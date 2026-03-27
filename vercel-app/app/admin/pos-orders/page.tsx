@@ -43,10 +43,10 @@ import { isOfficeRole } from "@/lib/permissions"
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
@@ -707,11 +707,11 @@ export default function PosOrdersPage() {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "orders" | "cookTime")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
-                <TabsTrigger value="orders" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="orders" className={adminTabsTriggerCn}>
                   {t("posOrderList") || "POS 주문 내역"}
                 </TabsTrigger>
-                <TabsTrigger value="cookTime" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="cookTime" className={adminTabsTriggerCn}>
                   {t("posCookTimeAnalysisTab")}
                 </TabsTrigger>
               </TabsList>

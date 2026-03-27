@@ -4,6 +4,7 @@ import * as React from "react"
 import { FileText, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -25,10 +26,10 @@ import { useT } from "@/lib/i18n"
 import {
   getPosTaxInvoiceRecipients,
   patchPosTaxInvoiceRecipient,
-  useStoreList,
   type PosTaxInvoiceRecipientRow,
 } from "@/lib/api-client"
 import { isOfficeRole, canAccessPosSettlement } from "@/lib/permissions"
+import { POS_TAX_INVOICE_SHARED_STORE_CODE } from "@/lib/pos-tax-invoice"
 import { appAlert } from "@/lib/app-message"
 import { cn } from "@/lib/utils"
 
@@ -38,25 +39,13 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
-  const office = isOfficeRole(auth?.role || "")
-  const canEdit = canAccessPosSettlement(auth?.role || "") || office
-
-  const [storeCode, setStoreCode] = React.useState("")
+  const canEdit = canAccessPosSettlement(auth?.role || "") || isOfficeRole(auth?.role || "")
   const [by, setBy] = React.useState<SearchBy>("phone")
   const [q, setQ] = React.useState("")
   const [rows, setRows] = React.useState<PosTaxInvoiceRecipientRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [editRow, setEditRow] = React.useState<PosTaxInvoiceRecipientRow | null>(null)
   const [saving, setSaving] = React.useState(false)
-
-  React.useEffect(() => {
-    if (office && stores.length && !storeCode) {
-      setStoreCode("")
-    } else if (!office && auth?.store) {
-      setStoreCode(auth.store)
-    }
-  }, [office, stores, auth?.store, storeCode])
 
   const load = React.useCallback(async () => {
     if (!auth?.store || !auth?.role) return
@@ -65,7 +54,7 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
       const res = await getPosTaxInvoiceRecipients({
         userStore: auth.store,
         userRole: auth.role,
-        storeCode: office && !storeCode ? undefined : storeCode || undefined,
+        storeCode: auth.store,
         q: q.trim() || undefined,
         by,
         limit: 100,
@@ -80,11 +69,11 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
     } finally {
       setLoading(false)
     }
-  }, [auth?.store, auth?.role, office, storeCode, q, by])
+  }, [auth?.store, auth?.role, q, by])
 
   React.useEffect(() => {
     void load()
-  }, [auth?.store, auth?.role, office, storeCode])
+  }, [load])
 
   const openEdit = (r: PosTaxInvoiceRecipientRow) => {
     if (!canEdit) return
@@ -138,24 +127,6 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
         </div>
 
         <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
-          {office && (
-            <div className="space-y-1">
-              <Label className="text-xs">{t("stockFilterStore")}</Label>
-              <Select value={storeCode || "__all__"} onValueChange={(v) => setStoreCode(v === "__all__" ? "" : v)}>
-                <SelectTrigger className="h-9 w-44">
-                  <SelectValue placeholder={t("all")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">{t("all")}</SelectItem>
-                  {stores.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
           <div className="space-y-1">
             <Label className="text-xs">{t("posSearch")}</Label>
             <Select value={by} onValueChange={(v) => setBy(v as SearchBy)}>
@@ -190,10 +161,11 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-3 py-2 text-left">{t("stockFilterStore")}</th>
+                <th className="px-3 py-2 text-left">{t("taxRecipientPoolColumn")}</th>
                 <th className="px-3 py-2 text-left">{t("posName")}</th>
                 <th className="px-3 py-2 text-left">{t("posTaxIdLabel")}</th>
                 <th className="px-3 py-2 text-left">{t("posPhone")}</th>
+                <th className="px-3 py-2 text-left">{t("settings_address")}</th>
                 <th className="px-3 py-2 text-left">{t("email")}</th>
                 <th className="px-3 py-2 text-center">{t("itemsBtnSave")}</th>
               </tr>
@@ -201,17 +173,24 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                     {t("adminLeaveNoResult")}
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => (
                   <tr key={r.id} className={cn("border-b", !r.is_active && "opacity-50")}>
-                    <td className="px-3 py-2 whitespace-nowrap">{r.store_code}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {r.store_code === POS_TAX_INVOICE_SHARED_STORE_CODE
+                        ? t("taxRecipientSharedPool")
+                        : r.store_code}
+                    </td>
                     <td className="px-3 py-2">{r.name}</td>
                     <td className="px-3 py-2 font-mono text-xs">{r.tax_id}</td>
                     <td className="px-3 py-2">{r.phone}</td>
+                    <td className="px-3 py-2 max-w-[200px] truncate align-top" title={r.address || undefined}>
+                      {r.address || "—"}
+                    </td>
                     <td className="px-3 py-2 max-w-[180px] truncate">{r.email}</td>
                     <td className="px-3 py-2 text-center">
                       {canEdit ? (
@@ -265,7 +244,11 @@ export default function AdminPosTaxInvoiceRecipientsPage() {
               </div>
               <div className="grid gap-1">
                 <Label>{t("settings_address")}</Label>
-                <Input value={editRow.address} onChange={(e) => setEditRow({ ...editRow, address: e.target.value })} />
+                <Textarea
+                  className="min-h-[72px] resize-y"
+                  value={editRow.address}
+                  onChange={(e) => setEditRow({ ...editRow, address: e.target.value })}
+                />
               </div>
               <div className="grid gap-1">
                 <Label>{t("posMemberNoInputPh") || "회원번호"}</Label>

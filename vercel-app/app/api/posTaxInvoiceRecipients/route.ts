@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   assertStoreAccess,
+  POS_TAX_INVOICE_SHARED_STORE_CODE,
   searchTaxInvoiceRecipients,
   upsertTaxInvoiceRecipient,
   type SearchBy,
@@ -40,17 +41,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
     }
 
-    const officeWide = isOfficeRole(userRole) && !storeCode
-    if (!officeWide && !storeCode) {
-      return NextResponse.json({ success: false, message: 'storeCode가 필요합니다.' }, { status: 400, headers })
-    }
-    if (!officeWide && !assertStoreAccess(userRole, userStore, storeCode)) {
+    const authorized =
+      isOfficeRole(userRole) ||
+      (!!storeCode && assertStoreAccess(userRole, userStore, storeCode))
+    if (!authorized) {
+      if (!storeCode) {
+        return NextResponse.json({ success: false, message: 'storeCode가 필요합니다.' }, { status: 400, headers })
+      }
       return NextResponse.json({ success: false, message: '매장 접근 권한이 없습니다.' }, { status: 403, headers })
     }
 
     const rows = await searchTaxInvoiceRecipients({
+      globalPool: true,
       storeCode: storeCode || null,
-      officeWide,
       q,
       by,
       limit,
@@ -135,7 +138,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, message: '데이터가 없습니다.' }, { status: 404, headers })
     }
     const sc = existing[0].store_code
-    if (!assertStoreAccess(userRole, userStore, sc)) {
+    if (
+      sc !== POS_TAX_INVOICE_SHARED_STORE_CODE &&
+      !assertStoreAccess(userRole, userStore, sc)
+    ) {
       return NextResponse.json({ success: false, message: '매장 접근 권한이 없습니다.' }, { status: 403, headers })
     }
 

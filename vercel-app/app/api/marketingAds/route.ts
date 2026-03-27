@@ -50,14 +50,15 @@ export async function GET(req: NextRequest) {
       filter = `campaign_id=eq.${encodeURIComponent(campaignId)}`
     }
 
+    const listLimit = 8000
     const rows = filter
       ? ((await supabaseSelectFilter('marketing_ads', filter, {
           order: 'publish_date.desc,id.desc',
-          limit: 500,
+          limit: listLimit,
         })) as Record<string, unknown>[])
       : ((await supabaseSelect('marketing_ads', {
           order: 'publish_date.desc,id.desc',
-          limit: 500,
+          limit: listLimit,
         })) as Record<string, unknown>[])
 
     const base = (rows || []).map((row) => ({
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
       contentPillar: String(row.content_pillar ?? ''),
       contentTopic: String(row.content_topic ?? ''),
       publishDate: row.publish_date ? parseDate(row.publish_date) : null,
+      periodEndDate: row.period_end_date ? parseDate(row.period_end_date) : null,
       platform: String(row.platform ?? ''),
       postLink: String(row.post_link ?? ''),
       boostBudget: parseNum(row.boost_budget),
@@ -105,6 +107,7 @@ export async function POST(req: NextRequest) {
       contentPillar?: string
       contentTopic?: string
       publishDate?: string | null
+      periodEndDate?: string | null
       platform?: string
       postLink?: string
       boostBudget?: number
@@ -149,7 +152,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const row: Record<string, unknown> = {
+    const rowBase: Record<string, unknown> = {
       campaign_id: Number(campaignId),
       content_format: String(body.contentFormat ?? '').trim(),
       content_pillar: String(body.contentPillar ?? '').trim(),
@@ -159,6 +162,11 @@ export async function POST(req: NextRequest) {
       post_link: String(body.postLink ?? '').trim(),
       boost_budget: parseNum(body.boostBudget),
       actual_spent: parseNum(body.actualSpent),
+    }
+    const periodEndParsed = body.periodEndDate ? parseDate(body.periodEndDate) : null
+    const rowWithPeriod: Record<string, unknown> = {
+      ...rowBase,
+      period_end_date: periodEndParsed,
     }
 
     let recordId = editingId || ''
@@ -170,14 +178,24 @@ export async function POST(req: NextRequest) {
         `id=eq.${encodeURIComponent(editingId)}`,
         { limit: 1 }
       )) as { id?: number }[] | null
-      if (existing?.length) {
-        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, row)
-        recordId = editingId
-      } else {
+      if (!existing?.length) {
         return NextResponse.json({ success: false, message: '수정할 광고를 찾을 수 없습니다.' }, { headers })
       }
+      try {
+        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowWithPeriod)
+      } catch (e) {
+        if (!isColumnSchemaError(e)) throw e
+        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowBase)
+      }
+      recordId = editingId
     } else {
-      const inserted = (await supabaseInsert('marketing_ads', row)) as { id?: number }[]
+      let inserted: { id?: number }[] | { id?: number } | null = null
+      try {
+        inserted = (await supabaseInsert('marketing_ads', rowWithPeriod)) as { id?: number }[]
+      } catch (e) {
+        if (!isColumnSchemaError(e)) throw e
+        inserted = (await supabaseInsert('marketing_ads', rowBase)) as { id?: number }[]
+      }
       const created = Array.isArray(inserted) ? inserted[0] : inserted
       recordId = created?.id != null ? String(created.id) : ''
       if (!recordId) {

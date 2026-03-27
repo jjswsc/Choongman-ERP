@@ -24,9 +24,9 @@ import { Pencil, Trash2, FolderTree } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
@@ -233,11 +233,11 @@ export function PosMenuCategorySettingsDialog({
         <Tabs defaultValue="main" className="flex-1 min-h-0 flex flex-col">
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-                <TabsTrigger value="main" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="main" className={adminTabsTriggerCn}>
                   {t("posMenuCategoryMain") || "대분류"}
                 </TabsTrigger>
-                <TabsTrigger value="sub" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="sub" className={adminTabsTriggerCn}>
                   {t("posMenuCategory") || "카테고리"}
                 </TabsTrigger>
               </TabsList>

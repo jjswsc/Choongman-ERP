@@ -15,10 +15,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -1127,27 +1127,22 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList
-                className={cn(
-                  adminTabsListGridClass("max-w-2xl"),
-                  isOffice ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1"
-                )}
-              >
+              <TabsList className={adminTabsListRowCn}>
                 {isOffice && (
-                  <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="new" className={adminTabsTriggerCn}>
                     {t("outTabNew")}
                   </TabsTrigger>
                 )}
-                <TabsTrigger value="hist" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="hist" className={adminTabsTriggerCn}>
                   {t("outTabHist")}
                 </TabsTrigger>
                 {isOffice && (
-                  <TabsTrigger value="warehouse" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="warehouse" className={adminTabsTriggerCn}>
                     {t("outTabByWarehouse")}
                   </TabsTrigger>
                 )}
                 {isOffice && (
-                  <TabsTrigger value="invoice" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="invoice" className={adminTabsTriggerCn}>
                     {t("outTabInvoice")}
                   </TabsTrigger>
                 )}

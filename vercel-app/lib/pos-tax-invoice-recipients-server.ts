@@ -6,8 +6,14 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
-import { parsePosOrderMemo, type PosTaxInvoiceData } from '@/lib/pos-tax-invoice'
+import {
+  parsePosOrderMemo,
+  POS_TAX_INVOICE_SHARED_STORE_CODE,
+  type PosTaxInvoiceData,
+} from '@/lib/pos-tax-invoice'
 import { isOfficeRole } from '@/lib/permissions'
+
+export { POS_TAX_INVOICE_SHARED_STORE_CODE } from '@/lib/pos-tax-invoice'
 
 export type TaxInvoiceRecipientRow = {
   id: string
@@ -87,8 +93,7 @@ export async function upsertTaxRecipientFromOrderMemo(
 export async function upsertTaxInvoiceRecipient(
   input: UpsertTaxRecipientInput
 ): Promise<TaxInvoiceRecipientRow> {
-  const store_code = String(input.storeCode || '').trim()
-  if (!store_code) throw new Error('storeCode required')
+  const store_code = POS_TAX_INVOICE_SHARED_STORE_CODE
 
   const tax_id = String(input.taxId || '').replace(/\D/g, '')
   const branch_no = String(input.branchNo || '').replace(/\D/g, '').slice(0, 5)
@@ -117,7 +122,7 @@ export async function upsertTaxInvoiceRecipient(
 
   const existing = (await supabaseSelectFilter(
     'pos_tax_invoice_recipients',
-    `store_code=eq.${encodeURIComponent(store_code)}&tax_id=eq.${encodeURIComponent(tax_id)}&branch_no=eq.${encodeURIComponent(branch_no)}&is_active=eq.true`,
+    `tax_id=eq.${encodeURIComponent(tax_id)}&branch_no=eq.${encodeURIComponent(branch_no)}&is_active=eq.true`,
     { limit: 2, select: 'id' }
   )) as { id: string }[]
 
@@ -147,16 +152,18 @@ export async function upsertTaxInvoiceRecipient(
 export type SearchBy = 'phone' | 'taxId' | 'name' | 'memberNo'
 
 export async function searchTaxInvoiceRecipients(params: {
+  /** true면 매장 구분 없이 전체 풀 조회 */
+  globalPool: boolean
   storeCode: string | null
-  officeWide: boolean
   q: string
   by: SearchBy
   limit: number
 }): Promise<TaxInvoiceRecipientRow[]> {
   const lim = Math.min(200, Math.max(1, params.limit))
   const q = String(params.q || '').trim()
+  const global = params.globalPool
   if (!q) {
-    if (params.officeWide && !params.storeCode) {
+    if (global) {
       const rows = (await supabaseSelectFilter(
         'pos_tax_invoice_recipients',
         'is_active=eq.true',
@@ -176,11 +183,10 @@ export async function searchTaxInvoiceRecipients(params: {
   if (params.by === 'taxId') {
     const digits = q.replace(/\D/g, '')
     if (digits.length < 5) return []
-    const sc = params.storeCode
-    if (!sc && !params.officeWide) return []
-    const filter = params.officeWide && !sc
+    if (!global && !params.storeCode) return []
+    const filter = global
       ? `tax_id=eq.${encodeURIComponent(digits)}&is_active=eq.true`
-      : `store_code=eq.${encodeURIComponent(sc!)}&tax_id=eq.${encodeURIComponent(digits)}&is_active=eq.true`
+      : `store_code=eq.${encodeURIComponent(params.storeCode!)}&tax_id=eq.${encodeURIComponent(digits)}&is_active=eq.true`
     const rows = (await supabaseSelectFilter('pos_tax_invoice_recipients', filter, {
       limit: lim,
       select: '*',
@@ -189,20 +195,22 @@ export async function searchTaxInvoiceRecipients(params: {
   }
 
   if (params.by === 'memberNo') {
-    const sc = params.storeCode
-    if (!sc) return []
-    const rows = (await supabaseSelectFilter(
-      'pos_tax_invoice_recipients',
-      `store_code=eq.${encodeURIComponent(sc)}&member_no=eq.${encodeURIComponent(q)}&is_active=eq.true`,
-      { limit: lim, select: '*' }
-    )) as TaxInvoiceRecipientRow[]
+    if (!global && !params.storeCode) return []
+    const filter = global
+      ? `member_no=eq.${encodeURIComponent(q)}&is_active=eq.true`
+      : `store_code=eq.${encodeURIComponent(params.storeCode!)}&member_no=eq.${encodeURIComponent(q)}&is_active=eq.true`
+    const rows = (await supabaseSelectFilter('pos_tax_invoice_recipients', filter, {
+      limit: lim,
+      select: '*',
+    })) as TaxInvoiceRecipientRow[]
     return Array.isArray(rows) ? rows : []
   }
 
-  const sc = params.storeCode
-  if (!sc && !params.officeWide) return []
+  if (!global && !params.storeCode) return []
 
-  const baseFilter = params.officeWide && !sc ? 'is_active=eq.true' : `store_code=eq.${encodeURIComponent(sc!)}&is_active=eq.true`
+  const baseFilter = global
+    ? 'is_active=eq.true'
+    : `store_code=eq.${encodeURIComponent(params.storeCode!)}&is_active=eq.true`
   const rows = (await supabaseSelectFilter('pos_tax_invoice_recipients', baseFilter, {
     limit: 500,
     order: 'last_used_at.desc.nullslast',

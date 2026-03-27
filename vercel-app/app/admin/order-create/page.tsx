@@ -62,7 +62,7 @@ function OrderCreateTabs() {
             <AdminOrderHistory />
           </TabsContent>
           <TabsContent value="hq" className={adminTabsContentCn}>
-            <AdminPurchaseOrder allowManualLines />
+            <AdminPurchaseOrder />
           </TabsContent>
           <TabsContent value="history" className={adminTabsContentCn}>
             <AdminPurchaseOrderHistory />

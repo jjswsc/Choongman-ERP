@@ -15,10 +15,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -610,11 +610,11 @@ export function OrderTab() {
       <Tabs defaultValue="new" className={adminTabsRootCn}>
         <div className={adminTabsBarCn}>
           <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-              <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="new" className={adminTabsTriggerCn}>
                 {t('ordNew')}
               </TabsTrigger>
-              <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+              <TabsTrigger value="history" className={adminTabsTriggerCn}>
                 {t('ordHistory')}
               </TabsTrigger>
             </TabsList>

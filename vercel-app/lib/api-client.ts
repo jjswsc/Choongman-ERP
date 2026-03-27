@@ -247,6 +247,28 @@ export async function getAdjustmentHistory(params: {
   return res.json() as Promise<AdjustmentHistoryItem[]>
 }
 
+/** stock_logs Usage 기간 합계 (발주 도움). 기준일·기간은 방콕 달력. */
+export async function getStockUsageAggregate(params: {
+  storeName: string
+  days?: number
+  endDate?: string
+}) {
+  const q = new URLSearchParams({ storeName: params.storeName })
+  if (params.days != null) q.set('days', String(params.days))
+  if (params.endDate?.trim()) q.set('endDate', params.endDate.trim())
+  const res = await apiFetchWithOffline(`/api/getStockUsageAggregate?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    usageByCode: Record<string, number>
+    startYmd: string
+    endYmd: string
+    days: number
+    message?: string
+    /** 본사: 출고 합계 / 매장: Usage 합계 */
+    consumptionBasis?: 'hq_outbound' | 'store_usage'
+  }>
+}
+
 export async function getStockStores() {
   const res = await apiFetchWithOffline('/api/getStockStores')
   return res.json() as Promise<string[]>
@@ -4816,6 +4838,8 @@ export interface MarketingAd {
   contentPillar: string
   contentTopic: string
   publishDate: string | null
+  /** 집행·노출 종료일 (marketing_ads.period_end_date, 마이그레이션 전에는 null) */
+  periodEndDate?: string | null
   platform: string
   postLink: string
   boostBudget: number
@@ -4837,6 +4861,7 @@ export async function saveMarketingAd(params: {
   contentPillar?: string
   contentTopic?: string
   publishDate?: string | null
+  periodEndDate?: string | null
   platform: string
   postLink?: string
   boostBudget?: number
@@ -5855,6 +5880,7 @@ export async function savePosOrder(params: {
 
 export interface PosTaxInvoiceRecipientRow {
   id: string
+  /** 전 매장 공유 마스터는 `__shared__` */
   store_code: string
   member_id: number | null
   member_no: string | null

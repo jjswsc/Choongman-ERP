@@ -15,9 +15,9 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -194,11 +194,11 @@ export function DepreciationTab() {
           <Tabs defaultValue="assets">
             <div className={adminTabsBarCn}>
               <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-                  <TabsTrigger value="assets" className={adminTabsTriggerGridCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="assets" className={adminTabsTriggerCn}>
                     고정자산
                   </TabsTrigger>
-                  <TabsTrigger value="depreciation" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="depreciation" className={adminTabsTriggerCn}>
                     감가상각 실행
                   </TabsTrigger>
                 </TabsList>

@@ -16,10 +16,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -393,17 +393,17 @@ export function AdminStoreRepairs() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-3xl", "grid-cols-2", "sm:grid-cols-4")}>
-                <TabsTrigger value="dash" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="dash" className={adminTabsTriggerCn}>
                   {t("tab_repair_dashboard")}
                 </TabsTrigger>
-                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_repair_list")}
                 </TabsTrigger>
-                <TabsTrigger value="process" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="process" className={adminTabsTriggerCn}>
                   {t("tab_repair_process")}
                 </TabsTrigger>
-                <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="new" className={adminTabsTriggerCn}>
                   {t("tab_repair_new")}
                 </TabsTrigger>
               </TabsList>

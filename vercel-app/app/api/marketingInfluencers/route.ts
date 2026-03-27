@@ -59,14 +59,15 @@ export async function GET(req: NextRequest) {
     let filter = ''
     if (campaignId) filter = `campaign_id=eq.${encodeURIComponent(campaignId)}`
 
+    const listLimit = 8000
     const rows = filter
       ? ((await supabaseSelectFilter('marketing_influencers', filter, {
           order: 'publish_date.desc.nullslast,id.desc',
-          limit: 500,
+          limit: listLimit,
         })) as Record<string, unknown>[])
       : ((await supabaseSelect('marketing_influencers', {
           order: 'publish_date.desc.nullslast,id.desc',
-          limit: 500,
+          limit: listLimit,
         })) as Record<string, unknown>[])
 
     const base = (rows || []).map((row) => ({

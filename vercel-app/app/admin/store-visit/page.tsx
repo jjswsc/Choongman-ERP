@@ -4,10 +4,10 @@ import { MapPin } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -37,14 +37,14 @@ export default function Page() {
         <Tabs defaultValue="list" className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-2xl", "grid-cols-3")}>
-                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_visit_list")}
                 </TabsTrigger>
-                <TabsTrigger value="today" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="today" className={adminTabsTriggerCn}>
                   {t("tab_visit_today")}
                 </TabsTrigger>
-                <TabsTrigger value="stats" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="stats" className={adminTabsTriggerCn}>
                   {t("tab_visit_stats")}
                 </TabsTrigger>
               </TabsList>

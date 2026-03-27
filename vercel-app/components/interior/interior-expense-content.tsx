@@ -7,7 +7,7 @@ import {
   adminTabsBarCn,
   adminTabsContentCn,
   adminTabsIconCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
   adminTabsTriggerCn,
@@ -496,7 +496,7 @@ export function InteriorExpenseContent({ projectId, t }: InteriorExpenseContentP
     <Tabs defaultValue="expense" className={adminTabsRootCn}>
       <div className={adminTabsBarCn}>
         <div className={adminTabsScrollCn}>
-          <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+          <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="expense" className={adminTabsTriggerCn}>
               <Banknote className={adminTabsIconCn} aria-hidden />
               {t("interiorExpenseTab") || "비용"}

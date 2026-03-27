@@ -889,7 +889,9 @@ export function PosSetMenuTabWorkspace({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-base font-bold tracking-tight">{t("posSetTabWorkspaceTitle")}</h3>
-          <p className="mt-1 max-w-2xl text-xs text-muted-foreground leading-relaxed">{t("posSetTabWorkspaceDesc")}</p>
+          {t("posSetTabWorkspaceDesc") ? (
+            <p className="mt-1 max-w-2xl text-xs text-muted-foreground leading-relaxed">{t("posSetTabWorkspaceDesc")}</p>
+          ) : null}
           <p className="mt-2 max-w-2xl text-[11px] text-muted-foreground/90 leading-relaxed border-l-2 border-emerald-500/60 pl-3">
             {fixedCid ? t("posSetTabMarketingCampaignContextNote") : t("posSetTabMarketingPromoNote")}
           </p>
@@ -998,11 +1000,17 @@ export function PosSetMenuTabWorkspace({
               onChange={(e) => setPickQty(e.target.value)}
               aria-label={t("qty")}
             />
-            <span className="text-[10px] text-muted-foreground leading-tight">{t("posSetTabPickQtyHint")}</span>
+            {t("posSetTabPickQtyHint") ? (
+              <span className="text-[10px] text-muted-foreground leading-tight">{t("posSetTabPickQtyHint")}</span>
+            ) : null}
           </div>
           <div className="max-h-[min(420px,55vh)] overflow-y-auto rounded-lg border border-border/60 bg-card/80">
             {!pickMenuListShown ? (
-              <p className="p-4 text-center text-xs text-muted-foreground leading-relaxed">{t("posSetTabPickSearchHint")}</p>
+              t("posSetTabPickSearchHint") ? (
+                <p className="p-4 text-center text-xs text-muted-foreground leading-relaxed">{t("posSetTabPickSearchHint")}</p>
+              ) : (
+                <div className="min-h-[72px]" aria-hidden />
+              )
             ) : filteredPickMenus.length === 0 ? (
               <p className="p-4 text-center text-xs text-muted-foreground">{t("itemsNoResults")}</p>
             ) : (

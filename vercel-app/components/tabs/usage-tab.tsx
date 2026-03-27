@@ -27,10 +27,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -301,11 +301,11 @@ export function UsageTab() {
       <Tabs defaultValue="input" className={adminTabsRootCn}>
         <div className={adminTabsBarCn}>
           <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-              <TabsTrigger value="input" className={adminTabsTriggerGridCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="input" className={adminTabsTriggerCn}>
                 {t('useInput')}
               </TabsTrigger>
-              <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+              <TabsTrigger value="history" className={adminTabsTriggerCn}>
                 {t('useHistory')}
               </TabsTrigger>
             </TabsList>

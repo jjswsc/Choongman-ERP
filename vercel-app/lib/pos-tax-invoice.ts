@@ -1,3 +1,6 @@
+/** POS 세금계산서 수취인 마스터 DB `store_code` — 전 매장 공유 풀 */
+export const POS_TAX_INVOICE_SHARED_STORE_CODE = '__shared__'
+
 export type PosTaxInvoiceCustomerType = 'person' | 'company'
 
 export interface PosTaxInvoiceData {
@@ -10,6 +13,59 @@ export interface PosTaxInvoiceData {
   email: string
   address: string
   member: boolean
+}
+
+/** 주문 memo 토큰 값에 `|`, `=` 등이 있어도 파싱되도록 저장 시 사용 */
+export function encodeTaxInvoiceMemoValue(value: string): string {
+  return encodeURIComponent(String(value ?? ''))
+}
+
+export function decodeTaxInvoiceMemoValue(raw: string): string {
+  const s = String(raw ?? '')
+  if (!s) return ''
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return s
+  }
+}
+
+/**
+ * 80mm 등 단순 영수증 HTML — 태국 Tax Invoice 수취인(ผู้ซื้อ) 필수 표기
+ */
+export function buildPosTaxInvoiceThermalHtml(opts: {
+  taxInvoice: PosTaxInvoiceData
+  esc: (s: string) => string
+  tr: (key: string, fallback: string) => string
+}): string {
+  const { taxInvoice, esc, tr } = opts
+  const branchDisplay =
+    taxInvoice.branchNo ||
+    (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점'))
+  const typeLabel =
+    taxInvoice.customerType === 'company'
+      ? tr('posTaxCustomerCorporate', '법인')
+      : tr('posTaxCustomerIndividual', '개인')
+  const row = (label: string, value: string) =>
+    '<div style="margin:2px 0;overflow-wrap:anywhere;word-break:break-word"><span style="font-weight:700">' +
+    esc(label) +
+    ':</span> ' +
+    esc(value) +
+    '</div>'
+  return (
+    '<div style="border:1px solid #000;padding:6px;margin:8px 0;font-size:11px;line-height:1.35;text-align:left">' +
+    '<div style="font-weight:700;margin-bottom:4px;text-align:center">' +
+    esc(tr('posReceiptTaxInvoice', '세금계산서')) +
+    '</div>' +
+    row(tr('posTaxCustomerTypeLabel', '구분'), typeLabel) +
+    row(tr('posName', '이름'), taxInvoice.name) +
+    row(tr('posTaxIdLabel', 'Tax ID'), taxInvoice.taxId) +
+    row(tr('posBranchLabel', '지점'), branchDisplay) +
+    row(tr('settings_address', '주소'), taxInvoice.address) +
+    row(tr('posPhone', '전화번호'), taxInvoice.phone) +
+    row(tr('email', '이메일'), taxInvoice.email) +
+    '</div>'
+  )
 }
 
 export interface ParsedPosOrderMemo {
@@ -44,14 +100,14 @@ export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrd
   const customerType: PosTaxInvoiceCustomerType =
     parsed.customerType === 'company' ? 'company' : 'person'
   const taxInvoice: PosTaxInvoiceData = {
-    memberNo: parsed.memberNo || '',
+    memberNo: decodeTaxInvoiceMemoValue(parsed.memberNo || ''),
     customerType,
-    name: parsed.name || '',
-    taxId: parsed.taxId || '',
-    branchNo: parsed.branchNo || '',
-    phone: parsed.phone || '',
-    email: parsed.email || '',
-    address: parsed.address || '',
+    name: decodeTaxInvoiceMemoValue(parsed.name || ''),
+    taxId: decodeTaxInvoiceMemoValue(parsed.taxId || '').replace(/\D/g, ''),
+    branchNo: decodeTaxInvoiceMemoValue(parsed.branchNo || '').replace(/\D/g, ''),
+    phone: decodeTaxInvoiceMemoValue(parsed.phone || ''),
+    email: decodeTaxInvoiceMemoValue(parsed.email || ''),
+    address: decodeTaxInvoiceMemoValue(parsed.address || ''),
     member: parsed.member === 'Y',
   }
 

@@ -75,15 +75,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
 
+    const listLimit = 8000
     const rows = campaignId
       ? ((await supabaseSelectFilter(
           'marketing_materials',
           `campaign_id=eq.${encodeURIComponent(campaignId)}`,
-          { order: 'id.asc', limit: 500 }
+          { order: 'id.asc', limit: listLimit }
         )) as Record<string, unknown>[])
       : ((await supabaseSelect('marketing_materials', {
           order: 'id.desc',
-          limit: 500,
+          limit: listLimit,
         })) as Record<string, unknown>[])
 
     const base = (rows || []).map((row) => ({

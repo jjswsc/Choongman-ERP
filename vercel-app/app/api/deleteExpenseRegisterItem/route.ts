@@ -10,6 +10,7 @@ type LinkedPayableRow = {
 type BankTransactionRow = {
   id?: number
   trans_date?: string
+  trans_type?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -39,13 +40,16 @@ export async function POST(request: NextRequest) {
       supabaseSelectFilter('card_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
     ])
     const txRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
-      select: 'id,trans_date',
+      select: 'id,trans_date,trans_type',
       limit: 1,
     })) as BankTransactionRow[] | null
     if (!txRows?.[0]?.id) {
       return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
     }
-    await assertAccountingDateOpen(String(txRows[0].trans_date || '').slice(0, 10))
+    const transTypeLower = String(txRows[0].trans_type || '').toLowerCase()
+    if (!['deposit', 'withdraw'].includes(transTypeLower)) {
+      return NextResponse.json({ success: false, message: '입금·출금 거래만 삭제할 수 있습니다.' }, { status: 400, headers })
+    }
 
     if ((linkedPayables || []).some((r) => Number(r.expense_accrual_id || 0) > 0)) {
       return NextResponse.json(
@@ -66,7 +70,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (transTypeLower === 'deposit') {
+      const recvRows = (await supabaseSelectFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, {
+        limit: 20,
+        select: 'id,ref_type,ref_id',
+      })) as { id?: number; ref_type?: string | null; ref_id?: number | null }[] | null
+      const blockedRecv = (recvRows || []).some((row) => {
+        const rid = Number(row.ref_id || 0)
+        if (rid > 0) return true
+        if (String(row.ref_type || '') === 'Order') return true
+        return false
+      })
+      if (blockedRecv) {
+        return NextResponse.json(
+          { success: false, message: '주문·기타 원장과 연결된 미수금 입금은 삭제할 수 없습니다.' },
+          { status: 400, headers }
+        )
+      }
+    }
+
+    await assertAccountingDateOpen(String(txRows[0].trans_date || '').slice(0, 10))
+
     await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
+    if (transTypeLower === 'deposit') {
+      await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`)
+    }
     await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
       memoIncludes: ['통장 거래 자동분개'],
     })
@@ -75,10 +103,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
   } catch (e) {
     console.error('deleteExpenseRegisterItem:', e)
-    return NextResponse.json(
-      { success: false, message: e instanceof Error ? e.message : '삭제 실패' },
-      { status: 500, headers }
-    )
+    const raw = e instanceof Error ? e.message : '삭제 실패'
+    const message =
+      raw === 'ACCOUNTING_PERIOD_CLOSED' ? '마감된 회계기간의 거래는 삭제할 수 없습니다.' : raw
+    return NextResponse.json({ success: false, message }, { status: 500, headers })
   }
 }
 

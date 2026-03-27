@@ -16,10 +16,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Save, Image } from "lucide-react"
@@ -285,11 +285,11 @@ export function AdminComplaints() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as "input" | "list")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
-                <TabsTrigger value="input" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="input" className={adminTabsTriggerCn}>
                   {t("tab_complaint_input")}
                 </TabsTrigger>
-                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_complaint_list")}
                 </TabsTrigger>
               </TabsList>

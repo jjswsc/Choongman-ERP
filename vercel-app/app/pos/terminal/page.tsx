@@ -33,7 +33,7 @@ import { useT } from '@/lib/i18n'
 import type { Order, OrderItem } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
-import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -517,8 +517,11 @@ export default function PosTerminalPage() {
       })
       .join('')
     const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
+    const taxInvoiceRow = parsedMemo.taxInvoice
+      ? buildPosTaxInvoiceThermalHtml({ taxInvoice: parsedMemo.taxInvoice, esc, tr })
+      : ''
     const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
-    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
+    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + taxInvoiceRow + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

@@ -7,12 +7,10 @@ import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
   adminTabsIconCn,
-  adminTabsListGridClass,
   adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
   adminTabsTriggerCn,
-  adminTabsTriggerGridCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PosTableLayoutContent } from "@/components/pos/pos-table-layout-content"
@@ -105,11 +103,11 @@ export default function PosScreenConfigPage() {
               <Tabs value={menusSubTab} onValueChange={(v) => setMenusSubTab(v as "menu-screen" | "menu-board")} className="space-y-3">
                 <div className={adminTabsBarCn}>
                   <div className={adminTabsScrollCn}>
-                    <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-                      <TabsTrigger value="menu-screen" className={adminTabsTriggerGridCn}>
+                    <TabsList className={adminTabsListRowCn}>
+                      <TabsTrigger value="menu-screen" className={adminTabsTriggerCn}>
                         {t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
                       </TabsTrigger>
-                      <TabsTrigger value="menu-board" className={adminTabsTriggerGridCn}>
+                      <TabsTrigger value="menu-board" className={adminTabsTriggerCn}>
                         {t("posMenuTabMenuBoard") || "메뉴판 관리"}
                       </TabsTrigger>
                     </TabsList>

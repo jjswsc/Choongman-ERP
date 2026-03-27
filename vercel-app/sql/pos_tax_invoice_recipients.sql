@@ -38,7 +38,7 @@ create index if not exists idx_ptir_store_member_no
   on public.pos_tax_invoice_recipients (store_code, member_no)
   where is_active = true and member_no is not null;
 
-comment on table public.pos_tax_invoice_recipients is 'POS 세금계산서 수취인 프로필(회원/비회원). 검색·중복 완화용 마스터.';
+comment on table public.pos_tax_invoice_recipients is 'POS 세금계산서 수취인 프로필(회원/비회원). 전 매장 공유 시 store_code=__shared__ (sql/pos_tax_invoice_recipients_shared_pool.sql 참고).';
 
 alter table public.pos_tax_invoice_recipients enable row level security;
 

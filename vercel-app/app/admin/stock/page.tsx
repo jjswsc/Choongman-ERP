@@ -6,13 +6,14 @@ import { BarChart3 } from "lucide-react"
 import { StockTable } from "@/components/erp/stock-table"
 import { StockAdjustDialog } from "@/components/erp/stock-adjust-dialog"
 import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-history"
+import { StockReorderAssist } from "@/components/erp/stock-reorder-assist"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
@@ -214,11 +215,14 @@ export default function StockPage() {
         <Tabs defaultValue="list" className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
-                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("stockTabList")}
                 </TabsTrigger>
-                <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="reorder" className={adminTabsTriggerCn}>
+                  {t("stockTabReorder")}
+                </TabsTrigger>
+                <TabsTrigger value="history" className={adminTabsTriggerCn}>
                   {t("stockTabHistory")}
                 </TabsTrigger>
               </TabsList>
@@ -246,6 +250,17 @@ export default function StockPage() {
               onAdjust={handleAdjust}
               onSaveSafeQty={handleSaveSafeQty}
               onToggleOrderDisabled={handleToggleOrderDisabled}
+            />
+          </TabsContent>
+          <TabsContent value="reorder" className={adminTabsContentCn}>
+            <StockReorderAssist
+              stores={storesForFilter}
+              storeFilter={storeFilter}
+              setStoreFilter={setStoreFilter}
+              storeSelectDisabled={storeSelectDisabled}
+              stockDateFilter={stockDateFilter}
+              setStockDateFilter={setStockDateFilter}
+              userRole={auth?.role || ""}
             />
           </TabsContent>
           <TabsContent value="history" className={adminTabsContentCn}>

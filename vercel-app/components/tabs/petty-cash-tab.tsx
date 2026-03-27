@@ -15,9 +15,9 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -555,11 +555,11 @@ ${rows.map((row, ri) => {
           <Tabs defaultValue="list" className="w-full">
             <div className={adminTabsBarCn}>
               <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
-                  <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="list" className={adminTabsTriggerCn}>
                     {t("pettyTabList")}
                   </TabsTrigger>
-                  <TabsTrigger value="monthly" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="monthly" className={adminTabsTriggerCn}>
                     {t("pettyTabMonthly")}
                   </TabsTrigger>
                 </TabsList>

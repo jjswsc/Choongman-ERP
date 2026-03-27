@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseRpc } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { isPosAdditiveOptionItemCategory } from '@/lib/pos-additive-item-category'
+import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
 
 export interface AppItem {
   code: string
@@ -147,45 +148,13 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   return list
 }
 
-const OFFICE_LOCATIONS = ['office', '본사', '오피스', '본점']
-/** 입고 시 "입고등록"(HQ Warehouse) 선택하면 저장되는 location. 본사 재고 조회 시 포함해야 함 */
-const INBOUND_HQ_LOCATION = '입고등록'
-
-/** 매장명→동일 매장 변형 목록. stock_logs.location이 "สาขาเอกมัย"/"เอกมัย"/"Ekkamai" 등으로 섞여 있을 때 모두 매칭 */
-const STORE_ALIASES: Record<string, string[]> = {
-  ekkamai: ['เอกมัย', 'สาขาเอกมัย', 'ekkamai'],
-  'เอกมัย': ['ekkamai', 'สาขาเอกมัย', 'เอกมัย'],
-  jidubang: ['jidubang'],
-  huamak: ['huamak'],
-  silom: ['silom'],
-}
-
-/** 매장명 변형 생성 (예: "CM The street" → ["cm the street", "the street"]) - stock_logs.location 불일치 대응 */
-function getLocationVariants(storeNorm: string): string[] {
-  const variants = new Set<string>([storeNorm])
-  const cmPrefix = /^cm\s+/i
-  if (cmPrefix.test(storeNorm)) {
-    const withoutCm = storeNorm.replace(cmPrefix, '').trim()
-    if (withoutCm) variants.add(withoutCm)
-  }
-  const aliases = STORE_ALIASES[storeNorm]
-  if (aliases) aliases.forEach((a) => variants.add(a))
-  return Array.from(variants)
-}
-
 async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
   try {
     const storeNorm = String(store || '').toLowerCase().trim()
     if (!storeNorm) return {}
 
-    const isOffice = OFFICE_LOCATIONS.some((x) => storeNorm === x || storeNorm.includes(x))
-    const isInboundHq = storeNorm === INBOUND_HQ_LOCATION.toLowerCase()
-
-    const patterns: string[] = isOffice
-      ? [INBOUND_HQ_LOCATION, ...OFFICE_LOCATIONS]
-      : isInboundHq
-        ? [INBOUND_HQ_LOCATION]
-        : getLocationVariants(storeNorm)
+    const patterns: string[] = getStockLocationPatterns(store)
+    if (patterns.length === 0) return {}
 
     const asOfTimestamp =
       asOfDate?.trim() ? `${asOfDate.trim()}T23:59:59.999Z` : null

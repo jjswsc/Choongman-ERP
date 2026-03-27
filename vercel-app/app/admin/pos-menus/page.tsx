@@ -58,12 +58,10 @@ import {
   adminTabsBarCn,
   adminTabsContentCn,
   adminTabsIconCn,
-  adminTabsListGridClass,
   adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
   adminTabsTriggerCn,
-  adminTabsTriggerGridCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -451,6 +449,7 @@ export default function PosMenusPage() {
   )
 
   const handleSave = async () => {
+    const wasEditingExisting = Boolean(editingId)
     if (editingMenuLinkedPromoId) {
       await appAlert(
         t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요."
@@ -520,8 +519,10 @@ export default function PosMenusPage() {
     if (newMainCat && !allMainCategories.includes(newMainCat)) {
       setAllMainCategories((prev) => [...prev, newMainCat].sort())
     }
-    setFormData(emptyForm)
-    setEditingId(null)
+    if (!wasEditingExisting) {
+      setFormData(emptyForm)
+      setEditingId(null)
+    }
   }
 
   const handleEdit = (menu: PosMenu) => {
@@ -1347,14 +1348,14 @@ export default function PosMenusPage() {
                 <Tabs value={formTab} onValueChange={(v) => setFormTab(v as typeof formTab)}>
                   <div className={adminTabsBarCn}>
                     <div className={adminTabsScrollCn}>
-                      <TabsList className={adminTabsListGridClass("grid-cols-3")}>
-                        <TabsTrigger value="info" className={adminTabsTriggerGridCn}>
+                      <TabsList className={adminTabsListRowCn}>
+                        <TabsTrigger value="info" className={adminTabsTriggerCn}>
                           {t("posFormTabInfo") || "메뉴정보"}
                         </TabsTrigger>
-                        <TabsTrigger value="options" className={adminTabsTriggerGridCn}>
+                        <TabsTrigger value="options" className={adminTabsTriggerCn}>
                           {t("posFormTabOptions") || "옵션"}
                         </TabsTrigger>
-                        <TabsTrigger value="cost" className={adminTabsTriggerGridCn}>
+                        <TabsTrigger value="cost" className={adminTabsTriggerCn}>
                           {t("posFormTabCost") || "원가"}
                         </TabsTrigger>
                       </TabsList>

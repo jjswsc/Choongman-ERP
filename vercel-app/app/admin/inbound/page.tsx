@@ -18,10 +18,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
@@ -613,14 +613,14 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "guide")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-2xl", "grid-cols-3")}>
-                <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="new" className={adminTabsTriggerCn}>
                   {t("inTabNew")}
                 </TabsTrigger>
-                <TabsTrigger value="hist" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="hist" className={adminTabsTriggerCn}>
                   {t("inTabHist")}
                 </TabsTrigger>
-                <TabsTrigger value="guide" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="guide" className={adminTabsTriggerCn}>
                   {t("inTabGuide")}
                 </TabsTrigger>
               </TabsList>

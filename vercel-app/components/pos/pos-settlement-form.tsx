@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   adminTabsBarCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from '@/lib/admin-tab-styles'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -553,11 +553,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
             <div className={cn(adminTabsBarCn, 'mb-4 overflow-hidden rounded-lg')}>
               <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-                  <TabsTrigger value="entry" className={adminTabsTriggerGridCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="entry" className={adminTabsTriggerCn}>
                     결산 입력
                   </TabsTrigger>
-                  <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="history" className={adminTabsTriggerCn}>
                     결산 조회
                   </TabsTrigger>
                 </TabsList>

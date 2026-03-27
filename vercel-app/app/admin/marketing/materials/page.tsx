@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { appAlert } from "@/lib/app-message"
-import { Package, RotateCw, ExternalLink, LayoutGrid, Store, Plus, Save, Loader2 } from "lucide-react"
+import { appAlert, appConfirm } from "@/lib/app-message"
+import { Package, RotateCw, ExternalLink, LayoutGrid, Store, Plus, Save, Loader2, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -11,6 +11,7 @@ import {
   getMarketingCampaigns,
   getMarketingMaterialGifts,
   saveMarketingMaterial,
+  deleteMarketingMaterial,
   useStoreList,
   type MarketingMaterial,
   type MarketingCampaign,
@@ -25,6 +26,15 @@ import { useRouter } from "next/navigation"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
 import { addDaysYmd } from "@/lib/pos-business-day"
 import { MarketingMaterialGiftsPanel } from "@/components/marketing/material-gifts-panel"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 
 const MATERIAL_STATUS_COLORS: Record<string, string> = {
   planning: "bg-gray-100 text-gray-700",
@@ -71,6 +81,8 @@ function defaultMaterialAddForm() {
 
 type ViewMode = "store" | "material"
 type MainTab = "overview" | "gifts"
+type MaterialsBrowseTab = "byCampaign" | "all"
+type InquiryCampStatusFilter = "all" | "draft" | "ongoing" | "finish" | "unlinked"
 
 export default function MarketingMaterialsPage() {
   const searchParams = useSearchParams()
@@ -102,13 +114,28 @@ export default function MarketingMaterialsPage() {
   const [spotFilter, setSpotFilter] = React.useState("")
   const [campaignFilter, setCampaignFilter] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
-  const [materialAddOpen, setMaterialAddOpen] = React.useState(false)
   const [materialAddForm, setMaterialAddForm] = React.useState(defaultMaterialAddForm)
   const [savingMaterialAdd, setSavingMaterialAdd] = React.useState(false)
+  const [materialsBrowseTab, setMaterialsBrowseTab] = React.useState<MaterialsBrowseTab>("byCampaign")
+  const [allMaterials, setAllMaterials] = React.useState<MarketingMaterial[]>([])
+  const [inquiryLoading, setInquiryLoading] = React.useState(false)
+  const [inqCampStatus, setInqCampStatus] = React.useState<InquiryCampStatusFilter>("all")
+  const [inqCampaignId, setInqCampaignId] = React.useState("")
+  const [inqMatStatus, setInqMatStatus] = React.useState<string>("")
+  const [inqSearch, setInqSearch] = React.useState("")
 
   const { stores } = useStoreList()
 
   const activeCampaignId = (campaignFilter || campaignIdFromQuery || "").trim()
+
+  const formatMatDisplayPeriod = React.useCallback((start: string | null | undefined, end: string | null | undefined) => {
+    const a = (start || "").trim()
+    const b = (end || "").trim()
+    if (!a && !b) return ""
+    if (a && b) return `${a} ~ ${b}`
+    if (a) return `${a} ~`
+    return `~ ${b}`
+  }, [])
 
   const tr = React.useCallback(
     (ko: string, en: string, th: string) => {
@@ -200,19 +227,34 @@ export default function MarketingMaterialsPage() {
       .finally(() => setLoading(false))
   }, [campaignFilter, campaignIdFromQuery])
 
+  const loadInquiryMaterials = React.useCallback(async () => {
+    setInquiryLoading(true)
+    try {
+      const [mats, camps] = await Promise.all([getMarketingMaterials(), getMarketingCampaigns()])
+      setAllMaterials(mats)
+      setCampaigns(camps)
+    } catch {
+      setAllMaterials([])
+    } finally {
+      setInquiryLoading(false)
+    }
+  }, [])
+
   React.useEffect(() => {
     loadData()
   }, [loadData])
+
+  React.useEffect(() => {
+    if (mainTab === "overview" && materialsBrowseTab === "all") {
+      void loadInquiryMaterials()
+    }
+  }, [mainTab, materialsBrowseTab, loadInquiryMaterials])
 
   React.useEffect(() => {
     if (campaignIdFromQuery) {
       setCampaignFilter(campaignIdFromQuery)
     }
   }, [campaignIdFromQuery])
-
-  React.useEffect(() => {
-    if (!activeCampaignId) setMaterialAddOpen(false)
-  }, [activeCampaignId])
 
   const toggleMaterialAddBranch = (store: string) => {
     setMaterialAddForm((f) => ({
@@ -266,6 +308,7 @@ export default function MarketingMaterialsPage() {
         await appAlert(tr("저장되었습니다.", "Saved.", "บันทึกแล้ว") + extra)
         setMaterialAddForm(defaultMaterialAddForm())
         void loadData()
+        void loadInquiryMaterials()
       } else {
         await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))
       }
@@ -283,6 +326,93 @@ export default function MarketingMaterialsPage() {
     })
     return m
   }, [campaigns])
+
+  const campaignByIdMap = React.useMemo(() => {
+    const m = new Map<string, MarketingCampaign>()
+    for (const c of campaigns) m.set(String(c.id), c)
+    return m
+  }, [campaigns])
+
+  const campaignStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case "ongoing":
+        return "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/35 dark:text-emerald-200"
+      case "finish":
+        return "bg-muted text-muted-foreground"
+      case "draft":
+        return "bg-amber-100 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100"
+      default:
+        return "bg-border text-foreground"
+    }
+  }
+
+  const campaignStatusLabelT = React.useCallback(
+    (status: string) => {
+      switch (status) {
+        case "draft":
+          return t("marketingAdsStatusDraft")
+        case "ongoing":
+          return t("marketingAdsStatusOngoing")
+        case "finish":
+          return t("marketingAdsStatusFinish")
+        default:
+          return status
+      }
+    },
+    [t]
+  )
+
+  const filteredInquiryMaterials = React.useMemo(() => {
+    let rows = allMaterials
+    const q = inqSearch.trim().toLowerCase()
+    if (q) {
+      rows = rows.filter((m) => {
+        const camp = m.campaignId ? campaignByIdMap.get(String(m.campaignId)) : undefined
+        const blob = [m.name, m.type, m.campaignNo, m.note, camp?.topic, camp?.campaignNo]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+        return blob.includes(q)
+      })
+    }
+    if (inqCampaignId.trim()) {
+      rows = rows.filter((m) => String(m.campaignId ?? "") === inqCampaignId.trim())
+    }
+    if (inqMatStatus) {
+      rows = rows.filter((m) => m.status === inqMatStatus)
+    }
+    if (inqCampStatus !== "all") {
+      rows = rows.filter((m) => {
+        const cid = m.campaignId ? String(m.campaignId) : ""
+        const camp = cid ? campaignByIdMap.get(cid) : undefined
+        if (inqCampStatus === "unlinked") return !cid || !camp
+        if (!camp) return false
+        return camp.status === inqCampStatus
+      })
+    }
+    return rows
+  }, [allMaterials, inqSearch, inqCampaignId, inqMatStatus, inqCampStatus, campaignByIdMap])
+
+  const openMaterialByCampaignTab = (m: MarketingMaterial) => {
+    setMaterialsBrowseTab("byCampaign")
+    if (m.campaignId) setCampaignFilter(String(m.campaignId))
+  }
+
+  const handleDeleteInquiryMaterial = async (m: MarketingMaterial) => {
+    if (
+      !(await appConfirm(
+        tr(`「${m.name}」 홍보물을 삭제할까요?`, `Delete material “${m.name}”?`, `ลบสื่อ “${m.name}”?`)
+      ))
+    )
+      return
+    const res = await deleteMarketingMaterial({ id: m.id })
+    if (res.success) {
+      void loadInquiryMaterials()
+      void loadData()
+    } else {
+      await appAlert(res.message || tr("삭제 실패", "Delete failed", "ลบไม่สำเร็จ"))
+    }
+  }
 
   const filteredMaterials = React.useMemo(() => {
     let list = materials
@@ -436,7 +566,24 @@ export default function MarketingMaterialsPage() {
             </div>
           )
         ) : (
-          <>
+          <Tabs
+            value={materialsBrowseTab}
+            onValueChange={(v) => setMaterialsBrowseTab(v as MaterialsBrowseTab)}
+            className={adminTabsRootCn}
+          >
+            <div className={cn(adminTabsBarCn, "px-0 pb-2")}>
+              <div className={adminTabsScrollCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="byCampaign" className={adminTabsTriggerCn}>
+                    {t("marketingMaterialsSubtabByCampaign")}
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className={adminTabsTriggerCn}>
+                    {t("marketingMaterialsSubtabInquiry")}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+            </div>
+            <TabsContent value="byCampaign" className={cn(adminTabsContentCn, "space-y-0")}>
         <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           {tr(
             "홍보물은 캠페인 허브의 고유번호(campaign_no)로 연결됩니다. 캠페인을 선택한 뒤 조회하세요.",
@@ -445,11 +592,30 @@ export default function MarketingMaterialsPage() {
           )}
         </div>
         <div className="mb-4 flex flex-wrap items-center gap-2">
+          <select
+            value={campaignFilter}
+            onChange={(e) => setCampaignFilter(e.target.value)}
+            className="h-10 min-w-[200px] rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">
+              {tr("캠페인 선택…", "Select campaign…", "เลือกแคมเปญ…")}
+            </option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.campaignNo ? `[${c.campaignNo}] ` : ""}
+                {c.topic}
+              </option>
+            ))}
+          </select>
+
           <Button
             variant="outline"
             size="sm"
             className="h-10 gap-1.5"
-            onClick={loadData}
+            onClick={() => {
+              void loadData()
+              void loadInquiryMaterials()
+            }}
             disabled={loading}
           >
             <RotateCw
@@ -460,19 +626,15 @@ export default function MarketingMaterialsPage() {
 
           <Button
             type="button"
+            variant="outline"
             size="sm"
             className="h-10 gap-1.5"
             disabled={!activeCampaignId || loading}
-            title={
-              !activeCampaignId
-                ? tr("캠페인을 선택한 뒤 추가할 수 있습니다.", "Select a campaign to add.", "เลือกแคมเปญก่อนเพิ่ม")
-                : undefined
-            }
-            variant={materialAddOpen ? "secondary" : "default"}
-            onClick={() => setMaterialAddOpen((o) => !o)}
+            title={tr("입력란을 비우고 새로 입력합니다.", "Clear the form for a new entry.", "ล้างฟอร์มเพื่อกรอกใหม่")}
+            onClick={() => setMaterialAddForm(defaultMaterialAddForm())}
           >
             <Plus className="h-4 w-4" />
-            {tr("홍보물 추가", "Add material", "เพิ่มสื่อ")}
+            {tr("입력란 초기화", "Clear form", "ล้างฟอร์ม")}
           </Button>
 
           <select
@@ -509,22 +671,6 @@ export default function MarketingMaterialsPage() {
             {MATERIAL_PLACEMENT_SPOTS.map((spot) => (
               <option key={spot.value} value={spot.value}>
                 {materialPlacementSpotLabel(spot.value)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={campaignFilter}
-            onChange={(e) => setCampaignFilter(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option value="">
-              {tr("캠페인 선택…", "Select campaign…", "เลือกแคมเปญ…")}
-            </option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.campaignNo ? `[${c.campaignNo}] ` : ""}
-                {c.topic}
               </option>
             ))}
           </select>
@@ -566,11 +712,44 @@ export default function MarketingMaterialsPage() {
           </div>
         </div>
 
-        {materialAddOpen && activeCampaignId && (
+        {!activeCampaignId && (
+          <p className="mb-4 rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+            {tr(
+              "캠페인을 선택하면 아래에 홍보물 등록 양식이 표시됩니다.",
+              "Select a campaign to show the registration form below.",
+              "เลือกแคมเปญเพื่อแสดงฟอร์มลงทะเบียนสื่อด้านล่าง"
+            )}
+          </p>
+        )}
+
+        {activeCampaignId && (
           <div className="mb-4 rounded-xl border bg-card p-4 shadow-sm">
             <h3 className="mb-3 text-sm font-semibold">
-              {tr("새 홍보물 등록", "Register new material", "ลงทะเบียนสื่อใหม่")}
+              {tr("홍보물 등록", "Register material", "ลงทะเบียนสื่อ")}
             </h3>
+            <div className="mb-4 rounded-lg border border-dashed bg-muted/25 p-3">
+              <p className="mb-2 text-xs font-semibold text-foreground">{t("marketingRecordDisplayWindowTitle")}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-[10px] font-medium text-foreground">{t("marketingRecordPeriodFrom")}</label>
+                  <Input
+                    type="date"
+                    value={materialAddForm.displayStartDate}
+                    onChange={(e) => setMaterialAddForm((f) => ({ ...f, displayStartDate: e.target.value }))}
+                    className="mt-1 h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-foreground">{t("marketingRecordPeriodTo")}</label>
+                  <Input
+                    type="date"
+                    value={materialAddForm.displayEndDate}
+                    onChange={(e) => setMaterialAddForm((f) => ({ ...f, displayEndDate: e.target.value }))}
+                    className="mt-1 h-9"
+                  />
+                </div>
+              </div>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-[10px] text-muted-foreground">{tr("종류", "Type", "ประเภท")}</label>
@@ -648,24 +827,6 @@ export default function MarketingMaterialsPage() {
                   )}
                 </p>
               </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground">{tr("게시 시작", "Display from", "เริ่มแสดง")}</label>
-                <Input
-                  type="date"
-                  value={materialAddForm.displayStartDate}
-                  onChange={(e) => setMaterialAddForm((f) => ({ ...f, displayStartDate: e.target.value }))}
-                  className="mt-1 h-9"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground">{tr("게시 종료", "Display until", "สิ้นสุดแสดง")}</label>
-                <Input
-                  type="date"
-                  value={materialAddForm.displayEndDate}
-                  onChange={(e) => setMaterialAddForm((f) => ({ ...f, displayEndDate: e.target.value }))}
-                  className="mt-1 h-9"
-                />
-              </div>
               <div className="sm:col-span-2">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
@@ -721,16 +882,8 @@ export default function MarketingMaterialsPage() {
                 {savingMaterialAdd ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
                 {tr("저장", "Save", "บันทึก")}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setMaterialAddOpen(false)
-                  setMaterialAddForm(defaultMaterialAddForm())
-                }}
-              >
-                {tr("닫기", "Close", "ปิด")}
+              <Button type="button" variant="outline" size="sm" onClick={() => setMaterialAddForm(defaultMaterialAddForm())}>
+                {tr("입력란 비우기", "Reset fields", "ล้างช่อง")}
               </Button>
             </div>
           </div>
@@ -968,7 +1121,206 @@ export default function MarketingMaterialsPage() {
             </div>
           )}
         </div>
-          </>
+            </TabsContent>
+            <TabsContent value="all" className={adminTabsContentCn}>
+              <div className="mb-4 flex flex-wrap items-end gap-2">
+                <div className="flex min-w-[180px] flex-1 flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("marketingAdsFilterCampaignOptional")}
+                  </label>
+                  <select
+                    value={inqCampaignId}
+                    onChange={(e) => setInqCampaignId(e.target.value)}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">{t("all")}</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.campaignNo ? `[${c.campaignNo}] ` : ""}
+                        {c.topic}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex min-w-[140px] flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("marketingAdsFilterStatus")}
+                  </label>
+                  <select
+                    value={inqCampStatus}
+                    onChange={(e) => setInqCampStatus(e.target.value as InquiryCampStatusFilter)}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="all">{t("all")}</option>
+                    <option value="ongoing">{t("marketingAdsStatusOngoing")}</option>
+                    <option value="draft">{t("marketingAdsStatusDraft")}</option>
+                    <option value="finish">{t("marketingAdsStatusFinish")}</option>
+                    <option value="unlinked">{t("marketingAdsStatusUnlinked")}</option>
+                  </select>
+                </div>
+                <div className="flex min-w-[140px] flex-col gap-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("marketingMaterialsFilterMaterialStatus")}
+                  </label>
+                  <select
+                    value={inqMatStatus}
+                    onChange={(e) => setInqMatStatus(e.target.value)}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">{t("all")}</option>
+                    {MATERIAL_STATUS_VALUES.map((v) => (
+                      <option key={v} value={v}>
+                        {materialStatusLabel(v)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-[200px] flex-1">
+                  <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("search")}
+                  </label>
+                  <Input
+                    className="mt-1 h-10"
+                    value={inqSearch}
+                    onChange={(e) => setInqSearch(e.target.value)}
+                    placeholder={t("marketingAdsSearchPlaceholder")}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1.5"
+                  onClick={() => void loadInquiryMaterials()}
+                  disabled={inquiryLoading}
+                >
+                  <RotateCw className={cn("h-4 w-4", inquiryLoading && "animate-spin")} />
+                  {t("posRefresh") || "새로고침"}
+                </Button>
+              </div>
+              {inquiryLoading && (
+                <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                  {t("loading")}
+                </div>
+              )}
+              <div className="rounded-xl border bg-card">
+                <div className="border-b px-4 py-3">
+                  <h3 className="text-sm font-semibold">
+                    {t("marketingMaterialsSubtabInquiry")} ({filteredInquiryMaterials.length})
+                  </h3>
+                </div>
+                <div className="divide-y overflow-x-auto">
+                  {!inquiryLoading && filteredInquiryMaterials.length === 0 && (
+                    <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      {t("marketingMaterialsInquiryEmpty")}
+                    </p>
+                  )}
+                  {filteredInquiryMaterials.map((mat) => {
+                    const cid = mat.campaignId ? String(mat.campaignId) : ""
+                    const camp = cid ? campaignByIdMap.get(cid) : undefined
+                    const st = camp?.status ?? ""
+                    const unlinked = !cid || !camp
+                    const campStatusText = unlinked ? t("marketingAdsStatusUnlinked") : campaignStatusLabelT(st)
+                    return (
+                      <div
+                        key={mat.id}
+                        className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{mat.name}</span>
+                            <span
+                              className={cn(
+                                "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                                MATERIAL_STATUS_COLORS[mat.status] || "bg-gray-100 text-gray-700"
+                              )}
+                            >
+                              {materialStatusLabel(mat.status)}
+                            </span>
+                            <span
+                              className={cn(
+                                "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                                unlinked
+                                  ? "border border-dashed border-amber-500/60 text-amber-800 dark:text-amber-200"
+                                  : campaignStatusBadgeClass(st)
+                              )}
+                            >
+                              {campStatusText}
+                            </span>
+                            {cid && (
+                              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                {mat.campaignNo?.trim() || (camp ? `${camp.campaignNo ? `[${camp.campaignNo}] ` : ""}${camp.topic}` : cid)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                            {formatMatDisplayPeriod(mat.displayStartDate, mat.displayEndDate) && (
+                              <span className="font-medium text-foreground">
+                                {t("marketingRecordDisplayWindowTitle")}:{" "}
+                                {formatMatDisplayPeriod(mat.displayStartDate, mat.displayEndDate)}
+                              </span>
+                            )}
+                            <span>{materialTypeLabel(mat.type)}</span>
+                            <span>
+                              {tr("수량", "Qty", "จำนวน")}: {mat.quantity}
+                            </span>
+                            {mat.isHqWide && (
+                              <span className="text-indigo-800 dark:text-indigo-200">{hqLabel}</span>
+                            )}
+                            {mat.branches && mat.branches.length > 0 && !mat.isHqWide && (
+                              <span>
+                                {tr("매장", "Stores", "สาขา")}: {mat.branches.join(", ")}
+                              </span>
+                            )}
+                            {(mat.actualCost > 0 || mat.unitCost > 0) && (
+                              <span>
+                                {tr("실비", "Actual", "จริง")} ฿{mat.actualCost.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => openMaterialByCampaignTab(mat)}
+                          >
+                            {t("marketingMaterialsOpenByCampaignTab")}
+                          </Button>
+                          {mat.campaignId && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 gap-1 text-xs"
+                              onClick={() =>
+                                router.push(
+                                  `/admin/marketing/campaigns?openCampaign=${mat.campaignId}&tab=materials`
+                                )
+                              }
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              {tr("캠페인에서 수정", "Edit in Campaign", "แก้ไขในแคมเปญ")}
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs text-destructive hover:text-destructive"
+                            onClick={() => void handleDeleteInquiryMaterial(mat)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </div>

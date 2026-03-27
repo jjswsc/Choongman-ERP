@@ -45,6 +45,7 @@ import {
   getVendorsForSales,
   updateBankTransactionInvoice,
   updateBankTransaction,
+  deleteExpenseRegisterItem,
   reconcileBankTransaction,
   invalidateBankTransactionsListCache,
   getPurchaseOrders,
@@ -178,6 +179,7 @@ export function BankTransactionsTab() {
   const [queryVendorSearch, setQueryVendorSearch] = React.useState("")
   const [queryStoreSearch, setQueryStoreSearch] = React.useState("")
   const [querySavingId, setQuerySavingId] = React.useState<number | null>(null)
+  const [deletingBankTxId, setDeletingBankTxId] = React.useState<number | null>(null)
   const [reconcilingTxId, setReconcilingTxId] = React.useState<number | null>(null)
   const [registerExpenseRow, setRegisterExpenseRow] = React.useState<(typeof list)[0] | null>(null)
   const [registerPurchaseRow, setRegisterPurchaseRow] = React.useState<(typeof list)[0] | null>(null)
@@ -272,6 +274,33 @@ export function BankTransactionsTab() {
       await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setReconcilingTxId(null)
+    }
+  }
+
+  const handleDeleteBankRow = async (r: (typeof list)[0]) => {
+    if (!r.id || !isOffice) return
+    if (r.transType !== "withdraw" && r.transType !== "deposit") return
+    const base = tt("bankTxRowDeleteConfirm", "이 통장 거래 한 건을 삭제할까요? (입·출금, CSV 중복 등)")
+    const msg = r.reconciledAt
+      ? `${tt("bankTxRowDeleteReconciledHint", "은행 대사가 완료된 거래입니다.")}\n${base}`
+      : base
+    if (!(await appConfirm(msg))) return
+    setDeletingBankTxId(r.id)
+    try {
+      const res = await deleteExpenseRegisterItem({
+        bankTransactionId: r.id,
+        userRole: auth?.role,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_delete_fail", "삭제 실패"))
+        return
+      }
+      await invalidateBankTransactionsListCache({ accountId, startStr, endStr })
+      await loadData()
+    } catch (e) {
+      await appAlert(`${tt("msg_delete_fail", "삭제 실패")}: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setDeletingBankTxId(null)
     }
   }
 
@@ -452,11 +481,11 @@ export function BankTransactionsTab() {
     }
   }, [accounts, accountId])
 
-  const loadData = React.useCallback(() => {
-    if (!accountId) return
+  const loadData = React.useCallback((): Promise<void> => {
+    if (!accountId) return Promise.resolve()
     setLoading(true)
     setQueryRowEdits({})
-    getBankTransactions({
+    return getBankTransactions({
       accountId,
       startStr,
       endStr,
@@ -1343,7 +1372,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "56px" }} />
                           <col style={{ width: "180px" }} />
                           <col style={{ width: "140px" }} />
-                          <col style={{ width: "44px" }} />
+                          <col style={{ width: "76px" }} />
                         </colgroup>
                         <thead className="bg-muted/50 sticky top-0">
                           <tr>
@@ -1645,18 +1674,36 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 />
                               </td>
                               <td className="p-2 align-middle text-center">
-                                {hasEdits && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                    onClick={() => handleQueryRowSave(r)}
-                                    disabled={isSaving}
-                                    title={t("btn_save") || "저장"}
-                                  >
-                                    {isSaving ? <span className="text-xs">...</span> : <Save className="h-4 w-4" />}
-                                  </Button>
-                                )}
+                                <div className="flex items-center justify-center gap-0.5">
+                                  {hasEdits && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() => handleQueryRowSave(r)}
+                                      disabled={isSaving}
+                                      title={t("btn_save") || "저장"}
+                                    >
+                                      {isSaving ? <span className="text-xs">...</span> : <Save className="h-4 w-4" />}
+                                    </Button>
+                                  )}
+                                  {isOffice && r.id && (r.transType === "withdraw" || r.transType === "deposit") ? (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                                      onClick={() => void handleDeleteBankRow(r)}
+                                      disabled={deletingBankTxId === r.id}
+                                      title={tt("bankTxRowDeleteTitle", "거래 삭제")}
+                                    >
+                                      {deletingBankTxId === r.id ? (
+                                        <span className="text-xs">...</span>
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  ) : null}
+                                </div>
                               </td>
                             </tr>
                           );

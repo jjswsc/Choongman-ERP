@@ -47,6 +47,7 @@ import {
   validatePosCoupon,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
+import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
@@ -829,14 +830,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!needTaxInvoice) return baseMemo
     const lines = [
       '[TAX_INVOICE]',
-      `memberNo=${taxMemberNo.trim()}`,
+      `memberNo=${encodeTaxInvoiceMemoValue(taxMemberNo.trim())}`,
       `customerType=${invoiceCustomerType}`,
-      `name=${normalizedTaxName}`,
-      `taxId=${normalizedTaxId}`,
-      `branchNo=${effectiveTaxBranchNo}`,
-      `phone=${normalizedTaxPhone}`,
-      `email=${normalizedTaxEmail}`,
-      `address=${normalizedTaxAddress}`,
+      `name=${encodeTaxInvoiceMemoValue(normalizedTaxName)}`,
+      `taxId=${encodeTaxInvoiceMemoValue(normalizedTaxId)}`,
+      `branchNo=${encodeTaxInvoiceMemoValue(effectiveTaxBranchNo)}`,
+      `phone=${encodeTaxInvoiceMemoValue(normalizedTaxPhone)}`,
+      `email=${encodeTaxInvoiceMemoValue(normalizedTaxEmail)}`,
+      `address=${encodeTaxInvoiceMemoValue(normalizedTaxAddress)}`,
       `member=${isMemberOrder ? 'Y' : 'N'}`,
     ]
     const taxMemo = lines.join(' | ')

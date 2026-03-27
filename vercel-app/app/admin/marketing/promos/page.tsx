@@ -30,10 +30,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from '@/lib/admin-tab-styles'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -44,6 +44,8 @@ export default function MarketingPromosPage() {
   const campaignIdFromQuery = searchParams.get('campaignId')?.trim() || ''
   const { lang } = useLang()
   const t = useT(lang)
+  const marketingPromoSetsBannerText = t('marketingPromoSetsBanner')
+  const marketingPromoCampaignSelectHelpText = t('marketingPromoCampaignSelectHelp')
   const optionPartLabel = (name: string) => {
     if (!name?.trim()) return name ?? ''
     let s = String(name)
@@ -194,9 +196,11 @@ export default function MarketingPromosPage() {
           </div>
         </div>
 
-        <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
-          {t('marketingPromoSetsBanner')}
-        </div>
+        {marketingPromoSetsBannerText ? (
+          <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+            {marketingPromoSetsBannerText}
+          </div>
+        ) : null}
 
         {campaignIdFromQuery && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs leading-relaxed">
@@ -212,11 +216,11 @@ export default function MarketingPromosPage() {
           <div className={cn(adminTabsBarCn, 'px-2 py-2.5 sm:px-4')}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
               <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListGridClass('w-full max-w-md', 'grid-cols-2')}>
-                  <TabsTrigger value="compose" className={adminTabsTriggerGridCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="compose" className={adminTabsTriggerCn}>
                     {t('marketingPromoTabsEditCompose')}
                   </TabsTrigger>
-                  <TabsTrigger value="inquiry" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
                     {t('marketingPromoTabsList')}
                   </TabsTrigger>
                 </TabsList>
@@ -242,7 +246,9 @@ export default function MarketingPromosPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[10px] leading-relaxed text-muted-foreground">{t('marketingPromoCampaignSelectHelp')}</p>
+                {marketingPromoCampaignSelectHelpText ? (
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">{marketingPromoCampaignSelectHelpText}</p>
+                ) : null}
               </div>
             </div>
           </div>

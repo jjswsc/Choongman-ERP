@@ -1,5 +1,5 @@
 "use client"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
@@ -20,12 +20,14 @@ import {
   setRuntimeApiItems,
   clearRuntimeIngredients,
   getIngredientItemCode,
+  getIngredientCodeByItemCode,
+  getIngredient,
   MISE_DEFAULT,
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
-import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
+import type { PosMenuCostAnalysisRow, PosMenuIngredient } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
-import { posCostAnalysisRowKey } from "@/lib/pos-cost-analysis-keys"
+import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
 import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
@@ -65,6 +67,49 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   return { food, packaging }
 }
 
+/** 원가 분석 API에 breakdown이 비어 있을 때(저장 직후 스냅샷 지연 등) BOM API로 폼 상태 복원 */
+function posMenuIngredientsToRecipeState(ings: PosMenuIngredient[]): { food: RecipeItem[]; packaging: RecipeItem[] } {
+  const food: RecipeItem[] = []
+  const packaging: RecipeItem[] = []
+  const runtimeItems: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
+
+  ings.forEach((ing, idx) => {
+    const itemCode = String(ing.itemCode ?? "").trim()
+    if (!itemCode) return
+    const cat = ing.ingredientType === "packaging" ? "packaging" : "food"
+    const resolved = getIngredientCodeByItemCode(itemCode)
+    const codeNum = parseInt(itemCode, 10)
+    const code = resolved ?? (!isNaN(codeNum) ? codeNum : 10000 + idx)
+    const meta = getIngredient(code)
+    const name = meta?.name ?? itemCode
+    const bahtPerUnit = meta && "bahtPerUnit" in meta ? Number(meta.bahtPerUnit) || 0 : 0
+    runtimeItems.push({ code, name, bahtPerUnit, category: cat, itemCode })
+    const item: RecipeItem = {
+      ingredientCode: code,
+      quantity: Number(ing.quantity) || 0,
+      misePercent: (ing.lossRate ?? 0) || MISE_DEFAULT,
+      savedItemCode: itemCode,
+    }
+    if (cat === "packaging") packaging.push(item)
+    else food.push(item)
+  })
+
+  setRuntimeIngredients(runtimeItems)
+  return { food, packaging }
+}
+
+/** getPosMenuIngredients 쿼리: 기본 행은 파라미터 생략(null·0 병합 조회와 일치) */
+function ingredientsQueryOptionId(row: PosMenuCostAnalysisRow): string | undefined {
+  if (isCostAnalysisBaseRow(row)) return undefined
+  return String(row.optionId ?? "").trim() || undefined
+}
+
+function savePayloadOptionId(row: PosMenuCostAnalysisRow): number | null {
+  if (isCostAnalysisBaseRow(row)) return null
+  const n = Number(row.optionId)
+  return Number.isFinite(n) ? n : null
+}
+
 export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -99,7 +144,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       ? { ...initialLoadFromRow, breakdown: Array.isArray(initialLoadFromRow.breakdown) ? initialLoadFromRow.breakdown : [] }
       : null
     if (row) {
-      const { food, packaging } = breakdownToRecipeItems(row)
       const priceHall = row.priceHall ?? 0
       const priceDelivery = row.priceDelivery ?? null
       const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
@@ -115,8 +159,41 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         priceDelivery,
         cookingTimeMin: row.cookingTimeMin ?? null,
       })
-      setFoodItems(food)
-      setPackagingItems(packaging)
+
+      const breakdown = row.breakdown
+      if (breakdown.length > 0) {
+        const { food, packaging } = breakdownToRecipeItems(row)
+        setFoodItems(food)
+        setPackagingItems(packaging)
+        return
+      }
+
+      /** breakdown이 비어 있으면(저장 직후 목록 갱신 지연·RLS 등) BOM API로 재료 복원 */
+      setFoodItems(emptyFoodRecipe)
+      setPackagingItems(emptyPackagingRecipe)
+      const menuIdStr = String(row.menuId ?? "").trim()
+      if (!menuIdStr) return
+
+      let cancelled = false
+      void (async () => {
+        try {
+          const opt = ingredientsQueryOptionId(row)
+          const ings = await getPosMenuIngredients({ menuId: menuIdStr, optionId: opt })
+          if (cancelled) return
+          const { food, packaging } = posMenuIngredientsToRecipeState(Array.isArray(ings) ? ings : [])
+          setFoodItems(food)
+          setPackagingItems(packaging)
+        } catch {
+          if (!cancelled) {
+            setFoodItems(emptyFoodRecipe)
+            setPackagingItems(emptyPackagingRecipe)
+          }
+        }
+      })()
+
+      return () => {
+        cancelled = true
+      }
     } else {
       clearRuntimeIngredients()
       setMenuItem(emptyMenuItem)
@@ -175,7 +252,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   const handleSave = useCallback(async () => {
     if (!initialLoadFromRow || saving) return
     const menuId = Number(initialLoadFromRow.menuId)
-    const optionId = initialLoadFromRow.optionId ? Number(initialLoadFromRow.optionId) : null
+    const optionId = savePayloadOptionId(initialLoadFromRow)
     if (!menuId) return
 
     const allItems = [
@@ -199,7 +276,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     try {
       const existing = await getPosMenuIngredients({
         menuId: String(menuId),
-        optionId: optionId != null ? String(optionId) : (undefined as string | undefined),
+        optionId: ingredientsQueryOptionId(initialLoadFromRow),
       })
       const uiIngredientRows = foodItems.length + packagingItems.length
       if (uiIngredientRows > 0 && toSave.length === 0) {
@@ -208,6 +285,13 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             "재료 품목코드를 확인할 수 없어 저장할 수 없습니다. 목록에서 메뉴를 다시 선택한 뒤 수정해 주세요."
         )
       }
+      if (existing.length > 0 && toSave.length === 0) {
+        const ok = await appConfirm(
+          t("posCostSaveConfirmClearAllBom") ||
+            "There are no ingredients on the form but the menu still has BOM rows in the database. Save will delete all of them. Continue?"
+        )
+        if (!ok) return
+      }
       for (const ing of existing) {
         const res = await deletePosMenuIngredient({ id: String(ing.id) })
         if (!res.success) throw new Error(res.message)
@@ -215,7 +299,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       for (const row of toSave) {
         const res = await savePosMenuIngredient({
           menuId,
-          optionId: optionId != null ? optionId : null,
+          optionId,
           itemCode: row.itemCode,
           quantity: row.quantity,
           lossRate: row.lossRate,
@@ -231,7 +315,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       const category = String(initialLoadFromRow.category ?? "").trim()
       const categoryMain = String(initialLoadFromRow.categoryMain ?? "").trim()
       if (optionId != null) {
-        const baseRow = menuRows?.find((r) => r.menuId === String(menuId) && !r.optionId)
+        const baseRow = menuRows?.find((r) => r.menuId === String(menuId) && isCostAnalysisBaseRow(r))
         const baseHall = baseRow?.priceHall ?? 0
         const baseDelivery = baseRow?.priceDelivery ?? baseHall
         const modHall = Math.round((pHall - baseHall) * 10) / 10
@@ -256,6 +340,14 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         })
         if (!menuRes.success) throw new Error(menuRes.message)
       }
+
+      const reloadIngs = await getPosMenuIngredients({
+        menuId: String(menuId),
+        optionId: ingredientsQueryOptionId(initialLoadFromRow),
+      })
+      const synced = posMenuIngredientsToRecipeState(Array.isArray(reloadIngs) ? reloadIngs : [])
+      setFoodItems(synced.food)
+      setPackagingItems(synced.packaging)
 
       await appAlert(t("msg_save_success") || "저장되었습니다.")
       onSaveSuccess?.()

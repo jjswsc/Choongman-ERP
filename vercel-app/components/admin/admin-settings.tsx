@@ -15,10 +15,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -251,17 +251,17 @@ export function AdminSettings() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as "office" | "permission" | "notification" | "about")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-2xl", "grid-cols-2", "sm:grid-cols-4")}>
-                <TabsTrigger value="office" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="office" className={adminTabsTriggerCn}>
                   {t("settings_head_office")}
                 </TabsTrigger>
-                <TabsTrigger value="permission" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="permission" className={adminTabsTriggerCn}>
                   {t("settings_menu_permission")}
                 </TabsTrigger>
-                <TabsTrigger value="notification" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="notification" className={adminTabsTriggerCn}>
                   {t("settings_notification_tab")}
                 </TabsTrigger>
-                <TabsTrigger value="about" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="about" className={adminTabsTriggerCn}>
                   {t("settings_permission_title")}
                 </TabsTrigger>
               </TabsList>

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 
 type BankTxRow = {
   id?: number
   trans_type?: string
   amount?: number
+  trans_date?: string
 }
 
 type PayableRow = {
@@ -130,11 +132,74 @@ export async function POST(request: NextRequest) {
     const bankRows = (await supabaseSelectFilter(
       'bank_transactions',
       `id=eq.${bankTransactionId}`,
-      { limit: 1, select: 'id,trans_type,amount' }
+      { limit: 1, select: 'id,trans_type,amount,trans_date' }
     )) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
     if (!bankRow?.id) return NextResponse.json({ success: false, message: '대상 거래를 찾을 수 없습니다.' }, { status: 404, headers })
-    if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
+    const transTypeLower = String(bankRow.trans_type || '').toLowerCase()
+
+    if (action === 'delete') {
+      if (!['deposit', 'withdraw'].includes(transTypeLower)) {
+        return NextResponse.json({ success: false, message: '입금·출금 거래만 삭제할 수 있습니다.' }, { status: 400, headers })
+      }
+
+      const linkedPayables = (await supabaseSelectFilter(
+        'payable_transactions',
+        `bank_transaction_id=eq.${bankTransactionId}`,
+        { limit: 20, select: 'id,expense_accrual_id' }
+      )) as PayableRow[] | null
+
+      if ((linkedPayables || []).some((p) => Number(p.expense_accrual_id || 0) > 0)) {
+        return NextResponse.json(
+          { success: false, message: '지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.' },
+          { status: 400, headers }
+        )
+      }
+
+      const [linkedInbound, linkedCards] = await Promise.all([
+        supabaseSelectFilter('bank_transaction_inbound_links', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
+        supabaseSelectFilter('card_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
+      ])
+      if ((linkedInbound || []).length > 0) {
+        return NextResponse.json({ success: false, message: '입고 연동된 거래는 삭제할 수 없습니다.' }, { status: 400, headers })
+      }
+      if ((linkedCards || []).length > 0) {
+        return NextResponse.json({ success: false, message: '카드 충전과 연결된 거래는 삭제할 수 없습니다.' }, { status: 400, headers })
+      }
+
+      if (transTypeLower === 'deposit') {
+        const recvRows = (await supabaseSelectFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, {
+          limit: 20,
+          select: 'id,ref_type,ref_id',
+        })) as { id?: number; ref_type?: string | null; ref_id?: number | null }[] | null
+        const blockedRecv = (recvRows || []).some((row) => {
+          const rid = Number(row.ref_id || 0)
+          if (rid > 0) return true
+          const rt = String(row.ref_type || '')
+          if (rt === 'Order') return true
+          return false
+        })
+        if (blockedRecv) {
+          return NextResponse.json(
+            { success: false, message: '주문·기타 원장과 연결된 미수금 입금은 삭제할 수 없습니다.' },
+            { status: 400, headers }
+          )
+        }
+      }
+
+      await assertAccountingDateOpen(String(bankRow.trans_date || '').slice(0, 10))
+      await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
+      if (transTypeLower === 'deposit') {
+        await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`)
+      }
+      await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
+        memoIncludes: ['통장 거래 자동분개'],
+      })
+      await supabaseDeleteByFilter('bank_transactions', `id=eq.${bankTransactionId}`)
+      return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
+    }
+
+    if (transTypeLower !== 'withdraw') {
       return NextResponse.json({ success: false, message: '출금 거래만 수정할 수 있습니다.' }, { status: 400, headers })
     }
 
@@ -149,28 +214,6 @@ export async function POST(request: NextRequest) {
         { success: false, message: '지급예정에서 생성된 지급 건입니다. 지급예정 탭에서 수정해 주세요.' },
         { status: 400, headers }
       )
-    }
-
-    if (action === 'delete') {
-      if ((linkedPayables || []).some((r) => Number(r.expense_accrual_id || 0) > 0)) {
-        return NextResponse.json(
-          { success: false, message: '지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.' },
-          { status: 400, headers }
-        )
-      }
-      const [linkedInbound, linkedCards] = await Promise.all([
-        supabaseSelectFilter('bank_transaction_inbound_links', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
-        supabaseSelectFilter('card_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
-      ])
-      if ((linkedInbound || []).length > 0) {
-        return NextResponse.json({ success: false, message: '입고 연동된 거래는 삭제할 수 없습니다.' }, { status: 400, headers })
-      }
-      if ((linkedCards || []).length > 0) {
-        return NextResponse.json({ success: false, message: '카드 충전과 연결된 거래는 삭제할 수 없습니다.' }, { status: 400, headers })
-      }
-      await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
-      await supabaseDeleteByFilter('bank_transactions', `id=eq.${bankTransactionId}`)
-      return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
     }
 
     const bankCategory = mapToBankTransactionCategory(category!)
@@ -217,10 +260,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {
     console.error('updateExpenseRegisterItem:', e)
-    return NextResponse.json(
-      { success: false, message: e instanceof Error ? e.message : '수정 실패' },
-      { status: 500, headers }
-    )
+    const raw = e instanceof Error ? e.message : '수정 실패'
+    const message =
+      raw === 'ACCOUNTING_PERIOD_CLOSED' ? '마감된 회계기간의 거래는 삭제할 수 없습니다.' : raw
+    return NextResponse.json({ success: false, message }, { status: 500, headers })
   }
 }
 

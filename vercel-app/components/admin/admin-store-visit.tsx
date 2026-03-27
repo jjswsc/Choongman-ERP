@@ -15,10 +15,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -210,11 +210,11 @@ export function AdminStoreVisit() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "stats")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
-                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_visit_list")}
                 </TabsTrigger>
-                <TabsTrigger value="stats" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="stats" className={adminTabsTriggerCn}>
                   {t("tab_visit_stats")}
                 </TabsTrigger>
               </TabsList>

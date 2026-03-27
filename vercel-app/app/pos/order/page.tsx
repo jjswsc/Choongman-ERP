@@ -1728,12 +1728,13 @@ export default function PosOrderPage() {
                 {parsedReceiptMemo.taxInvoice && (
                   <div className="text-xs border border-black p-2">
                     <div className="font-semibold mb-1">{tr("posReceiptTaxInvoice", "세금계산서")}</div>
+                    <div>{tr("posTaxCustomerTypeLabel", "구분")}: {parsedReceiptMemo.taxInvoice.customerType === "company" ? tr("posTaxCustomerCorporate", "법인") : tr("posTaxCustomerIndividual", "개인")}</div>
                     <div>{tr("posName", "이름")}: {parsedReceiptMemo.taxInvoice.name}</div>
                     <div>{tr("posTaxIdLabel", "Tax ID")}: {parsedReceiptMemo.taxInvoice.taxId}</div>
                     <div>{tr("posBranchLabel", "지점")}: {parsedReceiptMemo.taxInvoice.branchNo || (parsedReceiptMemo.taxInvoice.customerType === "company" ? "00000" : tr("posHeadOffice", "본점"))}</div>
+                    <div>{tr("settings_address", "주소")}: {parsedReceiptMemo.taxInvoice.address}</div>
                     <div>{tr("posPhone", "전화번호")}: {parsedReceiptMemo.taxInvoice.phone}</div>
                     <div>{tr("email", "이메일")}: {parsedReceiptMemo.taxInvoice.email}</div>
-                    <div>{tr("settings_address", "주소")}: {parsedReceiptMemo.taxInvoice.address}</div>
                   </div>
                 )}
                 <div className="space-y-1">

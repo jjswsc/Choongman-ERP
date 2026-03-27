@@ -15,10 +15,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -413,20 +413,18 @@ export function AdminStoreCheck() {
         >
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
-              <TabsList
-                className={cn(adminTabsListGridClass("max-w-2xl"), isHQ ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}
-              >
-                <TabsTrigger value="check" className={adminTabsTriggerGridCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="check" className={adminTabsTriggerCn}>
                   {t("tab_store_check")}
                 </TabsTrigger>
-                <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="history" className={adminTabsTriggerCn}>
                   {t("tab_store_history")}
                 </TabsTrigger>
-                <TabsTrigger value="failedSummary" className={adminTabsTriggerGridCn}>
+                <TabsTrigger value="failedSummary" className={adminTabsTriggerCn}>
                   {t("tab_store_failed_summary")}
                 </TabsTrigger>
                 {isHQ && (
-                  <TabsTrigger value="setting" className={adminTabsTriggerGridCn}>
+                  <TabsTrigger value="setting" className={adminTabsTriggerCn}>
                     {t("tab_store_setting")}
                   </TabsTrigger>
                 )}

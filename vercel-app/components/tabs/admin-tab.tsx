@@ -38,10 +38,10 @@ import {
 import {
   adminTabsBarCn,
   adminTabsContentCn,
-  adminTabsListGridClass,
+  adminTabsListRowCn,
   adminTabsRootCn,
   adminTabsScrollCn,
-  adminTabsTriggerGridCn,
+  adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
@@ -207,11 +207,11 @@ export function AdminTab() {
       <Tabs defaultValue="compose" className={adminTabsRootCn}>
         <div className={adminTabsBarCn}>
           <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListGridClass("grid-cols-2")}>
-              <TabsTrigger value="compose" className={adminTabsTriggerGridCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="compose" className={adminTabsTriggerCn}>
                 {t("noticeNewTitle")}
               </TabsTrigger>
-              <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+              <TabsTrigger value="history" className={adminTabsTriggerCn}>
                 {t("noticeHistoryTitle")}
               </TabsTrigger>
             </TabsList>
