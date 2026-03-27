@@ -231,13 +231,23 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
               type="number"
               value={menuItem.inclVat}
               onChange={(e) => {
-                const v = parseFloat(e.target.value) || 0
-                onMenuItemChange({
-                  ...menuItem,
-                  inclVat: v,
-                  priceHall: v,
-                  priceDelivery: menuItem.priceDelivery ?? v,
-                })
+                const parsed = parseFloat(e.target.value)
+                const v = Number.isFinite(parsed) ? parsed : 0
+                /** Dine-In: 홀가(price)만 편집. Delivery: 배달가(price_delivery)만 편집 — 섞이면 저장 시 한쪽 가격이 잘못 갱신됨 */
+                if (menuItem.serviceType === "Delivery") {
+                  onMenuItemChange({
+                    ...menuItem,
+                    inclVat: v,
+                    priceDelivery: v,
+                  })
+                } else {
+                  onMenuItemChange({
+                    ...menuItem,
+                    inclVat: v,
+                    priceHall: v,
+                    priceDelivery: menuItem.priceDelivery ?? v,
+                  })
+                }
               }}
               className="h-10 min-h-[40px] w-28 font-mono text-base font-semibold bg-primary/5 border-2 border-primary/30 text-primary [& input]:text-right"
               step="0.01"

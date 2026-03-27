@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
+/** JSON 본문에서 true/false 문자열 등도 안전하게 해석 (지연 배지 등) */
+function parseBoolParam(v: unknown, defaultVal: boolean): boolean {
+  if (v === true || v === 'true' || v === 1 || v === '1') return true
+  if (v === false || v === 'false' || v === 0 || v === '0') return false
+  return defaultVal
+}
+
+function parseCookingInt(v: unknown, fallback: number): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
+  const n = Number(String(v ?? '').trim())
+  return Number.isFinite(n) ? Math.trunc(n) : fallback
+}
+
 function extractMissingColumnName(error: unknown): string | null {
   const msg = String(error ?? '')
   const m = msg.match(/Could not find the '([^']+)' column/i)
@@ -63,14 +76,20 @@ export async function POST(req: NextRequest) {
     const autoStockDeduction = Boolean(body?.autoStockDeduction)
     const deliveryFee = Math.max(0, Number(body?.deliveryFee ?? 0))
     const packagingFee = Math.max(0, Number(body?.packagingFee ?? 0))
-    const cookingFreshMaxMin = Math.max(1, Number(body?.cookingFreshMaxMin ?? 10))
-    const cookingWarningMaxMin = Math.max(cookingFreshMaxMin + 1, Number(body?.cookingWarningMaxMin ?? 15))
+    const cookingFreshMaxMin = Math.max(1, parseCookingInt(body?.cookingFreshMaxMin, 10))
+    const cookingWarningMaxMin = Math.max(
+      cookingFreshMaxMin + 1,
+      parseCookingInt(body?.cookingWarningMaxMin, 15)
+    )
     const cookingRuleMode = String(body?.cookingRuleMode || 'elapsed') === 'recipe_diff' ? 'recipe_diff' : 'elapsed'
-    const cookingRecipeWarningDiffMin = Math.max(0, Number(body?.cookingRecipeWarningDiffMin ?? 0))
-    const cookingRecipeUrgentDiffMin = Math.max(cookingRecipeWarningDiffMin + 1, Number(body?.cookingRecipeUrgentDiffMin ?? 5))
-    const cookingDelayBadgeEnabled = body?.cookingDelayBadgeEnabled !== false
-    const cookingDelaySoundEnabled = Boolean(body?.cookingDelaySoundEnabled)
-    const cookingDelayAlertOverMin = Math.max(0, Number(body?.cookingDelayAlertOverMin ?? 0))
+    const cookingRecipeWarningDiffMin = Math.max(0, parseCookingInt(body?.cookingRecipeWarningDiffMin, 0))
+    const cookingRecipeUrgentDiffMin = Math.max(
+      cookingRecipeWarningDiffMin + 1,
+      parseCookingInt(body?.cookingRecipeUrgentDiffMin, 5)
+    )
+    const cookingDelayBadgeEnabled = parseBoolParam(body?.cookingDelayBadgeEnabled, true)
+    const cookingDelaySoundEnabled = parseBoolParam(body?.cookingDelaySoundEnabled, false)
+    const cookingDelayAlertOverMin = Math.max(0, parseCookingInt(body?.cookingDelayAlertOverMin, 0))
     const cardAutoOpen = Boolean(body?.cardAutoOpen)
     const checkAutoOpen = Boolean(body?.checkAutoOpen)
     const drawerOpt = String(body?.drawerOpenOption || 'reason_only')

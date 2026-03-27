@@ -28,6 +28,8 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 const HIRE_TYPE_OPTIONS = [
   { value: "pay", label: "Pay" },
@@ -369,17 +371,12 @@ export default function MarketingInfluencersPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Users className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">{t("adminMarketingInfluencers") || "인플루언서"}</h1>
-            <p className="text-xs text-muted-foreground">인플루언서 협업 이력 및 비용</p>
-          </div>
-        </div>
+    <MarketingPageShell maxWidthClass="max-w-4xl">
+        <MarketingPageHero
+          icon={Users}
+          title={t("adminMarketingInfluencers") || "인플루언서"}
+          description="인플루언서 협업 이력 및 비용"
+        />
 
         <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           인플루언서 활동은 <strong className="text-foreground">캠페인 고유번호</strong>로 묶입니다. 캠페인 허브에서 캠페인을 만든 뒤 선택해 주세요.
@@ -824,7 +821,6 @@ export default function MarketingInfluencersPage() {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </MarketingPageShell>
   )
 }

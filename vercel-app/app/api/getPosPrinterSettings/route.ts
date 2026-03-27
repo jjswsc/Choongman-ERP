@@ -236,7 +236,12 @@ export async function GET(request: NextRequest) {
       cookingRuleMode: String(raw?.cooking_rule_mode || 'elapsed') === 'recipe_diff' ? 'recipe_diff' : 'elapsed',
       cookingRecipeWarningDiffMin: Math.max(0, Number(raw?.cooking_recipe_warning_diff_min ?? 0)),
       cookingRecipeUrgentDiffMin: Math.max(1, Number(raw?.cooking_recipe_urgent_diff_min ?? 5)),
-      cookingDelayBadgeEnabled: raw?.cooking_delay_badge_enabled !== false,
+      cookingDelayBadgeEnabled:
+        raw?.cooking_delay_badge_enabled === false
+          ? false
+          : raw?.cooking_delay_badge_enabled === true
+            ? true
+            : true,
       cookingDelaySoundEnabled: Boolean(raw?.cooking_delay_sound_enabled),
       cookingDelayAlertOverMin: Math.max(0, Number(raw?.cooking_delay_alert_over_min ?? 0)),
       cardAutoOpen: Boolean(raw?.card_auto_open),

@@ -6,7 +6,7 @@ import {
   Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy,
   Users, Package, BarChart2, ExternalLink, Loader2, CheckCheck, X,
   List, ClipboardPen, Search, Tag, TrendingUp, ChevronDown, ChevronUp,
-  GitCompare,
+  GitCompare, Handshake,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +43,9 @@ import {
 import { cn } from "@/lib/utils"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
+import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 
@@ -241,6 +244,8 @@ const defaultForm = {
   discountType: "percent",
   discountValue: "",
   discountPricePromotion: "",
+  discountTargetAudience: "",
+  collabManagement: false,
   costAdsOnline: "",
   costAdsOffline: "",
   costProduction: "",
@@ -583,9 +588,11 @@ export default function MarketingCampaignsPage() {
           startDate: c.startDate ?? "",
           endDate: c.endDate ?? "",
           branches: Array.isArray(c.branches) ? [...c.branches] : [],
-          discountType: c.discountType ?? "percent",
+          discountType: ["amount", "fixed"].includes(c.discountType ?? "") ? "amount" : "percent",
           discountValue: String(c.discountValue ?? ""),
           discountPricePromotion: c.discountPricePromotion ?? "",
+          discountTargetAudience: c.discountTargetAudience ?? "",
+          collabManagement: c.collabManagement === true,
           costAdsOnline: String(c.costAdsOnline ?? ""),
           costAdsOffline: String(c.costAdsOffline ?? ""),
           costProduction: String(c.costProduction ?? ""),
@@ -666,13 +673,22 @@ export default function MarketingCampaignsPage() {
       const branches = (c.branches ?? []).join(" ").toLowerCase()
       const typeLabel = getCampaignTypeLabel(c.campaignType, lang).toLowerCase()
       const statusText = statusLabel(c.status).toLowerCase()
+      const audience = (c.discountTargetAudience ?? "").toLowerCase()
+      const promoLine = (c.discountPricePromotion ?? "").toLowerCase()
+      const disc =
+        c.discountType === "percent"
+          ? `${c.discountValue ?? 0}%`
+          : `฿${Number(c.discountValue ?? 0).toLocaleString()}`
       return (
         topic.includes(q) ||
         no.includes(q) ||
         format.includes(q) ||
         branches.includes(q) ||
         typeLabel.includes(q) ||
-        statusText.includes(q)
+        statusText.includes(q) ||
+        audience.includes(q) ||
+        promoLine.includes(q) ||
+        disc.includes(q)
       )
     })
   }, [list, listSearch, lang])
@@ -693,9 +709,11 @@ export default function MarketingCampaignsPage() {
         startDate: "",
         endDate: "",
         branches: Array.isArray(detail.branches) ? [...detail.branches] : [],
-        discountType: detail.discountType ?? "percent",
+        discountType: ["amount", "fixed"].includes(detail.discountType ?? "") ? "amount" : "percent",
         discountValue: String(detail.discountValue ?? ""),
         discountPricePromotion: detail.discountPricePromotion ?? "",
+        discountTargetAudience: detail.discountTargetAudience ?? "",
+        collabManagement: detail.collabManagement === true,
         costAdsOnline: String(detail.costAdsOnline ?? ""),
         costAdsOffline: String(detail.costAdsOffline ?? ""),
         costProduction: String(detail.costProduction ?? ""),
@@ -794,6 +812,8 @@ export default function MarketingCampaignsPage() {
         discountType: form.discountType,
         discountValue: Number(form.discountValue) || 0,
         discountPricePromotion: form.discountPricePromotion.trim(),
+        discountTargetAudience: form.discountTargetAudience.trim(),
+        collabManagement: form.collabManagement,
         costAdsOnline: normalizedCosts.costAdsOnline,
         costAdsOffline: normalizedCosts.costAdsOffline,
         costProduction: normalizedCosts.costProduction,
@@ -1140,32 +1160,16 @@ export default function MarketingCampaignsPage() {
   const selectedKpiUnit = kpiUnitLabel(form.kpiUnit)
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div
-        className={cn(
-          "mx-auto px-4 py-6 sm:px-6 lg:px-8",
-          hubTab === "compare" ? "max-w-7xl" : "max-w-4xl"
-        )}
-      >
-
-        {/* 헤더 */}
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Megaphone className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")}
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {tr(
-                "마케팅 캠페인 등록 및 통합 관리",
-                "Create and manage marketing campaigns",
-                "ลงทะเบียนและจัดการแคมเปญการตลาดแบบรวมศูนย์"
-              )}
-            </p>
-          </div>
-        </div>
+    <MarketingPageShell maxWidthClass={hubTab === "compare" ? "max-w-7xl" : "max-w-4xl"}>
+        <MarketingPageHero
+          icon={Megaphone}
+          title={tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")}
+          description={tr(
+            "마케팅 캠페인 등록 및 통합 관리",
+            "Create and manage marketing campaigns",
+            "ลงทะเบียนและจัดการแคมเปญการตลาดแบบรวมศูนย์"
+          )}
+        />
 
         {/* 툴바 */}
         <div className="mb-4 flex flex-wrap gap-2">
@@ -1412,33 +1416,138 @@ export default function MarketingCampaignsPage() {
                     {tr("선택됨", "Selected", "เลือกแล้ว")}: {form.branches.join(", ")}
                   </p>
                 )}
+                <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                  {tr(
+                    "참여 지점을 비워 두면 전체 매장 대상 협업·행사로 기록할 수 있습니다.",
+                    "Leave branches empty to record an all-store collaboration plan.",
+                    "เว้นสาขาว่างไว้เพื่อบันทึกแผนร่วมทุกสาขา"
+                  )}
+                </p>
               </div>
 
-              {/* 할인 정책(프로모션 세트 연결) */}
-              <div className="sm:col-span-2 rounded-lg border border-dashed bg-muted/20 px-3 py-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-semibold">
-                      {tr("할인 정책", "Discount Policy", "นโยบายส่วนลด")}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {tr(
-                        "할인 유형/값은 프로모션 세트에서 관리합니다.",
-                        "Discount type/value is managed in Promotion Sets.",
-                        "ประเภท/มูลค่าส่วนลดจัดการที่ชุดโปรโมชัน"
-                      )}
-                    </p>
+              {/* 협업 관리 (기획 메모 — POS 규칙은 프로모션 세트) */}
+              <div className="sm:col-span-2 rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.04] to-transparent px-3 py-3.5">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex gap-2">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/12">
+                      <Handshake className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">
+                        {tr("협업 관리", "Collab management", "การจัดการความร่วมมือ")}
+                      </p>
+                      <p className="mt-0.5 max-w-xl text-[10px] leading-relaxed text-muted-foreground">
+                        {tr(
+                          "어느 매장·누구에게 몇 % 할인 등 기획 내용을 적어 둡니다. 실제 POS에서 적용되는 할인 규칙·세트 구성은 프로모션 세트에서 설정합니다.",
+                          "Record which stores, audience, and planned % off. Actual POS discount rules are configured in Promotion Sets.",
+                          "บันทึกสาขา กลุ่มลูกค้า และส่วนลดที่วางแผน — กฎ POS จริงตั้งที่ชุดโปรโมชัน"
+                        )}
+                      </p>
+                    </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => router.push(`/admin/marketing/promos${editingId ? `?campaignId=${editingId}` : ""}`)}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {tr("프로모션 세트로 이동", "Go to Promotion Sets", "ไปที่ชุดโปรโมชัน")}
-                  </Button>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="secondary" className="h-8 gap-1 text-xs" asChild>
+                      <Link
+                        href={
+                          editingId
+                            ? `/admin/marketing/collab-menus?campaignId=${encodeURIComponent(editingId)}`
+                            : "/admin/marketing/collab-menus"
+                        }
+                      >
+                        <Handshake className="h-3 w-3" />
+                        {t("marketingCampaignOpenCollabHub")}
+                      </Link>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1 text-xs"
+                      onClick={() => router.push(`/admin/marketing/promos${editingId ? `?campaignId=${editingId}` : ""}`)}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}
+                    </Button>
+                  </div>
+                </div>
+                <div className="mb-3 flex items-start gap-2.5 rounded-md border border-border/60 bg-background/50 px-2.5 py-2">
+                  <Checkbox
+                    id="campaign-collab-management"
+                    checked={form.collabManagement}
+                    onCheckedChange={(v) =>
+                      setForm((f) => ({ ...f, collabManagement: v === true }))
+                    }
+                    className="mt-0.5"
+                  />
+                  <label htmlFor="campaign-collab-management" className="cursor-pointer text-xs leading-snug text-foreground">
+                    <span className="font-medium">{t("marketingCampaignCollabManagementInclude")}</span>
+                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                      {t("marketingCampaignCollabManagementIncludeHint")}
+                    </span>
+                  </label>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-foreground">
+                      {tr("할인·행사 대상", "Discount audience", "กลุ่มเป้าหมายส่วนลด")}
+                    </label>
+                    <Textarea
+                      value={form.discountTargetAudience}
+                      onChange={(e) => setForm((f) => ({ ...f, discountTargetAudience: e.target.value }))}
+                      placeholder={tr(
+                        "예: 전체 고객 / 앱 회원만 / 그랩·라인맨 주문 / 특정 제휴사 코드 입력 고객",
+                        "e.g. All guests · App members only · Delivery app orders · Partner code holders",
+                        "เช่น ลูกค้าทุกคน · สมาชิกแอป · ออเดอร์แอปเดลิเวอรี"
+                      )}
+                      className="mt-1 min-h-[72px] text-sm"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">{tr("기획 할인 유형", "Planned discount type", "ประเภทส่วนลด (แผน)")}</label>
+                      <select
+                        value={form.discountType}
+                        onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value }))}
+                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                      >
+                        <option value="percent">{tr("정률 (%)", "Percent (%)", "เปอร์เซ็นต์ (%)")}</option>
+                        <option value="amount">{tr("정액 (฿)", "Fixed amount (฿)", "จำนวนเงิน (฿)")}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">
+                        {form.discountType === "percent"
+                          ? tr("기획 할인율 (%)", "Planned % off", "ส่วนลด % (แผน)")
+                          : tr("기획 할인액 (฿)", "Planned amount (฿)", "ส่วนลดบาท (แผน)")}
+                      </label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={form.discountType === "percent" ? 100 : undefined}
+                        step={form.discountType === "percent" ? 1 : 1}
+                        value={form.discountValue}
+                        onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                        className="mt-1"
+                        placeholder={form.discountType === "percent" ? "10" : "50"}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {tr("협업 요약", "Collab summary", "สรุปความร่วมมือ")}
+                    </label>
+                    <Input
+                      value={form.discountPricePromotion}
+                      onChange={(e) => setForm((f) => ({ ...f, discountPricePromotion: e.target.value }))}
+                      placeholder={tr(
+                        "예: 후라이드 세트 20% / A브랜드 콜라보 한정 메뉴",
+                        "e.g. Fried combo 20% off · Limited collab menu with Brand A",
+                        "เช่น เซ็ตไก่ทอดลด 20% · เมนูร่วมแบรนด์ A"
+                      )}
+                      className="mt-1"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2387,7 +2496,30 @@ export default function MarketingCampaignsPage() {
                     <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-muted-foreground mt-0.5">
                       {c.format && <span>{c.format}</span>}
                       {(c.startDate || c.endDate) && <span>{c.startDate || "~"} ~ {c.endDate || "~"}</span>}
-                      {c.branches?.length > 0 && <span>{c.branches.slice(0, 3).join(", ")}{c.branches.length > 3 ? ` +${c.branches.length - 3}` : ""}</span>}
+                      {c.branches && c.branches.length > 0 ? (
+                        <span>{c.branches.slice(0, 3).join(", ")}{c.branches.length > 3 ? ` +${c.branches.length - 3}` : ""}</span>
+                      ) : (
+                        <span className="text-amber-800/90 dark:text-amber-200/90">
+                          {tr("전체 매장(기획)", "All stores (plan)", "ทุกสาขา (แผน)")}
+                        </span>
+                      )}
+                      {(c.discountValue ?? 0) > 0 && (
+                        <span className="font-medium text-foreground">
+                          {c.discountType === "amount" || c.discountType === "fixed"
+                            ? tr("기획", "Plan", "แผน") + ` ฿${Number(c.discountValue).toLocaleString()}`
+                            : tr("기획", "Plan", "แผน") + ` ${c.discountValue}%`}
+                        </span>
+                      )}
+                      {(c.discountPricePromotion ?? "").trim() && (
+                        <span className="max-w-[220px] truncate" title={c.discountPricePromotion}>
+                          {c.discountPricePromotion}
+                        </span>
+                      )}
+                      {(c.discountTargetAudience ?? "").trim() && (
+                        <span className="max-w-[200px] truncate" title={c.discountTargetAudience}>
+                          {tr("대상", "Audience", "กลุ่มเป้าหมาย")}: {c.discountTargetAudience}
+                        </span>
+                      )}
                       {c.kpiTarget > 0 && <span>KPI: {c.kpiTarget.toLocaleString()} {kpiUnitLabel(c.kpiUnit)}</span>}
                       {c.budgetTotal > 0 && <span>{tr("예산", "Budget", "งบประมาณ")}: ฿{c.budgetTotal.toLocaleString()}</span>}
                     </div>
@@ -2433,7 +2565,6 @@ export default function MarketingCampaignsPage() {
           {hubTab === "compare" && <CampaignAbComparePanel />}
 
         </div>
-      </div>
-    </div>
+    </MarketingPageShell>
   )
 }

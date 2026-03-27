@@ -40,6 +40,7 @@ import {
   type InboundBatchForLink,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { stripWithdrawalCategoryMetaFromNote } from "@/lib/bank-transaction-note-meta"
 import { compressImageForUpload } from "@/lib/utils"
 import { useSearchParams, useRouter } from "next/navigation"
 import { isOfficeStore } from "@/lib/permissions"
@@ -216,7 +217,9 @@ export function WithdrawalManagementTab() {
       hasAppliedParams.current = true
       if (amountParam && Number(amountParam) > 0) setAmount(String(Number(amountParam)))
       if (bankMemoParam) setBankMemo(bankMemoParam)
-      if (bankNoteParam || memoParam) setMemo(memoParam || bankNoteParam || "")
+      if (bankNoteParam || memoParam) {
+        setMemo(memoParam || stripWithdrawalCategoryMetaFromNote(bankNoteParam || "") || "")
+      }
       if (transDateParam && /^\d{4}-\d{2}-\d{2}$/.test(transDateParam)) setTransDate(transDateParam)
       if (accountIdParam) setAccountId(accountIdParam)
       if (btIdParam) {

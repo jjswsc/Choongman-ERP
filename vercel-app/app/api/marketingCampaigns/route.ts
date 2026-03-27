@@ -5,6 +5,7 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { normalizeMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -105,6 +106,8 @@ export async function GET(req: NextRequest) {
         discountType: String(row.discount_type ?? 'percent'),
         discountValue: parseNum(row.discount_value),
         discountPricePromotion: String(row.discount_price_promotion ?? ''),
+        discountTargetAudience: String(row.discount_target_audience ?? ''),
+        collabManagement: row.collab_management === true,
         costAdsOnline: parseNum(row.cost_ads_online),
         costAdsOffline: parseNum(row.cost_ads_offline),
         costProduction: parseNum(row.cost_production),
@@ -117,6 +120,7 @@ export async function GET(req: NextRequest) {
         kpiUnit: String(row.kpi_unit ?? 'order'),
         campaignPerformance: String(row.campaign_performance ?? ''),
         conclusion: String(row.conclusion ?? ''),
+        collabDetail: normalizeMarketingCollabDetail(row.collab_detail),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }
@@ -141,6 +145,11 @@ export async function GET(req: NextRequest) {
       kpiTarget: parseNum(row.kpi_target),
       kpiUnit: String(row.kpi_unit ?? 'order'),
       budgetTotal: parseNum(row.budget_total),
+      discountType: String(row.discount_type ?? 'percent'),
+      discountValue: parseNum(row.discount_value),
+      discountPricePromotion: String(row.discount_price_promotion ?? ''),
+      discountTargetAudience: String(row.discount_target_audience ?? ''),
+      collabManagement: row.collab_management === true,
     }))
 
     return NextResponse.json(list, { headers })
@@ -170,6 +179,7 @@ export async function POST(req: NextRequest) {
       discountType?: string
       discountValue?: number
       discountPricePromotion?: string
+      discountTargetAudience?: string
       costAdsOnline?: number
       costAdsOffline?: number
       costProduction?: number
@@ -182,6 +192,7 @@ export async function POST(req: NextRequest) {
       kpiUnit?: string
       campaignPerformance?: string
       conclusion?: string
+      collabManagement?: boolean
     }
 
     const topic = String(body.topic ?? '').trim()
@@ -213,6 +224,7 @@ export async function POST(req: NextRequest) {
       discount_type: String(body.discountType ?? 'percent').trim(),
       discount_value: parseNum(body.discountValue),
       discount_price_promotion: String(body.discountPricePromotion ?? '').trim(),
+      discount_target_audience: String(body.discountTargetAudience ?? '').trim(),
       cost_ads_online: parseNum(body.costAdsOnline),
       cost_ads_offline: parseNum(body.costAdsOffline),
       cost_production: parseNum(body.costProduction),
@@ -225,6 +237,7 @@ export async function POST(req: NextRequest) {
       kpi_unit: String(body.kpiUnit ?? 'order').trim(),
       campaign_performance: String(body.campaignPerformance ?? '').trim(),
       conclusion: String(body.conclusion ?? '').trim(),
+      collab_management: body.collabManagement === true,
       updated_at: new Date().toISOString(),
     }
 

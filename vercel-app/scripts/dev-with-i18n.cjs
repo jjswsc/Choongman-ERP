@@ -4,7 +4,13 @@ const { spawn } = require("child_process")
 
 const root = path.resolve(__dirname, "..")
 const scriptsDir = path.join(root, "scripts")
-const nextArgs = process.argv.slice(2)
+
+const STRIP_FROM_NEXT = new Set(["--no-i18n-watch", "--no-i18n-startup"])
+
+const rawArgs = process.argv.slice(2)
+const noI18nWatch = rawArgs.includes("--no-i18n-watch")
+const noI18nStartup = rawArgs.includes("--no-i18n-startup")
+const nextArgs = rawArgs.filter((a) => !STRIP_FROM_NEXT.has(a))
 
 function runNodeScript(scriptName, args = []) {
   return new Promise((resolve, reject) => {
@@ -57,12 +63,25 @@ function scheduleSync() {
 }
 
 async function main() {
-  await runNodeScript("generate-firebase-sw.cjs")
-  await syncI18n(true)
+  if (noI18nWatch || noI18nStartup) {
+    const parts = []
+    if (noI18nWatch) parts.push("저장 시 i18n 자동 동기화 없음")
+    if (noI18nStartup) parts.push("시작 시 i18n 검사 생략")
+    console.log(`[dev] 빠른 모드: ${parts.join(" · ")} (배포 전에는 npm run i18n:pos:sync 또는 npm run build 권장)`)
+  }
 
-  const watcher = fs.watch(root, { recursive: true }, (_event, filename) => {
-    if (shouldSync(filename)) scheduleSync()
-  })
+  await runNodeScript("generate-firebase-sw.cjs")
+  if (!noI18nStartup) {
+    await syncI18n(true)
+  }
+
+  /** @type {fs.FSWatcher | null} */
+  let watcher = null
+  if (!noI18nWatch) {
+    watcher = fs.watch(root, { recursive: true }, (_event, filename) => {
+      if (shouldSync(filename)) scheduleSync()
+    })
+  }
 
   const isWin = process.platform === "win32"
   const nextBin = path.join(root, "node_modules", ".bin", isWin ? "next.cmd" : "next")
@@ -85,13 +104,13 @@ async function main() {
   }
 
   const shutdown = () => {
-    watcher.close()
+    if (watcher) watcher.close()
     nextProc.kill()
   }
   process.on("SIGINT", shutdown)
   process.on("SIGTERM", shutdown)
   nextProc.on("exit", (code) => {
-    watcher.close()
+    if (watcher) watcher.close()
     process.exit(code ?? 0)
   })
 }

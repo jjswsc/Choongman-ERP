@@ -53,10 +53,10 @@ export function PosCookingRulesContent() {
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
 
-  const loadData = React.useCallback(() => {
-    if (!effectiveStore) return
+  const loadData = React.useCallback((): Promise<void> => {
+    if (!effectiveStore) return Promise.resolve()
     setLoading(true)
-    getPosPrinterSettings({ storeCode: effectiveStore })
+    return getPosPrinterSettings({ storeCode: effectiveStore })
       .then((settings) => {
         setBaseSettings({
           kitchenMode: (Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3),
@@ -72,7 +72,7 @@ export function PosCookingRulesContent() {
         setRuleMode(settings.cookingRuleMode === "recipe_diff" ? "recipe_diff" : "elapsed")
         setRecipeWarnDiff(String(settings.cookingRecipeWarningDiffMin ?? 0))
         setRecipeUrgentDiff(String(settings.cookingRecipeUrgentDiffMin ?? 5))
-        setDelayBadgeEnabled(settings.cookingDelayBadgeEnabled !== false)
+        setDelayBadgeEnabled(settings.cookingDelayBadgeEnabled === false ? false : true)
         setDelaySoundEnabled(Boolean(settings.cookingDelaySoundEnabled))
         setDelayAlertOverMin(String(settings.cookingDelayAlertOverMin ?? 0))
       })
@@ -125,7 +125,7 @@ export function PosCookingRulesContent() {
       })
       if (res.success) {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
-        loadData()
+        await loadData()
       } else {
         await appAlert(res.message || t("msg_save_fail_detail"))
       }
@@ -151,7 +151,7 @@ export function PosCookingRulesContent() {
     setRuleMode(settings.cookingRuleMode === "recipe_diff" ? "recipe_diff" : "elapsed")
     setRecipeWarnDiff(String(settings.cookingRecipeWarningDiffMin ?? 0))
     setRecipeUrgentDiff(String(settings.cookingRecipeUrgentDiffMin ?? 5))
-    setDelayBadgeEnabled(settings.cookingDelayBadgeEnabled !== false)
+    setDelayBadgeEnabled(settings.cookingDelayBadgeEnabled === false ? false : true)
     setDelaySoundEnabled(Boolean(settings.cookingDelaySoundEnabled))
     setDelayAlertOverMin(String(settings.cookingDelayAlertOverMin ?? 0))
   }
@@ -377,7 +377,11 @@ export function PosCookingRulesContent() {
           {t("posCookingGuide") || "메뉴별 기준시간은 POS 메뉴의 `조리시간(분)` 값을 사용합니다. 미설정 메뉴는 경과시간 기준으로 판단됩니다."}
         </div>
 
-        <Button className="w-full" onClick={handleSave} disabled={saving || !effectiveStore}>
+        <Button
+          className="w-full"
+          onClick={handleSave}
+          disabled={saving || !effectiveStore || loading || !baseSettings}
+        >
           <Save className="mr-2 h-4 w-4" />
           {saving ? "..." : t("itemsBtnSave") || "저장"}
         </Button>

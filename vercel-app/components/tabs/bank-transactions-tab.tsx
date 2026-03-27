@@ -64,6 +64,12 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import {
+  extractExpenseAccrualPrefix,
+  extractWithdrawalCategoryFromNote,
+  mergeWithdrawalCategoryIntoBankNote,
+  stripWithdrawalCategoryMetaFromNote,
+} from "@/lib/bank-transaction-note-meta"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -341,7 +347,16 @@ export function BankTransactionsTab() {
                   ...x,
                   category: nextCategory,
                   accountSubjectId: edits.accountSubjectId !== undefined ? (edits.accountSubjectId === "__none__" || !edits.accountSubjectId ? null : Number(edits.accountSubjectId)) : x.accountSubjectId,
-                  note: edits.note !== undefined ? edits.note : x.note,
+                  note:
+                    edits.note !== undefined
+                      ? (() => {
+                          const cat = extractWithdrawalCategoryFromNote(x.note || "")
+                          if (!cat) return edits.note
+                          const prefix = extractExpenseAccrualPrefix(x.note || "")
+                          const body = mergeWithdrawalCategoryIntoBankNote(edits.note ?? "", cat)
+                          return prefix ? `${prefix}${body}` : body
+                        })()
+                      : x.note,
                   salesDate: edits.salesDate ?? x.salesDate,
                   expenseDate: edits.expenseDate ?? x.expenseDate,
                   vendorCode: edits.vendorCode ?? x.vendorCode,
@@ -976,7 +991,7 @@ export function BankTransactionsTab() {
         r.reconciledAt ? "Y" : "",
         r.reconciledBy || "",
         r.memo || "",
-        r.note || "",
+        stripWithdrawalCategoryMetaFromNote(r.note || ""),
       ])
     }
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -1583,7 +1598,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     onClick={() => {
                                       const amt = Math.abs(r.amount ?? 0)
                                       const bankMemo = (r.memo || "").trim().slice(0, 500)
-                                      const bankNote = (r.note || "").trim().slice(0, 500)
+                                      const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
                                       const q = new URLSearchParams({ tab: "expenseRegister", updateExisting: "1" })
                                       if (r.id) q.set("bankTransactionId", String(r.id))
                                       if (amt > 0) q.set("amount", String(amt))
@@ -1668,7 +1683,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className="p-2 align-middle">
                                 <Input
                                   placeholder={t("bankNotePlaceholder") || "메모 입력"}
-                                  value={edits?.note !== undefined ? edits.note : (r.note ?? "")}
+                                  value={
+                                    edits?.note !== undefined
+                                      ? edits.note
+                                      : stripWithdrawalCategoryMetaFromNote(r.note ?? "")
+                                  }
                                   onChange={(e) => r.id && setQueryRowEdit(r.id, "note", e.target.value)}
                                   className="h-8 text-xs min-w-[120px] max-w-[160px]"
                                 />
@@ -2563,7 +2582,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 const r = registerActionRow
                 const amt = Math.abs(r.amount ?? 0)
                 const bankMemo = (r.memo || "").trim().slice(0, 500)
-                const bankNote = (r.note || "").trim().slice(0, 500)
+                const bankNote = stripWithdrawalCategoryMetaFromNote((r.note || "").trim()).slice(0, 500)
                 const q = new URLSearchParams({ tab: "expenseRegister" })
                 if (r.id) q.set("bankTransactionId", String(r.id))
                 if (amt > 0) q.set("amount", String(amt))
@@ -2661,7 +2680,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         paymentMethod: "bank",
                         amount: Math.abs(Number(approvedPickRow.amount || 0)),
                         transDate: String(approvedPickRow.transDate || "").slice(0, 10),
-                        memo: (approvedPickRow.note || approvedPickRow.memo || "").trim(),
+                        memo: stripWithdrawalCategoryMetaFromNote(
+                          (approvedPickRow.note || approvedPickRow.memo || "").trim()
+                        ),
                         bankTransactionId: Number(approvedPickRow.id),
                         userName: auth?.user,
                         userRole: auth?.role,

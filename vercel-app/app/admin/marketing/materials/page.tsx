@@ -35,6 +35,8 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 const MATERIAL_STATUS_COLORS: Record<string, string> = {
   planning: "bg-gray-100 text-gray-700",
@@ -511,21 +513,12 @@ export default function MarketingMaterialsPage() {
   )
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Package className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">
-              {t("adminMarketingMaterials") || "홍보물"}
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {tr("마케팅 홍보물 현황", "Marketing Materials Overview", "ภาพรวมสื่อโปรโมชัน")}
-            </p>
-          </div>
-        </div>
+    <MarketingPageShell maxWidthClass="max-w-5xl">
+        <MarketingPageHero
+          icon={Package}
+          title={t("adminMarketingMaterials") || "홍보물"}
+          description={tr("마케팅 홍보물 현황", "Marketing Materials Overview", "ภาพรวมสื่อโปรโมชัน")}
+        />
 
         <div className="mb-4 flex rounded-lg border border-input bg-muted/30 p-1 text-sm font-medium">
           <button
@@ -1322,7 +1315,6 @@ export default function MarketingMaterialsPage() {
             </TabsContent>
           </Tabs>
         )}
-      </div>
-    </div>
+    </MarketingPageShell>
   )
 }

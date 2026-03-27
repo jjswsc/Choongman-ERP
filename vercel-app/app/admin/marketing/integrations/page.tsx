@@ -7,6 +7,8 @@ import { useLang } from "@/lib/lang-context"
 import { Button } from "@/components/ui/button"
 import { getLineOaGroupV2List, getLineOaGroups, getLineOaSegments } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
+import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 export default function MarketingIntegrationsPage() {
   const t = useT(useLang().lang)
@@ -87,19 +89,15 @@ export default function MarketingIntegrationsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <Settings2 className="h-4 w-4 text-primary" />
-          </div>
-          <h1 className="text-xl font-bold">
-            {t("adminMarketingIntegrations") || "마케팅 연동"}
-          </h1>
-        </div>
-        <p className="mb-6 text-sm text-muted-foreground">
-          {t("adminMarketingIntegrationsDesc") || "LINE OA, Meta(IG/FB), TikTok 등 외부 API 연동을 위한 설정입니다. API 키·채널 정보는 .env에 설정한 뒤 서버를 재시작하세요."}
-        </p>
+    <MarketingPageShell maxWidthClass="max-w-3xl">
+        <MarketingPageHero
+          icon={Settings2}
+          title={t("adminMarketingIntegrations") || "마케팅 연동"}
+          description={
+            t("adminMarketingIntegrationsDesc") ||
+            "LINE OA, Meta(IG/FB), TikTok 등 외부 API 연동을 위한 설정입니다. API 키·채널 정보는 .env에 설정한 뒤 서버를 재시작하세요."
+          }
+        />
 
         <div className="space-y-4">
           {/* LINE OA */}
@@ -272,7 +270,6 @@ export default function MarketingIntegrationsPage() {
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+    </MarketingPageShell>
   )
 }

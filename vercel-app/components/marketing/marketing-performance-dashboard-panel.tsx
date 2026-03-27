@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { CalendarDays } from "lucide-react"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import {
@@ -14,7 +16,15 @@ import {
   Legend,
 } from "recharts"
 import { getMarketingCampaigns, getMarketingCampaignResults, type MarketingCampaign } from "@/lib/api-client"
+import { useStoreList } from "@/lib/use-store-list"
 import { cn } from "@/lib/utils"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 type ChartRow = {
   id: string
@@ -37,9 +47,11 @@ export type MarketingPerformanceDashboardPanelProps = {
 export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }: MarketingPerformanceDashboardPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const { stores: storeList } = useStoreList()
 
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [campaignFilter, setCampaignFilter] = React.useState("")
+  const [storeFilter, setStoreFilter] = React.useState("")
   const [chartData, setChartData] = React.useState<ChartRow[]>([])
   const [loading, setLoading] = React.useState(false)
 
@@ -53,7 +65,15 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
       .then(async (all) => {
         setCampaigns(Array.isArray(all) ? all : [])
         const cid = campaignFilter.trim()
-        const scoped = cid ? (all || []).filter((c) => c.id === cid) : all || []
+        const store = storeFilter.trim()
+        let scoped = cid ? (all || []).filter((c) => c.id === cid) : all || []
+        if (store) {
+          scoped = scoped.filter((c) => {
+            const br = Array.isArray(c.branches) ? c.branches.map((x) => String(x).trim()).filter(Boolean) : []
+            if (br.length === 0) return true
+            return br.includes(store)
+          })
+        }
 
         const rows: ChartRow[] = []
         for (const c of scoped) {
@@ -80,7 +100,7 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
         setChartData([])
       })
       .finally(() => setLoading(false))
-  }, [campaignFilter])
+  }, [campaignFilter, storeFilter])
 
   const summary = React.useMemo(() => {
     if (chartData.length === 0) return null
@@ -94,21 +114,57 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
     return { count: chartData.length, avgPct, totalActual, totalTarget }
   }, [chartData])
 
+  const calendarHref = React.useMemo(() => {
+    const p = new URLSearchParams()
+    p.set("tab", "calendar")
+    const cid = campaignFilter.trim() || campaignIdFromQuery.trim()
+    if (cid) p.set("campaignId", cid)
+    return `/admin/marketing/report?${p.toString()}`
+  }, [campaignFilter, campaignIdFromQuery])
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <select
-          value={campaignFilter}
-          onChange={(e) => setCampaignFilter(e.target.value)}
-          className="h-9 max-w-xs rounded-md border border-input bg-background px-3 text-sm"
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">캠페인</label>
+            <select
+              value={campaignFilter}
+              onChange={(e) => setCampaignFilter(e.target.value)}
+              className="h-9 w-full min-w-[200px] rounded-md border border-input bg-background px-3 text-sm sm:max-w-xs"
+            >
+              <option value="">전체 캠페인 (기간·KPI 있는 항목)</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {campaignListLabel(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">매장</label>
+            <Select value={storeFilter || "__all__"} onValueChange={(v) => setStoreFilter(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="h-9 w-full min-w-[160px] bg-background sm:max-w-xs">
+                <SelectValue placeholder="전체 매장" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">전체 매장</SelectItem>
+                {storeList.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <Link
+          href={calendarHref}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted"
         >
-          <option value="">전체 캠페인 (기간·KPI 있는 항목)</option>
-          {campaigns.map((c) => (
-            <option key={c.id} value={c.id}>
-              {campaignListLabel(c)}
-            </option>
-          ))}
-        </select>
+          <CalendarDays className="h-4 w-4 text-primary" />
+          통합 캘린더
+        </Link>
       </div>
 
       <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -117,6 +173,9 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
         {campaignIdFromQuery && (
           <span className="ml-1 text-primary">(허브에서 연결된 캠페인으로 필터)</span>
         )}
+        {storeFilter ? (
+          <span className="ml-1 block sm:inline">매장 필터는 캠페인 허브에 지정된 매장명과 일치할 때 집계됩니다.</span>
+        ) : null}
       </div>
 
       {summary && (

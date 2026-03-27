@@ -23,9 +23,14 @@ import {
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
+import { Badge } from "@/components/ui/badge"
 import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search, XCircle } from "lucide-react"
 import { isPoApprovedStatus } from "@/components/invoice/purchase-order-print"
-import { formatPoDisplayDate, parsePurchaseOrderCart, purchaseOrderMetaOrderDate } from "@/lib/purchase-order-cart"
+import {
+  formatPoDisplayDate,
+  isAccountingPurchaseOrderByCartJson,
+  parsePurchaseOrderCart,
+} from "@/lib/purchase-order-cart"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 
 /** 방콕 달력 YYYY-MM-DD에 달 수만큼 더함(일은 월 말에 맞춤) */
@@ -33,7 +38,7 @@ function addCalendarMonthsBangkokYmd(ymd: string, deltaMonth: number): string {
   const [ys, ms, ds] = ymd.split("-").map((x) => parseInt(x, 10))
   let y = ys
   let m = ms + deltaMonth
-  let d = ds
+  const d = ds
   while (m < 1) {
     m += 12
     y -= 1
@@ -59,6 +64,8 @@ export function AdminPurchaseOrderHistory() {
   const [startDate, setStartDate] = React.useState(() => addCalendarMonthsBangkokYmd(todayStrBangkok(), -1))
   const [endDate, setEndDate] = React.useState(() => todayStrBangkok())
   const [vendorFilter, setVendorFilter] = React.useState<string>("All")
+  const [sourceFilter, setSourceFilter] = React.useState<"all" | "logistics" | "accounting">("all")
+  const [searchText, setSearchText] = React.useState("")
   const initialFetchDone = React.useRef(false)
 
   const poDateLocale = React.useMemo(
@@ -110,6 +117,31 @@ export function AdminPurchaseOrderHistory() {
       .catch(() => setList([]))
       .finally(() => setLoading(false))
   }, [startDate, endDate, vendorFilter])
+
+  const filteredList = React.useMemo(() => {
+    let rows = list
+    if (sourceFilter === "accounting") {
+      rows = rows.filter((po) => isAccountingPurchaseOrderByCartJson(po.cart_json))
+    } else if (sourceFilter === "logistics") {
+      rows = rows.filter((po) => !isAccountingPurchaseOrderByCartJson(po.cart_json))
+    }
+    const q = searchText.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((po) => {
+      const blob = [
+        po.po_no,
+        po.vendor_name,
+        po.vendor_code,
+        po.location_name,
+        po.location_code,
+        po.user_name,
+        po.id != null ? String(po.id) : "",
+      ]
+        .map((s) => String(s ?? "").toLowerCase())
+        .join(" ")
+      return blob.includes(q)
+    })
+  }, [list, sourceFilter, searchText])
 
   const handleApprove = React.useCallback(
     async (po: PurchaseOrderRow) => {
@@ -349,6 +381,23 @@ ${allRows.map((row, ri) => {
               ))}
             </SelectContent>
           </Select>
+          <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as "all" | "logistics" | "accounting")}>
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue placeholder={t("poHistorySourceFilter")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("poHistorySourceAll")}</SelectItem>
+              <SelectItem value="logistics">{t("poHistorySourceLogistics")}</SelectItem>
+              <SelectItem value="accounting">{t("poHistorySourceAccounting")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="search"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder={t("poHistorySearchPlaceholder")}
+            className="h-9 min-w-[10rem] flex-1 sm:max-w-xs"
+          />
           <Button size="sm" onClick={handleSearch} disabled={loading}>
             <Search className="mr-1.5 h-4 w-4" />
             {t("orderBtnSearch") || "검색"}
@@ -360,11 +409,14 @@ ${allRows.map((row, ri) => {
           <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
         ) : list.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("poHistoryEmpty")}</p>
+        ) : filteredList.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">{t("poHistoryNoMatch")}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
+                  <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("poHistoryColOrigin")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poNo")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poDate")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poVendor")}</th>
@@ -377,10 +429,19 @@ ${allRows.map((row, ri) => {
                 </tr>
               </thead>
               <tbody>
-                {list.map((po) => {
+                {filteredList.map((po) => {
                   const dateStr = formatPoDisplayDate(po, poDateLocale)
+                  const isAcct = isAccountingPurchaseOrderByCartJson(po.cart_json)
                   return (
                     <tr key={po.id} className="border-b border-border/60 last:border-0">
+                      <td className="px-3 py-2">
+                        <Badge
+                          variant={isAcct ? "default" : "secondary"}
+                          className="whitespace-nowrap text-[10px] font-medium"
+                        >
+                          {isAcct ? t("poHistorySourceAccounting") : t("poHistorySourceLogistics")}
+                        </Badge>
+                      </td>
                       <td className="px-3 py-2 font-medium">{po.po_no || `#${po.id}`}</td>
                       <td className="px-3 py-2 text-muted-foreground">{dateStr}</td>
                       <td className="px-3 py-2">{po.vendor_name || "-"}</td>

@@ -40,6 +40,7 @@ import {
   Wrench,
   Landmark,
   GitBranch,
+  Handshake,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -103,6 +104,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionMarketing",
     items: [
       { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
+      { titleKey: "adminMarketingCollabMenus", icon: Handshake, href: "/admin/marketing/collab-menus" },
       { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
       { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
@@ -182,6 +184,12 @@ const menuSections: MenuSection[] = [
   },
 ]
 
+const SIDEBAR_SECTIONS_STORAGE_KEY = "erp_sidebar_expanded_sections_v1"
+
+function buildCollapsedSections(): Record<string, boolean> {
+  return Object.fromEntries(menuSections.map((s) => [s.titleKey, false])) as Record<string, boolean>
+}
+
 /** 매니저에게 숨길 메뉴 href */
 const MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
 
@@ -210,20 +218,37 @@ export function ErpSidebar() {
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
 
-  const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
-    posMemberManage: false,
-    adminSectionSales: false,
-    adminSectionMarketing: false,
-    adminSectionPos: false,
-    adminSectionLogistics: true,
-    adminSectionHr: true,
-    adminSectionAccounting: true,
-    adminSectionStore: true,
-    adminSectionInterior: false,
-  })
+  const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SIDEBAR_SECTIONS_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as unknown
+      if (!parsed || typeof parsed !== "object") return
+      setExpandedSections((prev) => {
+        const next = { ...prev }
+        for (const s of menuSections) {
+          const v = (parsed as Record<string, unknown>)[s.titleKey]
+          next[s.titleKey] = v === true
+        }
+        return next
+      })
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const toggleSection = (titleKey: string) => {
-    setExpandedSections((prev) => ({ ...prev, [titleKey]: !prev[titleKey] }))
+    setExpandedSections((prev) => {
+      const next = { ...prev, [titleKey]: !prev[titleKey] }
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
   }
 
   const handleLogout = () => {
@@ -300,7 +325,7 @@ export function ErpSidebar() {
 
             {/* Grouped sections */}
             {menuSections.map((section) => {
-              const isExpanded = expandedSections[section.titleKey] ?? true
+              const isExpanded = expandedSections[section.titleKey] ?? false
               return (
                 <div key={section.titleKey} className="mb-1">
                   <button

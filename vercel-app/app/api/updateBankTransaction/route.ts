@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter, supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
+  extractExpenseAccrualPrefix,
+  extractWithdrawalCategoryFromNote,
+  mergeWithdrawalCategoryIntoBankNote,
+} from '@/lib/bank-transaction-note-meta'
+import {
   assertAccountingDateOpen,
   deleteJournalEntriesBySource,
   postBankTransactionJournal,
@@ -74,7 +79,18 @@ export async function POST(request: NextRequest) {
       }
       patch.account_subject_id = asid && !isNaN(asid) ? asid : null
     }
-    if (note !== undefined) patch.note = String(note || '').trim() || null
+    if (note !== undefined) {
+      const newDisplay = String(note || '').trim()
+      const prevNote = String(existing[0].note || '')
+      const cat = extractWithdrawalCategoryFromNote(prevNote)
+      if (cat) {
+        const prefix = extractExpenseAccrualPrefix(prevNote)
+        const body = mergeWithdrawalCategoryIntoBankNote(newDisplay, cat)
+        patch.note = prefix ? `${prefix}${body}` : body
+      } else {
+        patch.note = newDisplay || null
+      }
+    }
     if (transType === 'deposit' && salesDate !== undefined) {
       const sd = String(salesDate || '').slice(0, 10)
       patch.sales_date = /^\d{4}-\d{2}-\d{2}$/.test(sd) ? sd : null

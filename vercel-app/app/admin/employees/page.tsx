@@ -8,6 +8,7 @@ import {
   ClipboardList,
   ClipboardPenLine,
   Headphones,
+  LineChart,
   ListChecks,
   Users,
   UsersRound,
@@ -41,6 +42,7 @@ import {
   EmployeeForm,
   EmployeeEvalTab,
   EmployeeEvalListTab,
+  EmployeeEvalAnalyticsTab,
   EmployeeEvalSettingTab,
   EmployeeMovementTab,
   EmployeeHeadcountTab,
@@ -333,6 +335,8 @@ export default function EmployeesPage() {
   const isManager = isManagerRole(userRole)
   const isManagerOrFranchisee = isManager || isFranchiseeRole(userRole)
   const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const showEvalAnalyticsTab = isOffice || isManagerOrFranchisee
+  const evalAnalyticsCanPickAllStores = isOffice
 
   const handleNew = () => {
     const base = { ...emptyForm }
@@ -383,6 +387,12 @@ export default function EmployeesPage() {
                   <TabsTrigger value="eval" className={adminTabsTriggerCn}>
                     <ClipboardPenLine className={adminTabsIconCn} aria-hidden />
                     {t("tab_hr_eval")}
+                  </TabsTrigger>
+                )}
+                {showEvalAnalyticsTab && (
+                  <TabsTrigger value="eval-analytics" className={adminTabsTriggerCn}>
+                    <LineChart className={adminTabsIconCn} aria-hidden />
+                    {t("tab_hr_eval_analytics")}
                   </TabsTrigger>
                 )}
                 <TabsTrigger value="eval-list" className={adminTabsTriggerCn}>
@@ -483,6 +493,15 @@ export default function EmployeesPage() {
                 stores={storesForForm}
                 employees={allEmployees}
                 onSaved={loadEmployeeList}
+              />
+            </TabsContent>
+          )}
+          {showEvalAnalyticsTab && (
+            <TabsContent value="eval-analytics" className={adminTabsContentCn}>
+              <EmployeeEvalAnalyticsTab
+                stores={storesForFilter}
+                canPickAllStores={evalAnalyticsCanPickAllStores}
+                canUseAiSummary={isOffice}
               />
             </TabsContent>
           )}

@@ -44,6 +44,7 @@ type OptRow = {
   price_modifier_delivery?: number | null
 }
 type ItemRow = {
+  id?: number
   code?: string
   name?: string
   cost?: number
@@ -52,6 +53,16 @@ type ItemRow = {
   unit?: string
   purchase_source?: string
   category?: string
+}
+
+/** 품목 관리 getItems와 동일: code 없으면 매장 전용 등만 `_local_${id}` 키로 노출 */
+function effectiveItemCodeKey(r: ItemRow): string {
+  const raw = String(r.code ?? '').trim()
+  if (raw) return raw
+  const isStore =
+    (r.purchase_source ?? 'hq') === 'store' || String(r.category ?? '').trim() === '매장 전용'
+  if (isStore && r.id != null) return `_local_${r.id}`
+  return ''
 }
 
 async function loadPosMenusPaged(): Promise<MenuRow[]> {
@@ -126,7 +137,7 @@ export async function GET(request: NextRequest) {
         loadPosMenuOptionsPaged(),
         supabaseSelectAllPages('items', {
           order: 'code.asc',
-          select: 'code,name,cost,price,total_quantity,unit,purchase_source,category',
+          select: 'id,code,name,cost,price,total_quantity,unit,purchase_source,category',
           pageSize: 10000,
         }),
       ]),
@@ -149,16 +160,15 @@ export async function GET(request: NextRequest) {
     const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
     const itemMap: Record<string, { name: string; cost: number; unit: string; purchaseSource: 'hq' | 'store'; raw?: typeof itemRows extends (infer R)[] | null ? R : never }> = {}
     for (const r of itemRows || []) {
-      const code = String(r.code ?? '').trim()
-      if (code) {
-        const isPkg = /포장|packaging|박스|용기|봉지/.test(String(r.category ?? ''))
-        itemMap[code] = {
-          name: String(r.name ?? ''),
-          cost: getItemCostPerUnit(r, isPkg),
-          unit: String(r.unit ?? 'g'),
-          purchaseSource: (r.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq',
-          raw: r,
-        }
+      const code = effectiveItemCodeKey(r)
+      if (!code) continue
+      const isPkg = /포장|packaging|박스|용기|봉지/.test(String(r.category ?? ''))
+      itemMap[code] = {
+        name: String(r.name ?? ''),
+        cost: getItemCostPerUnit(r, isPkg),
+        unit: String(r.unit ?? 'g'),
+        purchaseSource: (r.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq',
+        raw: r,
       }
     }
     const sauceCostComputed: Record<string, number> = {}

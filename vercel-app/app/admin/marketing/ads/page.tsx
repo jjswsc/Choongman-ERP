@@ -2,9 +2,28 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { TrendingUp, Save, Plus, Trash2, RotateCw } from "lucide-react"
+import {
+  TrendingUp,
+  Save,
+  Plus,
+  Trash2,
+  RotateCw,
+  Sparkles,
+  CalendarRange,
+  LayoutGrid,
+  Wallet,
+  Link2,
+  Search,
+  Filter,
+  Pencil,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -27,6 +46,8 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
+import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 
 const PLATFORM_OPTIONS = [
   { value: "instagram", label: "Instagram" },
@@ -48,6 +69,20 @@ const FORMAT_OPTIONS = [
   { value: "Video", label: "Video" },
   { value: "Reels", label: "Reels" },
 ]
+
+const selectTriggerClass =
+  "h-10 w-full cursor-pointer appearance-none rounded-lg border border-input bg-background px-3 text-sm shadow-sm transition-[box-shadow,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+
+function platformBadgeClass(platform: string) {
+  const p = platform.toLowerCase()
+  if (p === "instagram")
+    return "border-0 bg-gradient-to-br from-[#f09433] via-[#e6683c] to-[#bc1888] text-white shadow-sm"
+  if (p === "facebook") return "border-0 bg-[#1877F2] text-white shadow-sm"
+  if (p === "tiktok") return "border-0 bg-gradient-to-br from-[#00f2ea] to-[#ff0050] text-white shadow-sm"
+  if (p === "line_oa") return "border-0 bg-[#06C755] text-white shadow-sm"
+  if (p === "twitter") return "border-0 bg-[#1d9bf0] text-white shadow-sm"
+  return "border-border bg-muted/80 text-foreground"
+}
 
 type MainTab = "compose" | "inquiry"
 type InquiryStatusFilter = "all" | "draft" | "ongoing" | "finish" | "unlinked"
@@ -320,25 +355,23 @@ export default function MarketingAdsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <TrendingUp className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">{t("adminMarketingAds") || "광고 ROAS"}</h1>
-            <p className="text-xs text-muted-foreground">광고 포스트 및 비용 관리</p>
-          </div>
-        </div>
-
-        <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          광고·비용은 <strong className="text-foreground">캠페인 고유번호</strong>로 묶입니다. 캠페인 허브에서 캠페인을 만든 뒤, 여기서 해당 캠페인을 선택해 주세요.
-        </div>
+    <MarketingPageShell>
+      <MarketingPageHero
+        icon={TrendingUp}
+        title={t("adminMarketingAds") || "광고 ROAS"}
+        description={t("marketingAdsPageDesc")}
+        badge={
+          <Badge variant="secondary" className="gap-1 font-normal">
+            <Sparkles className="h-3 w-3" />
+            ROAS
+          </Badge>
+        }
+      />
 
         {campaignIdFromQuery && (
-          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
-            캠페인 허브에서 전달된 항목으로 필터되었습니다. 새 등록은 이 캠페인으로 자동 연결됩니다.
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm shadow-sm">
+            <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p className="leading-relaxed text-foreground/90">{t("marketingAdsQueryBanner")}</p>
           </div>
         )}
 
@@ -357,396 +390,507 @@ export default function MarketingAdsPage() {
           </div>
 
           <TabsContent value="compose" className={adminTabsContentCn}>
-            <div id="marketing-ad-compose-anchor" className="mb-4 flex flex-wrap gap-2">
-              <select
-                value={campaignFilter}
-                onChange={(e) => setCampaignFilter(e.target.value)}
-                className="h-10 min-w-[200px] rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">캠페인 선택…</option>
-                {campaigns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.campaignNo ? `[${c.campaignNo}] ` : ""}
-                    {c.topic}
-                  </option>
-                ))}
-              </select>
-              <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={refreshAllLists} disabled={loading}>
-                <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                {t("posRefresh") || "새로고침"}
-              </Button>
-              <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={handleNew}>
-                <Plus className="h-4 w-4" />
-                추가
-              </Button>
-            </div>
+            <Card id="marketing-ad-compose-anchor" className="mb-6 overflow-hidden shadow-sm">
+              <CardHeader className="border-b border-border/80 bg-muted/20 pb-4">
+                <div className="flex flex-col gap-1">
+                  <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                    <LayoutGrid className="h-4 w-4 text-primary" />
+                    {t("marketingAdsTabCompose")}
+                  </CardTitle>
+                  <CardDescription>{t("marketingAdsToolbarSubtitle")}</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="min-w-[min(100%,240px)] flex-1 space-y-2">
+                    <Label htmlFor="compose-campaign-filter" className="text-xs text-muted-foreground">
+                      {t("adminMarketingCampaigns")}
+                    </Label>
+                    <select
+                      id="compose-campaign-filter"
+                      value={campaignFilter}
+                      onChange={(e) => setCampaignFilter(e.target.value)}
+                      className={selectTriggerClass}
+                    >
+                      <option value="">캠페인 선택…</option>
+                      {campaigns.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.campaignNo ? `[${c.campaignNo}] ` : ""}
+                          {c.topic}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-10 gap-1.5"
+                      onClick={refreshAllLists}
+                      disabled={loading}
+                    >
+                      <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                      {t("posRefresh") || "새로고침"}
+                    </Button>
+                    <Button variant="default" size="sm" className="h-10 gap-1.5 shadow-sm" onClick={handleNew}>
+                      <Plus className="h-4 w-4" />
+                      추가
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {loading && (
-              <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
+              <div className="mb-6 space-y-3 rounded-xl border bg-card/50 p-4">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-24 w-full rounded-lg" />
+                <Skeleton className="h-24 w-full rounded-lg" />
+              </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {(editingId !== null || form.platform) && (
-                <div className="rounded-xl border bg-card p-4">
-                  <h3 className="mb-3 text-sm font-semibold">{editingId ? "광고 수정" : "광고 등록"}</h3>
-                  <div className="mb-4 rounded-lg border border-dashed bg-muted/25 p-3 sm:col-span-2">
-                    <p className="mb-2 text-xs font-semibold text-foreground">{t("marketingRecordPeriodTitle")}</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="text-xs font-medium text-foreground">{t("marketingRecordPeriodFrom")}</label>
-                        <Input
-                          type="date"
-                          value={form.publishDate}
-                          onChange={(e) => setForm((f) => ({ ...f, publishDate: e.target.value }))}
-                          className="mt-1"
-                        />
+                <Card className="overflow-hidden border-primary/15 shadow-md ring-1 ring-primary/5">
+                  <CardHeader className="border-b border-border/60 bg-gradient-to-r from-muted/40 to-transparent py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Pencil className="h-4 w-4 text-primary" />
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-foreground">{t("marketingRecordPeriodTo")}</label>
-                        <Input
-                          type="date"
-                          value={form.periodEndDate}
-                          onChange={(e) => setForm((f) => ({ ...f, periodEndDate: e.target.value }))}
-                          className="mt-1"
-                        />
+                      <CardTitle className="text-base">
+                        {editingId ? t("marketingAdsFormEdit") : t("marketingAdsFormNew")}
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6 pt-6">
+                    <div className="rounded-xl border border-dashed border-primary/25 bg-muted/20 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <CalendarRange className="h-4 w-4 text-primary" />
+                        {t("marketingRecordPeriodTitle")}
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">{t("marketingRecordPeriodFrom")}</Label>
+                          <Input
+                            type="date"
+                            value={form.publishDate}
+                            onChange={(e) => setForm((f) => ({ ...f, publishDate: e.target.value }))}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">{t("marketingRecordPeriodTo")}</Label>
+                          <Input
+                            type="date"
+                            value={form.periodEndDate}
+                            onChange={(e) => setForm((f) => ({ ...f, periodEndDate: e.target.value }))}
+                            className="h-10"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+
                     <div>
-                      <label className="text-xs text-muted-foreground">플랫폼 *</label>
-                      <select
-                        value={form.platform}
-                        onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))}
-                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                      >
-                        {PLATFORM_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                        <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+                        {t("marketingAdsSectionContent")}
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">플랫폼 *</Label>
+                          <select
+                            value={form.platform}
+                            onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))}
+                            className={selectTriggerClass}
+                          >
+                            {PLATFORM_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">캠페인</Label>
+                          <select
+                            value={form.campaignId}
+                            onChange={(e) => setForm((f) => ({ ...f, campaignId: e.target.value }))}
+                            className={selectTriggerClass}
+                          >
+                            <option value="">캠페인 선택 *</option>
+                            {campaigns.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.campaignNo ? `[${c.campaignNo}] ` : ""}
+                                {c.topic}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Content Format</Label>
+                          <select
+                            value={form.contentFormat}
+                            onChange={(e) => setForm((f) => ({ ...f, contentFormat: e.target.value }))}
+                            className={selectTriggerClass}
+                          >
+                            <option value="">선택</option>
+                            {FORMAT_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Content Pillar</Label>
+                          <select
+                            value={form.contentPillar}
+                            onChange={(e) => setForm((f) => ({ ...f, contentPillar: e.target.value }))}
+                            className={selectTriggerClass}
+                          >
+                            <option value="">선택</option>
+                            {PILLAR_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label className="text-xs text-muted-foreground">Content Topic</Label>
+                          <Input
+                            value={form.contentTopic}
+                            onChange={(e) => setForm((f) => ({ ...f, contentTopic: e.target.value }))}
+                            placeholder="Post Promote : ..."
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
                     </div>
+
+                    <Separator />
+
                     <div>
-                      <label className="text-xs text-muted-foreground">캠페인</label>
-                      <select
-                        value={form.campaignId}
-                        onChange={(e) => setForm((f) => ({ ...f, campaignId: e.target.value }))}
-                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                      >
-                        <option value="">캠페인 선택 *</option>
-                        {campaigns.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.campaignNo ? `[${c.campaignNo}] ` : ""}
-                            {c.topic}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                        <Wallet className="h-4 w-4 text-muted-foreground" />
+                        {t("marketingAdsSectionBudget")}
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Link2 className="h-3 w-3" />
+                            Post Link
+                          </Label>
+                          <Input
+                            value={form.postLink}
+                            onChange={(e) => setForm((f) => ({ ...f, postLink: e.target.value }))}
+                            placeholder="https://..."
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Boost 예산 (฿)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={form.boostBudget}
+                            onChange={(e) => setForm((f) => ({ ...f, boostBudget: e.target.value }))}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label className="text-xs text-muted-foreground">실제 비용 (฿) · 지출관리 지급예정</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={form.actualSpent}
+                            onChange={(e) => setForm((f) => ({ ...f, actualSpent: e.target.value }))}
+                            className="h-10"
+                          />
+                          <p className="text-[11px] leading-relaxed text-muted-foreground">
+                            본사 권한으로 저장하면 이 금액이 지출관리 「지급예정」에 자동 등록·갱신됩니다. 0으로 저장 시 연동 건이 요청 상태면 삭제됩니다.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Content Format</label>
-                      <select
-                        value={form.contentFormat}
-                        onChange={(e) => setForm((f) => ({ ...f, contentFormat: e.target.value }))}
-                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                      >
-                        <option value="">선택</option>
-                        {FORMAT_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button onClick={handleSave} disabled={saving} className="gap-2 shadow-sm">
+                        <Save className="h-4 w-4" />
+                        {saving ? "..." : t("itemsBtnSave") || "저장"}
+                      </Button>
+                      <Button variant="outline" onClick={handleNew}>
+                        {t("posCancel") || "취소"}
+                      </Button>
                     </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Content Pillar</label>
-                      <select
-                        value={form.contentPillar}
-                        onChange={(e) => setForm((f) => ({ ...f, contentPillar: e.target.value }))}
-                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                      >
-                        <option value="">선택</option>
-                        {PILLAR_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="text-xs text-muted-foreground">Content Topic</label>
-                      <Input
-                        value={form.contentTopic}
-                        onChange={(e) => setForm((f) => ({ ...f, contentTopic: e.target.value }))}
-                        placeholder="Post Promote : ..."
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Post Link</label>
-                      <Input
-                        value={form.postLink}
-                        onChange={(e) => setForm((f) => ({ ...f, postLink: e.target.value }))}
-                        placeholder="https://..."
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Boost 예산 (฿)</label>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={form.boostBudget}
-                        onChange={(e) => setForm((f) => ({ ...f, boostBudget: e.target.value }))}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="text-xs text-muted-foreground">실제 비용 (฿) · 지출관리 지급예정</label>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={form.actualSpent}
-                        onChange={(e) => setForm((f) => ({ ...f, actualSpent: e.target.value }))}
-                        className="mt-1"
-                      />
-                      <p className="mt-1 text-[10px] text-muted-foreground">
-                        본사 권한으로 저장하면 이 금액이 지출관리 「지급예정」에 자동 등록·갱신됩니다. 0으로 저장 시 연동 건이 요청 상태면 삭제됩니다.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Button onClick={handleSave} disabled={saving}>
-                      <Save className="mr-2 h-4 w-4" />
-                      {saving ? "..." : t("itemsBtnSave") || "저장"}
-                    </Button>
-                    <Button variant="outline" onClick={handleNew}>
-                      {t("posCancel") || "취소"}
-                    </Button>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               )}
 
-              <div className="rounded-xl border bg-card">
-                <h3 className="border-b px-4 py-3 text-sm font-semibold">광고 목록</h3>
-                <div className="divide-y overflow-x-auto">
-                  {list.length === 0 && !loading && (
-                    <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      {!campaignFilter.trim()
-                        ? "캠페인을 선택하면 해당 캠페인의 광고 목록이 표시됩니다."
-                        : "등록된 광고가 없습니다."}
-                    </p>
-                  )}
-                  {list.map((a) => (
-                    <div
-                      key={a.id}
-                      className={cn(
-                        "flex flex-wrap items-center justify-between gap-2 px-4 py-3",
-                        editingId === a.id && "bg-primary/5"
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium capitalize">{a.platform}</span>
-                          {a.campaignId && (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                              {a.campaignNo?.trim() || campaignLabel(a.campaignId)}
-                            </span>
-                          )}
+              <Card className="overflow-hidden shadow-sm">
+                <CardHeader className="border-b border-border/80 bg-muted/15 py-4">
+                  <CardTitle className="text-base">{t("marketingAdsListTitle")}</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="divide-y divide-border/80">
+                    {list.length === 0 && !loading && (
+                      <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
+                        <div className="rounded-full bg-muted/80 p-3">
+                          <TrendingUp className="h-6 w-6 text-muted-foreground" />
                         </div>
-                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                          {formatAdPeriodLine(a.publishDate, a.periodEndDate) && (
-                            <span className="font-medium text-foreground">{formatAdPeriodLine(a.publishDate, a.periodEndDate)}</span>
-                          )}
-                          {a.contentTopic && <span>{a.contentTopic}</span>}
-                          {(a.boostBudget > 0 || a.actualSpent > 0) && (
-                            <span>
-                              예산 ฿{(a.boostBudget || 0).toLocaleString()} / 실비 ฿{(a.actualSpent || 0).toLocaleString()}
-                            </span>
-                          )}
+                        <p className="max-w-sm text-sm text-muted-foreground">
+                          {!campaignFilter.trim() ? t("marketingAdsEmptyNeedCampaign") : t("marketingAdsEmptyNoRows")}
+                        </p>
+                      </div>
+                    )}
+                    {list.map((a) => (
+                      <div
+                        key={a.id}
+                        className={cn(
+                          "flex flex-wrap items-center justify-between gap-3 px-4 py-4 transition-colors sm:px-5",
+                          editingId === a.id ? "bg-primary/[0.06]" : "hover:bg-muted/30"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={cn("px-2 py-0.5 text-[11px] font-semibold capitalize", platformBadgeClass(a.platform || ""))}>
+                              {a.platform}
+                            </Badge>
+                            {a.campaignId && (
+                              <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                                {a.campaignNo?.trim() || campaignLabel(a.campaignId)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {formatAdPeriodLine(a.publishDate, a.periodEndDate) && (
+                              <span className="font-medium text-foreground">
+                                {formatAdPeriodLine(a.publishDate, a.periodEndDate)}
+                              </span>
+                            )}
+                            {a.contentTopic && <span className="line-clamp-2">{a.contentTopic}</span>}
+                            {(a.boostBudget > 0 || a.actualSpent > 0) && (
+                              <span className="tabular-nums">
+                                예산 ฿{(a.boostBudget || 0).toLocaleString()} · 실비 ฿{(a.actualSpent || 0).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button variant="secondary" size="sm" className="h-8" onClick={() => handleEdit(a)}>
+                            {t("posEdit") || "수정"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDelete(a)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex shrink-0 gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(a)}>
-                          {t("posEdit") || "수정"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(a)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="inquiry" className={adminTabsContentCn}>
-            <div className="mb-4 flex flex-wrap items-end gap-2">
-              <div className="flex min-w-[180px] flex-1 flex-col gap-1">
-                <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("marketingAdsFilterCampaignOptional")}
-                </label>
-                <select
-                  value={inquiryCampaignId}
-                  onChange={(e) => setInquiryCampaignId(e.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">{t("all")}</option>
-                  {campaigns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.campaignNo ? `[${c.campaignNo}] ` : ""}
-                      {c.topic}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex min-w-[140px] flex-col gap-1">
-                <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("marketingAdsFilterStatus")}
-                </label>
-                <select
-                  value={inquiryStatusFilter}
-                  onChange={(e) => setInquiryStatusFilter(e.target.value as InquiryStatusFilter)}
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="all">{t("all")}</option>
-                  <option value="ongoing">{t("marketingAdsStatusOngoing")}</option>
-                  <option value="draft">{t("marketingAdsStatusDraft")}</option>
-                  <option value="finish">{t("marketingAdsStatusFinish")}</option>
-                  <option value="unlinked">{t("marketingAdsStatusUnlinked")}</option>
-                </select>
-              </div>
-              <div className="min-w-[200px] flex-1">
-                <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("search")}
-                </label>
-                <Input
-                  className="mt-1 h-10"
-                  value={inquirySearch}
-                  onChange={(e) => setInquirySearch(e.target.value)}
-                  placeholder={t("marketingAdsSearchPlaceholder")}
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 gap-1.5"
-                onClick={() => void loadInquiryAds()}
-                disabled={inquiryLoading}
-              >
-                <RotateCw className={cn("h-4 w-4", inquiryLoading && "animate-spin")} />
-                {t("posRefresh") || "새로고침"}
-              </Button>
-            </div>
+            <Card className="mb-6 overflow-hidden shadow-sm">
+              <CardHeader className="border-b border-border/80 bg-muted/15 py-4">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-background shadow-sm ring-1 ring-border/50">
+                      <Filter className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{t("marketingAdsTabInquiry")}</CardTitle>
+                      <CardDescription className="text-xs">{t("marketingAdsToolbarSubtitle")}</CardDescription>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="w-fit font-mono text-xs tabular-nums" title={t("marketingAdsTabInquiry")}>
+                    {filteredInquiryAds.length}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-4 pt-6 sm:grid-cols-2 lg:grid-cols-12">
+                <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+                  <Label className="text-xs text-muted-foreground">{t("marketingAdsFilterCampaignOptional")}</Label>
+                  <select
+                    value={inquiryCampaignId}
+                    onChange={(e) => setInquiryCampaignId(e.target.value)}
+                    className={selectTriggerClass}
+                  >
+                    <option value="">{t("all")}</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.campaignNo ? `[${c.campaignNo}] ` : ""}
+                        {c.topic}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                  <Label className="text-xs text-muted-foreground">{t("marketingAdsFilterStatus")}</Label>
+                  <select
+                    value={inquiryStatusFilter}
+                    onChange={(e) => setInquiryStatusFilter(e.target.value as InquiryStatusFilter)}
+                    className={selectTriggerClass}
+                  >
+                    <option value="all">{t("all")}</option>
+                    <option value="ongoing">{t("marketingAdsStatusOngoing")}</option>
+                    <option value="draft">{t("marketingAdsStatusDraft")}</option>
+                    <option value="finish">{t("marketingAdsStatusFinish")}</option>
+                    <option value="unlinked">{t("marketingAdsStatusUnlinked")}</option>
+                  </select>
+                </div>
+                <div className="space-y-2 sm:col-span-2 lg:col-span-4">
+                  <Label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Search className="h-3.5 w-3.5" />
+                    {t("search")}
+                  </Label>
+                  <Input
+                    className="h-10"
+                    value={inquirySearch}
+                    onChange={(e) => setInquirySearch(e.target.value)}
+                    placeholder={t("marketingAdsSearchPlaceholder")}
+                  />
+                </div>
+                <div className="flex items-end sm:col-span-2 lg:col-span-1">
+                  <Button
+                    variant="outline"
+                    className="h-10 w-full gap-1.5 lg:w-auto"
+                    onClick={() => void loadInquiryAds()}
+                    disabled={inquiryLoading}
+                  >
+                    <RotateCw className={cn("h-4 w-4", inquiryLoading && "animate-spin")} />
+                    {t("posRefresh") || "새로고침"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {inquiryLoading && (
-              <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
+              <div className="mb-6 space-y-3 rounded-xl border bg-card/50 p-4">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-28 w-full rounded-lg" />
+                <Skeleton className="h-28 w-full rounded-lg" />
+              </div>
             )}
 
-            <div className="rounded-xl border bg-card">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
-                <h3 className="text-sm font-semibold">
-                  {t("marketingAdsTabInquiry")} ({filteredInquiryAds.length})
-                </h3>
-              </div>
-              <div className="divide-y overflow-x-auto">
-                {!inquiryLoading && filteredInquiryAds.length === 0 && (
-                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">{t("marketingAdsInquiryEmpty")}</p>
-                )}
-                {filteredInquiryAds.map((a) => {
-                  const cid = a.campaignId ? String(a.campaignId) : ""
-                  const camp = cid ? campaignById.get(cid) : undefined
-                  const st = camp?.status ?? ""
-                  const unlinked = !cid || !camp
-                  const statusText = unlinked ? t("marketingAdsStatusUnlinked") : campaignStatusLabel(st)
-
-                  return (
-                    <div
-                      key={a.id}
-                      className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
-                    >
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium capitalize">{a.platform}</span>
-                          <span
-                            className={cn(
-                              "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                              unlinked ? "border border-dashed border-amber-500/60 text-amber-800 dark:text-amber-200" : campaignStatusBadgeClass(st)
-                            )}
-                            title={t("marketingAdsColCampaignStatus")}
-                          >
-                            {statusText}
-                          </span>
-                          {cid && (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                              {a.campaignNo?.trim() || campaignLabel(cid)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                          {formatAdPeriodLine(a.publishDate, a.periodEndDate) && (
-                            <span className="font-medium text-foreground">
-                              {formatAdPeriodLine(a.publishDate, a.periodEndDate)}
-                            </span>
-                          )}
-                          {camp?.topic && <span>{camp.topic}</span>}
-                          {a.contentTopic && <span className="text-foreground">{a.contentTopic}</span>}
-                        </div>
-                        {(a.boostBudget > 0 || a.actualSpent > 0) && (
-                          <div className="text-xs text-muted-foreground">
-                            예산 ฿{(a.boostBudget || 0).toLocaleString()} / 실비 ฿{(a.actualSpent || 0).toLocaleString()}
-                          </div>
-                        )}
-                        {a.postLink && (
-                          <a
-                            href={a.postLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block truncate text-xs text-primary underline-offset-2 hover:underline"
-                          >
-                            {a.postLink}
-                          </a>
-                        )}
+            <Card className="overflow-hidden shadow-sm">
+              <CardHeader className="border-b border-border/80 bg-muted/10 py-3">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  {t("marketingAdsTabInquiry")} · {filteredInquiryAds.length}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border/80">
+                  {!inquiryLoading && filteredInquiryAds.length === 0 && (
+                    <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
+                      <div className="rounded-full bg-muted/80 p-3">
+                        <Search className="h-6 w-6 text-muted-foreground" />
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-1">
-                        <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={() => openAdInCompose(a)}>
-                          {t("marketingAdsOpenComposeTab")}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => {
-                            setMainTab("compose")
-                            if (a.campaignId) setCampaignFilter(String(a.campaignId))
-                            handleEdit(a)
-                          }}
-                        >
-                          {t("posEdit") || "수정"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(a)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <p className="max-w-md text-sm text-muted-foreground">{t("marketingAdsInquiryEmpty")}</p>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
+                  )}
+                  {filteredInquiryAds.map((a) => {
+                    const cid = a.campaignId ? String(a.campaignId) : ""
+                    const camp = cid ? campaignById.get(cid) : undefined
+                    const st = camp?.status ?? ""
+                    const unlinked = !cid || !camp
+                    const statusText = unlinked ? t("marketingAdsStatusUnlinked") : campaignStatusLabel(st)
+
+                    return (
+                      <div
+                        key={a.id}
+                        className="flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/20 sm:flex-row sm:items-start sm:justify-between sm:px-5"
+                      >
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              className={cn("px-2 py-0.5 text-[11px] font-semibold capitalize", platformBadgeClass(a.platform || ""))}
+                            >
+                              {a.platform}
+                            </Badge>
+                            <span
+                              className={cn(
+                                "rounded-md px-2 py-0.5 text-[11px] font-medium",
+                                unlinked
+                                  ? "border border-dashed border-amber-500/60 text-amber-800 dark:text-amber-200"
+                                  : campaignStatusBadgeClass(st)
+                              )}
+                              title={t("marketingAdsColCampaignStatus")}
+                            >
+                              {statusText}
+                            </span>
+                            {cid && (
+                              <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                                {a.campaignNo?.trim() || campaignLabel(cid)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {formatAdPeriodLine(a.publishDate, a.periodEndDate) && (
+                              <span className="font-medium text-foreground">
+                                {formatAdPeriodLine(a.publishDate, a.periodEndDate)}
+                              </span>
+                            )}
+                            {camp?.topic && <span>{camp.topic}</span>}
+                            {a.contentTopic && <span className="text-foreground">{a.contentTopic}</span>}
+                          </div>
+                          {(a.boostBudget > 0 || a.actualSpent > 0) && (
+                            <div className="text-xs tabular-nums text-muted-foreground">
+                              예산 ฿{(a.boostBudget || 0).toLocaleString()} · 실비 ฿{(a.actualSpent || 0).toLocaleString()}
+                            </div>
+                          )}
+                          {a.postLink && (
+                            <a
+                              href={a.postLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex max-w-full items-center gap-1 truncate text-xs text-primary underline-offset-4 hover:underline"
+                            >
+                              <Link2 className="h-3 w-3 shrink-0" />
+                              {a.postLink}
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-1.5 border-t border-border/50 pt-3 sm:border-0 sm:pt-0">
+                          <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={() => openAdInCompose(a)}>
+                            {t("marketingAdsOpenComposeTab")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => {
+                              setMainTab("compose")
+                              if (a.campaignId) setCampaignFilter(String(a.campaignId))
+                              handleEdit(a)
+                            }}
+                          >
+                            {t("posEdit") || "수정"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDelete(a)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </MarketingPageShell>
   )
 }

@@ -85,6 +85,11 @@ export interface PosTerminalMenuScreenProps {
    */
   containMenuHeight?: boolean
   className?: string
+  /**
+   * true면 상단 바(테이블 선택 뒤로가기 + 테이블명)를 숨김.
+   * 터미널에서 테이블·뒤로가기를 장바구니로 옮길 때 사용.
+   */
+  hideTableContextBar?: boolean
 }
 
 export function PosTerminalMenuScreen({
@@ -100,6 +105,7 @@ export function PosTerminalMenuScreen({
   touchMode = 'default',
   containMenuHeight = false,
   className,
+  hideTableContextBar = false,
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -214,6 +220,9 @@ export function PosTerminalMenuScreen({
   )
   const mainCategoryFontPx = isAdminMode ? screenConfig.mainCategoryFontSize : 12
   const categoryFontPx = isAdminMode ? screenConfig.categoryFontSize : 12
+  /** POS 터미널: 대분류·소분류 버튼 가독성 (관리자 화면 구성 폰트와 별도) */
+  const posMainBtnFontPx = touchMode === 'large' ? 14 : 13
+  const posCategoryBtnFontPx = touchMode === 'large' ? 13 : 12
   const tileFontPx = isAdminMode ? screenConfig.menuTileFontSize : 13
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
@@ -596,15 +605,17 @@ export function PosTerminalMenuScreen({
 
   return (
     <div className={cn('flex flex-col rounded-lg border border-border bg-card overflow-hidden', isExpandedMobileList ? 'h-auto' : 'h-full', className)}>
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
-        <Button variant="ghost" size="sm" className="gap-1.5 h-9" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-          {backButtonLabel || t('posBackToTableSelect') || '테이블 선택'}
-        </Button>
-        <span className="text-sm font-medium text-muted-foreground">
-          {t('posTableLabel')}: <span className="text-foreground font-semibold">{selectedTableName}</span>
-        </span>
-      </div>
+      {!hideTableContextBar && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
+          <Button variant="ghost" size="sm" className="gap-1.5 h-9" onClick={onBack}>
+            <ArrowLeft className="h-4 w-4" />
+            {backButtonLabel || t('posBackToTableSelect') || '테이블 선택'}
+          </Button>
+          <span className="text-sm font-medium text-muted-foreground">
+            {t('posTableLabel')}: <span className="text-foreground font-semibold">{selectedTableName}</span>
+          </span>
+        </div>
+      )}
       <div
         className={cn(
           isExpandedMobileList ? 'flex-none min-h-fit flex flex-col' : 'flex-1 min-h-0 flex flex-col',
@@ -614,12 +625,21 @@ export function PosTerminalMenuScreen({
         <section
           ref={categoryPanelRef}
           className={cn(
-            'bg-muted/20 px-3 py-3',
-            isAdminMode ? 'min-[980px]:min-h-0 min-[980px]:overflow-hidden border-r' : 'flex-shrink-0 border-b px-2 py-1'
+            isAdminMode
+              ? 'bg-muted/20 px-3 py-3 min-[980px]:min-h-0 min-[980px]:overflow-hidden border-r'
+              : 'flex shrink-0 flex-col gap-2 border-b border-border/50 bg-muted/25 px-2 py-2'
           )}
         >
-          <p className={cn('font-semibold text-muted-foreground', isAdminMode ? 'mb-2 text-xs' : 'mb-0.5 text-[10px]')}>{t('posMainCategory') || '대분류'}</p>
-          <div className={cn(isAdminMode ? 'grid gap-1.5' : 'flex gap-1 overflow-x-auto')}>
+          {isAdminMode && (
+            <p className="mb-2 font-semibold text-xs text-muted-foreground">{t('posMainCategory') || '대분류'}</p>
+          )}
+          <div
+            className={cn(
+              isAdminMode ? 'grid gap-1.5' : 'flex gap-2 overflow-x-auto scroll-smooth [-webkit-overflow-scrolling:touch]'
+            )}
+            role="group"
+            aria-label={t('posMainCategory') || '대분류'}
+          >
             {mainCategories.map((main) => (
               <button
                 key={main}
@@ -629,33 +649,66 @@ export function PosTerminalMenuScreen({
                   setSelectedCategory('')
                 }}
                 className={cn(
-                  'rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
-                  selectedMainCategory === main
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border hover:bg-muted',
-                  !isAdminMode && 'h-8 px-3 py-0 text-sm'
+                  isAdminMode
+                    ? cn(
+                        'rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
+                        selectedMainCategory === main
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background hover:bg-muted'
+                      )
+                    : cn(
+                        'touch-manipulation shrink-0 rounded-lg border px-3 py-1.5 text-left font-semibold leading-snug whitespace-nowrap transition-all',
+                        'min-h-10 min-w-[2.75rem] active:scale-[0.98]',
+                        selectedMainCategory === main
+                          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                          : 'border-border/80 bg-background text-foreground hover:border-primary/40 hover:bg-muted/70'
+                      )
                 )}
-                style={{ fontSize: `${mainCategoryFontPx}px` }}
+                style={{
+                  fontSize: `${isAdminMode ? mainCategoryFontPx : posMainBtnFontPx}px`,
+                }}
               >
                 {main}
               </button>
             ))}
           </div>
-          <p className={cn('font-semibold text-muted-foreground', isAdminMode ? 'mb-2 mt-4 text-xs' : 'mb-0.5 mt-1.5 text-[10px]')}>{t('posCategory') || '카테고리'}</p>
-          <div className={cn(isAdminMode ? 'grid gap-1.5' : 'flex gap-1 overflow-x-auto')}>
+          {isAdminMode && (
+            <p className="mb-2 mt-4 font-semibold text-xs text-muted-foreground">{t('posCategory') || '카테고리'}</p>
+          )}
+          {!isAdminMode && categoriesForSelectedMain.length > 0 && (
+            <div className="mx-0.5 h-px shrink-0 bg-border/50" aria-hidden />
+          )}
+          <div
+            className={cn(
+              isAdminMode ? 'grid gap-1.5' : 'flex gap-2 overflow-x-auto scroll-smooth [-webkit-overflow-scrolling:touch]'
+            )}
+            role="group"
+            aria-label={t('posCategory') || '카테고리'}
+          >
             {categoriesForSelectedMain.map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
                 className={cn(
-                  'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
-                  selectedCategory === cat
-                    ? 'bg-sky-500 text-white border-sky-600'
-                    : 'bg-background border-border hover:bg-muted',
-                  !isAdminMode && 'h-8 px-3 py-0 text-sm'
+                  isAdminMode
+                    ? cn(
+                        'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
+                        selectedCategory === cat
+                          ? 'border-sky-600 bg-sky-500 text-white'
+                          : 'border-border bg-background hover:bg-muted'
+                      )
+                    : cn(
+                        'touch-manipulation shrink-0 rounded-lg border px-3 py-1.5 text-left font-medium leading-snug whitespace-nowrap transition-all',
+                        'min-h-10 min-w-[2.75rem] active:scale-[0.98]',
+                        selectedCategory === cat
+                          ? 'border-sky-600 bg-sky-500 text-white shadow-sm'
+                          : 'border-border/80 bg-background text-foreground hover:border-sky-400/60 hover:bg-sky-50/70 dark:hover:bg-sky-950/30'
+                      )
                 )}
-                style={{ fontSize: `${categoryFontPx}px` }}
+                style={{
+                  fontSize: `${isAdminMode ? categoryFontPx : posCategoryBtnFontPx}px`,
+                }}
               >
                 {translatePosMenuCategoryLabel(cat, t)}
               </button>
@@ -684,8 +737,8 @@ export function PosTerminalMenuScreen({
           <div
             ref={menuGridRef}
             className={cn(
-              'grid content-start gap-2',
-              !isAdminMode && 'auto-rows-[162px]'
+              'grid content-start',
+              isAdminMode ? 'gap-2' : 'gap-2.5 auto-rows-[162px]'
             )}
             style={{
               gridTemplateColumns: `repeat(${Math.max(2, screenConfig.menuTileCols)}, minmax(0, 1fr))`,
@@ -701,7 +754,11 @@ export function PosTerminalMenuScreen({
                 onClick={() => interactive && fireMenuAction(() => addPromo(p))}
                 className={cn(
                   'touch-manipulation flex h-full flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition',
-                  interactive ? 'hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98]' : 'opacity-75 cursor-default'
+                  !isAdminMode &&
+                    'rounded-2xl border-amber-400/50 bg-gradient-to-b from-amber-50 to-amber-100/90 shadow-md shadow-amber-900/10 ring-1 ring-amber-500/20',
+                  interactive
+                    ? 'hover:border-amber-500 hover:bg-amber-100 hover:shadow-lg active:scale-[0.98]'
+                    : 'opacity-75 cursor-default'
                 )}
                 data-menu-card="promo"
               >
@@ -731,7 +788,11 @@ export function PosTerminalMenuScreen({
                 onClick={() => interactive && fireMenuAction(() => openMenuPicker(m))}
                 className={cn(
                   'touch-manipulation flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition',
-                  interactive ? 'hover:border-emerald-400 hover:shadow-md active:scale-[0.98]' : 'opacity-85 cursor-default'
+                  !isAdminMode &&
+                    'rounded-2xl border-border/90 bg-card shadow-md shadow-black/[0.06] ring-1 ring-border/50 dark:shadow-black/30',
+                  interactive
+                    ? 'hover:border-emerald-500/70 hover:shadow-lg hover:ring-emerald-500/25 active:scale-[0.98]'
+                    : 'opacity-85 cursor-default'
                 )}
                 data-menu-card="menu"
               >

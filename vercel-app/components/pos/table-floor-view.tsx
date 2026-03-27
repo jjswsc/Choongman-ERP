@@ -453,52 +453,71 @@ export function TableFloorView({
               className={labelTextClass}
               style={{ writingMode: 'horizontal-tb' }}
             >
-              {/* 1줄: 테이블명만 강조 · 2줄: 손님 수(주문) vs 테이블 정원(좌석)을 칩·아이콘으로 구분 */}
+              {/* 1줄: 테이블명 + 정원(좌석) 칩을 오른쪽에 붙임 · 2줄: 손님 수 */}
               <div className="flex min-w-0 max-w-full flex-col items-center gap-1 px-0.5 leading-none">
-                <span
-                  className="min-w-0 max-w-[min(100%,9rem)] truncate border-b border-current/30 pb-0.5 text-base font-extrabold tracking-tight sm:text-lg"
-                  title={translateReceiptTableDisplayName(tab.name, t)}
-                >
-                  {translateReceiptTableDisplayName(tab.name, t)}
-                </span>
-                <div className="flex max-w-full flex-wrap items-center justify-center gap-1">
-                  {isOccupied && tableGuestCount > 0 && (
+                <div className="flex max-w-full items-center justify-center gap-1">
+                  <span
+                    className="min-w-0 max-w-[min(100%,7.5rem)] truncate border-b border-current/30 pb-0.5 text-base font-extrabold tracking-tight sm:text-lg"
+                    title={translateReceiptTableDisplayName(tab.name, t)}
+                  >
+                    {translateReceiptTableDisplayName(tab.name, t)}
+                  </span>
+                  {tab.seats > 0 && (
                     <span
-                      className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-sky-300/90 bg-sky-950/88 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-50 shadow-md ring-1 ring-sky-400/40 sm:text-xs"
-                      title={t('posOrderGuestCount') || '이 테이블 주문 손님 수'}
-                    >
-                      <Users className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
-                      <span className="tabular-nums leading-none">{tableGuestCount}</span>
-                      <span className="max-w-[4rem] truncate text-[9px] font-bold normal-case opacity-95 sm:text-[10px]">
-                        {t('posGuestCount') || '손님'}
-                      </span>
-                    </span>
-                  )}
-                  {isOccupied && tab.seats > 0 && (
-                    <span
-                      className="inline-flex items-center gap-0.5 rounded-full border border-amber-200/50 bg-amber-950/70 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-amber-50 shadow-sm ring-1 ring-amber-700/35 sm:text-[10px]"
+                      className={cn(
+                        'inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 tabular-nums shadow-sm',
+                        isOccupied
+                          ? 'border-amber-200/50 bg-amber-950/70 text-[9px] font-bold text-amber-50 ring-1 ring-amber-700/35 sm:text-[10px]'
+                          : 'border-amber-600/85 bg-amber-950/65 text-[10px] font-extrabold text-amber-50 ring-1 ring-amber-800/40 sm:text-xs'
+                      )}
                       title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
                     >
-                      <Armchair className="h-2.5 w-2.5 shrink-0 opacity-95 sm:h-3 sm:w-3" strokeWidth={2.25} aria-hidden />
-                      {tab.seats}
-                    </span>
-                  )}
-                  {!isOccupied && tab.seats > 0 && (
-                    <span
-                      className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-amber-600/85 bg-amber-950/65 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-50 shadow-md ring-1 ring-amber-800/40 sm:text-xs"
-                      title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
-                    >
-                      <Armchair className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
-                      <span className="tabular-nums leading-none">{tab.seats}</span>
-                      <span className="max-w-[3.5rem] truncate text-[9px] font-bold normal-case opacity-95 sm:text-[10px]">
-                        {t('posTableSeats') || '좌석'}
-                      </span>
+                      <Armchair
+                        className={cn('shrink-0 opacity-95', isOccupied ? 'h-2.5 w-2.5 sm:h-3 sm:w-3' : 'h-3 w-3')}
+                        strokeWidth={2.25}
+                        aria-hidden
+                      />
+                      <span className="leading-none tabular-nums">{tab.seats}</span>
                     </span>
                   )}
                 </div>
+                {isOccupied && (tableGuestCount > 0 || createdAt) && (
+                  <div className="flex max-w-full flex-wrap items-center justify-center gap-1">
+                    {tableGuestCount > 0 && (
+                      <span
+                        className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-sky-300/90 bg-sky-950/88 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-50 shadow-md ring-1 ring-sky-400/40 sm:text-xs"
+                        title={t('posOrderGuestCount') || '이 테이블 주문 손님 수'}
+                      >
+                        <Users className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
+                        <span className="tabular-nums leading-none">{tableGuestCount}</span>
+                      </span>
+                    )}
+                    {createdAt && (
+                      <span
+                        className={cn(
+                          'inline-flex max-w-full shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums shadow-sm ring-1 ring-black/10 sm:text-xs',
+                          elapsedClass
+                        )}
+                        title={t('posTableElapsedHint') || ''}
+                      >
+                        {showDelayBadge ? (
+                          <span className="whitespace-nowrap">
+                            {t('posDelayBadge') || '지연'} {elapsedMin}
+                            {minuteUnit}
+                          </span>
+                        ) : (
+                          <span className="whitespace-nowrap">
+                            {elapsedMin}
+                            {minuteUnit}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* 2줄: 상태 · 주문시각 · 경과(지연 문구는 경과 칩 안으로 합침) */}
+              {/* 3줄: 상태 · 주문 시각 (경과 분은 손님 수 줄에 표시) */}
               {isOccupied && createdAt && (
                 <div
                   className="flex max-w-full min-w-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 px-0.5 text-xs leading-tight sm:text-sm"
@@ -509,25 +528,6 @@ export function TableFloorView({
                   ) : null}
                   <span className="shrink-0 tabular-nums font-semibold opacity-90" title={t('posTableOrderClockHint') || ''}>
                     {formatTableTime(createdAt)}
-                  </span>
-                  <span
-                    className={cn(
-                      'max-w-full shrink-0 rounded px-1.5 py-0.5 text-xs font-extrabold tabular-nums shadow-sm sm:text-sm',
-                      elapsedClass
-                    )}
-                    title={t('posTableElapsedHint') || ''}
-                  >
-                    {showDelayBadge ? (
-                      <span className="whitespace-nowrap">
-                        {t('posDelayBadge') || '지연'} {elapsedMin}
-                        {minuteUnit}
-                      </span>
-                    ) : (
-                      <span className="whitespace-nowrap">
-                        {elapsedMin}
-                        {minuteUnit}
-                      </span>
-                    )}
                   </span>
                 </div>
               )}

@@ -3,6 +3,7 @@
  * core fetch/auth는 lib/api/ 에서 분리
  * 쓰기 API는 apiFetchWithOffline 사용 → 네트워크 실패 시 큐 적재, 복구 후 자동 전송
  */
+import type { MarketingCollabDetail } from './marketing-collab-detail'
 import { apiFetch } from './api/fetch'
 import { apiFetchWithOffline } from './api/fetch-offline'
 import {
@@ -4180,12 +4181,23 @@ export interface PosPromoItem {
   sortOrder: number
 }
 
+/** 목록 API: 비 JSON·HTML 오류 페이지·빈 본문 시 빈 배열 (통합 캘린더 등에서 Promise.all 전체 실패 방지) */
+async function apiJsonArrayResponse<T>(res: Response): Promise<T[]> {
+  if (!res.ok) return []
+  try {
+    const data = await res.json()
+    return Array.isArray(data) ? (data as T[]) : []
+  } catch {
+    return []
+  }
+}
+
 export async function getPosPromos(params?: { campaignId?: string; standaloneOnly?: boolean }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
   if (params?.standaloneOnly) q.set('standaloneOnly', 'true')
   const res = await apiFetchWithOffline('/api/getPosPromos' + (q.toString() ? '?' + q.toString() : ''))
-  return res.json() as Promise<PosPromo[]>
+  return apiJsonArrayResponse<PosPromo>(res)
 }
 
 export async function getPosPromoSchemaStatus() {
@@ -4310,13 +4322,25 @@ export interface MarketingCampaign {
   kpiTarget: number
   kpiUnit: string
   budgetTotal: number
+  /** 목록 API에서 함께 내려옴 — 협업·할인 요약 표시용 */
+  discountType?: string
+  discountValue?: number
+  discountPricePromotion?: string
+  discountTargetAudience?: string
+  /** 캠페인 편집에서 「협업 관리」목록 포함 여부 */
+  collabManagement?: boolean
 }
+
+export type { MarketingCollabDetail } from './marketing-collab-detail'
 
 export interface MarketingCampaignDetail extends MarketingCampaign {
   detail: string
   discountType: string
   discountValue: number
   discountPricePromotion: string
+  discountTargetAudience: string
+  /** 협업 관리 화면 전용 세부 JSON (normalize된 형태) */
+  collabDetail?: MarketingCollabDetail
   costAdsOnline: number
   costAdsOffline: number
   costProduction: number
@@ -4332,13 +4356,25 @@ export interface MarketingCampaignDetail extends MarketingCampaign {
 
 export async function getMarketingCampaigns() {
   const res = await apiFetchWithOffline('/api/marketingCampaigns')
-  return res.json() as Promise<MarketingCampaign[]>
+  return apiJsonArrayResponse<MarketingCampaign>(res)
 }
 
 export async function getMarketingCampaign(id: string) {
   const q = new URLSearchParams({ id })
   const res = await apiFetchWithOffline('/api/marketingCampaigns?' + q.toString())
   return res.json() as Promise<MarketingCampaignDetail | null>
+}
+
+export async function saveMarketingCampaignCollabDetail(params: {
+  campaignId: string
+  collabDetail: Record<string, unknown>
+}) {
+  const res = await apiFetchWithOffline('/api/marketingCampaignCollabDetail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function getNextCampaignNumber(): Promise<string | null> {
@@ -4361,6 +4397,7 @@ export async function saveMarketingCampaign(params: {
   discountType?: string
   discountValue?: number
   discountPricePromotion?: string
+  discountTargetAudience?: string
   costAdsOnline?: number
   costAdsOffline?: number
   costProduction?: number
@@ -4373,6 +4410,7 @@ export async function saveMarketingCampaign(params: {
   kpiUnit?: string
   campaignPerformance?: string
   conclusion?: string
+  collabManagement?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/marketingCampaigns', {
     method: 'POST',
@@ -4851,7 +4889,7 @@ export async function getMarketingAds(params?: { campaignId?: string }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
   const res = await apiFetchWithOffline('/api/marketingAds' + (q.toString() ? '?' + q.toString() : ''))
-  return res.json() as Promise<MarketingAd[]>
+  return apiJsonArrayResponse<MarketingAd>(res)
 }
 
 export async function saveMarketingAd(params: {
@@ -4917,7 +4955,7 @@ export async function getMarketingInfluencers(params?: { campaignId?: string }) 
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
   const res = await apiFetchWithOffline('/api/marketingInfluencers' + (q.toString() ? '?' + q.toString() : ''))
-  return res.json() as Promise<MarketingInfluencer[]>
+  return apiJsonArrayResponse<MarketingInfluencer>(res)
 }
 
 export async function saveMarketingInfluencer(params: {
@@ -4985,7 +5023,7 @@ export async function getMarketingMaterials(params?: { campaignId?: string }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
   const res = await apiFetchWithOffline('/api/marketingMaterials' + (q.toString() ? '?' + q.toString() : ''))
-  return res.json() as Promise<MarketingMaterial[]>
+  return apiJsonArrayResponse<MarketingMaterial>(res)
 }
 
 export async function saveMarketingMaterial(params: {
@@ -6750,6 +6788,82 @@ export async function getEvaluationHistory(params: {
       jsonData?: string
     }[]
   >
+}
+
+export type EvaluationAnalyticsPayload = {
+  summary: {
+    totalEvaluations: number
+    uniqueEmployees: number
+    avgTotalScore: number | null
+  }
+  gradeDistribution: Record<string, number>
+  byStore: {
+    store: string
+    evaluations: number
+    uniqueEmployees: number
+    avgScore: number | null
+  }[]
+  byType: {
+    evalType: string
+    evaluations: number
+    uniqueEmployees: number
+    avgScore: number | null
+  }[]
+  byMonth: { yearMonth: string; evaluations: number; avgScore: number | null }[]
+  byEvaluator: { evaluator: string; evaluations: number; avgScore: number | null }[]
+  sectionAverages?: Record<string, number | null>
+  source: 'rpc' | 'fallback'
+}
+
+/** 직원 평가 집계 (분석 탭) */
+export async function getEvaluationAnalytics(params: {
+  start: string
+  end: string
+  type?: string
+  store?: string
+}) {
+  const q = new URLSearchParams()
+  q.set('start', params.start.slice(0, 10))
+  q.set('end', params.end.slice(0, 10))
+  q.set('type', (params.type || 'all').trim())
+  if (params.store && params.store !== 'All') q.set('store', params.store.trim())
+  const res = await apiFetchWithOffline(`/api/getEvaluationAnalytics?${q}`)
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(err || '집계 조회 실패')
+  }
+  return res.json() as Promise<EvaluationAnalyticsPayload>
+}
+
+/** 직원 평가 집계 AI 요약 (본사·회계, OPENAI_API_KEY 필요) */
+export async function summarizeEvaluationAnalytics(params: {
+  start: string
+  end: string
+  type?: string
+  store?: string
+}) {
+  const res = await apiFetchWithOffline('/api/summarizeEvaluationAnalytics', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      start: params.start.slice(0, 10),
+      end: params.end.slice(0, 10),
+      type: (params.type || 'all').trim(),
+      store: (params.store || 'All').trim(),
+    }),
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    let msg = text
+    try {
+      const j = JSON.parse(text) as { error?: string }
+      if (j.error) msg = j.error
+    } catch {
+      //
+    }
+    throw new Error(msg || '요약 실패')
+  }
+  return JSON.parse(text) as { summary: string; source: string }
 }
 
 /** 평가 항목 일괄 수정 */

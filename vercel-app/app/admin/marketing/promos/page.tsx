@@ -38,6 +38,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { POS_MAIN_CATEGORIES } from '@/lib/pos-menu-categories'
+import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
+import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
 
 export default function MarketingPromosPage() {
   const searchParams = useSearchParams()
@@ -174,27 +176,24 @@ export default function MarketingPromosPage() {
   )
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-[min(100%,1600px)] px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <Tag className="h-5 w-5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t('posPromoMgmt')}</h1>
-            <p className="text-xs text-muted-foreground">{t('posPromoMgmtSub')}</p>
-            {selectedCampaign ? (
-              <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-foreground">
+    <MarketingPageShell maxWidthClass="max-w-[min(100%,1600px)]">
+        <MarketingPageHero
+          icon={Tag}
+          title={t('posPromoMgmt')}
+          description={t('posPromoMgmtSub')}
+          footer={
+            selectedCampaign ? (
+              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-foreground">
                 <span className="font-mono text-xs font-semibold tabular-nums text-primary">
                   [{selectedCampaign.campaignNo?.trim() || '—'}]
                 </span>
                 <span className="font-medium leading-snug">{selectedCampaign.topic}</span>
               </p>
             ) : (
-              <p className="mt-2 text-xs text-muted-foreground">{t('marketingPromoToolbarCampaignHint')}</p>
-            )}
-          </div>
-        </div>
+              <p className="text-xs text-muted-foreground">{t('marketingPromoToolbarCampaignHint')}</p>
+            )
+          }
+        />
 
         {marketingPromoSetsBannerText ? (
           <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
@@ -303,7 +302,6 @@ export default function MarketingPromosPage() {
             />
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </MarketingPageShell>
   )
 }

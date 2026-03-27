@@ -9,6 +9,7 @@ import {
   useImperativeHandle,
   type Dispatch,
   type SetStateAction,
+  type ReactNode,
 } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,7 +35,32 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/tooltip'
-import { ShoppingCart, Trash2, Tag, Minus, Plus, ChevronDown, ChevronUp, CreditCard, Banknote, QrCode, Wallet, Users, Receipt, Building2, User, Check, X, Pencil, LayoutGrid } from 'lucide-react'
+import {
+  ShoppingCart,
+  Trash2,
+  Tag,
+  Minus,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Banknote,
+  QrCode,
+  Wallet,
+  Users,
+  Receipt,
+  Building2,
+  User,
+  Check,
+  X,
+  Pencil,
+  LayoutGrid,
+  ArrowLeft,
+  Bike,
+  Package,
+  CircleDollarSign,
+  Sparkles,
+} from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
@@ -48,14 +74,66 @@ import {
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
-import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import { computePosPricing, type PosPricingAdjustments, type PosPricingResult } from '@/lib/pos-pricing'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
+import { Separator } from '@/components/ui/separator'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
 export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
+
+/** Grab 녹색 · 라인맨 하늘색 · 쇼피 주황 — 장바구니 칩/뱃지 */
+function deliveryAppBrandClasses(app: string | undefined) {
+  switch (app) {
+    case 'grab':
+      return {
+        bike: 'text-emerald-700 dark:text-emerald-300',
+        chip: cn(
+          'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
+          'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
+          'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
+        ),
+        badge:
+          'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
+      }
+    case 'lineman':
+      return {
+        bike: 'text-sky-600 dark:text-sky-300',
+        chip: cn(
+          'border-sky-600/40 bg-gradient-to-b from-sky-50 to-sky-100/90 text-sky-950',
+          'dark:border-sky-500/35 dark:from-sky-950/50 dark:to-sky-900/60 dark:text-sky-50',
+          'shadow-sm ring-1 ring-sky-700/10 dark:ring-sky-400/15'
+        ),
+        badge:
+          'border-sky-600/35 bg-sky-50 text-sky-900 hover:bg-sky-100/90 dark:border-sky-500/40 dark:bg-sky-950/55 dark:text-sky-50 dark:hover:bg-sky-950/70',
+      }
+    case 'shopee':
+      return {
+        bike: 'text-orange-600 dark:text-orange-400',
+        chip: cn(
+          'border-orange-500/45 bg-gradient-to-b from-orange-50 to-orange-100/90 text-orange-950',
+          'dark:border-orange-500/40 dark:from-orange-950/50 dark:to-orange-900/55 dark:text-orange-50',
+          'shadow-sm ring-1 ring-orange-600/15 dark:ring-orange-400/20'
+        ),
+        badge:
+          'border-orange-500/40 bg-orange-50 text-orange-950 hover:bg-orange-100/90 dark:border-orange-500/40 dark:bg-orange-950/55 dark:text-orange-50 dark:hover:bg-orange-950/70',
+      }
+    default:
+      return {
+        bike: 'text-emerald-700 dark:text-emerald-300',
+        chip: cn(
+          'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
+          'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
+          'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
+        ),
+        badge:
+          'border-emerald-600/35 bg-emerald-50 text-emerald-900 hover:bg-emerald-100/90 dark:border-emerald-500/40 dark:bg-emerald-950/55 dark:text-emerald-50 dark:hover:bg-emerald-950/70',
+      }
+  }
+}
+
 type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'other'
 type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 type TaxInvoiceProfile = {
@@ -143,6 +221,8 @@ interface CartPanelProps {
    * selectedTable 객체가 늦게 채워져도 키가 안 흔들림 (장바구니 초기화 방지).
    */
   cartSessionTableId?: string | null
+  /** 홀(테이블) 주문 시 플로어로 돌아가기 — 터미널에서 메뉴 상단과 중복 방지용 */
+  onBackToTableSelection?: () => void
   /** 홀 주문 전송 (주방 전달) - 부모에서 savePosOrder 호출 후 pendingOrderId 전달 */
   onOrderSubmit?: (payload: {
     items: {
@@ -253,6 +333,132 @@ const cloneCartItems = (items: CartItem[]): CartItem[] =>
     promoItems: i.promoItems ? i.promoItems.map((p) => ({ ...p })) : undefined,
   }))
 
+/** POS 결제 모달 — 금액 요약(소계·할인·수수료·합계) */
+function PosPaymentModalAmountCard({
+  subtotal,
+  discount,
+  pricing,
+  total,
+  totalLabelKey,
+  t,
+}: {
+  subtotal: number
+  discount: number
+  pricing: PosPricingResult
+  total: number
+  /** i18n 키 (없으면 posPaymentTotalLabel) */
+  totalLabelKey?: string
+  t: (key: string) => string
+}) {
+  const totalLineLabel = totalLabelKey ? t(totalLabelKey) : (t('posPaymentTotalLabel') || '결제 금액')
+  const feeRows: { show: boolean; label: ReactNode; value: string; valueClass?: string }[] = [
+    {
+      show: pricing.vatFeeAmt > 0,
+      label: (
+        <span className="text-muted-foreground">
+          {t('posVatLabel') || '부가세'}{' '}
+          <span className="text-[11px] opacity-80">
+            ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+          </span>
+        </span>
+      ),
+      value: `${pricing.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.vatFeeAmt)} ฿`,
+    },
+    {
+      show: pricing.serviceFeeAmt > 0,
+      label: (
+        <span className="text-muted-foreground">
+          {t('posServiceFee') || '서비스비'}{' '}
+          <span className="text-[11px] opacity-80">
+            ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+          </span>
+        </span>
+      ),
+      value: `${pricing.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.serviceFeeAmt)} ฿`,
+    },
+    {
+      show: pricing.cardFeeAmt > 0,
+      label: (
+        <span className="text-muted-foreground">
+          {t('posCardFee') || '카드비'}{' '}
+          <span className="text-[11px] opacity-80">
+            ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+          </span>
+        </span>
+      ),
+      value: `${pricing.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.cardFeeAmt)} ฿`,
+    },
+    {
+      show: pricing.otherFeeAmt > 0,
+      label: (
+        <span className="text-muted-foreground">
+          {t('posOtherFee') || '기타'}{' '}
+          <span className="text-[11px] opacity-80">
+            ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+          </span>
+        </span>
+      ),
+      value: `${pricing.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.otherFeeAmt)} ฿`,
+    },
+  ]
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-muted/45 via-muted/25 to-background/95 p-4 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]">
+      <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+      <div className="mb-3 flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary shadow-inner">
+          <Receipt className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.25} />
+        </div>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="text-sm font-semibold leading-tight text-foreground">
+            {t('posSubtotal') || 'Subtotal'}
+          </p>
+          <p className="text-xs text-muted-foreground/90 leading-snug">
+            {t('posPaymentSum') || '입력 합계'} → {t('posPaymentTotalLabel') || '결제 금액'}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-0">
+        <div className="flex items-center justify-between gap-3 py-2 text-sm">
+          <span className="text-muted-foreground">{t('posSubtotal')}</span>
+          <span className="tabular-nums font-medium text-foreground">{formatBahtNum(subtotal)} ฿</span>
+        </div>
+        {discount > 0 && (
+          <div className="flex items-center justify-between gap-3 py-2 text-sm">
+            <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-80" />
+              {t('posDiscount')}
+            </span>
+            <span className="tabular-nums font-medium text-emerald-700 dark:text-emerald-400">−{formatBahtNum(discount)} ฿</span>
+          </div>
+        )}
+        {feeRows.some((r) => r.show) && (
+          <>
+            <Separator className="my-1 bg-border/60" />
+            <div className="space-y-0.5 py-1">
+              {feeRows
+                .filter((r) => r.show)
+                .map((row, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-[13px]">
+                    {row.label}
+                    <span className="shrink-0 tabular-nums text-foreground/90">{row.value}</span>
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
+        <Separator className="my-2 bg-border/70" />
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-primary/8 px-3 py-3 dark:bg-primary/15">
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CircleDollarSign className="h-4 w-4 text-primary" />
+            {totalLineLabel}
+          </span>
+          <span className="text-lg font-bold tabular-nums tracking-tight text-primary">{formatBahtNum(total)} ฿</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
   stores,
   currentStoreId,
@@ -266,6 +472,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   deliveryOrderNo: deliveryOrderNoProp,
   takeoutLabel: takeoutLabelProp,
   cartSessionTableId: cartSessionTableIdProp,
+  onBackToTableSelection,
   onOrderSubmit,
   onTakeoutOrderComplete,
   onDeliveryOrderComplete,
@@ -454,8 +661,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
-  const dutchUnitAmount = Math.max(0, Math.round((total / Math.max(1, splitCount)) * 100) / 100)
-  const dutchRemainingPeople = Math.max(0, splitCount - splitPaidSteps)
 
   const confirmGuestDirect = () => {
     const v = parseInt(guestDirectValue, 10)
@@ -489,6 +694,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseFloat(payShopeePay) || 0) +
     (parseFloat(payOther) || 0)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
+  /** 더치 패널을 열지 않아도: 합계 미달·일부 결제 진행 중이면 수단 탭이 더치 방식(1인분/잔액)으로 동작 */
+  const splitFlowForInputs =
+    showSplit || splitPaidSteps > 0 || (total > 0 && !paymentSumMatch)
+  /** 더치 패널: 인원 고정. 그 외: 일부 결제 단계에 맞춰 인원수를 가정(최소 2) */
+  const effectiveDutchCount = showSplit
+    ? Math.max(1, Number(splitCount) || 1)
+    : Math.max(splitPaidSteps + 1, 2)
+  const dutchUnitAmount =
+    total <= 0 ? 0 : Math.max(0, Math.round((total / Math.max(1, effectiveDutchCount)) * 100) / 100)
+  const dutchRemainingPeople = showSplit ? Math.max(0, splitCount - splitPaidSteps) : 0
+  const partialPayDisabled = showSplit ? dutchRemainingPeople <= 0 : total <= 0 || paymentSumMatch
   const DISCOUNT_PRESETS = [10, 15, 20, 50]
   const paymentTabs: { id: PaymentMethodTab; label: string; icon: typeof Banknote }[] = [
     { id: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
@@ -529,6 +745,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           : deliveryAppProp === 'shopee'
             ? t('posDeliveryAppShopee')
             : deliveryAppProp || ''
+  const deliveryBrand = deliveryAppBrandClasses(deliveryAppProp)
 
   const loadMembers = async (keyword?: string) => {
     setMembersLoading(true)
@@ -746,9 +963,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   type MoveTarget = 'cash' | 'card' | 'qr' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay'
 
-  /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 추가 (진행은 분할 결제 버튼에서만 증가) */
+  /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 추가 (진행은 하단 「일부 결제」에서만 증가) */
   const addDutchAmountOnly = (target: MoveTarget) => {
-    const count = Math.max(1, Number(splitCount) || 1)
+    const count = effectiveDutchCount
     const perPerson = dutchUnitAmount
     const currentSum =
       (parseFloat(payCash) || 0) +
@@ -777,11 +994,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
   }
 
-  /** 분할 결제 클릭 시: 진행만 누적 (금액은 탭 클릭으로 이미 입력됨) */
+  /** 더치페이 「일부 결제」: 진행만 누적 (금액은 탭 클릭으로 이미 입력됨). 패널 없이도 일부 결제만으로 단계 증가 가능 */
   const confirmSplitStep = () => {
-    const count = Math.max(1, Number(splitCount) || 1)
-    if (splitPaidSteps >= count) return
-    setSplitPaidSteps((prev) => Math.min(count, prev + 1))
+    if (showSplit) {
+      const count = Math.max(1, Number(splitCount) || 1)
+      if (splitPaidSteps >= count) return
+      setSplitPaidSteps((prev) => Math.min(count, prev + 1))
+    } else {
+      setSplitPaidSteps((prev) => prev + 1)
+    }
   }
 
   useEffect(() => {
@@ -789,10 +1010,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setSplitPaidSteps(0)
   }, [showPaymentModal, splitCount, total])
 
-  /** 모달을 닫을 때 더치페이 상태 초기화 (다음 결제 시 전액 자동 입력과 충돌 방지) */
+  /** 모달을 닫을 때 더치페이·일부 결제 진행 초기화 (다음 결제 시 전액 자동 입력과 충돌 방지) */
   useEffect(() => {
     if (!showPaymentModal) {
       setShowSplit(false)
+      setSplitPaidSteps(0)
     }
   }, [showPaymentModal])
 
@@ -812,9 +1034,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }, [activePaymentTab])
 
-  // 할인/포인트 변경 시 결제 입력 금액 즉시 반영 (더치페이 모드에서는 건너뜀)
+  // 할인/포인트 변경 시 결제 입력 금액 즉시 반영 (더치페이·일부 분할 입력 중에는 건너뜀)
   useEffect(() => {
     if (!showPaymentModal || total <= 0 || showSplit) return
+    if (splitPaidSteps > 0) return
+    if (!paymentSumMatch && paymentSum > 0.005) return
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
     const newTotal = computePosPricing({
@@ -824,7 +1048,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }).finalTotal
     resetPaymentInputs()
     setPayCash(String(newTotal))
-  }, [showPaymentModal, total, discountValue, discountType, pointUsedNum, showSplit, cartItems, pricingAdjustments])
+  }, [
+    showPaymentModal,
+    total,
+    discountValue,
+    discountType,
+    pointUsedNum,
+    showSplit,
+    splitPaidSteps,
+    paymentSum,
+    paymentSumMatch,
+    cartItems,
+    pricingAdjustments,
+  ])
 
   const buildOrderMemo = (baseMemo: string) => {
     if (!needTaxInvoice) return baseMemo
@@ -1203,45 +1439,153 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   return (
     <>
     <Card className="h-full flex flex-col min-w-0 overflow-hidden">
-      <CardHeader className="py-2.5 px-3 border-b">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold flex items-center gap-2 flex-wrap">
-            <ShoppingCart className="w-4 h-4" />
-            {t('posCart')}
-            {cartItems.length > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                {cartItems.reduce((s, i) => s + i.quantity, 0)}
-              </span>
+      <CardHeader className="border-b px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          {orderType === 'dine-in' && typeof onBackToTableSelection === 'function' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className={cn(
+                'h-10 w-10 shrink-0 rounded-xl border-border bg-background shadow-sm',
+                'hover:bg-muted'
+              )}
+              onClick={onBackToTableSelection}
+              aria-label={t('posBackToTableSelect') || '테이블 선택'}
+            >
+              <ArrowLeft className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
+            </Button>
+          )}
+
+          <div
+            className={cn(
+              'flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-2.5 py-1 shadow-sm',
+              'dark:bg-muted/20'
             )}
-            {orderType && (
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold shrink-0 ring-1 ring-black/10 dark:ring-white/20',
-                  orderType === 'dine-in' && 'bg-blue-500 text-white dark:bg-blue-600 dark:text-blue-50',
-                  orderType === 'delivery' && 'bg-emerald-500 text-white dark:bg-emerald-600 dark:text-emerald-50',
-                  orderType === 'takeout' && 'bg-amber-500 text-white dark:bg-amber-600 dark:text-amber-50'
-                )}
-              >
-                <span
-                  className={cn(
-                    'w-2 h-2 rounded-full shrink-0',
-                    orderType === 'dine-in' && 'bg-blue-200 dark:bg-blue-300',
-                    orderType === 'delivery' && 'bg-emerald-200 dark:bg-emerald-300',
-                    orderType === 'takeout' && 'bg-amber-200 dark:bg-amber-300'
-                  )}
-                />
-                {orderType === 'dine-in' ? t('posOrderTypeDineIn') : orderType === 'delivery' ? t('posOrderTypeDelivery') : t('posOrderTypeTakeout')}
-              </span>
-            )}
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={handleClearCart}
           >
-            <Trash2 className="w-3 h-3 mr-1" />
-            {t('posClearCart')}
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <ShoppingCart className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <CardTitle className="truncate text-sm font-semibold leading-none">
+                {t('posCart')}
+              </CardTitle>
+              {cartItems.length > 0 && (
+                <span className="inline-flex h-6 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">
+                  {cartItems.reduce((s, i) => s + i.quantity, 0)}
+                </span>
+              )}
+            </div>
+
+            {orderType === 'dine-in' && (
+              <>
+                <div className="h-6 w-px shrink-0 bg-border/80" aria-hidden />
+                <div
+                  className="flex shrink-0 items-center gap-1.5"
+                  title={t('posTableLabel') || ''}
+                >
+                  <LayoutGrid
+                    className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-300"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <span
+                    className={cn(
+                      'inline-flex h-8 min-w-[2rem] max-w-[3rem] items-center justify-center rounded-full border px-1.5',
+                      'border-emerald-600/40 bg-gradient-to-b from-emerald-50 to-emerald-100/90 text-emerald-950',
+                      'dark:border-emerald-500/35 dark:from-emerald-950/50 dark:to-emerald-900/60 dark:text-emerald-50',
+                      'shadow-sm ring-1 ring-emerald-700/10 dark:ring-emerald-400/15'
+                    )}
+                    aria-label={
+                      selectedTable?.name
+                        ? translateReceiptTableDisplayName(selectedTable.name, t)
+                        : t('posSelectTableNone')
+                    }
+                  >
+                    <span className="truncate text-center text-xs font-extrabold tabular-nums leading-none">
+                      {selectedTable?.name
+                        ? translateReceiptTableDisplayName(selectedTable.name, t)
+                        : '—'}
+                    </span>
+                  </span>
+                </div>
+              </>
+            )}
+
+            {orderType === 'delivery' && (
+              <>
+                <div className="h-6 w-px shrink-0 bg-border/80" aria-hidden />
+                <div
+                  className="flex min-w-0 shrink-0 items-center gap-1.5"
+                  title={
+                    [
+                      deliveryAppLabel,
+                      deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || (t('posOrderTypeDelivery') || '')
+                  }
+                >
+                  <Bike
+                    className={cn('h-4 w-4 shrink-0', deliveryBrand.bike)}
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <span
+                    className={cn(
+                      'inline-flex h-8 max-w-[5.5rem] min-w-[2rem] items-center justify-center rounded-full border px-1.5 sm:max-w-[7rem]',
+                      deliveryBrand.chip
+                    )}
+                  >
+                    <span className="truncate text-center text-xs font-extrabold leading-none">
+                      {deliveryAppLabel || (t('posSelectDeliveryApp') || '—')}
+                    </span>
+                  </span>
+                </div>
+              </>
+            )}
+
+            {orderType === 'takeout' && (
+              <>
+                <div className="h-6 w-px shrink-0 bg-border/80" aria-hidden />
+                <div
+                  className="flex min-w-0 shrink-0 items-center gap-1.5"
+                  title={
+                    takeoutLabelProp?.trim() ||
+                    (t('posTakeoutSlotN') || '포장 {{n}}').replace('{{n}}', '1')
+                  }
+                >
+                  <Package
+                    className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    strokeWidth={2.25}
+                    aria-hidden
+                  />
+                  <span
+                    className={cn(
+                      'inline-flex h-8 max-w-[5.5rem] min-w-[2rem] items-center justify-center rounded-full border px-1.5 sm:max-w-[7rem]',
+                      'border-amber-600/40 bg-gradient-to-b from-amber-50 to-amber-100/90 text-amber-950',
+                      'dark:border-amber-500/35 dark:from-amber-950/45 dark:to-amber-900/55 dark:text-amber-50',
+                      'shadow-sm ring-1 ring-amber-700/10 dark:ring-amber-400/15'
+                    )}
+                  >
+                    <span className="truncate text-center text-xs font-extrabold leading-none">
+                      {takeoutLabelProp?.trim() ||
+                        (t('posTakeoutSlotN') || '포장 {{n}}').replace('{{n}}', '1')}
+                    </span>
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-xl border-border bg-background shadow-sm hover:bg-muted"
+            onClick={handleClearCart}
+            title={t('posClearCart') || ''}
+            aria-label={t('posClearCart') || ''}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
           </Button>
         </div>
       </CardHeader>
@@ -1422,14 +1766,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <div
                 className="flex items-center gap-1.5 shrink-0 rounded-lg border border-sky-500/45 bg-sky-500/[0.08] px-2 py-1 shadow-sm dark:bg-sky-950/25"
                 title={t('posOrderGuestCount') || '홀 주문 손님 수(매출·통계용)'}
+                aria-label={t('posOrderGuestCount') || undefined}
               >
                 <Users className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
-                <div className="flex min-w-0 flex-col leading-none">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/90 dark:text-sky-100/90">
-                    {t('posGuestCount') || '손님'}
-                  </span>
-                  <span className="sr-only">{t('posOrderGuestCount') || ''}</span>
-                </div>
                 <Select
                   value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
                   onValueChange={(v) => {
@@ -1455,35 +1794,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             )}
           </div>
 
-          {/* 2행: 테이블(테이블현황) / 배달앱+주문번호(배달) / 포장(포장) */}
-          {orderType === 'dine-in' && (
-            <div
-              className="flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-500/[0.07] px-2.5 py-1.5 shadow-sm dark:bg-emerald-950/20"
-              title={t('posTableLabel') || '선택한 테이블(번호·이름)'}
-            >
-              <LayoutGrid className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden />
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
-                <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/85 dark:text-emerald-100/85">
-                  {t('posTableLabel') || '테이블'}
-                </span>
-                <Badge
-                  variant="outline"
-                  className="h-7 w-fit max-w-full border-emerald-600/50 bg-background/90 px-2.5 font-semibold text-emerald-950 shadow-none dark:border-emerald-500/45 dark:text-emerald-50"
-                >
-                  <span className="truncate">
-                    {selectedTable?.name
-                      ? translateReceiptTableDisplayName(selectedTable.name, t)
-                      : t('posSelectTableNone')}
-                  </span>
-                </Badge>
-              </div>
-            </div>
-          )}
+          {/* 2행: 배달앱+주문번호(배달) / 포장(포장) — 홀은 테이블명을 카드 헤더에 표시 */}
           {orderType === 'delivery' && (
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <Label className="text-sm flex-shrink-0">{t('posDeliveryApp')}</Label>
-                <Badge variant="secondary" className="h-7 px-3">
+                <Badge variant="secondary" className={cn('h-7 border px-3', deliveryBrand.badge)}>
                   {deliveryAppLabel || t('posSelectDeliveryApp')}
                 </Badge>
               </div>
@@ -1559,7 +1875,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           <Dialog open={guestDirectOpen} onOpenChange={setGuestDirectOpen}>
                   <DialogContent className="sm:max-w-xs">
                     <DialogHeader>
-                      <DialogTitle>{t('posGuestCount') || '손님'} · {t('posGuestDirectInput') || '직접 입력'}</DialogTitle>
+                      <DialogTitle>{t('posGuestDirectInput') || '직접 입력'}</DialogTitle>
                     </DialogHeader>
                     <div className="flex flex-col gap-2 py-2">
                       <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
@@ -1726,15 +2042,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     </Card>
 
     <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
-      <DialogContent className="w-[95vw] max-w-lg sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden rounded-2xl p-0">
-        <DialogHeader className="sticky top-0 z-10 bg-card border-b px-5 py-4">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-bold">{t('posSplitPayment') || '결제 수단 입력'}</DialogTitle>
+      <DialogContent
+        hideCloseButton
+        className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
+      >
+        <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 bg-gradient-to-b from-card to-card/95 px-5 py-4 text-left backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <DialogTitle className="text-xl font-bold tracking-tight">
+                {t('posSplitPayment') || '결제 수단 입력'}
+              </DialogTitle>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {tr('posPaymentModalSubtitle', '수단별 금액을 입력하고, 하단 입력 합계가 결제 금액과 같으면 완료할 수 있습니다.')}
+              </p>
+            </div>
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="h-10 w-10 rounded-xl"
+              className="h-10 w-10 shrink-0 rounded-xl"
               onClick={() => setShowPaymentModal(false)}
             >
               <X className="h-5 w-5" />
@@ -1742,52 +2068,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           </div>
         </DialogHeader>
         {orderType === 'delivery' ? (
-          <div className="space-y-4 p-5">
-            <div className="rounded-xl border bg-muted/30 px-4 py-4 space-y-2 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>{t('posSubtotal')}</span>
-                <span className="tabular-nums">{formatBahtNum(subtotal)} ฿</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posDiscount')}</span>
-                  <span className="tabular-nums">-{formatBahtNum(discount)} ฿</span>
+          <>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-5 py-5">
+              <PosPaymentModalAmountCard
+                subtotal={subtotal}
+                discount={discount}
+                pricing={pricing}
+                total={total}
+                totalLabelKey="posInputTotal"
+                t={t}
+              />
+              <div className="flex gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3.5 text-sm leading-relaxed text-muted-foreground dark:bg-emerald-500/10">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  <Bike className="h-4 w-4" />
                 </div>
-              )}
-              {pricing.vatFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
-                </div>
-              )}
-              {pricing.serviceFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
-                </div>
-              )}
-              {pricing.cardFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
-                </div>
-              )}
-              {pricing.otherFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-base pt-1 border-t">
-                <span>{t('posInputTotal') || '결제 금액'}</span>
-                <span className="tabular-nums">{formatBahtNum(total)} ฿</span>
+                <p>{t('posDeliveryPaymentNote') || '배달 주문은 플랫폼에서 결제 완료되며, 익일 통장으로 정산됩니다.'}</p>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {t('posDeliveryPaymentNote') || '배달 주문은 플랫폼에서 결제 완료되며, 익일 통장으로 정산됩니다.'}
-            </p>
-            <DialogFooter>
+            <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:justify-end">
               <Button
+                type="button"
+                variant="outline"
+                className="h-12 w-full rounded-xl sm:w-auto"
+                onClick={() => setShowPaymentModal(false)}
+              >
+                {t('posCancel') || '취소'}
+              </Button>
+              <Button
+                className="h-12 w-full rounded-xl font-semibold sm:min-w-[8rem]"
                 onClick={() => {
                   submitNonDineOrder(false)
                   setShowPaymentModal(false)
@@ -1797,55 +2105,31 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 {t('posConfirm') || '확인'}
               </Button>
             </DialogFooter>
-          </div>
+          </>
         ) : (
-          <div className="space-y-5 p-5">
-            {/* 결제 금액 요약: 소계 / 쿠폰·할인 / 결제 금액 */}
-            <div className="rounded-xl border bg-muted/30 px-4 py-4 space-y-2 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>{t('posSubtotal')}</span>
-                <span className="tabular-nums">{formatBahtNum(subtotal)} ฿</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posDiscount')}</span>
-                  <span className="tabular-nums">-{formatBahtNum(discount)} ฿</span>
-                </div>
-              )}
-              {pricing.vatFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
-                </div>
-              )}
-              {pricing.serviceFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
-                </div>
-              )}
-              {pricing.cardFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
-                </div>
-              )}
-              {pricing.otherFeeAmt > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-                  <span className="tabular-nums">{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold text-base pt-1 border-t">
-                <span>{t('posPaymentTotalLabel') || '결제 금액'}</span>
-                <span className="tabular-nums">{formatBahtNum(total)} ฿</span>
-              </div>
-            </div>
+          <>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-5 py-5">
+            <PosPaymentModalAmountCard
+              subtotal={subtotal}
+              discount={discount}
+              pricing={pricing}
+              total={total}
+              t={t}
+            />
 
             {/* 쿠폰 · 할인 */}
-            <div className="space-y-3 border rounded-xl p-4 bg-card">
+            <div className="space-y-4 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm dark:from-amber-950/25 dark:via-card dark:to-card">
+              <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                  <Tag className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-none">{tr('posDiscountCouponSection', '할인 · 쿠폰 · 포인트')}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{tr('posDiscountCouponHint', '프리셋·쿠폰·직접 할인·포인트를 조합할 수 있습니다.')}</p>
+                </div>
+              </div>
               <div>
-                <Label className="text-xs text-muted-foreground mb-1 block">{t('posDiscount')}</Label>
+                <Label className="mb-2 block text-xs font-medium text-muted-foreground">{t('posDiscount')}</Label>
                 <div className="grid gap-2">
                   <div className="grid gap-2 lg:grid-cols-[1fr_auto] items-center">
                     <div className="flex gap-2 flex-nowrap overflow-x-auto">
@@ -1936,8 +2220,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
             </div>
 
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">{tr('posPaymentMethodSection', '결제 수단')}</p>
+                <span className="text-[11px] text-muted-foreground">{tr('posPaymentMethodTapHint', '탭을 바꿔 금액을 나누어 입력')}</span>
+              </div>
             {/* 결제 수단 탭 */}
-            <div className="grid grid-cols-4 gap-2 rounded-xl bg-secondary p-2">
+            <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner">
               {paymentTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -1946,14 +2235,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     type="button"
                     variant="ghost"
                     className={cn(
-                      'h-16 flex-col gap-1 rounded-xl',
+                      'h-[4.25rem] flex-col gap-1 rounded-xl transition-all',
                       activePaymentTab === tab.id
-                        ? 'bg-card text-card-foreground shadow-sm'
-                        : 'text-muted-foreground'
+                        ? 'bg-card text-card-foreground shadow-md ring-1 ring-border/70'
+                        : 'text-muted-foreground hover:bg-muted/80'
                     )}
                     onClick={() => {
                       setActivePaymentTab(tab.id)
-                      if (showSplit) {
+                      if (splitFlowForInputs) {
                         addDutchAmountOnly(tab.id)
                         if (tab.id === 'other') setShowOtherPayments(true)
                       } else {
@@ -1967,51 +2256,79 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       }
                     }}
                   >
-                    <Icon className="h-5 w-5" />
-                    <span className="text-sm">{tab.label}</span>
+                    <Icon className={cn('h-5 w-5', activePaymentTab === tab.id ? 'text-primary' : '')} />
+                    <span className="text-[13px] font-medium leading-tight">{tab.label}</span>
                   </Button>
                 )
               })}
             </div>
+            </div>
 
             {/* 결제 수단 */}
-            <div className="grid gap-2">
+            <div className="grid gap-3">
               {[
-                { key: 'cash', value: payCash, set: setPayCash, label: t('posPaymentCash') || '현금' },
-                { key: 'card', value: payCard, set: setPayCard, label: t('posPaymentCard') || '카드' },
-                { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: `${t('posPaymentQr') || 'QR'} 코드` },
+                { key: 'cash', value: payCash, set: setPayCash, label: t('posPaymentCash') || '현금', icon: Banknote },
+                { key: 'card', value: payCard, set: setPayCard, label: t('posPaymentCard') || '카드', icon: CreditCard },
+                { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: `${t('posPaymentQr') || 'QR'} 코드`, icon: QrCode },
               ]
                 .filter(({ key }) => activePaymentTab === 'other' ? false : key === activePaymentTab)
-                .map(({ key, value, set, label }) => (
-                <div key={key} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="w-24 text-sm shrink-0 text-left hover:underline"
-                    onClick={() => showSplit ? addDutchAmountOnly(key as MoveTarget) : moveAllAmountTo(key as 'cash' | 'card' | 'qr')}
-                  >
-                    {label}
-                  </button>
+                .map(({ key, value, set, label, icon: Icon }) => (
+                <div
+                  key={key}
+                  className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/15"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold leading-none">{label}</p>
+                        <button
+                          type="button"
+                          className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
+                          onClick={() =>
+                            splitFlowForInputs
+                              ? addDutchAmountOnly(key as MoveTarget)
+                              : moveAllAmountTo(key as 'cash' | 'card' | 'qr')
+                          }
+                        >
+                          {tr('posPayAllToThisMethod', '이 수단으로 전액')}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:max-w-[14rem] sm:flex-1">
                   <Input
                     type="number"
                     min={0}
                     step="0.01"
                     value={value}
                     onChange={e => set(e.target.value)}
-                    className="h-12 text-right text-lg flex-1 rounded-xl"
+                    className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
                   />
-                  <span className="text-xs text-muted-foreground w-6">฿</span>
+                  <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
+                    </div>
+                  </div>
                 </div>
               ))}
 
               {activePaymentTab === 'other' && (
                 <Collapsible open={showSplit ? true : showOtherPayments} onOpenChange={(v) => { if (!showSplit) setShowOtherPayments(v) }}>
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="sm" className="w-full justify-between h-9 px-2 text-sm font-medium" type="button">
-                      <span>{t('posPaymentOther') || '기타'}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-11 w-full justify-between rounded-xl border-dashed px-3 text-sm font-semibold"
+                      type="button"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-primary" />
+                        {t('posPaymentOther') || '기타'} · {tr('posPaymentOtherExpand', '세부 수단')}
+                      </span>
                       {showSplit ? <ChevronUp className="w-4 h-4" /> : (showOtherPayments ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                     </Button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="grid gap-2 pt-1 pl-2 border-l-2 border-muted">
+                  <CollapsibleContent className="grid gap-2 border-l-2 border-primary/20 pl-3 pt-3">
                     {[
                       { value: payTrueMoney, set: setPayTrueMoney, labelKey: 'posPaymentTrueMoney', moveKey: 'truemoney' as const },
                       { value: payWeChat, set: setPayWeChat, labelKey: 'posPaymentWeChat', moveKey: 'wechat' as const },
@@ -2020,34 +2337,40 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       { value: payShopeePay, set: setPayShopeePay, labelKey: 'posPaymentShopeePay', moveKey: 'shopeepay' as const },
                       { value: payOther, set: setPayOther, labelKey: 'posPaymentOtherEtc', moveKey: 'other' as const },
                     ].map(({ value, set, labelKey, moveKey }) => (
-                      <div key={labelKey} className="flex items-center gap-2 rounded-xl border p-3 bg-card">
+                      <div key={labelKey} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center">
+                        <div className="flex min-w-0 flex-1 items-start justify-between gap-2 sm:items-center">
                         <button
                           type="button"
-                          className="w-20 text-xs shrink-0 text-left hover:underline"
-                          onClick={() => showSplit ? addDutchAmountOnly(moveKey) : moveAllAmountTo(moveKey)}
+                          className="min-w-0 shrink text-left text-sm font-medium hover:underline"
+                          onClick={() =>
+                            splitFlowForInputs ? addDutchAmountOnly(moveKey) : moveAllAmountTo(moveKey)
+                          }
                         >
                           {t(labelKey)}
                         </button>
-                        {showSplit && (
+                        {splitFlowForInputs && (
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="secondary"
                             className="h-8 shrink-0 px-2 text-xs"
                             onClick={() => addDutchAmountOnly(moveKey)}
                           >
                             +{formatBahtNum(dutchUnitAmount)} ฿
                           </Button>
                         )}
+                        </div>
+                        <div className="flex items-center gap-2 sm:max-w-[12rem]">
                         <Input
                           type="number"
                           min={0}
                           step="0.01"
                           value={value}
                           onChange={e => set(e.target.value)}
-                          className="h-12 text-right flex-1 text-lg rounded-xl"
+                          className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
                         />
-                        <span className="text-xs text-muted-foreground w-5">฿</span>
+                        <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
+                        </div>
                       </div>
                     ))}
                   </CollapsibleContent>
@@ -2057,11 +2380,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
             {/* Tax Invoice */}
             <Collapsible open={showTaxInvoiceDetails} onOpenChange={setShowTaxInvoiceDetails}>
-              <div className="space-y-2 border rounded-xl p-3 bg-card min-h-[72px]">
+              <div className="min-h-[72px] space-y-2 rounded-2xl border border-border/70 bg-gradient-to-br from-slate-50/80 to-card p-4 shadow-sm dark:from-slate-950/40 dark:to-card">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <Receipt className="h-5 w-5 text-primary" />
-                    <Label className="text-sm font-medium">{t('posReceiptTaxInvoice')}</Label>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                      <Receipt className="h-5 w-5 text-primary" />
+                    </div>
+                    <Label className="text-sm font-semibold">{t('posReceiptTaxInvoice')}</Label>
                     <Button
                       type="button"
                       size="sm"
@@ -2213,21 +2538,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
             {/* Dutch Pay - 가로 compact, 터치 44px */}
             <Collapsible open={showSplit} onOpenChange={setShowSplit}>
-              <div className="border rounded-xl p-2 bg-card w-fit">
+              <div className="w-full rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-50/90 to-card p-3 shadow-sm dark:from-violet-950/30 dark:to-card">
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
                     variant="ghost"
-                    className="min-h-11 justify-between rounded-lg px-3 shrink-0"
+                    className="h-auto min-h-11 w-full justify-between rounded-xl px-2 py-2"
                   >
                     <span className="flex items-center gap-2">
-                      <Users className="h-5 w-5 text-primary shrink-0" />
-                      <span>{tr('posDutchPayTitle', '더치페이 (분할결제)')}</span>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/15 text-violet-700 dark:text-violet-300">
+                        <Users className="h-5 w-5 shrink-0" />
+                      </div>
+                      <span className="text-left font-semibold">{tr('posDutchPayTitle', '더치페이')}</span>
                     </span>
                     {showSplit ? <ChevronUp className="h-5 w-5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />}
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="pt-2 flex flex-wrap items-center gap-2">
+                <CollapsibleContent className="flex flex-wrap items-center gap-2 pt-3">
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-sm text-muted-foreground">{tr('posSplitPeople', '인원')}</span>
                     <Input
@@ -2246,54 +2573,87 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     <span>{tr('posProgress', '진행')} <span className="font-semibold tabular-nums">{splitPaidSteps}/{Math.max(1, splitCount)}{tr('posPeopleUnit', '명')}</span></span>
                     <span className="font-semibold tabular-nums text-muted-foreground">{formatBahtNum(paymentSum)}/{formatBahtNum(total)}฿</span>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="min-h-11 px-4 font-semibold rounded-lg shrink-0"
-                    disabled={dutchRemainingPeople <= 0}
-                    onClick={confirmSplitStep}
-                  >
-                    {tr('posSplitPayButton', '분할 결제')} +1
-                  </Button>
+                  <p className="w-full text-[11px] text-muted-foreground sm:w-auto sm:flex-1 sm:min-w-[12rem]">
+                    {tr('posDutchPayFooterHint', '수단을 탭해 금액을 넣은 뒤, 하단 「일부 결제」로 한 명씩 진행하세요.')}
+                  </p>
                 </CollapsibleContent>
               </div>
             </Collapsible>
 
             {orderType === 'dine-in' && (
-              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-muted/30 px-4 py-3 text-sm select-none">
                 <input
                   type="checkbox"
                   checked={isPrepaid}
                   onChange={(e) => setIsPrepaid(e.target.checked)}
-                  className="rounded border-input h-4 w-4"
+                  className="h-4 w-4 rounded border-input"
                 />
-                <span>{tr('posPrepaidKeepTable', '선불 (결제 후 테이블 유지)')}</span>
+                <span className="font-medium">{tr('posPrepaidKeepTable', '선불 (결제 후 테이블 유지)')}</span>
               </label>
             )}
-            <div className={cn(
-              'rounded-lg px-3 py-2 text-sm flex justify-between',
-              paymentSumMatch ? 'bg-green-500/10 text-green-700 dark:bg-green-500/20 dark:text-green-400' : 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
-            )}>
-              <span>{t('posPaymentSum') || '입력 합계'}</span>
-              <span className="tabular-nums font-medium">{formatBahtNum(paymentSum)} ฿</span>
+            <div
+              className={cn(
+                'space-y-2 rounded-2xl border px-4 py-3 shadow-sm',
+                paymentSumMatch
+                  ? 'border-emerald-500/30 bg-emerald-500/[0.07] text-emerald-900 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-100'
+                  : 'border-amber-500/35 bg-amber-500/[0.08] text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50'
+              )}
+            >
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold">{t('posPaymentSum') || '입력 합계'}</span>
+                <span className="tabular-nums text-base font-bold">
+                  {formatBahtNum(paymentSum)} <span className="text-muted-foreground font-medium">/</span>{' '}
+                  {formatBahtNum(total)} ฿
+                </span>
+              </div>
+              {total > 0 && (
+                <div className="h-2 overflow-hidden rounded-full bg-background/60 dark:bg-background/20">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-300',
+                      paymentSumMatch ? 'bg-emerald-500' : 'bg-amber-500'
+                    )}
+                    style={{ width: `${Math.min(100, (paymentSum / total) * 100)}%` }}
+                  />
+                </div>
+              )}
+              {!paymentSumMatch && total > 0 && (
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                  {tr('posPaymentRemaining', '남은 금액')}: {formatBahtNum(Math.max(0, total - paymentSum))} ฿
+                </p>
+              )}
             </div>
             {!paymentSumMatch && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">{t('posPaymentSumMismatch') || '결제 합계가 주문 금액과 일치해야 합니다.'}</p>
+              <p className="text-center text-xs text-amber-700 dark:text-amber-400">{t('posPaymentSumMismatch') || '결제 합계가 주문 금액과 일치해야 합니다.'}</p>
             )}
-            <DialogFooter className="sticky bottom-0 border-t bg-card px-5 py-4 mt-3">
+            </div>
+
+            <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-3">
               <Button
                 variant="secondary"
-                className="h-14 px-8 rounded-xl"
+                className="h-12 w-full rounded-xl sm:w-auto sm:min-w-[7rem]"
                 onClick={() => setShowPaymentModal(false)}
               >
                 {t('posCancel') || '취소'}
               </Button>
               <Button
+                type="button"
+                variant="outline"
                 className={cn(
-                  'h-14 px-10 rounded-xl font-bold',
+                  'h-12 w-full rounded-xl border-violet-500/40 font-semibold sm:w-auto sm:min-w-[9rem]',
+                  partialPayDisabled ? 'opacity-60' : ''
+                )}
+                disabled={partialPayDisabled}
+                onClick={confirmSplitStep}
+              >
+                {tr('posPartialPaymentButton', '일부 결제')}
+              </Button>
+              <Button
+                className={cn(
+                  'h-12 w-full rounded-xl px-8 font-bold sm:w-auto sm:min-w-[10rem]',
                   !paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))
                     ? 'bg-muted text-muted-foreground hover:bg-muted'
-                    : ''
+                    : 'shadow-md'
                 )}
                 disabled={!paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))}
                 onClick={handlePaymentComplete}
@@ -2301,7 +2661,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 {t('posPayConfirm') || '결제 완료'}
               </Button>
             </DialogFooter>
-          </div>
+          </>
         )}
       </DialogContent>
     </Dialog>

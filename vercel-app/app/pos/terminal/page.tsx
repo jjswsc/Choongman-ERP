@@ -1201,6 +1201,9 @@ export default function PosTerminalPage() {
             t={t}
             lockOrderType
             orderType={cartOrderType}
+            onBackToTableSelection={
+              activeTab === 'tables' && selectedTableId ? () => setSelectedTableId(null) : undefined
+            }
             deliveryApp={deliveryApp ?? undefined}
             deliveryAppName={effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name}
             deliveryOrderNo={deliveryOrderNo}
@@ -1973,6 +1976,7 @@ export default function PosTerminalPage() {
                         : String(selectedTableId ?? '')
                     }
                     onBack={() => setSelectedTableId(null)}
+                    hideTableContextBar
                     onAddItem={handleAddItemToCart}
                     orderType="dine-in"
                     touchMode={isNarrowViewport ? 'large' : 'default'}
@@ -2193,7 +2197,6 @@ export default function PosTerminalPage() {
               tableName={servingTable.name}
               order={servingTable.order}
               allTables={currentStore?.tables ?? []}
-              deliveryApps={deliveryAppsFromApi}
               onServed={refetchStores}
               onAddOrder={() => {
                 if (!servingTableId) return

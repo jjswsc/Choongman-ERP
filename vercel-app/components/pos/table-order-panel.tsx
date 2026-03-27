@@ -11,20 +11,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { Order, Table } from '@/lib/pos-types'
-import type { PosDeliveryApp } from '@/lib/api-client'
 import {
   markPosOrderItemServed,
   posDineInTableMerge,
   posDineInTableMove,
-  updatePosOrder,
   updatePosOrderStatus,
 } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Check, CheckCircle, Clock, Users, XCircle, ArrowRightLeft, Combine } from 'lucide-react'
+import { Check, CheckCircle, Users, XCircle, ArrowRightLeft, Combine, LayoutGrid, ArrowLeft } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
+import { useT } from '@/lib/i18n'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TableOrderPanelProps {
@@ -32,7 +31,6 @@ export interface TableOrderPanelProps {
   order: Order | null
   /** 테이블 이동·합석용 (매장 전체 테이블 목록) */
   allTables?: Table[]
-  deliveryApps?: PosDeliveryApp[]
   onServed?: () => void
   onAddOrder?: () => void
   onPay?: () => void
@@ -44,45 +42,21 @@ export interface TableOrderPanelProps {
   t?: (key: string) => string
 }
 
-function getPlatformAndOrderNo(order: Order, deliveryApps?: PosDeliveryApp[]): { platform: string; orderNo: string } {
-  const text = [order.customerName ?? '', order.orderNo ?? '', order.memo ?? ''].filter(Boolean).join(' ')
-  const raw = text.toLowerCase()
-  let platform = ''
-  if (deliveryApps?.length) {
-    for (const app of deliveryApps) {
-      const keywords = app.matchKeywords || []
-      if (keywords.some((k) => raw.includes(String(k).toLowerCase()))) {
-        platform = app.name
-        break
-      }
-    }
-  }
-  if (!platform) {
-    if (raw.includes('grab') || raw.includes('그랩')) platform = 'Grab'
-    else if (raw.includes('lineman') || raw.includes('line man') || raw.includes('라인맨')) platform = 'Line Man'
-    else if (raw.includes('shopee') || raw.includes('쇼피')) platform = 'Shopee'
-  }
-  const hashMatch = text.match(/#\s*([A-Za-z0-9-]+)/)
-  const orderNo = hashMatch?.[1] ?? order.orderNo ?? ''
-  return { platform, orderNo }
-}
-
 export function TableOrderPanel({
   tableName,
   order,
   allTables = [],
-  deliveryApps = [],
   onServed,
   onAddOrder,
   onPay,
   onLeaveTable,
   onCancel,
   onClose,
-  t = (k) => k,
+  t: tProp,
 }: TableOrderPanelProps) {
   const { lang } = useLang()
-  const dineOutApps = deliveryApps.filter((a) => a.dineOutEnabled && a.enabled)
-  const showPlatformPayOption = dineOutApps.length > 0
+  const tDefault = useT(lang)
+  const t = tProp ?? tDefault
   const isServedReadyForPayment = order?.status === 'ready'
   const isPaidPrepaid = order?.status === 'paid'
   const mergeDisabledByPayment = isPaidPrepaid
@@ -134,9 +108,6 @@ export function TableOrderPanel({
   const servedCount = order?.items?.filter((it) => itemServed[it.id]).length ?? 0
   const allServed = order?.items?.length ? servedCount >= order.items.length : false
 
-  const [payChoiceOpen, setPayChoiceOpen] = useState(false)
-  const [platformPaymentConfirmOpen, setPlatformPaymentConfirmOpen] = useState(false)
-  const [platformPaymentSubmitting, setPlatformPaymentSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
@@ -197,46 +168,8 @@ export function TableOrderPanel({
     }
   }
 
-  const handlePayClick = () => setPayChoiceOpen(true)
-  const handlePayInStore = () => {
-    setPayChoiceOpen(false)
+  const handlePayClick = () => {
     onPay?.()
-  }
-  const handlePayPlatform = () => {
-    setPayChoiceOpen(false)
-    setPlatformPaymentConfirmOpen(true)
-  }
-
-  const handlePlatformPaymentConfirm = async () => {
-    if (!order) return
-    setPlatformPaymentSubmitting(true)
-    try {
-      const items = order.items.map((it) => ({
-        id: it.id,
-        name: it.name,
-        price: it.price,
-        qty: it.quantity || 1,
-        ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-      }))
-      await updatePosOrder({
-        id: Number(order.id),
-        items,
-        tableName,
-        memo: order.memo,
-        paymentCash: 0,
-        paymentCard: 0,
-        paymentQr: 0,
-        paymentOther: order.total,
-      })
-      await updatePosOrderStatus({ id: Number(order.id), status: 'completed' })
-      setPlatformPaymentConfirmOpen(false)
-      onServed?.()
-      onPay?.()
-    } catch (e) {
-      await appAlert(String(e))
-    } finally {
-      setPlatformPaymentSubmitting(false)
-    }
   }
 
   const handleServeComplete = async () => {
@@ -312,14 +245,56 @@ export function TableOrderPanel({
     }
   }
 
+  const tableDisplayName = translateReceiptTableDisplayName(tableName, t)
+
   return (
     <div className="h-full flex flex-col border-l border-border bg-card">
-      <div className="px-3 py-3 border-b flex items-center justify-between">
-        <h3 className="text-base font-semibold truncate">
-          {translateReceiptTableDisplayName(tableName, t)} {t('posTableOrder') || '주문'}
-        </h3>
-        <Button variant="outline" size="sm" className="h-8 text-sm" onClick={onClose}>
-          {t('posBack') || '뒤로가기'}
+      <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            className="inline-flex shrink-0 items-center gap-1.5"
+            title={t('posTableLabel') || ''}
+          >
+            <LayoutGrid
+              className="h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300"
+              strokeWidth={2.25}
+              aria-hidden
+            />
+            <span
+              className={cn(
+                'inline-flex h-10 min-w-[2.5rem] max-w-[3.5rem] shrink-0 items-center justify-center rounded-full border px-1.5 shadow-sm',
+                'border-emerald-600/45 bg-gradient-to-b from-emerald-50/95 to-emerald-100/90 text-emerald-950',
+                'dark:border-emerald-500/40 dark:from-emerald-950/55 dark:to-emerald-900/70 dark:text-emerald-50',
+                'ring-1 ring-emerald-700/15 dark:ring-emerald-400/20'
+              )}
+            >
+              <span className="truncate text-center text-sm font-extrabold tabular-nums leading-none tracking-tight">
+                {tableDisplayName}
+              </span>
+            </span>
+          </span>
+          {order && (
+            <span
+              className="min-w-0 truncate text-sm font-semibold tabular-nums text-muted-foreground"
+              title={`${t('posOrderTime') || ''} ${formatPosOrderMonthDayTime(order.createdAt, lang)}`}
+            >
+              {formatPosOrderMonthDayTime(order.createdAt, lang)}
+            </span>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className={cn(
+            'h-10 w-10 shrink-0 border-2 border-border bg-muted/50 shadow-sm',
+            'text-foreground hover:bg-muted hover:text-foreground',
+            'dark:bg-muted/30 dark:hover:bg-muted/60'
+          )}
+          onClick={onClose}
+          aria-label={t('posBack') || '뒤로'}
+        >
+          <ArrowLeft className="h-5 w-5 shrink-0" strokeWidth={2.5} aria-hidden />
         </Button>
       </div>
 
@@ -327,57 +302,49 @@ export function TableOrderPanel({
         <div className="p-3 text-base text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
       ) : (
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-base">
-            <Clock className="w-5 h-5 shrink-0" />
-            <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
-          </div>
-          {order.type === 'dine-in' && (order.guestCount ?? 0) > 0 && (
-            <div className="flex items-center gap-2 text-muted-foreground text-base">
-              <Users className="w-5 h-5 shrink-0" />
-              <span>
-                {t('posOrderGuestCount') || '손님 수'}:{' '}
-                <span className="font-semibold tabular-nums text-foreground">
-                  {order.guestCount}
-                  {t('posPeopleUnit') || ''}
-                </span>
-              </span>
-            </div>
-          )}
-
-          {order.type === 'dine-in' && allTables.length > 0 && (
-            <div className="rounded-lg border border-border/80 bg-muted/25 p-2.5 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground leading-snug">
-                {t('posTableMoveTitle') || '테이블 이동'} · {t('posTableMergeTitle') || '합석'}
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-10 gap-1.5 text-xs font-semibold"
-                  disabled={emptyTableOptions.length === 0 || transferSubmitting}
-                  onClick={() => setMoveOpen(true)}
-                >
-                  <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
-                  {t('posTableMoveTitle') || '이동'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-10 gap-1.5 text-xs font-semibold"
-                  title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : undefined}
-                  disabled={
-                    mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
-                  }
-                  onClick={() => setMergeOpen(true)}
-                >
-                  <Combine className="h-4 w-4 shrink-0" aria-hidden />
-                  {t('posTableMergeTitle') || '합석'}
-                </Button>
+          {order.type === 'dine-in' &&
+            ((order.guestCount ?? 0) > 0 || allTables.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {(order.guestCount ?? 0) > 0 && (
+                  <div
+                    className="flex shrink-0 items-center gap-2 text-muted-foreground text-base"
+                    title={t('posOrderGuestCount') || ''}
+                  >
+                    <Users className="w-5 h-5 shrink-0" aria-hidden />
+                    <span className="font-semibold tabular-nums text-foreground">{order.guestCount}</span>
+                  </div>
+                )}
+                {allTables.length > 0 && (
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 min-w-0 flex-1 gap-1.5 px-2 text-xs font-semibold"
+                      disabled={emptyTableOptions.length === 0 || transferSubmitting}
+                      onClick={() => setMoveOpen(true)}
+                    >
+                      <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
+                      {t('posTableMoveBtn')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 min-w-0 flex-1 gap-1.5 px-2 text-xs font-semibold"
+                      title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : undefined}
+                      disabled={
+                        mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
+                      }
+                      onClick={() => setMergeOpen(true)}
+                    >
+                      <Combine className="h-4 w-4 shrink-0" aria-hidden />
+                      {t('posTableMergeBtn')}
+                    </Button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
 
           {isPaidPrepaid ? (
             <>
@@ -636,58 +603,6 @@ export function TableOrderPanel({
               </Button>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={payChoiceOpen} onOpenChange={setPayChoiceOpen}>
-        <DialogContent className="max-w-xs sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('posPayButton') || '결제'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Button className="w-full h-11 text-base font-semibold" variant="outline" onClick={handlePayInStore}>
-              {t('posTablePayInStore') || '매장 결제'}
-            </Button>
-            <Button className="w-full h-11 text-base font-semibold" variant="outline" onClick={handlePayPlatform}>
-              {t('posTablePayPlatform') || '배달앱 결제(플랫폼)'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={platformPaymentConfirmOpen} onOpenChange={setPlatformPaymentConfirmOpen}>
-        <DialogContent className="max-w-xs sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('posDeliveryPaymentConfirmTitle') || '결제 확인'}</DialogTitle>
-          </DialogHeader>
-          {order && (() => {
-            const { platform, orderNo } = getPlatformAndOrderNo(order, deliveryApps)
-            const platformOrderText = [platform, orderNo ? `#${orderNo}` : ''].filter(Boolean).join(' ')
-            return (
-              <div className="space-y-4 py-2">
-                {platformOrderText ? (
-                  <div className="rounded-lg border bg-card px-3 py-2.5">
-                    <p className="text-xs text-muted-foreground mb-1">{t('posDeliveryPaymentConfirmVerify') || '플랫폼·주문번호 확인'}</p>
-                    <p className="text-base font-bold tabular-nums">{platformOrderText}</p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {t('posTablePayPlatformNote') || '배달앱(Grab/Line Man/Shopee) dine out 주문은 플랫폼에서 이미 결제되었습니다.'}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground">
-                  {t('posDeliveryPaymentConfirmMessage') || '배달 주문은 플랫폼에서 이미 결제되었으며, 익일 통장으로 정산됩니다. 확인 완료하시겠습니까?'}
-                </p>
-                <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
-                  <span className="text-xs text-muted-foreground">{t('posInputTotal') || '합계'}</span>
-                  <div className="text-xl font-bold tabular-nums">{order.total.toLocaleString()} ฿</div>
-                </div>
-                <Button className="w-full" size="lg" disabled={platformPaymentSubmitting} onClick={handlePlatformPaymentConfirm}>
-                  {platformPaymentSubmitting ? '...' : (t('posDeliveryPaymentComplete') || '완료')}
-                </Button>
-              </div>
-            )
-          })()}
         </DialogContent>
       </Dialog>
     </div>

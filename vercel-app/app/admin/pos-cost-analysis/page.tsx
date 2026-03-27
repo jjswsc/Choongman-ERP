@@ -86,8 +86,13 @@ export default function PosCostAnalysisPage() {
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const allowed = canAccessPosCostAnalysis(auth?.role || "")
 
-  const loadList = React.useCallback(async () => {
-    if (!allowed) return
+  /**
+   * 목록·저장 후 갱신 공통. 저장 직후 `getPosMenuCostAnalysis()`만 호출하면,
+   * 그보다 먼저 시작된 초기/조회 `loadList`가 늦게 끝나며 예전 `setRows`로 덮어쓰는 경쟁이 난다.
+   * 동일 시퀀스 가드로 한 번에 한 "최신" 응답만 반영한다.
+   */
+  const refreshRows = React.useCallback(async (): Promise<PosMenuCostAnalysisRow[] | null> => {
+    if (!allowed) return null
     const seq = ++posCostAnalysisLoadSeq
     setLoading(true)
     /** 로컬(dev)은 Cold start·페이지네이션이 길어질 수 있어 배포보다 여유 있게 */
@@ -100,18 +105,25 @@ export default function PosCostAnalysisPage() {
         getPosMenuCostAnalysis(),
         timeoutPromise,
       ])
-      if (seq !== posCostAnalysisLoadSeq) return
-      setRows(Array.isArray(data) ? data : [])
+      if (seq !== posCostAnalysisLoadSeq) return null
+      const next = Array.isArray(data) ? data : []
+      setRows(next)
+      return next
     } catch (e) {
-      if (seq !== posCostAnalysisLoadSeq) return
+      if (seq !== posCostAnalysisLoadSeq) return null
       console.error("getPosMenuCostAnalysis:", e)
       setRows([])
+      return []
     } finally {
       if (seq === posCostAnalysisLoadSeq) {
         setLoading(false)
       }
     }
   }, [allowed])
+
+  const loadList = React.useCallback(() => {
+    void refreshRows()
+  }, [refreshRows])
 
   /** POS 메뉴 관리와 동일: 페이지 진입 시 목록 1회 자동 조회 (배포·로컬 동일 데이터 확인) */
   const initialCostAnalysisLoadRef = React.useRef(false)
@@ -627,15 +639,15 @@ export default function PosCostAnalysisPage() {
                 initialLoadFromRow={selectedForCalculator}
                 onClearLoad={() => setSelectedForCalculator(null)}
                 onSaveSuccess={() => {
-                  getPosMenuCostAnalysis().then((data) => {
-                    const arr = Array.isArray(data) ? data : []
-                    setRows(arr)
-                    if (selectedForCalculator) {
-                      const key = posCostAnalysisRowKey(selectedForCalculator)
+                  void refreshRows().then((arr) => {
+                    if (!arr) return
+                    setSelectedForCalculator((prev) => {
+                      if (!prev) return prev
+                      const key = posCostAnalysisRowKey(prev)
                       const fresh = arr.find((r) => posCostAnalysisRowKey(r) === key)
-                      if (fresh) setSelectedForCalculator(fresh)
-                    }
-                  }).catch(() => {})
+                      return fresh ?? prev
+                    })
+                  })
                 }}
                 onReloadMenu={(row) => setSelectedForCalculator(row)}
                 menuRows={fullFlatList}

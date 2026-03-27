@@ -536,8 +536,43 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     }
   }
 
+  const resolveVendorForSave = React.useCallback((): VendorForPurchase | null => {
+    if (vendorSelect) return vendorSelect
+    const q = vendorSearchQuery.trim()
+    if (!q) return null
+    const exactMatch = vendors.find(
+      (v) =>
+        (v.code || "").toLowerCase() === q.toLowerCase() ||
+        (v.name || "").toLowerCase() === q.toLowerCase()
+    )
+    const partialMatch =
+      exactMatch ??
+      vendors.find(
+        (v) =>
+          (v.code || "").toLowerCase().includes(q.toLowerCase()) ||
+          (v.name || "").toLowerCase().includes(q.toLowerCase())
+      )
+    return partialMatch ?? { code: q, name: q, address: "" }
+  }, [vendorSelect, vendorSearchQuery, vendors])
+
   const handleSave = async () => {
-    if (!locationSelect || !vendorSelect || !auth?.user || cart.length === 0) return
+    if (!locationSelect) {
+      await appAlert(t("purchaseOrderSelectLocation"))
+      return
+    }
+    const vendorToUse = resolveVendorForSave()
+    if (!vendorToUse) {
+      await appAlert(t("purchaseOrderSelectVendor"))
+      return
+    }
+    if (!auth?.user) {
+      await appAlert(t("poBillingBulkNeedAuth"))
+      return
+    }
+    if (cart.length === 0) {
+      await appAlert(t("noCartItems"))
+      return
+    }
     setSubmitting(true)
     try {
       const passBillingUpsert =
@@ -547,8 +582,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         billingMonthYm.length === 7 &&
         billingIntentMode != null
       const res = await savePurchaseOrder({
-        vendorCode: vendorSelect.code,
-        vendorName: vendorSelect.name,
+        vendorCode: vendorToUse.code,
+        vendorName: vendorToUse.name,
         locationName: locationSelect.name,
         locationAddress: locationSelect.address,
         locationCode: locationSelect.location_code,
@@ -563,6 +598,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       })
       if (res.success) {
         void invalidatePurchaseOrdersListCache()
+        setVendorSelect(vendorToUse)
+        setVendorSearchQuery("")
         const msg =
           res.updated === true
             ? t("purchaseOrderSuccessUpdated")
@@ -1204,8 +1241,13 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       <div className="flex flex-wrap gap-2">
         <Button
           className="flex-1"
-          onClick={handleSave}
-          disabled={cart.length === 0 || submitting}
+          onClick={() => void handleSave()}
+          disabled={
+            cart.length === 0 ||
+            submitting ||
+            !locationSelect ||
+            (!vendorSelect && !vendorSearchQuery.trim())
+          }
         >
           {submitting ? t("loading") : t("purchaseOrderSave")}
         </Button>

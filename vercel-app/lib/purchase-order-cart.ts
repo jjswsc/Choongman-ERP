@@ -72,6 +72,22 @@ export function purchaseOrderMetaOrderDate(cartJson: string | undefined): string
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
 }
 
+/**
+ * 회계(본사 PO·POS 청구 등) vs 물류(매장 발주 등) 구분.
+ * `savePurchaseOrder`에서 회계 전용 메타(orderDate, billing*, relatedStore)가 있으면 회계.
+ * 순수 JSON 배열 또는 메타 없음은 물류(레거시 매장 발주)로 본다.
+ */
+export function isAccountingPurchaseOrderByCartJson(cartJson: string | undefined): boolean {
+  const { meta } = parsePurchaseOrderCart(cartJson)
+  if (!meta) return false
+  if (purchaseOrderMetaOrderDate(cartJson)) return true
+  const ym = String(meta.billingMonthYm ?? "").trim()
+  const bk = String(meta.billingKind ?? "").trim()
+  if (ym.length === 7 && bk) return true
+  if (String(meta.relatedStore ?? "").trim()) return true
+  return false
+}
+
 /** 목록·보내기용: meta.orderDate 우선, 없으면 created_at — 표시는 Asia/Bangkok */
 export function formatPoDisplayDate(
   po: { cart_json?: string; created_at?: string },

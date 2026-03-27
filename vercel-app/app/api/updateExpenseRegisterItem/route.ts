@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
+import { composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
 
 type BankTxRow = {
   id?: number
   trans_type?: string
   amount?: number
   trans_date?: string
+  memo?: string
+  note?: string
 }
 
 type PayableRow = {
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
     const bankRows = (await supabaseSelectFilter(
       'bank_transactions',
       `id=eq.${bankTransactionId}`,
-      { limit: 1, select: 'id,trans_type,amount,trans_date' }
+      { limit: 1, select: 'id,trans_type,amount,trans_date,memo,note' }
     )) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
     if (!bankRow?.id) return NextResponse.json({ success: false, message: '대상 거래를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -217,13 +220,15 @@ export async function POST(request: NextRequest) {
     }
 
     const bankCategory = mapToBankTransactionCategory(category!)
+    const existingNote = String(bankRow.note || '')
+    const composedNote = composeBankNoteWithCategoryAndOptionalAccrualPrefix(existingNote, memo, category!)
     const patch: Record<string, unknown> = {
       account_id: accountId,
       trans_date: transDate,
       amount: -amount,
       memo: memo || null,
       category: bankCategory,
-      note: `withdrawal_category:${category}`,
+      note: composedNote,
       store: storeName || null,
       expense_date: transDate,
       vendor_code: vendorCode || null,

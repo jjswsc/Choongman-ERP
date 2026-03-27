@@ -99,7 +99,7 @@ export function buildCostAnalysisLookups(rows: Iterable<unknown>): {
     if (!mid) continue
 
     const hall = parseCostAnalysisAmount(costHall)
-    let del = parseCostAnalysisAmount(costDelivery)
+    const del = parseCostAnalysisAmount(costDelivery)
     const opt = optionId as string | number | null | undefined
 
     mergeCostEntry(byMenuKey, promoCostKey(mid, opt), hall, del)
