@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
@@ -316,7 +317,12 @@ export async function POST(req: NextRequest) {
         guest_count: guestCount,
       }
 
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${keepOrderId}`, patch)
+      await supabaseUpdateByFilterWithPgrst204Fallback(
+        'pos_orders',
+        `id=eq.${keepOrderId}`,
+        patch,
+        'posDineInTableActions'
+      )
       await supabaseUpdateByFilter('pos_orders', `id=eq.${absorbOrderId}`, {
         status: 'cancelled',
       })

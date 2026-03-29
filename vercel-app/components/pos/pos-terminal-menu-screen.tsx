@@ -167,30 +167,46 @@ export function PosTerminalMenuScreen({
   })
 
   const loadMenuData = React.useCallback(async () => {
-    const [list, catRes, opts, promoList] = await Promise.all([
+    const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
+    const [r0, r1, r2, r3] = await Promise.allSettled([
       getPosMenus(),
       getPosMenuCategories(),
       getPosMenuOptions(),
       getPosPromosWithItems(),
     ])
-    setMenus(list || [])
-    setPromos(promoList || [])
-    setAllOptions(opts || [])
-    const mains = normalizePosMainCategoryTabs([...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY])
+    const list = r0.status === 'fulfilled' ? r0.value || [] : []
+    const catRes = r1.status === 'fulfilled' ? r1.value || emptyCats : emptyCats
+    const opts = r2.status === 'fulfilled' ? r2.value || [] : []
+    const promoList = r3.status === 'fulfilled' ? r3.value || [] : []
+    const derivedCats = Array.from(new Set(list.map((m) => String(m.category || '').trim()).filter(Boolean)))
+    const derivedMains = Array.from(
+      new Set(list.map((m) => String(m.categoryMain || '').trim()).filter(Boolean))
+    )
+    const finalCats = (catRes.categories || []).length > 0 ? (catRes.categories || []) : derivedCats
+    const finalMains = (catRes.mainCategories || []).length > 0 ? (catRes.mainCategories || []) : derivedMains
+    setMenus(list)
+    setPromos(promoList)
+    setAllOptions(opts)
+    const mains = normalizePosMainCategoryTabs([...finalMains, PROMOTION_MAIN_CATEGORY])
     setMainCategories(mains)
     setSelectedMainCategory(mains[0] ?? '')
-    setSelectedCategory('')
+    const firstSub =
+      mains[0] === PROMOTION_MAIN_CATEGORY
+        ? normalizePromotionSubcategory(
+            Array.from(new Set((promoList || []).map((p) => String(p.category || '').trim()).filter(Boolean)))[0] || ''
+          )
+        : finalCats.find((c) => {
+            const hit = list.some(
+              (m) => String(m.categoryMain || '').trim() === mains[0] && String(m.category || '').trim() === c
+            )
+            return hit
+          }) || ''
+    setSelectedCategory(firstSub)
   }, [])
 
   React.useEffect(() => {
     setLoading(true)
-    loadMenuData()
-      .catch(() => {
-        setMenus([])
-        setPromos([])
-        setAllOptions([])
-      })
-      .finally(() => setLoading(false))
+    loadMenuData().finally(() => setLoading(false))
   }, [loadMenuData])
 
   React.useEffect(() => {

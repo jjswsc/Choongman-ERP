@@ -16,6 +16,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import { useStoreList, getBalanceSheet, translateTexts, type BalanceSheetData } from "@/lib/api-client"
+import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 
 export function BalanceSheetTab() {
   const { lang } = useLang()
@@ -26,10 +27,7 @@ export function BalanceSheetTab() {
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
   const managerStore = (auth?.store || "").trim()
 
-  const [yearMonth, setYearMonth] = React.useState(() => {
-    const n = new Date()
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`
-  })
+  const [yearMonth, setYearMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
   const [storeFilter, setStoreFilter] = React.useState(() =>
     isManager && managerStore ? managerStore : "All"
   )
@@ -81,12 +79,9 @@ export function BalanceSheetTab() {
       .finally(() => setLoading(false))
   }, [yearMonth, storeFilter, auth?.store, auth?.role])
 
-  const yearMonthOptions = Array.from({ length: 24 }, (_, i) => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - i)
-    const y = d.getFullYear()
-    const m = d.getMonth() + 1
-    return { value: `${y}-${String(m).padStart(2, "0")}`, label: `${y}년 ${m}월` }
+  const yearMonthOptions = getBangkokRecentYearMonths(24).map((value) => {
+    const [y, m] = value.split("-").map(Number)
+    return { value, label: `${y}년 ${m}월` }
   })
 
   const storeOptions = isOffice

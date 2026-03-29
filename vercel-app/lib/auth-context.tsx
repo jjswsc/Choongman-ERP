@@ -11,14 +11,40 @@ export interface AuthState {
 
 const LAST_LOGIN_SNAPSHOT_KEY = 'cm_last_login_snapshot'
 
+function resolveLoginPathByCurrentRoute(): string {
+  if (typeof window === 'undefined') return '/login'
+  const p = window.location.pathname || '/'
+  if (p.startsWith('/admin')) return '/admin/login'
+  if (p.startsWith('/pos')) return '/pos/login'
+  return '/login'
+}
+
 function loadAuth(): AuthState | null {
   if (typeof window === 'undefined') return null
   try {
     const token = sessionStorage.getItem('cm_token')
     const store = sessionStorage.getItem('cm_store')
     const user = sessionStorage.getItem('cm_user')
-    const role = sessionStorage.getItem('cm_role') || ''
-    if (store && user) return { store, user, role, token: token || undefined }
+    let role = sessionStorage.getItem('cm_role') || ''
+    if (store && user) {
+      // cm_role만 비어 있는 경우(세션 불일치 등) 스냅샷으로 복구 — 없으면 관리자 레이아웃이 / 로 튕김
+      if (!String(role).trim()) {
+        try {
+          const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
+          if (raw) {
+            const o = JSON.parse(raw) as { role?: string }
+            const snapRole = String(o.role ?? '').trim()
+            if (snapRole) {
+              role = snapRole
+              try {
+                sessionStorage.setItem('cm_role', snapRole)
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+      return { store, user, role, token: token || undefined }
+    }
   } catch {}
   return null
 }
@@ -35,12 +61,14 @@ export function loadOfflineResumeAuth(): AuthState | null {
     const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
     if (!raw) return null
     const o = JSON.parse(raw) as { store?: string; user?: string; role?: string }
-    if (!o.store || !o.user) return null
+    const store = String(o.store ?? '').trim()
+    const user = String(o.user ?? '').trim()
+    if (!store || !user) return null
     let token: string | undefined
     try {
       token = sessionStorage.getItem('cm_token') || undefined
     } catch {}
-    return { store: o.store, user: o.user, role: o.role || '', token }
+    return { store, user, role: String(o.role || '').trim(), token }
   } catch {
     return null
   }
@@ -59,13 +87,13 @@ function saveAuth(auth: AuthState) {
   } catch {}
 }
 
+/** 세션·토큰만 제거. `cm_last_login_snapshot`은 유지 → 로그아웃 후에도 오프라인 모드로 재진입 가능(전용 기기 POS). 완전 삭제는 브라우저 사이트 데이터 삭제. */
 function clearAuth() {
   try {
     sessionStorage.removeItem('cm_store')
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
     sessionStorage.removeItem('cm_token')
-    localStorage.removeItem(LAST_LOGIN_SNAPSHOT_KEY)
   } catch {}
 }
 
@@ -97,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setAuthState(null)
     clearAuth()
-    if (typeof window !== 'undefined') window.location.href = '/login'
+    if (typeof window !== 'undefined') window.location.href = resolveLoginPathByCurrentRoute()
   }, [])
 
   const value = useMemo(

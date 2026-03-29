@@ -2,7 +2,11 @@
  * 주방 주문서 인쇄용 HTML (POS·관리자 공통)
  */
 
+import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
+
+/** 용지 폭(80mm)과 실제 인쇄 가능 폭(드라이버·프린터 비인쇄 여백) 차이로 오른쪽이 잘리는 것을 줄이기 위해 본문은 약간 좁게 둡니다. */
 const POS_PAPER_WIDTH_MM = 80
+const KITCHEN_SLIP_BODY_WIDTH_MM = 76
 const POS_PAPER_SIDE_PADDING_MM = 1
 const POS_PAPER_HEIGHT_MM = 200
 
@@ -51,7 +55,9 @@ export function getKitchenSlipPaperCss(
   @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
   html, body { margin: 0; padding: 0; }
   body {
-    width: ${POS_PAPER_WIDTH_MM}mm;
+    width: ${KITCHEN_SLIP_BODY_WIDTH_MM}mm;
+    max-width: 100%;
+    margin: 0 auto;
     box-sizing: border-box;
     font-family: sans-serif;
     font-size: ${tp.body}px;
@@ -65,14 +71,14 @@ export function getKitchenSlipPaperCss(
 function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
   const tp = typographyForScale(design.fontScale)
   return `
-.k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-.k-row { margin: 6px 0; font-size: ${tp.row}px; }
-.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; line-height: 1.25; }
+.k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: break-word; overflow-wrap: anywhere; }
+.k-row { margin: 6px 0; font-size: ${tp.row}px; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
+.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
 .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: ${tp.memo}px; }
 `
 }
 
-/** 주방전표 한 줄: 메뉴명 × 수량 + (선택) 줄 메모 */
+/** 주방전표 한 줄: 수량 × 메뉴명 + (선택) 줄 메모 */
 export function formatKitchenSlipItemRowHtml(
   it: { name: string; qty: number; note?: string | null | undefined },
   escapeHtml: (s: string) => string,
@@ -81,7 +87,7 @@ export function formatKitchenSlipItemRowHtml(
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
   const note = showLineNotes ? String(it.note ?? '').trim() : ''
-  const main = escapeHtml(it.name) + ' × ' + Number(it.qty)
+  const main = Number(it.qty) + ' × ' + escapeHtml(it.name)
   if (!note) return '<div class="k-row">' + main + close('div')
   return (
     '<div class="k-row">' +
@@ -155,6 +161,7 @@ export function buildKitchenSlipHtml(params: {
   } = params
   const paperCss = getKitchenSlipPaperCss(design, printColorAdjust)
   const classCss = kitchenSlipClassCss(design)
+  const orderNoPrint = formatPosOrderNoForPrint(orderNo)
   const c = (tag: string) => '\u003c/' + tag + '>'
   return (
     '<!DOCTYPE html><html><head><title>' +
@@ -168,7 +175,7 @@ export function buildKitchenSlipHtml(params: {
     escapeHtml(label) +
     c('div') +
     '<div class="k-row"><strong>' +
-    escapeHtml(orderNo) +
+    escapeHtml(orderNoPrint) +
     c('strong') +
     c('div') +
     '<div class="k-row">' +

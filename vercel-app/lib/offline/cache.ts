@@ -7,6 +7,14 @@ import { getDB, STORES } from './db'
 
 const TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30일
 const ERP_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 (ERP 기본 데이터)
+/** POS 메뉴·화면구성 등 — 오프라인 영업일 넘겨도 스냅샷 유지 */
+const ERP_POS_CATALOG_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+function erpCacheMaxAgeMs(cacheKey: string): number {
+  /** POS 워밍·터미널이 쓰는 키(메뉴·테이블·결제수단·회원 등) — 24시간 만료 시 오프라인 메뉴 공백 방지 */
+  if (cacheKey.startsWith('erp:pos')) return ERP_POS_CATALOG_TTL_MS
+  return ERP_CACHE_TTL_MS
+}
 
 export interface CacheEntry<T> {
   cacheKey: string
@@ -116,7 +124,8 @@ export async function getFromErpCache<T>(cacheKey: string): Promise<T | null> {
         return
       }
       const age = Date.now() - entry.cachedAt
-      if (age > ERP_CACHE_TTL_MS) {
+      const maxAge = erpCacheMaxAgeMs(cacheKey)
+      if (age > maxAge) {
         const delTx = db.transaction(STORES.ERP_CACHE, 'readwrite')
         delTx.objectStore(STORES.ERP_CACHE).delete(cacheKey)
         resolve(null)

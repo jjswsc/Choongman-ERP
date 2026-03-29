@@ -71,7 +71,9 @@ DB: cm_offline
 │   ├── body: string (JSON)
 │   ├── createdAt: number (timestamp)
 │   ├── retryCount: number
-│   └── lastError?: string
+│   ├── lastTriedAt?: number
+│   ├── lastError?: string
+│   └── metadata?: { localOrderNo?: string }
 └── pos_order_local (Object Store) - 로컬에서 생성한 주문 정보
     ├── localId: string (uuid)
     ├── orderNo: string (동기화 후 서버에서 받은 값)
@@ -116,27 +118,13 @@ DB: cm_offline
 
 ### 4.1 네트워크 감지
 
-```typescript
-// lib/offline/network.ts
-export function isOnline(): boolean {
-  return typeof navigator !== 'undefined' && navigator.onLine
-}
+`navigator.onLine` 만으로는 실제 서버 장애를 완전히 구분할 수 없다.  
+현재는 아래 2단계 신호를 함께 사용한다.
 
-export function useOnlineStatus(callback?: (online: boolean) => void): boolean {
-  const [online, setOnline] = useState(() => isOnline())
-  useEffect(() => {
-    const onOnline = () => { setOnline(true); callback?.(true) }
-    const onOffline = () => { setOnline(false); callback?.(false) }
-    window.addEventListener('online', onOnline)
-    window.addEventListener('offline', onOffline)
-    return () => {
-      window.removeEventListener('online', onOnline)
-      window.removeEventListener('offline', onOffline)
-    }
-  }, [callback])
-  return online
-}
-```
+- 1차: 브라우저 신호 (`navigator.onLine`)
+- 2차: 최근 API 실패 횟수 기반 `degraded` (짧은 시간 연속 실패 시 캐시 우선 모드)
+
+즉, "오프라인" + "degraded" 모두 읽기 fallback 트리거로 본다.
 
 ### 4.2 큐 항목 형식
 
@@ -223,8 +211,10 @@ vercel-app/
 
 | 항목 | 내용 |
 |------|------|
-| 멱등성 키 | `X-Idempotency-Key: {localOrderId}` 헤더로 중복 요청 무시 가능 |
-| 주문번호 | 오프라인 주문은 서버 저장 시 서버에서 생성. 로컬 `LOCAL-xxx`는 임시용 |
+| 멱등성 키 | 큐 동기화 시 `X-Idempotency-Key` 전송 (`metadata.localOrderNo` 우선, 없으면 queue id) |
+| 서버 중복 방지 | `savePosOrder`는 동일 키 재수신 시 최근 성공 결과를 즉시 반환 (중복 insert 방지) |
+| 재시도 정책 | 지수 백오프(2s, 4s, 8s...) + 최대 간격 5분, 최대 재시도 횟수 초과 건은 큐에 남겨 수동 점검 |
+| 주문번호 | 오프라인 응답의 `LOCAL-xxx`는 임시 번호, 서버 저장 후 `order_no`가 기준 |
 
 ---
 

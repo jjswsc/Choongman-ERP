@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { translateTexts } from "@/lib/api-client"
+import { useAutoTranslate } from "@/lib/auto-translate"
 
 const SEP = "\u241e"
 
@@ -20,9 +21,10 @@ function stableKey(texts: string[]) {
 export function useTranslatedTextMap(texts: string[], lang: string) {
   const key = stableKey(texts)
   const [map, setMap] = useState<Record<string, string>>({})
+  const { enabled } = useAutoTranslate()
 
   useEffect(() => {
-    if (!key) {
+    if (!enabled || !key) {
       setMap({})
       return
     }
@@ -43,7 +45,7 @@ export function useTranslatedTextMap(texts: string[], lang: string) {
     return () => {
       cancelled = true
     }
-  }, [key, lang])
+  }, [enabled, key, lang])
 
   return useCallback(
     (s: string) => {
@@ -61,10 +63,11 @@ export function useTranslatedTextMap(texts: string[], lang: string) {
 export function useDebouncedTranslatedText(text: string, lang: string, debounceMs = 450) {
   const [translated, setTranslated] = useState("")
   const [pending, setPending] = useState(false)
+  const { enabled } = useAutoTranslate()
 
   useEffect(() => {
     const raw = String(text || "").trim()
-    if (!raw) {
+    if (!enabled || !raw) {
       setTranslated("")
       setPending(false)
       return
@@ -79,7 +82,7 @@ export function useDebouncedTranslatedText(text: string, lang: string, debounceM
         .finally(() => setPending(false))
     }, debounceMs)
     return () => clearTimeout(id)
-  }, [text, lang, debounceMs])
+  }, [enabled, text, lang, debounceMs])
 
   return { translated, pending }
 }

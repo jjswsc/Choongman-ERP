@@ -36,6 +36,42 @@ function parsePlatformLinks(val: unknown): Record<string, string> {
   return {}
 }
 
+function parseProvidedMenus(val: unknown): {
+  id: string
+  code: string
+  name: string
+  price: number
+  quantity: number
+  categoryMain: string
+}[] {
+  if (!Array.isArray(val)) return []
+  const out: {
+    id: string
+    code: string
+    name: string
+    price: number
+    quantity: number
+    categoryMain: string
+  }[] = []
+  for (const x of val) {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) continue
+    const o = x as Record<string, unknown>
+    const id = String(o.id ?? '').trim()
+    if (!id) continue
+    let qty = Math.floor(parseNum(o.quantity))
+    if (qty < 1) qty = 1
+    out.push({
+      id,
+      code: String(o.code ?? '').trim(),
+      name: String(o.name ?? '').trim(),
+      price: parseNum(o.price),
+      quantity: qty,
+      categoryMain: String(o.category_main ?? o.categoryMain ?? '').trim(),
+    })
+  }
+  return out
+}
+
 function isColumnSchemaError(e: unknown): boolean {
   const s = String(e)
   return (
@@ -74,6 +110,9 @@ export async function GET(req: NextRequest) {
       id: String(row.id ?? ''),
       campaignId: row.campaign_id != null ? String(row.campaign_id) : null,
       name: String(row.name ?? ''),
+      contactName: row.contact_name != null ? String(row.contact_name) : '',
+      contactPhone: row.contact_phone != null ? String(row.contact_phone) : '',
+      providedMenus: parseProvidedMenus(row.provided_menus),
       followers: String(row.followers ?? ''),
       contentFormat: String(row.content_format ?? ''),
       contentTopic: String(row.content_topic ?? ''),
@@ -117,6 +156,9 @@ export async function POST(req: NextRequest) {
       id?: string
       campaignId?: string | null
       name?: string
+      contactName?: string
+      contactPhone?: string
+      providedMenus?: unknown
       followers?: string
       contentFormat?: string
       contentTopic?: string
@@ -136,6 +178,9 @@ export async function POST(req: NextRequest) {
     }
 
     const name = String(body.name ?? '').trim()
+    const contactName = String(body.contactName ?? '').trim()
+    const contactPhone = String(body.contactPhone ?? '').trim()
+    const providedMenus = parseProvidedMenus(body.providedMenus)
     const editingId = body.id?.trim()
     const campaignId = String(body.campaignId ?? '').trim()
     const userRole = String(body.userRole ?? body.user_role ?? '')
@@ -176,6 +221,9 @@ export async function POST(req: NextRequest) {
     const row: Record<string, unknown> = {
       campaign_id: Number(campaignId),
       name,
+      contact_name: contactName,
+      contact_phone: contactPhone,
+      provided_menus: providedMenus,
       followers: String(body.followers ?? '').trim(),
       content_format: String(body.contentFormat ?? '').trim(),
       content_topic: String(body.contentTopic ?? '').trim(),
@@ -224,6 +272,8 @@ export async function POST(req: NextRequest) {
         ? String(body.shootingDate).slice(0, 10)
         : ''
 
+    const detailLine = [contactName, name].filter(Boolean).join(' · ') || name
+
     const sync = await syncMarketingExpenseAccrual({
       userRole,
       userName,
@@ -235,7 +285,7 @@ export async function POST(req: NextRequest) {
       amount: actual,
       expenseDate,
       dueDate: null,
-      detailLine: name,
+      detailLine,
       existingExpenseAccrualId: priorAccrualId,
     })
 

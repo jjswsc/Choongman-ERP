@@ -1,0 +1,5 @@
+-- @deprecated 내용은 `marketing_campaigns_vercel_api_bootstrap.sql`에 통합되었습니다.
+-- Supabase에서는 아래 통합 스크립트만 실행하면 collab_management·discount_target_audience·phase_periods 등 API 필수 컬럼이 한 번에 추가됩니다.
+--
+--   vercel-app/sql/marketing_campaigns_vercel_api_bootstrap.sql
+--

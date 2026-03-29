@@ -274,10 +274,13 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
     setSaving(true)
     try {
-      const existing = await getPosMenuIngredients({
-        menuId: String(menuId),
-        optionId: ingredientsQueryOptionId(initialLoadFromRow),
-      })
+      const existing = await getPosMenuIngredients(
+        {
+          menuId: String(menuId),
+          optionId: ingredientsQueryOptionId(initialLoadFromRow),
+        },
+        { requireOnline: true }
+      )
       const uiIngredientRows = foodItems.length + packagingItems.length
       if (uiIngredientRows > 0 && toSave.length === 0) {
         throw new Error(
@@ -293,25 +296,32 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         if (!ok) return
       }
       for (const ing of existing) {
-        const res = await deletePosMenuIngredient({ id: String(ing.id) })
-        if (!res.success) throw new Error(res.message)
+        await deletePosMenuIngredient({ id: String(ing.id) }, { requireOnline: true })
       }
       for (const row of toSave) {
-        const res = await savePosMenuIngredient({
-          menuId,
-          optionId,
-          itemCode: row.itemCode,
-          quantity: row.quantity,
-          lossRate: row.lossRate,
-          ingredientType: row.ingredientType,
-        })
-        if (!res.success) throw new Error(res.message)
+        await savePosMenuIngredient(
+          {
+            menuId,
+            optionId,
+            itemCode: row.itemCode,
+            quantity: row.quantity,
+            lossRate: row.lossRate,
+            ingredientType: row.ingredientType,
+          },
+          { requireOnline: true }
+        )
       }
 
       const pHall = menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0
       const pDelivery = menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null
-      const code = String(initialLoadFromRow.menuCode ?? "").replace(/-\d+$/, "").trim()
-      const name = String(initialLoadFromRow.menuName ?? "").replace(/\s*\([^)]+\)$/, "").trim()
+      const stripTrailingOptionCode = (c: string) => String(c ?? "").replace(/-\d+$/, "").trim()
+      const stripTrailingParenOption = (n: string) => String(n ?? "").replace(/\s*\([^)]+\)$/, "").trim()
+      const code =
+        stripTrailingOptionCode(String(initialLoadFromRow.menuCode ?? "")) ||
+        stripTrailingOptionCode(String(menuItem.menuCode ?? ""))
+      const name =
+        stripTrailingParenOption(String(initialLoadFromRow.menuName ?? "")) ||
+        stripTrailingParenOption(String(menuItem.menuName ?? ""))
       const category = String(initialLoadFromRow.category ?? "").trim()
       const categoryMain = String(initialLoadFromRow.categoryMain ?? "").trim()
       if (optionId != null) {
@@ -320,31 +330,38 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         const baseDelivery = baseRow?.priceDelivery ?? baseHall
         const modHall = Math.round((pHall - baseHall) * 10) / 10
         const modDelivery = pDelivery != null ? Math.round((pDelivery - (baseDelivery || baseHall)) * 10) / 10 : modHall
-        const optRes = await savePosMenuOption({
-          id: String(optionId),
-          menuId,
-          name: String(initialLoadFromRow.optionName ?? "").trim() || name,
-          priceModifier: modHall,
-          priceModifierDelivery: modDelivery,
-        })
-        if (!optRes.success) throw new Error(optRes.message)
+        await savePosMenuOption(
+          {
+            id: String(optionId),
+            menuId,
+            name: String(initialLoadFromRow.optionName ?? "").trim() || name,
+            priceModifier: modHall,
+            priceModifierDelivery: modDelivery,
+          },
+          { requireOnline: true }
+        )
       } else if (code && name) {
-        const menuRes = await savePosMenu({
-          id: String(menuId),
-          code,
-          name,
-          category,
-          categoryMain,
-          price: Math.round(pHall),
-          priceDelivery: pDelivery != null ? Math.round(pDelivery) : null,
-        })
-        if (!menuRes.success) throw new Error(menuRes.message)
+        await savePosMenu(
+          {
+            id: String(menuId),
+            code,
+            name,
+            category,
+            categoryMain,
+            price: Math.round(pHall),
+            priceDelivery: pDelivery != null ? Math.round(pDelivery) : null,
+          },
+          { requireOnline: true }
+        )
       }
 
-      const reloadIngs = await getPosMenuIngredients({
-        menuId: String(menuId),
-        optionId: ingredientsQueryOptionId(initialLoadFromRow),
-      })
+      const reloadIngs = await getPosMenuIngredients(
+        {
+          menuId: String(menuId),
+          optionId: ingredientsQueryOptionId(initialLoadFromRow),
+        },
+        { requireOnline: true }
+      )
       const synced = posMenuIngredientsToRecipeState(Array.isArray(reloadIngs) ? reloadIngs : [])
       setFoodItems(synced.food)
       setPackagingItems(synced.packaging)
@@ -428,16 +445,19 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
                       const name = String(initialLoadFromRow.menuName ?? "").replace(/\s*\([^)]+\)$/, "").trim()
                       if (code && name) {
                         // 조리 시간만 바꿔도 category·가격이 사라지지 않도록 현재 값을 함께 전달
-                        await savePosMenu({
-                          id,
-                          code,
-                          name,
-                          cookingTimeMin,
-                          category: menuItem.category ?? initialLoadFromRow.category ?? "",
-                          categoryMain: menuItem.categoryMain ?? initialLoadFromRow.categoryMain ?? "",
-                          price: menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0,
-                          priceDelivery: menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null,
-                        })
+                        await savePosMenu(
+                          {
+                            id,
+                            code,
+                            name,
+                            cookingTimeMin,
+                            category: menuItem.category ?? initialLoadFromRow.category ?? "",
+                            categoryMain: menuItem.categoryMain ?? initialLoadFromRow.categoryMain ?? "",
+                            price: menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0,
+                            priceDelivery: menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null,
+                          },
+                          { requireOnline: true }
+                        )
                         onSaveSuccess?.()
                       }
                     } catch (e) {

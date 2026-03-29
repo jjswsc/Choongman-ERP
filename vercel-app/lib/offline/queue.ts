@@ -12,6 +12,7 @@ export interface PendingRequest {
   headers?: Record<string, string>
   createdAt: number
   retryCount: number
+  lastTriedAt?: number
   lastError?: string
   metadata?: { localOrderNo?: string }
 }

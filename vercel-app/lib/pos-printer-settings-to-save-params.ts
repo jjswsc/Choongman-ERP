@@ -1,4 +1,5 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
+import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
 
 /** GET 응답(PosPrinterSettings)을 savePosPrinterSettings POST 본문으로 변환 */
 export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
@@ -60,8 +61,8 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     merchantReceiptOrderDetails: s.merchantReceiptOrderDetails !== false,
     cashPaymentReceipt: Boolean(s.cashPaymentReceipt),
     signatureLine: Boolean(s.signatureLine),
-    receiptBarcode: s.receiptBarcode !== false,
-    itemBarcode: s.itemBarcode !== false,
+    receiptBarcode: Boolean(s.receiptBarcode),
+    itemBarcode: Boolean(s.itemBarcode),
     qrCodeOption,
     discountSeparatePrint: s.discountSeparatePrint !== false,
     merchantReceiptPrint: s.merchantReceiptPrint !== false,
@@ -82,6 +83,16 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     receiptShowPaidStamp: s.receiptShowPaidStamp !== false,
     receiptShowThankYou: s.receiptShowThankYou !== false,
     receiptShowCustomerCopy: s.receiptShowCustomerCopy !== false,
+    receiptFooterPrimaryText: String(s.receiptFooterPrimaryText ?? "").trim(),
+    receiptFooterSecondaryText: String(s.receiptFooterSecondaryText ?? "").trim(),
+    receiptLogoImageUrl: String(s.receiptLogoImageUrl ?? "").trim(),
+    receiptStampImageUrl: String(s.receiptStampImageUrl ?? "").trim(),
+    receiptShowStamp: s.receiptShowStamp !== false,
+    receiptStampOnlyTaxInvoice: s.receiptStampOnlyTaxInvoice !== false,
+    receiptMembershipQrImageUrl: String(s.receiptMembershipQrImageUrl ?? "").trim(),
+    receiptMembershipQrLinkUrl: String(s.receiptMembershipQrLinkUrl ?? "").trim(),
+    receiptMembershipQrText: String(s.receiptMembershipQrText ?? "").trim(),
+    receiptShowMembershipQr: Boolean(s.receiptShowMembershipQr),
     receiptPrintLang: String(s.receiptPrintLang ?? "").trim() || undefined,
     kitchenSlipFontScale: (String(s.kitchenSlipFontScale || "md").toLowerCase() === "sm"
       ? "sm"
@@ -99,5 +110,8 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     cardBaseMode,
     otherRate: Math.max(0, Number(s.otherRate ?? 0)),
     otherMode: (String(s.otherMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",
+    kitchenRouteByMenu: normalizeKitchenRouteMapInput(s.kitchenRouteByMenu),
+    kitchenRouteByCategory: normalizeKitchenRouteMapInput(s.kitchenRouteByCategory),
+    kitchenRouteByCategoryMain: normalizeKitchenRouteMapInput(s.kitchenRouteByCategoryMain),
   }
 }

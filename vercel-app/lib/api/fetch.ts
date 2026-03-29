@@ -18,6 +18,15 @@ function resolveUrl(input: RequestInfo | URL): string {
   return typeof input === 'string' ? input : input.toString()
 }
 
+/** 현재 앱 영역에 맞는 로그인 경로 선택 (모바일/관리자/POS) */
+function resolveLoginPathFromLocation(): string {
+  if (typeof window === 'undefined') return '/login'
+  const p = window.location.pathname || '/'
+  if (p.startsWith('/admin')) return '/admin/login'
+  if (p.startsWith('/pos')) return '/pos/login'
+  return '/login'
+}
+
 /** 인증 토큰을 붙인 fetch - 컴포넌트에서 직접 API 호출 시 사용 */
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
@@ -30,13 +39,17 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       // 오프라인 시 401 리다이렉트 방지 - 세션이 있으면 캐시된 데이터로 계속 사용 허용
       return res
     }
+    // Bearer 없음 = 오프라인 복구 세션(cm_store 등만 있음) 등 — 401이 나와도 로그인 화면으로 보내지 않음
+    if (!auth.Authorization) {
+      return res
+    }
     try {
       sessionStorage.removeItem('cm_token')
       sessionStorage.removeItem('cm_store')
       sessionStorage.removeItem('cm_user')
       sessionStorage.removeItem('cm_role')
     } catch {}
-    window.location.href = '/login'
+    window.location.href = resolveLoginPathFromLocation()
   }
   return res
 }

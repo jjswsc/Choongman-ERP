@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseUpsertMerge } from '@/lib/supabase-server'
 import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
 
 /** JSON 본문에서 true/false 문자열 등도 안전하게 해석 (지연 배지 등) */
@@ -21,29 +21,16 @@ function extractMissingColumnName(error: unknown): string | null {
   return m?.[1] || null
 }
 
-async function saveWithMissingColumnFallback(params: {
-  storeCode: string
-  exists: boolean
-  patch: Record<string, unknown>
-}) {
-  const { storeCode, exists } = params
-  const workingPatch: Record<string, unknown> = { ...params.patch }
+async function upsertWithMissingColumnFallback(storeCode: string, patch: Record<string, unknown>) {
+  const workingPatch: Record<string, unknown> = { ...patch }
 
-  // 컬럼 미존재(PGRST204) 시 해당 키를 제거하고 재시도
+  // 컬럼 미존재(PGRST204) 시 해당 키를 제거하고 재시도 (store_code PK upsert 한 번에 처리)
   for (let i = 0; i < 40; i++) {
     try {
-      if (exists) {
-        await supabaseUpdateByFilter(
-          'pos_printer_settings',
-          `store_code=eq.${encodeURIComponent(storeCode)}`,
-          workingPatch
-        )
-      } else {
-        await supabaseInsert('pos_printer_settings', {
-          store_code: storeCode,
-          ...workingPatch,
-        })
-      }
+      await supabaseUpsertMerge('pos_printer_settings', 'store_code', {
+        store_code: storeCode,
+        ...workingPatch,
+      })
       return
     } catch (e) {
       const missingCol = extractMissingColumnName(e)
@@ -102,8 +89,8 @@ export async function POST(req: NextRequest) {
     const merchantReceiptOrderDetails = body?.merchantReceiptOrderDetails !== false
     const cashPaymentReceipt = Boolean(body?.cashPaymentReceipt)
     const signatureLine = Boolean(body?.signatureLine)
-    const receiptBarcode = body?.receiptBarcode !== false
-    const itemBarcode = body?.itemBarcode !== false
+    const receiptBarcode = Boolean(body?.receiptBarcode)
+    const itemBarcode = Boolean(body?.itemBarcode)
     const qrOpt = String(body?.qrCodeOption || 'yes')
     const qrCodeOption = ['yes', 'no', 'return_points'].includes(qrOpt) ? qrOpt : 'yes'
     const discountSeparatePrint = body?.discountSeparatePrint !== false
@@ -126,6 +113,16 @@ export async function POST(req: NextRequest) {
     const receiptShowPaidStamp = body?.receiptShowPaidStamp !== false
     const receiptShowThankYou = body?.receiptShowThankYou !== false
     const receiptShowCustomerCopy = body?.receiptShowCustomerCopy !== false
+    const receiptFooterPrimaryText = String(body?.receiptFooterPrimaryText ?? '').trim()
+    const receiptFooterSecondaryText = String(body?.receiptFooterSecondaryText ?? '').trim()
+    const receiptLogoImageUrl = String(body?.receiptLogoImageUrl ?? '').trim()
+    const receiptStampImageUrl = String(body?.receiptStampImageUrl ?? '').trim()
+    const receiptShowStamp = body?.receiptShowStamp !== false
+    const receiptStampOnlyTaxInvoice = body?.receiptStampOnlyTaxInvoice !== false
+    const receiptMembershipQrImageUrl = String(body?.receiptMembershipQrImageUrl ?? '').trim()
+    const receiptMembershipQrLinkUrl = String(body?.receiptMembershipQrLinkUrl ?? '').trim()
+    const receiptMembershipQrText = String(body?.receiptMembershipQrText ?? '').trim()
+    const receiptShowMembershipQr = Boolean(body?.receiptShowMembershipQr)
     const kitchenSlipScaleRaw = String(body?.kitchenSlipFontScale || 'md').toLowerCase()
     const kitchenSlipFontScale = kitchenSlipScaleRaw === 'sm' ? 'sm' : kitchenSlipScaleRaw === 'lg' ? 'lg' : 'md'
     const kitchenSlipShowLineNotes = body?.kitchenSlipShowLineNotes !== false
@@ -162,12 +159,6 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
     }
-
-    const existing = (await supabaseSelectFilter(
-      'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
-      { limit: 1 }
-    )) as { store_code?: string }[] | null
 
     const patch = {
       kitchen_mode: kitchenMode,
@@ -216,6 +207,16 @@ export async function POST(req: NextRequest) {
       receipt_show_paid_stamp: receiptShowPaidStamp,
       receipt_show_thank_you: receiptShowThankYou,
       receipt_show_customer_copy: receiptShowCustomerCopy,
+      receipt_footer_primary_text: receiptFooterPrimaryText,
+      receipt_footer_secondary_text: receiptFooterSecondaryText,
+      receipt_logo_image_url: receiptLogoImageUrl,
+      receipt_stamp_image_url: receiptStampImageUrl,
+      receipt_show_stamp: receiptShowStamp,
+      receipt_stamp_only_tax_invoice: receiptStampOnlyTaxInvoice,
+      receipt_membership_qr_image_url: receiptMembershipQrImageUrl,
+      receipt_membership_qr_link_url: receiptMembershipQrLinkUrl,
+      receipt_membership_qr_text: receiptMembershipQrText,
+      receipt_show_membership_qr: receiptShowMembershipQr,
       kitchen_slip_font_scale: kitchenSlipFontScale,
       kitchen_slip_show_line_notes: kitchenSlipShowLineNotes,
       kitchen_slip_show_order_memo: kitchenSlipShowOrderMemo,
@@ -235,11 +236,7 @@ export async function POST(req: NextRequest) {
       ...(routeMainPatch !== undefined ? { kitchen_route_by_category_main: routeMainPatch } : {}),
     }
 
-    await saveWithMissingColumnFallback({
-      storeCode,
-      exists: Boolean(existing?.length),
-      patch,
-    })
+    await upsertWithMissingColumnFallback(storeCode, patch)
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

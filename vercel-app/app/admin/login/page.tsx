@@ -15,7 +15,15 @@ function AdminLoginContent() {
   const redirect = searchParams.get("redirect")?.trim()
   const redirectTo = redirect && redirect.startsWith("/") ? redirect : "/admin"
   const isPosRedirect = redirectTo === "/pos"
-  return <LoginForm redirectTo={redirectTo} isAdminPage={!isPosRedirect} />
+  const msg = searchParams.get("msg")?.trim()
+  const initialNoticeKey = msg === "no_admin" ? "msg_no_admin_permission" : undefined
+  return (
+    <LoginForm
+      redirectTo={redirectTo}
+      isAdminPage={!isPosRedirect}
+      initialNoticeKey={initialNoticeKey}
+    />
+  )
 }
 
 export default function AdminLoginPage() {

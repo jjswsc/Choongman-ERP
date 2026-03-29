@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Filter,
   LayoutGrid,
-  Sparkles,
   Store,
 } from "lucide-react"
 import {
@@ -25,9 +24,11 @@ import {
 } from "@/lib/api-client"
 import { useStoreList } from "@/lib/use-store-list"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
+import { useT } from "@/lib/i18n"
+import { useLang } from "@/lib/lang-context"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
@@ -43,10 +44,11 @@ import {
   filterMarketingCalendarEvents,
   eventsByDateForMonth,
   getBangkokMonthGridMeta,
-  CALENDAR_LAYER_OPTIONS,
+  CALENDAR_LAYER_IDS,
   layerOfEvent,
   type CalendarLayerId,
   type MarketingCalendarEvent,
+  type MarketingCalendarEventLocale,
 } from "./marketing-calendar-utils"
 import { MarketingPageHero } from "./marketing-page-hero"
 
@@ -55,12 +57,75 @@ function campaignListLabel(c: MarketingCampaign) {
   return no ? `[${no}] ${c.topic}` : c.topic
 }
 
+function bcp47FromAdminLang(lang: string): string {
+  if (lang === "mm") return "my-MM"
+  if (lang === "la") return "lo"
+  return lang
+}
+
+function formatMonthYearLabel(ym: string, lang: string): string {
+  const [y, mo] = ym.split("-").map(Number)
+  if (!y || !mo) return ym
+  return new Intl.DateTimeFormat(bcp47FromAdminLang(lang), {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "long",
+  }).format(new Date(Date.UTC(y, mo - 1, 1)))
+}
+
+function weekdayShortHeaders(lang: string): string[] {
+  const loc = bcp47FromAdminLang(lang)
+  return [0, 1, 2, 3, 4, 5, 6].map((dow) =>
+    new Intl.DateTimeFormat(loc, { weekday: "short" }).format(new Date(Date.UTC(2024, 0, 7 + dow)))
+  )
+}
+
+function formatSheetDayTitle(ymd: string, lang: string): string {
+  const [y, m, d] = ymd.split("-").map(Number)
+  if (!y || !m || !d) return ymd
+  return new Intl.DateTimeFormat(bcp47FromAdminLang(lang), {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "medium",
+  }).format(new Date(Date.UTC(y, m - 1, d, 12, 0, 0)))
+}
+
+function calendarEventLocaleFromT(t: (key: string) => string): MarketingCalendarEventLocale {
+  return {
+    bracketCampaign: t("marketingCalBracketCampaign"),
+    bracketPromo: t("marketingCalBracketPromo"),
+    bracketAdRoas: t("marketingCalBracketAdRoas"),
+    bracketInfluencer: t("marketingCalBracketInfluencer"),
+    bracketMaterial: t("marketingCalBracketMaterial"),
+    bracketCollab: t("marketingCalBracketCollab"),
+    verbStart: t("marketingCalVerbStart"),
+    verbEnd: t("marketingCalVerbEnd"),
+    verbPublish: t("marketingCalVerbPublish"),
+    verbShoot: t("marketingCalVerbShoot"),
+    verbDisplayStart: t("marketingCalVerbDisplayStart"),
+    verbDisplayShort: t("marketingCalVerbDisplayShort"),
+    verbExposureEnd: t("marketingCalVerbExposureEnd"),
+    verbDesignStart: t("marketingCalVerbDesignStart"),
+    verbDesignEnd: t("marketingCalVerbDesignEnd"),
+    defaultPromo: t("marketingCalDefaultPromo"),
+    defaultAd: t("marketingCalDefaultAd"),
+    defaultInfluencer: t("marketingCalDefaultInfluencer"),
+    defaultMaterial: t("marketingCalDefaultMaterial"),
+    inactive: t("marketingCalInactive"),
+    metaStatusTpl: t("marketingCalMetaStatus"),
+    metaFollowersTpl: t("marketingCalMetaFollowers"),
+    spend: t("marketingCalSpend"),
+    budget: t("marketingCalBudget"),
+    sepMid: t("marketingCalSepMid"),
+  }
+}
+
 const LAYER_CHIP: Record<CalendarLayerId, string> = {
   campaign: "bg-violet-500/15 text-violet-800 border-violet-200 dark:text-violet-200 dark:border-violet-800",
   promo: "bg-indigo-500/15 text-indigo-800 border-indigo-200 dark:text-indigo-200 dark:border-indigo-800",
   ad: "bg-emerald-500/15 text-emerald-800 border-emerald-200 dark:text-emerald-200 dark:border-emerald-800",
   influencer: "bg-amber-500/15 text-amber-900 border-amber-200 dark:text-amber-200 dark:border-amber-800",
   material: "bg-rose-500/15 text-rose-800 border-rose-200 dark:text-rose-200 dark:border-rose-800",
+  collab: "bg-sky-500/15 text-sky-900 border-sky-200 dark:text-sky-200 dark:border-sky-800",
 }
 
 function addMonthsYm(ym: string, delta: number): string {
@@ -82,12 +147,30 @@ export type MarketingIntegratedCalendarPanelProps = {
   campaignIdFromQuery?: string
   /** 상단 히어로/제목 축소 (리포트 허브 탭 안에서 사용) */
   compactHeader?: boolean
+  /** 통합 캘린더 페이지 등에서 허브 내비와 맞추기 위해 히어로 설명 문구 숨김 */
+  hideHeroDescription?: boolean
 }
 
 export function MarketingIntegratedCalendarPanel({
   campaignIdFromQuery = "",
   compactHeader = false,
+  hideHeroDescription = false,
 }: MarketingIntegratedCalendarPanelProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const calLocale = React.useMemo(() => calendarEventLocaleFromT(t), [t])
+  const sortLocale = bcp47FromAdminLang(lang)
+  const weekDayLabels = React.useMemo(() => weekdayShortHeaders(lang), [lang])
+  const layerOptions = React.useMemo(
+    () =>
+      CALENDAR_LAYER_IDS.map((id) => ({
+        id,
+        label: t(`marketingCalLayer_${id}`),
+        description: t(`marketingCalLayer_${id}Desc`),
+      })),
+    [t]
+  )
+
   const { stores: storeList } = useStoreList()
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [rawEvents, setRawEvents] = React.useState<MarketingCalendarEvent[]>([])
@@ -99,7 +182,7 @@ export function MarketingIntegratedCalendarPanel({
   const [storeFilter, setStoreFilter] = React.useState("")
   const [promoFilter, setPromoFilter] = React.useState("")
   const [layers, setLayers] = React.useState<Set<CalendarLayerId>>(
-    () => new Set(["campaign", "promo", "ad", "influencer", "material"])
+    () => new Set(["campaign", "promo", "ad", "influencer", "material", "collab"])
   )
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
@@ -137,6 +220,7 @@ export function MarketingIntegratedCalendarPanel({
           influencers: infs,
           materials: mats,
           promos,
+          locale: calLocale,
         })
         setRawEvents(built)
         setLoadError(failed === 5)
@@ -167,12 +251,15 @@ export function MarketingIntegratedCalendarPanel({
         layers,
         campaignId: campaignFilter.trim(),
         storeName: storeFilter.trim(),
-        promoId: promoFilter.trim(),
+        promoId: "",
       }),
-    [rawEvents, layers, campaignFilter, storeFilter, promoFilter]
+    [rawEvents, layers, campaignFilter, storeFilter]
   )
 
-  const eventsByDate = React.useMemo(() => eventsByDateForMonth(filteredEvents, month), [filteredEvents, month])
+  const eventsByDate = React.useMemo(
+    () => eventsByDateForMonth(filteredEvents, month, sortLocale),
+    [filteredEvents, month, sortLocale]
+  )
 
   const promoOptions = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -185,7 +272,7 @@ export function MarketingIntegratedCalendarPanel({
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], "ko"))
   }, [rawEvents])
 
-  const { startPad, daysInMonth, y, m } = getBangkokMonthGridMeta(month)
+  const { startPad, daysInMonth } = getBangkokMonthGridMeta(month)
   const todayBangkok = getBangkokDateStr()
 
   const weeks: (number | null)[][] = []
@@ -203,7 +290,7 @@ export function MarketingIntegratedCalendarPanel({
     weeks.push(w)
   }
 
-  const monthLabel = `${y}년 ${m}월`
+  const monthLabel = formatMonthYearLabel(month, lang)
 
   const openDay = (ymd: string) => {
     setSelectedDay(ymd)
@@ -223,7 +310,7 @@ export function MarketingIntegratedCalendarPanel({
 
   const summaryCounts = React.useMemo(() => {
     const monthEvents = filteredEvents.filter((e) => e.date.startsWith(month))
-    const by = { campaign: 0, promo: 0, ad: 0, influencer: 0, material: 0 }
+    const by = { campaign: 0, promo: 0, ad: 0, influencer: 0, material: 0, collab: 0 }
     for (const e of monthEvents) {
       const L = layerOfEvent(e)
       by[L]++
@@ -234,28 +321,13 @@ export function MarketingIntegratedCalendarPanel({
   return (
     <div className="space-y-4">
       {compactHeader && (
-        <p className="text-sm text-muted-foreground">
-          캠페인·프로모션 세트·광고(ROAS)·인플루언서·홍보물 일정을 한눈에 보고, 매장·유형별로 좁혀 확인합니다. (시간 기준: 방콕)
-        </p>
+        <p className="text-sm text-muted-foreground">{t("marketingCalCompactHint")}</p>
       )}
       {!compactHeader && (
         <MarketingPageHero
           icon={CalendarDays}
-          title="통합 마케팅 캘린더"
-          description="캠페인·프로모션 세트·광고(ROAS)·인플루언서·홍보물 일정을 한 화면에서 필터링합니다. 매장·캠페인별로 좁혀 실적과 집행을 맞춰 보세요."
-          badge={
-            <Badge variant="secondary" className="font-normal">
-              방콕 기준
-            </Badge>
-          }
-          actions={
-            <Button variant="outline" size="sm" className="shrink-0 gap-1.5" asChild>
-              <Link href="/admin/marketing/report?tab=performance">
-                <Sparkles className="h-3.5 w-3.5" />
-                실적 대시보드
-              </Link>
-            </Button>
-          }
+          title={t("marketingCalHeroTitle")}
+          description={hideHeroDescription ? undefined : t("marketingCalHeroDescription")}
         />
       )}
 
@@ -264,10 +336,10 @@ export function MarketingIntegratedCalendarPanel({
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <Filter className="h-3.5 w-3.5" />
-              표시 유형
+              {t("marketingCalDisplayTypes")}
             </div>
             <div className="flex flex-wrap gap-2">
-              {CALENDAR_LAYER_OPTIONS.map((opt) => {
+              {layerOptions.map((opt) => {
                 const on = layers.has(opt.id)
                 return (
                   <button
@@ -288,15 +360,15 @@ export function MarketingIntegratedCalendarPanel({
               })}
             </div>
           </div>
-          <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:max-w-4xl">
+          <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:max-w-3xl">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">캠페인</label>
+              <label className="text-xs text-muted-foreground">{t("marketingPerformanceFilterCampaign")}</label>
               <Select value={campaignFilter || "__all__"} onValueChange={(v) => setCampaignFilter(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="h-9 bg-background">
-                  <SelectValue placeholder="전체" />
+                  <SelectValue placeholder={t("all")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">전체 캠페인</SelectItem>
+                  <SelectItem value="__all__">{t("marketingCalAllCampaigns")}</SelectItem>
                   {campaigns.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {campaignListLabel(c)}
@@ -306,13 +378,13 @@ export function MarketingIntegratedCalendarPanel({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">매장</label>
+              <label className="text-xs text-muted-foreground">{t("marketingPerformanceStore")}</label>
               <Select value={storeFilter || "__all__"} onValueChange={(v) => setStoreFilter(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="h-9 bg-background">
-                  <SelectValue placeholder="전체 매장" />
+                  <SelectValue placeholder={t("marketingPerformanceAllStores")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">전체 매장</SelectItem>
+                  <SelectItem value="__all__">{t("marketingPerformanceAllStores")}</SelectItem>
                   {storeList.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
@@ -322,23 +394,7 @@ export function MarketingIntegratedCalendarPanel({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">프로모션 세트</label>
-              <Select value={promoFilter || "__all__"} onValueChange={(v) => setPromoFilter(v === "__all__" ? "" : v)}>
-                <SelectTrigger className="h-9 bg-background">
-                  <SelectValue placeholder="전체" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">전체 프로모션</SelectItem>
-                  {promoOptions.map(([id, label]) => (
-                    <SelectItem key={id} value={id}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">대상 월</label>
+              <label className="text-xs text-muted-foreground">{t("marketingCalLabelTargetMonth")}</label>
               <input
                 type="month"
                 value={month}
@@ -353,18 +409,24 @@ export function MarketingIntegratedCalendarPanel({
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
             <span className="inline-flex items-center gap-1 font-medium text-foreground">
               <LayoutGrid className="h-3.5 w-3.5" />
-              {monthLabel} 일정 {summaryCounts.total}건
+              {monthLabel} {t("marketingCalWordSchedule")} {summaryCounts.total}
+              {t("marketingCountUnit")}
             </span>
             <Separator orientation="vertical" className="hidden h-4 sm:inline-flex" />
             <span>
-              캠페인 {summaryCounts.by.campaign} · 프로모션 {summaryCounts.by.promo} · 광고 {summaryCounts.by.ad} · 인플{" "}
-              {summaryCounts.by.influencer} · 홍보물 {summaryCounts.by.material}
+              {t("marketingCalSummaryBreakdown")
+                .replace("{c}", String(summaryCounts.by.campaign))
+                .replace("{p}", String(summaryCounts.by.promo))
+                .replace("{a}", String(summaryCounts.by.ad))
+                .replace("{i}", String(summaryCounts.by.influencer))
+                .replace("{m}", String(summaryCounts.by.material))
+                .replace("{b}", String(summaryCounts.by.collab))}
             </span>
           </div>
           {storeFilter && (
             <span className="inline-flex items-center gap-1 rounded-md bg-background px-2 py-0.5 text-[11px]">
               <Store className="h-3 w-3" />
-              매장 필터: {storeFilter}
+              {t("marketingCalStoreFilterPrefix")} {storeFilter}
             </span>
           )}
         </div>
@@ -378,20 +440,22 @@ export function MarketingIntegratedCalendarPanel({
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button type="button" variant="ghost" size="sm" className="ml-1 text-xs" onClick={() => setMonth(getBangkokDateStr().slice(0, 7))}>
-              이번 달
+              {t("marketingCalThisMonth")}
             </Button>
           </div>
           <p className="text-sm font-medium">{monthLabel}</p>
         </div>
 
-        {loading && <div className="py-16 text-center text-sm text-muted-foreground">불러오는 중…</div>}
+        {loading && <div className="py-16 text-center text-sm text-muted-foreground">{t("loading")}</div>}
         {loadError && (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">일정을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</div>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {t("marketingCalLoadError")}
+          </div>
         )}
         {!loading && !loadError && (
           <div className="mt-3 overflow-hidden rounded-xl border bg-background shadow-inner">
             <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+              {weekDayLabels.map((d, i) => (
                 <div key={d} className={cn("py-2.5", i === 0 && "text-rose-600/90", i === 6 && "text-blue-600/90")}>
                   {d}
                 </div>
@@ -452,7 +516,7 @@ export function MarketingIntegratedCalendarPanel({
                                   onClick={() => openDay(ymd)}
                                   className="w-full rounded bg-muted/80 px-1 py-0.5 text-[10px] font-medium text-primary hover:underline"
                                 >
-                                  +{dayEvents.length - 3} 더보기
+                                  {t("marketingCalMoreExtra").replace("{n}", String(dayEvents.length - 3))}
                                 </button>
                               )}
                             </div>
@@ -470,8 +534,8 @@ export function MarketingIntegratedCalendarPanel({
         )}
 
         <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">범례</span>
-          {CALENDAR_LAYER_OPTIONS.map((opt) => (
+          <span className="font-medium text-foreground">{t("marketingCalLegend")}</span>
+          {layerOptions.map((opt) => (
             <span key={opt.id} className="inline-flex items-center gap-1.5">
               <span className={cn("h-2.5 w-2.5 rounded-sm border", LAYER_CHIP[opt.id])} />
               {opt.label}
@@ -484,9 +548,9 @@ export function MarketingIntegratedCalendarPanel({
         <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
           <SheetHeader>
             <SheetTitle className="text-left">
-              {selectedDay ? selectedDay.replace(/-/g, ". ") : ""}
+              {selectedDay ? formatSheetDayTitle(selectedDay, lang) : ""}
             </SheetTitle>
-            <p className="text-left text-xs text-muted-foreground">선택한 날짜의 필터 적용 일정입니다.</p>
+            <p className="text-left text-xs text-muted-foreground">{t("marketingCalSheetDayHint")}</p>
           </SheetHeader>
           <ScrollArea className="mt-4 flex-1 pr-3">
             {selectedDay && (
@@ -495,7 +559,7 @@ export function MarketingIntegratedCalendarPanel({
                   <li key={ev.id} className="rounded-xl border bg-muted/20 p-3">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className={cn("text-[10px]", LAYER_CHIP[layerOfEvent(ev)])}>
-                        {CALENDAR_LAYER_OPTIONS.find((o) => o.id === layerOfEvent(ev))?.label}
+                        {layerOptions.find((o) => o.id === layerOfEvent(ev))?.label}
                       </Badge>
                       {(ev.campaignNo || ev.campaignId) && (
                         <span className="font-mono text-[10px] text-muted-foreground">{ev.campaignNo || ev.campaignId}</span>
@@ -503,18 +567,28 @@ export function MarketingIntegratedCalendarPanel({
                     </div>
                     <p className="text-sm font-medium leading-snug">{ev.label}</p>
                     {ev.meta && <p className="mt-1 text-xs text-muted-foreground">{ev.meta}</p>}
-                    {ev.campaignId && (
+                    {ev.campaignId && layerOfEvent(ev) === "collab" && (
+                      <Link
+                        href={`/admin/marketing/collab-menus?campaignId=${encodeURIComponent(ev.campaignId)}`}
+                        className="mt-2 inline-block text-xs text-primary hover:underline"
+                      >
+                        {t("marketingCalGoCollabHub")}
+                      </Link>
+                    )}
+                    {ev.campaignId && layerOfEvent(ev) !== "collab" && (
                       <Link
                         href={`/admin/marketing/campaigns?openCampaign=${encodeURIComponent(ev.campaignId)}`}
                         className="mt-2 inline-block text-xs text-primary hover:underline"
                       >
-                        캠페인 허브로 이동
+                        {t("marketingCalGoCampaignHub")}
                       </Link>
                     )}
                   </li>
                 ))}
                 {(eventsByDate[selectedDay] || []).length === 0 && (
-                  <li className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">이 날짜에 표시할 일정이 없습니다.</li>
+                  <li className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                    {t("marketingCalEmptyDay")}
+                  </li>
                 )}
               </ul>
             )}

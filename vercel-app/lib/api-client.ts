@@ -4,6 +4,7 @@
  * 쓰기 API는 apiFetchWithOffline 사용 → 네트워크 실패 시 큐 적재, 복구 후 자동 전송
  */
 import type { MarketingCollabDetail } from './marketing-collab-detail'
+import type { MarketingCampaignPhasePeriod } from './marketing-campaign-periods'
 import { apiFetch } from './api/fetch'
 import { apiFetchWithOffline } from './api/fetch-offline'
 import {
@@ -24,6 +25,8 @@ import {
   getLoginDataWithCache,
   invalidateAppDataCache as invalidateAppDataCacheOffline,
 } from './offline/erp-offline'
+import { fetchPosCatalogCached } from './offline/pos-catalog-offline'
+import { readAutoTranslateEnabled } from './auto-translate'
 
 export { apiFetch } from './api/fetch'
 export { apiFetchWithOffline }
@@ -31,6 +34,7 @@ export { loginCheck, changePassword } from './api/auth'
 export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
 export { invalidateBankTransactionsListCache, invalidatePurchaseOrdersListCache } from './offline/erp-offline'
+export type { MarketingCampaignPhasePeriod } from './marketing-campaign-periods'
 
 /** 페이지네이션 목록 API 공통 응답 */
 export interface PaginatedList<T> {
@@ -1318,6 +1322,7 @@ export async function getPettyCashMonthDetail(params: {
 export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim())
   if (filtered.length === 0) return []
+  if (!readAutoTranslateEnabled()) return filtered
   const res = await apiFetchWithOffline('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1632,6 +1637,15 @@ export interface IncomeStatementData {
     warnings: string[]
     limits: Record<string, { fetched: number; limit: number; total?: number }>
   }
+  expenseByAccountSubject?: {
+    accountSubjectId: number | null
+    code: string
+    name: string
+    nameEn: string | null
+    nameTh: string | null
+    amount: number
+  }[]
+  purchaseByVendor?: { key: string; amount: number }[]
   grossProfit: number
   netProfit: number
   error?: string
@@ -3704,8 +3718,7 @@ export interface PosMenuOption {
 }
 
 export async function getPosMenus() {
-  const res = await apiFetchWithOffline('/api/getPosMenus')
-  return res.json() as Promise<PosMenu[]>
+  return fetchPosCatalogCached<PosMenu[]>('erp:posCatalog:menus', '/api/getPosMenus', [])
 }
 
 export async function getNextPosMenuCode(mainCategory: string) {
@@ -3715,8 +3728,11 @@ export async function getNextPosMenuCode(mainCategory: string) {
 }
 
 export async function getPosMenuCategories() {
-  const res = await apiFetchWithOffline('/api/getPosMenuCategories')
-  return res.json() as Promise<{ categories: string[]; mainCategories: string[] }>
+  return fetchPosCatalogCached<{ categories: string[]; mainCategories: string[] }>(
+    'erp:posCatalog:categories',
+    '/api/getPosMenuCategories',
+    { categories: [], mainCategories: [] }
+  )
 }
 
 export interface PosMenuCategoriesConfig {
@@ -3758,32 +3774,61 @@ export async function savePosMenuCategoriesConfig(params: {
 export async function getPosMenuOptions(params?: { menuId?: string }) {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)
-  const res = await apiFetchWithOffline('/api/getPosMenuOptions?' + q.toString())
-  return res.json() as Promise<PosMenuOption[]>
+  const qs = q.toString()
+  const url = '/api/getPosMenuOptions' + (qs ? `?${qs}` : '')
+  const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}`
+  return fetchPosCatalogCached<PosMenuOption[]>(cacheKey, url, [])
 }
 
-export async function savePosMenuOption(params: {
-  id?: string
-  menuId: number
-  name: string
-  priceModifier?: number
-  priceModifierDelivery?: number | null
-  priceModifierPackaging?: number | null
-  sortOrder?: number
-  optionType?: 'substitution' | 'additive'
-  itemCode?: string | null
-  additiveSourceMenuId?: number | null
-  quantity?: number
-  optionStepValues?: Record<string, string> | null
-  sellHall?: boolean
-  sellDelivery?: boolean
-  sellPackaging?: boolean
-}) {
-  const res = await apiFetchWithOffline('/api/savePosMenuOption', {
+/** 오프라인 큐의 가짜 성공(JSON)과 구분 — 관리자 원가 분석 등 “즉시 반영”이 필요한 저장용 */
+async function parsePosMutationResponse(res: Response): Promise<{ success: boolean; message?: string }> {
+  const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `요청 실패 (${res.status})`)
+  }
+  if (res.headers.get('X-Offline-Queued') === '1') {
+    throw new Error(
+      data?.message ||
+        '네트워크 오류로 서버에 저장되지 않았습니다. 연결을 확인한 뒤 다시 시도하세요.'
+    )
+  }
+  if (data.success === false) {
+    throw new Error(data.message || '저장에 실패했습니다.')
+  }
+  return data as { success: boolean; message?: string }
+}
+
+export async function savePosMenuOption(
+  params: {
+    id?: string
+    menuId: number
+    name: string
+    priceModifier?: number
+    priceModifierDelivery?: number | null
+    priceModifierPackaging?: number | null
+    sortOrder?: number
+    optionType?: 'substitution' | 'additive'
+    itemCode?: string | null
+    additiveSourceMenuId?: number | null
+    quantity?: number
+    optionStepValues?: Record<string, string> | null
+    sellHall?: boolean
+    sellDelivery?: boolean
+    sellPackaging?: boolean
+  },
+  opts?: { requireOnline?: boolean }
+) {
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
-  })
+  }
+  const res = opts?.requireOnline
+    ? await apiFetch('/api/savePosMenuOption', init)
+    : await apiFetchWithOffline('/api/savePosMenuOption', init)
+  if (opts?.requireOnline) {
+    return parsePosMutationResponse(res)
+  }
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
@@ -3797,28 +3842,45 @@ export interface PosMenuIngredient {
   optionId?: string | null
 }
 
-export async function getPosMenuIngredients(params: { menuId: string; optionId?: string }) {
+export async function getPosMenuIngredients(
+  params: { menuId: string; optionId?: string },
+  opts?: { requireOnline?: boolean }
+) {
   const q = new URLSearchParams()
   q.set('menuId', params.menuId)
   if (params.optionId !== undefined) q.set('optionId', params.optionId)
-  const res = await apiFetchWithOffline('/api/getPosMenuIngredients?' + q.toString())
+  const url = '/api/getPosMenuIngredients?' + q.toString()
+  const res = opts?.requireOnline ? await apiFetch(url) : await apiFetchWithOffline(url)
+  if (opts?.requireOnline && !res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { message?: string }
+    throw new Error(err.message || `재료 조회 실패 (${res.status})`)
+  }
   return res.json() as Promise<PosMenuIngredient[]>
 }
 
-export async function savePosMenuIngredient(params: {
-  id?: string
-  menuId: number
-  itemCode: string
-  quantity?: number
-  lossRate?: number
-  optionId?: number | null
-  ingredientType?: 'food' | 'packaging'
-}) {
-  const res = await apiFetchWithOffline('/api/savePosMenuIngredient', {
+export async function savePosMenuIngredient(
+  params: {
+    id?: string
+    menuId: number
+    itemCode: string
+    quantity?: number
+    lossRate?: number
+    optionId?: number | null
+    ingredientType?: 'food' | 'packaging'
+  },
+  opts?: { requireOnline?: boolean }
+) {
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
-  })
+  }
+  const res = opts?.requireOnline
+    ? await apiFetch('/api/savePosMenuIngredient', init)
+    : await apiFetchWithOffline('/api/savePosMenuIngredient', init)
+  if (opts?.requireOnline) {
+    return parsePosMutationResponse(res)
+  }
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
@@ -4033,12 +4095,21 @@ export async function updateCostSettings(params: { globalOverheadPercent?: numbe
   return data
 }
 
-export async function deletePosMenuIngredient(params: { id: string }) {
-  const res = await apiFetchWithOffline('/api/deletePosMenuIngredient', {
+export async function deletePosMenuIngredient(
+  params: { id: string },
+  opts?: { requireOnline?: boolean }
+) {
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
-  })
+  }
+  const res = opts?.requireOnline
+    ? await apiFetch('/api/deletePosMenuIngredient', init)
+    : await apiFetchWithOffline('/api/deletePosMenuIngredient', init)
+  if (opts?.requireOnline) {
+    return parsePosMutationResponse(res)
+  }
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
@@ -4051,28 +4122,37 @@ export async function deletePosMenuOption(params: { id: string }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function savePosMenu(params: {
-  id?: string
-  code: string
-  name: string
-  category?: string
-  categoryMain?: string
-  price?: number
-  priceDelivery?: number | null
-  imageUrl?: string
-  vatIncluded?: boolean
-  isActive?: boolean
-  sortOrder?: number
-  optionSelectionGroups?: string[]
-  kitchenPrinter?: number | null
-  cookingTimeMin?: number | null
-  isBanban?: boolean
-}) {
-  const res = await apiFetchWithOffline('/api/savePosMenu', {
+export async function savePosMenu(
+  params: {
+    id?: string
+    code: string
+    name: string
+    category?: string
+    categoryMain?: string
+    price?: number
+    priceDelivery?: number | null
+    imageUrl?: string
+    vatIncluded?: boolean
+    isActive?: boolean
+    sortOrder?: number
+    optionSelectionGroups?: string[]
+    kitchenPrinter?: number | null
+    cookingTimeMin?: number | null
+    isBanban?: boolean
+  },
+  opts?: { requireOnline?: boolean }
+) {
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
-  })
+  }
+  const res = opts?.requireOnline
+    ? await apiFetch('/api/savePosMenu', init)
+    : await apiFetchWithOffline('/api/savePosMenu', init)
+  if (opts?.requireOnline) {
+    return parsePosMutationResponse(res)
+  }
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
@@ -4224,8 +4304,10 @@ export async function getPosPromosWithItems(params?: { campaignId?: string; incl
   const q = new URLSearchParams()
   if (params?.campaignId) q.set("campaignId", params.campaignId)
   if (params?.includeInactive) q.set("includeInactive", "true")
-  const res = await apiFetchWithOffline('/api/getPosPromosWithItems' + (q.toString() ? `?${q.toString()}` : ''))
-  return res.json() as Promise<PosPromoWithItems[]>
+  const qs = q.toString()
+  const url = '/api/getPosPromosWithItems' + (qs ? `?${qs}` : '')
+  const cacheKey = `erp:posCatalog:promos:${params?.campaignId?.trim() || ''}:${params?.includeInactive ? '1' : '0'}`
+  return fetchPosCatalogCached<PosPromoWithItems[]>(cacheKey, url, [])
 }
 
 export async function getPosPromoItems(params: { promoId: string }) {
@@ -4318,6 +4400,12 @@ export interface MarketingCampaign {
   status: string
   startDate?: string | null
   endDate?: string | null
+  /** 캠페인 디자인 작업 일정 */
+  designStartDate?: string | null
+  designEndDate?: string | null
+  designNote?: string
+  /** 차수별 기간(1차·2차·…) — DB phase_periods */
+  phasePeriods?: MarketingCampaignPhasePeriod[]
   branches: string[]
   kpiTarget: number
   kpiUnit: string
@@ -4329,6 +4417,8 @@ export interface MarketingCampaign {
   discountTargetAudience?: string
   /** 캠페인 편집에서 「협업 관리」목록 포함 여부 */
   collabManagement?: boolean
+  /** 목록 API에 포함(협업 관리 매장별 조회 등) */
+  collabDetail?: MarketingCollabDetail
 }
 
 export type { MarketingCollabDetail } from './marketing-collab-detail'
@@ -4393,6 +4483,9 @@ export async function saveMarketingCampaign(params: {
   detail?: string
   startDate?: string | null
   endDate?: string | null
+  designStartDate?: string | null
+  designEndDate?: string | null
+  designNote?: string
   branches?: string[]
   discountType?: string
   discountValue?: number
@@ -4411,6 +4504,7 @@ export async function saveMarketingCampaign(params: {
   campaignPerformance?: string
   conclusion?: string
   collabManagement?: boolean
+  phasePeriods?: MarketingCampaignPhasePeriod[]
 }) {
   const res = await apiFetchWithOffline('/api/marketingCampaigns', {
     method: 'POST',
@@ -4418,6 +4512,23 @@ export async function saveMarketingCampaign(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function saveMarketingCampaignDesignDates(params: {
+  campaignId: string
+  designStartDate?: string | null
+  designEndDate?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/marketingCampaignDesignDates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      campaignId: params.campaignId.trim(),
+      designStartDate: params.designStartDate ?? null,
+      designEndDate: params.designEndDate ?? null,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function deleteMarketingCampaign(params: { id: string }) {
@@ -4875,6 +4986,8 @@ export interface MarketingAd {
   contentFormat: string
   contentPillar: string
   contentTopic: string
+  /** 상세 메모 (marketing_ads.content_detail) */
+  contentDetail?: string
   publishDate: string | null
   /** 집행·노출 종료일 (marketing_ads.period_end_date, 마이그레이션 전에는 null) */
   periodEndDate?: string | null
@@ -4898,6 +5011,7 @@ export async function saveMarketingAd(params: {
   contentFormat?: string
   contentPillar?: string
   contentTopic?: string
+  contentDetail?: string
   publishDate?: string | null
   periodEndDate?: string | null
   platform: string
@@ -4930,11 +5044,28 @@ export async function deleteMarketingAd(params: { id: string }) {
 }
 
 // ─── 마케팅 인플루언서 ───
+/** 저장 시점 POS 메뉴 가격 스냅샷 */
+export interface InfluencerProvidedMenuSnapshot {
+  id: string
+  code: string
+  name: string
+  price: number
+  /** 제공 수량 */
+  quantity: number
+  /** 대분류(검색·표시용, POS categoryMain·category) */
+  categoryMain?: string
+}
+
 export interface MarketingInfluencer {
   id: string
   campaignId: string | null
   campaignNo?: string | null
+  /** SNS 계정·필명 등 ID 성격 */
   name: string
+  /** 실명 등 (풀·연락용) */
+  contactName?: string
+  contactPhone?: string
+  providedMenus?: InfluencerProvidedMenuSnapshot[]
   followers: string
   contentFormat: string
   contentTopic: string
@@ -4962,6 +5093,9 @@ export async function saveMarketingInfluencer(params: {
   id?: string
   campaignId?: string | null
   name: string
+  contactName?: string
+  contactPhone?: string
+  providedMenus?: InfluencerProvidedMenuSnapshot[]
   followers?: string
   contentFormat?: string
   contentTopic?: string
@@ -5019,6 +5153,20 @@ export interface MarketingMaterial {
   expenseAccrualId?: string | null
 }
 
+export interface MarketingMaterialDeployment {
+  id: string
+  materialId: string
+  campaignId: string | null
+  storeName: string
+  placementSpot: string
+  materialType: string | null
+  installedOn: string | null
+  removedOn: string | null
+  note: string
+  updatedAt: string | null
+  isActive: boolean
+}
+
 export async function getMarketingMaterials(params?: { campaignId?: string }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
@@ -5055,6 +5203,49 @@ export async function saveMarketingMaterial(params: {
     id?: string
     expenseSyncMessage?: string
   }>
+}
+
+export async function getMarketingMaterialDeployments(params?: {
+  campaignId?: string
+  materialId?: string
+  store?: string
+  activeOnly?: boolean
+}) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set('campaignId', params.campaignId)
+  if (params?.materialId) q.set('materialId', params.materialId)
+  if (params?.store) q.set('store', params.store)
+  if (params?.activeOnly) q.set('activeOnly', '1')
+  const res = await apiFetchWithOffline('/api/marketingMaterialDeployments' + (q.toString() ? '?' + q.toString() : ''))
+  return apiJsonArrayResponse<MarketingMaterialDeployment>(res)
+}
+
+export async function saveMarketingMaterialDeployment(params: {
+  id?: string
+  materialId: string
+  campaignId?: string | null
+  storeName: string
+  placementSpot: string
+  materialType?: string | null
+  installedOn: string
+  removedOn?: string | null
+  note?: string
+}) {
+  const res = await apiFetchWithOffline('/api/marketingMaterialDeployments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function deleteMarketingMaterialDeployment(params: { id: string }) {
+  const res = await apiFetchWithOffline('/api/deleteMarketingMaterialDeployment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function deleteMarketingMaterial(params: { id: string }) {
@@ -5210,8 +5401,14 @@ export interface PosTableItem {
 export async function getPosTableLayout(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
-  const res = await apiFetchWithOffline('/api/getPosTableLayout?' + q.toString())
-  return res.json() as Promise<{ layout: PosTableItem[]; storeCode: string; isFallback?: boolean }>
+  const url = '/api/getPosTableLayout?' + q.toString()
+  const cacheKey = `erp:posTableLayout:${params.storeCode.trim()}`
+  const empty = { layout: [] as PosTableItem[], storeCode: params.storeCode }
+  return fetchPosCatalogCached<{ layout: PosTableItem[]; storeCode: string; isFallback?: boolean }>(
+    cacheKey,
+    url,
+    empty
+  )
 }
 
 export interface PosPrinterSettings {
@@ -5266,6 +5463,16 @@ export interface PosPrinterSettings {
   receiptShowPaidStamp?: boolean
   receiptShowThankYou?: boolean
   receiptShowCustomerCopy?: boolean
+  receiptFooterPrimaryText?: string
+  receiptFooterSecondaryText?: string
+  receiptLogoImageUrl?: string
+  receiptStampImageUrl?: string
+  receiptShowStamp?: boolean
+  receiptStampOnlyTaxInvoice?: boolean
+  receiptMembershipQrImageUrl?: string
+  receiptMembershipQrLinkUrl?: string
+  receiptMembershipQrText?: string
+  receiptShowMembershipQr?: boolean
   receiptPrintLang?: string
   /** 주방 주문서 글자 크기 */
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
@@ -5291,8 +5498,15 @@ export interface PosPrinterSettings {
 export async function getPosPrinterSettings(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
-  const res = await apiFetchWithOffline('/api/getPosPrinterSettings?' + q.toString())
-  return res.json() as Promise<PosPrinterSettings>
+  const url = '/api/getPosPrinterSettings?' + q.toString()
+  const cacheKey = `erp:posPrinterSettings:${params.storeCode.trim()}`
+  const fallback: PosPrinterSettings = {
+    storeCode: params.storeCode,
+    kitchenMode: 1,
+    kitchen1Categories: [],
+    kitchen2Categories: [],
+  }
+  return fetchPosCatalogCached<PosPrinterSettings>(cacheKey, url, fallback)
 }
 
 export async function savePosPrinterSettings(params: {
@@ -5346,6 +5560,16 @@ export async function savePosPrinterSettings(params: {
   receiptShowPaidStamp?: boolean
   receiptShowThankYou?: boolean
   receiptShowCustomerCopy?: boolean
+  receiptFooterPrimaryText?: string
+  receiptFooterSecondaryText?: string
+  receiptLogoImageUrl?: string
+  receiptStampImageUrl?: string
+  receiptShowStamp?: boolean
+  receiptStampOnlyTaxInvoice?: boolean
+  receiptMembershipQrImageUrl?: string
+  receiptMembershipQrLinkUrl?: string
+  receiptMembershipQrText?: string
+  receiptShowMembershipQr?: boolean
   receiptPrintLang?: string
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
@@ -5365,7 +5589,27 @@ export async function savePosPrinterSettings(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const queued = res.headers.get('X-Offline-Queued') === '1'
+  const text = await res.text()
+  let data: { success?: boolean; message?: string } = {}
+  try {
+    if (text) data = JSON.parse(text) as { success?: boolean; message?: string }
+  } catch {
+    return {
+      success: false,
+      message: text ? text.slice(0, 240) : `HTTP ${res.status}`,
+      queued,
+    }
+  }
+  if (queued) return { success: true, queued: true }
+  if (!res.ok) {
+    return { success: false, message: data.message || `HTTP ${res.status}`, queued: false }
+  }
+  return {
+    success: data.success !== false,
+    message: data.message,
+    queued: false,
+  }
 }
 
 export async function clearPosMainDevice(params: { storeCode: string; deviceToken?: string }) {
@@ -5465,8 +5709,10 @@ export async function getPosDeliveryApps(params?: { storeCode?: string; includeD
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.includeDisabled) q.set('includeDisabled', 'true')
-  const res = await apiFetchWithOffline('/api/getPosDeliveryApps?' + q.toString())
-  return res.json() as Promise<PosDeliveryApp[]>
+  const qs = q.toString()
+  const url = '/api/getPosDeliveryApps' + (qs ? `?${qs}` : '')
+  const cacheKey = `erp:posDeliveryApps:${params?.storeCode?.trim() || ''}:${params?.includeDisabled ? '1' : '0'}`
+  return fetchPosCatalogCached<PosDeliveryApp[]>(cacheKey, url, [])
 }
 
 export async function savePosDeliveryApps(params: {
@@ -5505,8 +5751,20 @@ export interface PosMenuScreenConfig {
 export async function getPosMenuScreenConfig(params?: { storeCode?: string }) {
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
-  const res = await apiFetchWithOffline('/api/getPosMenuScreenConfig?' + q.toString())
-  return res.json() as Promise<PosMenuScreenConfig>
+  const qs = q.toString()
+  const url = '/api/getPosMenuScreenConfig' + (qs ? `?${qs}` : '')
+  const cacheKey = `erp:posMenuScreenConfig:${params?.storeCode?.trim() || 'default'}`
+  const fallback: PosMenuScreenConfig = {
+    storeCode: params?.storeCode?.trim() || null,
+    mainCategoryFontSize: 18,
+    categoryFontSize: 15,
+    menuTileFontSize: 13,
+    menuTileCols: 4,
+    menuListFontSize: 14,
+    menuListPageSize: 8,
+    kioskGroupFontSize: 16,
+  }
+  return fetchPosCatalogCached<PosMenuScreenConfig>(cacheKey, url, fallback)
 }
 
 export async function savePosMenuScreenConfig(params: {
@@ -5607,8 +5865,10 @@ export interface PosPaymentMethodItem {
 export async function getPosPaymentMethodItems(params: { storeCode?: string }) {
   const q = new URLSearchParams()
   if (params.storeCode?.trim()) q.set('storeCode', params.storeCode.trim())
-  const res = await apiFetchWithOffline('/api/getPosPaymentMethodItems?' + q.toString())
-  return res.json() as Promise<PosPaymentMethodItem[]>
+  const qs = q.toString()
+  const url = '/api/getPosPaymentMethodItems' + (qs ? `?${qs}` : '')
+  const cacheKey = `erp:posPaymentMethodItems:${params.storeCode?.trim() || 'default'}`
+  return fetchPosCatalogCached<PosPaymentMethodItem[]>(cacheKey, url, [])
 }
 
 export async function savePosPaymentMethodItem(params: {
@@ -5712,13 +5972,21 @@ export async function getPosTodaySales(params?: {
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
-  const res = await apiFetchWithOffline('/api/getPosTodaySales?' + q.toString())
-  return res.json() as Promise<{
+  const qs = q.toString()
+  const url = '/api/getPosTodaySales' + (qs ? `?${qs}` : '')
+  const cacheKey = `erp:posTodaySales:${params?.storeCode?.trim() || ''}:${params?.startStr?.trim() || ''}:${params?.endStr?.trim() || ''}`
+  const fallback = {
+    completedCount: 0,
+    completedTotal: 0,
+    completedCash: 0,
+    pendingCount: 0,
+  }
+  return fetchPosCatalogCached<{
     completedCount: number
     completedTotal: number
     completedCash: number
     pendingCount: number
-  }>
+  }>(cacheKey, url, fallback)
 }
 
 export async function getPosOrders(params?: {
@@ -6254,10 +6522,10 @@ export async function getMembers(params?: { q?: string; limit?: number }) {
   if (params?.q) q.set('q', params.q)
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()
-  const res = await apiFetchWithOffline('/api/members' + (suffix ? `?${suffix}` : ''))
-  const json = await res.json().catch(() => [])
-  if (!Array.isArray(json)) return []
-  return json as Member[]
+  const url = '/api/members' + (suffix ? `?${suffix}` : '')
+  const cacheKey = `erp:posMembers:${params?.q?.trim() || ''}:${params?.limit ?? 'default'}`
+  const list = await fetchPosCatalogCached<unknown>(cacheKey, url, [])
+  return Array.isArray(list) ? (list as Member[]) : []
 }
 
 export async function createMember(params: {
@@ -7388,6 +7656,53 @@ export interface HeadOfficeInfo {
 export async function getHeadOfficeInfo() {
   const res = await apiFetchWithOffline('/api/getHeadOfficeInfo')
   return res.json() as Promise<HeadOfficeInfo>
+}
+
+/** Vercel 서버의 Supabase 조회 상한(설정 화면 표시용, 비밀값 없음) */
+export interface AdminRouteLimitResolved {
+  path: string
+  line: number
+  kind: string
+  value: number
+  apiLabel: string
+  effectiveValue: number | null
+  effectiveDisplay: string
+}
+
+export interface AdminTableUsageRow {
+  table: string
+  rowCount: number | null
+  error?: string
+  capFromPaging: number
+  defaultMaxRows: number
+  exceedsPagingCap: boolean
+  exceedsDefaultMaxRows: boolean
+}
+
+export interface AdminDataLimits {
+  selectPageCap: number
+  envSupabaseSelectPageSizeMax: string | null
+  selectAllPagesMaxPages: number
+  selectAllPagesDefaultMaxRows: number
+  selectFilterAllPagesMaxPages: number
+  selectFilterAllPagesMaxRowsCeiling: number
+  selectFilterAllPagesMinStride: number
+  fetchedAt: string
+  /** scripts/extract-api-limits.mjs 생성 시각 (UTC) */
+  limitsExtractedAt: string
+  /** 코드에서 추출한 limit/pageSize/maxRows/maxDuration 지점 수 */
+  limitsExtractedCount: number
+  routeLimits: AdminRouteLimitResolved[]
+  tableUsage: AdminTableUsageRow[]
+}
+
+export async function getAdminDataLimits(): Promise<AdminDataLimits> {
+  const res = await apiFetch('/api/getAdminDataLimits')
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(t || `getAdminDataLimits ${res.status}`)
+  }
+  return res.json() as Promise<AdminDataLimits>
 }
 
 export async function saveHeadOfficeInfo(data: HeadOfficeInfo) {

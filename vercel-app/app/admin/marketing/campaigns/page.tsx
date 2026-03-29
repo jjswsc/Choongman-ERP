@@ -6,10 +6,11 @@ import {
   Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy,
   Users, Package, BarChart2, ExternalLink, Loader2, CheckCheck, X,
   List, ClipboardPen, Search, Tag, TrendingUp, ChevronDown, ChevronUp,
-  GitCompare, Handshake,
+  GitCompare, Handshake, Filter,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useLang } from "@/lib/lang-context"
@@ -45,9 +46,35 @@ import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import {
+  defaultMarketingMaterialTypeOptions,
+  loadMarketingMaterialTypeOptions,
+  materialTypeSelectOptions,
+  resolveMaterialTypeLabel,
+  type MarketingMaterialTypeOption,
+} from "@/lib/marketing-material-type-options"
+import {
+  defaultMarketingMaterialPlacementOptions,
+  loadMarketingMaterialPlacementOptions,
+  resolvePlacementLabel,
+  type MarketingMaterialPlacementOption,
+} from "@/lib/marketing-material-placement-options"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { buildMarketingCampaignHubLinkSetsFromRows } from "@/lib/marketing-campaign-hub-link-data"
+import {
+  applyMarketingCampaignListFilters,
+  marketingCampaignListFiltersActive,
+  type CampaignListSearchScope,
+} from "@/lib/marketing-campaign-list-query"
+import {
+  CAMPAIGN_TYPE_OPTIONS,
+  KPI_UNIT_OPTIONS,
+  getCampaignTypeLabel,
+  toCampaignTypeFormState,
+  toCampaignTypeStorageValue,
+} from "@/lib/marketing-campaign-type-utils"
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 const DEFAULT_DELIVERY_APPS = ["그랩", "라인맨", "쇼피", "기타"]
@@ -101,19 +128,6 @@ const STATUS_OPTIONS = [
   { value: "finish", label: "완료" },
 ]
 
-const CAMPAIGN_TYPE_OPTIONS = [
-  { value: "menu_discount", ko: "메뉴 할인 캠페인", en: "Menu Discount", th: "แคมเปญส่วนลดเมนู" },
-  { value: "new_menu_launch", ko: "신메뉴 런칭", en: "New Menu Launch", th: "เปิดตัวเมนูใหม่" },
-  { value: "membership_crm", ko: "멤버십/재방문 유도", en: "Membership/CRM", th: "สมาชิก/กระตุ้นการกลับมาซื้อ" },
-  { value: "delivery_activation", ko: "배달 채널 활성화", en: "Delivery Activation", th: "กระตุ้นช่องทางเดลิเวอรี" },
-  { value: "collab_marketing", ko: "협업 마케팅", en: "Collab Marketing", th: "การตลาดร่วมมือ" },
-  { value: "brand_promo", ko: "브랜드 홍보 캠페인", en: "Brand Promotion", th: "แคมเปญโปรโมตแบรนด์" },
-  { value: "new_store", ko: "신규 매장 오픈 캠페인", en: "New Store Opening", th: "แคมเปญเปิดสาขาใหม่" },
-  { value: "seasonal", ko: "시즌/이벤트 캠페인", en: "Seasonal/Event", th: "แคมเปญตามฤดูกาล/อีเวนต์" },
-  { value: "other", ko: "기타", en: "Other", th: "อื่นๆ" },
-]
-const CAMPAIGN_TYPE_OTHER_PREFIX = "other:"
-
 type CostFieldKey = "costAdsOnline" | "costAdsOffline" | "costProduction" | "costFood" | "costInfluencer" | "costOther"
 
 const COST_FIELD_OPTIONS: { key: CostFieldKey; labelKey: string }[] = [
@@ -142,85 +156,11 @@ const buildCostFlags = (values: {
   costOther: Number(values.costOther) > 0 || String(values.costOtherLabel ?? "").trim().length > 0,
 })
 
-const normalizeCampaignTypeInput = (value: string) => value.trim().replace(/\s+/g, " ")
-
-const toCampaignTypeFormState = (raw: string | undefined | null) => {
-  const value = String(raw ?? "").trim()
-  if (!value) return { type: "menu_discount", custom: "" }
-  if (value.startsWith(CAMPAIGN_TYPE_OTHER_PREFIX)) {
-    return {
-      type: "other",
-      custom: normalizeCampaignTypeInput(value.slice(CAMPAIGN_TYPE_OTHER_PREFIX.length)),
-    }
-  }
-  const exists = CAMPAIGN_TYPE_OPTIONS.some((x) => x.value === value)
-  if (exists) return { type: value, custom: "" }
-  return { type: "other", custom: normalizeCampaignTypeInput(value) }
-}
-
-const toCampaignTypeStorageValue = (type: string, custom: string) => {
-  if (type !== "other") return type
-  const normalized = normalizeCampaignTypeInput(custom)
-  return normalized ? `${CAMPAIGN_TYPE_OTHER_PREFIX}${normalized}` : "other"
-}
-
-const getCampaignTypeLabel = (raw: string | undefined | null, lang: string) => {
-  const parsed = toCampaignTypeFormState(raw)
-  if (parsed.type === "other") {
-    if (parsed.custom) return parsed.custom
-    if (lang === "en") return "Other"
-    if (lang === "th") return "อื่นๆ"
-    return "기타"
-  }
-  const option = CAMPAIGN_TYPE_OPTIONS.find((x) => x.value === parsed.type)
-  if (!option) return String(raw ?? (lang === "en" ? "N/A" : lang === "th" ? "ไม่มีประเภท" : "유형없음"))
-  if (lang === "en") return option.en
-  if (lang === "th") return option.th
-  return option.ko
-}
-
-const KPI_UNIT_OPTIONS = [
-  { value: "order", label: "주문" },
-  { value: "sales", label: "매출" },
-  { value: "customer", label: "고객수" },
-  { value: "new_customer", label: "신규고객" },
-  { value: "repeat_customer", label: "재방문고객" },
-  { value: "coupon", label: "쿠폰사용" },
-  { value: "member", label: "회원가입" },
-  { value: "impression", label: "노출수" },
-  { value: "reach", label: "도달수" },
-  { value: "click", label: "클릭수" },
-  { value: "ctr", label: "클릭률(CTR)" },
-  { value: "conversion", label: "전환수" },
-  { value: "cvr", label: "전환율(CVR)" },
-  { value: "roas", label: "ROAS" },
-  { value: "aov", label: "객단가(AOV)" },
-  { value: "followers", label: "팔로워증가" },
-  { value: "engagement", label: "참여수" },
-]
-
-const MATERIAL_TYPES = [
-  { value: "tentcard", label: "텐트카드" },
-  { value: "standee", label: "스탠디" },
-  { value: "coupon", label: "쿠폰/전단" },
-  { value: "flyer", label: "플라이어" },
-  { value: "banner", label: "배너" },
-  { value: "prop", label: "프롭" },
-  { value: "other", label: "기타" },
-]
-
 const MATERIAL_STATUSES = [
   { value: "planning", label: "계획중" },
   { value: "producing", label: "제작중" },
   { value: "completed", label: "완료" },
   { value: "distributed", label: "배포완료" },
-]
-
-const MATERIAL_PLACEMENT_SPOTS = [
-  { value: "counter", ko: "카운터", en: "Counter", th: "เคาน์เตอร์" },
-  { value: "tv", ko: "TV", en: "TV", th: "ทีวี" },
-  { value: "table", ko: "테이블", en: "Table", th: "โต๊ะ" },
-  { value: "entrance", ko: "입구", en: "Entrance", th: "ทางเข้า" },
 ]
 
 const MATERIAL_STATUS_COLORS: Record<string, string> = {
@@ -229,6 +169,8 @@ const MATERIAL_STATUS_COLORS: Record<string, string> = {
   completed: "bg-blue-100 text-blue-800",
   distributed: "bg-green-100 text-green-800",
 }
+
+type CampaignPhaseFormRow = { label: string; startDate: string; endDate: string }
 
 // ─── 기본값 ──────────────────────────────────────────────────────────────────
 const defaultForm = {
@@ -240,6 +182,10 @@ const defaultForm = {
   detail: "",
   startDate: "",
   endDate: "",
+  designStartDate: "",
+  designEndDate: "",
+  designNote: "",
+  phasePeriods: [] as CampaignPhaseFormRow[],
   branches: [] as string[],
   discountType: "percent",
   discountValue: "",
@@ -304,10 +250,17 @@ export default function MarketingCampaignsPage() {
   const t = useT(lang)
   const { auth } = useAuth()
   const { stores, loading: storesLoading } = useStoreList()
+  const [materialTypeOptions, setMaterialTypeOptions] = React.useState<MarketingMaterialTypeOption[]>(
+    defaultMarketingMaterialTypeOptions
+  )
+  const [placementOptions, setPlacementOptions] = React.useState<MarketingMaterialPlacementOption[]>(
+    defaultMarketingMaterialPlacementOptions
+  )
   const tr = React.useCallback((ko: string, en: string, th: string) => {
     if (lang === "en") return en
     if (lang === "th") return th
-    return ko
+    if (lang === "ko") return ko
+    return en
   }, [lang])
   const costLabel = React.useCallback((labelKey: string) => {
     switch (labelKey) {
@@ -379,18 +332,10 @@ export default function MarketingCampaignsPage() {
         return value
     }
   }, [tr])
-  const materialTypeLabel = React.useCallback((value: string) => {
-    switch (value) {
-      case "tentcard": return tr("텐트카드", "Tent Card", "เทนท์การ์ด")
-      case "standee": return tr("스탠디", "Standee", "สแตนดี้")
-      case "coupon": return tr("쿠폰/전단", "Coupon/Flyer", "คูปอง/ใบปลิว")
-      case "flyer": return tr("플라이어", "Flyer", "ใบปลิว")
-      case "banner": return tr("배너", "Banner", "แบนเนอร์")
-      case "prop": return tr("프롭", "Props", "พร็อพ")
-      case "other": return tr("기타", "Other", "อื่นๆ")
-      default: return value
-    }
-  }, [tr])
+  const materialTypeLabel = React.useCallback(
+    (value: string) => resolveMaterialTypeLabel(value, materialTypeOptions, tr),
+    [materialTypeOptions, tr]
+  )
   const materialStatusLabel = React.useCallback((value: string) => {
     switch (value) {
       case "planning": return tr("계획중", "Planning", "วางแผน")
@@ -400,13 +345,10 @@ export default function MarketingCampaignsPage() {
       default: return value
     }
   }, [tr])
-  const materialPlacementSpotLabel = React.useCallback((value: string) => {
-    const found = MATERIAL_PLACEMENT_SPOTS.find((x) => x.value === value)
-    if (!found) return value
-    if (lang === "en") return found.en
-    if (lang === "th") return found.th
-    return found.ko
-  }, [lang])
+  const materialPlacementSpotLabel = React.useCallback(
+    (value: string) => resolvePlacementLabel(value, placementOptions, tr),
+    [placementOptions, tr]
+  )
 
   // 캠페인 목록
   const [list, setList] = React.useState<MarketingCampaign[]>([])
@@ -444,6 +386,30 @@ export default function MarketingCampaignsPage() {
     return new URLSearchParams(window.location.search).get("view") === "compare" ? "compare" : "form"
   })
   const [listSearch, setListSearch] = React.useState("")
+  const [listSearchScope, setListSearchScope] = React.useState<CampaignListSearchScope>("all")
+  const [listFiltersOpen, setListFiltersOpen] = React.useState(false)
+  const [listPeriodFrom, setListPeriodFrom] = React.useState("")
+  const [listPeriodTo, setListPeriodTo] = React.useState("")
+  const [listDesignFrom, setListDesignFrom] = React.useState("")
+  const [listDesignTo, setListDesignTo] = React.useState("")
+  const [listCampaignTypeFilter, setListCampaignTypeFilter] = React.useState("")
+  const [listStatusDraft, setListStatusDraft] = React.useState(true)
+  const [listStatusOngoing, setListStatusOngoing] = React.useState(true)
+  const [listStatusFinish, setListStatusFinish] = React.useState(true)
+  const [listBranchFilter, setListBranchFilter] = React.useState("")
+  const [listHubLinkFilter, setListHubLinkFilter] = React.useState("")
+  const [hubLinkSets, setHubLinkSets] = React.useState({
+    promo: new Set<string>(),
+    ads: new Set<string>(),
+    influencer: new Set<string>(),
+    materials: new Set<string>(),
+  })
+  const [listBudgetMin, setListBudgetMin] = React.useState("")
+  const [listBudgetMax, setListBudgetMax] = React.useState("")
+  const [listKpiMin, setListKpiMin] = React.useState("")
+  const [listKpiMax, setListKpiMax] = React.useState("")
+  const [listKpiUnitFilter, setListKpiUnitFilter] = React.useState("")
+  const [listDiscountFilter, setListDiscountFilter] = React.useState<"any" | "none" | "percent" | "amount">("any")
 
   // 인플루언서 인라인
   const [linkedInfluencers, setLinkedInfluencers] = React.useState<MarketingInfluencer[]>([])
@@ -478,13 +444,60 @@ export default function MarketingCampaignsPage() {
   // ─── 데이터 로드 ────────────────────────────────────────────────────────────
   const loadList = React.useCallback(() => {
     setLoading(true)
-    getMarketingCampaigns()
-      .then(setList)
-      .catch(() => setList([]))
+    Promise.all([
+      getMarketingCampaigns(),
+      getPosPromos(),
+      getMarketingAds(),
+      getMarketingInfluencers(),
+      getMarketingMaterials(),
+    ])
+      .then(([campaigns, promos, ads, influencers, materials]) => {
+        setList(Array.isArray(campaigns) ? campaigns : [])
+        setHubLinkSets(
+          buildMarketingCampaignHubLinkSetsFromRows(
+            promos || [],
+            ads || [],
+            influencers || [],
+            materials || []
+          )
+        )
+      })
+      .catch(() => {
+        setList([])
+        setHubLinkSets({
+          promo: new Set(),
+          ads: new Set(),
+          influencer: new Set(),
+          materials: new Set(),
+        })
+      })
       .finally(() => setLoading(false))
   }, [])
 
   React.useEffect(() => { loadList() }, [loadList])
+
+  React.useEffect(() => {
+    setMaterialTypeOptions(loadMarketingMaterialTypeOptions())
+  }, [])
+
+  React.useEffect(() => {
+    setPlacementOptions(loadMarketingMaterialPlacementOptions())
+  }, [])
+
+  React.useEffect(() => {
+    setMatForm((f) => {
+      if (materialTypeOptions.some((o) => o.value === f.type)) return f
+      return { ...f, type: materialTypeOptions[0]?.value ?? "tentcard" }
+    })
+  }, [materialTypeOptions])
+
+  React.useEffect(() => {
+    const vals = new Set(placementOptions.map((o) => o.value))
+    setMatForm((f) => ({
+      ...f,
+      placementSpots: f.placementSpots.filter((s) => vals.has(s)),
+    }))
+  }, [placementOptions])
 
   const openCampaignId = searchParams.get("openCampaign")?.trim()
   const openTab = searchParams.get("tab") as "influencers" | "materials" | "results" | null
@@ -587,6 +600,16 @@ export default function MarketingCampaignsPage() {
           detail: c.detail ?? "",
           startDate: c.startDate ?? "",
           endDate: c.endDate ?? "",
+          designStartDate: c.designStartDate ?? "",
+          designEndDate: c.designEndDate ?? "",
+          designNote: c.designNote ?? "",
+          phasePeriods: Array.isArray(c.phasePeriods)
+            ? c.phasePeriods.map((p) => ({
+                label: (p.label ?? "").trim(),
+                startDate: p.startDate ?? "",
+                endDate: p.endDate ?? "",
+              }))
+            : [],
           branches: Array.isArray(c.branches) ? [...c.branches] : [],
           discountType: ["amount", "fixed"].includes(c.discountType ?? "") ? "amount" : "percent",
           discountValue: String(c.discountValue ?? ""),
@@ -663,35 +686,118 @@ export default function MarketingCampaignsPage() {
     setActiveTab(tab)
   }
 
-  const filteredList = React.useMemo(() => {
-    const q = listSearch.trim().toLowerCase()
-    if (!q) return list
-    return list.filter((c) => {
-      const topic = (c.topic ?? "").toLowerCase()
-      const no = (c.campaignNo ?? "").toLowerCase()
-      const format = (c.format ?? "").toLowerCase()
-      const branches = (c.branches ?? []).join(" ").toLowerCase()
-      const typeLabel = getCampaignTypeLabel(c.campaignType, lang).toLowerCase()
-      const statusText = statusLabel(c.status).toLowerCase()
-      const audience = (c.discountTargetAudience ?? "").toLowerCase()
-      const promoLine = (c.discountPricePromotion ?? "").toLowerCase()
-      const disc =
-        c.discountType === "percent"
-          ? `${c.discountValue ?? 0}%`
-          : `฿${Number(c.discountValue ?? 0).toLocaleString()}`
-      return (
-        topic.includes(q) ||
-        no.includes(q) ||
-        format.includes(q) ||
-        branches.includes(q) ||
-        typeLabel.includes(q) ||
-        statusText.includes(q) ||
-        audience.includes(q) ||
-        promoLine.includes(q) ||
-        disc.includes(q)
-      )
-    })
-  }, [list, listSearch, lang])
+  const listFiltersActive = React.useMemo(
+    () =>
+      marketingCampaignListFiltersActive({
+        listSearchScope,
+        listPeriodFrom,
+        listPeriodTo,
+        listDesignFrom,
+        listDesignTo,
+        listCampaignTypeFilter,
+        listStatusDraft,
+        listStatusOngoing,
+        listStatusFinish,
+        listBranchFilter,
+        listHubLinkFilter,
+        listBudgetMin,
+        listBudgetMax,
+        listKpiMin,
+        listKpiMax,
+        listKpiUnitFilter,
+        listDiscountFilter,
+      }),
+    [
+      listSearchScope,
+      listPeriodFrom,
+      listPeriodTo,
+      listDesignFrom,
+      listDesignTo,
+      listCampaignTypeFilter,
+      listStatusDraft,
+      listStatusOngoing,
+      listStatusFinish,
+      listBranchFilter,
+      listHubLinkFilter,
+      listBudgetMin,
+      listBudgetMax,
+      listKpiMin,
+      listKpiMax,
+      listKpiUnitFilter,
+      listDiscountFilter,
+    ]
+  )
+
+  const resetListFilters = React.useCallback(() => {
+    setListPeriodFrom("")
+    setListPeriodTo("")
+    setListDesignFrom("")
+    setListDesignTo("")
+    setListCampaignTypeFilter("")
+    setListStatusDraft(true)
+    setListStatusOngoing(true)
+    setListStatusFinish(true)
+    setListBranchFilter("")
+    setListHubLinkFilter("")
+    setListBudgetMin("")
+    setListBudgetMax("")
+    setListKpiMin("")
+    setListKpiMax("")
+    setListKpiUnitFilter("")
+    setListDiscountFilter("any")
+    setListSearchScope("all")
+    setListSearch("")
+  }, [])
+
+  const filteredList = React.useMemo(
+    () =>
+      applyMarketingCampaignListFilters(list, hubLinkSets, {
+        listSearch,
+        listSearchScope,
+        listPeriodFrom,
+        listPeriodTo,
+        listDesignFrom,
+        listDesignTo,
+        listCampaignTypeFilter,
+        listStatusDraft,
+        listStatusOngoing,
+        listStatusFinish,
+        listBranchFilter,
+        listHubLinkFilter,
+        listBudgetMin,
+        listBudgetMax,
+        listKpiMin,
+        listKpiMax,
+        listKpiUnitFilter,
+        listDiscountFilter,
+        lang,
+        statusLabel,
+      }),
+    [
+      list,
+      listSearch,
+      listSearchScope,
+      listPeriodFrom,
+      listPeriodTo,
+      listDesignFrom,
+      listDesignTo,
+      listCampaignTypeFilter,
+      listStatusDraft,
+      listStatusOngoing,
+      listStatusFinish,
+      listBranchFilter,
+      listHubLinkFilter,
+      hubLinkSets,
+      listBudgetMin,
+      listBudgetMax,
+      listKpiMin,
+      listKpiMax,
+      listKpiUnitFilter,
+      listDiscountFilter,
+      lang,
+      statusLabel,
+    ]
+  )
 
   const handleCopyCampaign = (c: MarketingCampaign) => {
     getMarketingCampaign(c.id).then((detail) => {
@@ -708,6 +814,10 @@ export default function MarketingCampaignsPage() {
         detail: detail.detail ?? "",
         startDate: "",
         endDate: "",
+        designStartDate: "",
+        designEndDate: "",
+        designNote: "",
+        phasePeriods: [],
         branches: Array.isArray(detail.branches) ? [...detail.branches] : [],
         discountType: ["amount", "fixed"].includes(detail.discountType ?? "") ? "amount" : "percent",
         discountValue: String(detail.discountValue ?? ""),
@@ -771,6 +881,37 @@ export default function MarketingCampaignsPage() {
     })
   }
 
+  const addCampaignPhaseRow = () => {
+    setForm((f) => {
+      const n = f.phasePeriods.length + 1
+      return {
+        ...f,
+        phasePeriods: [
+          ...f.phasePeriods,
+          {
+            label: tr(`${n}차`, `Round ${n}`, `รอบ ${n}`),
+            startDate: "",
+            endDate: "",
+          },
+        ],
+      }
+    })
+  }
+
+  const removeCampaignPhaseRow = (idx: number) => {
+    setForm((f) => ({
+      ...f,
+      phasePeriods: f.phasePeriods.filter((_, i) => i !== idx),
+    }))
+  }
+
+  const updateCampaignPhaseRow = (idx: number, patch: Partial<CampaignPhaseFormRow>) => {
+    setForm((f) => ({
+      ...f,
+      phasePeriods: f.phasePeriods.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
+    }))
+  }
+
   const handleSave = async () => {
     const topic = form.topic.trim()
     if (!topic) {
@@ -808,6 +949,16 @@ export default function MarketingCampaignsPage() {
         detail: form.detail.trim(),
         startDate: form.startDate.trim() || null,
         endDate: form.endDate.trim() || null,
+        designStartDate: form.designStartDate.trim() || null,
+        designEndDate: form.designEndDate.trim() || null,
+        designNote: form.designNote.trim(),
+        phasePeriods: form.phasePeriods
+          .map((p) => ({
+            label: p.label.trim(),
+            startDate: p.startDate.trim() || null,
+            endDate: p.endDate.trim() || null,
+          }))
+          .filter((p) => p.label || p.startDate || p.endDate),
         branches: form.branches,
         discountType: form.discountType,
         discountValue: Number(form.discountValue) || 0,
@@ -1161,15 +1312,7 @@ export default function MarketingCampaignsPage() {
 
   return (
     <MarketingPageShell maxWidthClass={hubTab === "compare" ? "max-w-7xl" : "max-w-4xl"}>
-        <MarketingPageHero
-          icon={Megaphone}
-          title={tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")}
-          description={tr(
-            "마케팅 캠페인 등록 및 통합 관리",
-            "Create and manage marketing campaigns",
-            "ลงทะเบียนและจัดการแคมเปญการตลาดแบบรวมศูนย์"
-          )}
-        />
+        <MarketingPageHero icon={Megaphone} title={tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")} />
 
         {/* 툴바 */}
         <div className="mb-4 flex flex-wrap gap-2">
@@ -1365,6 +1508,97 @@ export default function MarketingCampaignsPage() {
                 <label className="text-xs text-muted-foreground">{tr("기간 종료", "End Date", "วันที่สิ้นสุด")}</label>
                 <Input type="date" value={form.endDate}
                   onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} className="mt-1" />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">{tr("디자인 시작", "Design start", "เริ่มงานดีไซน์")}</label>
+                <Input type="date" value={form.designStartDate}
+                  onChange={(e) => setForm((f) => ({ ...f, designStartDate: e.target.value }))} className="mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">{tr("디자인 종료", "Design end", "จบงานดีไซน์")}</label>
+                <Input type="date" value={form.designEndDate}
+                  onChange={(e) => setForm((f) => ({ ...f, designEndDate: e.target.value }))} className="mt-1" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs text-muted-foreground">{tr("디자인 메모/링크", "Design memo / links", "บันทึก/ลิงก์งานดีไซน์")}</label>
+                <Input
+                  value={form.designNote}
+                  onChange={(e) => setForm((f) => ({ ...f, designNote: e.target.value }))}
+                  placeholder={tr("예: Figma, Drive 링크", "e.g. Figma or Drive links", "เช่น ลิงก์ Figma หรือ Drive")}
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="sm:col-span-2 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-medium text-foreground">
+                      {tr("차수별 기간 (선택)", "Phases (optional)", "ระยะเวลาแต่ละรอบ (ไม่บังคับ)")}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {tr(
+                        "한 캠페인을 1차·2차·3차처럼 나눌 때 각 구간의 시작·종료를 적습니다. 전체 기간(위)은 집계·요약용으로 유지할 수 있습니다.",
+                        "Split one campaign into rounds (e.g. phase 1–3). Keep the main dates above for overall reporting if needed.",
+                        "แบ่งแคมเปญเป็นหลายรอบ ระบุวันเริ่ม/จบของแต่ละรอบ ช่วงหลักด้านบนใช้สรุปภาพรวมได้"
+                      )}
+                    </p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs shrink-0"
+                    onClick={addCampaignPhaseRow}>
+                    <Plus className="h-3.5 w-3.5" />
+                    {tr("차수 추가", "Add phase", "เพิ่มรอบ")}
+                  </Button>
+                </div>
+                {form.phasePeriods.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground py-1">
+                    {tr("차수가 없습니다. 필요할 때만 추가하세요.", "No phases yet. Add when needed.", "ยังไม่มีรอบ — เพิ่มเมื่อต้องการ")}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {form.phasePeriods.map((row, idx) => (
+                      <div key={idx} className="flex flex-wrap items-end gap-2 rounded-md border bg-background/80 px-2 py-2">
+                        <div className="min-w-[5.5rem] flex-1 sm:flex-initial sm:w-28">
+                          <label className="text-[10px] text-muted-foreground">{tr("차수명", "Label", "ชื่อรอบ")}</label>
+                          <Input
+                            value={row.label}
+                            onChange={(e) => updateCampaignPhaseRow(idx, { label: e.target.value })}
+                            placeholder={tr("예: 1차", "e.g. Round 1", "เช่น รอบ 1")}
+                            className="mt-0.5 h-8 text-xs"
+                          />
+                        </div>
+                        <div className="w-[9.5rem]">
+                          <label className="text-[10px] text-muted-foreground">{tr("시작", "Start", "เริ่ม")}</label>
+                          <Input
+                            type="date"
+                            value={row.startDate}
+                            onChange={(e) => updateCampaignPhaseRow(idx, { startDate: e.target.value })}
+                            className="mt-0.5 h-8 text-xs"
+                          />
+                        </div>
+                        <div className="w-[9.5rem]">
+                          <label className="text-[10px] text-muted-foreground">{tr("종료", "End", "จบ")}</label>
+                          <Input
+                            type="date"
+                            value={row.endDate}
+                            onChange={(e) => updateCampaignPhaseRow(idx, { endDate: e.target.value })}
+                            className="mt-0.5 h-8 text-xs"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                          title={tr("이 차수 삭제", "Remove this phase", "ลบรอบนี้")}
+                          onClick={() => removeCampaignPhaseRow(idx)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 참여 지점 — 체크박스 */}
@@ -1873,10 +2107,20 @@ export default function MarketingCampaignsPage() {
                     <p className="mb-2 text-xs font-semibold">{tr("홍보물 추가", "Add Material", "เพิ่มสื่อโปรโมชัน")}</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground">{tr("종류", "Type", "ประเภท")}</label>
+                        <div className="mt-0.5 flex flex-wrap items-center justify-between gap-1">
+                          <label className="text-[10px] text-muted-foreground">{tr("종류", "Type", "ประเภท")}</label>
+                          <Link
+                            href="/admin/marketing/materials"
+                            className="text-[10px] text-primary underline-offset-2 hover:underline"
+                          >
+                            {tr("종류 편집…", "Edit types…", "แก้ไขประเภท…")}
+                          </Link>
+                        </div>
                         <select value={matForm.type} onChange={(e) => setMatForm((f) => ({ ...f, type: e.target.value }))}
                           className="mt-0.5 flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs">
-                          {MATERIAL_TYPES.map((o) => <option key={o.value} value={o.value}>{materialTypeLabel(o.value)}</option>)}
+                          {materialTypeSelectOptions(materialTypeOptions, matForm.type, tr).map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
                         </select>
                       </div>
                       <div>
@@ -1982,44 +2226,52 @@ export default function MarketingCampaignsPage() {
 
                       {/* 매장 내 위치 */}
                       <div className="sm:col-span-2">
-                        <div className="mb-1 flex items-center justify-between">
+                        <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
                           <label className="text-[10px] text-muted-foreground">{tr("매장 내 위치", "In-store Placement", "ตำแหน่งในร้าน")}</label>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-6 w-6 p-0"
-                              title={tr("전체 선택", "Select All", "เลือกทั้งหมด")}
-                              onClick={() =>
-                                setMatForm((f) => ({
-                                  ...f,
-                                  placementSpots: MATERIAL_PLACEMENT_SPOTS.map((x) => x.value),
-                                }))
-                              }
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href="/admin/marketing/materials"
+                              className="text-[10px] text-primary underline-offset-2 hover:underline"
                             >
-                              <CheckCheck className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-6 w-6 p-0"
-                              title={tr("전체 해제", "Clear All", "ล้างทั้งหมด")}
-                              onClick={() => setMatForm((f) => ({ ...f, placementSpots: [] }))}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
+                              {tr("위치 편집…", "Edit placements…", "แก้ไขตำแหน่ง…")}
+                            </Link>
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-6 w-6 p-0"
+                                title={tr("전체 선택", "Select All", "เลือกทั้งหมด")}
+                                onClick={() =>
+                                  setMatForm((f) => ({
+                                    ...f,
+                                    placementSpots: placementOptions.map((x) => x.value),
+                                  }))
+                                }
+                              >
+                                <CheckCheck className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-6 w-6 p-0"
+                                title={tr("전체 해제", "Clear All", "ล้างทั้งหมด")}
+                                onClick={() => setMatForm((f) => ({ ...f, placementSpots: [] }))}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-lg border bg-background px-2 py-2">
-                          {MATERIAL_PLACEMENT_SPOTS.map((spot) => (
+                          {placementOptions.map((spot) => (
                             <label key={spot.value} className="flex cursor-pointer items-center gap-1 text-xs">
                               <Checkbox
                                 checked={matForm.placementSpots.includes(spot.value)}
                                 onCheckedChange={() => toggleMatPlacementSpot(spot.value)}
                               />
-                              <span className="truncate">{materialPlacementSpotLabel(spot.value)}</span>
+                              <span className="truncate">{spot.label}</span>
                             </label>
                           ))}
                         </div>
@@ -2443,28 +2695,268 @@ export default function MarketingCampaignsPage() {
 
           {hubTab === "list" && (
           <>
-          {/* ── 캠페인 목록 (검색 + 행별 연결 메뉴) ───────────────────────────── */}
+          {/* ── 캠페인 목록 (필터 + 검색 + 행별 연결 메뉴) ───────────────────────────── */}
           <div className="rounded-xl border bg-card">
-            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-sm font-semibold">
-                {tr("캠페인 목록", "Campaign List", "รายการแคมเปญ")} ({filteredList.length}{listSearch.trim() ? ` / ${list.length}` : ""})
-              </h3>
-              <div className="relative flex-1 sm:max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={listSearch}
-                  onChange={(e) => setListSearch(e.target.value)}
-                  placeholder={tr("제목, 번호, 채널, 지점 등 검색", "Search title, number, channel...", "ค้นหาชื่อ หมายเลข ช่องทาง...")}
-                  className="h-9 pl-9"
-                />
+            <div className="flex flex-col gap-3 border-b px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">
+                  {tr("캠페인 목록", "Campaign List", "รายการแคมเปญ")}
+                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(listFiltersActive || listSearch.trim()) && (
+                    <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={resetListFilters}>
+                      {tr("초기화", "Reset", "รีเซ็ต")}
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              <div className="flex flex-wrap items-end gap-x-2 gap-y-2 rounded-lg border border-border/70 bg-muted/10 px-2 py-2 sm:px-3">
+                <div className="flex shrink-0 flex-col gap-0.5">
+                  <span className="text-[9px] font-medium leading-none text-muted-foreground whitespace-nowrap">
+                    {tr("조회 기간", "Period", "ช่วงวันที่")}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="date"
+                      title={tr("시작", "From", "เริ่ม")}
+                      className="h-8 w-[8.65rem] shrink-0 px-1.5 text-xs"
+                      value={listPeriodFrom}
+                      onChange={(e) => setListPeriodFrom(e.target.value)}
+                    />
+                    <span className="shrink-0 pb-0.5 text-[10px] text-muted-foreground">~</span>
+                    <Input
+                      type="date"
+                      title={tr("종료", "To", "ถึง")}
+                      className="h-8 w-[8.65rem] shrink-0 px-1.5 text-xs"
+                      value={listPeriodTo}
+                      onChange={(e) => setListPeriodTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex min-w-[6.5rem] max-w-[9.5rem] flex-col gap-0.5 sm:min-w-[7.5rem]">
+                  <Label className="text-[9px] font-medium leading-none text-muted-foreground">
+                    {tr("검색 범위", "Search in", "ค้นหาใน")}
+                  </Label>
+                  <select
+                    value={listSearchScope}
+                    onChange={(e) => setListSearchScope(e.target.value as CampaignListSearchScope)}
+                    className="h-8 w-full rounded-md border border-input bg-background px-1.5 text-[11px]"
+                  >
+                    <option value="all">{tr("전체 필드", "All fields", "ทุกฟิลด์")}</option>
+                    <option value="topic">{tr("제목만", "Title only", "ชื่ออย่างเดียว")}</option>
+                    <option value="campaignNo">{tr("캠페인 번호만", "Campaign no. only", "เฉพาะเลขแคมเปญ")}</option>
+                    <option value="format">{tr("채널/형식만", "Format only", "เฉพาะรูปแบบ")}</option>
+                    <option value="audience_promo">
+                      {tr("지점·대상·프로모", "Branch, audience, promo", "สาขา กลุ่มเป้า โปร")}
+                    </option>
+                  </select>
+                </div>
+                <div className="flex min-w-[5.5rem] max-w-[9rem] flex-col gap-0.5">
+                  <Label className="text-[9px] font-medium leading-none text-muted-foreground">{tr("매장", "Store", "สาขา")}</Label>
+                  <select
+                    value={listBranchFilter || "_all"}
+                    onChange={(e) => setListBranchFilter(e.target.value === "_all" ? "" : e.target.value)}
+                    disabled={storesLoading}
+                    className="h-8 w-full rounded-md border border-input bg-background px-1.5 text-[11px] disabled:opacity-60"
+                  >
+                    <option value="_all">{tr("전체", "All", "ทั้งหมด")}</option>
+                    <option value="_allStoresPlan">{tr("전체 매장(기획)만", "All stores (plan) only", "เฉพาะทุกสาขา (แผน)")}</option>
+                    {stores.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="relative min-w-[8rem] flex-1 basis-[10rem]">
+                  <Label className="sr-only">{tr("검색", "Search", "ค้นหา")}</Label>
+                  <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                    placeholder={tr("키워드…", "Keyword…", "คำค้น…")}
+                    className="h-8 pl-8 text-xs"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1 px-2.5 text-xs"
+                  onClick={() => setListFiltersOpen((o) => !o)}
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  {tr("필터", "Filters", "ตัวกรอง")}
+                  {listFiltersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+
+              {listFiltersOpen && (
+                <div className="space-y-3 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
+                  <div className="space-y-1.5 border-b border-border/60 pb-3">
+                    <p className="text-xs font-medium text-foreground">{tr("디자인 기간", "Design period", "ช่วงงานดีไซน์")}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <div className="min-w-[9rem] flex-1 space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">{tr("시작", "From", "เริ่ม")}</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={listDesignFrom}
+                          onChange={(e) => setListDesignFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="min-w-[9rem] flex-1 space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">{tr("종료", "To", "ถึง")}</Label>
+                        <Input
+                          type="date"
+                          className="h-9"
+                          value={listDesignTo}
+                          onChange={(e) => setListDesignTo(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      {tr(
+                        "디자인 시작/종료가 조회 구간과 겹치는 캠페인만 표시합니다.",
+                        "Shows campaigns whose design period overlaps this range.",
+                        "แสดงเฉพาะแคมเปญที่ช่วงงานดีไซน์ทับซ้อนกับช่วงนี้",
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 lg:items-end">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("캠페인 유형", "Campaign type", "ประเภทแคมเปญ")}</Label>
+                      <select
+                        value={listCampaignTypeFilter || "_all"}
+                        onChange={(e) => setListCampaignTypeFilter(e.target.value === "_all" ? "" : e.target.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="_all">{tr("전체", "All", "ทั้งหมด")}</option>
+                        {CAMPAIGN_TYPE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {lang === "en" ? o.en : lang === "th" ? o.th : o.ko}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{t("marketingCampaignListHubLinkLabel")}</Label>
+                      <select
+                        value={listHubLinkFilter || "_all"}
+                        onChange={(e) => setListHubLinkFilter(e.target.value === "_all" ? "" : e.target.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="_all">{tr("전체", "All", "ทั้งหมด")}</option>
+                        <option value="collab">{t("marketingCampaignListHubLinkCollab")}</option>
+                        <option value="promo_set">{t("marketingCampaignListHubLinkPromoSet")}</option>
+                        <option value="ads_roas">{t("marketingCampaignListHubLinkAdsRoas")}</option>
+                        <option value="influencer">{t("marketingCampaignListHubLinkInfluencer")}</option>
+                        <option value="materials">{t("marketingCampaignListHubLinkMaterials")}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border/60 pt-3">
+                    <span className="w-full text-xs font-medium text-foreground sm:w-auto">{tr("상태", "Status", "สถานะ")}</span>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs">
+                      <Checkbox checked={listStatusDraft} onCheckedChange={(v) => setListStatusDraft(v === true)} />
+                      {statusLabel("draft")}
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs">
+                      <Checkbox checked={listStatusOngoing} onCheckedChange={(v) => setListStatusOngoing(v === true)} />
+                      {statusLabel("ongoing")}
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-xs">
+                      <Checkbox checked={listStatusFinish} onCheckedChange={(v) => setListStatusFinish(v === true)} />
+                      {statusLabel("finish")}
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 border-t border-border/60 pt-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("예산 최소 (฿)", "Budget min (฿)", "งบขั้นต่ำ (฿)")}</Label>
+                      <Input
+                        className="h-9"
+                        inputMode="decimal"
+                        value={listBudgetMin}
+                        onChange={(e) => setListBudgetMin(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("예산 최대 (฿)", "Budget max (฿)", "งบสูงสุด (฿)")}</Label>
+                      <Input
+                        className="h-9"
+                        inputMode="decimal"
+                        value={listBudgetMax}
+                        onChange={(e) => setListBudgetMax(e.target.value)}
+                        placeholder="—"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("KPI 목표 최소", "KPI target min", "KPI ขั้นต่ำ")}</Label>
+                      <Input
+                        className="h-9"
+                        inputMode="decimal"
+                        value={listKpiMin}
+                        onChange={(e) => setListKpiMin(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("KPI 목표 최대", "KPI target max", "KPI สูงสุด")}</Label>
+                      <Input
+                        className="h-9"
+                        inputMode="decimal"
+                        value={listKpiMax}
+                        onChange={(e) => setListKpiMax(e.target.value)}
+                        placeholder="—"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("KPI 단위", "KPI unit", "หน่วย KPI")}</Label>
+                      <select
+                        value={listKpiUnitFilter || "_any"}
+                        onChange={(e) => setListKpiUnitFilter(e.target.value === "_any" ? "" : e.target.value)}
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="_any">{tr("전체", "All", "ทั้งหมด")}</option>
+                        {KPI_UNIT_OPTIONS.map((u) => (
+                          <option key={u.value} value={u.value}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{tr("기획 할인", "Planned discount", "ส่วนลดที่วางแผน")}</Label>
+                      <select
+                        value={listDiscountFilter}
+                        onChange={(e) => setListDiscountFilter(e.target.value as "any" | "none" | "percent" | "amount")}
+                        className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        <option value="any">{tr("제한 없음", "Any", "ไม่กรอง")}</option>
+                        <option value="none">{tr("할인 없음", "No discount", "ไม่มีส่วนลด")}</option>
+                        <option value="percent">{tr("퍼센트 할인", "Percent off", "ส่วนลด %")}</option>
+                        <option value="amount">{tr("금액 할인", "Amount off", "ส่วนลดเงิน")}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="divide-y overflow-x-auto">
               {filteredList.length === 0 && !loading && (
                 <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {listSearch.trim()
-                    ? tr("검색 결과가 없습니다.", "No search results.", "ไม่พบผลการค้นหา")
-                    : tr("등록된 캠페인이 없습니다.", "No campaigns.", "ไม่มีแคมเปญ")}
+                  {list.length === 0
+                    ? tr("등록된 캠페인이 없습니다.", "No campaigns.", "ไม่มีแคมเปญ")
+                    : tr(
+                        "필터·검색 조건에 맞는 캠페인이 없습니다.",
+                        "No campaigns match filters or search.",
+                        "ไม่มีแคมเปญที่ตรงกับตัวกรองหรือการค้นหา",
+                      )}
                 </p>
               )}
               {filteredList.map((c) => (
@@ -2496,6 +2988,32 @@ export default function MarketingCampaignsPage() {
                     <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-muted-foreground mt-0.5">
                       {c.format && <span>{c.format}</span>}
                       {(c.startDate || c.endDate) && <span>{c.startDate || "~"} ~ {c.endDate || "~"}</span>}
+                      {(c.designStartDate || c.designEndDate) && (
+                        <span>
+                          {tr("디자인", "Design", "ดีไซน์")}: {c.designStartDate || "~"} ~ {c.designEndDate || "~"}
+                        </span>
+                      )}
+                      {(c.phasePeriods && c.phasePeriods.length > 0) && (
+                        <span className="max-w-full text-[11px] leading-snug" title={
+                          c.phasePeriods
+                            .map((p, i) => {
+                              const lb = (p.label ?? "").trim() || `${i + 1}차`
+                              return `${lb} ${p.startDate || "—"} ~ ${p.endDate || "—"}`
+                            })
+                            .join(" · ")
+                        }>
+                          {tr("차수", "Phases", "รอบ")}:{" "}
+                          {c.phasePeriods.map((p, i) => {
+                            const lb = (p.label ?? "").trim() || `${i + 1}차`
+                            return (
+                              <span key={i}>
+                                {i > 0 ? " · " : ""}
+                                {lb} {p.startDate || "—"}~{p.endDate || "—"}
+                              </span>
+                            )
+                          })}
+                        </span>
+                      )}
                       {c.branches && c.branches.length > 0 ? (
                         <span>{c.branches.slice(0, 3).join(", ")}{c.branches.length > 3 ? ` +${c.branches.length - 3}` : ""}</span>
                       ) : (

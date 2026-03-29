@@ -25,7 +25,7 @@ AS $$
   GROUP BY sl.item_code;
 $$;
 
-COMMENT ON FUNCTION get_store_stock(text[], timestamptz) IS '매장별 재고 합계 조회. location이 patterns 중 하나와 ILIKE 매칭되는 row만 합산';
+COMMENT ON FUNCTION get_store_stock(text[], timestamptz) IS '매장별 재고 합계 조회. location ILIKE 매칭. p_as_of_date 는 포함 상한(<=): 앱에서 방콕 해당일 말일 끝 UTC(getBangkokEndOfDayUtcIso)로 전달 권장';
 
 -- 재고 현황용 매장 목록 (stock_logs의 DISTINCT location) - limit 없음
 CREATE OR REPLACE FUNCTION get_distinct_stock_locations()

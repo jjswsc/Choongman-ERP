@@ -11,7 +11,10 @@ export default function MarketingCalendarPage() {
 
   return (
     <MarketingPageShell>
-      <MarketingIntegratedCalendarPanel campaignIdFromQuery={campaignIdFromQuery} />
+      <MarketingIntegratedCalendarPanel
+        campaignIdFromQuery={campaignIdFromQuery}
+        hideHeroDescription
+      />
     </MarketingPageShell>
   )
 }

@@ -21,49 +21,9 @@ import {
   getMarketingCampaignResults,
   type MarketingCampaign,
 } from "@/lib/api-client"
+import { marketingCampaignEffectiveBounds } from "@/lib/marketing-campaign-periods"
+import { getCampaignTypeLabel } from "@/lib/marketing-campaign-type-utils"
 import { cn } from "@/lib/utils"
-
-const CAMPAIGN_TYPE_OPTIONS = [
-  { value: "menu_discount", ko: "메뉴 할인 캠페인", en: "Menu Discount", th: "แคมเปญส่วนลดเมนู" },
-  { value: "new_menu_launch", ko: "신메뉴 런칭", en: "New Menu Launch", th: "เปิดตัวเมนูใหม่" },
-  { value: "membership_crm", ko: "멤버십/재방문 유도", en: "Membership/CRM", th: "สมาชิก/กระตุ้นการกลับมาซื้อ" },
-  { value: "delivery_activation", ko: "배달 채널 활성화", en: "Delivery Activation", th: "กระตุ้นช่องทางเดลิเวอรี" },
-  { value: "collab_marketing", ko: "협업 마케팅", en: "Collab Marketing", th: "การตลาดร่วมมือ" },
-  { value: "brand_promo", ko: "브랜드 홍보 캠페인", en: "Brand Promotion", th: "แคมเปญโปรโมตแบรนด์" },
-  { value: "new_store", ko: "신규 매장 오픈 캠페인", en: "New Store Opening", th: "แคมเปญเปิดสาขาใหม่" },
-  { value: "seasonal", ko: "시즌/이벤트 캠페인", en: "Seasonal/Event", th: "แคมเปญตามฤดูกาล/อีเวนต์" },
-  { value: "other", ko: "기타", en: "Other", th: "อื่นๆ" },
-]
-const CAMPAIGN_TYPE_OTHER_PREFIX = "other:"
-
-function toCampaignTypeFormState(raw: string | undefined | null) {
-  const value = String(raw ?? "").trim()
-  if (!value) return { type: "menu_discount", custom: "" }
-  if (value.startsWith(CAMPAIGN_TYPE_OTHER_PREFIX)) {
-    return {
-      type: "other",
-      custom: value.slice(CAMPAIGN_TYPE_OTHER_PREFIX.length).trim().replace(/\s+/g, " "),
-    }
-  }
-  const exists = CAMPAIGN_TYPE_OPTIONS.some((x) => x.value === value)
-  if (exists) return { type: value, custom: "" }
-  return { type: "other", custom: value.trim().replace(/\s+/g, " ") }
-}
-
-function getCampaignTypeLabel(raw: string | undefined | null, lang: string) {
-  const parsed = toCampaignTypeFormState(raw)
-  if (parsed.type === "other") {
-    if (parsed.custom) return parsed.custom
-    if (lang === "en") return "Other"
-    if (lang === "th") return "อื่นๆ"
-    return "기타"
-  }
-  const option = CAMPAIGN_TYPE_OPTIONS.find((x) => x.value === parsed.type)
-  if (!option) return String(raw ?? "")
-  if (lang === "en") return option.en
-  if (lang === "th") return option.th
-  return option.ko
-}
 
 function bangkokTodayUtcMidnight(): number {
   const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -132,15 +92,16 @@ export function CampaignAbComparePanel() {
       const cutoff = periodDays !== null ? today - periodDays * 86400000 : null
 
       const eligible = campaigns.filter((c) => {
+        const eff = marketingCampaignEffectiveBounds(c)
         if (statusFilter === "finish") {
-          if (c.status !== "finish" || !c.startDate || !c.endDate) return false
+          if (c.status !== "finish" || !eff.startDate || !eff.endDate) return false
         } else {
           if (c.status !== "finish" && c.status !== "ongoing") return false
-          if (!c.startDate) return false
+          if (!eff.startDate) return false
         }
         if (cutoff === null) return true
-        const endMs = parseYmdUtc(c.endDate ?? null)
-        const startMs = parseYmdUtc(c.startDate ?? null)
+        const endMs = parseYmdUtc(eff.endDate)
+        const startMs = parseYmdUtc(eff.startDate)
         if (c.status === "ongoing" && endMs == null && startMs != null && startMs < cutoff) return false
         if (c.status === "finish" && endMs != null) return endMs >= cutoff
         if (c.status === "ongoing") {
@@ -156,6 +117,7 @@ export function CampaignAbComparePanel() {
         const slice = eligible.slice(i, i + BATCH)
         const part = await Promise.all(
           slice.map(async (c) => {
+            const eff = marketingCampaignEffectiveBounds(c)
             const [costRes, posRes] = await Promise.all([
               getMarketingCampaignCosts(c.id),
               getMarketingCampaignResults({ campaignId: c.id }),
@@ -179,8 +141,8 @@ export function CampaignAbComparePanel() {
               roi,
               roas,
               avgOrder,
-              startDate: c.startDate ?? null,
-              endDate: c.endDate ?? null,
+              startDate: eff.startDate ?? c.startDate ?? null,
+              endDate: eff.endDate ?? c.endDate ?? null,
               costConfidence: costRes.attributionConfidence,
               salesConfidence: posRes.attributionConfidence,
               attributionModeCost: costRes.attributionMode,

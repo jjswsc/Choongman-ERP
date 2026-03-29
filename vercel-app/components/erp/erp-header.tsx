@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect } from "react"
+import { appAlert } from "@/lib/app-message"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User, Smartphone, ArrowLeft } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft, HardDriveDownload, Languages } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -26,6 +27,10 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
+import { useStoreList } from "@/lib/api-client"
+import { isOfficeRole } from "@/lib/permissions"
+import { warmAdminOfflineCache } from "@/lib/offline/pos-offline-warm"
+import { useAutoTranslate } from "@/lib/auto-translate"
 
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ko", label: "한국어" },
@@ -47,9 +52,31 @@ export function ErpHeader() {
   const { auth, logout } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
+  const { enabled: autoTranslateEnabled, setEnabled: setAutoTranslateEnabled } = useAutoTranslate()
+  const { stores } = useStoreList()
+  const [prefetchBusy, setPrefetchBusy] = useState(false)
+  const warmStoreCodes = useMemo(() => {
+    if (isOfficeRole(auth?.role || "")) return stores
+    if (auth?.store) return [auth.store]
+    return stores.length ? [stores[0]] : []
+  }, [auth?.role, auth?.store, stores])
+  const handlePrefetchOffline = useCallback(async () => {
+    setPrefetchBusy(true)
+    const r = await warmAdminOfflineCache({ storeCodes: warmStoreCodes })
+    setPrefetchBusy(false)
+    if (r.ok) await appAlert(t("posOfflinePrefetchDone"))
+    else
+      await appAlert(
+        (t("posOfflinePrefetchFail") || "") +
+          (r.errors.length ? ` (${r.errors.slice(0, 4).join(", ")})` : "")
+      )
+  }, [warmStoreCodes, t])
   const isLoginPage = pathname === "/admin/login"
   const isDashboard = pathname === "/admin" || pathname === "/admin/"
   const showBackButton = !isLoginPage && !isDashboard
+  const offlinePrefetchTitle =
+    t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
+  const autoTranslateLabel = lang === "ko" ? "자동번역" : "Auto translate"
 
   // ERP 내 이동 시 이전/현재 경로 저장 (뒤로가기용)
   useEffect(() => {
@@ -111,6 +138,34 @@ export function ErpHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1 border-emerald-600/40 px-2 text-emerald-800 hover:bg-emerald-50 sm:px-3"
+          disabled={prefetchBusy}
+          title={offlinePrefetchTitle}
+          onClick={() => void handlePrefetchOffline()}
+        >
+          <HardDriveDownload className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">
+            {prefetchBusy ? t("posOfflinePrefetching") : t("posOfflinePrefetch")}
+          </span>
+        </Button>
+        <Separator orientation="vertical" className="mx-1 h-5" />
+        <Button
+          type="button"
+          variant={autoTranslateEnabled ? "default" : "outline"}
+          size="sm"
+          className="h-8 gap-1.5 px-2 text-xs"
+          onClick={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
+          title={`${autoTranslateLabel} ${autoTranslateEnabled ? "ON" : "OFF"}`}
+        >
+          <Languages className="h-3.5 w-3.5 shrink-0" />
+          <span className="hidden md:inline">{autoTranslateLabel}</span>
+          <span className="text-[10px] font-semibold">{autoTranslateEnabled ? "ON" : "OFF"}</span>
+        </Button>
+        <Separator orientation="vertical" className="mx-1 h-5" />
         {/* Language */}
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
           <SelectTrigger className="h-8 w-[7rem] text-xs">

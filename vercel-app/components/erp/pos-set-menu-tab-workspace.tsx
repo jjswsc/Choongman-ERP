@@ -1102,8 +1102,70 @@ export function PosSetMenuTabWorkspace({
                   </Badge>
                 ) : null}
               </div>
-              <Sparkles className="h-4 w-4 text-emerald-500/70" aria-hidden />
+                <Sparkles className="h-4 w-4 text-emerald-500/70" aria-hidden />
             </div>
+            {lines.length > 0 && (showPricingHall || showPricingDelivery) ? (
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] px-3 py-2 text-[11px] dark:bg-emerald-950/25">
+                <span className="shrink-0 font-semibold text-emerald-800 dark:text-emerald-200">
+                  {t("posSetTabQuickSummaryTitle")}
+                </span>
+                {showPricingHall ? (
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-muted-foreground">{t("posMenuPriceHall")}</span>
+                    {!costsReady ? (
+                      <span>{t("posPromoSimulatorCalculating")}</span>
+                    ) : (
+                      <>
+                        <span className="font-mono tabular-nums">
+                          {t("posPromoCostSum")} ฿{costHallTotal.toFixed(1)}
+                        </span>
+                        <span className="text-border">·</span>
+                        <span className="font-mono tabular-nums">
+                          {t("posMenuBundleCostRate")} {economics.costRateHall.toFixed(1)}%
+                        </span>
+                        <span className="text-border">·</span>
+                        <span
+                          className={cn(
+                            "font-mono tabular-nums",
+                            economics.marginPercent >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                          )}
+                        >
+                          {t("posMenuBundleMarginPct")} {economics.marginPercent.toFixed(1)}%
+                        </span>
+                      </>
+                    )}
+                  </span>
+                ) : null}
+                {showPricingHall && showPricingDelivery ? (
+                  <span className="hidden text-muted-foreground sm:inline" aria-hidden>
+                    |
+                  </span>
+                ) : null}
+                {showPricingDelivery ? (
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-muted-foreground">{t("posOrderTypeDelivery")}</span>
+                    {!costsReady ? (
+                      <span>{t("posPromoSimulatorCalculating")}</span>
+                    ) : (
+                      <>
+                        <span className="font-mono tabular-nums">
+                          {t("posMenuBundleCostRate")} {economics.costRateDelivery.toFixed(1)}%
+                        </span>
+                        <span className="text-border">·</span>
+                        <span
+                          className={cn(
+                            "font-mono tabular-nums",
+                            economics.marginPercentDel >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
+                          )}
+                        >
+                          {t("posMenuBundleMarginPct")} {economics.marginPercentDel.toFixed(1)}%
+                        </span>
+                      </>
+                    )}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2 space-y-2">
                 <label className="text-[10px] font-medium text-muted-foreground">{t("posSetTabPromoGroupLabel")}</label>

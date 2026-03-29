@@ -1,27 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
+import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
+const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
+
+function readIdempotencyHit(key: string): { id: number; orderNo: string } | null {
+  const hit = idempotencyCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at > IDEMPOTENCY_TTL_MS) {
+    idempotencyCache.delete(key)
+    return null
+  }
+  return { id: hit.id, orderNo: hit.orderNo }
+}
+
+function writeIdempotencyHit(key: string, id: number, orderNo: string) {
+  idempotencyCache.set(key, { id, orderNo, at: Date.now() })
+}
 
 function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
   if (paymentDeliveryApp <= 0.005) return null
   const s = String(raw ?? '').trim().toLowerCase()
   if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
   return 'grab'
-}
-
-/** 주문 번호 생성 (8자리: ST0317A3 = 매장2자+MMDD+랜덤2자) */
-function generateOrderNo(storeCode: string): string {
-  const now = new Date()
-  const store = (storeCode || 'ST').slice(0, 2).toUpperCase()
-  const mmdd = now.toLocaleDateString('en-CA', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Bangkok' }).replace(/\D/g, '')
-  const rnd = Math.random().toString(36).slice(2, 4).toUpperCase()
-  return `${store}${mmdd}${rnd}`
 }
 
 /** POS 주문 저장 */
@@ -31,6 +40,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
+    const idempotencyHeader = String(req.headers.get('x-idempotency-key') ?? '').trim()
+    const idempotencyBody = String(body.localOrderNo ?? body.local_order_no ?? '').trim()
+    const idempotencyKey = idempotencyHeader || idempotencyBody
+    if (idempotencyKey) {
+      const hit = readIdempotencyHit(idempotencyKey)
+      if (hit) {
+        return NextResponse.json(
+          { success: true, orderId: hit.id, orderNo: hit.orderNo, duplicate: true },
+          { headers }
+        )
+      }
+    }
     const storeCode = String(body.storeCode ?? '').trim()
     const orderType = coercePosOrderTypeForDb(body.orderType ?? body.order_type)
     const tableName = String(body.tableName ?? '')
@@ -57,6 +78,7 @@ export async function POST(req: NextRequest) {
     const guestCountReq = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
     const items = Array.isArray(body.items) ? body.items : []
     const pricingAdjustments = body.pricingAdjustments || {}
+    const createdBy = String(body.createdBy ?? body.created_by ?? '').trim()
 
     if (items.length === 0) {
       return NextResponse.json({ success: false, message: '주문 항목이 없습니다.' }, { headers })
@@ -104,7 +126,7 @@ export async function POST(req: NextRequest) {
       delivery_app_code = code || null
     }
 
-    const orderNo = generateOrderNo(storeCode)
+    const orderNo = await allocateNextPosOrderNo(storeCode)
     const row = {
       order_no: orderNo,
       store_code: storeCode,
@@ -134,9 +156,17 @@ export async function POST(req: NextRequest) {
       point_earned: pointEarnedReq,
       guest_count,
       delivery_app_code,
+      created_by: createdBy,
     }
-    const inserted = await supabaseInsert('pos_orders', row) as { id?: number }[]
+    const inserted = (await supabaseInsertWithPgrst204Fallback(
+      'pos_orders',
+      row,
+      'savePosOrder'
+    )) as { id?: number }[]
     const created = Array.isArray(inserted) ? inserted[0] : inserted
+    if (idempotencyKey && Number(created?.id) > 0) {
+      writeIdempotencyHit(idempotencyKey, Number(created.id), orderNo)
+    }
 
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
     let pointEarned = pointEarnedReq

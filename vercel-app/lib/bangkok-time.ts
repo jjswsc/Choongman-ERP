@@ -72,6 +72,18 @@ export function getBangkokNextDayStartUtcIso(ymd: string): string {
   return new Date(Date.UTC(y, m - 1, d + 1, -7, 0, 0, 0)).toISOString()
 }
 
+/**
+ * 방콕 달력 `YYYY-MM-DD` 하루의 마지막 순간(다음날 0시 직전)을 UTC ISO로.
+ * `log_date <= 이 값` 이면 해당 방콕일까지의 재고에 포함(UTC 자정만 보는 실수 방지).
+ */
+export function getBangkokEndOfDayUtcIso(ymd: string): string {
+  const nextStartMs = Date.parse(getBangkokNextDayStartUtcIso(ymd))
+  if (Number.isNaN(nextStartMs)) {
+    throw new Error(`getBangkokEndOfDayUtcIso: invalid date ${ymd}`)
+  }
+  return new Date(nextStartMs - 1).toISOString()
+}
+
 /** 방콕 날짜 범위를 UTC 반열린 구간으로 변환 [start, nextDayStart) */
 export function getBangkokDateRangeUtc(startYmd: string, endYmd: string): {
   dayStartUtcIso: string
@@ -81,4 +93,24 @@ export function getBangkokDateRangeUtc(startYmd: string, endYmd: string): {
     dayStartUtcIso: getBangkokStartOfDayUtcIso(startYmd),
     nextDayStartUtcIso: getBangkokNextDayStartUtcIso(endYmd),
   }
+}
+
+/**
+ * 방콕 기준 최근 `count`개월(이번 달 포함) `YYYY-MM` 목록.
+ * `Date#setMonth` 말일 보정으로 같은 달이 두 번 나오는 문제를 피하기 위해 연·월 정수로만 감소합니다.
+ */
+export function getBangkokRecentYearMonths(count: number, base: Date = new Date()): string[] {
+  const { yearMonth } = getBangkokMonthRange(undefined, base)
+  let y = Number(yearMonth.slice(0, 4))
+  let m = Number(yearMonth.slice(5, 7))
+  const out: string[] = []
+  for (let i = 0; i < count; i++) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m -= 1
+    if (m < 1) {
+      m = 12
+      y -= 1
+    }
+  }
+  return out
 }

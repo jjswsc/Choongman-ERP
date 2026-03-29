@@ -178,6 +178,29 @@ export function supabaseSelectPageCap(): number {
   return Math.min(Math.floor(raw), 500_000)
 }
 
+/** 전 페이지 조회 루프 상한 (한 테이블당 최대 페이지 수) */
+export const SUPABASE_SELECT_ALL_PAGES_MAX_PAGES = 5000
+/** supabaseSelectAllPages 기본 maxRows (옵션 미지정 시) */
+export const SUPABASE_SELECT_ALL_PAGES_DEFAULT_MAX_ROWS = 1_000_000
+export const SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_PAGES = 5000
+export const SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_ROWS_CEILING = 5_000_000
+export const SUPABASE_SELECT_FILTER_ALL_PAGES_MIN_STRIDE = 500
+
+/** 관리자 설정 화면용 — Vercel에 적용된 조회 상한(비밀값 없음) */
+export function getSupabaseDataLimitDiagnostics() {
+  const rawEnv = (process.env.SUPABASE_SELECT_PAGE_SIZE_MAX || '').trim()
+  return {
+    selectPageCap: supabaseSelectPageCap(),
+    envSupabaseSelectPageSizeMax: rawEnv || null,
+    selectAllPagesMaxPages: SUPABASE_SELECT_ALL_PAGES_MAX_PAGES,
+    selectAllPagesDefaultMaxRows: SUPABASE_SELECT_ALL_PAGES_DEFAULT_MAX_ROWS,
+    selectFilterAllPagesMaxPages: SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_PAGES,
+    selectFilterAllPagesMaxRowsCeiling: SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_ROWS_CEILING,
+    selectFilterAllPagesMinStride: SUPABASE_SELECT_FILTER_ALL_PAGES_MIN_STRIDE,
+    fetchedAt: new Date().toISOString(),
+  }
+}
+
 export async function supabaseSelect(
   table: string,
   options: { order?: string; limit?: number; offset?: number; select?: string } = {}
@@ -217,12 +240,12 @@ export async function supabaseSelectAllPages(
 ): Promise<unknown[]> {
   const cap = supabaseSelectPageCap()
   const pageSize = Math.max(1, Math.min(options.pageSize ?? cap, cap))
-  const maxRows = options.maxRows ?? 1_000_000
+  const maxRows = options.maxRows ?? SUPABASE_SELECT_ALL_PAGES_DEFAULT_MAX_ROWS
   const out: unknown[] = []
   let offset = 0
   /** PostgREST/프록시가 limit=10000 요청에도 예: 1000행만 줄 수 있음. rows.length < pageSize 로 끊으면 나머지 페이지를 영원히 안 읽음 → 원가 분석 등에서 최신 BOM 누락 */
   let guard = 0
-  const maxPages = 5000
+  const maxPages = SUPABASE_SELECT_ALL_PAGES_MAX_PAGES
   while (out.length < maxRows && guard++ < maxPages) {
     const batch = await supabaseSelect(table, {
       order: options.order,
@@ -255,6 +278,30 @@ export async function supabaseInsert(table: string, row: Record<string, unknown>
   if (!res.ok) throw new Error('Supabase insert failed: ' + (await res.text()))
   const text = await res.text()
   return text ? (JSON.parse(text) as unknown) : []
+}
+
+/**
+ * PostgREST upsert — on_conflict 열이 이미 있으면 본문 필드로 병합(갱신).
+ * pos_printer_settings(store_code PK) 저장 등 INSERT/UPDATE 분기 실패를 막기 위해 사용.
+ */
+export async function supabaseUpsertMerge(
+  table: string,
+  onConflictColumn: string,
+  row: Record<string, unknown>
+) {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?on_conflict=${encodeURIComponent(onConflictColumn)}`
+  const res = await supabaseFetch(pathStr, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) throw new Error('Supabase upsert failed: ' + (await res.text()))
 }
 
 export async function supabaseUpdate(
@@ -340,12 +387,18 @@ export async function supabaseSelectFilterAllPages(
   options: { order?: string; select?: string; pageSize?: number; maxRows?: number } = {}
 ): Promise<unknown[]> {
   const cap = supabaseSelectPageCap()
-  const pageSize = Math.max(500, Math.min(Number(options.pageSize) || Math.min(8000, cap), cap))
-  const maxRows = Math.min(Math.max(pageSize, Number(options.maxRows) || 2_000_000), 5_000_000)
+  const pageSize = Math.max(
+    SUPABASE_SELECT_FILTER_ALL_PAGES_MIN_STRIDE,
+    Math.min(Number(options.pageSize) || Math.min(8000, cap), cap)
+  )
+  const maxRows = Math.min(
+    Math.max(pageSize, Number(options.maxRows) || 2_000_000),
+    SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_ROWS_CEILING
+  )
   const all: unknown[] = []
   let start = 0
   let guard = 0
-  const maxPages = 5000
+  const maxPages = SUPABASE_SELECT_FILTER_ALL_PAGES_MAX_PAGES
   while (all.length < maxRows && guard++ < maxPages) {
     const end = start + pageSize - 1
     const batch = (await supabaseSelectFilterRange(table, filter, {
@@ -407,6 +460,28 @@ export async function supabaseDeleteByFilter(
 export async function supabaseCountFilter(table: string, filter: string): Promise<number> {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?select=id&${filter}`
+  const res = await supabaseFetch(pathStr, {
+    method: 'GET',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Prefer: 'count=exact',
+      Range: '0-0',
+    },
+  })
+  if (!res.ok) throw new Error('Supabase count failed: ' + (await res.text()))
+  const range = res.headers.get('Content-Range')
+  if (range) {
+    const match = range.match(/\/(\d+)$/)
+    if (match) return parseInt(match[1], 10)
+  }
+  return 0
+}
+
+/** 테이블 전체 행 수 (필터 없음). RLS/권한에 따라 관리 API에서만 사용 권장. */
+export async function supabaseCountTable(table: string): Promise<number> {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?select=id`
   const res = await supabaseFetch(pathStr, {
     method: 'GET',
     headers: {

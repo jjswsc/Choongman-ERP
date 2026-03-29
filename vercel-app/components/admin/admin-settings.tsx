@@ -22,7 +22,8 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Settings } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Settings, RefreshCw, Copy } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -37,7 +38,29 @@ import {
   getNotificationSettings,
   updateNotificationSettings,
   type HeadOfficeInfo,
+  getAdminDataLimits,
+  type AdminDataLimits,
+  type AdminTableUsageRow,
 } from "@/lib/api-client"
+
+function dataLimitKindLabel(kind: string, t: (key: string) => string): string {
+  const key = `settings_data_limits_kind_${kind}`
+  const label = t(key)
+  return label === key ? kind : label
+}
+
+function sortTableUsage(rows: AdminTableUsageRow[]): AdminTableUsageRow[] {
+  return [...rows].sort((a, b) => {
+    const wa = (a.exceedsPagingCap ? 2 : 0) + (a.exceedsDefaultMaxRows ? 1 : 0)
+    const wb = (b.exceedsPagingCap ? 2 : 0) + (b.exceedsDefaultMaxRows ? 1 : 0)
+    if (wb !== wa) return wb - wa
+    return (b.rowCount ?? 0) - (a.rowCount ?? 0)
+  })
+}
+
+const CM_ADMIN_DATA_LIMITS_NOTE_KEY = "cm_admin_data_limits_note"
+
+type SettingsTab = "office" | "permission" | "notification" | "dataLimits" | "about"
 
 const MENU_IDS = [
   "dashboard", "notices", "work-log", "item-manage", "vendor-manage",
@@ -73,7 +96,7 @@ export function AdminSettings() {
   const { lang } = useLang()
   const t = useT(lang)
 
-  const [tab, setTab] = useState<"office" | "permission" | "notification" | "about">("office")
+  const [tab, setTab] = useState<SettingsTab>("office")
 
   const [companyName, setCompanyName] = useState("")
   const [taxId, setTaxId] = useState("")
@@ -95,7 +118,10 @@ export function AdminSettings() {
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notificationSaving, setNotificationSaving] = useState(false)
 
-  const isHQ = auth?.role === "director" || auth?.role === "officer"
+  const [limitsData, setLimitsData] = useState<AdminDataLimits | null>(null)
+  const [limitsLoading, setLimitsLoading] = useState(false)
+  const [limitsError, setLimitsError] = useState("")
+  const [limitsNote, setLimitsNote] = useState("")
 
   const loadHeadOffice = useCallback(async () => {
     try {
@@ -164,6 +190,32 @@ export function AdminSettings() {
   useEffect(() => {
     loadHeadOffice()
   }, [loadHeadOffice])
+
+  useEffect(() => {
+    try {
+      const s = typeof localStorage !== "undefined" ? localStorage.getItem(CM_ADMIN_DATA_LIMITS_NOTE_KEY) : null
+      if (s) setLimitsNote(s)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const loadDataLimits = useCallback(async () => {
+    setLimitsLoading(true)
+    setLimitsError("")
+    try {
+      setLimitsData(await getAdminDataLimits())
+    } catch (e) {
+      setLimitsData(null)
+      setLimitsError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLimitsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === "dataLimits") void loadDataLimits()
+  }, [tab, loadDataLimits])
 
   useEffect(() => {
     loadPermOptions()
@@ -238,6 +290,29 @@ export function AdminSettings() {
     setPermChecks((p) => ({ ...p, [key]: !p[key] }))
   }
 
+  const persistLimitsNote = (v: string) => {
+    setLimitsNote(v)
+    try {
+      localStorage.setItem(CM_ADMIN_DATA_LIMITS_NOTE_KEY, v)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const handleCopyLimits = async () => {
+    if (!limitsData) {
+      await appAlert(t("settings_data_limits_no_data"))
+      return
+    }
+    try {
+      const payload = { ...limitsData, localBrowserNote: limitsNote }
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      await appAlert(t("settings_data_limits_copied"))
+    } catch (e) {
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
@@ -248,7 +323,7 @@ export function AdminSettings() {
           <h1 className="text-xl font-bold tracking-tight">{t("adminSettings")}</h1>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "office" | "permission" | "notification" | "about")} className={adminTabsRootCn}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -260,6 +335,9 @@ export function AdminSettings() {
                 </TabsTrigger>
                 <TabsTrigger value="notification" className={adminTabsTriggerCn}>
                   {t("settings_notification_tab")}
+                </TabsTrigger>
+                <TabsTrigger value="dataLimits" className={adminTabsTriggerCn}>
+                  {t("settings_data_limits_tab")}
                 </TabsTrigger>
                 <TabsTrigger value="about" className={adminTabsTriggerCn}>
                   {t("settings_permission_title")}
@@ -391,6 +469,179 @@ export function AdminSettings() {
                     </Button>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="dataLimits" className={adminTabsContentCn}>
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <p className="text-xs text-muted-foreground">{t("settings_data_limits_desc")}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" className="h-9 gap-1.5" onClick={() => void loadDataLimits()} disabled={limitsLoading}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${limitsLoading ? "animate-spin" : ""}`} />
+                    {limitsLoading ? t("loading") : t("settings_data_limits_refresh")}
+                  </Button>
+                  <Button type="button" variant="outline" className="h-9 gap-1.5" onClick={() => void handleCopyLimits()} disabled={!limitsData}>
+                    <Copy className="h-3.5 w-3.5" />
+                    {t("settings_data_limits_copy")}
+                  </Button>
+                </div>
+                {limitsError ? (
+                  <p className="text-sm text-destructive">{limitsError}</p>
+                ) : null}
+                {limitsLoading && !limitsData ? (
+                  <p className="py-6 text-center text-muted-foreground text-xs">{t("loading")}</p>
+                ) : limitsData ? (
+                  <>
+                    <p className="text-xs text-amber-700 dark:text-amber-500/90 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                      {t("settings_data_limits_formula")
+                        .replace("{{pages}}", String(limitsData.selectAllPagesMaxPages))
+                        .replace("{{cap}}", String(limitsData.selectPageCap))
+                        .replace("{{rows}}", (limitsData.selectAllPagesMaxPages * limitsData.selectPageCap).toLocaleString())}
+                    </p>
+                    <div className="overflow-x-auto rounded-lg border text-xs">
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-muted/50 border-b">
+                            <th className="text-left p-2.5 font-medium w-[45%]">{t("settings_data_limits_col_name")}</th>
+                            <th className="text-left p-2.5 font-medium">{t("settings_data_limits_col_value")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_select_page_cap")}</td>
+                            <td className="p-2.5 font-mono">{limitsData.selectPageCap.toLocaleString()}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_env_max")}</td>
+                            <td className="p-2.5 font-mono break-all">
+                              {limitsData.envSupabaseSelectPageSizeMax ?? "—"}
+                            </td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_all_pages_max")}</td>
+                            <td className="p-2.5 font-mono">{limitsData.selectAllPagesMaxPages.toLocaleString()}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_all_pages_rows")}</td>
+                            <td className="p-2.5 font-mono">{limitsData.selectAllPagesDefaultMaxRows.toLocaleString()}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_filter_pages_max")}</td>
+                            <td className="p-2.5 font-mono">{limitsData.selectFilterAllPagesMaxPages.toLocaleString()}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_filter_rows_max")}</td>
+                            <td className="p-2.5 font-mono">{limitsData.selectFilterAllPagesMaxRowsCeiling.toLocaleString()}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_filter_stride")}</td>
+                            <td className="p-2.5 font-mono">{limitsData.selectFilterAllPagesMinStride.toLocaleString()}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_data_limits_extracted_at")}</td>
+                            <td className="p-2.5 font-mono break-all">{limitsData.limitsExtractedAt ?? "—"}</td>
+                          </tr>
+                          <tr className="border-b">
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_data_limits_extracted_count")}</td>
+                            <td className="p-2.5 font-mono">{(limitsData.limitsExtractedCount ?? 0).toLocaleString()}</td>
+                          </tr>
+                          <tr>
+                            <td className="p-2.5 align-top text-muted-foreground">{t("settings_dl_fetched_at")}</td>
+                            <td className="p-2.5 font-mono break-all">{limitsData.fetchedAt}</td>
+                          </tr>
+                          <tr className="bg-muted/50 border-y">
+                            <td colSpan={2} className="p-2.5 text-xs font-semibold">
+                              {t("settings_data_limits_table_section")}
+                            </td>
+                          </tr>
+                          {sortTableUsage(limitsData.tableUsage ?? []).map((u) => (
+                            <tr
+                              key={u.table}
+                              className={
+                                u.exceedsPagingCap || u.exceedsDefaultMaxRows
+                                  ? "border-b border-amber-500/25 bg-amber-500/5"
+                                  : "border-b border-border/60"
+                              }
+                            >
+                              <td className="p-2.5 align-top text-muted-foreground font-mono text-[11px]">{u.table}</td>
+                              <td className="p-2.5 align-top">
+                                {u.error ? (
+                                  <span className="text-destructive text-[11px]">{u.error}</span>
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    <div className="font-mono text-sm">
+                                      {(u.rowCount ?? 0).toLocaleString()} {t("settings_data_limits_rows_suffix")}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground leading-snug">
+                                      {t("settings_data_limits_row_detail_caps")
+                                        .replace("{{paging}}", u.capFromPaging.toLocaleString())
+                                        .replace("{{total}}", u.defaultMaxRows.toLocaleString())}
+                                      {" · "}
+                                      {u.exceedsDefaultMaxRows
+                                        ? t("settings_data_limits_usage_warn_max")
+                                        : u.exceedsPagingCap
+                                          ? t("settings_data_limits_usage_warn_paging")
+                                          : t("settings_data_limits_usage_ok")}
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <ul className="text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
+                      <li>{t("settings_data_limits_hint_rows")}</li>
+                      <li>{t("settings_data_limits_hint_env")}</li>
+                      <li>{t("settings_data_limits_hint_all_pages")}</li>
+                    </ul>
+
+                    <p className="text-[11px] text-muted-foreground border-t pt-3">{t("settings_data_limits_codegen_note")}</p>
+
+                    <div className="space-y-2 border-t pt-4">
+                      <h3 className="text-sm font-semibold">{t("settings_data_limits_routes_title")}</h3>
+                      <p className="text-[11px] text-muted-foreground">{t("settings_data_limits_routes_desc")}</p>
+                      <div className="max-h-[min(70vh,720px)] overflow-auto rounded-lg border text-xs">
+                        <table className="w-full border-collapse">
+                          <thead className="sticky top-0 bg-muted/95 z-[1]">
+                            <tr className="border-b">
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("settings_data_limits_routes_col_location")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("settings_data_limits_routes_col_kind")}</th>
+                              <th className="text-right p-2 font-medium whitespace-nowrap">{t("settings_data_limits_routes_col_code")}</th>
+                              <th className="text-left p-2 font-medium whitespace-nowrap">{t("settings_data_limits_routes_col_effective")}</th>
+                              <th className="text-left p-2 font-medium min-w-[120px]">{t("settings_data_limits_routes_col_path")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(limitsData.routeLimits ?? []).map((r, i) => (
+                              <tr key={`${r.path}-${r.line}-${i}`} className="border-b border-border/60">
+                                <td className="p-2 align-top text-muted-foreground whitespace-pre-wrap break-all">{r.apiLabel}</td>
+                                <td className="p-2 align-top">{dataLimitKindLabel(r.kind, t)}</td>
+                                <td className="p-2 align-top font-mono text-[11px] text-right">{r.value.toLocaleString()}</td>
+                                <td className="p-2 align-top font-mono text-[11px]">{r.effectiveDisplay}</td>
+                                <td className="p-2 align-top font-mono text-[10px] text-muted-foreground break-all">
+                                  {r.path}:{r.line}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold block">{t("settings_data_limits_note_label")}</label>
+                  <Textarea
+                    value={limitsNote}
+                    onChange={(e) => persistLimitsNote(e.target.value)}
+                    placeholder={t("settings_data_limits_note_ph")}
+                    className="min-h-[88px] text-xs"
+                  />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

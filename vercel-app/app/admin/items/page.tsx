@@ -24,6 +24,8 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
 import { compareByCode } from "@/lib/sort-utils"
+import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 
 export type Product = AdminItem
 
@@ -52,6 +54,8 @@ const emptyForm: ItemFormData = {
 export default function ItemsPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
+  const canToggleOrderPaused = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
   const [products, setProducts] = React.useState<Product[]>([])
   const [allCategories, setAllCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -463,7 +467,7 @@ export default function ItemsPage() {
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}
-            onToggleOrderDisabled={handleToggleOrderDisabled}
+            onToggleOrderDisabled={canToggleOrderPaused ? handleToggleOrderDisabled : undefined}
           />
         </div>
           </TabsContent>

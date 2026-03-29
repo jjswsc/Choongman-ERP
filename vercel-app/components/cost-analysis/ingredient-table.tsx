@@ -712,7 +712,7 @@ export function IngredientTable({
         <span
           className={cn(
             "font-mono text-base font-bold",
-            type === "food" ? "text-primary" : "text-accent"
+            "text-primary"
           )}
         >
           {subTotal.toFixed(2)} THB

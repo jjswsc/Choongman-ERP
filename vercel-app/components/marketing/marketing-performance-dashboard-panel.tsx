@@ -16,6 +16,7 @@ import {
   Legend,
 } from "recharts"
 import { getMarketingCampaigns, getMarketingCampaignResults, type MarketingCampaign } from "@/lib/api-client"
+import { marketingCampaignHasDefinedPeriod } from "@/lib/marketing-campaign-periods"
 import { useStoreList } from "@/lib/use-store-list"
 import { cn } from "@/lib/utils"
 import {
@@ -77,7 +78,7 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
 
         const rows: ChartRow[] = []
         for (const c of scoped) {
-          if (!c.startDate || !c.endDate || !c.kpiTarget) continue
+          if (!marketingCampaignHasDefinedPeriod(c) || !c.kpiTarget) continue
           const res = await getMarketingCampaignResults({ campaignId: c.id })
           if (res.success && res.totalOrders != null) {
             const topic = c.topic
@@ -127,13 +128,13 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">캠페인</label>
+            <label className="text-xs text-muted-foreground">{t("marketingPerformanceFilterCampaign")}</label>
             <select
               value={campaignFilter}
               onChange={(e) => setCampaignFilter(e.target.value)}
               className="h-9 w-full min-w-[200px] rounded-md border border-input bg-background px-3 text-sm sm:max-w-xs"
             >
-              <option value="">전체 캠페인 (기간·KPI 있는 항목)</option>
+              <option value="">{t("marketingPerformanceAllCampaignsKpi")}</option>
               {campaigns.map((c) => (
                 <option key={c.id} value={c.id}>
                   {campaignListLabel(c)}
@@ -142,13 +143,13 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">매장</label>
+            <label className="text-xs text-muted-foreground">{t("marketingPerformanceStore")}</label>
             <Select value={storeFilter || "__all__"} onValueChange={(v) => setStoreFilter(v === "__all__" ? "" : v)}>
               <SelectTrigger className="h-9 w-full min-w-[160px] bg-background sm:max-w-xs">
-                <SelectValue placeholder="전체 매장" />
+                <SelectValue placeholder={t("marketingPerformanceAllStores")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">전체 매장</SelectItem>
+                <SelectItem value="__all__">{t("marketingPerformanceAllStores")}</SelectItem>
                 {storeList.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
@@ -163,37 +164,41 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
           className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-sm transition-colors hover:bg-muted"
         >
           <CalendarDays className="h-4 w-4 text-primary" />
-          통합 캘린더
+          {t("marketingPerformanceIntegratedCalendar")}
         </Link>
       </div>
 
       <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        KPI 단위는 캠페인 허브 설정(주문·매출 등)과 동일하며, 실적은{" "}
-        <strong className="text-foreground">POS 집계(성과/비용과 동일 귀속)</strong> 기준입니다.
+        {t("marketingPerformanceKpiNoteLead")}{" "}
+        <strong className="text-foreground">{t("marketingPerformanceKpiNotePosBold")}</strong>
+        {t("marketingPerformanceKpiNoteTrail")}
         {campaignIdFromQuery && (
-          <span className="ml-1 text-primary">(허브에서 연결된 캠페인으로 필터)</span>
+          <span className="ml-1 text-primary">{t("marketingPerformanceHubLinkedFilterHint")}</span>
         )}
         {storeFilter ? (
-          <span className="ml-1 block sm:inline">매장 필터는 캠페인 허브에 지정된 매장명과 일치할 때 집계됩니다.</span>
+          <span className="ml-1 block sm:inline">{t("marketingPerformanceStoreFilterMatchHint")}</span>
         ) : null}
       </div>
 
       {summary && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-lg border bg-card px-3 py-2">
-            <div className="text-[10px] text-muted-foreground">집계 캠페인</div>
-            <div className="text-lg font-semibold">{summary.count}건</div>
+            <div className="text-[10px] text-muted-foreground">{t("marketingPerformanceAggregatedCampaigns")}</div>
+            <div className="text-lg font-semibold">
+              {summary.count}
+              {t("marketingCountUnit")}
+            </div>
           </div>
           <div className="rounded-lg border bg-card px-3 py-2">
-            <div className="text-[10px] text-muted-foreground">평균 달성률</div>
+            <div className="text-[10px] text-muted-foreground">{t("marketingPerformanceAvgAchievement")}</div>
             <div className="text-lg font-semibold">{summary.avgPct.toFixed(1)}%</div>
           </div>
           <div className="rounded-lg border bg-card px-3 py-2">
-            <div className="text-[10px] text-muted-foreground">합계 목표</div>
+            <div className="text-[10px] text-muted-foreground">{t("marketingPerformanceSumTarget")}</div>
             <div className="text-lg font-semibold tabular-nums">{summary.totalTarget.toLocaleString()}</div>
           </div>
           <div className="rounded-lg border bg-primary/10 px-3 py-2">
-            <div className="text-[10px] text-muted-foreground">합계 실적</div>
+            <div className="text-[10px] text-muted-foreground">{t("marketingPerformanceSumActual")}</div>
             <div className="text-lg font-semibold tabular-nums">{summary.totalActual.toLocaleString()}</div>
           </div>
         </div>
@@ -204,13 +209,13 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
       )}
       {!loading && chartData.length === 0 && (
         <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/30 px-6 py-12 text-center text-muted-foreground">
-          <p className="text-sm">선택한 범위에 기간·KPI·실적이 있는 캠페인이 없습니다.</p>
+          <p className="text-sm">{t("marketingPerformanceEmptyNoData")}</p>
         </div>
       )}
       {!loading && chartData.length > 0 && (
         <div className="space-y-4">
           <div className="rounded-xl border bg-card p-4">
-            <h3 className="mb-3 text-sm font-semibold">KPI 목표 vs 실적</h3>
+            <h3 className="mb-3 text-sm font-semibold">{t("marketingPerformanceKpiChartTitle")}</h3>
             <div className="h-[340px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData.slice(0, 15)} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -219,8 +224,8 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="target" fill="#94a3b8" name="목표" />
-                  <Bar dataKey="actual" fill="#3b82f6" name="실적" />
+                  <Bar dataKey="target" fill="#94a3b8" name={t("marketingPerformanceChartTarget")} />
+                  <Bar dataKey="actual" fill="#3b82f6" name={t("marketingPerformanceChartActual")} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -229,11 +234,11 @@ export function MarketingPerformanceDashboardPanel({ campaignIdFromQuery = "" }:
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-muted-foreground">
-                  <th className="px-4 py-2 text-left">캠페인번호</th>
-                  <th className="px-4 py-2 text-left">캠페인</th>
-                  <th className="px-4 py-2 text-right">목표</th>
-                  <th className="px-4 py-2 text-right">실적</th>
-                  <th className="px-4 py-2 text-right">달성률</th>
+                  <th className="px-4 py-2 text-left">{t("marketingPerformanceColCampaignNo")}</th>
+                  <th className="px-4 py-2 text-left">{t("marketingPerformanceColCampaign")}</th>
+                  <th className="px-4 py-2 text-right">{t("marketingPerformanceColTarget")}</th>
+                  <th className="px-4 py-2 text-right">{t("marketingPerformanceColActual")}</th>
+                  <th className="px-4 py-2 text-right">{t("marketingPerformanceColRate")}</th>
                 </tr>
               </thead>
               <tbody>

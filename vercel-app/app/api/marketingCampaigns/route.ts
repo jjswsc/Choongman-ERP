@@ -6,6 +6,7 @@ import {
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 import { normalizeMarketingCollabDetail } from '@/lib/marketing-collab-detail'
+import { parsePhasePeriodsFromUnknown } from '@/lib/marketing-campaign-periods'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -57,6 +58,11 @@ async function generateCampaignNo() {
 
 function toCampaignErrorMessage(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e)
+  if (raw.includes('PGRST204') && raw.includes("Could not find the '") && raw.includes("column")) {
+    return (
+      'Supabase에 marketing_campaigns 확장 컬럼이 없습니다. SQL Editor에서 vercel-app/sql/marketing_campaigns_vercel_api_bootstrap.sql 전체를 실행한 뒤 다시 저장하세요. (PGRST204 스키마 캐시)'
+    )
+  }
   if (
     raw.includes('42501') ||
     (raw.includes('PGRST') && raw.includes('row-level security')) ||
@@ -102,7 +108,10 @@ export async function GET(req: NextRequest) {
         detail: String(row.detail ?? ''),
         startDate: row.start_date ? parseDate(row.start_date) : null,
         endDate: row.end_date ? parseDate(row.end_date) : null,
-        branches: Array.isArray(row.branches) ? row.branches : (row.branches && typeof row.branches === 'object' ? Object.values(row.branches) : []),
+        designStartDate: row.design_start_date ? parseDate(row.design_start_date) : null,
+        designEndDate: row.design_end_date ? parseDate(row.design_end_date) : null,
+        designNote: String(row.design_note ?? ''),
+        branches: parseBranches(row.branches),
         discountType: String(row.discount_type ?? 'percent'),
         discountValue: parseNum(row.discount_value),
         discountPricePromotion: String(row.discount_price_promotion ?? ''),
@@ -121,6 +130,7 @@ export async function GET(req: NextRequest) {
         campaignPerformance: String(row.campaign_performance ?? ''),
         conclusion: String(row.conclusion ?? ''),
         collabDetail: normalizeMarketingCollabDetail(row.collab_detail),
+        phasePeriods: parsePhasePeriodsFromUnknown(row.phase_periods),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }
@@ -141,7 +151,10 @@ export async function GET(req: NextRequest) {
       status: String(row.status ?? 'draft'),
       startDate: row.start_date ? parseDate(row.start_date) : null,
       endDate: row.end_date ? parseDate(row.end_date) : null,
-      branches: Array.isArray(row.branches) ? row.branches : [],
+      designStartDate: row.design_start_date ? parseDate(row.design_start_date) : null,
+      designEndDate: row.design_end_date ? parseDate(row.design_end_date) : null,
+      designNote: String(row.design_note ?? ''),
+      branches: parseBranches(row.branches),
       kpiTarget: parseNum(row.kpi_target),
       kpiUnit: String(row.kpi_unit ?? 'order'),
       budgetTotal: parseNum(row.budget_total),
@@ -150,6 +163,8 @@ export async function GET(req: NextRequest) {
       discountPricePromotion: String(row.discount_price_promotion ?? ''),
       discountTargetAudience: String(row.discount_target_audience ?? ''),
       collabManagement: row.collab_management === true,
+      collabDetail: normalizeMarketingCollabDetail(row.collab_detail),
+      phasePeriods: parsePhasePeriodsFromUnknown(row.phase_periods),
     }))
 
     return NextResponse.json(list, { headers })
@@ -175,6 +190,9 @@ export async function POST(req: NextRequest) {
       detail?: string
       startDate?: string | null
       endDate?: string | null
+      designStartDate?: string | null
+      designEndDate?: string | null
+      designNote?: string
       branches?: string[]
       discountType?: string
       discountValue?: number
@@ -193,6 +211,7 @@ export async function POST(req: NextRequest) {
       campaignPerformance?: string
       conclusion?: string
       collabManagement?: boolean
+      phasePeriods?: unknown
     }
 
     const topic = String(body.topic ?? '').trim()
@@ -206,6 +225,7 @@ export async function POST(req: NextRequest) {
     }
 
     const branches = Array.isArray(body.branches) ? body.branches : parseBranches(body.branches)
+    const phasePeriods = parsePhasePeriodsFromUnknown(body.phasePeriods)
 
     const campaignNo =
       String(body.campaignNo ?? '').trim() ||
@@ -220,6 +240,9 @@ export async function POST(req: NextRequest) {
       detail: String(body.detail ?? '').trim(),
       start_date: body.startDate ? parseDate(body.startDate) : null,
       end_date: body.endDate ? parseDate(body.endDate) : null,
+      design_start_date: body.designStartDate ? parseDate(body.designStartDate) : null,
+      design_end_date: body.designEndDate ? parseDate(body.designEndDate) : null,
+      design_note: String(body.designNote ?? '').trim(),
       branches: branches,
       discount_type: String(body.discountType ?? 'percent').trim(),
       discount_value: parseNum(body.discountValue),
@@ -238,6 +261,7 @@ export async function POST(req: NextRequest) {
       campaign_performance: String(body.campaignPerformance ?? '').trim(),
       conclusion: String(body.conclusion ?? '').trim(),
       collab_management: body.collabManagement === true,
+      phase_periods: phasePeriods,
       updated_at: new Date().toISOString(),
     }
 

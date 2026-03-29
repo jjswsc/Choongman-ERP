@@ -5,6 +5,12 @@
 
 import { apiFetch } from './fetch'
 import { addToQueue } from '@/lib/offline/queue'
+import {
+  isBrowserOnline,
+  isNetworkDegraded,
+  reportNetworkFailure,
+  reportNetworkSuccess,
+} from '@/lib/offline/network'
 
 function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError && e.message?.toLowerCase().includes('fetch')) return true
@@ -174,11 +180,6 @@ const OFFLINE_FALLBACK: Record<string, unknown> = {
 /** 기본 fallback */
 const DEFAULT_FALLBACK = { success: true }
 
-/** savePosOrder 5xx/오프라인 시 클라이언트에 줄 응답 (orderNo 표시용) */
-function getSavePosOrderFallback(): Record<string, unknown> {
-  return { success: true, orderNo: `LOCAL-${Date.now()}` }
-}
-
 function canQueue(url: string, init?: RequestInit): boolean {
   const path = normalPath(url)
   const method = (init?.method || 'GET').toUpperCase()
@@ -214,6 +215,7 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
     const body = getSerializableBody(init)
     if (body === undefined) throw new Error('Body not serializable')
     const method = (init?.method || 'POST').toUpperCase()
+    const localOrderNo = path === '/api/savePosOrder' ? `LOCAL-${Date.now()}` : undefined
     await addToQueue({
       api: path.startsWith('/') ? path : `/${path}`,
       method,
@@ -222,19 +224,23 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
         init?.headers instanceof Headers
           ? Object.fromEntries((init.headers as Headers).entries())
           : (init?.headers as Record<string, string>) ?? {},
+      ...(localOrderNo ? { metadata: { localOrderNo } } : {}),
     })
     const fallback =
-      path === '/api/savePosOrder'
-        ? getSavePosOrderFallback()
+      path === '/api/savePosOrder' && localOrderNo
+        ? { success: true, orderNo: localOrderNo }
         : (OFFLINE_FALLBACK[path] ?? DEFAULT_FALLBACK)
     return new Response(JSON.stringify(fallback), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Offline-Queued': '1',
+      },
     })
   }
 
-  /** 브라우저가 오프라인이면 fetch 대기 없이 곧바로 큐 적재 (저장 버튼이 실패로 보이는 현상 완화) */
-  if (typeof navigator !== 'undefined' && navigator.onLine === false && canQueue(url, init)) {
+  /** 오프라인/심각한 degraded 상태면 fetch 대기 없이 곧바로 큐 적재 */
+  if ((!isBrowserOnline() || isNetworkDegraded()) && canQueue(url, init)) {
     try {
       return await queueAndReturnFallback()
     } catch {
@@ -244,8 +250,12 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
 
   try {
     const res = await apiFetch(input, init)
+    if (res.ok) {
+      reportNetworkSuccess()
+    }
     // 서버/DB 장애(5xx) 시에도 큐 적재 → Supabase 등 장애 시 오프라인처럼 동작
     if (!res.ok && res.status >= 500 && res.status < 600) {
+      reportNetworkFailure()
       try {
         return await queueAndReturnFallback()
       } catch {
@@ -255,6 +265,7 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
     return res
   } catch (e) {
     if (!isNetworkError(e)) throw e
+    reportNetworkFailure()
     try {
       return await queueAndReturnFallback()
     } catch {

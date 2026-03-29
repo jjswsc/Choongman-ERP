@@ -62,7 +62,10 @@ import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
+import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
+import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
+import { printHtmlInHiddenIframe } from "@/lib/print-html-iframe"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -298,15 +301,31 @@ export default function PosOrderPage() {
 
   const loadMenusAndPromos = React.useCallback(() => {
     setLoading(true)
-    Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions(), getPosPromosWithItems()])
-      .then(([list, { categories: cats, mainCategories: mains }, opts, promoList]) => {
-        setMenus(list || [])
-        setPromos(promoList || [])
-        setAllOptions(opts || [])
+    const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
+    Promise.allSettled([
+      getPosMenus(),
+      getPosMenuCategories(),
+      getPosMenuOptions(),
+      getPosPromosWithItems(),
+    ])
+      .then(([r0, r1, r2, r3]) => {
+        const list = r0.status === "fulfilled" ? r0.value || [] : []
+        const catRes = r1.status === "fulfilled" ? r1.value || emptyCats : emptyCats
+        const cats = catRes.categories || []
+        const mains = catRes.mainCategories || []
+        const opts = r2.status === "fulfilled" ? r2.value || [] : []
+        const promoList = r3.status === "fulfilled" ? r3.value || [] : []
+        const derivedCats = Array.from(new Set(list.map((m) => String(m.category || "").trim()).filter(Boolean)))
+        const derivedMains = Array.from(new Set(list.map((m) => String(m.categoryMain || "").trim()).filter(Boolean)))
+        const finalCats = cats.length > 0 ? cats : derivedCats
+        const finalMains = mains.length > 0 ? mains : derivedMains
+        setMenus(list)
+        setPromos(promoList)
+        setAllOptions(opts)
         const promoCategories = [...new Set((promoList || []).map((p) => p.category).filter(Boolean))]
-        const merged = [...new Set([...(cats || []), ...promoCategories])].sort()
+        const merged = [...new Set([...(finalCats || []), ...promoCategories])].sort()
         setCategories(merged)
-        const mainMerged = normalizePosMainCategoryTabs([...(mains || []), PROMOTION_MAIN_CATEGORY])
+        const mainMerged = normalizePosMainCategoryTabs([...(finalMains || []), PROMOTION_MAIN_CATEGORY])
         setMainCategories(mainMerged)
         setSelectedMainCategory((prev) => (mainMerged.includes(prev) ? prev : ""))
         setSelectedCategory((prev) => {
@@ -316,12 +335,6 @@ export default function PosOrderPage() {
           if (merged.some((c) => promotionSubcategoriesEqual(c, pn))) return pn
           return ""
         })
-      })
-      .catch(() => {
-        setMenus([])
-        setPromos([])
-        setCategories([])
-        setAllOptions([])
       })
       .finally(() => setLoading(false))
   }, [])
@@ -800,6 +813,19 @@ export default function PosOrderPage() {
       print-color-adjust: exact;
     }
   `
+  const printInIframe = React.useCallback(
+    (fullHtml: string, title: string) =>
+      new Promise<void>((resolve, reject) => {
+        printHtmlInHiddenIframe(fullHtml, {
+          title,
+          printDelayMs: 220,
+          fallbackCleanupMs: 30_000,
+          onPrintUnavailable: () => reject(new Error(t("posPrintBlocked") || "인쇄를 시작할 수 없습니다.")),
+          onAfterCleanup: () => resolve(),
+        })
+      }),
+    [t]
+  )
 
   const handlePrintReceipt = async () => {
     if (!receiptRef.current) return
@@ -809,12 +835,7 @@ export default function PosOrderPage() {
     fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH5)}).catch(()=>{});
     fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH5)}).catch(()=>{});
     // #endregion
-    const printWindow = window.open("", "_blank")
-    if (!printWindow) {
-      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
-      return
-    }
-    printWindow.document.write(`
+    const fullHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -840,27 +861,16 @@ export default function PosOrderPage() {
         </head>
         <body>${printContent}</body>
       </html>
-    `)
-    printWindow.document.close()
-    printWindow.focus()
-    let closed = false
-    const safeClose = () => {
-      if (closed) return
-      closed = true
-      printWindow.close()
+    `
+    try {
+      await printInIframe(fullHtml, t("posReceipt") || "영수증")
+    } catch {
+      await appAlert(t("posPrintBlocked") || "팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정을 확인해 주세요.")
     }
-    printWindow.onafterprint = safeClose
-    setTimeout(() => printWindow.print(), 250)
-    setTimeout(safeClose, 30000)
   }
 
   const handlePrintKitchenSlip = async () => {
     if (!receiptData || !receiptData.storeCode) return
-    const win = window.open("", "_blank")
-    if (!win) {
-      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
-      return
-    }
     try {
       const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
       const kLabels = {
@@ -874,16 +884,18 @@ export default function PosOrderPage() {
         buildKitchenSlipGroupOpts(settings, menus, kLabels)
       )
       if (slips.length === 0) {
-        win.close()
         await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 출력할 품목이 없습니다.")
         return
       }
       const slipDesign = resolveKitchenSlipDesign(settings)
-      const printOne = (idx: number) => {
+      const kitchenOrderNoRaw = resolvePosReceiptOrderNoRaw({
+        posOrderNo: receiptData.orderNo,
+        tableName: receiptData.tableName,
+        memo: receiptData.memo,
+      })
+      const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
-        const w = idx === 0 ? win : window.open("", "_blank")
-        if (!w) return
         const kitchenMemo = parsePosOrderMemo(receiptData.memo).plainMemo
         const tablePart = receiptData.tableName
           ? ` · ${t("posTable") || "테이블"}: ${translateReceiptTableDisplayName(receiptData.tableName, t)}`
@@ -892,7 +904,7 @@ export default function PosOrderPage() {
           kitchenMemo.trim() ? `${t("posCustomerMemo") || "메모"}: ${kitchenMemo.trim()}` : ""
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
-          orderNo: receiptData.orderNo,
+          orderNo: kitchenOrderNoRaw,
           storeCode: receiptData.storeCode,
           orderTypeLabel: orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType,
           tablePart,
@@ -907,23 +919,14 @@ export default function PosOrderPage() {
           design: slipDesign,
           printColorAdjust: "economy",
         })
-        w.document.write(html)
-        w.document.close()
-        w.focus()
-        let done = false
-        const afterPrint = () => {
-          if (done) return
-          done = true
-          w.close()
-          if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+        await printInIframe(html, slip.label)
+        if (idx + 1 < slips.length) {
+          await new Promise((resolve) => setTimeout(resolve, 220))
+          await printOne(idx + 1)
         }
-        w.onafterprint = afterPrint
-        setTimeout(() => w.print(), 250)
-        setTimeout(afterPrint, 30000)
       }
-      printOne(0)
+      await printOne(0)
     } catch (e) {
-      win.close()
       await appAlert(String(e))
     }
   }
@@ -980,12 +983,7 @@ export default function PosOrderPage() {
           retryLabel={t("posRetrySync") || "재시도"}
         />
       {todaySales != null && (
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 text-xs shadow-sm">
-          <span className="text-slate-600">
-            {t("posTodayCompleted") || "오늘 완료"}:{" "}
-            <span className="font-bold text-emerald-600">{todaySales.completedCount}</span>
-            {t("posCount") || "건"}
-          </span>
+        <div className="flex shrink-0 items-center justify-end border-b border-slate-200 bg-white px-4 py-2 text-xs shadow-sm">
           <span className="font-bold tabular-nums text-slate-800">
             {formatBahtNum(todaySales.completedTotal)} ฿
           </span>
@@ -1244,7 +1242,7 @@ export default function PosOrderPage() {
                   onClick={() => reorderFrom(o)}
                   className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                 >
-                  <div className="text-[10px] font-bold text-emerald-600">{o.orderNo}</div>
+                  <div className="text-[10px] font-bold text-emerald-600">{formatPosOrderNoForPrint(o.orderNo)}</div>
                   <div className="text-[11px] text-slate-600">
                     {formatBahtNum(o.total)} ฿
                   </div>
@@ -1773,7 +1771,11 @@ export default function PosOrderPage() {
                   />
                   <div className="receipt-store-name">{receiptData.storeCode}</div>
                   <div className="text-xs text-muted-foreground">
-                    {receiptData.orderNo}
+                    {formatPosReceiptOrderNoDisplay({
+                      posOrderNo: receiptData.orderNo,
+                      tableName: receiptData.tableName,
+                      memo: receiptData.memo,
+                    })}
                   </div>
                   <div className="text-xs">
                     {orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}

@@ -1,0 +1,28 @@
+$ErrorActionPreference = "Stop"
+
+# ============================================================
+# POS Cash Drawer Open Script (PowerShell Template)
+#
+# 이 파일은 예시입니다.
+# 실제 매장 장비(프린터/드라이버/유틸)에 맞는 "돈통 열기" 명령으로 교체하세요.
+# 성공 시 exit 0, 실패 시 exit 1 이어야 합니다.
+# ============================================================
+
+try {
+    # [예시 1] 벤더 EXE 호출
+    # $tool = "C:\Program Files\YourVendor\DrawerTool.exe"
+    # if (Test-Path $tool) {
+    #     & $tool "--open"
+    #     if ($LASTEXITCODE -ne 0) { throw "Drawer tool failed: $LASTEXITCODE" }
+    #     exit 0
+    # }
+
+    # [예시 2] 프린터/OPOS 커맨드 호출
+    # TODO: 매장 환경에 맞는 명령 추가
+
+    throw "No drawer command implemented."
+}
+catch {
+    Write-Error "[open-drawer] $($_.Exception.Message)"
+    exit 1
+}

@@ -1,0 +1,29 @@
+@echo off
+setlocal
+
+REM ============================================================
+REM POS Cash Drawer Open Script (Template)
+REM
+REM 1) 이 파일을 복사해서 C:\POS\open-drawer.bat 로 저장
+REM 2) 아래 [A] 또는 [B] 중 하나를 실제 환경에 맞게 활성화
+REM 3) 성공 시 exit /b 0, 실패 시 exit /b 1
+REM ============================================================
+
+REM [A] 벤더 유틸/드라이버 EXE 호출 예시
+REM set "DRAWER_TOOL=C:\Program Files\YourVendor\DrawerTool.exe"
+REM if exist "%DRAWER_TOOL%" (
+REM   "%DRAWER_TOOL%" --open
+REM   if errorlevel 1 exit /b 1
+REM   exit /b 0
+REM )
+
+REM [B] PowerShell 스크립트 호출 예시
+set "PS_SCRIPT=%~dp0open-drawer.ps1.example"
+if exist "%PS_SCRIPT%" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT%"
+  if errorlevel 1 exit /b 1
+  exit /b 0
+)
+
+echo [open-drawer] No valid drawer command configured.
+exit /b 1

@@ -79,6 +79,7 @@ start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printin
 
 - **QZ Tray**, **JS Print Manager** 등 로컬 프로그램을 설치하면, 브라우저에서 해당 프로그램으로 인쇄를 넘겨서 대화상자 없이 인쇄할 수 있습니다.
 - 영수증 전용이라면 **thermal printer + 로컬 HTTP 서버** 조합으로 브라우저에서 `fetch`로 인쇄 요청을 보내는 방식도 가능합니다.
+- 돈통 자동 열림도 같은 방식으로 로컬 브리지를 사용합니다: [POS 돈통 로컬 브리지 가이드](./POS-CASH-DRAWER-BRIDGE.md)
 
 ---
 

@@ -14,6 +14,8 @@ export type PrintHtmlInHiddenIframeOptions = {
   onPrintUnavailable?: () => void
   /** iframe 제거 시 최대 1회 (onafterprint / 오류 / fallback 타임아웃) */
   onAfterCleanup?: () => void
+  /** print 다이얼로그/프린터 파이프라인 시작 감지 대기(ms). 초과 시 onPrintUnavailable 호출 */
+  printStartTimeoutMs?: number
 }
 
 export function printHtmlInHiddenIframe(
@@ -22,12 +24,17 @@ export function printHtmlInHiddenIframe(
 ): void {
   const printDelayMs = opts?.printDelayMs ?? 450
   const fallbackCleanupMs = opts?.fallbackCleanupMs ?? 30000
+  const printStartTimeoutMs = opts?.printStartTimeoutMs ?? 1800
 
   const iframe = document.createElement('iframe')
   iframe.setAttribute('title', opts?.title || 'Print')
   iframe.setAttribute('aria-hidden', 'true')
+  /**
+   * 일부 Chromium 환경에서 0x0 + visibility:hidden iframe 의 print() 호출이 무시되는 케이스가 있어
+   * 1x1 투명 프레임을 화면 밖으로 보냅니다.
+   */
   iframe.style.cssText =
-    'position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;visibility:hidden'
+    'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none'
   document.body.appendChild(iframe)
   const cw = iframe.contentWindow
   if (!cw) {
@@ -40,6 +47,7 @@ export function printHtmlInHiddenIframe(
   cw.document.close()
 
   let cleaned = false
+  let printStarted = false
   const removeIframe = () => {
     if (cleaned) return
     cleaned = true
@@ -51,14 +59,33 @@ export function printHtmlInHiddenIframe(
     opts?.onAfterCleanup?.()
   }
 
-  cw.onafterprint = removeIframe
+  cw.onbeforeprint = () => {
+    printStarted = true
+  }
+  cw.onafterprint = () => {
+    printStarted = true
+    removeIframe()
+  }
+
+  const startGuardTimer = setTimeout(() => {
+    if (!printStarted) {
+      opts?.onPrintUnavailable?.()
+      removeIframe()
+    }
+  }, printDelayMs + printStartTimeoutMs)
+
   setTimeout(() => {
     try {
       cw.focus()
       cw.print()
     } catch {
+      clearTimeout(startGuardTimer)
       removeIframe()
+      opts?.onPrintUnavailable?.()
     }
   }, printDelayMs)
-  setTimeout(removeIframe, fallbackCleanupMs)
+  setTimeout(() => {
+    clearTimeout(startGuardTimer)
+    removeIframe()
+  }, fallbackCleanupMs)
 }

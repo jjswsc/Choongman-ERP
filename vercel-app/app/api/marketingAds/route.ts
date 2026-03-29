@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
       contentFormat: String(row.content_format ?? ''),
       contentPillar: String(row.content_pillar ?? ''),
       contentTopic: String(row.content_topic ?? ''),
+      contentDetail: String((row as { content_detail?: unknown }).content_detail ?? ''),
       publishDate: row.publish_date ? parseDate(row.publish_date) : null,
       periodEndDate: row.period_end_date ? parseDate(row.period_end_date) : null,
       platform: String(row.platform ?? ''),
@@ -106,6 +107,8 @@ export async function POST(req: NextRequest) {
       contentFormat?: string
       contentPillar?: string
       contentTopic?: string
+      contentDetail?: string
+      content_detail?: string
       publishDate?: string | null
       periodEndDate?: string | null
       platform?: string
@@ -152,7 +155,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const rowBase: Record<string, unknown> = {
+    const contentDetail = String(body.contentDetail ?? body.content_detail ?? '').trim()
+    const rowCore: Record<string, unknown> = {
       campaign_id: Number(campaignId),
       content_format: String(body.contentFormat ?? '').trim(),
       content_pillar: String(body.contentPillar ?? '').trim(),
@@ -165,8 +169,12 @@ export async function POST(req: NextRequest) {
     }
     const periodEndParsed = body.periodEndDate ? parseDate(body.periodEndDate) : null
     const rowWithPeriod: Record<string, unknown> = {
-      ...rowBase,
+      ...rowCore,
       period_end_date: periodEndParsed,
+    }
+    const rowFull: Record<string, unknown> = {
+      ...rowWithPeriod,
+      content_detail: contentDetail,
     }
 
     let recordId = editingId || ''
@@ -182,19 +190,29 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: '수정할 광고를 찾을 수 없습니다.' }, { headers })
       }
       try {
-        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowWithPeriod)
+        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowFull)
       } catch (e) {
         if (!isColumnSchemaError(e)) throw e
-        await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowBase)
+        try {
+          await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowWithPeriod)
+        } catch (e2) {
+          if (!isColumnSchemaError(e2)) throw e2
+          await supabaseUpdateByFilter('marketing_ads', `id=eq.${editingId}`, rowCore)
+        }
       }
       recordId = editingId
     } else {
       let inserted: { id?: number }[] | { id?: number } | null = null
       try {
-        inserted = (await supabaseInsert('marketing_ads', rowWithPeriod)) as { id?: number }[]
+        inserted = (await supabaseInsert('marketing_ads', rowFull)) as { id?: number }[]
       } catch (e) {
         if (!isColumnSchemaError(e)) throw e
-        inserted = (await supabaseInsert('marketing_ads', rowBase)) as { id?: number }[]
+        try {
+          inserted = (await supabaseInsert('marketing_ads', rowWithPeriod)) as { id?: number }[]
+        } catch (e2) {
+          if (!isColumnSchemaError(e2)) throw e2
+          inserted = (await supabaseInsert('marketing_ads', rowCore)) as { id?: number }[]
+        }
       }
       const created = Array.isArray(inserted) ? inserted[0] : inserted
       recordId = created?.id != null ? String(created.id) : ''
@@ -220,7 +238,9 @@ export async function POST(req: NextRequest) {
       amount: actual,
       expenseDate,
       dueDate: null,
-      detailLine: `${platform}${body.contentTopic ? ` · ${String(body.contentTopic).slice(0, 80)}` : ''}`,
+      detailLine: `${platform}${
+        body.contentTopic ? ` · ${String(body.contentTopic).slice(0, 80)}` : ''
+      }${contentDetail ? ` · ${contentDetail.slice(0, 80)}` : ''}`,
       existingExpenseAccrualId: priorAccrualId,
     })
 

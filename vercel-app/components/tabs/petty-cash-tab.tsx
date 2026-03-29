@@ -32,6 +32,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
+import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import {
@@ -84,10 +85,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [monthlyScope, setMonthlyScope] = useState<"store" | "office">("store")
   const [monthlyStore, setMonthlyStore] = useState("All")
   const [monthlyDepartment, setMonthlyDepartment] = useState("All")
-  const [monthlyYm, setMonthlyYm] = useState(() => {
-    const n = new Date()
-    return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0")
-  })
+  const [monthlyYm, setMonthlyYm] = useState(() => getBangkokRecentYearMonths(1)[0])
   const [monthlyData, setMonthlyData] = useState<PettyCashItem[]>([])
   const [monthlyLoading, setMonthlyLoading] = useState(false)
 
@@ -252,12 +250,9 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       .finally(() => setMonthlyLoading(false))
   }
 
-  const monthlyYmOptions = Array.from({ length: 24 }, (_, i) => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - i)
-    const y = d.getFullYear()
-    const m = d.getMonth() + 1
-    return { value: y + "-" + String(m).padStart(2, "0"), label: y + "년 " + m + "월" }
+  const monthlyYmOptions = getBangkokRecentYearMonths(24).map((value) => {
+    const [y, m] = value.split("-").map(Number)
+    return { value, label: `${y}년 ${m}월` }
   })
 
   const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {

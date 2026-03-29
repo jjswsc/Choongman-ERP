@@ -3,7 +3,11 @@
  */
 
 import { apiFetch } from '@/lib/api/fetch'
-import { isOnline } from './network'
+import {
+  isOnline,
+  reportNetworkFailure,
+  reportNetworkSuccess,
+} from './network'
 import {
   getAllPending,
   removeFromQueue,
@@ -15,6 +19,9 @@ export type SyncResult = { synced: number; failed: number }
 export type SyncListener = (result: SyncResult) => void
 
 const listeners = new Set<SyncListener>()
+const MAX_RETRY_COUNT = 8
+const RETRY_BASE_MS = 2_000
+const RETRY_MAX_MS = 5 * 60_000
 
 export function onSyncComplete(cb: SyncListener): () => void {
   listeners.add(cb)
@@ -45,6 +52,11 @@ function syncOrder(item: { api: string; createdAt: number }): number {
   return 1 // updatePosOrder 및 그 외
 }
 
+function nextRetryDelayMs(retryCount: number): number {
+  if (retryCount <= 0) return 0
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, retryCount - 1))
+}
+
 export async function syncPending(): Promise<SyncResult> {
   if (!isOnline()) return { synced: 0, failed: 0 }
   let pending = await getAllPending()
@@ -58,10 +70,24 @@ export async function syncPending(): Promise<SyncResult> {
   let failed = 0
 
   for (const item of pending) {
+    if (item.retryCount >= MAX_RETRY_COUNT) {
+      continue
+    }
+    const now = Date.now()
+    const retryDelay = nextRetryDelayMs(item.retryCount)
+    const lastTriedAt = item.lastTriedAt ?? item.createdAt
+    if (retryDelay > 0 && now - lastTriedAt < retryDelay) {
+      continue
+    }
     try {
+      const idempotencyKey = item.metadata?.localOrderNo || item.id
       const init: RequestInit = {
         method: item.method,
-        headers: { 'Content-Type': 'application/json', ...item.headers },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': idempotencyKey,
+          ...item.headers,
+        },
         body: item.body,
       }
       const res = await apiFetch(item.api, init)
@@ -71,6 +97,7 @@ export async function syncPending(): Promise<SyncResult> {
         await updateQueueItem(item.id, {
           lastError: '로그인이 필요합니다.',
           retryCount: item.retryCount + 1,
+          lastTriedAt: now,
         })
         failed++
         continue
@@ -81,11 +108,14 @@ export async function syncPending(): Promise<SyncResult> {
         await updateQueueItem(item.id, {
           lastError: text?.slice(0, 200) || `HTTP ${res.status}`,
           retryCount: item.retryCount + 1,
+          lastTriedAt: now,
         })
+        if (res.status >= 500) reportNetworkFailure()
         failed++
         continue
       }
 
+      reportNetworkSuccess()
       await removeFromQueue(item.id)
       synced++
     } catch (e) {
@@ -94,7 +124,9 @@ export async function syncPending(): Promise<SyncResult> {
         await updateQueueItem(item.id, {
           lastError: String(e),
           retryCount: item.retryCount + 1,
+          lastTriedAt: Date.now(),
         })
+        reportNetworkFailure()
       }
       failed++
     }

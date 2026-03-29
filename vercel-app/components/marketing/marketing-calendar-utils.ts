@@ -6,7 +6,7 @@ import type {
   PosPromo,
 } from "@/lib/api-client"
 
-export type CalendarLayerId = "campaign" | "promo" | "ad" | "influencer" | "material"
+export type CalendarLayerId = "campaign" | "promo" | "ad" | "influencer" | "material" | "collab"
 
 export type CalendarEventKind =
   | "campaign_start"
@@ -19,6 +19,8 @@ export type CalendarEventKind =
   | "influencer_publish"
   | "material_display_start"
   | "material_display_end"
+  | "collab_design_start"
+  | "collab_design_end"
 
 export type MarketingCalendarEvent = {
   id: string
@@ -47,6 +49,8 @@ const LAYER_BY_KIND: Record<CalendarEventKind, CalendarLayerId> = {
   influencer_publish: "influencer",
   material_display_start: "material",
   material_display_end: "material",
+  collab_design_start: "collab",
+  collab_design_end: "collab",
 }
 
 export function layerOfEvent(e: MarketingCalendarEvent): CalendarLayerId {
@@ -93,13 +97,52 @@ function influencerStoreKeys(i: MarketingInfluencer): string[] {
   return br ? [br] : []
 }
 
+function calTpl(template: string, vars: Record<string, string>) {
+  let out = template
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.split(`{${k}}`).join(v)
+  }
+  return out
+}
+
+/** 캘린더 이벤트 문구(레이어 칩·툴팁용). `useT`로 채워 전달합니다. */
+export type MarketingCalendarEventLocale = {
+  bracketCampaign: string
+  bracketPromo: string
+  bracketAdRoas: string
+  bracketInfluencer: string
+  bracketMaterial: string
+  bracketCollab: string
+  verbStart: string
+  verbEnd: string
+  verbPublish: string
+  verbShoot: string
+  verbDisplayStart: string
+  verbDisplayShort: string
+  verbExposureEnd: string
+  verbDesignStart: string
+  verbDesignEnd: string
+  defaultPromo: string
+  defaultAd: string
+  defaultInfluencer: string
+  defaultMaterial: string
+  inactive: string
+  metaStatusTpl: string
+  metaFollowersTpl: string
+  spend: string
+  budget: string
+  sepMid: string
+}
+
 export function buildMarketingCalendarEvents(params: {
   campaigns: MarketingCampaign[]
   ads: MarketingAd[]
   influencers: MarketingInfluencer[]
   materials: MarketingMaterial[]
   promos: PosPromo[]
+  locale: MarketingCalendarEventLocale
 }): MarketingCalendarEvent[] {
+  const L = params.locale
   const cmap = new Map<string, MarketingCampaign>()
   for (const c of params.campaigns) cmap.set(c.id, c)
 
@@ -113,13 +156,13 @@ export function buildMarketingCalendarEvents(params: {
       list.push({
         id: `c-start-${c.id}`,
         date: d,
-        label: `[캠페인] ${tag}${c.topic} 시작`,
-        shortLabel: `${tag}${shortTopic(c.topic)} 시작`,
+        label: `${L.bracketCampaign} ${tag}${c.topic} ${L.verbStart}`,
+        shortLabel: `${tag}${shortTopic(c.topic)} ${L.verbStart}`,
         kind: "campaign_start",
         layer: "campaign",
         campaignId: c.id,
         campaignNo: (c.campaignNo ?? "").trim(),
-        meta: c.status ? `상태 ${c.status}` : undefined,
+        meta: c.status ? calTpl(L.metaStatusTpl, { status: c.status }) : undefined,
         storeKeys: stores,
       })
     }
@@ -128,10 +171,81 @@ export function buildMarketingCalendarEvents(params: {
       list.push({
         id: `c-end-${c.id}`,
         date: d,
-        label: `[캠페인] ${tag}${c.topic} 종료`,
-        shortLabel: `${tag}${shortTopic(c.topic)} 종료`,
+        label: `${L.bracketCampaign} ${tag}${c.topic} ${L.verbEnd}`,
+        shortLabel: `${tag}${shortTopic(c.topic)} ${L.verbEnd}`,
         kind: "campaign_end",
         layer: "campaign",
+        campaignId: c.id,
+        campaignNo: (c.campaignNo ?? "").trim(),
+        storeKeys: stores,
+      })
+    }
+
+    const phases = c.phasePeriods ?? []
+    phases.forEach((p, idx) => {
+      const pl = (p.label ?? "").trim() || `#${idx + 1}`
+      if (p.startDate) {
+        const d = p.startDate.slice(0, 10)
+        list.push({
+          id: `c-phase-${c.id}-s-${idx}`,
+          date: d,
+          label: `${L.bracketCampaign} ${tag}${c.topic}${L.sepMid}${pl} ${L.verbStart}`,
+          shortLabel: `${tag}${shortTopic(c.topic)} ${pl} ${L.verbStart}`,
+          kind: "campaign_start",
+          layer: "campaign",
+          campaignId: c.id,
+          campaignNo: (c.campaignNo ?? "").trim(),
+          meta: pl,
+          storeKeys: stores,
+        })
+      }
+      if (p.endDate && p.endDate.slice(0, 10) !== (p.startDate ?? "").slice(0, 10)) {
+        const d = p.endDate.slice(0, 10)
+        list.push({
+          id: `c-phase-${c.id}-e-${idx}`,
+          date: d,
+          label: `${L.bracketCampaign} ${tag}${c.topic}${L.sepMid}${pl} ${L.verbEnd}`,
+          shortLabel: `${tag}${shortTopic(c.topic)} ${pl} ${L.verbEnd}`,
+          kind: "campaign_end",
+          layer: "campaign",
+          campaignId: c.id,
+          campaignNo: (c.campaignNo ?? "").trim(),
+          meta: pl,
+          storeKeys: stores,
+        })
+      }
+    })
+  }
+
+  /** 협업 관리 대상 캠페인 — 디자인 기간만 별도 레이어로 표시 */
+  for (const c of params.campaigns) {
+    if (!c.collabManagement) continue
+    const tag = campTag(c)
+    const stores = campaignStoreKeys(c)
+    const ds = (c.designStartDate ?? "").trim().slice(0, 10)
+    const de = (c.designEndDate ?? "").trim().slice(0, 10)
+    if (ds) {
+      list.push({
+        id: `collab-ds-${c.id}`,
+        date: ds,
+        label: `${L.bracketCollab} ${tag}${c.topic} ${L.verbDesignStart}`,
+        shortLabel: `${tag}${shortTopic(c.topic)} ${L.verbDesignStart}`,
+        kind: "collab_design_start",
+        layer: "collab",
+        campaignId: c.id,
+        campaignNo: (c.campaignNo ?? "").trim(),
+        meta: c.status ? calTpl(L.metaStatusTpl, { status: c.status }) : undefined,
+        storeKeys: stores,
+      })
+    }
+    if (de && de !== ds) {
+      list.push({
+        id: `collab-de-${c.id}`,
+        date: de,
+        label: `${L.bracketCollab} ${tag}${c.topic} ${L.verbDesignEnd}`,
+        shortLabel: `${tag}${shortTopic(c.topic)} ${L.verbDesignEnd}`,
+        kind: "collab_design_end",
+        layer: "collab",
         campaignId: c.id,
         campaignNo: (c.campaignNo ?? "").trim(),
         storeKeys: stores,
@@ -144,19 +258,19 @@ export function buildMarketingCalendarEvents(params: {
     const camp = cid ? cmap.get(cid) : undefined
     const tag = campTag(camp)
     const stores = camp ? campaignStoreKeys(camp) : []
-    const name = p.name || p.code || "프로모션"
+    const name = p.name || p.code || L.defaultPromo
     if (p.validFrom) {
       const d = p.validFrom.slice(0, 10)
       list.push({
         id: `p-start-${p.id}`,
         date: d,
-        label: `[프로모션] ${tag}${name} (${p.code})`,
-        shortLabel: `${tag}${shortTopic(name)} 시작`,
+        label: `${L.bracketPromo} ${tag}${name} (${p.code})`,
+        shortLabel: `${tag}${shortTopic(name)} ${L.verbStart}`,
         kind: "promo_start",
         layer: "promo",
         campaignId: cid,
         campaignNo: (camp?.campaignNo ?? p.marketingCampaignNo ?? "").trim(),
-        meta: p.isActive === false ? "비활성" : undefined,
+        meta: p.isActive === false ? L.inactive : undefined,
         promoId: String(p.id),
         storeKeys: stores,
       })
@@ -166,8 +280,8 @@ export function buildMarketingCalendarEvents(params: {
       list.push({
         id: `p-end-${p.id}`,
         date: d,
-        label: `[프로모션] ${tag}${name} (${p.code}) 종료`,
-        shortLabel: `${tag}${shortTopic(name)} 종료`,
+        label: `${L.bracketPromo} ${tag}${name} (${p.code}) ${L.verbEnd}`,
+        shortLabel: `${tag}${shortTopic(name)} ${L.verbEnd}`,
         kind: "promo_end",
         layer: "promo",
         campaignId: cid,
@@ -183,24 +297,27 @@ export function buildMarketingCalendarEvents(params: {
     const camp = cid ? cmap.get(cid) : undefined
     const tag = campTag(camp)
     const stores = camp ? campaignStoreKeys(camp) : []
-    const topic = (a.contentTopic || a.platform || "").trim() || "광고"
+    const topic = (a.contentTopic || a.platform || "").trim() || L.defaultAd
     const spend = Number(a.actualSpent) || 0
     const budget = Number(a.boostBudget) || 0
-    const roasLine =
-      spend > 0 ? `지출 ${spend.toLocaleString()}${budget ? ` · 예산 ${budget.toLocaleString()}` : ""}` : budget ? `예산 ${budget.toLocaleString()}` : ""
+    const spendPart = spend > 0 ? `${L.spend} ${spend.toLocaleString()}` : ""
+    const budgetPart = budget > 0 ? `${L.budget} ${budget.toLocaleString()}` : ""
+    let roasLine = ""
+    if (spendPart && budgetPart) roasLine = `${spendPart}${L.sepMid}${budgetPart}`
+    else roasLine = spendPart || budgetPart
 
     if (a.publishDate) {
       const d = a.publishDate.slice(0, 10)
       list.push({
         id: `ad-pub-${a.id}`,
         date: d,
-        label: `[광고·ROAS] ${tag}${topic}`,
-        shortLabel: `${tag}${shortTopic(topic)} 게시`,
+        label: `${L.bracketAdRoas} ${tag}${topic}`,
+        shortLabel: `${tag}${shortTopic(topic)} ${L.verbPublish}`,
         kind: "ad_publish",
         layer: "ad",
         campaignId: cid,
         campaignNo: (a.campaignNo ?? camp?.campaignNo ?? "").trim(),
-        meta: [a.platform, roasLine].filter(Boolean).join(" · "),
+        meta: [a.platform, roasLine].filter(Boolean).join(L.sepMid),
         storeKeys: stores,
       })
     }
@@ -210,8 +327,8 @@ export function buildMarketingCalendarEvents(params: {
       list.push({
         id: `ad-end-${a.id}`,
         date: d,
-        label: `[광고·ROAS] ${tag}${topic} 노출 종료`,
-        shortLabel: `${shortTopic(topic)} 노출 종료`,
+        label: `${L.bracketAdRoas} ${tag}${topic} ${L.verbExposureEnd}`,
+        shortLabel: `${shortTopic(topic)} ${L.verbExposureEnd}`,
         kind: "ad_period_end",
         layer: "ad",
         campaignId: cid,
@@ -227,14 +344,14 @@ export function buildMarketingCalendarEvents(params: {
     const camp = cid ? cmap.get(cid) : undefined
     const tag = campTag(camp)
     const stores = [...(camp ? campaignStoreKeys(camp) : []), ...influencerStoreKeys(i)]
-    const nm = i.name || "인플루언서"
+    const nm = i.name || L.defaultInfluencer
     if (i.shootingDate) {
       const d = i.shootingDate.slice(0, 10)
       list.push({
         id: `inf-shoot-${i.id}`,
         date: d,
-        label: `[인플루언서] ${tag}${nm} 촬영`,
-        shortLabel: `${tag}${shortTopic(nm)} 촬영`,
+        label: `${L.bracketInfluencer} ${tag}${nm} ${L.verbShoot}`,
+        shortLabel: `${tag}${shortTopic(nm)} ${L.verbShoot}`,
         kind: "influencer_shoot",
         layer: "influencer",
         campaignId: cid,
@@ -248,13 +365,15 @@ export function buildMarketingCalendarEvents(params: {
       list.push({
         id: `inf-pub-${i.id}`,
         date: d,
-        label: `[인플루언서] ${tag}${nm} 게시`,
-        shortLabel: `${tag}${shortTopic(nm)} 게시`,
+        label: `${L.bracketInfluencer} ${tag}${nm} ${L.verbPublish}`,
+        shortLabel: `${tag}${shortTopic(nm)} ${L.verbPublish}`,
         kind: "influencer_publish",
         layer: "influencer",
         campaignId: cid,
         campaignNo: (i.campaignNo ?? camp?.campaignNo ?? "").trim(),
-        meta: [i.status, i.followers ? `팔로워 ${i.followers}` : ""].filter(Boolean).join(" · ") || undefined,
+        meta:
+          [i.status, i.followers ? calTpl(L.metaFollowersTpl, { n: String(i.followers) }) : ""].filter(Boolean).join(L.sepMid) ||
+          undefined,
         storeKeys: stores.filter(Boolean),
       })
     }
@@ -265,19 +384,19 @@ export function buildMarketingCalendarEvents(params: {
     const camp = cid ? cmap.get(cid) : undefined
     const tag = campTag(camp)
     const stores = [...(camp ? campaignStoreKeys(camp) : []), ...materialStoreKeys(mat)]
-    const nm = mat.name || "홍보물"
+    const nm = mat.name || L.defaultMaterial
     if (mat.displayStartDate) {
       const d = mat.displayStartDate.slice(0, 10)
       list.push({
         id: `mat-start-${mat.id}`,
         date: d,
-        label: `[홍보물] ${tag}${nm} 노출 시작`,
-        shortLabel: `${tag}${shortTopic(nm)} 노출`,
+        label: `${L.bracketMaterial} ${tag}${nm} ${L.verbDisplayStart}`,
+        shortLabel: `${tag}${shortTopic(nm)} ${L.verbDisplayShort}`,
         kind: "material_display_start",
         layer: "material",
         campaignId: cid,
         campaignNo: (mat.campaignNo ?? camp?.campaignNo ?? "").trim(),
-        meta: mat.status ? `상태 ${mat.status}` : undefined,
+        meta: mat.status ? calTpl(L.metaStatusTpl, { status: mat.status }) : undefined,
         storeKeys: Array.from(new Set(stores.map((x) => x.trim()).filter(Boolean))),
       })
     }
@@ -286,8 +405,8 @@ export function buildMarketingCalendarEvents(params: {
       list.push({
         id: `mat-end-${mat.id}`,
         date: d,
-        label: `[홍보물] ${tag}${nm} 노출 종료`,
-        shortLabel: `${shortTopic(nm)} 노출 종료`,
+        label: `${L.bracketMaterial} ${tag}${nm} ${L.verbExposureEnd}`,
+        shortLabel: `${shortTopic(nm)} ${L.verbExposureEnd}`,
         kind: "material_display_end",
         layer: "material",
         campaignId: cid,
@@ -322,7 +441,11 @@ export function filterMarketingCalendarEvents(
   })
 }
 
-export function eventsByDateForMonth(events: MarketingCalendarEvent[], monthYm: string): Record<string, MarketingCalendarEvent[]> {
+export function eventsByDateForMonth(
+  events: MarketingCalendarEvent[],
+  monthYm: string,
+  sortLocale = "en"
+): Record<string, MarketingCalendarEvent[]> {
   const map: Record<string, MarketingCalendarEvent[]> = {}
   for (const e of events) {
     const d = e.date.slice(0, 10)
@@ -331,15 +454,9 @@ export function eventsByDateForMonth(events: MarketingCalendarEvent[], monthYm: 
     map[d].push(e)
   }
   for (const k of Object.keys(map)) {
-    map[k].sort((a, b) => a.label.localeCompare(b.label, "ko"))
+    map[k].sort((a, b) => a.label.localeCompare(b.label, sortLocale))
   }
   return map
 }
 
-export const CALENDAR_LAYER_OPTIONS: { id: CalendarLayerId; label: string; description: string }[] = [
-  { id: "campaign", label: "캠페인", description: "시작·종료" },
-  { id: "promo", label: "프로모션 세트", description: "유효기간" },
-  { id: "ad", label: "광고·ROAS", description: "게시·노출" },
-  { id: "influencer", label: "인플루언서", description: "촬영·게시" },
-  { id: "material", label: "홍보물", description: "매장 노출" },
-]
+export const CALENDAR_LAYER_IDS: CalendarLayerId[] = ["campaign", "promo", "ad", "influencer", "material", "collab"]

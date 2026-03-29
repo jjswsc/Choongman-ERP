@@ -421,12 +421,9 @@ function PosPaymentModalAmountCard({
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary shadow-inner">
           <Receipt className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.25} />
         </div>
-        <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-tight text-foreground">
             {t('posSubtotal') || 'Subtotal'}
-          </p>
-          <p className="text-xs text-muted-foreground/90 leading-snug">
-            {t('posPaymentSum') || '입력 합계'} → {t('posPaymentTotalLabel') || '결제 금액'}
           </p>
         </div>
       </div>
@@ -2228,13 +2225,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       >
         <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 bg-gradient-to-b from-card to-card/95 px-5 py-4 text-left backdrop-blur-sm">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
+            <div className="min-w-0">
               <DialogTitle className="text-xl font-bold tracking-tight">
                 {t('posSplitPayment') || '결제 수단 입력'}
               </DialogTitle>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {tr('posPaymentModalSubtitle', '수단별 금액을 입력하고, 하단 입력 합계가 결제 금액과 같으면 완료할 수 있습니다.')}
-              </p>
             </div>
             <Button
               type="button"
@@ -2305,7 +2299,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
                 <div>
                   <p className="text-sm font-semibold leading-none">{tr('posDiscountCouponSection', '할인 · 쿠폰 · 포인트')}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{tr('posDiscountCouponHint', '프리셋·쿠폰·직접 할인·포인트를 조합할 수 있습니다.')}</p>
                 </div>
               </div>
               <div>
@@ -2401,10 +2394,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">{tr('posPaymentMethodSection', '결제 수단')}</p>
-                <span className="text-[11px] text-muted-foreground">{tr('posPaymentMethodTapHint', '탭을 바꿔 금액을 나누어 입력')}</span>
-              </div>
+              <p className="text-sm font-semibold">{tr('posPaymentMethodSection', '결제 수단')}</p>
             {/* 결제 수단 탭 */}
             <div className="grid grid-cols-5 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner">
               {paymentTabs.map((tab) => {

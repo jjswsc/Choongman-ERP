@@ -5,7 +5,8 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
-import { getPosTableLayout, getPosOrders, type PosTableItem, type PosOrder } from '@/lib/api-client'
+import { getPosTableLayout, type PosTableItem, type PosOrder } from '@/lib/api-client'
+import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
@@ -110,15 +111,24 @@ export function usePosStore() {
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
   const effectiveStoreCodes = useMemo(() => {
-    if (canSearchAll) return storeCodes
+    if (canSearchAll) {
+      if (storeCodes.length > 0) return storeCodes
+      if (auth?.store) return [auth.store]
+      return storeCodes
+    }
     return auth?.store ? [auth.store] : storeCodes
   }, [canSearchAll, auth?.store, storeCodes])
 
   const [stores, setStores] = useState<Store[]>([])
   const [layoutByStoreId, setLayoutByStoreId] = useState<Record<string, PosTableItem[]>>({})
+  const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    layoutByStoreIdRef.current = layoutByStoreId
+  }, [layoutByStoreId])
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {
@@ -133,13 +143,15 @@ export function usePosStore() {
       effectiveStoreCodes.map(async (storeCode) => {
         const [layoutRes, ordersRes] = await Promise.all([
           getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-          getPosOrders({
+          getPosOrdersWithCache({
             storeCode,
             startStr: businessDate,
             endStr: businessDate,
           }).catch(() => []),
         ])
-        const layout = layoutRes.layout || []
+        const fetchedLayout = layoutRes.layout || []
+        const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
+        const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
         const activeOrders = (ordersRes || []).filter(
           (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
         )
@@ -257,9 +269,15 @@ export function usePosStore() {
       effectiveStoreCodes.map(async (storeCode) => {
         const [layoutRes, ordersRes] = await Promise.all([
           getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-          getPosOrders({ storeCode, startStr: businessDate, endStr: businessDate }).catch(() => []),
+          getPosOrdersWithCache({
+            storeCode,
+            startStr: businessDate,
+            endStr: businessDate,
+          }).catch(() => []),
         ])
-        const layout = layoutRes.layout || []
+        const fetchedLayout = layoutRes.layout || []
+        const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
+        const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
         const activeOrders = (ordersRes || []).filter(
           (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
         )

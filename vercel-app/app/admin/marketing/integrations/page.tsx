@@ -90,14 +90,7 @@ export default function MarketingIntegrationsPage() {
 
   return (
     <MarketingPageShell maxWidthClass="max-w-3xl">
-        <MarketingPageHero
-          icon={Settings2}
-          title={t("adminMarketingIntegrations") || "마케팅 연동"}
-          description={
-            t("adminMarketingIntegrationsDesc") ||
-            "LINE OA, Meta(IG/FB), TikTok 등 외부 API 연동을 위한 설정입니다. API 키·채널 정보는 .env에 설정한 뒤 서버를 재시작하세요."
-          }
-        />
+        <MarketingPageHero icon={Settings2} title={t("adminMarketingIntegrations") || "마케팅 연동"} />
 
         <div className="space-y-4">
           {/* LINE OA */}

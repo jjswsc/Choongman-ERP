@@ -96,8 +96,8 @@ export async function GET(request: NextRequest) {
     merchantReceiptOrderDetails: true,
     cashPaymentReceipt: false,
     signatureLine: false,
-    receiptBarcode: true,
-    itemBarcode: true,
+    receiptBarcode: false,
+    itemBarcode: false,
     qrCodeOption: 'yes' as const,
     discountSeparatePrint: true,
     merchantReceiptPrint: true,
@@ -118,6 +118,16 @@ export async function GET(request: NextRequest) {
     receiptShowPaidStamp: true,
     receiptShowThankYou: true,
     receiptShowCustomerCopy: true,
+    receiptFooterPrimaryText: '',
+    receiptFooterSecondaryText: '',
+    receiptLogoImageUrl: '',
+    receiptStampImageUrl: '',
+    receiptShowStamp: true,
+    receiptStampOnlyTaxInvoice: true,
+    receiptMembershipQrImageUrl: '',
+    receiptMembershipQrLinkUrl: '',
+    receiptMembershipQrText: '',
+    receiptShowMembershipQr: false,
     kitchenSlipFontScale: 'md' as const,
     kitchenSlipShowLineNotes: true,
     kitchenSlipShowOrderMemo: true,
@@ -193,6 +203,16 @@ export async function GET(request: NextRequest) {
       receipt_show_paid_stamp?: boolean
       receipt_show_thank_you?: boolean
       receipt_show_customer_copy?: boolean
+      receipt_footer_primary_text?: string
+      receipt_footer_secondary_text?: string
+      receipt_logo_image_url?: string
+      receipt_stamp_image_url?: string
+      receipt_show_stamp?: boolean
+      receipt_stamp_only_tax_invoice?: boolean
+      receipt_membership_qr_image_url?: string
+      receipt_membership_qr_link_url?: string
+      receipt_membership_qr_text?: string
+      receipt_show_membership_qr?: boolean
       kitchen_slip_font_scale?: string
       kitchen_slip_show_line_notes?: boolean
       kitchen_slip_show_order_memo?: boolean
@@ -270,8 +290,8 @@ export async function GET(request: NextRequest) {
       merchantReceiptOrderDetails: raw?.merchant_receipt_order_details !== false,
       cashPaymentReceipt: Boolean(raw?.cash_payment_receipt),
       signatureLine: Boolean(raw?.signature_line),
-      receiptBarcode: raw?.receipt_barcode !== false,
-      itemBarcode: raw?.item_barcode !== false,
+      receiptBarcode: Boolean(raw?.receipt_barcode),
+      itemBarcode: Boolean(raw?.item_barcode),
       qrCodeOption: String(raw?.qr_code_option || 'yes') === 'no'
         ? 'no'
         : String(raw?.qr_code_option || 'yes') === 'return_points'
@@ -301,6 +321,16 @@ export async function GET(request: NextRequest) {
       receiptShowPaidStamp: raw?.receipt_show_paid_stamp !== false,
       receiptShowThankYou: raw?.receipt_show_thank_you !== false,
       receiptShowCustomerCopy: raw?.receipt_show_customer_copy !== false,
+      receiptFooterPrimaryText: String(raw?.receipt_footer_primary_text ?? '').trim(),
+      receiptFooterSecondaryText: String(raw?.receipt_footer_secondary_text ?? '').trim(),
+      receiptLogoImageUrl: String(raw?.receipt_logo_image_url ?? '').trim(),
+      receiptStampImageUrl: String(raw?.receipt_stamp_image_url ?? '').trim(),
+      receiptShowStamp: raw?.receipt_show_stamp !== false,
+      receiptStampOnlyTaxInvoice: raw?.receipt_stamp_only_tax_invoice !== false,
+      receiptMembershipQrImageUrl: String(raw?.receipt_membership_qr_image_url ?? '').trim(),
+      receiptMembershipQrLinkUrl: String(raw?.receipt_membership_qr_link_url ?? '').trim(),
+      receiptMembershipQrText: String(raw?.receipt_membership_qr_text ?? '').trim(),
+      receiptShowMembershipQr: Boolean(raw?.receipt_show_membership_qr),
       kitchenSlipFontScale:
         String(raw?.kitchen_slip_font_scale || 'md').toLowerCase() === 'sm'
           ? 'sm'

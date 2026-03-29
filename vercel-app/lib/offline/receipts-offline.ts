@@ -17,6 +17,14 @@ export async function getPosOrdersWithCache(params: {
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr)
 
+  const applyStatus = (rows: PosOrder[]) => {
+    let result = rows
+    if (status && status !== 'all') {
+      result = result.filter((o) => o.status === status)
+    }
+    return result
+  }
+
   if (isOnline()) {
     try {
       const data = await getPosOrders({
@@ -29,15 +37,23 @@ export async function getPosOrdersWithCache(params: {
       return data
     } catch {
       const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
-      return cached ?? []
+      return applyStatus(cached ?? [])
     }
   }
 
   const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
-  let result = cached ?? []
-
-  if (status && status !== 'all') {
-    result = result.filter((o) => o.status === status)
+  if (cached !== null) {
+    return applyStatus(cached)
   }
-  return result
+  try {
+    const data = await getPosOrders({
+      startStr,
+      endStr,
+      storeCode: storeCode || undefined,
+    })
+    await setCache('pos_orders_cache', key, data)
+    return applyStatus(data)
+  } catch {
+    return []
+  }
 }

@@ -36,6 +36,7 @@ import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { OfflineBanner } from '@/components/offline-banner'
+import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
 import {
   Collapsible,
   CollapsibleContent,
@@ -389,13 +390,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   }
 
   const handlePrint = async () => {
-    const w = window.open('', '_blank')
-    if (!w) {
-      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
-      return
-    }
     const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
-    w.document.write(`
+    const fullHtml = `
       <!DOCTYPE html>
       <html><head><title>${t('posSettlementReport') || 'POS 결산 리포트'} - ${storeLabel} - ${settleDate}</title>
       <style>body{font-family:sans-serif;padding:20px;max-width:400px;margin:0 auto}table{width:100%;border-collapse:collapse}.r{text-align:right}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:8px;margin-top:8px}</style>
@@ -417,13 +413,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       ${memo ? `<p class="t"><strong>${t('posMemo') || '비고'}</strong>: ${memo}</p>` : ''}
       ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}
       <p class="t" style="font-size:12px;color:#666">${formatPosDateTimeMedium(new Date(), lang)}</p>
-      </body></html>`)
-    w.document.close()
-    w.focus()
-    setTimeout(() => {
-      w.print()
-      w.close()
-    }, 250)
+      </body></html>`
+    printHtmlInHiddenIframe(fullHtml, {
+      title: t('posSettlementReport') || 'POS 결산 리포트',
+      printDelayMs: 220,
+      fallbackCleanupMs: 30_000,
+      onPrintUnavailable: () => {
+        void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+      },
+    })
   }
 
   const paddingClass = 'px-4 py-6 sm:px-6 lg:px-8'

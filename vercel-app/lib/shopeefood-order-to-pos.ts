@@ -5,16 +5,7 @@
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { logShopeeFoodEvent } from '@/lib/shopeefood-webhook'
-
-function generateOrderNo(storeCode: string): string {
-  const now = new Date()
-  const store = (storeCode || 'ST').slice(0, 2).toUpperCase()
-  const mmdd = now
-    .toLocaleDateString('en-CA', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Bangkok' })
-    .replace(/\D/g, '')
-  const rnd = Math.random().toString(36).slice(2, 4).toUpperCase()
-  return `${store}${mmdd}${rnd}`
-}
+import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 
 /** ShopeeFood store_id → POS store_code. JSON: {"20278000":"ST01"} */
 export function parseShopeeFoodStoreMap(): Record<string, string> {
@@ -198,7 +189,7 @@ export async function persistShopeeFoodOrderToPos(params: {
     adjustments: {},
   })
 
-  const orderNo = generateOrderNo(storeCode)
+  const orderNo = await allocateNextPosOrderNo(storeCode)
   const remark = String(order.remark ?? '').trim()
   const tableName = shortCode
     ? remark

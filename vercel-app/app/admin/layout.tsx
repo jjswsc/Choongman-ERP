@@ -54,7 +54,7 @@ export default function AdminLayout({
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { auth, initialized } = useAuth()
+  const { auth, initialized, setAuth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const isLoginPage = pathname === "/admin/login"
@@ -66,7 +66,8 @@ export default function AdminLayout({
       return
     }
     if (auth && !isLoginPage && !canAccessAdmin(auth.role || "")) {
-      router.replace("/?msg=no_admin")
+      setAuth(null)
+      router.replace("/admin/login?msg=no_admin")
       return
     }
     if (auth && !isLoginPage && (isManagerRole(auth.role || "") || isFranchiseeRole(auth.role || "")) && !canManagerAccessPath(pathname)) {
@@ -87,7 +88,7 @@ export default function AdminLayout({
         }
       }
     }
-  }, [auth, initialized, isLoginPage, pathname, router])
+  }, [auth, initialized, isLoginPage, pathname, router, setAuth])
 
   // 로그인 페이지: 사이드바 없이 전체 화면
   if (isLoginPage) {

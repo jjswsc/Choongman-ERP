@@ -163,6 +163,12 @@ export function TableFloorView({
   }, [layout])
 
   useEffect(() => {
+    if (!onFloorChange) return
+    if (availableFloors.includes(activeFloor)) return
+    onFloorChange(availableFloors[0] ?? 1)
+  }, [activeFloor, availableFloors, onFloorChange])
+
+  useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])

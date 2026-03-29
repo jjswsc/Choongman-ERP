@@ -2,9 +2,10 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import { Printer, Save, RotateCw, Wallet, Receipt, Building2 } from "lucide-react"
+import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -18,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -38,6 +40,7 @@ import {
   savePosPrinterSettings,
   useStoreList,
   type PosMenu,
+  type PosPrinterSettings,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
@@ -50,12 +53,25 @@ import {
   type KitchenRouteValue,
 } from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
+import {
+  bangkokTodayYmdCompact,
+  buildStoredPosOrderNo,
+  formatPosOrderNoForPrint,
+  normalizeStoreSlugForOrderNo,
+} from "@/lib/pos-order-no"
 
 type PreviewKind = "receipt" | "kitchen"
 
 const POS_PAPER_WIDTH_MM = 80
 const POS_PAPER_SIDE_PADDING_MM = 1
 const POS_PAPER_HEIGHT_MM = 200
+const RECEIPT_ASSET_MAX_BYTES = 1024 * 700
+
+const buildCode128BarcodeUrl = (raw: string) => {
+  const text = String(raw || "").trim()
+  if (!text) return ""
+  return `https://quickchart.io/barcode?type=code128&text=${encodeURIComponent(text)}&scale=2&height=38&includetext=true`
+}
 
 const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
   @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
@@ -82,8 +98,10 @@ function ToggleRow({
   onChange: (v: boolean) => void
   t: (k: string) => string
 }) {
-  const yesLabel = t("yes") || "예"
-  const noLabel = t("no") || "아니오"
+  const yesText = t("yes")
+  const noText = t("no")
+  const yesLabel = yesText && yesText !== "yes" ? yesText : "예"
+  const noLabel = noText && noText !== "no" ? noText : "아니오"
   return (
     <div className="flex items-center justify-between rounded-lg border p-3">
       <span className="text-sm font-medium">{label}</span>
@@ -113,8 +131,6 @@ function ToggleRow({
   )
 }
 
-const KITCHEN_ROUTE_NONE = "__kitchen_route_none__"
-
 function KitchenRouteSelectRow({
   label,
   value,
@@ -128,42 +144,31 @@ function KitchenRouteSelectRow({
   maxK: 1 | 2 | 3
   t: (k: string) => string
 }) {
+  const trLocal = (key: string, fallback: string) => {
+    const value = t(key)
+    return value && value !== key ? value : fallback
+  }
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2 last:border-0">
       <span className="min-w-0 flex-1 text-xs text-foreground">{label}</span>
       <Select
-        value={value == null ? KITCHEN_ROUTE_NONE : String(value)}
+        value={String(value == null ? 1 : value)}
         onValueChange={(v) => {
-          if (v === KITCHEN_ROUTE_NONE) onChange(undefined)
-          else onChange(Number(v) as KitchenRouteValue)
+          onChange(Number(v) as KitchenRouteValue)
         }}
       >
         <SelectTrigger className="h-8 w-[148px] shrink-0 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={KITCHEN_ROUTE_NONE}>{t("posKitchenRouteDefault")}</SelectItem>
-          <SelectItem value="0">{t("posKitchenSkipPrint")}</SelectItem>
-          {maxK >= 1 ? <SelectItem value="1">{t("posKitchen1")}</SelectItem> : null}
-          {maxK >= 2 ? <SelectItem value="2">{t("posKitchen2")}</SelectItem> : null}
-          {maxK >= 3 ? <SelectItem value="3">{t("posKitchen3")}</SelectItem> : null}
+          {maxK >= 1 ? <SelectItem value="1">{trLocal("posKitchen1", "주방 1")}</SelectItem> : null}
+          <SelectItem value="0">{trLocal("posKitchenSkipPrint", "출력 안함")}</SelectItem>
+          {maxK >= 2 ? <SelectItem value="2">{trLocal("posKitchen2", "주방 2")}</SelectItem> : null}
+          {maxK >= 3 ? <SelectItem value="3">{trLocal("posKitchen3", "주방 3")}</SelectItem> : null}
         </SelectContent>
       </Select>
     </div>
   )
-}
-
-function getBangkokNowStr() {
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Bangkok",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date())
 }
 
 export default function PosPrintersPage() {
@@ -174,6 +179,33 @@ export default function PosPrintersPage() {
     const value = t(key)
     return value && value !== key ? value : fallback
   }, [t])
+  const bangkokLocaleTag = React.useMemo(() => {
+    const m: Record<string, string> = {
+      ko: "ko-KR",
+      en: "en-GB",
+      th: "th-TH",
+      mm: "my-MM",
+      la: "lo-LA",
+      kh: "km-KH",
+      vi: "vi-VN",
+      ms: "ms-MY",
+    }
+    return m[lang] || "en-GB"
+  }, [lang])
+  const formatBangkokDateTime = React.useCallback(
+    (d: Date) =>
+      new Intl.DateTimeFormat(bangkokLocaleTag, {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).format(d),
+    [bangkokLocaleTag]
+  )
   const { stores } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState("")
@@ -195,6 +227,18 @@ export default function PosPrintersPage() {
     Record<string, KitchenRouteValue>
   >({})
   const [menuRouteFilter, setMenuRouteFilter] = React.useState("")
+  const [kitchen1Categories, setKitchen1Categories] = React.useState<string[]>([])
+  const [kitchen2Categories, setKitchen2Categories] = React.useState<string[]>([])
+  const [kitchen3Categories, setKitchen3Categories] = React.useState<string[]>([])
+  const [copyDialogOpen, setCopyDialogOpen] = React.useState(false)
+  const [copySourceStore, setCopySourceStore] = React.useState("")
+  const [copyTabPrinter, setCopyTabPrinter] = React.useState(true)
+  const [copyTabReceipt, setCopyTabReceipt] = React.useState(true)
+  const [copyTabReceiptDesign, setCopyTabReceiptDesign] = React.useState(true)
+  const [copyTabBusiness, setCopyTabBusiness] = React.useState(true)
+  const [copyTabDrawer, setCopyTabDrawer] = React.useState(true)
+  const [copySaveImmediately, setCopySaveImmediately] = React.useState(false)
+  const [copyWorking, setCopyWorking] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [previewKind, setPreviewKind] = React.useState<PreviewKind>("receipt")
@@ -207,16 +251,11 @@ export default function PosPrintersPage() {
 
   const [logoPrint, setLogoPrint] = React.useState(false)
   const [receiptPrintTiming, setReceiptPrintTiming] = React.useState<'per_payment' | 'final_payment'>('per_payment')
-  const [customerReceiptOrderDetails, setCustomerReceiptOrderDetails] = React.useState(true)
-  const [merchantReceiptOrderDetails, setMerchantReceiptOrderDetails] = React.useState(true)
-  const [cashPaymentReceipt, setCashPaymentReceipt] = React.useState(false)
   const [signatureLine, setSignatureLine] = React.useState(false)
-  const [receiptBarcode, setReceiptBarcode] = React.useState(true)
-  const [itemBarcode, setItemBarcode] = React.useState(true)
-  const [qrCodeOption, setQrCodeOption] = React.useState<'yes' | 'no' | 'return_points'>('yes')
+  const [receiptBarcode, setReceiptBarcode] = React.useState(false)
+  const [itemBarcode, setItemBarcode] = React.useState(false)
+  const [qrCodeOption, setQrCodeOption] = React.useState<'yes' | 'no'>('yes')
   const [discountSeparatePrint, setDiscountSeparatePrint] = React.useState(true)
-  const [merchantReceiptPrint, setMerchantReceiptPrint] = React.useState(true)
-  const [actualOrderDetails, setActualOrderDetails] = React.useState(true)
   const [toppingOptionsPrint, setToppingOptionsPrint] = React.useState(false)
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = React.useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = React.useState(false)
@@ -233,13 +272,23 @@ export default function PosPrintersPage() {
   const [receiptShowPaidStamp, setReceiptShowPaidStamp] = React.useState(true)
   const [receiptShowThankYou, setReceiptShowThankYou] = React.useState(true)
   const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = React.useState(true)
+  const [receiptFooterPrimaryText, setReceiptFooterPrimaryText] = React.useState("")
+  const [receiptFooterSecondaryText, setReceiptFooterSecondaryText] = React.useState("")
+  const [receiptLogoImageUrl, setReceiptLogoImageUrl] = React.useState("")
+  const [receiptStampImageUrl, setReceiptStampImageUrl] = React.useState("")
+  const [receiptShowStamp, setReceiptShowStamp] = React.useState(true)
+  const [receiptStampOnlyTaxInvoice, setReceiptStampOnlyTaxInvoice] = React.useState(true)
+  const [receiptMembershipQrImageUrl, setReceiptMembershipQrImageUrl] = React.useState("")
+  const [receiptMembershipQrLinkUrl, setReceiptMembershipQrLinkUrl] = React.useState("")
+  const [receiptMembershipQrText, setReceiptMembershipQrText] = React.useState("")
+  const [receiptShowMembershipQr, setReceiptShowMembershipQr] = React.useState(false)
   const [receiptPrintLang, setReceiptPrintLang] = React.useState<string>("")
   const [kitchenSlipFontScale, setKitchenSlipFontScale] = React.useState<"sm" | "md" | "lg">("md")
   const [kitchenSlipShowLineNotes, setKitchenSlipShowLineNotes] = React.useState(true)
   const [kitchenSlipShowOrderMemo, setKitchenSlipShowOrderMemo] = React.useState(true)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
-  const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
+  const effectiveStore = String(canSearchAll && storeCode ? storeCode : auth?.store || "").trim()
 
   const menusFilteredForRoute = React.useMemo(() => {
     const q = menuRouteFilter.trim().toLowerCase()
@@ -257,6 +306,158 @@ export default function PosPrintersPage() {
     )
   }, [menusList, menuRouteFilter])
 
+  const allMenuRouteIds = React.useMemo(
+    () => menusList.map((m) => String(m.id || "").trim()).filter(Boolean),
+    [menusList]
+  )
+
+  const ensureRouteDefaults = React.useCallback(
+    (keys: string[], src: Record<string, KitchenRouteValue>) => {
+      const next: Record<string, KitchenRouteValue> = {}
+      for (const key of keys) {
+        const v = src[key]
+        next[key] = v === 0 || v === 1 || v === 2 || v === 3 ? v : 1
+      }
+      return next
+    },
+    []
+  )
+
+  const readAsDataUrl = React.useCallback((file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ""))
+      reader.onerror = () => reject(new Error("file_read_failed"))
+      reader.readAsDataURL(file)
+    })
+  }, [tr])
+
+  const handleAssetUpload = React.useCallback(
+    async (
+      e: React.ChangeEvent<HTMLInputElement>,
+      setValue: React.Dispatch<React.SetStateAction<string>>,
+      label: string
+    ) => {
+      const file = e.target.files?.[0]
+      e.target.value = ""
+      if (!file) return
+      if (!String(file.type || "").startsWith("image/")) {
+        await appAlert((t("posReceiptImageOnly") || "{{label}}: 이미지 파일만 업로드할 수 있습니다.").replace("{{label}}", label))
+        return
+      }
+      if (file.size > RECEIPT_ASSET_MAX_BYTES) {
+        await appAlert(
+          (t("posReceiptImageSizeLimit") ||
+            "{{label}}: 이미지가 너무 큽니다. 700KB 이하 파일을 사용해 주세요.").replace(
+            "{{label}}",
+            label
+          )
+        )
+        return
+      }
+      try {
+        const dataUrl = await readAsDataUrl(file)
+        setValue(dataUrl)
+      } catch {
+        await appAlert(t("posReceiptImageUploadFail") || "이미지 업로드에 실패했습니다.")
+      }
+    },
+    [readAsDataUrl, t]
+  )
+
+  const applyFromPosSettings = React.useCallback((settings: PosPrinterSettings) => {
+    const km = Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3
+    setKitchenMode(km)
+    setKitchen1Categories(
+      Array.isArray(settings.kitchen1Categories) ? [...settings.kitchen1Categories] : []
+    )
+    setKitchen2Categories(
+      Array.isArray(settings.kitchen2Categories) ? [...settings.kitchen2Categories] : []
+    )
+    setKitchen3Categories(
+      Array.isArray(settings.kitchen3Categories) ? [...settings.kitchen3Categories] : []
+    )
+    const mt = Array.isArray(settings.mainDeviceTokens)
+      ? settings.mainDeviceTokens.map((x) => String(x || "").trim()).filter(Boolean)
+      : []
+    const leg =
+      settings.mainDeviceToken != null && String(settings.mainDeviceToken).trim()
+        ? [String(settings.mainDeviceToken).trim()]
+        : []
+    setMainDeviceTokensPreview(mt.length > 0 ? mt : leg)
+    setReceiptPreviewDelivery(Math.max(0, Number(settings.deliveryFee ?? 0)))
+    setReceiptPreviewPackaging(Math.max(0, Number(settings.packagingFee ?? 0)))
+    setKitchenRouteByMenu(normalizeKitchenRouteMapInput(settings.kitchenRouteByMenu as unknown))
+    setKitchenRouteByCategory(normalizeKitchenRouteMapInput(settings.kitchenRouteByCategory as unknown))
+    setKitchenRouteByCategoryMain(
+      normalizeKitchenRouteMapInput(settings.kitchenRouteByCategoryMain as unknown)
+    )
+    setCardAutoOpen(Boolean(settings.cardAutoOpen))
+    setCheckAutoOpen(Boolean(settings.checkAutoOpen))
+    setDrawerOpenOption(
+      (["password_and_reason", "reason_only", "force"].includes(settings.drawerOpenOption || "")
+        ? settings.drawerOpenOption
+        : "reason_only") as "password_and_reason" | "reason_only" | "force"
+    )
+    setLogoPrint(Boolean(settings.logoPrint))
+    setReceiptPrintTiming(settings.receiptPrintTiming === "final_payment" ? "final_payment" : "per_payment")
+    setSignatureLine(Boolean(settings.signatureLine))
+    setReceiptBarcode(Boolean(settings.receiptBarcode))
+    setItemBarcode(Boolean(settings.itemBarcode))
+    setQrCodeOption(
+      (["yes", "no"].includes(settings.qrCodeOption || "")
+        ? settings.qrCodeOption
+        : "yes") as "yes" | "no"
+    )
+    setDiscountSeparatePrint(settings.discountSeparatePrint !== false)
+    setToppingOptionsPrint(Boolean(settings.toppingOptionsPrint))
+    setAutoPrintReceiptOnOrder(Boolean(settings.autoPrintReceiptOnOrder))
+    setAutoPrintReceiptOnAddOrder(Boolean(settings.autoPrintReceiptOnAddOrder))
+    setAutoPrintReceiptOnPayment(
+      Boolean(settings.autoPrintReceiptOnPayment ?? settings.autoPrintReceiptOnOrder)
+    )
+    setAutoPrintKitchenSlipOnOrder(Boolean(settings.autoPrintKitchenSlipOnOrder))
+    setReceiptBizName(String(settings.receiptBizName || ""))
+    setReceiptBizTaxId(String(settings.receiptBizTaxId || ""))
+    setReceiptBizOwner(String(settings.receiptBizOwner || ""))
+    setReceiptBizAddress(String(settings.receiptBizAddress || ""))
+    setReceiptBizPhone(String(settings.receiptBizPhone || ""))
+    setReceiptDesignStyle(settings.receiptDesignStyle === "simple" ? "simple" : "badge")
+    setReceiptLogoSize(
+      settings.receiptLogoSize === "sm" ? "sm" : settings.receiptLogoSize === "lg" ? "lg" : "md"
+    )
+    setReceiptShowTitle(settings.receiptShowTitle !== false)
+    setReceiptShowPaidStamp(settings.receiptShowPaidStamp !== false)
+    setReceiptShowThankYou(settings.receiptShowThankYou !== false)
+    setReceiptShowCustomerCopy(settings.receiptShowCustomerCopy !== false)
+    setReceiptFooterPrimaryText(
+      String(settings.receiptFooterPrimaryText ?? "").trim() ||
+        (settings.receiptShowThankYou !== false ? tr("posReceiptThankYou", "감사합니다") : "")
+    )
+    setReceiptFooterSecondaryText(
+      String(settings.receiptFooterSecondaryText ?? "").trim() ||
+        (settings.receiptShowCustomerCopy !== false ? tr("posReceiptCustomerCopy", "고객용") : "")
+    )
+    setReceiptLogoImageUrl(String(settings.receiptLogoImageUrl ?? "").trim())
+    setReceiptStampImageUrl(String(settings.receiptStampImageUrl ?? "").trim())
+    setReceiptShowStamp(settings.receiptShowStamp !== false)
+    setReceiptStampOnlyTaxInvoice(settings.receiptStampOnlyTaxInvoice !== false)
+    setReceiptMembershipQrImageUrl(String(settings.receiptMembershipQrImageUrl ?? "").trim())
+    setReceiptMembershipQrLinkUrl(String(settings.receiptMembershipQrLinkUrl ?? "").trim())
+    setReceiptMembershipQrText(String(settings.receiptMembershipQrText ?? "").trim())
+    setReceiptShowMembershipQr(Boolean(settings.receiptShowMembershipQr))
+    setReceiptPrintLang(String(settings.receiptPrintLang ?? "").trim())
+    setKitchenSlipFontScale(
+      settings.kitchenSlipFontScale === "sm"
+        ? "sm"
+        : settings.kitchenSlipFontScale === "lg"
+          ? "lg"
+          : "md"
+    )
+    setKitchenSlipShowLineNotes(settings.kitchenSlipShowLineNotes !== false)
+    setKitchenSlipShowOrderMemo(settings.kitchenSlipShowOrderMemo !== false)
+  }, [])
+
   const loadData = React.useCallback(() => {
     if (!effectiveStore) return
     setLoading(true)
@@ -267,79 +468,16 @@ export default function PosPrintersPage() {
     ])
       .then(([settings, catRes, menus]) => {
         const cats = catRes.categories
-        const km = Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3
-        setKitchenMode(km)
-        const mt = Array.isArray(settings.mainDeviceTokens)
-          ? settings.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
-          : []
-        const leg =
-          settings.mainDeviceToken != null && String(settings.mainDeviceToken).trim()
-            ? [String(settings.mainDeviceToken).trim()]
-            : []
-        setMainDeviceTokensPreview(mt.length > 0 ? mt : leg)
-        setReceiptPreviewDelivery(Math.max(0, Number(settings.deliveryFee ?? 0)))
-        setReceiptPreviewPackaging(Math.max(0, Number(settings.packagingFee ?? 0)))
+        applyFromPosSettings(settings)
         setCategories(cats || [])
         setMainCategories(Array.isArray(catRes.mainCategories) ? catRes.mainCategories : [])
         setMenusList(Array.isArray(menus) ? menus : [])
-        setKitchenRouteByMenu(normalizeKitchenRouteMapInput(settings.kitchenRouteByMenu as unknown))
-        setKitchenRouteByCategory(normalizeKitchenRouteMapInput(settings.kitchenRouteByCategory as unknown))
-        setKitchenRouteByCategoryMain(
-          normalizeKitchenRouteMapInput(settings.kitchenRouteByCategoryMain as unknown)
-        )
-        setCardAutoOpen(Boolean(settings.cardAutoOpen))
-        setCheckAutoOpen(Boolean(settings.checkAutoOpen))
-        setDrawerOpenOption((['password_and_reason', 'reason_only', 'force'].includes(settings.drawerOpenOption || '') ? settings.drawerOpenOption : 'reason_only') as 'password_and_reason' | 'reason_only' | 'force')
-        setLogoPrint(Boolean(settings.logoPrint))
-        setReceiptPrintTiming(settings.receiptPrintTiming === 'final_payment' ? 'final_payment' : 'per_payment')
-        setCustomerReceiptOrderDetails(settings.customerReceiptOrderDetails !== false)
-        setMerchantReceiptOrderDetails(settings.merchantReceiptOrderDetails !== false)
-        setCashPaymentReceipt(Boolean(settings.cashPaymentReceipt))
-        setSignatureLine(Boolean(settings.signatureLine))
-        setReceiptBarcode(settings.receiptBarcode !== false)
-        setItemBarcode(settings.itemBarcode !== false)
-        setQrCodeOption((['yes', 'no', 'return_points'].includes(settings.qrCodeOption || '') ? settings.qrCodeOption : 'yes') as 'yes' | 'no' | 'return_points')
-        setDiscountSeparatePrint(settings.discountSeparatePrint !== false)
-        setMerchantReceiptPrint(settings.merchantReceiptPrint !== false)
-        setActualOrderDetails(settings.actualOrderDetails !== false)
-        setToppingOptionsPrint(Boolean(settings.toppingOptionsPrint))
-        setAutoPrintReceiptOnOrder(Boolean(settings.autoPrintReceiptOnOrder))
-        setAutoPrintReceiptOnAddOrder(Boolean(settings.autoPrintReceiptOnAddOrder))
-        setAutoPrintReceiptOnPayment(Boolean(settings.autoPrintReceiptOnPayment ?? settings.autoPrintReceiptOnOrder))
-        setAutoPrintKitchenSlipOnOrder(Boolean(settings.autoPrintKitchenSlipOnOrder))
-        setReceiptBizName(String(settings.receiptBizName || ""))
-        setReceiptBizTaxId(String(settings.receiptBizTaxId || ""))
-        setReceiptBizOwner(String(settings.receiptBizOwner || ""))
-        setReceiptBizAddress(String(settings.receiptBizAddress || ""))
-        setReceiptBizPhone(String(settings.receiptBizPhone || ""))
-        setReceiptDesignStyle(settings.receiptDesignStyle === 'simple' ? 'simple' : 'badge')
-        setReceiptLogoSize(
-          settings.receiptLogoSize === 'sm'
-            ? 'sm'
-            : settings.receiptLogoSize === 'lg'
-              ? 'lg'
-              : 'md'
-        )
-        setReceiptShowTitle(settings.receiptShowTitle !== false)
-        setReceiptShowPaidStamp(settings.receiptShowPaidStamp !== false)
-        setReceiptShowThankYou(settings.receiptShowThankYou !== false)
-        setReceiptShowCustomerCopy(settings.receiptShowCustomerCopy !== false)
-        setReceiptPrintLang(String(settings.receiptPrintLang ?? "").trim())
-        setKitchenSlipFontScale(
-          settings.kitchenSlipFontScale === "sm"
-            ? "sm"
-            : settings.kitchenSlipFontScale === "lg"
-              ? "lg"
-              : "md"
-        )
-        setKitchenSlipShowLineNotes(settings.kitchenSlipShowLineNotes !== false)
-        setKitchenSlipShowOrderMemo(settings.kitchenSlipShowOrderMemo !== false)
       })
       .catch(() => {
         setCategories([])
       })
       .finally(() => setLoading(false))
-  }, [effectiveStore])
+  }, [effectiveStore, applyFromPosSettings])
 
   React.useEffect(() => {
     if (canSearchAll && stores.length && !storeCode) {
@@ -353,36 +491,34 @@ export default function PosPrintersPage() {
     loadData()
   }, [loadData])
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     if (!effectiveStore) {
       await appAlert(t("store") || "매장을 선택하세요.")
-      return
+      return false
     }
     setSaving(true)
     try {
       const latest = await getPosPrinterSettings({ storeCode: effectiveStore })
-      const res = await savePosPrinterSettings({
-        ...posPrinterSettingsToSaveParams(latest),
+      const merged: PosPrinterSettings = {
+        ...latest,
         storeCode: effectiveStore,
         kitchenMode,
-        kitchen1Categories: [],
-        kitchen2Categories: [],
-        kitchen3Categories: [],
+        kitchen1Categories,
+        kitchen2Categories,
+        kitchen3Categories,
+        kitchenRouteByMenu: ensureRouteDefaults(allMenuRouteIds, kitchenRouteByMenu),
+        kitchenRouteByCategory: ensureRouteDefaults(categories, kitchenRouteByCategory),
+        kitchenRouteByCategoryMain: ensureRouteDefaults(mainCategories, kitchenRouteByCategoryMain),
         cardAutoOpen,
         checkAutoOpen,
         drawerOpenOption,
         logoPrint,
         receiptPrintTiming,
-        customerReceiptOrderDetails,
-        merchantReceiptOrderDetails,
-        cashPaymentReceipt,
         signatureLine,
         receiptBarcode,
         itemBarcode,
         qrCodeOption,
         discountSeparatePrint,
-        merchantReceiptPrint,
-        actualOrderDetails,
         toppingOptionsPrint,
         autoPrintReceiptOnOrder,
         autoPrintReceiptOnAddOrder,
@@ -397,33 +533,193 @@ export default function PosPrintersPage() {
         receiptLogoSize,
         receiptShowTitle,
         receiptShowPaidStamp,
-        receiptShowThankYou,
-        receiptShowCustomerCopy,
+        receiptShowThankYou: Boolean(receiptFooterPrimaryText.trim()),
+        receiptShowCustomerCopy: Boolean(receiptFooterSecondaryText.trim()),
+        receiptFooterPrimaryText: receiptFooterPrimaryText.trim(),
+        receiptFooterSecondaryText: receiptFooterSecondaryText.trim(),
+        receiptLogoImageUrl: receiptLogoImageUrl.trim(),
+        receiptStampImageUrl: receiptStampImageUrl.trim(),
+        receiptShowStamp,
+        receiptStampOnlyTaxInvoice,
+        receiptMembershipQrImageUrl: receiptMembershipQrImageUrl.trim(),
+        receiptMembershipQrLinkUrl: receiptMembershipQrLinkUrl.trim(),
+        receiptMembershipQrText: receiptMembershipQrText.trim(),
+        receiptShowMembershipQr,
         receiptPrintLang: receiptPrintLang || undefined,
         kitchenSlipFontScale,
         kitchenSlipShowLineNotes,
         kitchenSlipShowOrderMemo,
-        kitchenRouteByMenu,
-        kitchenRouteByCategory,
-        kitchenRouteByCategoryMain,
-      })
-      if (res.success) {
-        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
-        loadData()
-      } else {
-        await appAlert(res.message || t("msg_save_fail_detail"))
       }
+      const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
+      if (res.success) {
+        if (res.queued) {
+          await appAlert(
+            t("posPrinterSavedQueued") ||
+              "저장 요청이 대기 중입니다. 네트워크가 복구되면 서버에 반영됩니다. 지금 새로고침하면 예전 설정이 보일 수 있습니다."
+          )
+        } else {
+          await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
+          loadData()
+        }
+        return true
+      }
+      await appAlert(res.message || t("msg_save_fail_detail"))
+      return false
     } catch (e) {
       await appAlert(String(e))
+      return false
     } finally {
       setSaving(false)
     }
   }
 
+  const handleOpenCopyDialog = () => {
+    const others = stores.filter((s) => s !== effectiveStore)
+    setCopySourceStore(others[0] || "")
+    setCopyTabPrinter(true)
+    setCopyTabReceipt(true)
+    setCopyTabReceiptDesign(true)
+    setCopyTabBusiness(true)
+    setCopyTabDrawer(true)
+    setCopySaveImmediately(false)
+    setCopyDialogOpen(true)
+  }
+
+  const handleCopySettingsApply = async () => {
+    if (!effectiveStore) {
+      await appAlert(t("store") || "매장을 선택하세요.")
+      return
+    }
+    const src = String(copySourceStore || "").trim()
+    if (!src) {
+      await appAlert(t("posPrinterCopyPickSource") || "복사할 매장을 선택하세요.")
+      return
+    }
+    if (src === effectiveStore) {
+      await appAlert(t("posPrinterCopySameStore") || "같은 매장은 선택할 수 없습니다.")
+      return
+    }
+    if (!copyTabPrinter && !copyTabReceipt && !copyTabReceiptDesign && !copyTabBusiness && !copyTabDrawer) {
+      await appAlert(tr("posPrinterCopyPickAtLeastOneTab", "복사할 탭을 하나 이상 선택하세요."))
+      return
+    }
+    setCopyWorking(true)
+    try {
+      const [source, targetCurrent] = await Promise.all([
+        getPosPrinterSettings({ storeCode: src }),
+        getPosPrinterSettings({ storeCode: effectiveStore }),
+      ])
+      const merged: PosPrinterSettings = {
+        ...targetCurrent,
+        storeCode: effectiveStore,
+      }
+      const copyKeys = (keys: (keyof PosPrinterSettings)[]) => {
+        const m = merged as unknown as Record<string, unknown>
+        const s = source as unknown as Record<string, unknown>
+        for (const key of keys) {
+          m[String(key)] = s[String(key)]
+        }
+      }
+      if (copyTabPrinter) {
+        copyKeys([
+          "kitchenMode",
+          "kitchen1Categories",
+          "kitchen2Categories",
+          "kitchen3Categories",
+          "kitchenRouteByMenu",
+          "kitchenRouteByCategory",
+          "kitchenRouteByCategoryMain",
+        ])
+      }
+      if (copyTabReceipt) {
+        copyKeys([
+          "autoPrintKitchenSlipOnOrder",
+          "autoPrintReceiptOnOrder",
+          "autoPrintReceiptOnAddOrder",
+          "autoPrintReceiptOnPayment",
+          "receiptPrintLang",
+          "logoPrint",
+          "receiptPrintTiming",
+          "signatureLine",
+          "receiptBarcode",
+          "itemBarcode",
+          "qrCodeOption",
+          "discountSeparatePrint",
+          "toppingOptionsPrint",
+        ])
+      }
+      if (copyTabReceiptDesign) {
+        copyKeys([
+          "receiptDesignStyle",
+          "receiptLogoSize",
+          "receiptShowTitle",
+          "receiptShowPaidStamp",
+          "receiptShowThankYou",
+          "receiptShowCustomerCopy",
+          "receiptFooterPrimaryText",
+          "receiptFooterSecondaryText",
+          "receiptLogoImageUrl",
+          "receiptStampImageUrl",
+          "receiptShowStamp",
+          "receiptStampOnlyTaxInvoice",
+          "receiptMembershipQrImageUrl",
+          "receiptMembershipQrLinkUrl",
+          "receiptMembershipQrText",
+          "receiptShowMembershipQr",
+          "kitchenSlipFontScale",
+          "kitchenSlipShowLineNotes",
+          "kitchenSlipShowOrderMemo",
+        ])
+      }
+      if (copyTabBusiness) {
+        copyKeys([
+          "receiptBizName",
+          "receiptBizTaxId",
+          "receiptBizOwner",
+          "receiptBizAddress",
+          "receiptBizPhone",
+          "deliveryFee",
+          "packagingFee",
+        ])
+      }
+      if (copyTabDrawer) {
+        copyKeys(["cardAutoOpen", "checkAutoOpen", "drawerOpenOption"])
+      }
+      applyFromPosSettings(merged)
+      if (copySaveImmediately) {
+        const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
+        if (res.success) {
+          setCopyDialogOpen(false)
+          if (res.queued) {
+            await appAlert(
+              t("posPrinterSavedQueued") ||
+                "저장 요청이 대기 중입니다. 네트워크가 복구되면 서버에 반영됩니다. 지금 새로고침하면 예전 설정이 보일 수 있습니다."
+            )
+          } else {
+            await appAlert(t("posPrinterCopySuccess") || "다른 매장 설정을 복사해 저장했습니다.")
+            loadData()
+          }
+        } else {
+          await appAlert(res.message || t("msg_save_fail_detail"))
+        }
+      } else {
+        setCopyDialogOpen(false)
+        await appAlert(
+          t("posPrinterCopyApplied") ||
+            "원본 매장 설정을 화면에 반영했습니다. 하단 저장으로 DB에 반영하세요."
+        )
+      }
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setCopyWorking(false)
+    }
+  }
+
   const previewData = React.useMemo(() => {
     const items = [
-      { name: "후라이드 치킨", qty: 1, price: 199 },
-      { name: "콜라 1.25L", qty: 1, price: 45 },
+      { name: tr("posPrinterPreviewSampleMenu1", "Sample: Fried chicken"), qty: 1, price: 199 },
+      { name: tr("posPrinterPreviewSampleMenu2", "Sample: Cola 1.25L"), qty: 1, price: 45 },
     ]
     const subtotal = items.reduce((sum, it) => sum + it.qty * it.price, 0)
     const delivery = receiptPreviewDelivery
@@ -431,20 +727,31 @@ export default function PosPrintersPage() {
     const discount = 10
     const total = Math.max(0, subtotal - discount + delivery + packaging)
     return {
-      orderNo: "TEST-0001",
+      orderNo: buildStoredPosOrderNo(
+        normalizeStoreSlugForOrderNo(effectiveStore || "ST01"),
+        bangkokTodayYmdCompact(),
+        12
+      ),
       storeCode: effectiveStore || "ST01",
       orderType: t("posOrderTypeTakeout") || "포장",
       tableName: "A-1",
-      now: getBangkokNowStr(),
+      now: formatBangkokDateTime(new Date()),
       items,
       subtotal,
       discount,
       delivery,
       packaging,
       total,
-      memo: "덜 맵게 부탁드려요.",
+      memo: tr("posPrinterPreviewSampleMemo", "Less spicy, please. (sample)"),
     }
-  }, [receiptPreviewDelivery, receiptPreviewPackaging, effectiveStore, t])
+  }, [
+    receiptPreviewDelivery,
+    receiptPreviewPackaging,
+    effectiveStore,
+    t,
+    tr,
+    formatBangkokDateTime,
+  ])
 
   const kitchenSlipsForPreview = React.useMemo(() => {
     const cats = categories.length > 0 ? categories : ["A", "B"]
@@ -454,7 +761,7 @@ export default function PosPrintersPage() {
       id: `pv${i}`,
       name: it.name,
       qty: it.qty,
-      note: i === 0 ? tr("posLineNote", "메모") + " 예시" : undefined,
+      note: i === 0 ? tr("posPrinterPreviewKitchenLineNote", "Line note (sample)") : undefined,
     }))
     const previewMenus: PosMenu[] = items.map((_, i) => ({
       id: `pv${i}`,
@@ -470,8 +777,8 @@ export default function PosPrintersPage() {
     }))
     const settingsPreview = {
       kitchenMode,
-      kitchen2Categories: [] as string[],
-      kitchen3Categories: [] as string[],
+      kitchen2Categories,
+      kitchen3Categories,
       kitchenRouteByMenu,
       kitchenRouteByCategory,
       kitchenRouteByCategoryMain,
@@ -488,6 +795,8 @@ export default function PosPrintersPage() {
   }, [
     previewData.items,
     kitchenMode,
+    kitchen2Categories,
+    kitchen3Categories,
     kitchenRouteByMenu,
     kitchenRouteByCategory,
     kitchenRouteByCategoryMain,
@@ -497,13 +806,31 @@ export default function PosPrintersPage() {
   ])
 
   const buildReceiptHtml = React.useCallback(() => {
-    const logoUrl = `${window.location.origin}/company-stamp.png`
+    const logoUrl = receiptLogoImageUrl || `${window.location.origin}/company-stamp.png`
+    const previewIsTaxInvoice = false
+    const footerPrimary =
+      receiptFooterPrimaryText.trim() ||
+      (receiptShowThankYou ? tr("posReceiptThankYou", "감사합니다") : "")
+    const footerSecondary =
+      receiptFooterSecondaryText.trim() ||
+      (receiptShowCustomerCopy ? tr("posReceiptCustomerCopy", "고객용") : "")
+    const qrCaption = receiptMembershipQrText.trim()
+    const qrSrc = receiptMembershipQrLinkUrl.trim()
+      ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
+      : receiptMembershipQrImageUrl
+    const receiptBarcodeUrl = receiptBarcode ? buildCode128BarcodeUrl(previewData.orderNo) : ""
     const lines = previewData.items
       .map(
-        (it) =>
-          `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${(
+        (it, idx) => {
+          const itemBarcodeUrl = itemBarcode ? buildCode128BarcodeUrl(`pv${idx}`) : ""
+          return `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${(
             it.qty * it.price
-          ).toLocaleString()}</span></div>`
+          ).toLocaleString()}</span></div>${
+            itemBarcodeUrl
+              ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${escapeHtml(itemBarcodeUrl)}" alt="Item barcode" style="width:66mm;max-width:100%;height:auto;object-fit:contain;" /></div>`
+              : ""
+          }`
+        }
       )
       .join("")
     return `
@@ -556,7 +883,7 @@ export default function PosPrintersPage() {
               : ""
           }
           <div class="text-xs">
-            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderNo", "주문번호"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderNo)}</span></div>
+            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderNo", "주문번호"))}</span><span class="receipt-meta-value">${escapeHtml(formatPosOrderNoForPrint(previewData.orderNo))}</span></div>
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posTable", "테이블"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.tableName)}</span></div>
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("date", "Date"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.now)}</span></div>
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "Order Type"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
@@ -582,16 +909,20 @@ export default function PosPrintersPage() {
             <div class="receipt-row"><span>${escapeHtml(t("posTotal") || "합계")}</span><span>${previewData.total.toLocaleString()} ฿</span></div>
           </div>
           <div class="receipt-divider"></div>
+          ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptBarcodeUrl)}" alt="Receipt barcode" style="width:68mm;max-width:100%;height:auto;object-fit:contain;" /></div>` : ""}
+          ${signatureLine && previewIsTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;">${escapeHtml(tr("posSignature", "서명"))}: ____________________</div>` : ""}
           ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${escapeHtml(tr("posReceiptPaid", "결제완료"))}</span></div>` : ""}
-          ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ""}
-          ${receiptShowThankYou ? `<div class="footer-strong">${escapeHtml(tr("posReceiptThankYou", "감사합니다"))}</div>` : ""}
-          ${receiptShowCustomerCopy ? `<div>${escapeHtml(tr("posReceiptCustomerCopy", "고객용"))}</div>` : ""}
-          ${(receiptShowThankYou || receiptShowCustomerCopy) ? "</div>" : ""}
+          ${receiptShowMembershipQr && qrSrc ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(qrSrc)}" alt="Membership QR" style="width:84px;height:84px;object-fit:contain;" />${qrCaption ? `<div class="text-xs receipt-muted" style="margin-top:2px;">${escapeHtml(qrCaption)}</div>` : ""}</div>` : ""}
+          ${receiptShowStamp && receiptStampImageUrl && !receiptStampOnlyTaxInvoice ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptStampImageUrl)}" alt="Company stamp" style="width:72px;height:72px;object-fit:contain;" /></div>` : ""}
+          ${(footerPrimary || footerSecondary) ? '<div class="text-center text-xs receipt-muted">' : ""}
+          ${footerPrimary ? `<div class="footer-strong">${escapeHtml(footerPrimary)}</div>` : ""}
+          ${footerSecondary ? `<div>${escapeHtml(footerSecondary)}</div>` : ""}
+          ${(footerPrimary || footerSecondary) ? "</div>" : ""}
           </div>
         </body>
       </html>
     `
-  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptShowThankYou, receiptShowCustomerCopy, receiptBizName, receiptBizTaxId, receiptBizOwner, receiptBizAddress, receiptBizPhone])
+  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizOwner, receiptBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t])
 
   const buildKitchenSlipHtmlForSlip = React.useCallback(
     (slip: { label: string; items: { name: string; qty: number; note?: string }[] }) => {
@@ -687,10 +1018,12 @@ export default function PosPrintersPage() {
     printOne(0)
   }
 
+  const receiptPreviewIsTaxInvoice = false
+
   if (!canAccessPosPrinters(auth?.role || "")) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
-        <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>
+        <p className="text-muted-foreground">{tr("noPermission", "접근 권한이 없습니다.")}</p>
       </div>
     )
   }
@@ -704,10 +1037,10 @@ export default function PosPrintersPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {t("posPrinterSettings") || "프린터 설정"}
+              {tr("posPrinterSettings", "프린터 설정")}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {t("posPrinterSettingsSub") || "매장별 주방 프린터·카테고리 출력 설정"}
+              {tr("posPrinterSettingsSub", "매장별 주방 프린터·카테고리 출력 설정")}
             </p>
           </div>
         </div>
@@ -715,7 +1048,7 @@ export default function PosPrintersPage() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Select value={storeCode} onValueChange={setStoreCode}>
             <SelectTrigger className="h-10 w-40">
-              <SelectValue placeholder={t("store") || "매장"} />
+              <SelectValue placeholder={tr("store", "매장")} />
             </SelectTrigger>
             <SelectContent>
               {stores.map((s) => (
@@ -733,8 +1066,21 @@ export default function PosPrintersPage() {
             disabled={loading}
           >
             <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            {t("posRefresh") || "새로고침"}
+            {tr("posRefresh", "새로고침")}
           </Button>
+          {canSearchAll && stores.length > 1 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 gap-1.5"
+              type="button"
+              onClick={handleOpenCopyDialog}
+              disabled={!effectiveStore || loading}
+            >
+              <Copy className="h-4 w-4" />
+              {tr("posPrinterCopySettings", "설정 복사")}
+            </Button>
+          ) : null}
         </div>
 
         {loading && (
@@ -744,60 +1090,41 @@ export default function PosPrintersPage() {
         )}
 
         {effectiveStore && !loading && (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
+          <div className={adminTabsRootCn}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className={adminTabsBarCn}>
               <div className={adminTabsScrollCn}>
                 <TabsList className={adminTabsListRowCn}>
                   <TabsTrigger value="printer" className={adminTabsTriggerCn}>
                     <Printer className={adminTabsIconCn} aria-hidden />
-                    {t("posPrinterTab") || "프린터"}
+                    {tr("posPrinterTabKitchenRouting", "주방 라우팅")}
                   </TabsTrigger>
                   <TabsTrigger value="receipt" className={adminTabsTriggerCn}>
                     <Receipt className={adminTabsIconCn} aria-hidden />
-                    {t("posReceiptTab") || "영수증"}
+                    {tr("posReceiptTabAutoPrint", "영수증/자동인쇄")}
                   </TabsTrigger>
                   <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
                     <Receipt className={adminTabsIconCn} aria-hidden />
-                    {t("posReceiptDesignTab") || "디자인"}
+                    {tr("posReceiptDesignTab", "디자인")}
                   </TabsTrigger>
                   <TabsTrigger value="business" className={adminTabsTriggerCn}>
                     <Building2 className={adminTabsIconCn} aria-hidden />
-                    {t("posBizInfoTab") || "사업자 정보"}
+                    {tr("posBizInfoTab", "사업자 정보")}
                   </TabsTrigger>
                   <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
                     <Wallet className={adminTabsIconCn} aria-hidden />
-                    {t("posDrawerTab") || "돈통"}
+                    {tr("posDrawerTab", "돈통")}
                   </TabsTrigger>
                 </TabsList>
               </div>
             </div>
 
             <TabsContent value="printer" className={cn(adminTabsContentCn, "space-y-6")}>
-            <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground">
-              {t("posPrinterNote") ||
-                "※ 손님 영수증·주방 주문서는 결제 완료 후 모달에서 수동 인쇄하거나, 아래 자동 인쇄를 설정할 수 있습니다."}
-            </div>
-
-              <p className="text-sm font-medium text-foreground">{t("posPrinterWorkflowSectionTitle") || "카운터·주방 출력"}</p>
-              <p className="text-sm text-muted-foreground">
-                {t("posKitchenOptionsHint") || "주방 주문서 출력 방식, 분류, 자동 인쇄를 설정합니다."}
-              </p>
-              <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground space-y-2">
-                <p className="font-medium text-foreground">{t("posAdminPrinterWorkflowTitle") || "카운터·주방 프린터 안내"}</p>
-                <p>{t("posAdminPrinterWorkflowBody") || "웹 POS는 Windows/Chrome 인쇄 창에서 프린터를 고릅니다. 주방이 2~3대면 인쇄 창이 슬립마다 순서대로 열리므로, 각 창에서 해당 주방 프린터를 선택하세요. ‘주문 완료 시 주방 자동 인쇄’를 켜야 주방으로 나갑니다."}</p>
-                <p>
-                  {mainDeviceTokensPreview.length > 0
-                    ? (t("posAdminPrinterMainRegisteredN") ||
-                        "카운터(메인) POS {{n}}대가 등록되어 있습니다. 등록된 각 PC에서 주문 수신·자동 인쇄가 실행됩니다.").replace(
-                        "{{n}}",
-                        String(mainDeviceTokensPreview.length)
-                      )
-                    : t("posAdminPrinterMainNone") ||
-                      "메인 POS 미등록 시 각 기기의 로컬 ‘메인’ 토글만 적용됩니다. 카운터마다 /pos/terminal 에서 메인을 켜거나, POS 설정 화면에서 기기별로 지정하세요."}
-                </p>
-              </div>
               <div>
-                <label className="text-sm font-medium">{t("posKitchenMode") || "주방 프린터 구성"}</label>
+                <label className="text-sm font-medium">{tr("posKitchenMode", "주방 주문서 분할")}</label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {tr("posKitchenModeScopeNote", "카운터·영수증(메인 POS)은 위 안내와 같이 별도입니다. 여기서는 주방 주문서를 주방 1~3 슬립으로 최대 몇 갈래까지 나눌지만 정합니다.")}
+                </p>
                 <Select
                   value={String(kitchenMode)}
                   onValueChange={(v) => setKitchenMode(Number(v) as 1 | 2 | 3)}
@@ -806,26 +1133,29 @@ export default function PosPrintersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">{t("posKitchenMode1") || "1대 (통합)"}</SelectItem>
-                    <SelectItem value="2">{t("posKitchenMode2") || "2대 (카테고리별)"}</SelectItem>
-                    <SelectItem value="3">{t("posKitchenMode3") || "3대 (주방2·주방3 분할)"}</SelectItem>
+                    <SelectItem value="1">{tr("posKitchenMode1", "1대")}</SelectItem>
+                    <SelectItem value="2">{tr("posKitchenMode2", "2대")}</SelectItem>
+                    <SelectItem value="3">{tr("posKitchenMode3", "3대")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {t("posKitchenModeRoutingHint") ||
-                    "아래 표에서 대분류·카테고리·메뉴별로 주방 1~3 또는 주방 미인쇄를 지정합니다. 2·3대 모드에서는 슬립이 주방별로 나뉩니다."}
+                  {tr("posKitchenModeRoutingHint", "아래 표에서 대분류·카테고리·메뉴별로 주방 1~3 또는 주방 미인쇄를 지정합니다. 2·3대 모드에서는 슬립이 주방별로 나뉩니다.")}
                 </p>
               </div>
 
               <div className="space-y-3 rounded-lg border p-4">
                 <div>
-                  <p className="text-sm font-medium text-foreground">{t("posKitchenRouteSection")}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{t("posKitchenRouteHint")}</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {tr("posKitchenRouteSection", "주방 프린터 지정 (대분류·카테고리·메뉴)")}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {tr("posKitchenRouteHint", "우선순위: 메뉴별 → 카테고리별 → 대분류별. 미지정은 주방 1로 처리됩니다.")}
+                  </p>
                 </div>
                 {mainCategories.length > 0 ? (
                   <div>
                     <p className="mb-2 text-xs font-medium text-muted-foreground">
-                      {t("posKitchenRouteByMain")}
+                      {tr("posKitchenRouteByMain", "대분류(category_main)")}
                     </p>
                     <div className="max-h-48 overflow-y-auto rounded-md border px-2">
                       {mainCategories.map((main) => (
@@ -851,7 +1181,7 @@ export default function PosPrintersPage() {
                 {categories.length > 0 ? (
                   <div>
                     <p className="mb-2 text-xs font-medium text-muted-foreground">
-                      {t("posKitchenRouteByCategoryCol")}
+                      {tr("posKitchenRouteByCategoryCol", "카테고리(소분류)")}
                     </p>
                     <div className="max-h-48 overflow-y-auto rounded-md border px-2">
                       {categories.map((cat) => (
@@ -876,11 +1206,11 @@ export default function PosPrintersPage() {
                 ) : null}
                 <div>
                   <p className="mb-2 text-xs font-medium text-muted-foreground">
-                    {t("posKitchenRouteByMenuCol")}
+                    {tr("posKitchenRouteByMenuCol", "메뉴별")}
                   </p>
                   <Input
                     className="mb-2 h-9 text-sm"
-                    placeholder={t("posKitchenRouteMenuSearch")}
+                    placeholder={tr("posKitchenRouteMenuSearch", "메뉴 검색 (이름·코드·ID)")}
                     value={menuRouteFilter}
                     onChange={(e) => setMenuRouteFilter(e.target.value)}
                   />
@@ -907,94 +1237,80 @@ export default function PosPrintersPage() {
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-lg border p-4">
-                <p className="text-sm font-medium">{t("posPrinterAutoPrintSection") || "자동 인쇄"}</p>
-                <ToggleRow label={t("posKitchenAutoPrintOnOrder") || "주문 완료 시 주방 주문서 자동 인쇄"} value={autoPrintKitchenSlipOnOrder} onChange={setAutoPrintKitchenSlipOnOrder} t={t} />
-                <ToggleRow label={t("posAutoPrintReceiptOnOrder") || "주문 시 영수증 자동 인쇄"} value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
-                <ToggleRow label={t("posAutoPrintReceiptOnAddOrder") || "추가 주문 시 영수증 자동 인쇄"} value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
-                <ToggleRow label={t("posAutoPrintReceiptOnPayment") || "결제 시 영수증 자동 인쇄"} value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />
-              </div>
-
             <div className="grid gap-2 sm:grid-cols-2">
               <Button variant="outline" onClick={() => handleOpenPreview("receipt")}>
                 <Receipt className="mr-2 h-4 w-4" />
-                {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                {tr("posReceipt", "영수증")} {tr("posPreview", "미리보기")}
               </Button>
               <Button variant="outline" onClick={() => handleOpenPreview("kitchen")}>
                 <Printer className="mr-2 h-4 w-4" />
-                {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+                {tr("posKitchenOrder", "주방 주문서")} {tr("posPreview", "미리보기")}
               </Button>
             </div>
             </TabsContent>
 
             <TabsContent value="receipt" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
-                {t("posReceiptOptionsHint") || "영수증·고객 주문서 출력 시 포함할 항목을 설정합니다."}
+                {tr("posReceiptOptionsHint", "영수증·고객 주문서 출력 시 포함할 항목을 설정합니다.")}
               </p>
               <div className="space-y-3">
+                <div className="space-y-3 rounded-lg border p-4">
+                  <p className="text-sm font-medium">{tr("posReceiptAutoPrintSection", "자동 인쇄")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tr("posReceiptAutoPrintSectionHint", "영수증/주방 주문서 자동 인쇄 시점을 선택합니다.")}
+                  </p>
+                  <ToggleRow label={tr("posKitchenAutoPrintOnOrder", "주문 완료 시 주방 주문서 자동 인쇄")} value={autoPrintKitchenSlipOnOrder} onChange={setAutoPrintKitchenSlipOnOrder} t={t} />
+                  <ToggleRow label={tr("posAutoPrintReceiptOnOrder", "주문 시 영수증 자동 인쇄")} value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
+                  <ToggleRow label={tr("posAutoPrintReceiptOnAddOrder", "추가 주문 시 영수증 자동 인쇄")} value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
+                  <ToggleRow label={tr("posAutoPrintReceiptOnPayment", "결제 시 영수증 자동 인쇄")} value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />
+                </div>
                 <div>
-                  <label className="text-sm font-medium">{t("posReceiptPrintLang") || "주문·영수증·주방 인쇄 언어"}</label>
-                  <p className="text-xs text-muted-foreground mt-0.5">{t("posReceiptPrintLangHint") || "설정 시 주문, 영수증, 주방 주문서에 적용됩니다. 미설정 시 화면 언어를 따릅니다."}</p>
+                  <label className="text-sm font-medium">{tr("posReceiptPrintLang", "주문·영수증·주방 인쇄 언어")}</label>
+                  <p className="text-xs text-muted-foreground mt-0.5">{tr("posReceiptPrintLangHint", "설정 시 주문, 영수증, 주방 주문서에 적용됩니다. 미설정 시 화면 언어를 따릅니다.")}</p>
                   <Select value={receiptPrintLang || "__auto__"} onValueChange={(v) => setReceiptPrintLang(v === "__auto__" ? "" : v)}>
                     <SelectTrigger className="mt-1 w-48">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__auto__">{t("posReceiptPrintLangAuto") || "화면 언어 따름"}</SelectItem>
-                      <SelectItem value="ko">{t("posLangKo") || "한국어"}</SelectItem>
-                      <SelectItem value="en">{t("posLangEn") || "English"}</SelectItem>
-                      <SelectItem value="th">{t("posLangTh") || "ไทย"}</SelectItem>
-                      <SelectItem value="mm">{t("posLangMm") || "မြန်မာ"}</SelectItem>
-                      <SelectItem value="la">{t("posLangLa") || "ລາວ"}</SelectItem>
-                      <SelectItem value="kh">{t("posLangKh") || "ខ្មែរ"}</SelectItem>
-                      <SelectItem value="vi">{t("posLangVi") || "Tiếng Việt"}</SelectItem>
-                      <SelectItem value="ms">{t("posLangMs") || "Bahasa"}</SelectItem>
+                      <SelectItem value="__auto__">{tr("posReceiptPrintLangAuto", "화면 언어 따름")}</SelectItem>
+                      <SelectItem value="ko">{tr("posLangKo", "한국어")}</SelectItem>
+                      <SelectItem value="en">{tr("posLangEn", "English")}</SelectItem>
+                      <SelectItem value="th">{tr("posLangTh", "ไทย")}</SelectItem>
+                      <SelectItem value="mm">{tr("posLangMm", "မြန်မာ")}</SelectItem>
+                      <SelectItem value="la">{tr("posLangLa", "ລາວ")}</SelectItem>
+                      <SelectItem value="kh">{tr("posLangKh", "ខ្មែរ")}</SelectItem>
+                      <SelectItem value="vi">{tr("posLangVi", "Tiếng Việt")}</SelectItem>
+                      <SelectItem value="ms">{tr("posLangMs", "Bahasa")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <ToggleRow label={t("posLogoPrint") || "로고 인쇄"} value={logoPrint} onChange={setLogoPrint} t={t} />
-                <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
-                  {t("posReceiptPrintTiming") || "영수증 출력 시점"}: {t("posOrderButton") || "주문"} / {t("posReorder") || "추가 주문"} / {t("posPayButton") || "결제"}
-                </div>
-                <ToggleRow label={t("posCustomerReceiptOrderDetails") || "고객영수증 주문내역"} value={customerReceiptOrderDetails} onChange={setCustomerReceiptOrderDetails} t={t} />
-                <ToggleRow label={t("posMerchantReceiptOrderDetails") || "가맹점영수증 주문내역"} value={merchantReceiptOrderDetails} onChange={setMerchantReceiptOrderDetails} t={t} />
-                <ToggleRow label={t("posCashPaymentReceipt") || "현금 결제 시 영수증 출력"} value={cashPaymentReceipt} onChange={setCashPaymentReceipt} t={t} />
-                <ToggleRow label={t("posSignatureLine") || "서명란 출력"} value={signatureLine} onChange={setSignatureLine} t={t} />
-                <ToggleRow label={t("posReceiptBarcode") || "영수증 바코드"} value={receiptBarcode} onChange={setReceiptBarcode} t={t} />
-                <ToggleRow label={t("posItemBarcode") || "아이템 바코드"} value={itemBarcode} onChange={setItemBarcode} t={t} />
-                <div>
-                  <label className="text-sm font-medium">{t("posQrCodeOption") || "QR코드 영수증"}</label>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {(['yes', 'no', 'return_points'] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => setQrCodeOption(v)}
-                        className={cn(
-                          "rounded-md border px-3 py-1.5 text-sm",
-                          qrCodeOption === v ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                        )}
-                      >
-                        {v === 'yes' ? t("yes") || "예" : v === 'no' ? t("no") || "아니오" : (t("posQrReturnPoints") || "리턴포인트")}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <ToggleRow label={t("posDiscountSeparatePrint") || "할인내역 별도출력"} value={discountSeparatePrint} onChange={setDiscountSeparatePrint} t={t} />
-                <ToggleRow label={t("posMerchantReceiptPrint") || "가맹점 영수증 출력"} value={merchantReceiptPrint} onChange={setMerchantReceiptPrint} t={t} />
-                <ToggleRow label={t("posActualOrderDetails") || "실 주문 내역 출력"} value={actualOrderDetails} onChange={setActualOrderDetails} t={t} />
-                <ToggleRow label={t("posToppingOptionsPrint") || "토핑메뉴 추가옵션"} value={toppingOptionsPrint} onChange={setToppingOptionsPrint} t={t} />
+                <ToggleRow label={tr("posLogoPrint", "로고 인쇄")} value={logoPrint} onChange={setLogoPrint} t={t} />
+                <ToggleRow label={tr("posSignatureLine", "서명란 출력")} value={signatureLine} onChange={setSignatureLine} t={t} />
+                <ToggleRow label={tr("posReceiptBarcode", "영수증 바코드")} value={receiptBarcode} onChange={setReceiptBarcode} t={t} />
+                <ToggleRow label={tr("posItemBarcode", "아이템 바코드")} value={itemBarcode} onChange={setItemBarcode} t={t} />
+                <ToggleRow
+                  label={tr("posQrCodeOption", "QR코드 영수증")}
+                  value={qrCodeOption === "yes"}
+                  onChange={(v) => setQrCodeOption(v ? "yes" : "no")}
+                  t={t}
+                />
+                <ToggleRow label={tr("posDiscountSeparatePrint", "할인내역 별도출력")} value={discountSeparatePrint} onChange={setDiscountSeparatePrint} t={t} />
+                <ToggleRow label={tr("posToppingOptionsPrint", "토핑메뉴 추가옵션")} value={toppingOptionsPrint} onChange={setToppingOptionsPrint} t={t} />
                 <p className="text-xs text-muted-foreground mt-2">
-                  인쇄 화면(미리보기) 없이 바로 프린터로 나가게 하려면, 포스 전용 PC에서 Chrome을 <code className="rounded bg-muted px-1">--kiosk-printing</code> 옵션으로 실행하세요. 매장 오픈 시 PC 세팅 방법: <code className="rounded bg-muted px-1">vercel-app/docs/STORE-OPEN-SETUP.md</code> 참고.
+                  <span>{tr("posPrinterKioskPrintingHintBefore", "인쇄 확인 창 없이 바로 프린터로 출력하려면, 포스 PC에서 Chrome을")}</span>{" "}
+                  <code className="rounded bg-muted px-1">--kiosk-printing</code>{" "}
+                  <span>{tr("posPrinterKioskPrintingHintMid", "옵션으로 실행하세요. 매장 오픈 시 PC 안내는 문서")}</span>{" "}
+                  <code className="rounded bg-muted px-1">vercel-app/docs/STORE-OPEN-SETUP.md</code>
+                  <span>{tr("posPrinterKioskPrintingHintAfter", "를 참고하세요.")}</span>
                 </p>
                 <div className="flex flex-wrap gap-2 border-t pt-3">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />
-                    {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                    {tr("posReceipt", "영수증")} {tr("posPreview", "미리보기")}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("kitchen")}>
                     <Printer className="h-4 w-4" />
-                    {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+                    {tr("posKitchenOrder", "주방 주문서")} {tr("posPreview", "미리보기")}
                   </Button>
                 </div>
               </div>
@@ -1002,13 +1318,13 @@ export default function PosPrintersPage() {
 
             <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
-                {t("posReceiptDesignHint") || "손님 영수증·주방 주문서 레이아웃을 설정합니다."}
+                {tr("posReceiptDesignHint", "손님 영수증·주방 주문서 레이아웃을 설정합니다.")}
               </p>
 
               <div className="rounded-lg border p-4 space-y-3">
-                <p className="text-sm font-semibold">{t("posKitchenSlipDesignSection") || "주방 주문서"}</p>
+                <p className="text-sm font-semibold">{tr("posKitchenSlipDesignSection", "주방 주문서")}</p>
                 <div>
-                  <label className="text-sm font-medium">{t("posKitchenSlipFontScaleLabel") || "주방 슬립 글자 크기"}</label>
+                  <label className="text-sm font-medium">{tr("posKitchenSlipFontScaleLabel", "주방 슬립 글자 크기")}</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {(["sm", "md", "lg"] as const).map((v) => (
                       <button
@@ -1020,19 +1336,19 @@ export default function PosPrintersPage() {
                           kitchenSlipFontScale === v ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
                         )}
                       >
-                        {v === "sm" ? t("posReceiptLogoSizeSm") || "작게" : v === "md" ? t("posReceiptLogoSizeMd") || "중간" : t("posReceiptLogoSizeLg") || "크게"}
+                        {v === "sm" ? tr("posReceiptLogoSizeSm", "작게") : v === "md" ? tr("posReceiptLogoSizeMd", "중간") : tr("posReceiptLogoSizeLg", "크게")}
                       </button>
                     ))}
                   </div>
                 </div>
                 <ToggleRow
-                  label={t("posKitchenSlipShowLineNotesLabel") || "품목 줄 메모 표시"}
+                  label={tr("posKitchenSlipShowLineNotesLabel", "품목 줄 메모 표시")}
                   value={kitchenSlipShowLineNotes}
                   onChange={setKitchenSlipShowLineNotes}
                   t={t}
                 />
                 <ToggleRow
-                  label={t("posKitchenSlipShowOrderMemoLabel") || "주문 메모 박스 표시"}
+                  label={tr("posKitchenSlipShowOrderMemoLabel", "주문 메모 박스 표시")}
                   value={kitchenSlipShowOrderMemo}
                   onChange={setKitchenSlipShowOrderMemo}
                   t={t}
@@ -1040,23 +1356,23 @@ export default function PosPrintersPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />
-                    {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                    {tr("posReceipt", "영수증")} {tr("posPreview", "미리보기")}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("kitchen")}>
                     <Printer className="h-4 w-4" />
-                    {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+                    {tr("posKitchenOrder", "주방 주문서")} {tr("posPreview", "미리보기")}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void handleTestPrint("kitchen")}>
                     <Printer className="h-4 w-4" />
-                    {t("posKitchenOrder") || "주방 주문서"} {t("posPrint") || "인쇄"} {t("test") || "테스트"}
+                    {tr("posKitchenOrder", "주방 주문서")} {tr("posPrintTest", "테스트 인쇄")}
                   </Button>
                 </div>
               </div>
 
               <div className="rounded-lg border p-4 space-y-3">
-                <p className="text-sm font-semibold">{t("posReceiptDesignCustomerSection") || "손님 영수증"}</p>
+                <p className="text-sm font-semibold">{tr("posReceiptDesignCustomerSection", "손님 영수증")}</p>
                 <div>
-                  <label className="text-sm font-medium">{t("posReceiptDesignStyleLabel") || "헤더 스타일"}</label>
+                  <label className="text-sm font-medium">{tr("posReceiptDesignStyleLabel", "헤더 스타일")}</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -1066,7 +1382,7 @@ export default function PosPrintersPage() {
                         receiptDesignStyle === 'badge' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
                       )}
                     >
-                      {t("posReceiptDesignStyleBadge") || "배지형"}
+                      {tr("posReceiptDesignStyleBadge", "배지형")}
                     </button>
                     <button
                       type="button"
@@ -1076,12 +1392,12 @@ export default function PosPrintersPage() {
                         receiptDesignStyle === 'simple' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
                       )}
                     >
-                      {t("posReceiptDesignStyleSimple") || "기본형"}
+                      {tr("posReceiptDesignStyleSimple", "기본형")}
                     </button>
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t("posReceiptLogoSizeLabel") || "로고 크기"}</label>
+                  <label className="text-sm font-medium">{tr("posReceiptLogoSizeLabel", "로고 크기")}</label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -1091,7 +1407,7 @@ export default function PosPrintersPage() {
                         receiptLogoSize === 'sm' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
                       )}
                     >
-                      {t("posReceiptLogoSizeSm") || "작게"}
+                      {tr("posReceiptLogoSizeSm", "작게")}
                     </button>
                     <button
                       type="button"
@@ -1101,7 +1417,7 @@ export default function PosPrintersPage() {
                         receiptLogoSize === 'md' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
                       )}
                     >
-                      {t("posReceiptLogoSizeMd") || "중간"}
+                      {tr("posReceiptLogoSizeMd", "중간")}
                     </button>
                     <button
                       type="button"
@@ -1111,22 +1427,138 @@ export default function PosPrintersPage() {
                         receiptLogoSize === 'lg' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
                       )}
                     >
-                      {t("posReceiptLogoSizeLg") || "크게"}
+                      {tr("posReceiptLogoSizeLg", "크게")}
                     </button>
                   </div>
                 </div>
-                <ToggleRow label={t("posReceiptShowTitle") || "영수증 제목 표시"} value={receiptShowTitle} onChange={setReceiptShowTitle} t={t} />
-                <ToggleRow label={t("posReceiptShowPaidStamp") || "PAID 스탬프 표시"} value={receiptShowPaidStamp} onChange={setReceiptShowPaidStamp} t={t} />
-                <ToggleRow label={t("posReceiptShowThankYou") || "하단 Thank you 표시"} value={receiptShowThankYou} onChange={setReceiptShowThankYou} t={t} />
-                <ToggleRow label={t("posReceiptShowCustomerCopy") || "하단 Customer Copy 표시"} value={receiptShowCustomerCopy} onChange={setReceiptShowCustomerCopy} t={t} />
+                <ToggleRow label={tr("posReceiptShowTitle", "영수증 제목 표시")} value={receiptShowTitle} onChange={setReceiptShowTitle} t={t} />
+                <ToggleRow label={tr("posReceiptShowPaidStamp", "PAID 스탬프 표시")} value={receiptShowPaidStamp} onChange={setReceiptShowPaidStamp} t={t} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {tr("posReceiptFooterPrimaryText", "하단 문구 1")}
+                    </label>
+                    <Textarea
+                      value={receiptFooterPrimaryText}
+                      onChange={(e) => setReceiptFooterPrimaryText(e.target.value)}
+                      className="mt-1 min-h-[72px] text-sm"
+                      placeholder={tr("posReceiptFooterPrimaryPh", "예: Thank you / 감사합니다")}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {tr("posReceiptFooterSecondaryText", "하단 문구 2")}
+                    </label>
+                    <Textarea
+                      value={receiptFooterSecondaryText}
+                      onChange={(e) => setReceiptFooterSecondaryText(e.target.value)}
+                      className="mt-1 min-h-[72px] text-sm"
+                      placeholder={tr("posReceiptFooterSecondaryPh", "예: Customer Copy / 멤버십 가입 안내")}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-xs font-medium">{tr("posReceiptLogoUploadTitle", "로고 이미지")}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="max-w-xs text-xs"
+                      onChange={(e) => void handleAssetUpload(e, setReceiptLogoImageUrl, tr("posReceiptLogoUploadTitle", "로고 이미지"))}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => setReceiptLogoImageUrl("")}>
+                      {tr("reset", "초기화")}
+                    </Button>
+                  </div>
+                  {receiptLogoImageUrl ? (
+                    <img src={receiptLogoImageUrl} alt="Receipt logo" className="h-14 w-auto object-contain rounded border bg-white p-1" />
+                  ) : null}
+                </div>
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-xs font-medium">{tr("posReceiptStampUploadTitle", "회사 도장 이미지")}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="max-w-xs text-xs"
+                      onChange={(e) => void handleAssetUpload(e, setReceiptStampImageUrl, tr("posReceiptStampUploadTitle", "회사 도장 이미지"))}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => setReceiptStampImageUrl("")}>
+                      {tr("reset", "초기화")}
+                    </Button>
+                  </div>
+                  <ToggleRow
+                    label={tr("posReceiptShowStamp", "도장 표시")}
+                    value={receiptShowStamp}
+                    onChange={setReceiptShowStamp}
+                    t={t}
+                  />
+                  <ToggleRow
+                    label={tr("posReceiptStampOnlyTaxInvoice", "인보이스(세금계산서) 발행 시만 도장 표시")}
+                    value={receiptStampOnlyTaxInvoice}
+                    onChange={setReceiptStampOnlyTaxInvoice}
+                    t={t}
+                  />
+                  {receiptStampImageUrl ? (
+                    <img src={receiptStampImageUrl} alt="Receipt stamp" className="h-14 w-14 object-contain rounded border bg-white p-1" />
+                  ) : null}
+                </div>
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-xs font-medium">{tr("posReceiptMembershipQrTitle", "멤버십 QR")}</p>
+                  <Input
+                    value={receiptMembershipQrLinkUrl}
+                    onChange={(e) => setReceiptMembershipQrLinkUrl(e.target.value)}
+                    className="h-9"
+                    placeholder={tr("posReceiptMembershipQrUrlPh", "https://... (URL만 입력하면 QR 자동 생성)")}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="max-w-xs text-xs"
+                      onChange={(e) => void handleAssetUpload(e, setReceiptMembershipQrImageUrl, tr("posReceiptMembershipQrTitle", "멤버십 QR"))}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setReceiptMembershipQrImageUrl(""); setReceiptMembershipQrLinkUrl("") }}>
+                      {tr("reset", "초기화")}
+                    </Button>
+                  </div>
+                  {receiptMembershipQrLinkUrl.trim() ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {tr("posReceiptMembershipQrUrlHint", "URL이 있으면 업로드 이미지 대신 자동 생성 QR이 우선 사용됩니다.")}
+                    </p>
+                  ) : null}
+                  <ToggleRow
+                    label={tr("posReceiptShowMembershipQr", "멤버십 QR 표시")}
+                    value={receiptShowMembershipQr}
+                    onChange={setReceiptShowMembershipQr}
+                    t={t}
+                  />
+                  <Input
+                    value={receiptMembershipQrText}
+                    onChange={(e) => setReceiptMembershipQrText(e.target.value)}
+                    className="h-9"
+                    placeholder={tr("posReceiptMembershipQrTextPh", "예: 가입하고 포인트 적립 받기")}
+                  />
+                  {(receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) ? (
+                    <img
+                      src={
+                        receiptMembershipQrLinkUrl.trim()
+                          ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
+                          : receiptMembershipQrImageUrl
+                      }
+                      alt="Membership QR"
+                      className="h-20 w-20 object-contain rounded border bg-white p-1"
+                    />
+                  ) : null}
+                </div>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
                     <Receipt className="h-4 w-4" />
-                    {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                    {tr("posReceipt", "영수증")} {tr("posPreview", "미리보기")}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void handleTestPrint("receipt")}>
                     <Printer className="h-4 w-4" />
-                    {t("posReceipt") || "영수증"} {t("posPrint") || "인쇄"} {t("test") || "테스트"}
+                    {tr("posReceipt", "영수증")} {tr("posPrintTest", "테스트 인쇄")}
                   </Button>
                 </div>
               </div>
@@ -1134,44 +1566,50 @@ export default function PosPrintersPage() {
 
             <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-lg border p-4 space-y-3">
-                <p className="text-sm font-medium">{t("posBizInfoTab") || "사업자 정보"}</p>
+                <p className="text-sm font-medium">{tr("posBizInfoTab", "사업자 정보")}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs text-muted-foreground">{t("posBizNameLabel") || "상호명"}</label>
-                    <Input value={receiptBizName} onChange={(e) => setReceiptBizName(e.target.value)} className="mt-1 h-9" placeholder={t("posBizNamePh") || "예: 청만 아속점"} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizNameLabel", "상호명")}</label>
+                    <Input value={receiptBizName} onChange={(e) => setReceiptBizName(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizNamePh", "예: 청만 아속점")} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">{t("posBizTaxIdLabel") || "사업자등록번호"}</label>
-                    <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={t("posBizTaxIdPh") || "예: 0105566137147"} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizTaxIdLabel", "사업자등록번호")}</label>
+                    <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizTaxIdPh", "예: 0105566137147")} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">{t("posBizOwnerLabel") || "대표자명"}</label>
-                    <Input value={receiptBizOwner} onChange={(e) => setReceiptBizOwner(e.target.value)} className="mt-1 h-9" placeholder={t("posBizOwnerPh") || "예: 홍길동"} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizOwnerLabel", "대표자명")}</label>
+                    <Input value={receiptBizOwner} onChange={(e) => setReceiptBizOwner(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizOwnerPh", "예: 홍길동")} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground">{t("posBizPhoneLabel") || "연락처"}</label>
-                    <Input value={receiptBizPhone} onChange={(e) => setReceiptBizPhone(e.target.value)} className="mt-1 h-9" placeholder={t("posBizPhonePh") || "예: 02-123-4567"} />
+                    <label className="text-xs text-muted-foreground">{tr("posBizPhoneLabel", "연락처")}</label>
+                    <Input value={receiptBizPhone} onChange={(e) => setReceiptBizPhone(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizPhonePh", "예: 02-123-4567")} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground">{t("posBizAddressLabel") || "사업장 주소"}</label>
-                  <Input value={receiptBizAddress} onChange={(e) => setReceiptBizAddress(e.target.value)} className="mt-1 h-9" placeholder={t("posBizAddressPh") || "예: Bangkok ... "} />
+                  <label className="text-xs text-muted-foreground">{tr("posBizAddressLabel", "사업장 주소")}</label>
+                  <Input value={receiptBizAddress} onChange={(e) => setReceiptBizAddress(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizAddressPh", "예: Bangkok ... ")} />
                 </div>
-                <p className="text-[11px] text-muted-foreground">{t("posBizInfoHint") || "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다."}</p>
+                <p className="text-[11px] text-muted-foreground">{tr("posBizInfoHint", "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다.")}</p>
               </div>
             </TabsContent>
 
             <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
-                {t("posDrawerHint") || "결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다."}
+                {tr("posDrawerHint", "결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다.")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {tr(
+                  "posDrawerBridgeHint",
+                  "※ 실제 자동 열림은 POS PC의 로컬 드로어 브리지(127.0.0.1) 실행이 필요합니다. 브리지가 없으면 설정은 저장되지만 하드웨어는 열리지 않습니다."
+                )}
               </p>
               <div className="space-y-3">
-                <ToggleRow label={t("posCardAutoOpen") || "카드결제 자동열기"} value={cardAutoOpen} onChange={setCardAutoOpen} t={t} />
-                <ToggleRow label={t("posCheckAutoOpen") || "체크결제 자동열기"} value={checkAutoOpen} onChange={setCheckAutoOpen} t={t} />
+                <ToggleRow label={tr("posCardAutoOpen", "카드결제 자동열기")} value={cardAutoOpen} onChange={setCardAutoOpen} t={t} />
+                <ToggleRow label={tr("posCheckAutoOpen", "체크결제 자동열기")} value={checkAutoOpen} onChange={setCheckAutoOpen} t={t} />
                 <div>
-                  <label className="text-sm font-medium">{t("posDrawerOpenOption") || "돈통열기 옵션"}</label>
+                  <label className="text-sm font-medium">{tr("posDrawerOpenOption", "돈통열기 옵션")}</label>
                   <p className="text-xs text-muted-foreground mb-1">
-                    {t("posDrawerOpenOptionHint") || "수동으로 돈통을 열 때 필요한 조건"}
+                    {tr("posDrawerOpenOptionHint", "수동으로 돈통을 열 때 필요한 조건")}
                   </p>
                   <div className="flex flex-col gap-2 mt-1">
                     {(['password_and_reason', 'reason_only', 'force'] as const).map((v) => (
@@ -1190,9 +1628,9 @@ export default function PosPrintersPage() {
                           className="h-4 w-4"
                         />
                         <span className="text-sm">
-                          {v === 'password_and_reason' ? (t("posDrawerPasswordAndReason") || "암호입력 및 사유입력") :
-                           v === 'reason_only' ? (t("posDrawerReasonOnly") || "사유입력") :
-                           (t("posDrawerForceOpen") || "강제열기")}
+                          {v === 'password_and_reason' ? tr("posDrawerPasswordAndReason", "암호입력 및 사유입력") :
+                           v === 'reason_only' ? tr("posDrawerReasonOnly", "사유입력") :
+                           tr("posDrawerForceOpen", "강제열기")}
                         </span>
                       </label>
                     ))}
@@ -1200,21 +1638,107 @@ export default function PosPrintersPage() {
                 </div>
               </div>
             </TabsContent>
-
-            <div className="border-t px-6 py-4">
-              <Button className="w-full" onClick={handleSave} disabled={saving}>
+          </Tabs>
+            <div className="border-t border-border px-4 py-4 sm:px-6">
+              <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving}>
                 <Save className="mr-2 h-4 w-4" />
-                {saving ? "..." : t("itemsBtnSave") || "저장"}
+                {saving ? t("posPrinterSaving") : t("itemsBtnSave")}
               </Button>
             </div>
-          </Tabs>
+          </div>
         )}
       </div>
+
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tr("posPrinterCopySettings", "설정 복사")}</DialogTitle>
+            <DialogDescription className="text-left">
+              {tr("posPrinterCopySettingsDesc", "다른 매장의 POS 프린터·영수증·돈통 등 저장값을 현재 매장으로 가져옵니다. 메인 POS 기기 등록은 매장별로 따로 관리됩니다.")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium">{tr("posPrinterCopyFromStore", "복사할 매장")}</label>
+              <Select value={copySourceStore} onValueChange={setCopySourceStore}>
+                <SelectTrigger className="mt-1 h-10 w-full">
+                  <SelectValue placeholder={tr("store", "매장")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores
+                    .filter((s) => s !== effectiveStore)
+                    .map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {tr("posPrinterCopyToCurrent", "적용 대상: {{store}}").replace("{{store}}", effectiveStore || "—")}
+            </p>
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">{tr("posPrinterCopyTabsTitle", "복사할 탭 선택")}</p>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabPrinter} onChange={(e) => setCopyTabPrinter(e.target.checked)} />
+                <span>{tr("posPrinterTab", "프린터")}</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabReceipt} onChange={(e) => setCopyTabReceipt(e.target.checked)} />
+                <span>{tr("posReceiptTab", "영수증")}</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabReceiptDesign} onChange={(e) => setCopyTabReceiptDesign(e.target.checked)} />
+                <span>{tr("posReceiptDesignTab", "디자인")}</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabBusiness} onChange={(e) => setCopyTabBusiness(e.target.checked)} />
+                <span>{tr("posBizInfoTab", "사업자 정보")}</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabDrawer} onChange={(e) => setCopyTabDrawer(e.target.checked)} />
+                <span>{tr("posDrawerTab", "돈통")}</span>
+              </label>
+              <p className="text-[11px] text-muted-foreground">
+                {tr("posPrinterCopyTabsHint", "선택한 탭만 현재 매장 설정에 덮어씁니다. 선택하지 않은 탭은 유지됩니다.")}
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-input"
+                checked={copySaveImmediately}
+                onChange={(e) => setCopySaveImmediately(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">
+                  {tr("posPrinterCopySaveNow", "가져온 뒤 바로 저장")}
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {tr("posPrinterCopySaveNowHint", "끄면 화면에만 반영됩니다. 확인 후 하단 저장으로 DB에 반영하세요.")}
+                </span>
+              </span>
+            </label>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setCopyDialogOpen(false)} disabled={copyWorking}>
+              {tr("cancel", "취소")}
+            </Button>
+            <Button type="button" onClick={() => void handleCopySettingsApply()} disabled={copyWorking}>
+              {copyWorking ? t("posPrinterCopyWorking") : t("posPrinterCopyApply")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{t("posPrintPreviewBothTitle") || "영수증 · 주방 미리보기"}</DialogTitle>
+            <DialogTitle>{tr("posPrintPreviewBothTitle", "영수증 · 주방 미리보기")}</DialogTitle>
+            <DialogDescription className="text-left text-sm">
+              {tr("posPrintPreviewSaveHint", "미리보기·테스트 인쇄는 DB에 저장하지 않습니다. 변경한 설정은 이 창을 닫은 뒤 아래 「설정 저장」 또는 페이지 맨 아래 「저장」으로 반영하세요.")}
+            </DialogDescription>
           </DialogHeader>
           <Tabs
             value={previewKind}
@@ -1224,11 +1748,11 @@ export default function PosPrintersPage() {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="receipt" className="gap-1.5">
                 <Receipt className="h-3.5 w-3.5" />
-                {t("posReceipt") || "영수증"}
+                {tr("posReceipt", "영수증")}
               </TabsTrigger>
               <TabsTrigger value="kitchen" className="gap-1.5">
                 <Printer className="h-3.5 w-3.5" />
-                {t("posKitchenOrder") || "주방 주문서"}
+                {tr("posKitchenOrder", "주방 주문서")}
               </TabsTrigger>
             </TabsList>
             <TabsContent value="receipt" className="mt-3 outline-none">
@@ -1242,8 +1766,8 @@ export default function PosPrintersPage() {
                 <div className="font-mono text-xs">
                   <div className="text-center">
                     <img
-                      src="/company-stamp.png"
-                      alt="Company logo"
+                      src={receiptLogoImageUrl || "/company-stamp.png"}
+                      alt={t("posReceiptLogoAlt")}
                       className={cn(
                         "mx-auto h-auto object-contain",
                         receiptLogoSize === "sm" ? "w-20" : receiptLogoSize === "lg" ? "w-32" : "w-24"
@@ -1259,7 +1783,7 @@ export default function PosPrintersPage() {
                     </div>
                   )}
                   <div className="mt-1">
-                    <div className="my-1 grid grid-cols-[70px_minmax(0,1fr)] items-start gap-x-1"><span>{tr("posOrderNo", "주문번호")}</span><span className="break-words">{previewData.orderNo}</span></div>
+                    <div className="my-1 grid grid-cols-[70px_minmax(0,1fr)] items-start gap-x-1"><span>{tr("posOrderNo", "주문번호")}</span><span className="break-words">{formatPosOrderNoForPrint(previewData.orderNo)}</span></div>
                     <div className="my-1 grid grid-cols-[70px_minmax(0,1fr)] items-start gap-x-1"><span>{t("posTable") || "테이블"}</span><span className="break-words">{previewData.tableName}</span></div>
                     <div className="my-1 grid grid-cols-[70px_minmax(0,1fr)] items-start gap-x-1"><span>{t("date") || "Date"}</span><span className="break-words">{previewData.now}</span></div>
                     <div className="my-1 flex items-center justify-between"><span>{t("posOrderType") || "Order Type"}</span><span>{previewData.orderType}</span></div>
@@ -1280,9 +1804,21 @@ export default function PosPrintersPage() {
                     <span>{tr("amount", "금액")}</span>
                   </div>
                   {previewData.items.map((it) => (
-                    <div key={it.name} className="my-1 flex items-center justify-between">
-                      <span>{it.qty}x {it.name}</span>
-                      <span>{(it.qty * it.price).toLocaleString()}</span>
+                    <div key={it.name} className="my-1">
+                      <div className="flex items-center justify-between">
+                        <span>{it.qty}x {it.name}</span>
+                        <span>{(it.qty * it.price).toLocaleString()}</span>
+                      </div>
+                      {itemBarcode ? (
+                        <div className="text-center mt-1">
+                          <img
+                            src={buildCode128BarcodeUrl(`pv-${it.name}`)}
+                            alt="Item barcode"
+                            className="mx-auto h-auto max-w-full"
+                            style={{ width: "66mm" }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                   <div className="my-2 border-t border-dashed border-black" />
@@ -1295,15 +1831,56 @@ export default function PosPrintersPage() {
                     <div className="flex items-center justify-between"><span>{t("posTotal") || "합계"}</span><span>{previewData.total.toLocaleString()} ฿</span></div>
                   </div>
                   <div className="my-2 border-t border-dashed border-black" />
+                  {receiptBarcode ? (
+                    <div className="my-2 text-center">
+                      <img
+                        src={buildCode128BarcodeUrl(previewData.orderNo)}
+                        alt="Receipt barcode"
+                        className="mx-auto h-auto max-w-full"
+                        style={{ width: "68mm" }}
+                      />
+                    </div>
+                  ) : null}
+                  {signatureLine && receiptPreviewIsTaxInvoice ? (
+                    <div className="my-2 text-[11px] text-black">
+                      {tr("posSignature", "서명")}: ____________________
+                    </div>
+                  ) : null}
                   {receiptShowPaidStamp && (
                     <div className="my-2 text-center">
                       <span className="inline-block border border-black px-3 py-0.5 text-xs font-semibold tracking-widest">{tr("posReceiptPaid", "결제완료")}</span>
                     </div>
                   )}
-                  {(receiptShowThankYou || receiptShowCustomerCopy) && (
+                  {receiptShowMembershipQr && (receiptMembershipQrLinkUrl.trim() || receiptMembershipQrImageUrl) && (
+                    <div className="my-2 text-center">
+                      <img
+                        src={
+                          receiptMembershipQrLinkUrl.trim()
+                            ? `https://quickchart.io/qr?text=${encodeURIComponent(receiptMembershipQrLinkUrl.trim())}&size=180&margin=1&format=png`
+                            : receiptMembershipQrImageUrl
+                        }
+                        alt="Membership QR"
+                        className="mx-auto h-20 w-20 object-contain"
+                      />
+                      {receiptMembershipQrText.trim() ? (
+                        <div className="mt-1 text-[11px] text-black">{receiptMembershipQrText.trim()}</div>
+                      ) : null}
+                    </div>
+                  )}
+                  {receiptShowStamp && receiptStampImageUrl && !receiptStampOnlyTaxInvoice && (
+                    <div className="my-2 text-center">
+                      <img src={receiptStampImageUrl} alt="Company stamp" className="mx-auto h-16 w-16 object-contain" />
+                    </div>
+                  )}
+                  {(
+                    receiptFooterPrimaryText.trim() ||
+                    receiptFooterSecondaryText.trim() ||
+                    receiptShowThankYou ||
+                    receiptShowCustomerCopy
+                  ) && (
                     <div className="text-center text-black">
-                      {receiptShowThankYou && <div className="font-semibold">{tr("posReceiptThankYou", "감사합니다")}</div>}
-                      {receiptShowCustomerCopy && <div>{tr("posReceiptCustomerCopy", "고객용")}</div>}
+                      {receiptFooterPrimaryText.trim() ? <div className="font-semibold">{receiptFooterPrimaryText.trim()}</div> : receiptShowThankYou ? <div className="font-semibold">{tr("posReceiptThankYou", "감사합니다")}</div> : null}
+                      {receiptFooterSecondaryText.trim() ? <div>{receiptFooterSecondaryText.trim()}</div> : receiptShowCustomerCopy ? <div>{tr("posReceiptCustomerCopy", "고객용")}</div> : null}
                     </div>
                   )}
                 </div>
@@ -1342,7 +1919,7 @@ export default function PosPrintersPage() {
                         >
                           {slip.label}
                         </div>
-                        <div className="mb-1 font-bold">{previewData.orderNo}</div>
+                        <div className="mb-1 font-bold">{formatPosOrderNoForPrint(previewData.orderNo)}</div>
                         <div className="mb-1">
                           {previewData.storeCode} · {previewData.orderType} · {t("posTable") || "테이블"}:{" "}
                           {previewData.tableName}
@@ -1351,7 +1928,7 @@ export default function PosPrintersPage() {
                         <hr className="my-2 border-black" />
                         {slip.items.map((it) => (
                           <div key={`${slip.label}-${it.name}-${it.qty}`} className="my-1">
-                            {it.name} × {it.qty}
+                            {it.qty} × {it.name}
                             {kitchenSlipShowLineNotes && it.note ? (
                               <div className="pl-1 text-xs text-neutral-600">{it.note}</div>
                             ) : null}
@@ -1369,13 +1946,24 @@ export default function PosPrintersPage() {
           </div>
             </TabsContent>
           </Tabs>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-              {t("close") || "닫기"}
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>
+              {t("posDialogClose")}
             </Button>
-            <Button onClick={() => handleTestPrint(previewKind)}>
+            <Button type="button" variant="outline" onClick={() => void handleTestPrint(previewKind)}>
               <Printer className="mr-2 h-4 w-4" />
-              {t("posPrint") || "인쇄"} {t("test") || "테스트"}
+              {t("posPrintTest")}
+            </Button>
+            <Button
+              type="button"
+              disabled={saving || !effectiveStore}
+              onClick={async () => {
+                const ok = await handleSave()
+                if (ok) setPreviewOpen(false)
+              }}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {t("posPrintPreviewSaveSettings") || t("itemsBtnSave") || "설정 저장"}
             </Button>
           </DialogFooter>
         </DialogContent>

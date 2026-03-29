@@ -18,6 +18,8 @@ import { MarketingCostsHubPanel } from "@/components/marketing/marketing-costs-h
 import { MarketingIntegratedCalendarPanel } from "@/components/marketing/marketing-integrated-calendar-panel"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 const TAB_IDS = ["monthly", "performance", "calendar", "costs"] as const
 type ReportTab = (typeof TAB_IDS)[number]
@@ -30,6 +32,8 @@ function normalizeTab(raw: string | null): ReportTab {
 export default function MarketingReportHubPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { lang } = useLang()
+  const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const activeTab = normalizeTab(searchParams.get("tab"))
 
@@ -58,27 +62,23 @@ export default function MarketingReportHubPage() {
 
   return (
     <MarketingPageShell maxWidthClass={wide ? "max-w-7xl" : "max-w-4xl"}>
-        <MarketingPageHero
-          icon={FileText}
-          title="월간 리포트"
-          description="월간 집계 · 실적 대시보드 · 통합 캘린더 · 비용 연계"
-        />
+        <MarketingPageHero icon={FileText} title={t("adminMarketingReportHubTitle")} />
 
         <Tabs value={activeTab} onValueChange={(v) => setTab(normalizeTab(v))} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="monthly" className={adminTabsTriggerCn}>
-                  월간 리포트
+                  {t("marketingReportTabMonthly")}
                 </TabsTrigger>
                 <TabsTrigger value="performance" className={adminTabsTriggerCn}>
-                  실적 대시보드
+                  {t("marketingReportTabPerformance")}
                 </TabsTrigger>
                 <TabsTrigger value="calendar" className={adminTabsTriggerCn}>
-                  통합 캘린더
+                  {t("marketingReportTabCalendar")}
                 </TabsTrigger>
                 <TabsTrigger value="costs" className={adminTabsTriggerCn}>
-                  비용 연계
+                  {t("marketingReportTabCosts")}
                 </TabsTrigger>
               </TabsList>
             </div>

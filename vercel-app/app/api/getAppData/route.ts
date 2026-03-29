@@ -3,6 +3,7 @@ import { supabaseSelect, supabaseSelectFilter, supabaseRpc } from '@/lib/supabas
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { isPosAdditiveOptionItemCategory } from '@/lib/pos-additive-item-category'
 import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
+import { getBangkokEndOfDayUtcIso } from '@/lib/bangkok-time'
 
 export interface AppItem {
   code: string
@@ -156,8 +157,9 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
     const patterns: string[] = getStockLocationPatterns(store)
     if (patterns.length === 0) return {}
 
+    const asOfTrim = asOfDate?.trim() || ''
     const asOfTimestamp =
-      asOfDate?.trim() ? `${asOfDate.trim()}T23:59:59.999Z` : null
+      asOfTrim && /^\d{4}-\d{2}-\d{2}$/.test(asOfTrim) ? getBangkokEndOfDayUtcIso(asOfTrim) : null
 
     try {
       const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>(

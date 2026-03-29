@@ -35,6 +35,7 @@ import {
   runDepreciation,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -51,10 +52,7 @@ export function DepreciationTab() {
   const isOffice = isOfficeRole(auth?.role || "")
 
   const [storeFilter, setStoreFilter] = React.useState("All")
-  const [yearMonth, setYearMonth] = React.useState(() => {
-    const n = new Date()
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`
-  })
+  const [yearMonth, setYearMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
 
   const [assets, setAssets] = React.useState<unknown[]>([])
   const [entries, setEntries] = React.useState<unknown[]>([])
@@ -79,11 +77,7 @@ export function DepreciationTab() {
     ? ["All", "본사", ...(storeList || []).filter((s) => !OFFICE_STORES.includes(s) && !s.toLowerCase().includes("office"))]
     : [auth?.store || "All"]
 
-  const yearMonthOptions = Array.from({ length: 24 }, (_, i) => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - i)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-  })
+  const yearMonthOptions = getBangkokRecentYearMonths(24)
 
   const loadAssets = React.useCallback(() => {
     setLoading(true)

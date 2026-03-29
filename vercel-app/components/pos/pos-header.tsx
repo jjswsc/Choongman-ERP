@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, LayoutDashboard } from "lucide-react"
+import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, LayoutDashboard, HardDriveDownload } from "lucide-react"
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -41,6 +41,9 @@ interface PosHeaderProps {
   canChangeStore?: boolean
   /** 테이블 현황 등 새로고침 시 호출 (미전달 시 location.reload) */
   onRefresh?: () => void
+  /** 인터넷이 될 때 로컬에 POS 오프라인용 캐시 채우기 */
+  onPrefetchOfflineData?: () => void
+  prefetchOfflineDataBusy?: boolean
   title?: string
   className?: string
   /** 메인 포스 모드 (프린터 연결, 태블릿 주문 수신 인쇄) */
@@ -64,6 +67,8 @@ export function POSHeader({
   canAccessAdmin: canAccessAdminProp = true,
   canChangeStore = true,
   onRefresh,
+  onPrefetchOfflineData,
+  prefetchOfflineDataBusy = false,
   title = "POS",
   className,
   isMainPosDevice,
@@ -72,9 +77,9 @@ export function POSHeader({
   const router = useRouter()
   const { lang, setLang } = useLang()
   const t = useT(lang)
-  const completed = todayCompleted ?? todayOrders
   const sales = totalSales ?? totalAmount
   const showStoreSelect = canChangeStore && stores.length > 0 && currentStoreId && onStoreChange
+  const offlinePrefetchTitle = t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
 
   const langOptions: { value: typeof lang; labelKey: string }[] = [
     { value: 'ko', labelKey: 'posLangKo' },
@@ -152,13 +157,25 @@ export function POSHeader({
               <RefreshCw className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">{t('posRefresh')}</span>
             </Button>
+            {onPrefetchOfflineData && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1 border-emerald-600/40 px-2 text-emerald-800 hover:bg-emerald-50 sm:px-3"
+                disabled={prefetchOfflineDataBusy}
+                title={offlinePrefetchTitle}
+                onClick={() => onPrefetchOfflineData()}
+              >
+                <HardDriveDownload className="h-4 w-4 shrink-0" />
+                <span className="hidden max-[380px]:hidden sm:inline">
+                  {prefetchOfflineDataBusy ? t("posOfflinePrefetching") : t("posOfflinePrefetch")}
+                </span>
+              </Button>
+            )}
           </div>
         )}
 
-        <span className="hidden text-sm text-muted-foreground lg:inline">
-          {t('posTodayCompleted')}:{" "}
-          <span className="font-semibold text-foreground">{completed}{t('posCount')}</span>
-        </span>
         {typeof isMainPosDevice === "boolean" && onMainPosDeviceChange && (
           <Button
             variant={isMainPosDevice ? "default" : "outline"}
@@ -180,6 +197,22 @@ export function POSHeader({
       </h1>
 
       <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 lg:gap-4">
+        {onPrefetchOfflineData && !showStoreSelect && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 gap-1 border-emerald-600/40 px-2 text-emerald-800 hover:bg-emerald-50 sm:px-3"
+            disabled={prefetchOfflineDataBusy}
+            title={offlinePrefetchTitle}
+            onClick={() => onPrefetchOfflineData()}
+          >
+            <HardDriveDownload className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">
+              {prefetchOfflineDataBusy ? t("posOfflinePrefetching") : t("posOfflinePrefetch")}
+            </span>
+          </Button>
+        )}
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
           <SelectTrigger className="h-8 w-[5.5rem] gap-1 sm:w-[100px]" aria-label={t('posLanguage')}>
             <Languages className="w-3.5 h-3.5 shrink-0" />

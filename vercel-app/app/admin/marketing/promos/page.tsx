@@ -2,8 +2,6 @@
 
 import * as React from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Tag } from 'lucide-react'
-
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import {
@@ -20,13 +18,7 @@ import {
 } from '@/lib/api-client'
 import { PosSetMenuTabWorkspace } from '@/components/erp/pos-set-menu-tab-workspace'
 import { PosSetMenuInquiryTab } from '@/components/erp/pos-set-menu-inquiry-tab'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { MarketingHubCampaignContextStrip } from '@/components/marketing/marketing-hub-campaign-context-strip'
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -38,9 +30,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { POS_MAIN_CATEGORIES } from '@/lib/pos-menu-categories'
+import { Tag } from 'lucide-react'
 import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
-
 export default function MarketingPromosPage() {
   const searchParams = useSearchParams()
   const campaignIdFromQuery = searchParams.get('campaignId')?.trim() || ''
@@ -74,7 +66,6 @@ export default function MarketingPromosPage() {
   const [schemaBannerDismissed, setSchemaBannerDismissed] = React.useState(false)
   const [mainTab, setMainTab] = React.useState<'compose' | 'inquiry'>('compose')
   const [focusPromoId, setFocusPromoId] = React.useState<string | null>(null)
-
   const mainCategories = React.useMemo(() => {
     const preset = categoriesConfig?.mainCategories?.length
       ? new Set(categoriesConfig.mainCategories.filter((c): c is string => typeof c === 'string'))
@@ -85,6 +76,13 @@ export default function MarketingPromosPage() {
       .filter((c): c is string => typeof c === 'string')
       .sort()
   }, [menus, allMainCategories, categoriesConfig])
+
+  React.useEffect(() => {
+    if (pageLoading || !workspaceCampaignId.trim()) return
+    if (!campaigns.some((c) => c.id === workspaceCampaignId)) {
+      setWorkspaceCampaignId('')
+    }
+  }, [campaigns, workspaceCampaignId, pageLoading])
 
   const loadMenusAndMeta = React.useCallback(async () => {
     try {
@@ -174,27 +172,21 @@ export default function MarketingPromosPage() {
     () => campaigns.find((c) => c.id === workspaceCampaignId),
     [campaigns, workspaceCampaignId]
   )
+  const todayBangkokYmd = React.useMemo(
+    () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
+    []
+  )
+  const selectedDesignOutOfRange = React.useMemo(() => {
+    if (!selectedCampaign) return false
+    const s = (selectedCampaign.designStartDate ?? '').trim()
+    const e = (selectedCampaign.designEndDate ?? '').trim()
+    if (!s || !e) return false
+    return todayBangkokYmd < s || todayBangkokYmd > e
+  }, [selectedCampaign, todayBangkokYmd])
 
   return (
     <MarketingPageShell maxWidthClass="max-w-[min(100%,1600px)]">
-        <MarketingPageHero
-          icon={Tag}
-          title={t('posPromoMgmt')}
-          description={t('posPromoMgmtSub')}
-          footer={
-            selectedCampaign ? (
-              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-foreground">
-                <span className="font-mono text-xs font-semibold tabular-nums text-primary">
-                  [{selectedCampaign.campaignNo?.trim() || '—'}]
-                </span>
-                <span className="font-medium leading-snug">{selectedCampaign.topic}</span>
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">{t('marketingPromoToolbarCampaignHint')}</p>
-            )
-          }
-        />
-
+        <MarketingPageHero icon={Tag} title={t('adminMarketingPromos')} />
         {marketingPromoSetsBannerText ? (
           <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
             {marketingPromoSetsBannerText}
@@ -213,44 +205,58 @@ export default function MarketingPromosPage() {
 
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'compose' | 'inquiry')} className={adminTabsRootCn}>
           <div className={cn(adminTabsBarCn, 'px-2 py-2.5 sm:px-4')}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
-              <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListRowCn}>
-                  <TabsTrigger value="compose" className={adminTabsTriggerCn}>
-                    {t('marketingPromoTabsEditCompose')}
-                  </TabsTrigger>
-                  <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
-                    {t('marketingPromoTabsList')}
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:max-w-md">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t('posPromoMarketingCampaign')} · {t('marketingPromoListPickCampaign')}
-                </span>
-                <Select
-                  value={workspaceCampaignId || '_none'}
-                  onValueChange={(v) => setWorkspaceCampaignId(v === '_none' ? '' : v)}
-                >
-                  <SelectTrigger className="h-9 w-full text-left text-sm">
-                    <SelectValue placeholder={t('posPromoCampaignSelectPlaceholder')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">{t('marketingPromoCampaignSelectRequiredOption')}</SelectItem>
-                    {campaigns.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.campaignNo ? `[${c.campaignNo}] ` : ''}
-                        {c.topic}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {marketingPromoCampaignSelectHelpText ? (
-                  <p className="text-[10px] leading-relaxed text-muted-foreground">{marketingPromoCampaignSelectHelpText}</p>
-                ) : null}
-              </div>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="compose" className={adminTabsTriggerCn}>
+                  {t('marketingPromoTabsEditCompose')}
+                </TabsTrigger>
+                <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
+                  {t('marketingPromoTabsList')}
+                </TabsTrigger>
+              </TabsList>
             </div>
           </div>
+
+          <MarketingHubCampaignContextStrip
+            value={workspaceCampaignId}
+            onChange={setWorkspaceCampaignId}
+            campaigns={campaigns}
+            defaultHubLinkFilter="promo_set"
+            allowEmpty
+            emptyOptionLabel={t('marketingPromoCampaignSelectRequiredOption')}
+            onRefresh={() => void loadMenusAndMeta()}
+            maxListHeightClass="max-h-56"
+            disabled={pageLoading}
+            summary={
+              selectedCampaign ? (
+                <div className="space-y-0.5 text-xs">
+                  <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-foreground">
+                    <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">
+                      [{selectedCampaign.campaignNo?.trim() || '—'}]
+                    </span>
+                    <span className="font-medium leading-snug">{selectedCampaign.topic}</span>
+                  </p>
+                  {(selectedCampaign.designStartDate || selectedCampaign.designEndDate) && (
+                    <p
+                      className={cn(
+                        'text-[11px]',
+                        selectedDesignOutOfRange ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+                      )}
+                    >
+                      {t('marketingDesignLabelShort')}: {selectedCampaign.designStartDate || '—'} ~{' '}
+                      {selectedCampaign.designEndDate || '—'}
+                      {selectedDesignOutOfRange ? ` · ${t('marketingDesignTodayOutsidePeriod')}` : ''}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">{t('marketingPromoToolbarCampaignHint')}</p>
+              )
+            }
+          />
+          {marketingPromoCampaignSelectHelpText ? (
+            <p className="mb-4 text-[10px] leading-relaxed text-muted-foreground">{marketingPromoCampaignSelectHelpText}</p>
+          ) : null}
 
           <TabsContent value="compose" className={adminTabsContentCn}>
             {!cidTrim ? (

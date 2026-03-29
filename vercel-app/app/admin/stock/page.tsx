@@ -20,7 +20,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerOrFranchiseeRole } from "@/lib/permissions"
+import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
   useStoreList,
   getAppData,
@@ -30,8 +30,6 @@ import {
   type StockStatusItem,
 } from "@/lib/api-client"
 import { OFFICE_STORES } from "@/lib/permissions"
-
-const OFFICE_ROLES = ["director", "officer", "ceo", "hr"]
 
 /** 본사/오피스/본점 → Office 로 통일 (중복 제거) */
 function normalizeStoreList(stores: string[]): string[] {
@@ -69,10 +67,11 @@ export default function StockPage() {
   const userStore = (auth?.store || "").trim()
 
   const canAdjust = React.useMemo(() => {
-    const role = (auth?.role || "").toLowerCase()
-    const isOffice = OFFICE_ROLES.some((r) => role.includes(r))
-    return isOffice || (isManager && !!userStore)
+    return isOfficeRole(auth?.role || "") || (isManager && !!userStore)
   }, [auth?.role, isManager, userStore])
+
+  /** 발주 일시중지 토글: 매장 직원 오클릭 방지 — 본사(Office) 권한만 */
+  const canToggleOrderPaused = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
 
   const storesForFilter = React.useMemo(() => {
     if (isManager && userStore) return [userStore]
@@ -249,7 +248,7 @@ export default function StockPage() {
               canAdjust={canAdjust}
               onAdjust={handleAdjust}
               onSaveSafeQty={handleSaveSafeQty}
-              onToggleOrderDisabled={handleToggleOrderDisabled}
+              onToggleOrderDisabled={canToggleOrderPaused ? handleToggleOrderDisabled : undefined}
             />
           </TabsContent>
           <TabsContent value="reorder" className={adminTabsContentCn}>

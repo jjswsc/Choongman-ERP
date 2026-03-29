@@ -6,6 +6,7 @@ import { ExternalLink, RefreshCw, ClipboardCopy, Pencil, Play, Ban, Trash2, Link
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -30,12 +31,15 @@ import {
   deletePosPromo,
   getMarketingCampaigns,
   getNextPosPromoCode,
+  getPosMenuCostAnalysis,
   getPosPromoItems,
+  getPosPromosWithItems,
   savePosPromo,
   savePosPromoItem,
   type MarketingCampaign,
   type PosPromo,
 } from "@/lib/api-client"
+import { buildInquiryEconomicsByPromoId, type InquiryPromoEconomics } from "@/lib/pos-promo-inquiry-economics"
 import { PROMOTION_DEFAULT_SUBCATEGORIES } from "@/lib/pos-promo-constants"
 import { PROMOTION_MAIN_CATEGORY } from "@/lib/pos-promo-constants"
 import { cn } from "@/lib/utils"
@@ -54,6 +58,23 @@ export type PosSetMenuInquiryTabProps = {
   hideLinkCampaign?: boolean
   /** 마케팅(캠페인 고정) 조회: 제목·설명·캠페인 열 숨김 등 */
   inquiryMode?: "bundle" | "campaign"
+}
+
+function posPromoValidityOverlapsRange(p: PosPromo, from: string, to: string): boolean {
+  const fs = from.trim().slice(0, 10)
+  const te = to.trim().slice(0, 10)
+  if (!fs && !te) return true
+  const vf = (p.validFrom ?? "").trim().slice(0, 10)
+  const vt = (p.validTo ?? "").trim().slice(0, 10)
+  if (!vf && !vt) return true
+  const ps = vf || "1970-01-01"
+  const pe = vt || vf || "2999-12-31"
+  if (fs && te) {
+    const [a, b] = fs <= te ? [fs, te] : [te, fs]
+    return ps <= b && pe >= a
+  }
+  const d = fs || te
+  return ps <= d && pe >= d
 }
 
 function buildSavePayload(p: PosPromo, overrides: { isActive?: boolean } = {}) {
@@ -98,12 +119,17 @@ export function PosSetMenuInquiryTab({
   const t = useT(lang)
   const { auth } = useAuth()
   const [search, setSearch] = React.useState("")
+  const [promoCategoryFilter, setPromoCategoryFilter] = React.useState("")
+  const [promoValidFrom, setPromoValidFrom] = React.useState("")
+  const [promoValidTo, setPromoValidTo] = React.useState("")
   const [showInactive, setShowInactive] = React.useState(true)
   const [busyId, setBusyId] = React.useState<string | null>(null)
   const [linkTarget, setLinkTarget] = React.useState<PosPromo | null>(null)
   const [linkCampaignId, setLinkCampaignId] = React.useState("")
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [campaignsLoading, setCampaignsLoading] = React.useState(false)
+  const [economicsByPromoId, setEconomicsByPromoId] = React.useState<Record<string, InquiryPromoEconomics>>({})
+  const [economicsLoading, setEconomicsLoading] = React.useState(false)
 
   React.useEffect(() => {
     if (!linkTarget) {
@@ -127,13 +153,54 @@ export function PosSetMenuInquiryTab({
     }
   }, [linkTarget])
 
+  React.useEffect(() => {
+    if (!promos.length) {
+      setEconomicsByPromoId({})
+      return
+    }
+    let cancelled = false
+    setEconomicsLoading(true)
+    const cid = (filterCampaignId ?? "").trim() || undefined
+    void (async () => {
+      try {
+        const [rows, withItems] = await Promise.all([
+          getPosMenuCostAnalysis({ summary: true }),
+          getPosPromosWithItems({ campaignId: cid, includeInactive: true }),
+        ])
+        if (cancelled) return
+        setEconomicsByPromoId(buildInquiryEconomicsByPromoId(Array.isArray(withItems) ? withItems : [], rows))
+      } catch {
+        if (!cancelled) setEconomicsByPromoId({})
+      } finally {
+        if (!cancelled) setEconomicsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [promos, filterCampaignId])
+
   const filterCid = (filterCampaignId ?? "").trim()
+
+  const promoCategoryOptions = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const p of promos) {
+      const c = (p.category ?? "").trim()
+      if (c) set.add(c)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, lang === "ko" ? "ko" : "en"))
+  }, [promos, lang])
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
+    const cat = promoCategoryFilter.trim()
     return promos.filter((p) => {
       if (filterCid && (p.marketingCampaignId ?? "").trim() !== filterCid) return false
       if (!showInactive && !p.isActive) return false
+      if (cat && (p.category ?? "").trim() !== cat) return false
+      if (inquiryMode === "campaign" && !posPromoValidityOverlapsRange(p, promoValidFrom, promoValidTo)) {
+        return false
+      }
       if (!q) return true
       return (
         (p.code ?? "").toLowerCase().includes(q) ||
@@ -141,7 +208,16 @@ export function PosSetMenuInquiryTab({
         (p.marketingCampaignNo ?? "").toLowerCase().includes(q)
       )
     })
-  }, [promos, search, showInactive, filterCid])
+  }, [
+    promos,
+    search,
+    showInactive,
+    filterCid,
+    promoCategoryFilter,
+    promoValidFrom,
+    promoValidTo,
+    inquiryMode,
+  ])
 
   const showCampaignCol = inquiryMode !== "campaign"
 
@@ -368,24 +444,72 @@ export function PosSetMenuInquiryTab({
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          className="h-9 max-w-md text-sm"
-          placeholder={t("posSetInquirySearchPh")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <label className="flex items-center gap-2 text-xs">
-          <Checkbox checked={showInactive} onCheckedChange={(c) => setShowInactive(c === true)} />
-          {t("posSetInquiryShowInactive")}
-        </label>
+      <div className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Input
+            className="h-9 max-w-md text-sm"
+            placeholder={t("posSetInquirySearchPh")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-xs">
+            <Checkbox checked={showInactive} onCheckedChange={(c) => setShowInactive(c === true)} />
+            {t("posSetInquiryShowInactive")}
+          </label>
+        </div>
+
+        {inquiryMode === "campaign" ? (
+          <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 px-3 py-3 sm:px-4">
+            <p className="text-[11px] font-medium text-muted-foreground">{t("posPromoListFilterTitle")}</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">{t("marketingPromoFilterPromoCategory")}</Label>
+                <Select
+                  value={promoCategoryFilter || "_all"}
+                  onValueChange={(v) => setPromoCategoryFilter(v === "_all" ? "" : v)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder={t("all")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_all">{t("all")}</SelectItem>
+                    {promoCategoryOptions.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">{t("posPromoListFilterFrom")}</Label>
+                <Input
+                  type="date"
+                  className="h-9"
+                  value={promoValidFrom}
+                  onChange={(e) => setPromoValidFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">{t("posPromoListFilterTo")}</Label>
+                <Input
+                  type="date"
+                  className="h-9"
+                  value={promoValidTo}
+                  onChange={(e) => setPromoValidTo(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{t("posPromoListFilterOverlapHint")}</p>
+          </div>
+        ) : null}
       </div>
 
       {promosLoading && promos.length === 0 ? (
         <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border/80">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+          <table className="w-full min-w-[1040px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
                 <th className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("itemsColCode")}</th>
@@ -395,6 +519,9 @@ export function PosSetMenuInquiryTab({
                 ) : null}
                 <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posMenuPriceHall")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posMenuPriceDelivery")}</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColCostHall")}</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColCostRateHall")}</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColCostRateDel")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("posSetInquiryColStatus")}</th>
                 <th className="min-w-[200px] px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColActions")}</th>
               </tr>
@@ -403,7 +530,7 @@ export function PosSetMenuInquiryTab({
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showCampaignCol ? 7 : 6}
+                    colSpan={showCampaignCol ? 10 : 9}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
                     {t("posSetInquiryEmpty")}
@@ -412,6 +539,13 @@ export function PosSetMenuInquiryTab({
               ) : (
                 filtered.map((p) => {
                   const b = busyId === p.id
+                  const ec = economicsByPromoId[p.id]
+                  const costCell =
+                    ec == null || ec.lineCount === 0
+                      ? "—"
+                      : `฿${ec.costHall.toFixed(1)}${ec.incomplete ? "*" : ""}`
+                  const rateHallCell = ec == null || ec.lineCount === 0 ? "—" : `${ec.costRateHall.toFixed(1)}%`
+                  const rateDelCell = ec == null || ec.lineCount === 0 ? "—" : `${ec.costRateDel.toFixed(1)}%`
                   return (
                     <tr key={p.id} className="border-b border-border/40 last:border-0">
                       <td className="px-3 py-2.5 align-middle font-mono text-xs">{p.code}</td>
@@ -434,6 +568,18 @@ export function PosSetMenuInquiryTab({
                         {p.priceDelivery != null && Number(p.priceDelivery) > 0
                           ? `฿${Math.round(Number(p.priceDelivery)).toLocaleString()}`
                           : "—"}
+                      </td>
+                      <td
+                        className="px-3 py-2.5 align-middle text-right font-mono tabular-nums text-muted-foreground"
+                        title={ec?.incomplete ? t("posSetInquiryEconomicsHint") : undefined}
+                      >
+                        {economicsLoading && ec == null ? "…" : costCell}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-right font-mono tabular-nums text-muted-foreground">
+                        {economicsLoading && ec == null ? "…" : rateHallCell}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-right font-mono tabular-nums text-muted-foreground">
+                        {economicsLoading && ec == null ? "…" : rateDelCell}
                       </td>
                       <td className="px-3 py-2.5 align-middle whitespace-nowrap">
                         {p.isActive ? (
@@ -532,6 +678,11 @@ export function PosSetMenuInquiryTab({
           </table>
         </div>
       )}
+      {filtered.length > 0 ? (
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          {economicsLoading ? `${t("loading")} · ${t("posSetInquiryEconomicsHint")}` : t("posSetInquiryEconomicsHint")}
+        </p>
+      ) : null}
     </div>
   )
 }

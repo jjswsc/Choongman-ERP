@@ -4,7 +4,6 @@
  */
 
 import { savePosOrder } from '@/lib/api-client'
-import { isOnline } from './network'
 import { addToQueue } from './queue'
 import { syncPending } from './sync'
 

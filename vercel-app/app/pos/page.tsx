@@ -1,5 +1,6 @@
 'use client'
 
+import { appAlert } from '@/lib/app-message'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
@@ -21,6 +22,7 @@ import {
   isManagerOrFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
+import { warmAdminOfflineCache } from '@/lib/offline/pos-offline-warm'
 import { formatPosClockDate, formatPosClockTime } from '@/lib/pos-datetime-locale'
 import {
   Dialog,
@@ -59,6 +61,24 @@ export default function POSMainPage() {
     pendingCount: number
   } | null>(null)
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
+  const warmStoreCodes = useMemo(() => {
+    if (isOfficeRole(auth?.role || '')) return stores
+    if (auth?.store) return [auth.store]
+    return stores.length ? [stores[0]] : []
+  }, [auth?.role, auth?.store, stores])
+  const [prefetchOfflineBusy, setPrefetchOfflineBusy] = useState(false)
+  const handlePrefetchOffline = useCallback(async () => {
+    if (!warmStoreCodes.length) return
+    setPrefetchOfflineBusy(true)
+    const r = await warmAdminOfflineCache({ storeCodes: warmStoreCodes })
+    setPrefetchOfflineBusy(false)
+    if (r.ok) await appAlert(t('posOfflinePrefetchDone'))
+    else
+      await appAlert(
+        (t('posOfflinePrefetchFail') || '') +
+          (r.errors.length ? ` (${r.errors.slice(0, 4).join(', ')})` : '')
+      )
+  }, [warmStoreCodes, t])
 
   const storeCode = auth?.store || stores[0] || ''
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
@@ -267,6 +287,8 @@ export default function POSMainPage() {
         totalAmount={totalAmount}
         isMainPosDevice={isMainPosDevice}
         onMainPosDeviceChange={setIsMainPosDevice}
+        onPrefetchOfflineData={warmStoreCodes.length ? handlePrefetchOffline : undefined}
+        prefetchOfflineDataBusy={prefetchOfflineBusy}
       />
 
       <POSMainGrid tiles={visibleTiles} onTileClick={handleTileClick} isKorean={lang === 'ko'} />

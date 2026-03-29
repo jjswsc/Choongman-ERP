@@ -1,4 +1,5 @@
 import type { PosDeliveryApp } from '@/lib/api-client'
+import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 
 /** POS 주문 행(배달 라벨은 DB `table_name`에 저장되는 경우가 많음)에서 배달앱 표시명 추출 */
 export function getPosDeliveryPlatformName(
@@ -47,4 +48,28 @@ export function formatPosOrderTypeChannelSuffix(order: {
   const { text, usedHash } = getPosChannelOrderNoDisplay(order)
   if (!text) return ''
   return usedHash ? ` · #${text}` : ` · ${text}`
+}
+
+/** table_name/memo 등에 `#채널주문번호`가 있으면 그 문자열, 없으면 POS order_no */
+export function resolvePosReceiptOrderNoRaw(args: {
+  posOrderNo: string
+  tableName?: string
+  memo?: string
+}): string {
+  const ch = getPosChannelOrderNoDisplay({
+    tableName: args.tableName,
+    orderNo: args.posOrderNo,
+    memo: args.memo ?? '',
+  })
+  if (ch.usedHash && ch.text.trim()) return ch.text.trim()
+  return String(args.posOrderNo ?? '').trim()
+}
+
+/** 영수증·간이 출력: 채널 번호 우선 후 formatPosOrderNoForPrint */
+export function formatPosReceiptOrderNoDisplay(args: {
+  posOrderNo: string
+  tableName?: string
+  memo?: string
+}): string {
+  return formatPosOrderNoForPrint(resolvePosReceiptOrderNoRaw(args))
 }

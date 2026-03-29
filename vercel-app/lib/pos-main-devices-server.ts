@@ -4,14 +4,20 @@ import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-ser
 export async function listMainDeviceTokensForStore(storeCode: string): Promise<string[]> {
   const s = String(storeCode || '').trim()
   if (!s) return []
-  const rows = (await supabaseSelectFilter(
-    'pos_connected_devices',
-    `store_code=eq.${encodeURIComponent(s)}&role=eq.main`,
-    { limit: 100 }
-  )) as { device_token?: string }[] | null
-  const list = Array.isArray(rows) ? rows : []
-  const tokens = list.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
-  return [...new Set(tokens)]
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_connected_devices',
+      `store_code=eq.${encodeURIComponent(s)}&role=eq.main`,
+      { limit: 100 }
+    )) as { device_token?: string }[] | null
+    const list = Array.isArray(rows) ? rows : []
+    const tokens = list.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
+    return [...new Set(tokens)]
+  } catch (e) {
+    // 테이블 미생성·PostgREST 스키마 캐시 없음(PGRST205) 등: 프린터 설정 조회 전체가 실패하지 않도록 빈 목록
+    console.warn('listMainDeviceTokensForStore:', e)
+    return []
+  }
 }
 
 /**

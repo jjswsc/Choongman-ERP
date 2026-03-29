@@ -26,14 +26,3 @@ create policy "pos_menu_ingredients_allow_public"
 
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on table public.pos_menu_ingredients to anon, authenticated;
-
--- SERIAL/IDENTITY id 기본값(nextval) 사용 시: 테이블만 GRANT 해도 42501이 아닌 "permission denied for sequence"가 날 수 있음
-do $$
-declare
-  seq regclass;
-begin
-  seq := pg_get_serial_sequence('public.pos_menu_ingredients', 'id')::regclass;
-  if seq is not null then
-    execute format('grant usage, select on sequence %s to anon, authenticated', seq::text);
-  end if;
-end$$;

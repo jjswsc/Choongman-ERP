@@ -3,7 +3,7 @@
  * 온라인 시 API 호출 후 캐시 저장, 오프라인/API 실패 시 캐시 사용
  */
 
-import { isOnline } from './network'
+import { isOnline, shouldPreferOfflineCache } from './network'
 import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } from './cache'
 import { apiFetch } from '../api/fetch'
 
@@ -23,19 +23,41 @@ export interface StoreListData {
 
 export async function getStoreListWithCache(): Promise<StoreListData> {
   const fallback = { stores: [], users: {}, staffByStore: {} }
-  if (isOnline()) {
+  const readIdb = () => getFromErpCache<StoreListData>(CACHE_KEYS.STORE_LIST)
+  const hasStoreData = (data: StoreListData | null | undefined) =>
+    Array.isArray(data?.stores) && data.stores.length > 0
+
+  if (!shouldPreferOfflineCache() && isOnline()) {
     try {
       const res = await apiFetch('/api/getStoreList')
+      if (!res.ok) {
+        const cached = await readIdb()
+        return cached ?? fallback
+      }
       const data = (await res.json()) as StoreListData
+      const cached = await readIdb()
+      if (!hasStoreData(data) && hasStoreData(cached)) return cached as StoreListData
       await setErpCache(CACHE_KEYS.STORE_LIST, data)
       return data
     } catch {
-      const cached = await getFromErpCache<StoreListData>(CACHE_KEYS.STORE_LIST)
+      const cached = await readIdb()
       return cached ?? fallback
     }
   }
-  const cached = await getFromErpCache<StoreListData>(CACHE_KEYS.STORE_LIST)
-  return cached ?? fallback
+
+  const fromIdb = await readIdb()
+  if (fromIdb != null) return fromIdb
+  try {
+    const res = await apiFetch('/api/getStoreList')
+    if (!res.ok) return fallback
+    const data = (await res.json()) as StoreListData
+    const cached = await readIdb()
+    if (!hasStoreData(data) && hasStoreData(cached)) return cached as StoreListData
+    await setErpCache(CACHE_KEYS.STORE_LIST, data)
+    return data
+  } catch {
+    return fallback
+  }
 }
 
 export type VendorForPurchase = {
