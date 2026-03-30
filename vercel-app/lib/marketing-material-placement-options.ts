@@ -13,6 +13,11 @@ export const DEFAULT_MARKETING_MATERIAL_PLACEMENTS: MarketingMaterialPlacementOp
   { value: "entrance", label: "입구" },
 ]
 
+/** 기본 제공 매장 위치 — 저장된 label과 무관하게 UI 언어로 표시 */
+export const BUILTIN_MARKETING_MATERIAL_PLACEMENT_VALUES = new Set(
+  DEFAULT_MARKETING_MATERIAL_PLACEMENTS.map((x) => x.value)
+)
+
 export function defaultMarketingMaterialPlacementOptions(): MarketingMaterialPlacementOption[] {
   return DEFAULT_MARKETING_MATERIAL_PLACEMENTS.map((x) => ({ ...x }))
 }
@@ -98,7 +103,11 @@ export function resolvePlacementLabel(
   options: MarketingMaterialPlacementOption[],
   tr: (ko: string, en: string, th: string) => string
 ): string {
-  const opt = options.find((o) => o.value === value)
+  const v = String(value ?? "").trim()
+  if (BUILTIN_MARKETING_MATERIAL_PLACEMENT_VALUES.has(v)) {
+    return builtInPlacementLabel(v, tr)
+  }
+  const opt = options.find((o) => o.value === v)
   if (opt) return opt.label
-  return builtInPlacementLabel(value, tr)
+  return builtInPlacementLabel(v, tr)
 }

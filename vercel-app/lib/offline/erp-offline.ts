@@ -315,7 +315,7 @@ export async function getBankTransactionsWithCache(params: {
   }, fallback)
 }
 
-/** 통장 거래 목록 오프라인 캐시 무효화 (대사 등 반영 후 재조회) */
+/** 통장 거래 목록 오프라인 캐시 무효화 */
 export function bankTransactionsCacheKey(params: {
   accountId: string | number
   startStr: string

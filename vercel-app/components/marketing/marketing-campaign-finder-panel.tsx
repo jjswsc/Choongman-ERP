@@ -38,11 +38,15 @@ export type MarketingCampaignFinderPanelProps = {
   emptyOptionLabel?: string
   maxListHeightClass?: string
   className?: string
-  /** 부모 새로고침(목록 재로드) — 클릭 시 허브 연동 집합도 갱신 */
-  onRefresh?: () => void
+  /** 부모 새로고침(목록 재로드) — 검색 버튼 처리 후 캠페인 prop이 갱신될 때까지 대기하려면 Promise 반환 */
+  onRefresh?: () => void | Promise<void>
   disabled?: boolean
   /** 등록 화면 등: 제목·기간·검색·필터를 한 줄(줄바꿈) 툴바로 압축 */
   toolbarLayout?: "default" | "compact"
+  /** compact 툴바일 때 맨 앞 열 — 제목과 검색·기간 입력 하단선 맞춤 */
+  compactToolbarTitle?: React.ReactNode
+  /** compact 툴바 같은 줄 오른쪽(캠페인 허브 링크 등) */
+  compactToolbarEnd?: React.ReactNode
 }
 
 export function MarketingCampaignFinderPanel({
@@ -59,6 +63,8 @@ export function MarketingCampaignFinderPanel({
   onRefresh,
   disabled = false,
   toolbarLayout = "default",
+  compactToolbarTitle,
+  compactToolbarEnd,
 }: MarketingCampaignFinderPanelProps) {
   const isCompactToolbar = toolbarLayout === "compact"
   const { lang } = useLang()
@@ -268,7 +274,7 @@ export function MarketingCampaignFinderPanel({
       setListSearchQuery(q)
     })
     await reloadData()
-    onRefresh?.()
+    await Promise.resolve(onRefresh?.())
   }, [listSearchDraft, reloadData, onRefresh])
 
   return (
@@ -287,15 +293,10 @@ export function MarketingCampaignFinderPanel({
           className={cn(
             "flex w-full min-w-0 flex-wrap items-end gap-x-2 gap-y-2 rounded-lg border border-border/70 bg-muted/10 px-2 py-2 sm:px-3",
             isCompactToolbar &&
-              "gap-x-3 gap-y-2.5 border-dashed border-border/60 bg-muted/5 px-3 py-2.5 sm:gap-x-4 sm:px-5 sm:py-3",
+              "flex-nowrap gap-x-2 gap-y-0 overflow-x-auto overflow-y-visible border-dashed border-border/60 bg-muted/5 px-2 py-2 sm:gap-x-2 sm:px-3 sm:py-2",
           )}
         >
-          <div
-            className={cn(
-              "flex shrink-0 flex-col gap-0.5",
-              isCompactToolbar && "min-w-[min(100%,17rem)] flex-1 basis-[min(100%,24rem)] sm:min-w-[18rem] sm:basis-[26rem]",
-            )}
-          >
+          <div className="flex shrink-0 flex-col gap-0.5">
             <span
               className={cn(
                 "font-medium leading-none text-muted-foreground whitespace-nowrap text-[9px]",
@@ -304,14 +305,11 @@ export function MarketingCampaignFinderPanel({
             >
               {tr("조회 기간", "Period", "ช่วงวันที่")}
             </span>
-            <div className={cn("flex min-w-0 items-center gap-1", isCompactToolbar && "gap-2")}>
+            <div className={cn("flex min-w-0 items-center gap-1", isCompactToolbar && "gap-1")}>
               <Input
                 type="date"
                 title={tr("시작", "From", "เริ่ม")}
-                className={cn(
-                  "h-8 shrink-0 px-1.5 text-xs",
-                  isCompactToolbar ? "min-w-[6.5rem] flex-1 sm:min-w-[7.5rem]" : "w-[8.65rem]",
-                )}
+                className="h-8 w-[8.65rem] shrink-0 px-1.5 text-xs"
                 disabled={disabled}
                 value={listPeriodFrom}
                 onChange={(e) => setListPeriodFrom(e.target.value)}
@@ -320,10 +318,7 @@ export function MarketingCampaignFinderPanel({
               <Input
                 type="date"
                 title={tr("종료", "To", "ถึง")}
-                className={cn(
-                  "h-8 shrink-0 px-1.5 text-xs",
-                  isCompactToolbar ? "min-w-[6.5rem] flex-1 sm:min-w-[7.5rem]" : "w-[8.65rem]",
-                )}
+                className="h-8 w-[8.65rem] shrink-0 px-1.5 text-xs"
                 disabled={disabled}
                 value={listPeriodTo}
                 onChange={(e) => setListPeriodTo(e.target.value)}
@@ -333,8 +328,7 @@ export function MarketingCampaignFinderPanel({
           <div
             className={cn(
               "flex min-w-[6.5rem] max-w-[9.5rem] flex-col gap-0.5 sm:min-w-[7.5rem]",
-              isCompactToolbar &&
-                "max-w-none min-w-[7rem] flex-1 basis-[9rem] sm:min-w-[8rem] sm:basis-[11rem] lg:basis-[12rem]",
+              isCompactToolbar && "w-[7.25rem] max-w-none shrink-0 sm:w-[8rem]",
             )}
           >
             <Label
@@ -366,8 +360,7 @@ export function MarketingCampaignFinderPanel({
           <div
             className={cn(
               "flex min-w-[5.5rem] max-w-[9rem] flex-col gap-0.5",
-              isCompactToolbar &&
-                "max-w-none min-w-[6rem] flex-1 basis-[8rem] sm:min-w-[7rem] sm:basis-[10rem] lg:basis-[11rem]",
+              isCompactToolbar && "w-[6.75rem] max-w-[9rem] shrink-0 sm:w-[7.25rem]",
             )}
           >
             <Label
@@ -399,8 +392,7 @@ export function MarketingCampaignFinderPanel({
           <div
             className={cn(
               "relative min-w-[8rem] flex-1 basis-[10rem]",
-              isCompactToolbar &&
-                "min-w-[10rem] flex-[1.35] basis-[min(100%,20rem)] sm:min-w-[14rem] lg:flex-[2] lg:basis-0",
+              isCompactToolbar && "min-w-[9rem] flex-1 basis-0",
             )}
           >
             <Label className="sr-only">{tr("검색", "Search", "ค้นหา")}</Label>
@@ -410,7 +402,7 @@ export function MarketingCampaignFinderPanel({
               disabled={disabled}
               onChange={(e) => setListSearchDraft(e.target.value)}
               placeholder={tr("키워드 입력 후 검색", "Enter keywords, then Search", "พิมพ์คำค้น แล้วกดค้นหา")}
-              className={cn("h-8 pl-8 text-xs", isCompactToolbar && "min-w-0 pl-9 text-sm sm:pl-10")}
+              className={cn("h-8 min-w-0 pl-8 text-xs", isCompactToolbar && "pl-9 text-sm sm:pl-10")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault()
@@ -425,7 +417,7 @@ export function MarketingCampaignFinderPanel({
             size="sm"
             className={cn(
               "h-8 shrink-0 gap-1 px-2.5 text-xs",
-              isCompactToolbar && "px-3.5 text-sm sm:px-4",
+              isCompactToolbar && "shrink-0 px-2.5 text-xs sm:px-3",
             )}
             disabled={disabled || dataLoading}
             onClick={() => void runSearch()}
@@ -439,7 +431,7 @@ export function MarketingCampaignFinderPanel({
             size="sm"
             className={cn(
               "h-8 shrink-0 gap-1 px-2.5 text-xs",
-              isCompactToolbar && "px-3.5 text-sm sm:px-4",
+              isCompactToolbar && "shrink-0 px-2.5 text-xs sm:px-3",
             )}
             disabled={disabled}
             onClick={() => setListFiltersOpen((o) => !o)}
@@ -448,6 +440,9 @@ export function MarketingCampaignFinderPanel({
             {tr("필터", "Filters", "ตัวกรอง")}
             {listFiltersOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </Button>
+          {isCompactToolbar && compactToolbarEnd != null ? (
+            <div className="ms-auto flex shrink-0 flex-wrap items-center gap-2">{compactToolbarEnd}</div>
+          ) : null}
         </div>
 
         {listFiltersOpen && (

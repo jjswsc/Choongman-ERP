@@ -208,7 +208,55 @@ npx next start -H 0.0.0.0 -p 3000
 
 ---
 
-## 4. 상세 문서
+## 4. 내부용/판매용 도메인 분리 운영 (SaaS 판매용)
+
+회사 내부에서 이미 쓰는 환경과, 외부 판매용 환경이 섞이지 않도록 **도메인 + 배포 프로젝트 + DB를 함께 분리**합니다.
+
+### 4-1. 분리 원칙
+
+- **내부용:** `https://choongman-erp.vercel.app/` + 내부용 Vercel 프로젝트 + 내부용 Supabase
+- **판매용:** `https://www.omnifoodtech.com/` + 판매용 Vercel 프로젝트 + 판매용 Supabase
+- 보유한 별도 도메인은 **판매용 Vercel 프로젝트에만** 연결합니다.
+- 내부/판매 프로젝트에서 환경 변수(`SUPABASE_*`, `NEXT_PUBLIC_SUPABASE_*`) 값을 절대 공유하지 않습니다.
+
+#### 현재 확정 URL
+
+- 내부 운영: `https://choongman-erp.vercel.app/`
+- 판매 운영(Primary): `https://www.omnifoodtech.com/`
+- 권장 리다이렉트: `omnifoodtech.com` -> `www.omnifoodtech.com` (301)
+
+### 4-2. 도메인 연결 순서 (실무 체크리스트)
+
+1. Vercel에서 판매용 프로젝트 생성 (또는 기존 판매용 프로젝트 확인)
+2. 판매용 프로젝트에 환경 변수 설정:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - (티어 운영 시) `NEXT_PUBLIC_PRODUCT_TIER=pos` 또는 `full`
+3. Vercel `Settings > Domains`에서 `www.omnifoodtech.com` 추가
+4. 도메인 등록업체 DNS에 Vercel 안내 레코드(A/CNAME/TXT) 반영
+5. Vercel에서 도메인 상태가 `Valid`인지 확인 (SSL 자동 발급 확인)
+6. Primary는 `www.omnifoodtech.com`으로 고정하고, 나머지(`omnifoodtech.com`)는 301 리다이렉트로 정리
+7. 내부용 Vercel 프로젝트에 판매 도메인이 연결되지 않았는지 최종 확인
+
+### 4-3. 오픈 전 점검
+
+- 판매 도메인(`www.omnifoodtech.com`)에서 로그인/주문/결제/영수증 인쇄가 정상 동작
+- 판매 데이터가 판매용 Supabase에만 저장되는지 확인
+- 내부 도메인(`choongman-erp.vercel.app`)과 판매 도메인(`www.omnifoodtech.com`) 간 의도치 않은 리다이렉트가 없는지 확인
+- Firebase 푸시, 결제, 크론 등 외부 연동도 내부/판매 분리 확인
+
+### 4-4. 운영 팁
+
+- 초기에 A(포스 중심) 플랜은 `NEXT_PUBLIC_PRODUCT_TIER=pos`, B(전체 ERP) 플랜은 `full`로 분리 운영
+- 장애 대응을 위해 내부용/판매용 배포 이력을 각각 독립적으로 관리
+- 판매 오픈 후 1주 동안 주문 저장 실패율/결제 실패율/에러 로그 집중 모니터링
+
+---
+
+## 5. 상세 문서
 
 - **로컬 서버만 더 자세히:** `vercel-app/docs/LOCAL-SERVER-SETUP.md`  
 - **인쇄 대화상자 없이 인쇄만:** `vercel-app/docs/POS-SILENT-PRINT.md`

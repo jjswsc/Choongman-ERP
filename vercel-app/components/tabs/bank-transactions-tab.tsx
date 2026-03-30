@@ -29,7 +29,6 @@ import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, OFFICE_STORES } from "@/lib/permissions"
-import { canManageAccountingCompliance } from "@/lib/accounting-auth"
 import {
   executeExpensePayment,
   getApprovedExpenseAccrualsForBankTx,
@@ -46,7 +45,6 @@ import {
   updateBankTransactionInvoice,
   updateBankTransaction,
   deleteExpenseRegisterItem,
-  reconcileBankTransaction,
   invalidateBankTransactionsListCache,
   getPurchaseOrders,
   getBankMemoRules,
@@ -89,7 +87,6 @@ export function BankTransactionsTab() {
   const { stores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
-  const canReconcileBank = canManageAccountingCompliance(auth?.role || "")
   const [accounts, setAccounts] = React.useState<{
     id: number
     name: string
@@ -119,9 +116,6 @@ export function BankTransactionsTab() {
     vendorCode?: string
     storeName?: string
     isLinked?: boolean
-    reconciledAt?: string | null
-    reconciledBy?: string | null
-    reconciliationNote?: string | null
   }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
@@ -186,7 +180,6 @@ export function BankTransactionsTab() {
   const [queryStoreSearch, setQueryStoreSearch] = React.useState("")
   const [querySavingId, setQuerySavingId] = React.useState<number | null>(null)
   const [deletingBankTxId, setDeletingBankTxId] = React.useState<number | null>(null)
-  const [reconcilingTxId, setReconcilingTxId] = React.useState<number | null>(null)
   const [registerExpenseRow, setRegisterExpenseRow] = React.useState<(typeof list)[0] | null>(null)
   const [registerPurchaseRow, setRegisterPurchaseRow] = React.useState<(typeof list)[0] | null>(null)
   const [registerEditMode, setRegisterEditMode] = React.useState(false)
@@ -244,52 +237,11 @@ export function BankTransactionsTab() {
     }))
   }
 
-  const handleBankReconcileToggle = async (r: (typeof list)[0], reconciled: boolean) => {
-    if (!r.id || !canReconcileBank || !auth?.role) return
-    setReconcilingTxId(r.id)
-    try {
-      const res = await reconcileBankTransaction({
-        userRole: auth.role,
-        id: r.id,
-        reconciled,
-        reconciledBy: auth.user,
-      })
-      if (res.success) {
-        await invalidateBankTransactionsListCache({
-          accountId,
-          startStr,
-          endStr,
-        })
-        const nowIso = new Date().toISOString()
-        setList((prev) =>
-          prev.map((x) =>
-            x.id === r.id
-              ? {
-                  ...x,
-                  reconciledAt: reconciled ? nowIso : null,
-                  reconciledBy: reconciled ? (auth.user || null) : null,
-                  reconciliationNote: reconciled ? x.reconciliationNote ?? null : null,
-                }
-              : x
-          )
-        )
-      } else {
-        await appAlert(t("processFail"))
-      }
-    } catch (e) {
-      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setReconcilingTxId(null)
-    }
-  }
-
   const handleDeleteBankRow = async (r: (typeof list)[0]) => {
     if (!r.id || !isOffice) return
     if (r.transType !== "withdraw" && r.transType !== "deposit") return
     const base = tt("bankTxRowDeleteConfirm", "이 통장 거래 한 건을 삭제할까요? (입·출금, CSV 중복 등)")
-    const msg = r.reconciledAt
-      ? `${tt("bankTxRowDeleteReconciledHint", "은행 대사가 완료된 거래입니다.")}\n${base}`
-      : base
+    const msg = base
     if (!(await appConfirm(msg))) return
     setDeletingBankTxId(r.id)
     try {
@@ -969,8 +921,6 @@ export function BankTransactionsTab() {
       t("accountSubject") || "계정과목",
       t("pettyColAmount") || "금액",
       t("bankAttributedDate") || "인식일",
-      t("bankReconcileCol") || "대사",
-      `${t("bankReconcileBy") || "By"}`,
       t("bankMemoLabel") || "은행 적요",
       t("bankNoteLabel") || "메모",
     ]
@@ -988,8 +938,6 @@ export function BankTransactionsTab() {
         subLabel,
         r.amount ?? 0,
         attrDate,
-        r.reconciledAt ? "Y" : "",
-        r.reconciledBy || "",
         r.memo || "",
         stripWithdrawalCategoryMetaFromNote(r.note || ""),
       ])
@@ -1374,7 +1322,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     ) : filteredList.length === 0 ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">{list.length === 0 ? (t("pettyNoData") || "데이터 없음") : (t("bankNoMatchFilter") || "조건에 맞는 거래가 없습니다.")}</p>
                     ) : (
-                      <table className="w-full text-sm min-w-[1160px] table-fixed">
+                      <table className="w-full text-sm min-w-[1100px] table-fixed">
                         <colgroup>
                           <col style={{ width: "92px" }} />
                           <col style={{ width: "64px" }} />
@@ -1384,7 +1332,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "108px" }} />
                           <col style={{ width: "150px" }} />
                           <col style={{ width: "40px" }} />
-                          <col style={{ width: "56px" }} />
                           <col style={{ width: "180px" }} />
                           <col style={{ width: "140px" }} />
                           <col style={{ width: "76px" }} />
@@ -1399,9 +1346,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             <th className="p-2 text-center whitespace-nowrap">{t("bankAttributedDate") || "인식일"}</th>
                             <th className="p-2 text-center whitespace-nowrap">{t("bankRegisterLabel") || "지출 등록"}</th>
                             <th className="p-2 text-center whitespace-nowrap" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</th>
-                            <th className="p-2 text-center whitespace-nowrap" title={t("accCompBankReconcileHint")}>
-                              {t("bankReconcileCol") || "대사"}
-                            </th>
                             <th className="p-2 text-left whitespace-nowrap">{t("bankMemoLabel") || "은행 적요"}</th>
                             <th className="p-2 text-center whitespace-nowrap">{t("bankNoteLabel") || "메모"}</th>
                             <th className="p-2 text-center w-11"></th>
@@ -1644,33 +1588,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   )
                                 })() : (
                                   <span className="text-muted-foreground">—</span>
-                                )}
-                              </td>
-                              <td className="p-2 align-middle text-center">
-                                {canReconcileBank && r.id ? (
-                                  <Checkbox
-                                    checked={!!r.reconciledAt}
-                                    disabled={reconcilingTxId === r.id}
-                                    onCheckedChange={(checked) => {
-                                      if (checked === "indeterminate") return
-                                      void handleBankReconcileToggle(r, checked === true)
-                                    }}
-                                    title={
-                                      r.reconciledAt
-                                        ? `${t("bankReconcileCol")}: ${r.reconciledBy || ""}`.trim()
-                                        : t("bankReconcileCol") || ""
-                                    }
-                                    className="data-[state=checked]:bg-sky-600 data-[state=checked]:border-sky-600 shrink-0 mx-auto"
-                                  />
-                                ) : r.reconciledAt ? (
-                                  <span
-                                    className="text-sky-600 text-lg leading-none"
-                                    title={`${r.reconciledBy || ""}`.trim()}
-                                  >
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">—</span>
                                 )}
                               </td>
                               <td

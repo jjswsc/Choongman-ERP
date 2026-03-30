@@ -480,6 +480,8 @@ export function PosSetMenuTabWorkspace({
         const promo = promos.find((p) => String(p.id) === String(editPromoId))
         const items = await getPosPromoItems({ promoId: editPromoId }).catch(() => [])
         if (cancelled) return
+        // 저장 직후 부모 목록(getPosPromos)이 아직 갱신 전이면 promo가 없다. 폼/줄을 비우면 우측「저장된 세트」키가 사라진다.
+        if (!promo) return
         setForm({
           marketingCampaignId: promo?.marketingCampaignId?.trim() ?? "",
           code: promo?.code ?? "",
@@ -597,10 +599,15 @@ export function PosSetMenuTabWorkspace({
   const savedSetsNameKey = React.useMemo(() => {
     if (editPromoId) {
       const pr = promoById[editPromoId]
-      return (pr?.name ?? "").trim() || form.name.trim()
+      const fromPromo = (pr?.name ?? "").trim()
+      if (fromPromo) return fromPromo
+      const mirror = mirrorMenus.find((m) => String(m.promoId) === String(editPromoId))
+      const fromMirror = (mirror?.name ?? "").trim()
+      if (fromMirror) return fromMirror
+      return form.name.trim()
     }
     return form.name.trim()
-  }, [editPromoId, promoById, form.name])
+  }, [editPromoId, promoById, form.name, mirrorMenus])
 
   const mirrorRowsForCurrentPromoName = React.useMemo(() => {
     if (!savedSetsNameKey) return [] as PosMenu[]

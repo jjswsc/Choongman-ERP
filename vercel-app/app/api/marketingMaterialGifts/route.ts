@@ -85,9 +85,8 @@ export async function POST(req: NextRequest) {
     const campaignId = campaignIdRaw ? Number(campaignIdRaw) : null
     const allocatedQty = Math.max(0, Math.floor(parseNum(body.allocatedQty)))
     const distributedQty = Math.max(0, Math.floor(parseNum(body.distributedQty)))
-    const remainingQtyInput = Math.floor(parseNum(body.remainingQty))
-    const remainingQty =
-      body.remainingQty == null ? Math.max(allocatedQty - distributedQty, 0) : Math.max(remainingQtyInput, 0)
+    /** 잔여는 항상 배정−배포로 산출 (재고·조회 일관성) */
+    const remainingQty = Math.max(allocatedQty - distributedQty, 0)
     const editingId = String(body.id ?? '').trim()
 
     if (!materialId || !storeName || !giftName) {

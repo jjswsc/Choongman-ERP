@@ -8,7 +8,8 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 const POS_PAPER_WIDTH_MM = 80
 const KITCHEN_SLIP_BODY_WIDTH_MM = 76
 const POS_PAPER_SIDE_PADDING_MM = 1
-const POS_PAPER_HEIGHT_MM = 200
+/** @page 높이: 짧으면 긴 주방전표가 2페이지로 잘림. 600mm까지 한 페이지로 묶음. */
+const POS_PAPER_HEIGHT_MM = 600
 
 export type KitchenSlipFontScale = 'sm' | 'md' | 'lg'
 
@@ -54,9 +55,12 @@ export function getKitchenSlipPaperCss(
   return `
   @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
   html, body { margin: 0; padding: 0; }
+  html { height: auto; }
   body {
     width: ${KITCHEN_SLIP_BODY_WIDTH_MM}mm;
     max-width: 100%;
+    min-height: auto;
+    height: auto;
     margin: 0 auto;
     box-sizing: border-box;
     font-family: sans-serif;

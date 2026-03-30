@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 import { clockOutCountsForPayroll } from '@/lib/payroll-utils'
@@ -68,10 +68,15 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
   const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
-  const attRows = (await supabaseSelectFilter(
+  const attRows = (await supabaseSelectFilterAllPages(
     'attendance_logs',
     `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-    { order: 'log_at.asc', limit: 3000, select: ATTENDANCE_LOG_PAYROLL_COLS }
+    {
+      order: 'log_at.asc',
+      select: ATTENDANCE_LOG_PAYROLL_COLS,
+      pageSize: 2500,
+      maxRows: 120000,
+    }
   )) as {
     log_at?: string
     store_name?: string

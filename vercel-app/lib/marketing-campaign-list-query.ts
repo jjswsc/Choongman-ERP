@@ -26,6 +26,40 @@ export function emptyMarketingCampaignHubLinkSets(): MarketingCampaignHubLinkSet
   }
 }
 
+/**
+ * 목록 상태 체크박스 필터용 — DB·구버전 값이 draft|ongoing|finish 가 아니면
+ * 알 수 없는 값은 숨기지 않음(전부 걸러지는 현상 방지).
+ */
+export function normalizeCampaignStatusForListFilter(raw: string | undefined | null): "draft" | "ongoing" | "finish" | "other" {
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+  if (!s) return "draft"
+  if (s === "draft" || s === "preparation" || s === "prepared" || s === "planned" || s === "prepare") return "draft"
+  if (
+    s === "ongoing" ||
+    s === "active" ||
+    s === "in_progress" ||
+    s === "progress" ||
+    s === "running"
+  ) {
+    return "ongoing"
+  }
+  if (
+    s === "finish" ||
+    s === "finished" ||
+    s === "completed" ||
+    s === "complete" ||
+    s === "done" ||
+    s === "closed" ||
+    s === "end"
+  ) {
+    return "finish"
+  }
+  return "other"
+}
+
 export type MarketingCampaignListFilterParams = {
   listSearch: string
   listSearchScope: CampaignListSearchScope
@@ -111,11 +145,12 @@ export function applyMarketingCampaignListFilters(
     if (!campaignMatchesDesignPeriodFilter(c, f.listDesignFrom, f.listDesignTo)) return false
     if (!campaignMatchesTypeFilter(c, f.listCampaignTypeFilter)) return false
 
-    const st = c.status
+    const ns = normalizeCampaignStatusForListFilter(c.status)
     const statusOk =
-      (st === "draft" && f.listStatusDraft) ||
-      (st === "ongoing" && f.listStatusOngoing) ||
-      (st === "finish" && f.listStatusFinish)
+      ns === "other" ||
+      (ns === "draft" && f.listStatusDraft) ||
+      (ns === "ongoing" && f.listStatusOngoing) ||
+      (ns === "finish" && f.listStatusFinish)
     if (!statusOk) return false
 
     if (!campaignMatchesBranchListFilter(c, f.listBranchFilter)) return false

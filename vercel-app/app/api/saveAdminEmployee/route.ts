@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     const payload: Record<string, unknown> = {
       store: String(d.store || '').trim(),
       name: String(d.name || '').trim(),
+      name_title: String(d.nameTitle ?? d.name_title ?? '').trim(),
       nick: String(d.nick || '').trim(),
       phone: String(d.phone || '').trim(),
       job: String(d.job || '').trim(),

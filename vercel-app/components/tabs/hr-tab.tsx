@@ -96,7 +96,18 @@ export function HrTab() {
   const [dailyRecords, setDailyRecords] = useState<AttendanceDailyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
-  const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, usedLakij: 0, remain: 15, remainLakij: 3, annualTotal: 6, lakijTotal: 3 })
+  const [leaveStats, setLeaveStats] = useState({
+    usedAnn: 0,
+    usedSick: 0,
+    usedUnpaid: 0,
+    usedLakij: 0,
+    remain: 15,
+    remainLakij: 3,
+    remainSick: 30,
+    annualTotal: 6,
+    lakijTotal: 3,
+    sickTotal: 30,
+  })
   const [leaveHistory, setLeaveHistory] = useState<{ id?: number; date: string; type: string; reason: string; status: string; certificateUrl?: string; rejectReason?: string }[]>([])
   const [leaveType, setLeaveType] = useState("연차")
   const [leaveDate, setLeaveDate] = useState(() => todayStrBangkok())
@@ -567,9 +578,9 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
               <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("lakij")}</p>
               <p className="text-sm sm:text-base font-bold text-primary">{leaveStats.usedLakij ?? 0} / {leaveStats.remainLakij ?? 3}</p>
             </div>
-            <div className="rounded-lg bg-muted/50 px-1.5 sm:px-3 py-2 min-w-0">
+            <div className="rounded-lg bg-primary/10 px-1.5 sm:px-3 py-2 min-w-0">
               <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("sick")}</p>
-              <p className="text-sm sm:text-base font-bold">{leaveStats.usedSick ?? 0}</p>
+              <p className="text-sm sm:text-base font-bold text-primary">{leaveStats.usedSick ?? 0} / {leaveStats.remainSick ?? 30}</p>
             </div>
             <div className="rounded-lg bg-muted/50 px-1.5 sm:px-3 py-2 min-w-0">
               <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("unpaid")}</p>

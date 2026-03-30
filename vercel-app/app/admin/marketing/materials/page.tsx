@@ -241,13 +241,12 @@ export default function MarketingMaterialsPage() {
       setMaterials([])
       setMaterialGifts([])
       setMaterialDeployments([])
-      getMarketingCampaigns()
+      return getMarketingCampaigns()
         .then((camps) => setCampaigns(Array.isArray(camps) ? camps : []))
         .catch(() => setCampaigns([]))
         .finally(() => setLoading(false))
-      return
     }
-    Promise.all([
+    return Promise.all([
       getMarketingMaterials({ campaignId: campaignParam }),
       getMarketingCampaigns(),
       getMarketingMaterialGifts({ campaignId: campaignParam }),
@@ -735,11 +734,14 @@ export default function MarketingMaterialsPage() {
 
   const sumGiftQty = React.useCallback((rows: MarketingMaterialGift[]) => {
     return rows.reduce(
-      (a, g) => ({
-        alloc: a.alloc + g.allocatedQty,
-        dist: a.dist + g.distributedQty,
-        rem: a.rem + g.remainingQty,
-      }),
+      (a, g) => {
+        const rem = Math.max(0, Math.floor(g.allocatedQty) - Math.floor(g.distributedQty))
+        return {
+          alloc: a.alloc + g.allocatedQty,
+          dist: a.dist + g.distributedQty,
+          rem: a.rem + rem,
+        }
+      },
       { alloc: 0, dist: 0, rem: 0 }
     )
   }, [])
@@ -889,9 +891,9 @@ export default function MarketingMaterialsPage() {
           campaigns={campaigns}
           allowEmpty
           emptyOptionLabel={tr("캠페인 선택…", "Select campaign…", "เลือกแคมเปญ…")}
-          onRefresh={() => {
-            void loadData()
-            void loadInquiryMaterials()
+          onRefresh={async () => {
+            await loadData()
+            await loadInquiryMaterials()
           }}
           maxListHeightClass="max-h-52"
           disabled={loading}
@@ -1171,7 +1173,7 @@ export default function MarketingMaterialsPage() {
                           >
                             {placementOptions.map((spot) => (
                               <option key={spot.value} value={spot.value}>
-                                {spot.label}
+                                {materialPlacementSpotLabel(spot.value)}
                               </option>
                             ))}
                           </select>
@@ -1271,9 +1273,9 @@ export default function MarketingMaterialsPage() {
           campaigns={campaigns}
           allowEmpty
           emptyOptionLabel={tr("캠페인 선택…", "Select campaign…", "เลือกแคมเปญ…")}
-          onRefresh={() => {
-            void loadData()
-            void loadInquiryMaterials()
+          onRefresh={async () => {
+            await loadData()
+            await loadInquiryMaterials()
           }}
           maxListHeightClass="max-h-52"
           disabled={loading}
@@ -1341,7 +1343,7 @@ export default function MarketingMaterialsPage() {
               <option value="">{tr("매장 위치 전체", "All Placements", "ตำแหน่งทั้งหมด")}</option>
               {placementOptions.map((spot) => (
                 <option key={spot.value} value={spot.value}>
-                  {spot.label}
+                  {materialPlacementSpotLabel(spot.value)}
                 </option>
               ))}
             </select>
@@ -1786,7 +1788,7 @@ export default function MarketingMaterialsPage() {
                     <option value="">{tr("매장 위치 전체", "All Placements", "ตำแหน่งทั้งหมด")}</option>
                     {placementOptions.map((spot) => (
                       <option key={spot.value} value={spot.value}>
-                        {spot.label}
+                        {materialPlacementSpotLabel(spot.value)}
                       </option>
                     ))}
                   </select>
@@ -2068,6 +2070,7 @@ export default function MarketingMaterialsPage() {
             save: tr("저장", "Save", "บันทึก"),
             cancel: tr("취소", "Cancel", "ยกเลิก"),
           }}
+          tr={tr}
         />
     </MarketingPageShell>
   )

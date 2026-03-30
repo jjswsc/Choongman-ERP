@@ -6,7 +6,7 @@ import {
   Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy,
   Users, Package, BarChart2, ExternalLink, Loader2, CheckCheck, X,
   List, ClipboardPen, Search, Tag, TrendingUp, ChevronDown, ChevronUp,
-  GitCompare, Handshake, Filter,
+  GitCompare, Filter, AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
-  getMarketingCampaigns,
   getMarketingCampaign,
   getNextCampaignNumber,
   saveMarketingCampaign,
@@ -41,6 +40,7 @@ import {
   type MarketingMaterial,
   type MarketingMaterialGift,
 } from "@/lib/api-client"
+import { computedGiftRemaining, giftRowQtyMismatch } from "@/lib/marketing-material-gift-inventory"
 import { cn } from "@/lib/utils"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
@@ -66,8 +66,10 @@ import { buildMarketingCampaignHubLinkSetsFromRows } from "@/lib/marketing-campa
 import {
   applyMarketingCampaignListFilters,
   marketingCampaignListFiltersActive,
+  emptyMarketingCampaignHubLinkSets,
   type CampaignListSearchScope,
 } from "@/lib/marketing-campaign-list-query"
+import { apiFetchWithOffline } from "@/lib/api/fetch-offline"
 import {
   CAMPAIGN_TYPE_OPTIONS,
   KPI_UNIT_OPTIONS,
@@ -238,7 +240,6 @@ const defaultGiftDraft = {
   giftName: "",
   allocatedQty: "",
   distributedQty: "",
-  remainingQty: "",
   ruleNote: "",
 }
 
@@ -353,6 +354,8 @@ export default function MarketingCampaignsPage() {
   // 캠페인 목록
   const [list, setList] = React.useState<MarketingCampaign[]>([])
   const [loading, setLoading] = React.useState(true)
+  /** getMarketingCampaigns는 HTTP 오류 시에도 []를 반환해 원인이 안 보였음 → 목록 탭에서만 별도 표시 */
+  const [listLoadError, setListLoadError] = React.useState<string | null>(null)
 
   // 캠페인 폼
   const [saving, setSaving] = React.useState(false)
@@ -375,6 +378,8 @@ export default function MarketingCampaignsPage() {
     apps: [],
   })
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  /** loadList 동시 호출 시 마지막 요청만 반영 (이전 응답이 목록을 비우는 것 방지) */
+  const loadListGenerationRef = React.useRef(0)
   const [showSimulator, setShowSimulator] = React.useState(false)
 
   // 하위 활동 탭
@@ -410,6 +415,8 @@ export default function MarketingCampaignsPage() {
   const [listKpiMax, setListKpiMax] = React.useState("")
   const [listKpiUnitFilter, setListKpiUnitFilter] = React.useState("")
   const [listDiscountFilter, setListDiscountFilter] = React.useState<"any" | "none" | "percent" | "amount">("any")
+  /** 필터 조합으로 0건일 때 서버에서 받은 전체 목록을 그대로 보기 */
+  const [listFilterBypass, setListFilterBypass] = React.useState(false)
 
   // 인플루언서 인라인
   const [linkedInfluencers, setLinkedInfluencers] = React.useState<MarketingInfluencer[]>([])
@@ -442,17 +449,60 @@ export default function MarketingCampaignsPage() {
   const [loadingResults, setLoadingResults] = React.useState(false)
 
   // ─── 데이터 로드 ────────────────────────────────────────────────────────────
-  const loadList = React.useCallback(() => {
+  const loadList = React.useCallback((): Promise<void> => {
+    const gen = ++loadListGenerationRef.current
     setLoading(true)
-    Promise.all([
-      getMarketingCampaigns(),
+    setListLoadError(null)
+    return Promise.allSettled([
+      apiFetchWithOffline("/api/marketingCampaigns", { cache: "no-store" }),
       getPosPromos(),
       getMarketingAds(),
       getMarketingInfluencers(),
       getMarketingMaterials(),
     ])
-      .then(([campaigns, promos, ads, influencers, materials]) => {
-        setList(Array.isArray(campaigns) ? campaigns : [])
+      .then(async (results) => {
+        if (gen !== loadListGenerationRef.current) return
+
+        const campResult = results[0]
+        let campaignsUpdate: MarketingCampaign[] | null = null
+
+        if (campResult.status === "rejected") {
+          setListLoadError(
+            String(campResult.reason instanceof Error ? campResult.reason.message : campResult.reason)
+          )
+        } else {
+          const campRes = campResult.value
+          if (!campRes.ok) {
+            setListLoadError(
+              tr(
+                `캠페인 목록을 불러오지 못했습니다 (HTTP ${campRes.status}). Vercel 환경 변수(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY 등)와 Supabase RLS를 확인하세요.`,
+                `Could not load campaigns (HTTP ${campRes.status}). Check Vercel env (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) and Supabase RLS.`,
+                `โหลดแคมเปญไม่สำเร็จ (HTTP ${campRes.status}) ตรวจสอบ env บน Vercel และ RLS ของ Supabase`
+              )
+            )
+          } else {
+            try {
+              const data = (await campRes.json()) as unknown
+              campaignsUpdate = Array.isArray(data) ? (data as MarketingCampaign[]) : []
+            } catch {
+              setListLoadError(
+                tr(
+                  "캠페인 목록 응답 형식이 올바르지 않습니다.",
+                  "Campaign list response was not valid JSON.",
+                  "รูปแบบการตอบกลับรายการแคมเปญไม่ถูกต้อง"
+                )
+              )
+            }
+          }
+        }
+
+        if (gen !== loadListGenerationRef.current) return
+        if (campaignsUpdate !== null) setList(campaignsUpdate)
+
+        const promos = results[1].status === "fulfilled" ? results[1].value : []
+        const ads = results[2].status === "fulfilled" ? results[2].value : []
+        const influencers = results[3].status === "fulfilled" ? results[3].value : []
+        const materials = results[4].status === "fulfilled" ? results[4].value : []
         setHubLinkSets(
           buildMarketingCampaignHubLinkSetsFromRows(
             promos || [],
@@ -462,19 +512,14 @@ export default function MarketingCampaignsPage() {
           )
         )
       })
-      .catch(() => {
-        setList([])
-        setHubLinkSets({
-          promo: new Set(),
-          ads: new Set(),
-          influencer: new Set(),
-          materials: new Set(),
-        })
+      .finally(() => {
+        if (gen === loadListGenerationRef.current) setLoading(false)
       })
-      .finally(() => setLoading(false))
-  }, [])
+  }, [tr])
 
-  React.useEffect(() => { loadList() }, [loadList])
+  React.useEffect(() => {
+    loadList()
+  }, [loadList])
 
   React.useEffect(() => {
     setMaterialTypeOptions(loadMarketingMaterialTypeOptions())
@@ -747,7 +792,31 @@ export default function MarketingCampaignsPage() {
     setListDiscountFilter("any")
     setListSearchScope("all")
     setListSearch("")
+    setListFilterBypass(false)
   }, [])
+
+  React.useEffect(() => {
+    setListFilterBypass(false)
+  }, [
+    listSearch,
+    listSearchScope,
+    listPeriodFrom,
+    listPeriodTo,
+    listDesignFrom,
+    listDesignTo,
+    listCampaignTypeFilter,
+    listStatusDraft,
+    listStatusOngoing,
+    listStatusFinish,
+    listBranchFilter,
+    listHubLinkFilter,
+    listBudgetMin,
+    listBudgetMax,
+    listKpiMin,
+    listKpiMax,
+    listKpiUnitFilter,
+    listDiscountFilter,
+  ])
 
   const filteredList = React.useMemo(
     () =>
@@ -798,6 +867,8 @@ export default function MarketingCampaignsPage() {
       statusLabel,
     ]
   )
+
+  const campaignListForDisplay = listFilterBypass ? list : filteredList
 
   const handleCopyCampaign = (c: MarketingCampaign) => {
     getMarketingCampaign(c.id).then((detail) => {
@@ -979,9 +1050,51 @@ export default function MarketingCampaignsPage() {
         conclusion: form.conclusion.trim(),
       })
       if (res.success) {
-        await appAlert(t("itemsAlertSaved") || tr("저장되었습니다.", "Saved.", "บันทึกแล้ว"))
+        const savedId = String((editingId || res.id || "").trim())
+        if (savedId) {
+          const phasePeriodsNorm = form.phasePeriods
+            .map((p) => ({
+              label: p.label.trim(),
+              startDate: p.startDate.trim() || null,
+              endDate: p.endDate.trim() || null,
+            }))
+            .filter((p) => p.label || p.startDate || p.endDate)
+          const merged: MarketingCampaign = {
+            id: savedId,
+            campaignNo: form.campaignNo.trim() || undefined,
+            topic,
+            format: form.format.trim(),
+            campaignType: campaignTypeValue,
+            status: form.status,
+            startDate: form.startDate.trim() || null,
+            endDate: form.endDate.trim() || null,
+            designStartDate: form.designStartDate.trim() || null,
+            designEndDate: form.designEndDate.trim() || null,
+            designNote: form.designNote.trim(),
+            phasePeriods: phasePeriodsNorm,
+            branches: [...form.branches],
+            kpiTarget: Number(form.kpiTarget) || 0,
+            kpiUnit: form.kpiUnit,
+            budgetTotal: Number(form.budgetTotal) || 0,
+            discountType: form.discountType,
+            discountValue: Number(form.discountValue) || 0,
+            discountPricePromotion: form.discountPricePromotion.trim(),
+            discountTargetAudience: form.discountTargetAudience.trim(),
+            collabManagement: form.collabManagement,
+          }
+          setList((prev) => {
+            const idx = prev.findIndex((c) => String(c.id) === savedId)
+            if (idx >= 0) {
+              const next = [...prev]
+              next[idx] = { ...prev[idx], ...merged }
+              return next
+            }
+            return [merged, ...prev]
+          })
+        }
         if (!editingId && res.id) setEditingId(res.id)
-        loadList()
+        await appAlert(t("itemsAlertSaved") || tr("저장되었습니다.", "Saved.", "บันทึกแล้ว"))
+        await loadList()
       } else {
         await appAlert(res.message)
       }
@@ -1169,7 +1282,6 @@ export default function MarketingCampaignsPage() {
       giftName: g.giftName,
       allocatedQty: String(g.allocatedQty),
       distributedQty: String(g.distributedQty),
-      remainingQty: String(g.remainingQty),
       ruleNote: g.ruleNote,
     })
   }
@@ -1184,7 +1296,6 @@ export default function MarketingCampaignsPage() {
     }
     const allocatedQty = Math.max(0, Math.floor(Number(giftAddDraft.allocatedQty) || 0))
     const distributedQty = Math.max(0, Math.floor(Number(giftAddDraft.distributedQty) || 0))
-    const remainingRaw = giftAddDraft.remainingQty.trim()
     setSavingGift(true)
     try {
       const res = await saveMarketingMaterialGift({
@@ -1194,7 +1305,6 @@ export default function MarketingCampaignsPage() {
         giftName,
         allocatedQty,
         distributedQty,
-        remainingQty: remainingRaw === "" ? undefined : Math.max(0, Math.floor(Number(remainingRaw) || 0)),
         ruleNote: giftAddDraft.ruleNote.trim(),
       })
       if (res.success) {
@@ -1220,7 +1330,6 @@ export default function MarketingCampaignsPage() {
     }
     const allocatedQty = Math.max(0, Math.floor(Number(giftEditDraft.allocatedQty) || 0))
     const distributedQty = Math.max(0, Math.floor(Number(giftEditDraft.distributedQty) || 0))
-    const remainingRaw = giftEditDraft.remainingQty.trim()
     setSavingGift(true)
     try {
       const res = await saveMarketingMaterialGift({
@@ -1231,7 +1340,6 @@ export default function MarketingCampaignsPage() {
         giftName,
         allocatedQty,
         distributedQty,
-        remainingQty: remainingRaw === "" ? undefined : Math.max(0, Math.floor(Number(remainingRaw) || 0)),
         ruleNote: giftEditDraft.ruleNote.trim(),
       })
       if (res.success) {
@@ -1659,129 +1767,41 @@ export default function MarketingCampaignsPage() {
                 </p>
               </div>
 
-              {/* 협업 관리 (기획 메모 — POS 규칙은 프로모션 세트) */}
-              <div className="sm:col-span-2 rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.04] to-transparent px-3 py-3.5">
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex gap-2">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/12">
-                      <Handshake className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">
-                        {tr("협업 관리", "Collab management", "การจัดการความร่วมมือ")}
-                      </p>
-                      <p className="mt-0.5 max-w-xl text-[10px] leading-relaxed text-muted-foreground">
-                        {tr(
-                          "어느 매장·누구에게 몇 % 할인 등 기획 내용을 적어 둡니다. 실제 POS에서 적용되는 할인 규칙·세트 구성은 프로모션 세트에서 설정합니다.",
-                          "Record which stores, audience, and planned % off. Actual POS discount rules are configured in Promotion Sets.",
-                          "บันทึกสาขา กลุ่มลูกค้า และส่วนลดที่วางแผน — กฎ POS จริงตั้งที่ชุดโปรโมชัน"
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="secondary" className="h-8 gap-1 text-xs" asChild>
-                      <Link
-                        href={
-                          editingId
-                            ? `/admin/marketing/collab-menus?campaignId=${encodeURIComponent(editingId)}`
-                            : "/admin/marketing/collab-menus"
-                        }
-                      >
-                        <Handshake className="h-3 w-3" />
-                        {t("marketingCampaignOpenCollabHub")}
-                      </Link>
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 gap-1 text-xs"
-                      onClick={() => router.push(`/admin/marketing/promos${editingId ? `?campaignId=${editingId}` : ""}`)}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      {tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}
-                    </Button>
-                  </div>
-                </div>
-                <div className="mb-3 flex items-start gap-2.5 rounded-md border border-border/60 bg-background/50 px-2.5 py-2">
-                  <Checkbox
-                    id="campaign-collab-management"
-                    checked={form.collabManagement}
-                    onCheckedChange={(v) =>
-                      setForm((f) => ({ ...f, collabManagement: v === true }))
-                    }
-                    className="mt-0.5"
-                  />
-                  <label htmlFor="campaign-collab-management" className="cursor-pointer text-xs leading-snug text-foreground">
-                    <span className="font-medium">{t("marketingCampaignCollabManagementInclude")}</span>
-                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                      {t("marketingCampaignCollabManagementIncludeHint")}
-                    </span>
+              {/* 캠페인 할인·요약 (협업 POS 규칙은 마케팅 &gt; 협업 관리에서 설정) */}
+              <div className="sm:col-span-2 space-y-3 rounded-lg border border-border/70 bg-muted/10 px-3 py-3">
+                <p className="text-xs font-medium text-foreground">
+                  {tr("할인·행사 요약", "Discount & promo summary", "สรุปส่วนลดและโปร")}
+                </p>
+                <div>
+                  <label className="text-xs font-medium text-foreground">
+                    {tr("대상", "Audience", "กลุ่มเป้าหมาย")}
                   </label>
+                  <Textarea
+                    value={form.discountTargetAudience}
+                    onChange={(e) => setForm((f) => ({ ...f, discountTargetAudience: e.target.value }))}
+                    placeholder={tr(
+                      "예: 전체 고객 / 앱 회원만 / 그랩·라인맨 주문 / 특정 제휴사 코드 입력 고객",
+                      "e.g. All guests · App members only · Delivery app orders · Partner code holders",
+                      "เช่น ลูกค้าทุกคน · สมาชิกแอป · ออเดอร์แอปเดลิเวอรี"
+                    )}
+                    className="mt-1 min-h-[72px] text-sm"
+                    rows={3}
+                  />
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-medium text-foreground">
-                      {tr("할인·행사 대상", "Discount audience", "กลุ่มเป้าหมายส่วนลด")}
-                    </label>
-                    <Textarea
-                      value={form.discountTargetAudience}
-                      onChange={(e) => setForm((f) => ({ ...f, discountTargetAudience: e.target.value }))}
-                      placeholder={tr(
-                        "예: 전체 고객 / 앱 회원만 / 그랩·라인맨 주문 / 특정 제휴사 코드 입력 고객",
-                        "e.g. All guests · App members only · Delivery app orders · Partner code holders",
-                        "เช่น ลูกค้าทุกคน · สมาชิกแอป · ออเดอร์แอปเดลิเวอรี"
-                      )}
-                      className="mt-1 min-h-[72px] text-sm"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground">{tr("기획 할인 유형", "Planned discount type", "ประเภทส่วนลด (แผน)")}</label>
-                      <select
-                        value={form.discountType}
-                        onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value }))}
-                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                      >
-                        <option value="percent">{tr("정률 (%)", "Percent (%)", "เปอร์เซ็นต์ (%)")}</option>
-                        <option value="amount">{tr("정액 (฿)", "Fixed amount (฿)", "จำนวนเงิน (฿)")}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">
-                        {form.discountType === "percent"
-                          ? tr("기획 할인율 (%)", "Planned % off", "ส่วนลด % (แผน)")
-                          : tr("기획 할인액 (฿)", "Planned amount (฿)", "ส่วนลดบาท (แผน)")}
-                      </label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={form.discountType === "percent" ? 100 : undefined}
-                        step={form.discountType === "percent" ? 1 : 1}
-                        value={form.discountValue}
-                        onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
-                        className="mt-1"
-                        placeholder={form.discountType === "percent" ? "10" : "50"}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">
-                      {tr("협업 요약", "Collab summary", "สรุปความร่วมมือ")}
-                    </label>
-                    <Input
-                      value={form.discountPricePromotion}
-                      onChange={(e) => setForm((f) => ({ ...f, discountPricePromotion: e.target.value }))}
-                      placeholder={tr(
-                        "예: 후라이드 세트 20% / A브랜드 콜라보 한정 메뉴",
-                        "e.g. Fried combo 20% off · Limited collab menu with Brand A",
-                        "เช่น เซ็ตไก่ทอดลด 20% · เมนูร่วมแบรนด์ A"
-                      )}
-                      className="mt-1"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-medium text-foreground">
+                    {tr("요약", "Summary", "สรุป")}
+                  </label>
+                  <Input
+                    value={form.discountPricePromotion}
+                    onChange={(e) => setForm((f) => ({ ...f, discountPricePromotion: e.target.value }))}
+                    placeholder={tr(
+                      "예: 후라이드 세트 20% / A브랜드 콜라보 한정 메뉴",
+                      "e.g. Fried combo 20% off · Limited collab menu with Brand A",
+                      "เช่น เซ็ตไก่ทอดลด 20% · เมนูร่วมแบรนด์ A"
+                    )}
+                    className="mt-1"
+                  />
                 </div>
               </div>
 
@@ -2271,7 +2291,7 @@ export default function MarketingCampaignsPage() {
                                 checked={matForm.placementSpots.includes(spot.value)}
                                 onCheckedChange={() => toggleMatPlacementSpot(spot.value)}
                               />
-                              <span className="truncate">{spot.label}</span>
+                              <span className="truncate">{materialPlacementSpotLabel(spot.value)}</span>
                             </label>
                           ))}
                         </div>
@@ -2319,7 +2339,7 @@ export default function MarketingCampaignsPage() {
                           (a, g) => ({
                             alloc: a.alloc + g.allocatedQty,
                             dist: a.dist + g.distributedQty,
-                            rem: a.rem + g.remainingQty,
+                            rem: a.rem + computedGiftRemaining(g.allocatedQty, g.distributedQty),
                           }),
                           { alloc: 0, dist: 0, rem: 0 }
                         )
@@ -2455,16 +2475,15 @@ export default function MarketingCampaignsPage() {
                                             }
                                             placeholder={tr("배포", "Dist", "แจกจ่าย")}
                                           />
-                                          <Input
-                                            type="number"
-                                            min={0}
-                                            className="h-8 text-xs sm:col-span-2"
-                                            value={giftEditDraft.remainingQty}
-                                            onChange={(e) =>
-                                              setGiftEditDraft((d) => ({ ...d, remainingQty: e.target.value }))
-                                            }
-                                            placeholder={tr("잔여(공란=자동)", "Left (auto if empty)", "คงเหลือ (เว้นว่าง=อัตโนมัติ)")}
-                                          />
+                                          <div className="flex h-8 items-center rounded-md border border-dashed px-2 text-[11px] text-muted-foreground sm:col-span-2">
+                                            {tr("잔여(자동)", "Remaining (auto)", "คงเหลือ (อัตโนมัติ)")}:{" "}
+                                            <span className="ml-1 font-medium text-foreground">
+                                              {computedGiftRemaining(
+                                                Math.max(0, Math.floor(Number(giftEditDraft.allocatedQty) || 0)),
+                                                Math.max(0, Math.floor(Number(giftEditDraft.distributedQty) || 0))
+                                              )}
+                                            </span>
+                                          </div>
                                           <Input
                                             className="h-8 text-xs sm:col-span-2"
                                             value={giftEditDraft.ruleNote}
@@ -2509,7 +2528,16 @@ export default function MarketingCampaignsPage() {
                                             <span>{g.giftName}</span>
                                             <div className="text-[10px] text-muted-foreground">
                                               {tr("배정", "Alloc", "จัดสรร")} {g.allocatedQty} · {tr("배포", "Dist", "แจกจ่าย")}{" "}
-                                              {g.distributedQty} · {tr("잔여", "Left", "คงเหลือ")} {g.remainingQty}
+                                              {g.distributedQty} · {tr("잔여", "Left", "คงเหลือ")}{" "}
+                                              {computedGiftRemaining(g.allocatedQty, g.distributedQty)}
+                                              {giftRowQtyMismatch(g) && (
+                                                <span className="ml-1 text-amber-800">
+                                                  (DB {g.remainingQty})
+                                                </span>
+                                              )}
+                                              {giftRowQtyMismatch(g) && (
+                                                <AlertTriangle className="ml-0.5 inline h-3 w-3 text-amber-600 align-text-bottom" />
+                                              )}
                                               {g.ruleNote ? ` · ${g.ruleNote}` : ""}
                                             </div>
                                           </div>
@@ -2586,16 +2614,15 @@ export default function MarketingCampaignsPage() {
                                       }
                                       placeholder={tr("배포", "Dist", "แจกจ่าย")}
                                     />
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      className="h-8 text-xs sm:col-span-2"
-                                      value={giftAddDraft.remainingQty}
-                                      onChange={(e) =>
-                                        setGiftAddDraft((d) => ({ ...d, remainingQty: e.target.value }))
-                                      }
-                                      placeholder={tr("잔여(공란=자동)", "Left (auto if empty)", "คงเหลือ (เว้นว่าง=อัตโนมัติ)")}
-                                    />
+                                    <div className="flex h-8 items-center rounded-md border border-dashed px-2 text-[11px] text-muted-foreground sm:col-span-2">
+                                      {tr("잔여(자동)", "Remaining (auto)", "คงเหลือ (อัตโนมัติ)")}:{" "}
+                                      <span className="ml-1 font-medium text-foreground">
+                                        {computedGiftRemaining(
+                                          Math.max(0, Math.floor(Number(giftAddDraft.allocatedQty) || 0)),
+                                          Math.max(0, Math.floor(Number(giftAddDraft.distributedQty) || 0))
+                                        )}
+                                      </span>
+                                    </div>
                                     <Input
                                       className="h-8 text-xs sm:col-span-2"
                                       value={giftAddDraft.ruleNote}
@@ -2697,10 +2724,28 @@ export default function MarketingCampaignsPage() {
           <>
           {/* ── 캠페인 목록 (필터 + 검색 + 행별 연결 메뉴) ───────────────────────────── */}
           <div className="rounded-xl border bg-card">
+            {listLoadError && (
+              <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+                <p className="font-medium text-destructive">{listLoadError}</p>
+                <p className="mt-2 text-xs leading-relaxed text-destructive/90">
+                  {tr(
+                    "DB에 데이터가 있는지 Supabase → SQL Editor에서 실행: select count(*) from public.marketing_campaigns;",
+                    "To verify rows in DB, run in Supabase → SQL Editor: select count(*) from public.marketing_campaigns;",
+                    "ตรวจว่ามีแถวในฐานข้อมูลหรือไม่: Supabase → SQL Editor รัน select count(*) from public.marketing_campaigns;"
+                  )}
+                </p>
+              </div>
+            )}
             <div className="flex flex-col gap-3 border-b px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">
                   {tr("캠페인 목록", "Campaign List", "รายการแคมเปญ")}
+                  {!listLoadError && !loading && list.length > 0 && (
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      ({tr("불러옴", "loaded", "โหลดแล้ว")} {list.length}
+                      {tr("건", "", " รายการ")})
+                    </span>
+                  )}
                 </h3>
                 <div className="flex flex-wrap items-center gap-2">
                   {(listFiltersActive || listSearch.trim()) && (
@@ -2775,10 +2820,31 @@ export default function MarketingCampaignsPage() {
                   <Input
                     value={listSearch}
                     onChange={(e) => setListSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        loadList()
+                      }
+                    }}
                     placeholder={tr("키워드…", "Keyword…", "คำค้น…")}
                     className="h-8 pl-8 text-xs"
                   />
                 </div>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1 px-3 text-xs"
+                  disabled={loading}
+                  onClick={() => loadList()}
+                >
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Search className="h-3.5 w-3.5" />
+                  )}
+                  {tr("검색", "Search", "ค้นหา")}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -2947,11 +3013,58 @@ export default function MarketingCampaignsPage() {
                 </div>
               )}
             </div>
+            {list.length > 0 && filteredList.length === 0 && !listFilterBypass && !loading && !listLoadError && (
+              <div className="flex flex-col gap-2 border-b border-amber-200/80 bg-amber-50 px-4 py-3 text-sm dark:bg-amber-950/30 dark:border-amber-800/50">
+                <p className="text-amber-950 dark:text-amber-100">
+                  {tr(
+                    "서버에서는 캠페인을 불러왔지만, 현재 필터·검색 조건과 맞는 행이 없습니다. 아래를 누르면 필터 없이 전체를 표시합니다.",
+                    "Campaigns were loaded, but nothing matches the current filters. Click below to show all loaded rows without filters.",
+                    "โหลดแคมเปญแล้วแต่ไม่มีแถวที่ตรงตัวกรอง กดด้านล่างเพื่อแสดงทั้งหมดโดยไม่กรอง",
+                  )}
+                </p>
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 border-amber-800/40 bg-background text-xs"
+                    onClick={() => setListFilterBypass(true)}
+                  >
+                    {tr("필터 없이 전체 보기", "Show all (ignore filters)", "แสดงทั้งหมด (ไม่กรอง)")} ({list.length}
+                    {tr("건", "", " รายการ")})
+                  </Button>
+                </div>
+              </div>
+            )}
+            {listFilterBypass && list.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2 text-xs">
+                <span className="text-muted-foreground">
+                  {tr("필터를 적용하지 않고 불러온 목록 전체를 표시 중입니다.", "Showing all loaded campaigns; filters are not applied.", "กำลังแสดงทั้งหมดโดยไม่ใช้ตัวกรอง")}
+                </span>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setListFilterBypass(false)}>
+                  {tr("필터 다시 적용", "Apply filters again", "ใช้ตัวกรองอีกครั้ง")}
+                </Button>
+              </div>
+            )}
             <div className="divide-y overflow-x-auto">
-              {filteredList.length === 0 && !loading && (
+              {campaignListForDisplay.length === 0 &&
+                !loading &&
+                !listLoadError &&
+                !(list.length > 0 && filteredList.length === 0 && !listFilterBypass) && (
                 <p className="px-4 py-8 text-center text-sm text-muted-foreground">
                   {list.length === 0
-                    ? tr("등록된 캠페인이 없습니다.", "No campaigns.", "ไม่มีแคมเปญ")
+                    ? (
+                        <>
+                          {tr("등록된 캠페인이 없습니다.", "No campaigns.", "ไม่มีแคมเปญ")}
+                          <span className="mt-2 block text-xs">
+                            {tr(
+                              "DB에는 있는데 여기만 비면 API/환경 변수 문제일 수 있습니다. 위 빨간 오류가 없을 때 Supabase에서 select count(*) from public.marketing_campaigns 로 개수를 확인해 보세요.",
+                              "If the DB has rows but this stays empty, check API/env. With no red error above, run select count(*) from public.marketing_campaigns in Supabase.",
+                              "ถ้าฐานข้อมูลมีแต่หน้านี้ว่าง อาจเป็นปัญหา API/env ลองรัน select count(*) from public.marketing_campaigns ใน Supabase"
+                            )}
+                          </span>
+                        </>
+                      )
                     : tr(
                         "필터·검색 조건에 맞는 캠페인이 없습니다.",
                         "No campaigns match filters or search.",
@@ -2959,7 +3072,13 @@ export default function MarketingCampaignsPage() {
                       )}
                 </p>
               )}
-              {filteredList.map((c) => (
+              {loading && campaignListForDisplay.length === 0 && (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin opacity-60" />
+                  {tr("불러오는 중…", "Loading…", "กำลังโหลด…")}
+                </p>
+              )}
+              {campaignListForDisplay.map((c) => (
                 <div
                   key={c.id}
                   className={cn(
@@ -3021,16 +3140,9 @@ export default function MarketingCampaignsPage() {
                           {tr("전체 매장(기획)", "All stores (plan)", "ทุกสาขา (แผน)")}
                         </span>
                       )}
-                      {(c.discountValue ?? 0) > 0 && (
-                        <span className="font-medium text-foreground">
-                          {c.discountType === "amount" || c.discountType === "fixed"
-                            ? tr("기획", "Plan", "แผน") + ` ฿${Number(c.discountValue).toLocaleString()}`
-                            : tr("기획", "Plan", "แผน") + ` ${c.discountValue}%`}
-                        </span>
-                      )}
                       {(c.discountPricePromotion ?? "").trim() && (
                         <span className="max-w-[220px] truncate" title={c.discountPricePromotion}>
-                          {c.discountPricePromotion}
+                          {tr("요약", "Summary", "สรุป")}: {c.discountPricePromotion}
                         </span>
                       )}
                       {(c.discountTargetAudience ?? "").trim() && (

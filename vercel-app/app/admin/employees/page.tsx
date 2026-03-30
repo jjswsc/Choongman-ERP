@@ -108,6 +108,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     row: e.row,
     store: e.store || "",
     name: e.name || "",
+    nameTitle: e.nameTitle || "",
     nick: e.nick || "",
     phone: e.phone || "",
     job: e.job || "Service",
@@ -141,7 +142,7 @@ export default function EmployeesPage() {
   const userStore = (auth?.store || "").trim()
   const userRole = (auth?.role || "").trim()
 
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [employeeCache, setEmployeeCache] = React.useState<EmployeeTableRow[]>([])
   const [allEmployees, setAllEmployees] = React.useState<EmployeeTableRow[]>([])
@@ -228,10 +229,6 @@ export default function EmployeesPage() {
     },
     [userStore, userRole]
   )
-
-  React.useEffect(() => {
-    loadEmployeeList({ updateDisplay: true }, () => setHasSearched(true))
-  }, [loadEmployeeList])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions
@@ -453,7 +450,6 @@ export default function EmployeesPage() {
                     onSearch={handleSearch}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">{t("emp_search_hint")}</p>
                 {loadError && (
                   <div className="rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
                     {loadError}

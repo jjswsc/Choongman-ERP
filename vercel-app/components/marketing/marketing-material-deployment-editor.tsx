@@ -10,7 +10,10 @@ import {
   saveMarketingMaterialDeployment,
   type MarketingMaterialDeployment,
 } from "@/lib/api-client"
-import { type MarketingMaterialPlacementOption } from "@/lib/marketing-material-placement-options"
+import {
+  resolvePlacementLabel,
+  type MarketingMaterialPlacementOption,
+} from "@/lib/marketing-material-placement-options"
 import {
   materialTypeSelectOptions,
   type MarketingMaterialTypeOption,
@@ -200,7 +203,7 @@ export function MarketingMaterialDeploymentEditor({
                 >
                   {placementOptions.map((spot) => (
                     <option key={spot.value} value={spot.value}>
-                      {spot.label}
+                      {resolvePlacementLabel(spot.value, placementOptions, tr)}
                     </option>
                   ))}
                 </select>

@@ -44,6 +44,7 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
     t("emp_label_store"),
     t("emp_grade"),
     t("emp_label_name"),
+    t("emp_label_nick_title"),
     t("emp_label_nickname"),
     t("emp_label_nation"),
     t("emp_col_age"),
@@ -67,11 +68,11 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
         <tbody className="divide-y divide-border">
           {loading ? (
             <tr>
-              <td colSpan={9} className="py-12 text-center">{t("loading")}</td>
+              <td colSpan={10} className="py-12 text-center">{t("loading")}</td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={9} className="py-12 text-center text-muted-foreground">{t("emp_result_empty")}</td>
+              <td colSpan={10} className="py-12 text-center text-muted-foreground">{t("emp_result_empty")}</td>
             </tr>
           ) : (
             rows.map((e, idx) => {
@@ -96,6 +97,7 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-center font-bold text-card-foreground">{e.name}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground">{displayLabelShort(e.nameTitle ?? "") || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{displayLabelShort(e.nick) || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.nation || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{age}{age !== "-" ? ageSuffix : ""}</td>

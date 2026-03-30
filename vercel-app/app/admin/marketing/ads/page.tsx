@@ -138,7 +138,7 @@ export default function MarketingAdsPage() {
   const loadData = React.useCallback(() => {
     const cid = campaignFilter.trim()
     setLoading(true)
-    Promise.all([
+    return Promise.all([
       cid ? getMarketingAds({ campaignId: cid }) : Promise.resolve([] as MarketingAd[]),
       getMarketingCampaigns(),
     ])
@@ -184,9 +184,9 @@ export default function MarketingAdsPage() {
     setForm((f) => (f.campaignId === campaignFilter ? f : { ...f, campaignId: campaignFilter }))
   }, [campaignFilter, editingId])
 
-  const refreshAllLists = React.useCallback(() => {
-    loadData()
-    void loadInquiryAds()
+  const refreshAllLists = React.useCallback(async () => {
+    await loadData()
+    await loadInquiryAds()
   }, [loadData, loadInquiryAds])
 
   const campaignById = React.useMemo(() => {

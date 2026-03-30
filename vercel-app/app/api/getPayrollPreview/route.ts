@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 import { clockOutCountsForPayroll } from '@/lib/payroll-utils'
@@ -37,17 +37,23 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
 
   type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; early_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }
   let attRows: AttRow[] = []
+  const attPages = {
+    order: 'log_at.asc' as const,
+    select: ATTENDANCE_LOG_PAYROLL_COLS,
+    pageSize: 2500,
+    maxRows: 120000,
+  }
   if (storeFilter) {
-    attRows = (await supabaseSelectFilter(
+    attRows = (await supabaseSelectFilterAllPages(
       'attendance_logs',
       `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-      { order: 'log_at.asc', limit: 3000, select: ATTENDANCE_LOG_PAYROLL_COLS }
+      attPages
     )) as AttRow[]
   } else {
-    attRows = (await supabaseSelectFilter(
+    attRows = (await supabaseSelectFilterAllPages(
       'attendance_logs',
       `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-      { order: 'log_at.asc', limit: 3000, select: ATTENDANCE_LOG_PAYROLL_COLS }
+      attPages
     )) as AttRow[]
   }
 
@@ -152,17 +158,23 @@ async function getHolidayWorkDaysMap(
   const holidayAttSelect = 'log_at,store_name,name,log_type,status,approved'
   type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; status?: string; approved?: string }
   let attRows: AttRow[] = []
+  const holPages = {
+    order: 'log_at.asc' as const,
+    select: holidayAttSelect,
+    pageSize: 2500,
+    maxRows: 120000,
+  }
   if (storeFilter) {
-    attRows = (await supabaseSelectFilter(
+    attRows = (await supabaseSelectFilterAllPages(
       'attendance_logs',
       `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`,
-      { order: 'log_at.asc', limit: 2000, select: holidayAttSelect }
+      holPages
     )) as AttRow[]
   } else {
-    attRows = (await supabaseSelectFilter(
+    attRows = (await supabaseSelectFilterAllPages(
       'attendance_logs',
       `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`,
-      { order: 'log_at.asc', limit: 3000, select: holidayAttSelect }
+      holPages
     )) as AttRow[]
   }
 

@@ -10,6 +10,16 @@ export function translateReceiptTableDisplayName(tableName: string, _t?: (key: s
   return s.replace(/\s*번\s*$/u, '').trimEnd()
 }
 
+/**
+ * 배치 테이블명 `4` vs 주문 `table_name` `4번` 등 매칭용 (소문자·trim·끝 `번` 제거).
+ */
+export function normalizePosTableNameForMatch(raw: string | undefined | null): string {
+  let s = String(raw ?? '').trim().toLowerCase()
+  if (!s) return ''
+  s = s.replace(/\s*번\s*$/u, '').trimEnd()
+  return s
+}
+
 /** 품목 줄에 포함된 순살/윙/봉 한글을 번역 키로 치환 ("M - 순살" 등) */
 export function translatePosMenuLineForReceipt(name: string, t: (key: string) => string): string {
   if (!name?.trim()) return name ?? ''

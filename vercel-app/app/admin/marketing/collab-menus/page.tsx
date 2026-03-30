@@ -6,6 +6,7 @@ import Link from "next/link"
 import { ExternalLink, Handshake, Megaphone, Tag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
@@ -14,6 +15,7 @@ import {
   getMarketingCampaign,
   saveMarketingCampaignCollabDetail,
   saveMarketingCampaignDesignDates,
+  toggleMarketingCampaignCollabManagement,
   useStoreList,
   type MarketingCampaign,
   type MarketingCampaignDetail,
@@ -46,6 +48,7 @@ export default function MarketingCollabMenusPage() {
   const [loadedDetail, setLoadedDetail] = React.useState<MarketingCampaignDetail | null>(null)
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailSaving, setDetailSaving] = React.useState(false)
+  const [collabFlagSaving, setCollabFlagSaving] = React.useState(false)
   const [draftCollab, setDraftCollab] = React.useState<MarketingCollabDetail>(emptyMarketingCollabDetail())
   const [hubDesignStart, setHubDesignStart] = React.useState("")
   const [hubDesignEnd, setHubDesignEnd] = React.useState("")
@@ -56,7 +59,7 @@ export default function MarketingCollabMenusPage() {
 
   const load = React.useCallback(() => {
     setLoading(true)
-    getMarketingCampaigns()
+    return getMarketingCampaigns()
       .then(setList)
       .catch(() => setList([]))
       .finally(() => setLoading(false))
@@ -108,6 +111,10 @@ export default function MarketingCollabMenusPage() {
 
   const saveCollabDetail = React.useCallback(async () => {
     if (!selectedCampaignId) return
+    if (loadedDetail && loadedDetail.collabManagement !== true) {
+      await appAlert(t("marketingCollabDetailSaveNeedInclude"))
+      return
+    }
     setDetailSaving(true)
     try {
       if (loadedDetail?.id && selectedCampaignId === String(loadedDetail.id)) {
@@ -157,11 +164,33 @@ export default function MarketingCollabMenusPage() {
     [list]
   )
 
-  React.useEffect(() => {
-    if (loading || !selectedCampaignId) return
-    const c = list.find((x) => x.id === selectedCampaignId)
-    if (!c || c.collabManagement !== true) setSelectedCampaignId("")
-  }, [list, selectedCampaignId, loading])
+  const applyCollabManagementFlag = React.useCallback(
+    async (enabled: boolean) => {
+      if (!selectedCampaignId) return
+      setCollabFlagSaving(true)
+      try {
+        const res = await toggleMarketingCampaignCollabManagement({
+          campaignId: selectedCampaignId,
+          enabled,
+        })
+        if (!res.success) {
+          await appAlert(res.message || t("marketingCollabDetailSaveError"))
+          return
+        }
+        await load()
+        const d = await getMarketingCampaign(selectedCampaignId)
+        if (d) {
+          setLoadedDetail(d)
+          setDraftCollab(normalizeMarketingCollabDetail(d.collabDetail ?? {}))
+        }
+      } catch (e) {
+        await appAlert(String(e))
+      } finally {
+        setCollabFlagSaving(false)
+      }
+    },
+    [load, selectedCampaignId, t]
+  )
   const selectedDesignOutOfRange = React.useMemo(() => {
     const s = (hubDesignStart.trim() || (loadedDetail?.designStartDate ?? "")).trim()
     const e = (hubDesignEnd.trim() || (loadedDetail?.designEndDate ?? "")).trim()
@@ -186,7 +215,7 @@ export default function MarketingCollabMenusPage() {
           <MarketingHubCampaignContextStrip
             value={selectedCampaignId}
             onChange={setSelectedCampaignId}
-            campaigns={collabOnly}
+            campaigns={list}
             hideHubLinkFilter
             allowEmpty
             emptyOptionLabel={t("marketingCollabMenusCampaignPickerAll")}
@@ -203,7 +232,7 @@ export default function MarketingCollabMenusPage() {
             }
           />
 
-          {!loading && collabOnly.length > 0 && (
+          {!loading && list.length > 0 && (
             <Card className="overflow-hidden border-primary/15 shadow-md ring-1 ring-primary/5">
               <CardContent className="space-y-4 p-4 sm:p-5">
                 <h2 className="text-sm font-semibold text-foreground">
@@ -218,56 +247,96 @@ export default function MarketingCollabMenusPage() {
                       label={t("marketingAdsOptionsLinkedCampaign")}
                       title={`${loadedDetail.campaignNo ? `[${loadedDetail.campaignNo}] ` : ""}${loadedDetail.topic}`}
                     />
-                    <MarketingHubRecordScheduleCard
-                      disabled={detailSaving || detailLoading}
-                      designOutOfRange={selectedDesignOutOfRange}
-                      campaignId={selectedCampaignId}
-                      hubDesignStartDate={hubDesignStart}
-                      hubDesignEndDate={hubDesignEnd}
-                      onHubDesignStartDateChange={setHubDesignStart}
-                      onHubDesignEndDateChange={setHubDesignEnd}
-                      executionTitle={null}
-                      className="mb-4"
-                    />
-                    {selectedDesignOutOfRange ? (
-                      <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-300">
-                        {t("marketingDesignTodayOutsidePeriod")}
-                      </p>
-                    ) : null}
-                    <CollabManagementDetailForm
-                      t={t}
-                      allStoresLabel={t("marketingCollabMenusAllStoresPlan")}
-                      basics={{
-                        topic: loadedDetail.topic,
-                        campaignNo: loadedDetail.campaignNo,
-                        startDate: loadedDetail.startDate,
-                        endDate: loadedDetail.endDate,
-                        branches: loadedDetail.branches ?? [],
-                        discountType: loadedDetail.discountType,
-                        discountValue: loadedDetail.discountValue,
-                        discountTargetAudience: loadedDetail.discountTargetAudience,
-                        discountPricePromotion: loadedDetail.discountPricePromotion,
-                      }}
-                      draft={draftCollab}
-                      onChange={setDraftCollab}
-                      onSave={saveCollabDetail}
-                      saving={detailSaving}
-                      loading={detailLoading}
-                    />
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-4">
-                      <Button variant="secondary" size="sm" className="gap-1" asChild>
-                        <Link href={`/admin/marketing/campaigns?openCampaign=${encodeURIComponent(selectedCampaignId)}`}>
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {t("marketingCollabMenusEditCampaign")}
-                        </Link>
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-1" asChild>
-                        <Link href={`/admin/marketing/promos?campaignId=${encodeURIComponent(selectedCampaignId)}`}>
-                          <Tag className="h-3.5 w-3.5" />
-                          {t("marketingCollabMenusOpenPromos")}
-                        </Link>
-                      </Button>
-                    </div>
+                    {loadedDetail.collabManagement !== true ? (
+                      <div className="rounded-lg border border-amber-500/35 bg-amber-50/90 px-3 py-3 dark:bg-amber-950/25">
+                        <p className="text-sm font-medium text-amber-950 dark:text-amber-50">
+                          {t("marketingCollabIncludeInListTitle")}
+                        </p>
+                        <p className="mt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
+                          {t("marketingCollabIncludeInListHint")}
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={collabFlagSaving}
+                            onClick={() => void applyCollabManagementFlag(true)}
+                          >
+                            {t("marketingCollabIncludeInListApply")}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-start gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+                          <Checkbox
+                            id="collab-mgmt-included"
+                            checked
+                            disabled={collabFlagSaving}
+                            onCheckedChange={(v) => {
+                              if (v !== true) void applyCollabManagementFlag(false)
+                            }}
+                            className="mt-0.5"
+                          />
+                          <label htmlFor="collab-mgmt-included" className="cursor-pointer text-xs leading-snug">
+                            <span className="font-medium">{t("marketingCampaignCollabManagementInclude")}</span>
+                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                              {t("marketingCampaignCollabManagementIncludeHint")}
+                            </span>
+                          </label>
+                        </div>
+                        <MarketingHubRecordScheduleCard
+                          disabled={detailSaving || detailLoading}
+                          designOutOfRange={selectedDesignOutOfRange}
+                          campaignId={selectedCampaignId}
+                          hubDesignStartDate={hubDesignStart}
+                          hubDesignEndDate={hubDesignEnd}
+                          onHubDesignStartDateChange={setHubDesignStart}
+                          onHubDesignEndDateChange={setHubDesignEnd}
+                          executionTitle={null}
+                          className="mb-4"
+                        />
+                        {selectedDesignOutOfRange ? (
+                          <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-300">
+                            {t("marketingDesignTodayOutsidePeriod")}
+                          </p>
+                        ) : null}
+                        <CollabManagementDetailForm
+                          t={t}
+                          allStoresLabel={t("marketingCollabMenusAllStoresPlan")}
+                          basics={{
+                            topic: loadedDetail.topic,
+                            campaignNo: loadedDetail.campaignNo,
+                            startDate: loadedDetail.startDate,
+                            endDate: loadedDetail.endDate,
+                            branches: loadedDetail.branches ?? [],
+                            discountType: loadedDetail.discountType,
+                            discountValue: loadedDetail.discountValue,
+                            discountTargetAudience: loadedDetail.discountTargetAudience,
+                            discountPricePromotion: loadedDetail.discountPricePromotion,
+                          }}
+                          draft={draftCollab}
+                          onChange={setDraftCollab}
+                          onSave={saveCollabDetail}
+                          saving={detailSaving}
+                          loading={detailLoading}
+                        />
+                        <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-4">
+                          <Button variant="secondary" size="sm" className="gap-1" asChild>
+                            <Link href={`/admin/marketing/campaigns?openCampaign=${encodeURIComponent(selectedCampaignId)}`}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              {t("marketingCollabMenusEditCampaign")}
+                            </Link>
+                          </Button>
+                          <Button variant="outline" size="sm" className="gap-1" asChild>
+                            <Link href={`/admin/marketing/promos?campaignId=${encodeURIComponent(selectedCampaignId)}`}>
+                              <Tag className="h-3.5 w-3.5" />
+                              {t("marketingCollabMenusOpenPromos")}
+                            </Link>
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : detailLoading ? (
                   <p className="text-sm text-muted-foreground">{t("loading")}</p>
@@ -280,12 +349,16 @@ export default function MarketingCollabMenusPage() {
 
           {loading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
 
-          {!loading && collabOnly.length === 0 && (
+          {!loading && list.length === 0 && (
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                {t("marketingCollabMenusEmptyNoCollabFlag")}
+                {t("marketingCollabMenusEmpty")}
               </CardContent>
             </Card>
+          )}
+
+          {!loading && list.length > 0 && collabOnly.length === 0 && (
+            <p className="text-center text-xs text-muted-foreground">{t("marketingCollabMenusEmptyNoCollabFlag")}</p>
           )}
         </TabsContent>
 

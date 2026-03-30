@@ -639,7 +639,6 @@ export function AdminAccountingCompliance() {
               ))}
             </CardContent>
           </Card>
-          <p className="text-xs text-muted-foreground px-1">{t("accCompBankReconcileHint")}</p>
         </TabsContent>
 
         <TabsContent value="resp" className={cn(adminTabsContentCn, "space-y-3")}>

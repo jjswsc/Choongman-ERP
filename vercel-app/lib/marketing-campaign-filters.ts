@@ -1,6 +1,9 @@
 import type { MarketingCampaign } from './api-client'
-import { marketingCampaignTouchesClosedDateRange } from './marketing-campaign-periods'
-import { campaignDesignTouchesRange } from './marketing-campaign-periods'
+import {
+  marketingCampaignTouchesClosedDateRange,
+  campaignDesignTouchesRange,
+  marketingCampaignEffectiveBounds,
+} from './marketing-campaign-periods'
 
 /** 캠페인 유형 필터 (빈 문자열이면 전체; other는 other: 접두 포함) */
 export function campaignMatchesTypeFilter(c: MarketingCampaign, typeFilter: string): boolean {
@@ -33,6 +36,9 @@ export function campaignMatchesPeriodFilter(c: MarketingCampaign, from: string, 
   const fs = from.trim().slice(0, 10)
   const te = to.trim().slice(0, 10)
   if (!fs && !te) return true
+  /** 행사·차수 일정이 전혀 없으면 조회 기간을 켜도 목록에서 빠지지 않게 함(초안 다수) */
+  const eff = marketingCampaignEffectiveBounds(c)
+  if (!eff.startDate && !eff.endDate) return true
   if (fs && te) {
     const [a, b] = fs <= te ? [fs, te] : [te, fs]
     return marketingCampaignTouchesClosedDateRange(c, a, b)
@@ -75,6 +81,9 @@ export function campaignMatchesDesignPeriodFilter(c: MarketingCampaign, from: st
   const fs = from.trim().slice(0, 10)
   const te = to.trim().slice(0, 10)
   if (!fs && !te) return true
+  const ds = String(c.designStartDate ?? '').trim().slice(0, 10)
+  const de = String(c.designEndDate ?? '').trim().slice(0, 10)
+  if (!ds && !de) return true
   if (fs && te) {
     const [a, b] = fs <= te ? [fs, te] : [te, fs]
     return campaignDesignTouchesRange(c, a, b)

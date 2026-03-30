@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
       employees.push({
         store,
         name,
+        name_title: '',
         nick,
         phone,
         job,

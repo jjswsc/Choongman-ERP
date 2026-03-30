@@ -2,7 +2,16 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Gift, Loader2, Plus, RotateCw, Trash2, Download, ExternalLink } from "lucide-react"
+import {
+  Gift,
+  Loader2,
+  Plus,
+  RotateCw,
+  Trash2,
+  Download,
+  ExternalLink,
+  AlertTriangle,
+} from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +24,15 @@ import {
   deleteMarketingMaterialGift,
   useStoreList,
   type MarketingCampaign,
+  type MarketingMaterial,
   type MarketingMaterialGift,
 } from "@/lib/api-client"
+import {
+  aggregateGiftInventoryGroups,
+  computedGiftRemaining,
+  giftRowQtyMismatch,
+  sumInventoryTotals,
+} from "@/lib/marketing-material-gift-inventory"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -30,7 +46,6 @@ const defaultAdd = {
   giftName: "",
   allocatedQty: "",
   distributedQty: "",
-  remainingQty: "",
   ruleNote: "",
 }
 
@@ -39,7 +54,6 @@ const defaultEditRow = {
   giftName: "",
   allocatedQty: "",
   distributedQty: "",
-  remainingQty: "",
   ruleNote: "",
 }
 
@@ -67,6 +81,11 @@ export function MarketingMaterialGiftsPanel({
   const [campaignFilter, setCampaignFilter] = React.useState("")
   const [storeFilter, setStoreFilter] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
+  const [giftSubTab, setGiftSubTab] = React.useState<"detail" | "inventory">("detail")
+  const [materialsForCampaign, setMaterialsForCampaign] = React.useState<MarketingMaterial[]>([])
+  const [invMaterialKey, setInvMaterialKey] = React.useState("")
+  const [invGiftKey, setInvGiftKey] = React.useState("")
+  const [invMismatchOnly, setInvMismatchOnly] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [exporting, setExporting] = React.useState(false)
   const [addDraft, setAddDraft] = React.useState({ ...defaultAdd })
@@ -100,10 +119,15 @@ export function MarketingMaterialGiftsPanel({
       if (!campaignParam) {
         setGifts([])
         setMatLookup({})
+        setMaterialsForCampaign([])
         return
       }
-      const g = await getMarketingMaterialGifts({ campaignId: campaignParam })
+      const [g, mats] = await Promise.all([
+        getMarketingMaterialGifts({ campaignId: campaignParam }),
+        getMarketingMaterials({ campaignId: campaignParam }),
+      ])
       setGifts(Array.isArray(g) ? g : [])
+      setMaterialsForCampaign(Array.isArray(mats) ? mats : [])
       const mids = [...new Set((Array.isArray(g) ? g : []).map((x) => x.materialId))]
       const meta = await getMarketingMaterialLookup(mids)
       const map: Record<string, MatMeta> = {}
@@ -114,6 +138,7 @@ export function MarketingMaterialGiftsPanel({
     } catch {
       setGifts([])
       setMatLookup({})
+      setMaterialsForCampaign([])
     } finally {
       setLoading(false)
     }
@@ -159,6 +184,40 @@ export function MarketingMaterialGiftsPanel({
     }
     return list
   }, [gifts, storeFilter, searchQuery, matLookup])
+
+  const materialMetaById = React.useMemo(() => {
+    const m: Record<string, { name: string; quantity: number }> = {}
+    for (const mat of materialsForCampaign) {
+      m[mat.id] = { name: mat.name, quantity: Math.max(0, Math.floor(Number(mat.quantity) || 0)) }
+    }
+    for (const g of gifts) {
+      if (!m[g.materialId] && matLookup[g.materialId]) {
+        m[g.materialId] = { name: matLookup[g.materialId].name, quantity: 0 }
+      }
+    }
+    return m
+  }, [materialsForCampaign, gifts, matLookup])
+
+  const inventoryGroups = React.useMemo(
+    () => aggregateGiftInventoryGroups(gifts, materialMetaById),
+    [gifts, materialMetaById]
+  )
+
+  const inventoryTotals = React.useMemo(() => sumInventoryTotals(inventoryGroups), [inventoryGroups])
+
+  const filteredInventoryGroups = React.useMemo(() => {
+    let list = inventoryGroups
+    if (invMaterialKey) list = list.filter((r) => r.materialId === invMaterialKey)
+    if (invGiftKey) list = list.filter((r) => r.giftName === invGiftKey)
+    if (invMismatchOnly) list = list.filter((r) => r.mismatchRowCount > 0)
+    return list
+  }, [inventoryGroups, invMaterialKey, invGiftKey, invMismatchOnly])
+
+  const invGiftNameOptions = React.useMemo(() => {
+    const s = new Set<string>()
+    inventoryGroups.forEach((r) => s.add(r.giftName))
+    return Array.from(s).sort()
+  }, [inventoryGroups])
 
   const campaignLabelForGift = React.useCallback(
     (g: MarketingMaterialGift) => {
@@ -218,7 +277,6 @@ export function MarketingMaterialGiftsPanel({
     }
     const allocatedQty = Math.max(0, Math.floor(Number(addDraft.allocatedQty) || 0))
     const distributedQty = Math.max(0, Math.floor(Number(addDraft.distributedQty) || 0))
-    const remainingRaw = addDraft.remainingQty.trim()
     setSaving(true)
     try {
       const res = await saveMarketingMaterialGift({
@@ -228,8 +286,6 @@ export function MarketingMaterialGiftsPanel({
         giftName,
         allocatedQty,
         distributedQty,
-        remainingQty:
-          remainingRaw === "" ? undefined : Math.max(0, Math.floor(Number(remainingRaw) || 0)),
         ruleNote: addDraft.ruleNote.trim(),
       })
       if (res.success) {
@@ -250,7 +306,6 @@ export function MarketingMaterialGiftsPanel({
       giftName: g.giftName,
       allocatedQty: String(g.allocatedQty),
       distributedQty: String(g.distributedQty),
-      remainingQty: String(g.remainingQty),
       ruleNote: g.ruleNote,
     })
   }
@@ -267,7 +322,6 @@ export function MarketingMaterialGiftsPanel({
     }
     const allocatedQty = Math.max(0, Math.floor(Number(editDraft.allocatedQty) || 0))
     const distributedQty = Math.max(0, Math.floor(Number(editDraft.distributedQty) || 0))
-    const remainingRaw = editDraft.remainingQty.trim()
     const cid =
       base.campaignId ??
       (campaignFilter || matLookup[base.materialId]?.campaignId || null)
@@ -281,8 +335,6 @@ export function MarketingMaterialGiftsPanel({
         giftName,
         allocatedQty,
         distributedQty,
-        remainingQty:
-          remainingRaw === "" ? undefined : Math.max(0, Math.floor(Number(remainingRaw) || 0)),
         ruleNote: editDraft.ruleNote.trim(),
       })
       if (res.success) {
@@ -363,10 +415,9 @@ export function MarketingMaterialGiftsPanel({
           value={campaignFilter}
           onChange={setCampaignFilter}
           campaigns={campaigns}
-          defaultHubLinkFilter="materials"
           allowEmpty
           emptyOptionLabel={t("marketingMaterialGiftSelectCampaignPlaceholder")}
-          onRefresh={() => void loadData()}
+          onRefresh={loadData}
           maxListHeightClass="max-h-48"
           disabled={loading || Boolean(syncCampaignId?.trim())}
         />
@@ -374,6 +425,7 @@ export function MarketingMaterialGiftsPanel({
           <select
             value={storeFilter}
             onChange={(e) => setStoreFilter(e.target.value)}
+            disabled={giftSubTab === "inventory"}
             className="h-10 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">{t("marketingMaterialGiftAllStores")}</option>
@@ -388,10 +440,167 @@ export function MarketingMaterialGiftsPanel({
             placeholder={t("marketingMaterialGiftSearchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            disabled={giftSubTab === "inventory"}
           />
         </div>
+        {effectiveCampaignId && (
+          <div className="flex flex-wrap gap-1 rounded-lg border border-input bg-muted/20 p-1">
+            <Button
+              type="button"
+              variant={giftSubTab === "detail" ? "default" : "ghost"}
+              size="sm"
+              className="h-8 flex-1 text-xs sm:flex-none"
+              onClick={() => setGiftSubTab("detail")}
+            >
+              {t("marketingMaterialGiftTabDetail")}
+            </Button>
+            <Button
+              type="button"
+              variant={giftSubTab === "inventory" ? "default" : "ghost"}
+              size="sm"
+              className="h-8 flex-1 text-xs sm:flex-none"
+              onClick={() => setGiftSubTab("inventory")}
+            >
+              {t("marketingMaterialGiftTabInventory")}
+            </Button>
+          </div>
+        )}
       </div>
 
+      {giftSubTab === "inventory" && effectiveCampaignId && (
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <p className="text-xs text-muted-foreground">{t("marketingMaterialGiftInventoryDesc")}</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMaterialGiftAllocPh")}</div>
+              <div className="text-lg font-semibold tabular-nums">{inventoryTotals.totalAllocated}</div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMaterialGiftDistPh")}</div>
+              <div className="text-lg font-semibold tabular-nums">{inventoryTotals.totalDistributed}</div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMaterialGiftRemainingComputed")}</div>
+              <div className="text-lg font-semibold tabular-nums">{inventoryTotals.totalRemainingComputed}</div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMaterialGiftCampaignTotals")}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {t("marketingMaterialGiftColStoreRows")}: {inventoryTotals.storeRowCount} ·{" "}
+                {t("marketingMaterialGiftSkuKinds")}: {inventoryTotals.uniqueSkus}
+              </div>
+              {inventoryTotals.mismatchRows > 0 && (
+                <div className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {t("marketingMaterialGiftMismatchRows")}: {inventoryTotals.mismatchRows}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={invMaterialKey}
+              onChange={(e) => setInvMaterialKey(e.target.value)}
+              className="h-9 max-w-[220px] rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value="">{t("marketingMaterialGiftFilterAllMaterials")}</option>
+              {materialsForCampaign.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={invGiftKey}
+              onChange={(e) => setInvGiftKey(e.target.value)}
+              className="h-9 max-w-[200px] rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value="">{t("marketingMaterialGiftFilterAllGifts")}</option>
+              {invGiftNameOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={invMismatchOnly}
+                onChange={(e) => setInvMismatchOnly(e.target.checked)}
+                className="rounded border-input"
+              />
+              {t("marketingMaterialGiftMismatchOnly")}
+            </label>
+          </div>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[880px] text-left text-xs">
+              <thead className="border-b bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 font-medium">{t("marketingMaterialGiftColMaterial")}</th>
+                  <th className="px-3 py-2 font-medium">{t("marketingMaterialGiftColGift")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftColStoreRows")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftColStores")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftAllocPh")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftDistPh")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftColLeft")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftMatQtyHint")}</th>
+                  <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftPoolVsAllocated")}</th>
+                  <th className="px-3 py-2 font-medium text-center">{t("marketingMaterialGiftColQtyStatus")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredInventoryGroups.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                      {t("marketingMaterialGiftTableEmpty")}
+                    </td>
+                  </tr>
+                )}
+                {filteredInventoryGroups.map((row) => (
+                  <tr key={`${row.materialId}-${row.giftName}`}>
+                    <td className="px-3 py-2 align-top font-medium">{row.materialName}</td>
+                    <td className="px-3 py-2 align-top">{row.giftName}</td>
+                    <td className="px-3 py-2 align-top text-right tabular-nums">{row.storeRowCount}</td>
+                    <td className="px-3 py-2 align-top text-right tabular-nums">{row.uniqueStoreCount}</td>
+                    <td className="px-3 py-2 align-top text-right tabular-nums">{row.totalAllocated}</td>
+                    <td className="px-3 py-2 align-top text-right tabular-nums">{row.totalDistributed}</td>
+                    <td className="px-3 py-2 align-top text-right tabular-nums font-medium">
+                      {row.totalRemainingComputed}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right tabular-nums text-muted-foreground">
+                      {row.materialQuantity || "—"}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-2 align-top text-right tabular-nums",
+                        row.poolVsAllocated < 0 ? "text-destructive font-medium" : "text-muted-foreground"
+                      )}
+                    >
+                      {row.materialQuantity > 0 ? row.poolVsAllocated : "—"}
+                    </td>
+                    <td className="px-3 py-2 align-top text-center">
+                      {row.mismatchRowCount > 0 ? (
+                        <span
+                          className="inline-flex items-center justify-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900"
+                          title={t("marketingMaterialGiftMismatchBadgeHint")}
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          {row.mismatchRowCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {giftSubTab === "detail" && (
+        <>
       <div className="rounded-xl border bg-card p-4">
         <h2 className="mb-3 text-sm font-semibold">{t("marketingMaterialGiftAddRowTitle")}</h2>
         <p className="mb-3 text-[11px] text-muted-foreground">{t("marketingMaterialGiftAddRowHint")}</p>
@@ -448,14 +657,15 @@ export function MarketingMaterialGiftsPanel({
             onChange={(e) => setAddDraft((d) => ({ ...d, distributedQty: e.target.value }))}
             placeholder={t("marketingMaterialGiftDistPh")}
           />
-          <Input
-            type="number"
-            min={0}
-            className="h-9 text-xs"
-            value={addDraft.remainingQty}
-            onChange={(e) => setAddDraft((d) => ({ ...d, remainingQty: e.target.value }))}
-            placeholder={t("marketingMaterialGiftLeftAutoPh")}
-          />
+          <div className="flex h-9 items-center rounded-md border border-dashed border-input bg-muted/30 px-2 text-xs tabular-nums text-muted-foreground">
+            {t("marketingMaterialGiftRemainingComputed")}:{" "}
+            <span className="ml-1 font-medium text-foreground">
+              {computedGiftRemaining(
+                Math.max(0, Math.floor(Number(addDraft.allocatedQty) || 0)),
+                Math.max(0, Math.floor(Number(addDraft.distributedQty) || 0))
+              )}
+            </span>
+          </div>
           <Input
             className="h-9 text-xs sm:col-span-2 lg:col-span-3"
             value={addDraft.ruleNote}
@@ -482,7 +692,7 @@ export function MarketingMaterialGiftsPanel({
       )}
 
       <div className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[800px] text-left text-sm">
           <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-2 font-medium">{t("marketingPerformanceFilterCampaign")}</th>
@@ -492,6 +702,9 @@ export function MarketingMaterialGiftsPanel({
               <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftAllocPh")}</th>
               <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftDistPh")}</th>
               <th className="px-3 py-2 font-medium text-right">{t("marketingMaterialGiftColLeft")}</th>
+              <th className="px-3 py-2 w-10 text-center font-medium" title={t("marketingMaterialGiftColQtyStatus")}>
+                <AlertTriangle className="mx-auto h-3.5 w-3.5 opacity-60" />
+              </th>
               <th className="px-3 py-2 font-medium">{t("marketingMaterialGiftColNote")}</th>
               <th className="px-3 py-2 font-medium w-[140px]">{t("marketingMaterialGiftColActions")}</th>
             </tr>
@@ -499,7 +712,7 @@ export function MarketingMaterialGiftsPanel({
           <tbody className="divide-y">
             {filteredGifts.length === 0 && !loading && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground text-xs">
+                <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground text-xs">
                   {!effectiveCampaignId
                     ? t("marketingMaterialGiftTablePickCampaign")
                     : t("marketingMaterialGiftTableEmpty")}
@@ -509,7 +722,7 @@ export function MarketingMaterialGiftsPanel({
             {filteredGifts.map((g) =>
               editingId === g.id ? (
                 <tr key={g.id} className="bg-muted/20">
-                  <td colSpan={9} className="p-3">
+                  <td colSpan={10} className="p-3">
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       <select
                         value={editDraft.storeName}
@@ -549,16 +762,15 @@ export function MarketingMaterialGiftsPanel({
                           setEditDraft((d) => ({ ...d, distributedQty: e.target.value }))
                         }
                       />
-                      <Input
-                        type="number"
-                        min={0}
-                        className="h-8 text-xs"
-                        value={editDraft.remainingQty}
-                        onChange={(e) =>
-                          setEditDraft((d) => ({ ...d, remainingQty: e.target.value }))
-                        }
-                        placeholder={t("marketingMaterialGiftColLeft")}
-                      />
+                      <div className="flex h-8 items-center rounded-md border border-dashed px-2 text-[11px] tabular-nums text-muted-foreground">
+                        {t("marketingMaterialGiftRemainingComputed")}:{" "}
+                        <span className="ml-1 font-medium text-foreground">
+                          {computedGiftRemaining(
+                            Math.max(0, Math.floor(Number(editDraft.allocatedQty) || 0)),
+                            Math.max(0, Math.floor(Number(editDraft.distributedQty) || 0))
+                          )}
+                        </span>
+                      </div>
                       <Input
                         className="h-8 text-xs sm:col-span-2 lg:col-span-4"
                         value={editDraft.ruleNote}
@@ -601,7 +813,26 @@ export function MarketingMaterialGiftsPanel({
                   <td className="px-3 py-2 align-top max-w-[140px] line-clamp-2">{g.giftName}</td>
                   <td className="px-3 py-2 align-top text-right tabular-nums">{g.allocatedQty}</td>
                   <td className="px-3 py-2 align-top text-right tabular-nums">{g.distributedQty}</td>
-                  <td className="px-3 py-2 align-top text-right tabular-nums">{g.remainingQty}</td>
+                  <td className="px-3 py-2 align-top text-right tabular-nums">
+                    {computedGiftRemaining(g.allocatedQty, g.distributedQty)}
+                    {giftRowQtyMismatch(g) && (
+                      <span className="ml-1 text-[10px] text-amber-700" title={t("marketingMaterialGiftMismatchStoredHint")}>
+                        (DB {g.remainingQty})
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-center">
+                    {giftRowQtyMismatch(g) ? (
+                      <span
+                        className="mx-auto inline-flex"
+                        title={t("marketingMaterialGiftMismatchBadgeHint")}
+                      >
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 align-top max-w-[160px] line-clamp-2 text-muted-foreground">
                     {g.ruleNote || "—"}
                   </td>
@@ -642,6 +873,8 @@ export function MarketingMaterialGiftsPanel({
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </div>
   )
 }

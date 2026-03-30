@@ -92,9 +92,9 @@ export default function MarketingPromosPage() {
         getPosMenuCategoriesConfig().catch(() => null),
         getMarketingCampaigns().catch(() => []),
       ])
-      setMenus(
-        (list || []).filter((m) => m.isActive && !(m.promoId != null && String(m.promoId).trim() !== ''))
-      )
+      // 번들 세트 구성 탭은 promo_id 미러 메뉴로「저장된 세트」목록을 만든다. 미러 행을 제외하면 목록이 비어 보인다.
+      // 좌측 메뉴 피커는 PosSetMenuTabWorkspace 내부 eligibleMenus에서 미러·비활성을 걸러 쓴다.
+      setMenus(Array.isArray(list) ? list : [])
       const { categories, mainCategories: mains } = catRes ?? { categories: [], mainCategories: [] }
       setAllCategories(Array.isArray(categories) ? categories : [])
       setAllMainCategories(Array.isArray(mains) ? mains : [])
@@ -221,10 +221,9 @@ export default function MarketingPromosPage() {
             value={workspaceCampaignId}
             onChange={setWorkspaceCampaignId}
             campaigns={campaigns}
-            defaultHubLinkFilter="promo_set"
             allowEmpty
             emptyOptionLabel={t('marketingPromoCampaignSelectRequiredOption')}
-            onRefresh={() => void loadMenusAndMeta()}
+            onRefresh={loadMenusAndMeta}
             maxListHeightClass="max-h-56"
             disabled={pageLoading}
             summary={

@@ -272,7 +272,24 @@ export function CollabManagementOverviewTab(props: {
       ) : null}
 
       <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-3 sm:px-4">
-        <p className="text-[11px] font-medium text-muted-foreground">{t("marketingCollabOverviewPeriodHint")}</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+          <p className="min-w-0 flex-1 text-[11px] font-medium leading-relaxed text-muted-foreground">
+            {t("marketingCollabOverviewPeriodHint")}
+          </p>
+          <div className="w-full shrink-0 sm:w-auto sm:min-w-[12rem] sm:max-w-[22rem]">
+            <Label className="sr-only">{t("search")}</Label>
+            <Input
+              className="h-9 text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={
+                subTab === "partners"
+                  ? t("marketingCollabOverviewSearchPhPartners")
+                  : t("marketingCollabOverviewSearchPh")
+              }
+            />
+          </div>
+        </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
           <div className="flex flex-wrap gap-2">
             <div className="min-w-[9rem] space-y-1">
@@ -317,19 +334,6 @@ export function CollabManagementOverviewTab(props: {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="min-w-0 flex-1 space-y-1 sm:min-w-[14rem]">
-            <Label className="text-[10px] text-muted-foreground">{t("search")}</Label>
-            <Input
-              className="h-9 text-sm"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={
-                subTab === "partners"
-                  ? t("marketingCollabOverviewSearchPhPartners")
-                  : t("marketingCollabOverviewSearchPh")
-              }
-            />
           </div>
         </div>
       </div>

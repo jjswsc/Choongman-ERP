@@ -22,7 +22,7 @@ import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
 import { getMembers, getPosMenus, getPosOrders, getPosPrinterSettings, getPosTodaySales, getPosDeliveryApps, updatePosOrder, updatePosOrderStatus, type PosMenu, type PosDeliveryApp } from '@/lib/api-client'
-import { savePosOrderWithOffline } from '@/lib/offline'
+import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import { warmAdminOfflineCache } from '@/lib/offline/pos-offline-warm'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -638,6 +638,8 @@ export default function PosTerminalPage() {
       title: tPrint('posReceipt') || '영수증',
       printDelayMs: directPrint ? 220 : 320,
       fallbackCleanupMs: 30_000,
+      /** 자동(주문 직후) 인쇄: iframe 포커스 생략 → 인쇄창 닫힌 뒤 POS 화면 전환이 덜 튐 */
+      focusIframeBeforePrint: !directPrint,
       onPrintUnavailable: () => {
         void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
       },
@@ -687,17 +689,23 @@ export default function PosTerminalPage() {
       const discountAmt = Number(row.discount_amt ?? 0)
       const total = Number(row.total ?? 0)
       if (autoPrintReceiptOnOrder) {
-        printReceiptNow({
-          orderNo,
-          storeCode,
-          orderType,
-          tableName,
-          memo,
-          items,
-          subtotal,
-          discountAmt,
-          total,
-        })
+        printReceiptNow(
+          {
+            orderNo,
+            storeCode,
+            orderType,
+            tableName,
+            memo,
+            items,
+            subtotal,
+            discountAmt,
+            total,
+          },
+          undefined,
+          false,
+          undefined,
+          true
+        )
       }
       if (autoPrintKitchenSlipOnOrder) {
         getPosPrinterSettings({ storeCode })
@@ -746,6 +754,7 @@ export default function PosTerminalPage() {
               printHtmlInHiddenIframe(html, {
                 title: slip.label,
                 printDelayMs: 250,
+                focusIframeBeforePrint: false,
                 onPrintUnavailable: () => {
                   void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                 },
@@ -820,17 +829,23 @@ export default function PosTerminalPage() {
           seenOrderIdsRef.current.add(oid)
           lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
           if (autoPrintReceiptOnOrder && items.length > 0) {
-            printReceiptNow({
-              orderNo: order.orderNo ?? '',
-              storeCode: order.storeCode ?? currentStoreId,
-              orderType: order.orderType ?? 'dine_in',
-              tableName: order.tableName,
-              memo: order.memo,
-              items,
-              subtotal: order.subtotal ?? 0,
-              discountAmt: order.discountAmt ?? 0,
-              total: order.total ?? 0,
-            })
+            printReceiptNow(
+              {
+                orderNo: order.orderNo ?? '',
+                storeCode: order.storeCode ?? currentStoreId,
+                orderType: order.orderType ?? 'dine_in',
+                tableName: order.tableName,
+                memo: order.memo,
+                items,
+                subtotal: order.subtotal ?? 0,
+                discountAmt: order.discountAmt ?? 0,
+                total: order.total ?? 0,
+              },
+              undefined,
+              false,
+              undefined,
+              true
+            )
           }
           if (autoPrintKitchenSlipOnOrder && items.length > 0) {
             try {
@@ -880,6 +895,7 @@ export default function PosTerminalPage() {
                 printHtmlInHiddenIframe(html, {
                   title: slip.label,
                   printDelayMs: 250,
+                  focusIframeBeforePrint: false,
                   onPrintUnavailable: () => {
                     void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                   },
@@ -1292,6 +1308,7 @@ export default function PosTerminalPage() {
               onImperativeBridge={bindCartImperative}
               cartItems={terminalCartLines}
               setCartItems={setTerminalCartLines}
+              posMenus={menus}
               stores={stores}
             currentStoreId={currentStoreId}
             selectedTable={selectedTable}
@@ -1662,6 +1679,7 @@ export default function PosTerminalPage() {
                         printHtmlInHiddenIframe(html, {
                           title: slip.label,
                           printDelayMs: 250,
+                          focusIframeBeforePrint: false,
                           onPrintUnavailable: () => {
                             void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                           },
@@ -1687,7 +1705,10 @@ export default function PosTerminalPage() {
               try {
                 let orderIdToComplete: number | null = null
                 let orderNo: string = ''
-                if (existingOrderId != null && payload.payment != null) {
+                const pay = payload.payment
+                const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
+                /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
+                if (existingOrderId != null && existingOrderId > 0 && pay != null) {
                   await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payload.items),
@@ -1701,42 +1722,81 @@ export default function PosTerminalPage() {
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
-                    paymentCash: payload.payment.paymentCash,
-                    paymentCard: payload.payment.paymentCard,
-                    paymentQr: payload.payment.paymentQr,
-                    paymentOther: payload.payment.paymentOther,
-                    paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
-                    deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                    paymentCash: pay.paymentCash,
+                    paymentCard: pay.paymentCard,
+                    paymentQr: pay.paymentQr,
+                    paymentOther: pay.paymentOther,
+                    paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
+                    deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
                     pricingAdjustments,
                   })
                   orderIdToComplete = existingOrderId
                   orderNo = pendingReceiptOrderNo ?? ''
-                } else {
-                  const res = await savePosOrderWithOffline({
-                    storeCode: currentStoreId,
-                    createdBy: auth?.user ?? '',
-                    orderType: 'dine_in',
-                    tableName: payload.tableName,
-                    memo: payload.memo,
-                    discountAmt: payload.discountAmt ?? 0,
-                    discountReason: payload.discountReason ?? '',
-                    memberId: payload.memberId,
-                    memberNo: payload.memberNo,
-                    couponCode: payload.couponCode,
-                    couponDiscountAmt: payload.couponDiscountAmt,
-                    pointUsed: payload.pointUsed,
-                    guestCount: payload.guestCount,
-                    items: cartLinesToPosOrderItems(payload.items),
-                    paymentCash: payload.payment?.paymentCash ?? 0,
-                    paymentCard: payload.payment?.paymentCard ?? 0,
-                    paymentQr: payload.payment?.paymentQr ?? 0,
-                    paymentOther: payload.payment?.paymentOther ?? 0,
-                    paymentDeliveryApp: payload.payment?.paymentDeliveryApp ?? 0,
-                    deliveryPaymentChannel: payload.payment?.deliveryPaymentChannel ?? null,
-                    pricingAdjustments,
-                  })
-                  orderIdToComplete = (res as { orderId?: number }).orderId ?? null
-                  orderNo = (res as { orderNo?: string }).orderNo ?? ''
+                } else if (pay != null) {
+                  const localNoCandidate =
+                    (pendingReceiptOrderNo?.startsWith('LOCAL-') ? pendingReceiptOrderNo : null) ??
+                    (servingTable?.order?.orderNo?.startsWith('LOCAL-')
+                      ? servingTable.order.orderNo
+                      : null) ??
+                    (selectedTable?.order?.orderNo?.startsWith('LOCAL-')
+                      ? selectedTable.order.orderNo
+                      : null)
+                  let mergedLocal = false
+                  if (localNoCandidate) {
+                    mergedLocal = await mergeQueuedSavePosOrderByLocalOrderNo(localNoCandidate, (body) => ({
+                      ...body,
+                      items: cartLinesToPosOrderItems(payload.items),
+                      tableName: payload.tableName,
+                      memo: payload.memo,
+                      discountAmt: payload.discountAmt ?? 0,
+                      discountReason: payload.discountReason ?? '',
+                      memberId: payload.memberId,
+                      memberNo: payload.memberNo,
+                      couponCode: payload.couponCode,
+                      couponDiscountAmt: payload.couponDiscountAmt,
+                      pointUsed: payload.pointUsed,
+                      guestCount: payload.guestCount,
+                      paymentCash: pay.paymentCash,
+                      paymentCard: pay.paymentCard,
+                      paymentQr: pay.paymentQr,
+                      paymentOther: pay.paymentOther,
+                      paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
+                      deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      pricingAdjustments,
+                      closeStatus: targetClose,
+                    }))
+                  }
+                  if (mergedLocal) {
+                    orderNo = localNoCandidate ?? ''
+                    orderIdToComplete = null
+                  } else {
+                    const res = await savePosOrderWithOffline({
+                      storeCode: currentStoreId,
+                      createdBy: auth?.user ?? '',
+                      orderType: 'dine_in',
+                      tableName: payload.tableName,
+                      memo: payload.memo,
+                      discountAmt: payload.discountAmt ?? 0,
+                      discountReason: payload.discountReason ?? '',
+                      memberId: payload.memberId,
+                      memberNo: payload.memberNo,
+                      couponCode: payload.couponCode,
+                      couponDiscountAmt: payload.couponDiscountAmt,
+                      pointUsed: payload.pointUsed,
+                      guestCount: payload.guestCount,
+                      items: cartLinesToPosOrderItems(payload.items),
+                      paymentCash: pay.paymentCash,
+                      paymentCard: pay.paymentCard,
+                      paymentQr: pay.paymentQr,
+                      paymentOther: pay.paymentOther,
+                      paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
+                      deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      pricingAdjustments,
+                      closeStatus: targetClose,
+                    })
+                    orderIdToComplete = (res as { orderId?: number }).orderId ?? null
+                    orderNo = (res as { orderNo?: string }).orderNo ?? ''
+                  }
                 }
                 if (orderIdToComplete != null) {
                   const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
@@ -1744,6 +1804,9 @@ export default function PosTerminalPage() {
                   if (!payload.isPrepaid && payload.tableName) {
                     clearTableOrder(currentStoreId, payload.tableName)
                   }
+                } else if (pay != null && !payload.isPrepaid && payload.tableName) {
+                  /** 오프라인 단일 save(closeStatus)만 한 경우에도 테이블 비우기 */
+                  clearTableOrder(currentStoreId, payload.tableName)
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -1805,6 +1868,7 @@ export default function PosTerminalPage() {
                   paymentDeliveryApp: payload.payment?.paymentDeliveryApp ?? 0,
                   deliveryPaymentChannel: payload.payment?.deliveryPaymentChannel ?? null,
                   pricingAdjustments,
+                  closeStatus: 'completed',
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
@@ -2463,8 +2527,12 @@ export default function PosTerminalPage() {
         receiptMembershipQrText={receiptMembershipQrText}
         receiptShowMembershipQr={receiptShowMembershipQr}
         signatureLine={signatureLine}
-        receiptBarcode={receiptBarcode}
-        itemBarcode={itemBarcode}
+        receiptBarcode={
+          receiptBarcode && receiptData?.receiptAutoPrintContext !== 'payment'
+        }
+        itemBarcode={
+          itemBarcode && receiptData?.receiptAutoPrintContext !== 'payment'
+        }
       />
       <DeliveryEditOrderNoDialog
         open={deliveryEditOrderNoOpen}

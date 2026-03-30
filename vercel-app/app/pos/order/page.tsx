@@ -13,6 +13,7 @@ import {
   getPosTodaySales,
   getPosTableLayout,
   getPosPrinterSettings,
+  getPosCollabCampaigns,
   validatePosCoupon,
   useStoreList,
   type PosMenu,
@@ -20,6 +21,8 @@ import {
   type PosOrder,
   type PosPromoWithItems,
 } from "@/lib/api-client"
+import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
+import { collabDiscountAmountForCart } from "@/lib/pos-collab-discount"
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
@@ -29,7 +32,7 @@ import { useT } from "@/lib/i18n"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
-import { Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
+import { Handshake, Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -66,6 +69,7 @@ import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { printHtmlInHiddenIframe } from "@/lib/print-html-iframe"
+import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -139,6 +143,10 @@ export default function PosOrderPage() {
   const [couponCode, setCouponCode] = React.useState("")
   const [appliedCoupon, setAppliedCoupon] = React.useState<{ name: string; discountAmt: number; discountReason: string } | null>(null)
   const [couponLoading, setCouponLoading] = React.useState(false)
+  const [collabOptions, setCollabOptions] = React.useState<
+    { id: string; topic: string; campaignNo?: string; collabDetail: MarketingCollabDetail }[]
+  >([])
+  const [appliedCollabId, setAppliedCollabId] = React.useState<string | null>(null)
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -422,6 +430,42 @@ export default function PosOrderPage() {
 
   const businessDateYmd = getPosBusinessDateStr()
 
+  React.useEffect(() => {
+    if (!storeCode.trim()) {
+      setCollabOptions([])
+      setAppliedCollabId(null)
+      return
+    }
+    let cancelled = false
+    getPosCollabCampaigns({ storeCode })
+      .then((rows) => {
+        if (cancelled) return
+        setCollabOptions(rows)
+        setAppliedCollabId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null))
+      })
+      .catch(() => {
+        if (!cancelled) setCollabOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [storeCode])
+
+  const menuByIdForCollab = React.useMemo(() => {
+    if (!menus.length) return new Map<string, PosMenu>()
+    return new Map(menus.map((m) => [String(m.id), m]))
+  }, [menus])
+
+  const appliedCollab = React.useMemo(
+    () => collabOptions.find((c) => c.id === appliedCollabId) ?? null,
+    [collabOptions, appliedCollabId]
+  )
+
+  const collabDiscountAmt = React.useMemo(() => {
+    if (!appliedCollab || menuByIdForCollab.size === 0) return 0
+    return collabDiscountAmountForCart(cart, menuByIdForCollab, appliedCollab.collabDetail)
+  }, [appliedCollab, cart, menuByIdForCollab])
+
   const filteredPromos = React.useMemo(() => {
     return promos.filter((p) => {
       if (!p.isActive) return false
@@ -570,7 +614,10 @@ export default function PosOrderPage() {
     setCart((prev) => prev.filter((x) => x.id !== id))
   }
 
-  const clearCart = () => setCart([])
+  const clearCart = () => {
+    setCart([])
+    setAppliedCollabId(null)
+  }
 
   const loadRecentOrders = React.useCallback(() => {
     const today = getPosBusinessDateStr()
@@ -612,8 +659,14 @@ export default function PosOrderPage() {
     discountType === "pct"
       ? Math.round(subtotal * (Number(discountValue) || 0) / 100)
       : Math.min(subtotal, Math.max(0, Number(discountValue) || 0))
-  const discountAmt = appliedCoupon ? appliedCoupon.discountAmt : manualDiscount
-  const effectiveDiscountReason = appliedCoupon ? appliedCoupon.discountReason : discountReason.trim()
+  const baseDiscountAmt = appliedCoupon ? appliedCoupon.discountAmt : manualDiscount
+  const discountAmt = Math.min(subtotal, baseDiscountAmt + collabDiscountAmt)
+  const collabReasonPart = appliedCollab ? `${t("posCollabDiscount")}: ${appliedCollab.topic}` : ""
+  const effectiveDiscountReason = (() => {
+    const base = appliedCoupon ? appliedCoupon.discountReason : discountReason.trim()
+    if (base && collabReasonPart) return `${base} · ${collabReasonPart}`
+    return base || collabReasonPart
+  })()
   const deliveryFeeAmt = orderType === "delivery" ? storeFees.deliveryFee : 0
   const packagingFeeAmt = orderType === "takeout" ? storeFees.packagingFee : 0
   const pricingAdjustments: PosPricingAdjustments = {
@@ -797,14 +850,15 @@ export default function PosOrderPage() {
     }
   }
 
-  const POS_PAPER_WIDTH_MM = 80
   const POS_PAPER_SIDE_PADDING_MM = 1
-  const POS_PAPER_HEIGHT_MM = 200
   const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
-    @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
+    ${posThermalReceiptPageSizeRule()}
     html, body { margin: 0; padding: 0; }
+    html { height: auto; }
     body {
-      width: ${POS_PAPER_WIDTH_MM}mm;
+      width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
+      min-height: auto;
+      height: auto;
       box-sizing: border-box;
       font-family: ${fontFamily};
       font-size: ${fontSizePx}px;
@@ -843,7 +897,7 @@ export default function PosOrderPage() {
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; }
-            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; }
+            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; break-inside: avoid; page-break-inside: avoid; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
             .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
@@ -1305,46 +1359,39 @@ export default function PosOrderPage() {
               className="mt-1 h-9 border-slate-200 bg-slate-50 text-sm text-slate-800"
             />
           </div>
-          <div>
-            <label className="text-xs text-slate-600">{t("posCoupon") || "쿠폰"}</label>
-            {appliedCoupon ? (
-              <div className="mt-1 flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-sm">
-                <span className="text-emerald-700 truncate">{appliedCoupon.name}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 text-slate-600 hover:text-slate-900"
-                  onClick={handleClearCoupon}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
+          <div className="rounded-lg border border-violet-200/80 bg-violet-50/35 px-3 py-2.5">
+            <div className="mb-2 flex items-center gap-2">
+              <Handshake className="h-3.5 w-3.5 text-violet-700" />
+              <div className="min-w-0">
+                <span className="text-xs font-semibold text-slate-800">{t("posPaymentSectionCollab")}</span>
+                <p className="text-[10px] text-slate-500">{t("posCollabSelectLabel")}</p>
               </div>
-            ) : (
-              <div className="mt-1 flex gap-1">
-                <Input
-                  placeholder={t("posCouponCodePh") || "쿠폰 코드"}
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
-                  className="h-9 flex-1 border-slate-200 bg-slate-50 text-sm uppercase text-slate-800"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 border-slate-200 bg-white px-3 text-slate-700"
-                  onClick={handleApplyCoupon}
-                  disabled={!couponCode.trim() || couponLoading}
-                >
-                  <Tag className="mr-1 h-3.5 w-3.5" />
-                  {couponLoading ? "..." : t("posCouponApply") || "적용"}
-                </Button>
-              </div>
-            )}
+            </div>
+            <Select
+              value={appliedCollabId ?? "__none__"}
+              onValueChange={(v) => setAppliedCollabId(v === "__none__" ? null : v)}
+            >
+              <SelectTrigger className="h-9 border-slate-200 bg-white text-sm text-slate-800">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{t("posCollabNoneOption")}</SelectItem>
+                {collabOptions.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {(c.campaignNo ? `[${c.campaignNo}] ` : "") + c.topic}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!menus.length ? (
+              <p className="mt-1.5 text-[11px] text-amber-800">{t("posCollabMenusNotLoaded")}</p>
+            ) : null}
+            {appliedCollabId && collabDiscountAmt <= 0 && menus.length > 0 ? (
+              <p className="mt-1.5 text-[11px] text-amber-800">{t("posCollabNoMatchingLines")}</p>
+            ) : null}
           </div>
-          <div>
-            <label className="text-xs text-slate-600">{t("posDiscount") || "할인"}</label>
+          <div className="rounded-lg border border-amber-200/80 bg-amber-50/35 px-3 py-2.5">
+            <label className="text-xs font-semibold text-slate-800">{t("posPaymentSectionManualDiscount")}</label>
             <div className={cn("mt-1 flex gap-2", appliedCoupon && "opacity-50")}>
               <div className="flex rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
                 <button
@@ -1388,56 +1435,103 @@ export default function PosOrderPage() {
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm text-slate-600">
-              <span>{t("posSubtotal") || "소계"}</span>
-              <span className="tabular-nums text-slate-800">{formatBahtNum(subtotal)} ฿</span>
+          <div className="rounded-lg border border-sky-200/80 bg-sky-50/40 px-3 py-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex shrink-0 items-center gap-2">
+                <Tag className="h-3.5 w-3.5 shrink-0 text-sky-700" />
+                <span className="text-xs font-semibold text-slate-800">{t("posPaymentSectionCoupon")}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-sm">
+                    <span className="text-emerald-700 truncate">{appliedCoupon.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 shrink-0 p-0 text-slate-600 hover:text-slate-900"
+                      onClick={handleClearCoupon}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <Input
+                      placeholder={t("posCouponCodePh") || "쿠폰 코드"}
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
+                      className="h-9 min-w-0 flex-1 border-slate-200 bg-white text-sm uppercase text-slate-800"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 border-slate-200 bg-white px-3 text-slate-700"
+                      onClick={handleApplyCoupon}
+                      disabled={!couponCode.trim() || couponLoading}
+                    >
+                      {couponLoading ? "..." : t("posCouponApply") || "적용"}
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
-            {discountAmt > 0 && (
-              <div className="flex justify-between text-sm text-emerald-600">
-                <span>{t("posDiscount") || "할인"}</span>
-                <span className="tabular-nums">-{formatBahtNum(discountAmt)} ฿</span>
+          </div>
+          <div className="flex gap-2 rounded-md border border-slate-200/80 bg-slate-50/60 py-1 pl-1 pr-2">
+            <div className="w-0.5 shrink-0 rounded-full bg-slate-300/70 self-stretch min-h-[2.5rem]" aria-hidden />
+            <div className="min-w-0 flex-1 space-y-0 text-xs leading-tight text-slate-600">
+              <div className="flex justify-between gap-2 py-0.5">
+                <span className="min-w-0 pl-0.5">{t("posSubtotal") || "소계"}</span>
+                <span className="shrink-0 tabular-nums text-slate-800">{formatBahtNum(subtotal)} ฿</span>
               </div>
-            )}
-            {deliveryFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                <span className="tabular-nums text-slate-800">+{formatBahtNum(deliveryFeeAmt)} ฿</span>
+              {discountAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5 text-emerald-600">
+                  <span className="min-w-0 pl-0.5">{t("posDiscount") || "할인"}</span>
+                  <span className="shrink-0 tabular-nums">-{formatBahtNum(discountAmt)} ฿</span>
+                </div>
+              )}
+              {deliveryFeeAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5">
+                  <span className="min-w-0 pl-0.5">{t("posDeliveryFee") || "배달 수수료"}</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">+{formatBahtNum(deliveryFeeAmt)} ฿</span>
+                </div>
+              )}
+              {packagingFeeAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5">
+                  <span className="min-w-0 pl-0.5">{t("posPackagingFee") || "포장 수수료"}</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">+{formatBahtNum(packagingFeeAmt)} ฿</span>
+                </div>
+              )}
+              {pricing.vatFeeAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5">
+                  <span className="min-w-0 pl-0.5">{t("posVatLabel") || "부가세"}</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
+                </div>
+              )}
+              {pricing.serviceFeeAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5">
+                  <span className="min-w-0 pl-0.5">{t("posServiceFee") || "서비스비"}</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
+                </div>
+              )}
+              {pricing.cardFeeAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5">
+                  <span className="min-w-0 pl-0.5">{t("posCardFee") || "카드비"}</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
+                </div>
+              )}
+              {pricing.otherFeeAmt > 0 && (
+                <div className="flex justify-between gap-2 py-0.5">
+                  <span className="min-w-0 pl-0.5">{t("posOtherFee") || "기타"}</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
+                </div>
+              )}
+              <div className="flex justify-between gap-2 border-t border-slate-200/90 pt-1 mt-0.5 text-sm font-bold text-slate-800">
+                <span className="min-w-0 pl-0.5">{t("posTotal") || "합계"}</span>
+                <span className="shrink-0 tabular-nums">{formatBahtNum(total)} ฿</span>
               </div>
-            )}
-            {packagingFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                <span className="tabular-nums text-slate-800">+{formatBahtNum(packagingFeeAmt)} ฿</span>
-              </div>
-            )}
-            {pricing.vatFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{t("posVatLabel") || "부가세"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
-              </div>
-            )}
-            {pricing.serviceFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{t("posServiceFee") || "서비스비"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
-              </div>
-            )}
-            {pricing.cardFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{t("posCardFee") || "카드비"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
-              </div>
-            )}
-            {pricing.otherFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-600">
-                <span>{t("posOtherFee") || "기타"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm font-bold text-slate-800 border-t border-slate-200 pt-2">
-              <span>{t("posTotal") || "합계"}</span>
-              <span className="tabular-nums">{formatBahtNum(total)} ฿</span>
             </div>
           </div>
           <Button

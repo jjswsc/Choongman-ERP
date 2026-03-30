@@ -16,6 +16,17 @@ export type PrintHtmlInHiddenIframeOptions = {
   onAfterCleanup?: () => void
   /** print 다이얼로그/프린터 파이프라인 시작 감지 대기(ms). 초과 시 onPrintUnavailable 호출 */
   printStartTimeoutMs?: number
+  /**
+   * print() 직전 숨김 iframe contentWindow 에 focus() 할지.
+   * 자동 인쇄에서는 false 로 두면 POS 화면 포커스가 덜 빼앗겨, 인쇄 창이 닫힌 뒤 전환이 덜 튀는 경우가 많음.
+   * (일부 환경에서만 print() 에 focus 가 필요할 수 있어 기본은 true)
+   */
+  focusIframeBeforePrint?: boolean
+  /**
+   * 정리 후 인쇄 전에 활성화되어 있던 document.activeElement 로 포커스 복원.
+   * 인쇄 대화상자 종료 뒤 키보드/포커스가 어색할 때 완화.
+   */
+  restoreDocumentFocus?: boolean
 }
 
 export function printHtmlInHiddenIframe(
@@ -25,6 +36,12 @@ export function printHtmlInHiddenIframe(
   const printDelayMs = opts?.printDelayMs ?? 450
   const fallbackCleanupMs = opts?.fallbackCleanupMs ?? 30000
   const printStartTimeoutMs = opts?.printStartTimeoutMs ?? 1800
+  const focusIframeBeforePrint = opts?.focusIframeBeforePrint !== false
+  const restoreDocumentFocus = opts?.restoreDocumentFocus !== false
+  const previousActive =
+    restoreDocumentFocus && typeof document !== 'undefined'
+      ? (document.activeElement as HTMLElement | null)
+      : null
 
   const iframe = document.createElement('iframe')
   iframe.setAttribute('title', opts?.title || 'Print')
@@ -48,6 +65,19 @@ export function printHtmlInHiddenIframe(
 
   let cleaned = false
   let printStarted = false
+  const restoreFocusIfNeeded = () => {
+    if (!restoreDocumentFocus || !previousActive) return
+    const run = () => {
+      try {
+        if (typeof previousActive.focus === 'function') {
+          previousActive.focus({ preventScroll: true })
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    requestAnimationFrame(() => requestAnimationFrame(run))
+  }
   const removeIframe = () => {
     if (cleaned) return
     cleaned = true
@@ -56,6 +86,7 @@ export function printHtmlInHiddenIframe(
     } catch {
       /* ignore */
     }
+    restoreFocusIfNeeded()
     opts?.onAfterCleanup?.()
   }
 
@@ -76,7 +107,9 @@ export function printHtmlInHiddenIframe(
 
   setTimeout(() => {
     try {
-      cw.focus()
+      if (focusIframeBeforePrint) {
+        cw.focus()
+      }
       cw.print()
     } catch {
       clearTimeout(startGuardTimer)

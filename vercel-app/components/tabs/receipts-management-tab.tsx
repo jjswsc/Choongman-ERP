@@ -19,7 +19,7 @@ import { getPosOrders, getPosMenus, getPosPrinterSettings, type PosOrder, type P
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { useOnlineStatus } from '@/lib/offline'
+import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
 import { isOfficeRole } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
@@ -136,6 +136,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
     }
     prevOnlineRef.current = online
   }, [online, offlineAware, loadOrders])
+
+  React.useEffect(() => {
+    if (!offlineAware) return
+    return onSyncComplete(() => {
+      loadOrders()
+    })
+  }, [offlineAware, loadOrders])
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const isToday = startStr === todayStr && endStr === todayStr && statusFilter === 'all'

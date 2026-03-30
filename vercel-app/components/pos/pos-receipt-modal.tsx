@@ -14,8 +14,10 @@ import {
   resolveKitchenSlipDesign,
 } from '@/lib/pos-kitchen-slip-html'
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from '@/lib/pos-delivery-platform'
+import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
+import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
 
 export type ReceiptModalData = {
   orderNo: string
@@ -44,15 +46,16 @@ export type ReceiptModalData = {
   suppressReceiptModalAutoPrint?: boolean
 }
 
-const POS_PAPER_WIDTH_MM = 80
 const POS_PAPER_SIDE_PADDING_MM = 1
-const POS_PAPER_HEIGHT_MM = 200
 function getPosPaperBaseCss(fontFamily: string, fontSizePx: number) {
   return `
-    @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
+    ${posThermalReceiptPageSizeRule()}
     html, body { margin: 0; padding: 0; }
+    html { height: auto; }
     body {
-      width: ${POS_PAPER_WIDTH_MM}mm;
+      width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
+      min-height: auto;
+      height: auto;
       box-sizing: border-box;
       font-family: ${fontFamily};
       font-size: ${fontSizePx}px;
@@ -153,6 +156,7 @@ export function PosReceiptModal({
         title,
         printDelayMs: 220,
         fallbackCleanupMs: 30_000,
+        focusIframeBeforePrint: false,
         onPrintUnavailable: () => reject(new Error(t('posPrintBlocked') || '인쇄를 시작할 수 없습니다.')),
         onAfterCleanup: () => resolve(),
       })
@@ -263,8 +267,8 @@ export function PosReceiptModal({
         ${receiptData.items
           .map((it) => {
             const lineNote = String(it.note ?? '').trim()
-            const itemCode = String(it.id ?? '').split('-')[0].trim()
-            const itemBarcodeUrl = itemBarcode ? buildCode128BarcodeUrl(itemCode) : ''
+            const itemCode = posReceiptItemSkuForBarcode(it.id)
+            const itemBarcodeUrl = itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
@@ -326,7 +330,7 @@ export function PosReceiptModal({
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; -webkit-print-color-adjust: economy; print-color-adjust: economy; }
-            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; color: #000; }
+            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; color: #000; break-inside: avoid; page-break-inside: avoid; }
             .receipt-brand-wrap { text-align: center; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
             .receipt-brand-logo.sm { width: 84px; }

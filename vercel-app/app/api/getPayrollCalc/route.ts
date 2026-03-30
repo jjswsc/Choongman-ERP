@@ -2,24 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   supabaseSelect,
   supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import { clockOutCountsForPayroll, getSSOLimitsByYear } from '@/lib/payroll-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
+import { isOfficeStore } from '@/lib/permissions'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
 // 매장 직원: 한 달에 10분 이상 지각 3번 이상 → 반차(0.5일) 급여 삭감
 const LATE_HALF_DAY_MIN = 10
 const LATE_HALF_DAY_COUNT = 3
-
-const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
-
-function isOfficeStore(st: string) {
-  const x = String(st || '').trim()
-  return x === '본사' || x === 'Office' || x === '오피스' || x.toLowerCase() === 'office'
-}
 
 function toDateStr(val: unknown): string {
   if (!val) return ''
@@ -244,10 +239,15 @@ export async function GET(request: NextRequest) {
         birth?: string
         join_date?: string
       }[] | null>,
-      supabaseSelectFilter(
+      supabaseSelectFilterAllPages(
         'attendance_logs',
         `log_at=gte.${normMonth}-01&log_at=lt.${nextMonthNextDay}`,
-        { order: 'log_at.asc', limit: 3000, select: ATTENDANCE_LOG_PAYROLL_COLS }
+        {
+          order: 'log_at.asc',
+          select: ATTENDANCE_LOG_PAYROLL_COLS,
+          pageSize: 2500,
+          maxRows: 120000,
+        }
       ) as Promise<{
         log_at?: string
         store_name?: string
@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
         break_min?: number
         status?: string
         approved?: string
-      }[] | null>,
+      }[]>,
       supabaseSelectFilter('public_holidays', `year=eq.${parseInt(normMonth.slice(0, 4), 10)}`, { order: 'date.asc' }) as Promise<{ date?: string }[] | null>,
       supabaseSelectFilter(
         'leave_requests',
@@ -380,8 +380,8 @@ export async function GET(request: NextRequest) {
         earlyDed = salAmt > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * salAmt) : 0
         otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
       } else {
-        // 월급제: 근무일이 없으면 기본급 0 (출퇴근 데이터 없음 = 근무 없음)
-        salary = workDays > 0 ? salAmt : 0
+        // 월급제: 인사에 등록된 월급을 항상 기본급으로 표시(일부만 출퇴근 미집계·이름 불일치로 workDays=0 되는 경우 방지)
+        salary = salAmt
         lateDed = LATE_DED_HOURS_BASE > 0 && salary ? Math.floor((lateMin / 60) * (salary / LATE_DED_HOURS_BASE)) : 0
         earlyDed = LATE_DED_HOURS_BASE > 0 && salary && earlyMin > 0 ? Math.floor((earlyMin / 60) * (salary / LATE_DED_HOURS_BASE)) : 0
         const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
@@ -417,7 +417,9 @@ export async function GET(request: NextRequest) {
       const unpaidLeaveDays = unpaidLeaveDaysMap[attKey] || 0
       const paidLeaveDays = paidLeaveDaysMap[attKey] || 0
       const expectedWorkDays = isOfficeStore(store) ? expectedWorkDaysOffice : expectedWorkDaysStore
-      const absenceDays = Math.max(0, expectedWorkDays - workDays - paidLeaveDays)
+      const rawAbsenceDays = Math.max(0, expectedWorkDays - workDays - paidLeaveDays)
+      // 출퇴근 0건이면 집계 미연동·키 불일치와 무근무를 구분할 수 없어 자동 '결석' 공제는 하지 않음(무급휴가는 leave만)
+      const absenceDays = workDays === 0 ? 0 : rawAbsenceDays
       const unpaidAbsenceDays = unpaidLeaveDays + absenceDays
       // 태국 관행: 일급 = 월급 ÷ 당월 근무일수, 공제 = 일급 × 결석/무급휴가일수
       const dailyRate = expectedWorkDays > 0 ? salary / expectedWorkDays : 0

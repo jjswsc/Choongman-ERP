@@ -33,12 +33,10 @@ export function MarketingHubCampaignContextStrip({
         className
       )}
     >
-      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="text-xs font-semibold text-foreground/80 sm:text-sm">{t("marketingCampaignFinderLabel")}</p>
-        {aside != null ? <div className="flex shrink-0 items-center gap-2">{aside}</div> : null}
-      </div>
       <MarketingCampaignFinderPanel
         toolbarLayout="compact"
+        compactToolbarTitle={t("marketingCampaignFinderLabel")}
+        compactToolbarEnd={aside != null ? <div className="flex shrink-0 flex-wrap items-center gap-2">{aside}</div> : undefined}
         className="border-0 bg-transparent shadow-none rounded-none"
         {...panelProps}
       />

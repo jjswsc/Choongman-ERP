@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-03-29T13:51:33.594Z",
-  "entryCount": 598,
+  "generatedAt": "2026-03-30T06:34:49.807Z",
+  "entryCount": 605,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -179,9 +179,16 @@
     },
     {
       "path": "app/api/calculatePayroll/route.ts",
-      "line": 74,
-      "kind": "limit",
-      "value": 3000,
+      "line": 77,
+      "kind": "pageSize",
+      "value": 2500,
+      "apiLabel": "calculatePayroll"
+    },
+    {
+      "path": "app/api/calculatePayroll/route.ts",
+      "line": 78,
+      "kind": "maxRows",
+      "value": 120000,
       "apiLabel": "calculatePayroll"
     },
     {
@@ -424,28 +431,28 @@
     },
     {
       "path": "app/api/exportMarketingMaterialGifts/route.ts",
-      "line": 22,
+      "line": 24,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "exportMarketingMaterialGifts"
     },
     {
       "path": "app/api/exportMarketingMaterialGifts/route.ts",
-      "line": 26,
+      "line": 28,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "exportMarketingMaterialGifts"
     },
     {
       "path": "app/api/exportMarketingMaterialGifts/route.ts",
-      "line": 42,
+      "line": 44,
       "kind": "limit",
       "value": 500,
       "apiLabel": "exportMarketingMaterialGifts"
     },
     {
       "path": "app/api/exportMarketingMaterialGifts/route.ts",
-      "line": 67,
+      "line": 70,
       "kind": "limit",
       "value": 500,
       "apiLabel": "exportMarketingMaterialGifts"
@@ -564,14 +571,14 @@
     },
     {
       "path": "app/api/getAdminEmployeeList/route.ts",
-      "line": 29,
+      "line": 31,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAdminEmployeeList"
     },
     {
       "path": "app/api/getAdminEmployeeList/route.ts",
-      "line": 33,
+      "line": 38,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAdminEmployeeList"
@@ -837,7 +844,7 @@
     },
     {
       "path": "app/api/getBankTransactions/route.ts",
-      "line": 125,
+      "line": 116,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "getBankTransactions"
@@ -1313,14 +1320,14 @@
     },
     {
       "path": "app/api/getLeaveStats/route.ts",
-      "line": 62,
+      "line": 66,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getLeaveStats"
     },
     {
       "path": "app/api/getLeaveStats/route.ts",
-      "line": 65,
+      "line": 69,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getLeaveStats"
@@ -1376,14 +1383,14 @@
     },
     {
       "path": "app/api/getMyLeaveInfo/route.ts",
-      "line": 33,
+      "line": 51,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getMyLeaveInfo"
     },
     {
       "path": "app/api/getMyLeaveInfo/route.ts",
-      "line": 41,
+      "line": 59,
       "kind": "limit",
       "value": 100,
       "apiLabel": "getMyLeaveInfo"
@@ -1600,9 +1607,16 @@
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 250,
-      "kind": "limit",
-      "value": 3000,
+      "line": 248,
+      "kind": "pageSize",
+      "value": 2500,
+      "apiLabel": "getPayrollCalc"
+    },
+    {
+      "path": "app/api/getPayrollCalc/route.ts",
+      "line": 249,
+      "kind": "maxRows",
+      "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
@@ -1614,30 +1628,30 @@
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
+      "line": 43,
+      "kind": "pageSize",
+      "value": 2500,
+      "apiLabel": "getPayrollPreview"
+    },
+    {
+      "path": "app/api/getPayrollPreview/route.ts",
       "line": 44,
-      "kind": "limit",
-      "value": 3000,
+      "kind": "maxRows",
+      "value": 120000,
       "apiLabel": "getPayrollPreview"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 50,
-      "kind": "limit",
-      "value": 3000,
-      "apiLabel": "getPayrollPreview"
-    },
-    {
-      "path": "app/api/getPayrollPreview/route.ts",
-      "line": 159,
-      "kind": "limit",
-      "value": 2000,
+      "line": 164,
+      "kind": "pageSize",
+      "value": 2500,
       "apiLabel": "getPayrollPreview"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
       "line": 165,
-      "kind": "limit",
-      "value": 3000,
+      "kind": "maxRows",
+      "value": 120000,
       "apiLabel": "getPayrollPreview"
     },
     {
@@ -1709,6 +1723,13 @@
       "kind": "limit",
       "value": 500,
       "apiLabel": "getPoBillingSettings"
+    },
+    {
+      "path": "app/api/getPosCollabCampaigns/route.ts",
+      "line": 41,
+      "kind": "limit",
+      "value": 300,
+      "apiLabel": "getPosCollabCampaigns"
     },
     {
       "path": "app/api/getPosCoupons/route.ts",
@@ -2398,7 +2419,7 @@
     },
     {
       "path": "app/api/importEmployeesFromCsv/route.ts",
-      "line": 217,
+      "line": 218,
       "kind": "limit",
       "value": 1,
       "apiLabel": "importEmployeesFromCsv"
@@ -2458,6 +2479,13 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingCampaignCollabDetail"
+    },
+    {
+      "path": "app/api/marketingCampaignCollabManagementToggle/route.ts",
+      "line": 19,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "marketingCampaignCollabManagementToggle"
     },
     {
       "path": "app/api/marketingCampaignCosts/route.ts",
@@ -2531,28 +2559,28 @@
     },
     {
       "path": "app/api/marketingCampaigns/route.ts",
-      "line": 52,
+      "line": 60,
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingCampaigns"
     },
     {
       "path": "app/api/marketingCampaigns/route.ts",
-      "line": 95,
+      "line": 104,
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingCampaigns"
     },
     {
       "path": "app/api/marketingCampaigns/route.ts",
-      "line": 142,
+      "line": 151,
       "kind": "limit",
-      "value": 500,
+      "value": 10000,
       "apiLabel": "marketingCampaigns"
     },
     {
       "path": "app/api/marketingCampaigns/route.ts",
-      "line": 272,
+      "line": 282,
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingCampaigns"
@@ -2570,6 +2598,27 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingInfluencers"
+    },
+    {
+      "path": "app/api/marketingMaterialDeployments/route.ts",
+      "line": 47,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "marketingMaterialDeployments"
+    },
+    {
+      "path": "app/api/marketingMaterialDeployments/route.ts",
+      "line": 51,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "marketingMaterialDeployments"
+    },
+    {
+      "path": "app/api/marketingMaterialDeployments/route.ts",
+      "line": 132,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "marketingMaterialDeployments"
     },
     {
       "path": "app/api/marketingMaterialGifts/route.ts",
@@ -2594,7 +2643,7 @@
     },
     {
       "path": "app/api/marketingMaterialGifts/route.ts",
-      "line": 122,
+      "line": 121,
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingMaterialGifts"
@@ -2986,7 +3035,7 @@
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 84,
+      "line": 85,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"

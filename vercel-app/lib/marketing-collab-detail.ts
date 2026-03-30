@@ -18,7 +18,13 @@ export type MarketingCollabDetail = {
   scopeAlcohol: boolean
   scopeTopping: boolean
   scopeNote: string
-  /** 매장·제휴에서 확정한 할인율 등 (자유 입력) */
+  /**
+   * POS에서 협업 버튼으로 적용할 할인 — 비우면(미설정) POS 목록에 안 나옴.
+   * `discountPercentStore`는 구버전 자유 입력 호환용으로 normalize 시 일부 이관됩니다.
+   */
+  posDiscountType: '' | 'percent' | 'amount'
+  posDiscountValue: number
+  /** @deprecated 구 자유 입력 — posDiscountType/Value 사용 권장 */
   discountPercentStore: string
   /** 타 할인·쿠폰과 중복 규칙 */
   discountStackingNote: string
@@ -46,6 +52,8 @@ export function emptyMarketingCollabDetail(): MarketingCollabDetail {
     scopeAlcohol: false,
     scopeTopping: false,
     scopeNote: '',
+    posDiscountType: '',
+    posDiscountValue: 0,
     discountPercentStore: '',
     discountStackingNote: '',
     rulesNote: '',
@@ -64,7 +72,14 @@ function asStr(v: unknown): string {
   return v == null ? '' : String(v).trim()
 }
 
+function asNum(v: unknown): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  const n = parseFloat(String(v ?? '').replace(/,/g, '').trim())
+  return Number.isFinite(n) ? n : 0
+}
+
 const PARTNER_TYPES = new Set(['enterprise', 'school', 'public', 'other'])
+const POS_DISCOUNT_TYPES = new Set(['percent', 'amount'])
 
 export function normalizeMarketingCollabDetail(raw: unknown): MarketingCollabDetail {
   const e = emptyMarketingCollabDetail()
@@ -91,7 +106,17 @@ export function normalizeMarketingCollabDetail(raw: unknown): MarketingCollabDet
   e.scopeAlcohol = asBool(scope?.alcohol ?? o.scopeAlcohol)
   e.scopeTopping = asBool(scope?.topping ?? o.scopeTopping)
   e.scopeNote = asStr(o.scopeNote)
+  const pdt = asStr(o.posDiscountType)
+  e.posDiscountType = POS_DISCOUNT_TYPES.has(pdt) ? (pdt as MarketingCollabDetail['posDiscountType']) : ''
+  e.posDiscountValue = Math.max(0, asNum(o.posDiscountValue))
   e.discountPercentStore = asStr(o.discountPercentStore)
+  if (!e.posDiscountType && e.posDiscountValue <= 0 && e.discountPercentStore) {
+    const m = e.discountPercentStore.match(/(\d+(?:\.\d+)?)/)
+    if (m) {
+      e.posDiscountType = 'percent'
+      e.posDiscountValue = Math.min(100, Math.max(0, parseFloat(m[1]) || 0))
+    }
+  }
   e.discountStackingNote = asStr(o.discountStackingNote)
   e.rulesNote = asStr(o.rulesNote)
   e.opsFlowNote = asStr(o.opsFlowNote)
@@ -127,6 +152,8 @@ export function collabDetailToJson(d: MarketingCollabDetail): Record<string, unk
       topping: d.scopeTopping,
     },
     scopeNote: d.scopeNote,
+    posDiscountType: d.posDiscountType,
+    posDiscountValue: d.posDiscountValue,
     discountPercentStore: d.discountPercentStore,
     discountStackingNote: d.discountStackingNote,
     rulesNote: d.rulesNote,

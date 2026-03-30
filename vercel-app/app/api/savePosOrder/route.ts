@@ -101,6 +101,17 @@ export async function POST(req: NextRequest) {
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
 
+    const paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const closeStatusRaw = String(body.closeStatus ?? body.close_status ?? '').trim().toLowerCase()
+    const closeStatus =
+      closeStatusRaw === 'paid' || closeStatusRaw === 'completed' ? closeStatusRaw : null
+    let orderStatus = 'pending'
+    if (total > 0 && paymentSumForStatus >= total - 0.02) {
+      if (closeStatus === 'paid' || closeStatus === 'completed') {
+        orderStatus = closeStatus
+      }
+    }
+
     const guest_count =
       orderType === 'dine_in' ? Math.max(0, Math.min(99, guestCountReq)) : 0
 
@@ -141,7 +152,7 @@ export async function POST(req: NextRequest) {
       subtotal,
       vat,
       total,
-      status: 'pending',
+      status: orderStatus,
       payment_cash: paymentCash,
       payment_card: paymentCard,
       payment_qr: paymentQr,
@@ -168,7 +179,7 @@ export async function POST(req: NextRequest) {
       writeIdempotencyHit(idempotencyKey, Number(created.id), orderNo)
     }
 
-    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const paymentSum = paymentSumForStatus
     let pointEarned = pointEarnedReq
     if (memberId > 0 && paymentSum > 0 && created?.id) {
       const loyalty = await applyLoyaltyOnOrder({

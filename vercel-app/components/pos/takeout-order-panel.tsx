@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
 import { markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
+import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
@@ -56,6 +57,15 @@ export function TakeoutOrderPanel({
     if (!order) return
     const id = Number(order.id)
     if (Number.isNaN(id)) return
+    if (!posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(
+        msg && msg !== 'posServedNeedsOrderId'
+          ? msg
+          : '이 주문은 아직 서버에 전송되지 않았습니다. 전송이 끝난 뒤 포장 완료를 눌러 주세요.'
+      )
+      return
+    }
     const nextPackaged = !itemPackaged[itemId]
     setSavingItemId(itemId)
     try {

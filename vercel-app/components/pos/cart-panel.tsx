@@ -4,11 +4,11 @@ import {
   Fragment,
   useState,
   useEffect,
+  useMemo,
   useLayoutEffect,
   useRef,
   forwardRef,
   useImperativeHandle,
-  useMemo,
   type Dispatch,
   type SetStateAction,
   type ReactNode,
@@ -62,6 +62,7 @@ import {
   Package,
   CircleDollarSign,
   Sparkles,
+  Handshake,
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
@@ -70,13 +71,17 @@ import { useT } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth-context'
 import {
   getMembers,
+  getPosCollabCampaigns,
   getPosPaymentMethodItems,
   getPosTaxInvoiceRecipients,
   upsertPosTaxInvoiceRecipient,
   validatePosCoupon,
+  type PosMenu,
   type PosPaymentMethodItem,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
+import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
+import { collabDiscountAmountForCart } from '@/lib/pos-collab-discount'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
 import { computePosPricing, type PosPricingAdjustments, type PosPricingResult } from '@/lib/pos-pricing'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -335,6 +340,8 @@ interface CartPanelProps {
   /** 터미널: 줄 단위 장바구니만 부모 단일 상태와 동기화 (좁은/넓은 패널 공유) */
   cartItems?: OrderItem[]
   setCartItems?: Dispatch<SetStateAction<OrderItem[]>>
+  /** 협업 할인: 장바구니 줄·메뉴 대분류 매칭용 */
+  posMenus?: PosMenu[]
 }
 
 type CartItem = OrderItem
@@ -415,54 +422,53 @@ function PosPaymentModalAmountCard({
     },
   ]
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-muted/45 via-muted/25 to-background/95 p-4 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]">
+    <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-muted/45 via-muted/25 to-background/95 p-3 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.06]">
       <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-      <div className="mb-3 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary shadow-inner">
-          <Receipt className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.25} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-tight text-foreground">
-            {t('posSubtotal') || 'Subtotal'}
-          </p>
-        </div>
-      </div>
-      <div className="space-y-0">
-        <div className="flex items-center justify-between gap-3 py-2 text-sm">
-          <span className="text-muted-foreground">{t('posSubtotal')}</span>
-          <span className="tabular-nums font-medium text-foreground">{formatBahtNum(subtotal)} ฿</span>
-        </div>
-        {discount > 0 && (
-          <div className="flex items-center justify-between gap-3 py-2 text-sm">
-            <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
-              <Sparkles className="h-3.5 w-3.5 shrink-0 opacity-80" />
-              {t('posDiscount')}
-            </span>
-            <span className="tabular-nums font-medium text-emerald-700 dark:text-emerald-400">−{formatBahtNum(discount)} ฿</span>
+      <div className="flex gap-2.5">
+        <div className="flex w-9 shrink-0 flex-col items-center pt-0.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/12 text-primary shadow-inner">
+            <Receipt className="h-[1.05rem] w-[1.05rem]" strokeWidth={2.25} />
           </div>
-        )}
-        {feeRows.some((r) => r.show) && (
-          <>
-            <Separator className="my-1 bg-border/60" />
-            <div className="space-y-0.5 py-1">
-              {feeRows
-                .filter((r) => r.show)
-                .map((row, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-[13px]">
-                    {row.label}
-                    <span className="shrink-0 tabular-nums text-foreground/90">{row.value}</span>
-                  </div>
-                ))}
+        </div>
+        <div className="min-w-0 flex-1 space-y-0">
+          <div className="flex items-baseline justify-between gap-2 border-b border-border/50 pb-1 text-sm leading-tight">
+            <span className="text-muted-foreground">{t('posSubtotal')}</span>
+            <span className="shrink-0 tabular-nums font-semibold text-foreground">{formatBahtNum(subtotal)} ฿</span>
+          </div>
+          {discount > 0 && (
+            <div className="flex items-baseline justify-between gap-2 py-1 text-[13px] leading-tight">
+              <span className="flex min-w-0 items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                <Sparkles className="h-3 w-3 shrink-0 opacity-80" />
+                {t('posDiscount')}
+              </span>
+              <span className="shrink-0 tabular-nums font-medium text-emerald-700 dark:text-emerald-400">
+                −{formatBahtNum(discount)} ฿
+              </span>
             </div>
-          </>
-        )}
-        <Separator className="my-2 bg-border/70" />
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-primary/8 px-3 py-3 dark:bg-primary/15">
-          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <CircleDollarSign className="h-4 w-4 text-primary" />
-            {totalLineLabel}
-          </span>
-          <span className="text-lg font-bold tabular-nums tracking-tight text-primary">{formatBahtNum(total)} ฿</span>
+          )}
+          {feeRows.some((r) => r.show) && (
+            <>
+              <Separator className="my-1 bg-border/60" />
+              <div className="space-y-0">
+                {feeRows
+                  .filter((r) => r.show)
+                  .map((row, i) => (
+                    <div key={i} className="flex items-baseline justify-between gap-2 py-1 text-[12px] leading-tight">
+                      <div className="min-w-0">{row.label}</div>
+                      <span className="shrink-0 tabular-nums text-foreground/90">{row.value}</span>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+          <Separator className="my-1.5 bg-border/70" />
+          <div className="flex items-baseline justify-between gap-2 rounded-lg bg-primary/8 px-2 py-2 dark:bg-primary/15">
+            <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight text-foreground">
+              <CircleDollarSign className="h-3.5 w-3.5 shrink-0 text-primary" />
+              {totalLineLabel}
+            </span>
+            <span className="shrink-0 text-base font-bold tabular-nums tracking-tight text-primary">{formatBahtNum(total)} ฿</span>
+          </div>
         </div>
       </div>
     </div>
@@ -494,6 +500,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   debugOwner = 'unknown',
   cartItems: cartItemsProp,
   setCartItems: setCartItemsProp,
+  posMenus,
 }, ref) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -566,6 +573,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
   const [discountValue, setDiscountValue] = useState(0)
   const [discountReason, setDiscountReason] = useState('')
+  const [collabOptions, setCollabOptions] = useState<
+    { id: string; topic: string; campaignNo?: string; collabDetail: MarketingCollabDetail }[]
+  >([])
+  const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [activePaymentTab, setActivePaymentTab] = useState<PaymentMethodTab>('cash')
   const [payCash, setPayCash] = useState('')
@@ -640,6 +651,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [currentStoreId])
 
   useEffect(() => {
+    if (!showPaymentModal || !currentStoreId?.trim()) return
+    let cancelled = false
+    getPosCollabCampaigns({ storeCode: currentStoreId })
+      .then((rows) => {
+        if (cancelled) return
+        setCollabOptions(rows)
+        setAppliedCollabId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : null))
+      })
+      .catch(() => {
+        if (!cancelled) setCollabOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showPaymentModal, currentStoreId])
+
+  useEffect(() => {
     setPayAdminLineAmounts((prev) => {
       const next: Record<string, string> = {}
       for (const i of adminPaymentLines) next[i.id] = prev[i.id] ?? '0'
@@ -702,9 +730,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [showPaymentModal, orderType, pendingOrderId])
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const discount = discountType === 'percent'
-    ? Math.floor((subtotal * discountValue) / 100)
-    : discountValue
+  const menuByIdForCollab = useMemo(() => {
+    if (!posMenus?.length) return new Map<string, PosMenu>()
+    return new Map(posMenus.map((m) => [String(m.id), m]))
+  }, [posMenus])
+  const appliedCollab = useMemo(
+    () => collabOptions.find((c) => c.id === appliedCollabId) ?? null,
+    [collabOptions, appliedCollabId]
+  )
+  const collabDiscountAmt = useMemo(() => {
+    if (!appliedCollab || menuByIdForCollab.size === 0) return 0
+    return collabDiscountAmountForCart(cartItems, menuByIdForCollab, appliedCollab.collabDetail)
+  }, [appliedCollab, cartItems, menuByIdForCollab])
+  const baseDiscount =
+    discountType === 'percent' ? Math.floor((subtotal * discountValue) / 100) : discountValue
+  const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
+  const paymentDiscountReason = useMemo(() => {
+    const base = discountReason.trim()
+    const collabPart = appliedCollab ? `${t('posCollabDiscount')}: ${appliedCollab.topic}` : ''
+    if (base && collabPart) return `${base} · ${collabPart}`
+    return base || collabPart
+  }, [appliedCollab, discountReason, t])
   const pointUsedNum = Math.max(0, Math.trunc(Number(pointUsed || 0)))
   const pricing = computePosPricing({
     subtotal,
@@ -1013,8 +1059,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay') => {
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
-    const amount = Math.max(0, st - dc - pointUsedNum)
+    const amount = Math.max(0, st - discount - pointUsedNum)
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
     const walletToAdmin =
@@ -1113,8 +1158,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const applyFullAmountToSingleAdminLine = (lineId: string) => {
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
-    const amount = Math.max(0, st - dc - pointUsedNum)
+    const amount = Math.max(0, st - discount - pointUsedNum)
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
     setPayAdminLineAmounts(Object.fromEntries(lines.map((li) => [li.id, li.id === lineId ? String(amount) : '0'])))
@@ -1199,10 +1243,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (splitPaidSteps > 0) return
     if (!paymentSumMatch && paymentSum > 0.005) return
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
     const newTotal = computePosPricing({
       subtotal: st,
-      discountAmt: dc + pointUsedNum,
+      discountAmt: discount + pointUsedNum,
       adjustments: pricingAdjustments,
     }).finalTotal
     resetPaymentInputs()
@@ -1210,6 +1253,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [
     showPaymentModal,
     total,
+    discount,
     discountValue,
     discountType,
     pointUsedNum,
@@ -1267,7 +1311,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       items: cartItems.map(mapCartItemToOrderPayload),
       memo: buildOrderMemo(customerMemo),
       discountAmt: discount,
-      discountReason: discountReason,
+      discountReason: paymentDiscountReason,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
       memberNo: selectedMemberNo || undefined,
       couponCode: couponAppliedCode || undefined,
@@ -1349,7 +1393,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           tableName: dineInTableName,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
-          discountReason: discountReason,
+          discountReason: paymentDiscountReason,
           payment: {
             paymentCash: parseFloat(payCash) || 0,
             paymentCard: parseFloat(payCard) || 0,
@@ -1374,7 +1418,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
-          discountReason: discountReason,
+          discountReason: paymentDiscountReason,
           payment: {
             paymentCash: parseFloat(payCash) || 0,
             paymentCard: parseFloat(payCard) || 0,
@@ -1397,7 +1441,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
-          discountReason: discountReason,
+          discountReason: paymentDiscountReason,
           payment: {
             paymentCash: parseFloat(payCash) || 0,
             paymentCard: parseFloat(payCard) || 0,
@@ -1522,6 +1566,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setCouponMessage('')
     setDiscountValue(0)
     setDiscountReason('')
+    setAppliedCollabId(null)
     setPaymentTableNameOverride(null)
   }
 
@@ -2126,45 +2171,56 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           )}
         </div>
 
-        {/* Totals - 여백 유지 */}
-        <div className="space-y-1.5 pt-3 border-t px-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">{t('posSubtotal')}</span>
-            <span>{formatBahtNum(subtotal)} ฿</span>
-          </div>
-          {discount > 0 && (
-            <div className="flex justify-between text-sm text-destructive">
-              <span>{t('posDiscount')}</span>
-              <span>-{formatBahtNum(discount)} ฿</span>
+        {/* Totals — 컴팩트, 라벨 열 정렬 */}
+        <div className="flex gap-2 border-t px-3 pt-2">
+          <div className="w-0.5 shrink-0 rounded-full bg-border self-stretch min-h-[2rem]" aria-hidden />
+          <div className="min-w-0 flex-1 space-y-0 text-xs leading-tight">
+            <div className="flex justify-between gap-2 py-0.5 text-sm">
+              <span className="min-w-0 pl-0.5 text-muted-foreground">{t('posSubtotal')}</span>
+              <span className="shrink-0 tabular-nums">{formatBahtNum(subtotal)} ฿</span>
             </div>
-          )}
-          {pricing.vatFeeAmt > 0 && (
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-              <span>{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
+            {discount > 0 && (
+              <div className="flex justify-between gap-2 py-0.5 text-destructive">
+                <span className="min-w-0 pl-0.5">{t('posDiscount')}</span>
+                <span className="shrink-0 tabular-nums">-{formatBahtNum(discount)} ฿</span>
+              </div>
+            )}
+            {pricing.vatFeeAmt > 0 && (
+              <div className="flex justify-between gap-2 py-0.5 text-muted-foreground">
+                <span className="min-w-0 pl-0.5">
+                  {t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+                </span>
+                <span className="shrink-0 tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
+              </div>
+            )}
+            {pricing.serviceFeeAmt > 0 && (
+              <div className="flex justify-between gap-2 py-0.5 text-muted-foreground">
+                <span className="min-w-0 pl-0.5">
+                  {t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+                </span>
+                <span className="shrink-0 tabular-nums">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
+              </div>
+            )}
+            {pricing.cardFeeAmt > 0 && (
+              <div className="flex justify-between gap-2 py-0.5 text-muted-foreground">
+                <span className="min-w-0 pl-0.5">
+                  {t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+                </span>
+                <span className="shrink-0 tabular-nums">{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
+              </div>
+            )}
+            {pricing.otherFeeAmt > 0 && (
+              <div className="flex justify-between gap-2 py-0.5 text-muted-foreground">
+                <span className="min-w-0 pl-0.5">
+                  {t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
+                </span>
+                <span className="shrink-0 tabular-nums">{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
+              </div>
+            )}
+            <div className="flex justify-between gap-2 border-t border-border/60 pt-1 mt-0.5 text-sm font-bold">
+              <span className="min-w-0 pl-0.5">{t('posInputTotal')}</span>
+              <span className="shrink-0 tabular-nums">{formatBahtNum(total)} ฿</span>
             </div>
-          )}
-          {pricing.serviceFeeAmt > 0 && (
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-              <span>{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
-            </div>
-          )}
-          {pricing.cardFeeAmt > 0 && (
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-              <span>{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
-            </div>
-          )}
-          {pricing.otherFeeAmt > 0 && (
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
-              <span>{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
-            </div>
-          )}
-          <div className="flex justify-between text-base font-bold">
-            <span>{t('posInputTotal')}</span>
-            <span>{formatBahtNum(total)} ฿</span>
           </div>
         </div>
 
@@ -2180,7 +2236,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   tableName: selectedTable.name,
                   memo: buildOrderMemo(customerMemo),
                   discountAmt: discount,
-                  discountReason: discountReason,
+                  discountReason: paymentDiscountReason,
                   memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
                   memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
                   couponCode: couponAppliedCode || undefined,
@@ -2291,28 +2347,59 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               t={t}
             />
 
-            {/* 쿠폰 · 할인 */}
-            <div className="space-y-4 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm dark:from-amber-950/25 dark:via-card dark:to-card">
-              <div className="flex items-center gap-2 border-b border-border/60 pb-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
-                  <Tag className="h-4 w-4" />
+            <div className="space-y-3">
+              {/* 협업 할인 — 항상 표시, 없음 선택 가능 */}
+              <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-50/80 via-card to-card p-4 shadow-sm dark:from-violet-950/25 dark:via-card dark:to-card">
+                <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-800 dark:text-violet-200">
+                    <Handshake className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{t('posPaymentSectionCollab')}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{t('posCollabSelectLabel')}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold leading-none">{tr('posDiscountCouponSection', '할인 · 쿠폰 · 포인트')}</p>
-                </div>
+                <Select
+                  value={appliedCollabId ?? '__none__'}
+                  onValueChange={(v) => setAppliedCollabId(v === '__none__' ? null : v)}
+                >
+                  <SelectTrigger className="h-10 w-full rounded-xl bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t('posCollabNoneOption')}</SelectItem>
+                    {collabOptions.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {(c.campaignNo ? `[${c.campaignNo}] ` : '') + c.topic}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!posMenus?.length ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">{t('posCollabMenusNotLoaded')}</p>
+                ) : null}
+                {appliedCollabId && collabDiscountAmt <= 0 && posMenus?.length ? (
+                  <p className="mt-2 text-[11px] text-amber-800 dark:text-amber-200">{t('posCollabNoMatchingLines')}</p>
+                ) : null}
               </div>
-              <div>
-                <Label className="mb-2 block text-xs font-medium text-muted-foreground">{t('posDiscount')}</Label>
-                <div className="grid gap-2">
-                  <div className="grid gap-2 lg:grid-cols-[1fr_auto] items-center">
-                    <div className="flex gap-2 flex-nowrap overflow-x-auto">
+
+              {/* 직접 할인 */}
+              <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm dark:from-amber-950/25 dark:via-card dark:to-card">
+                <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
+                </div>
+                <div className="grid gap-3">
+                  <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
                     {DISCOUNT_PRESETS.map((pct) => (
                       <Button
                         key={pct}
                         type="button"
                         size="default"
                         variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
-                        className="h-10 px-3 min-w-[3.75rem] text-sm font-semibold touch-manipulation"
+                        className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
                         onClick={() => {
                           setDiscountType('percent')
                           setDiscountValue(pct)
@@ -2321,23 +2408,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         {pct}%
                       </Button>
                     ))}
-                    </div>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Input
-                        placeholder={t('posCouponCodePh')}
-                        value={couponCode}
-                        onChange={e => setCouponCode(e.target.value)}
-                        className="h-10 w-28 sm:w-36 text-sm rounded-xl"
-                      />
-                      <Button variant="secondary" size="sm" className="h-10 px-3 shrink-0 rounded-xl" onClick={applyCouponCode}>
-                        {t('posCouponApply')}
-                      </Button>
-                    </div>
                   </div>
-                  {!!couponMessage && (
-                    <p className="text-xs text-muted-foreground">{couponMessage}</p>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-[auto_auto_7rem_1fr] gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_7rem_1fr]">
                     <Button
                       type="button"
                       size="default"
@@ -2366,29 +2438,72 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       type="number"
                       min={0}
                       step={discountType === 'percent' ? 1 : 0.01}
-                      placeholder={discountType === 'percent' ? (t('posDiscount') || '할인') + ' %' : (t('posDiscount') || '할인') + ' ฿'}
+                      placeholder={
+                        discountType === 'percent'
+                          ? (t('posDiscount') || '할인') + ' %'
+                          : (t('posDiscount') || '할인') + ' ฿'
+                      }
                       value={discountValue}
-                      onChange={e => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
+                      onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
                       className="h-11 text-sm rounded-xl px-2.5"
                     />
-                  <Input
-                    placeholder={t('posDiscountReasonPh')}
-                    value={discountReason}
-                    onChange={e => setDiscountReason(e.target.value)}
-                    className="h-12 text-base rounded-xl"
-                  />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label className="text-xs text-muted-foreground">포인트 사용</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={pointUsed}
-                      onChange={(e) => setPointUsed(String(Math.max(0, Math.trunc(Number(e.target.value || 0)))))}
-                      className="h-10 text-sm rounded-xl max-w-[10rem]"
+                      placeholder={t('posDiscountReasonPh')}
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
+                      className="h-12 text-base rounded-xl sm:col-span-1"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* 쿠폰 코드 — 제목 옆 입력 (직접 할인 아래) */}
+              <div className="rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-50/80 via-card to-card p-3 shadow-sm dark:from-sky-950/20 dark:via-card dark:to-card">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <div className="flex shrink-0 items-center gap-2 sm:min-w-[7.5rem]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-800 dark:text-sky-200">
+                      <Tag className="h-4 w-4" />
+                    </div>
+                    <p className="text-sm font-semibold leading-tight">{t('posPaymentSectionCoupon')}</p>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <Input
+                      placeholder={t('posCouponCodePh')}
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      className="h-10 min-w-0 flex-1 text-sm rounded-xl sm:max-w-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-10 shrink-0 rounded-xl px-4"
+                      onClick={applyCouponCode}
+                    >
+                      {t('posCouponApply')}
+                    </Button>
+                  </div>
+                </div>
+                {!!couponMessage && <p className="mt-2 text-xs text-muted-foreground">{couponMessage}</p>}
+              </div>
+
+              {/* 포인트 사용 — 제목 옆 입력 */}
+              <div className="rounded-2xl border border-teal-500/25 bg-gradient-to-br from-teal-50/70 via-card to-card p-3 shadow-sm dark:from-teal-950/20 dark:via-card dark:to-card">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                  <div className="flex shrink-0 items-center gap-2 sm:min-w-[7.5rem]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-800 dark:text-teal-200">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <p className="text-sm font-semibold leading-tight">{t('posPaymentSectionPoints')}</p>
+                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={pointUsed}
+                    onChange={(e) => setPointUsed(String(Math.max(0, Math.trunc(Number(e.target.value || 0)))))}
+                    className="h-10 w-full max-w-[12rem] text-sm rounded-xl sm:w-auto"
+                  />
                 </div>
               </div>
             </div>

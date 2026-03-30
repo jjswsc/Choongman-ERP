@@ -22,14 +22,19 @@ export async function GET(req: Request) {
     const forPettyTransfer =
       searchParams.get('forPettyTransfer') === '1' || searchParams.get('forPettyTransfer') === 'true'
 
-    const empSelectFull = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
-    const empSelectFallback = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    const empSelectFull =
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    const empSelectFallback =
+      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
     let rows: Record<string, unknown>[] | null = null
     try {
       rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFull, limit: 5000 })) as Record<string, unknown>[] | null
     } catch (colErr) {
       const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
-      if (/column.*(id_number|id_card_photo|tax_id|sso_number|address).*does not exist/i.test(errMsg) || /does not exist/i.test(errMsg)) {
+      if (
+        /column.*(id_number|id_card_photo|tax_id|sso_number|address|name_title).*does not exist/i.test(errMsg) ||
+        /does not exist/i.test(errMsg)
+      ) {
         rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFallback, limit: 5000 })) as Record<string, unknown>[] | null
       } else {
         throw colErr
@@ -46,6 +51,7 @@ export async function GET(req: Request) {
         row: r.id,
         store: empStore,
         name: r.name,
+        nameTitle: r.name_title != null ? String(r.name_title).trim() : '',
         nick: r.nick || '',
         phone: r.phone || '',
         job: r.job || '',

@@ -8,6 +8,7 @@ import { isOfficeRole } from '@/lib/permissions'
 import { getPosTableLayout, type PosTableItem, type PosOrder } from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
 const GRID_SIZE = 24
@@ -67,11 +68,17 @@ function layoutToTables(
 ): Table[] {
   const orderByTable = new Map<string, PosOrder>()
   for (const o of dineInOrders) {
-    const key = String(o.tableName ?? '').trim()
-    if (!key) continue
-    const existing = orderByTable.get(key)
-    if (!existing || new Date(o.createdAt || 0) > new Date(existing.createdAt || 0)) {
-      orderByTable.set(key, o)
+    const raw = String(o.tableName ?? '').trim()
+    if (!raw) continue
+    const keys = new Set<string>()
+    keys.add(raw)
+    const norm = normalizePosTableNameForMatch(raw)
+    if (norm) keys.add(norm)
+    for (const key of keys) {
+      const existing = orderByTable.get(key)
+      if (!existing || new Date(o.createdAt || 0) > new Date(existing.createdAt || 0)) {
+        orderByTable.set(key, o)
+      }
     }
   }
   return (layout || []).map((t) => {
@@ -88,7 +95,13 @@ function layoutToTables(
           : 'rectangle'
     const name = String(t.name ?? '').trim() || String(t.id ?? '')
     const idStr = String(t.id ?? '')
-    const posOrder = orderByTable.get(name) ?? orderByTable.get(idStr)
+    const nameNorm = normalizePosTableNameForMatch(name)
+    const idNorm = normalizePosTableNameForMatch(idStr)
+    const posOrder =
+      orderByTable.get(name) ??
+      orderByTable.get(idStr) ??
+      (nameNorm ? orderByTable.get(nameNorm) : undefined) ??
+      (idNorm ? orderByTable.get(idNorm) : undefined)
     const order = posOrder ? posOrderToOrder(posOrder) : undefined
     return {
       id: String(t.id ?? ''),
@@ -246,14 +259,23 @@ export function usePosStore() {
   const clearTableOrder = useCallback((storeId: string, tableName: string) => {
     const name = String(tableName ?? '').trim()
     if (!name) return
+    const nameNorm = normalizePosTableNameForMatch(name)
     setStores((prev) =>
       prev.map((store) =>
         store.id === storeId
           ? {
               ...store,
-              tables: store.tables.map((t) =>
-                (t.name === name || t.id === name) ? { ...t, order: undefined, isOccupied: false } : t
-              ),
+              tables: store.tables.map((t) => {
+                const tn = String(t.name ?? '').trim()
+                const tid = String(t.id ?? '').trim()
+                const match =
+                  tn === name ||
+                  tid === name ||
+                  (nameNorm &&
+                    (normalizePosTableNameForMatch(tn) === nameNorm ||
+                      normalizePosTableNameForMatch(tid) === nameNorm))
+                return match ? { ...t, order: undefined, isOccupied: false } : t
+              }),
             }
           : store
       )

@@ -218,7 +218,7 @@ export default function MarketingInfluencersPage() {
   const loadData = React.useCallback(() => {
     const cid = campaignFilter.trim()
     setLoading(true)
-    Promise.all([
+    return Promise.all([
       cid ? getMarketingInfluencers({ campaignId: cid }) : Promise.resolve([] as MarketingInfluencer[]),
       getMarketingCampaigns(),
     ])
@@ -276,9 +276,9 @@ export default function MarketingInfluencersPage() {
     setForm((f) => (f.campaignId === cid ? f : { ...f, campaignId: cid }))
   }, [campaignFilter, editingId])
 
-  const refreshAllLists = React.useCallback(() => {
-    loadData()
-    void loadInquiryInfs()
+  const refreshAllLists = React.useCallback(async () => {
+    await loadData()
+    await loadInquiryInfs()
   }, [loadData, loadInquiryInfs])
 
   const campaignById = React.useMemo(() => {

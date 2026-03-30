@@ -158,6 +158,8 @@ const QUEUE_WHITELIST = new Set([
   '/api/updatePosOrder',
   /** 주문 상태(pending→completed 등) — 결제·완료 처리 후 동기화 순서는 sync.ts 참고 */
   '/api/updatePosOrderStatus',
+  /** 라인별 서빙/포장 완료 표시 — 오프라인 시 큐 적재 */
+  '/api/markPosOrderItemServed',
   '/api/saveItemVendors',
   '/api/addChecklistItem',
   '/api/deleteChecklistItem',

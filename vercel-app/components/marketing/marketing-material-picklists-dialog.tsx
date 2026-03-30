@@ -10,12 +10,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   defaultMarketingMaterialTypeOptions,
   newMaterialTypeValue,
+  resolveMaterialTypeLabel,
   saveMarketingMaterialTypeOptions,
   type MarketingMaterialTypeOption,
 } from "@/lib/marketing-material-type-options"
 import {
   defaultMarketingMaterialPlacementOptions,
   newPlacementValue,
+  resolvePlacementLabel,
   saveMarketingMaterialPlacementOptions,
   type MarketingMaterialPlacementOption,
 } from "@/lib/marketing-material-placement-options"
@@ -26,12 +28,15 @@ function OptionListSection({
   addPlaceholder,
   newValueFn,
   resetKey,
+  rowTitle,
 }: {
   items: { value: string; label: string }[]
   onItemsChange: (next: { value: string; label: string }[]) => void
   addPlaceholder: string
   newValueFn: (label: string, existingValues: string[]) => string
   resetKey: number
+  /** 저장 label 대신 UI 언어로 표시 (기본 선택지는 tr 반영) */
+  rowTitle: (row: { value: string; label: string }) => string
 }) {
   const [addDraft, setAddDraft] = React.useState("")
   React.useEffect(() => {
@@ -80,7 +85,7 @@ function OptionListSection({
               className="flex items-center justify-between gap-2 rounded-md bg-background/80 px-2 py-1.5 text-sm shadow-sm"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{row.label}</div>
+                <div className="truncate font-medium">{rowTitle(row)}</div>
                 <div className="truncate font-mono text-[10px] text-muted-foreground">{row.value}</div>
               </div>
               <Button
@@ -117,6 +122,7 @@ type Props = {
     save: string
     cancel: string
   }
+  tr: (ko: string, en: string, th: string) => string
 }
 
 export function MarketingMaterialPicklistsDialog({
@@ -127,6 +133,7 @@ export function MarketingMaterialPicklistsDialog({
   onTypesApplied,
   onPlacementsApplied,
   labels,
+  tr,
 }: Props) {
   const [draftTypes, setDraftTypes] = React.useState<MarketingMaterialTypeOption[]>(() => [...types])
   const [draftPlacements, setDraftPlacements] = React.useState<MarketingMaterialPlacementOption[]>(() => [
@@ -174,6 +181,7 @@ export function MarketingMaterialPicklistsDialog({
               onItemsChange={setDraftTypes}
               addPlaceholder={labels.typeDisplayName}
               newValueFn={newMaterialTypeValue}
+              rowTitle={(row) => resolveMaterialTypeLabel(row.value, draftTypes, tr)}
             />
           </TabsContent>
           <TabsContent value="placement" className="mt-3 space-y-2">
@@ -183,6 +191,7 @@ export function MarketingMaterialPicklistsDialog({
               onItemsChange={setDraftPlacements}
               addPlaceholder={labels.placementDisplayName}
               newValueFn={newPlacementValue}
+              rowTitle={(row) => resolvePlacementLabel(row.value, draftPlacements, tr)}
             />
           </TabsContent>
         </Tabs>

@@ -59,12 +59,11 @@ import {
   formatPosOrderNoForPrint,
   normalizeStoreSlugForOrderNo,
 } from "@/lib/pos-order-no"
+import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 
 type PreviewKind = "receipt" | "kitchen"
 
-const POS_PAPER_WIDTH_MM = 80
 const POS_PAPER_SIDE_PADDING_MM = 1
-const POS_PAPER_HEIGHT_MM = 200
 const RECEIPT_ASSET_MAX_BYTES = 1024 * 700
 
 const buildCode128BarcodeUrl = (raw: string) => {
@@ -74,10 +73,13 @@ const buildCode128BarcodeUrl = (raw: string) => {
 }
 
 const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
-  @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
+  ${posThermalReceiptPageSizeRule()}
   html, body { margin: 0; padding: 0; }
+  html { height: auto; }
   body {
-    width: ${POS_PAPER_WIDTH_MM}mm;
+    width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
+    min-height: auto;
+    height: auto;
     box-sizing: border-box;
     font-family: ${fontFamily};
     font-size: ${fontSizePx}px;

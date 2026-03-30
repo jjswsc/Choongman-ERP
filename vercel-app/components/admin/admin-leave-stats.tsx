@@ -41,7 +41,23 @@ export function AdminLeaveStats() {
   const [endStr, setEndStr] = useState(todayStr())
   const [storeFilter, setStoreFilter] = useState("All")
   const [stores, setStores] = useState<string[]>([])
-  const [statsList, setStatsList] = useState<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[]>([])
+  const [statsList, setStatsList] = useState<
+    {
+      store: string
+      name: string
+      usedPeriodAnnual: number
+      usedPeriodSick: number
+      usedPeriodUnpaid: number
+      usedPeriodLakij: number
+      usedTotalAnnual: number
+      usedTotalSick: number
+      usedTotalUnpaid: number
+      usedTotalLakij: number
+      remain: number
+      remainLakij: number
+      remainSick: number
+    }[]
+  >([])
   const [loading, setLoading] = useState(false)
 
   const { stores: storeKeys } = useStoreList()
@@ -123,12 +139,13 @@ export function AdminLeaveStats() {
                 <th className="px-2 py-1 font-medium">{t("unpaid")}</th>
                 <th className="px-2 py-1 font-medium">{t("annual")}</th>
                 <th className="px-2 py-1 font-medium">{t("lakij")}</th>
+                <th className="px-2 py-1 font-medium">{t("sick")}</th>
               </tr>
             </thead>
             <tbody>
               {statsList.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={13} className="py-8 text-center text-muted-foreground">
                     {t("leave_stats_hint")}
                   </td>
                 </tr>
@@ -147,6 +164,7 @@ export function AdminLeaveStats() {
                     <td className="px-2 py-2.5">{r.usedTotalUnpaid}</td>
                     <td className="px-3 py-2.5 font-bold text-primary">{r.remain}</td>
                     <td className="px-3 py-2.5 font-bold text-primary">{r.remainLakij ?? 3}</td>
+                    <td className="px-3 py-2.5 font-bold text-primary">{r.remainSick ?? 30}</td>
                   </tr>
                 ))
               )}

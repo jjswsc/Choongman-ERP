@@ -6,6 +6,20 @@
 import { isOnline } from './network'
 import { getFromCache, setCache, cacheKeyOrders } from './cache'
 import { getPosOrders, type PosOrder } from '@/lib/api-client'
+import { getPendingSavePosOrdersMerged } from './pending-pos-orders-from-queue'
+
+async function mergePendingIntoRows(
+  rows: PosOrder[],
+  range: { startStr: string; endStr: string; storeCode?: string; status?: string }
+): Promise<PosOrder[]> {
+  const pending = await getPendingSavePosOrdersMerged(range)
+  if (pending.length === 0) return rows
+  const pendingNos = new Set(
+    pending.map((p) => String(p.orderNo ?? '').trim()).filter(Boolean)
+  )
+  const rest = rows.filter((r) => !pendingNos.has(String(r.orderNo ?? '').trim()))
+  return [...pending, ...rest]
+}
 
 export async function getPosOrdersWithCache(params: {
   startStr: string
@@ -16,6 +30,7 @@ export async function getPosOrdersWithCache(params: {
   const { startStr, endStr, storeCode, status } = params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr)
+  const range = { startStr, endStr, storeCode: storeCode || undefined, status }
 
   const applyStatus = (rows: PosOrder[]) => {
     let result = rows
@@ -34,16 +49,18 @@ export async function getPosOrdersWithCache(params: {
         status,
       })
       await setCache('pos_orders_cache', key, data)
-      return data
+      return mergePendingIntoRows(data, range)
     } catch {
       const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
-      return applyStatus(cached ?? [])
+      const merged = await mergePendingIntoRows(cached ?? [], range)
+      return applyStatus(merged)
     }
   }
 
   const cached = await getFromCache<PosOrder[]>('pos_orders_cache', key)
   if (cached !== null) {
-    return applyStatus(cached)
+    const merged = await mergePendingIntoRows(cached, range)
+    return applyStatus(merged)
   }
   try {
     const data = await getPosOrders({
@@ -52,8 +69,10 @@ export async function getPosOrdersWithCache(params: {
       storeCode: storeCode || undefined,
     })
     await setCache('pos_orders_cache', key, data)
-    return applyStatus(data)
+    const merged = await mergePendingIntoRows(data, range)
+    return applyStatus(merged)
   } catch {
-    return []
+    const merged = await mergePendingIntoRows([], range)
+    return applyStatus(merged)
   }
 }

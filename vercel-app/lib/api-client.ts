@@ -641,7 +641,18 @@ export async function getMyLeaveInfo(params: { store: string; name: string }) {
   const res = await apiFetchWithOffline(`/api/getMyLeaveInfo?${q}`)
   return res.json() as Promise<{
     history: LeaveHistoryItem[]
-    stats: { usedAnn: number; usedSick: number; usedUnpaid: number; usedLakij: number; remain: number; remainLakij: number; annualTotal: number; lakijTotal: number }
+    stats: {
+      usedAnn: number
+      usedSick: number
+      usedUnpaid: number
+      usedLakij: number
+      remain: number
+      remainLakij: number
+      remainSick: number
+      annualTotal: number
+      lakijTotal: number
+      sickTotal: number
+    }
   }>
 }
 
@@ -807,7 +818,23 @@ export async function getLeaveStats(params: {
   if (params.userRole) clean.userRole = params.userRole
   const q = new URLSearchParams(clean)
   const res = await apiFetchWithOffline(`/api/getLeaveStats?${q}`)
-  return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[]>
+  return res.json() as Promise<
+    {
+      store: string
+      name: string
+      usedPeriodAnnual: number
+      usedPeriodSick: number
+      usedPeriodUnpaid: number
+      usedPeriodLakij: number
+      usedTotalAnnual: number
+      usedTotalSick: number
+      usedTotalUnpaid: number
+      usedTotalLakij: number
+      remain: number
+      remainLakij: number
+      remainSick: number
+    }[]
+  >
 }
 
 export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string; rejectReason?: string }) {
@@ -1977,21 +2004,6 @@ export async function saveAccountingWorkflowStatus(params: {
   return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
 }
 
-export async function reconcileBankTransaction(params: {
-  userRole: string
-  id: number
-  reconciled: boolean
-  reconciledBy?: string | null
-  reconciliationNote?: string | null
-}) {
-  const res = await apiFetchWithOffline('/api/reconcileBankTransaction', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return res.json() as Promise<{ success: boolean }>
-}
-
 // ─── 감가상각·고정자산 ───
 export async function getFixedAssets(params: { storeFilter?: string; status?: string }) {
   const q = new URLSearchParams()
@@ -2715,10 +2727,6 @@ export interface BankTransactionItem {
   invoicePhotoUrl?: string
   purchaseOrderId?: number
   isLinked?: boolean
-  /** 은행 대사(reconciliation) 완료 시각 (ISO) */
-  reconciledAt?: string | null
-  reconciledBy?: string | null
-  reconciliationNote?: string | null
 }
 
 export interface BankTransactionsSummary {
@@ -4445,7 +4453,7 @@ export interface MarketingCampaignDetail extends MarketingCampaign {
 }
 
 export async function getMarketingCampaigns() {
-  const res = await apiFetchWithOffline('/api/marketingCampaigns')
+  const res = await apiFetchWithOffline('/api/marketingCampaigns', { cache: 'no-store' })
   return apiJsonArrayResponse<MarketingCampaign>(res)
 }
 
@@ -4465,6 +4473,36 @@ export async function saveMarketingCampaignCollabDetail(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function toggleMarketingCampaignCollabManagement(params: {
+  campaignId: string
+  enabled: boolean
+}) {
+  const res = await apiFetchWithOffline('/api/marketingCampaignCollabManagementToggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      campaignId: params.campaignId.trim(),
+      enabled: params.enabled === true,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getPosCollabCampaigns(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', params.storeCode.trim())
+  const res = await apiFetchWithOffline('/api/getPosCollabCampaigns?' + q.toString())
+  const data = (await res.json()) as {
+    campaigns?: {
+      id: string
+      topic: string
+      campaignNo?: string
+      collabDetail: MarketingCollabDetail
+    }[]
+  }
+  return Array.isArray(data.campaigns) ? data.campaigns : []
 }
 
 export async function getNextCampaignNumber(): Promise<string | null> {
@@ -6185,6 +6223,11 @@ export async function savePosOrder(params: {
   guestCount?: number
   /** 배달 주문 시 pos_orders.delivery_app_code (예: grab, lineman) */
   deliveryAppCode?: string
+  /**
+   * 결제 합계가 total 에 도달할 때 저장 직후 주문 상태 (오프라인 동기화 시 updatePosOrderStatus 생략용).
+   * 서버에서 payment 합계·total 로 검증 후 적용.
+   */
+  closeStatus?: 'paid' | 'completed'
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'
@@ -6934,6 +6977,8 @@ export interface AdminEmployeeItem {
   row: number
   store: string
   name: string
+  /** Mr./Mrs./Ms./Miss — nick과 별도 저장 */
+  nameTitle?: string
   nick: string
   phone: string
   job: string

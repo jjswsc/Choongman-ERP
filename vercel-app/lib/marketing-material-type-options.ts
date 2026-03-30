@@ -16,6 +16,11 @@ export const DEFAULT_MARKETING_MATERIAL_TYPES: MarketingMaterialTypeOption[] = [
   { value: "other", label: "기타" },
 ]
 
+/** 기본 제공 종류 — 저장된 label(한글)과 무관하게 UI 언어로 표시 */
+export const BUILTIN_MARKETING_MATERIAL_TYPE_VALUES = new Set(
+  DEFAULT_MARKETING_MATERIAL_TYPES.map((x) => x.value)
+)
+
 export function defaultMarketingMaterialTypeOptions(): MarketingMaterialTypeOption[] {
   return DEFAULT_MARKETING_MATERIAL_TYPES.map((x) => ({ ...x }))
 }
@@ -107,21 +112,28 @@ export function resolveMaterialTypeLabel(
   options: MarketingMaterialTypeOption[],
   tr: (ko: string, en: string, th: string) => string
 ): string {
-  const opt = options.find((o) => o.value === value)
+  const v = String(value ?? "").trim()
+  if (BUILTIN_MARKETING_MATERIAL_TYPE_VALUES.has(v)) {
+    return builtInMaterialTypeLabel(v, tr)
+  }
+  const opt = options.find((o) => o.value === v)
   if (opt) return opt.label
-  return builtInMaterialTypeLabel(value, tr)
+  return builtInMaterialTypeLabel(v, tr)
 }
 
-/** 셀렉트용: 목록에 없는 현재 값이면 임시 항목을 붙임 */
+/** 셀렉트용: 목록에 없는 현재 값이면 임시 항목을 붙임 (표시 문구는 UI 언어) */
 export function materialTypeSelectOptions(
   options: MarketingMaterialTypeOption[],
   currentValue: string,
   tr: (ko: string, en: string, th: string) => string
 ): MarketingMaterialTypeOption[] {
-  const base = [...options]
+  const base = options.map((o) => ({
+    value: o.value,
+    label: resolveMaterialTypeLabel(o.value, options, tr),
+  }))
   const cv = currentValue.trim()
   if (cv && !base.some((o) => o.value === cv)) {
-    base.push({ value: cv, label: builtInMaterialTypeLabel(cv, tr) })
+    base.push({ value: cv, label: resolveMaterialTypeLabel(cv, options, tr) })
   }
   return base
 }

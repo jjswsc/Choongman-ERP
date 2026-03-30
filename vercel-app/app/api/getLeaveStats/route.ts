@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getAnnualLeaveDays, hasOneYearTenureAsOf } from '@/lib/annual-leave'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -18,6 +19,9 @@ function getLeaveDays(type: string): number {
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
 const LAKIJ_DAYS_PER_YEAR = 3
+
+/** 병가: 연 30일 고정 (방콕 달력년 기준 사용분 차감) */
+const SICK_DAYS_PER_YEAR = 30
 
 /** 휴가 통계 - 매장별 직원별 연차/병가 사용 현황 */
 export async function GET(request: NextRequest) {
@@ -65,7 +69,23 @@ export async function GET(request: NextRequest) {
       leaveRows = (await supabaseSelect('leave_requests', { order: 'leave_date.asc', limit: 2000 })) as LeaveRow[]
     }
 
-    const result: { store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[] = []
+    const bangkokYear = parseInt(getBangkokTodayDateString().slice(0, 4), 10)
+
+    const result: {
+      store: string
+      name: string
+      usedPeriodAnnual: number
+      usedPeriodSick: number
+      usedPeriodUnpaid: number
+      usedPeriodLakij: number
+      usedTotalAnnual: number
+      usedTotalSick: number
+      usedTotalUnpaid: number
+      usedTotalLakij: number
+      remain: number
+      remainLakij: number
+      remainSick: number
+    }[] = []
 
     for (const emp of empRows || []) {
       const empStore = String(emp.store || '').trim()
@@ -81,6 +101,7 @@ export async function GET(request: NextRequest) {
       let usedTotalSick = 0
       let usedTotalUnpaid = 0
       let usedTotalLakij = 0
+      let usedSickThisBangkokYear = 0
 
       for (const l of leaveRows || []) {
         const lStore = String(l.store || '').trim()
@@ -106,6 +127,7 @@ export async function GET(request: NextRequest) {
           if (lDate >= start && lDate <= end) usedPeriodLakij += days
         } else if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
           usedTotalSick += days
+          if (parseInt(dateStr.slice(0, 4), 10) === bangkokYear) usedSickThisBangkokYear += days
           if (lDate >= start && lDate <= end) usedPeriodSick += days
         } else {
           usedTotalAnnual += days
@@ -126,6 +148,7 @@ export async function GET(request: NextRequest) {
         usedTotalLakij: Math.round(usedTotalLakij * 10) / 10,
         remain: Math.max(0, Math.round((annualLimit - usedTotalAnnual) * 10) / 10),
         remainLakij: Math.max(0, Math.round((LAKIJ_DAYS_PER_YEAR - usedTotalLakij) * 10) / 10),
+        remainSick: Math.max(0, Math.round((SICK_DAYS_PER_YEAR - usedSickThisBangkokYear) * 10) / 10),
       })
     }
 

@@ -21,17 +21,19 @@ import {
 } from "@/components/ui/accordion"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import type { AdminEmployeeItem } from "@/lib/api-client"
 import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
+export const EMP_NAME_TITLE_OPTIONS = ["Mr.", "Mrs.", "Ms.", "Miss"] as const
+
 export interface EmployeeFormData {
   row: number
   store: string
   name: string
+  nameTitle: string
   nick: string
   phone: string
   job: string
@@ -61,6 +63,7 @@ const emptyForm: EmployeeFormData = {
   row: 0,
   store: "",
   name: "",
+  nameTitle: "",
   nick: "",
   phone: "",
   job: "Service",
@@ -136,7 +139,7 @@ export function EmployeeForm({
           </AccordionTrigger>
           <AccordionContent className="pb-3">
       <div className="grid grid-cols-2 gap-3">
-        {/* 매장, 이름, 닉네임 + 오른쪽 사진 */}
+        {/* 매장, 호칭, 이름, 닉네임 + 오른쪽 사진 */}
         <div className="col-span-2 flex gap-4">
           <div className="flex-1 space-y-3">
             <div>
@@ -149,6 +152,25 @@ export function EmployeeForm({
                   <SelectItem value="__none__">-</SelectItem>
                   {stores.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1">{t("emp_label_nick_title")}</label>
+              <Select
+                value={form.nameTitle || "__none__"}
+                onValueChange={(v) => update("nameTitle", v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder={t("emp_label_nick_title")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">{t("emp_nick_title_none")}</SelectItem>
+                  {EMP_NAME_TITLE_OPTIONS.map((x) => (
+                    <SelectItem key={x} value={x}>
+                      {x}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

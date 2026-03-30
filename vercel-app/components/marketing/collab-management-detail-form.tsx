@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
+import { collabHasPosDiscount } from "@/lib/pos-collab-discount"
 import { Loader2, Save } from "lucide-react"
 
 type Basics = {
@@ -85,6 +86,16 @@ export function CollabManagementDetailForm(props: {
               {basics.branches.length > 0 ? basics.branches.join(", ") : allStoresLabel}
             </p>
           </div>
+          {collabHasPosDiscount(draft) && (
+            <div>
+              <span className="text-[10px] text-muted-foreground">{t("marketingCollabDetailBasicsPosDiscount")}</span>
+              <p>
+                {draft.posDiscountType === "amount"
+                  ? `฿${Number(draft.posDiscountValue).toLocaleString()}`
+                  : `${draft.posDiscountValue}%`}
+              </p>
+            </div>
+          )}
           {(basics.discountValue ?? 0) > 0 && (
             <div>
               <span className="text-[10px] text-muted-foreground">{t("marketingCollabDetailBasicsPlannedDiscount")}</span>
@@ -199,7 +210,47 @@ export function CollabManagementDetailForm(props: {
           </section>
 
           <section className="space-y-3 rounded-xl border border-border/60 bg-background px-4 py-3">
-            <h3 className="text-sm font-semibold">{t("marketingCollabDetailSectionScope")}</h3>
+            <h3 className="text-sm font-semibold">{t("marketingCollabDetailSectionStorePosDiscount")}</h3>
+            <p className="text-[11px] text-muted-foreground">{t("marketingCollabDetailPosDiscountHint")}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailPosDiscountTypeLabel")}</Label>
+                <select
+                  value={draft.posDiscountType}
+                  onChange={(e) =>
+                    set({
+                      posDiscountType: e.target.value as MarketingCollabDetail["posDiscountType"],
+                    })
+                  }
+                  className="flex h-9 w-full max-w-md rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                >
+                  <option value="">{t("marketingCollabDetailPosDiscountTypeUnset")}</option>
+                  <option value="percent">{t("marketingCollabDetailPosDiscountTypePercent")}</option>
+                  <option value="amount">{t("marketingCollabDetailPosDiscountTypeAmount")}</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">
+                  {draft.posDiscountType === "amount"
+                    ? t("marketingCollabDetailPosDiscountValueBaht")
+                    : t("marketingCollabDetailPosDiscountValuePercent")}
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={draft.posDiscountType === "percent" ? 100 : undefined}
+                  step={draft.posDiscountType === "percent" ? 1 : 1}
+                  value={draft.posDiscountValue || ""}
+                  onChange={(e) =>
+                    set({ posDiscountValue: Math.max(0, Number(e.target.value) || 0) })
+                  }
+                  placeholder={draft.posDiscountType === "percent" ? "10" : "50"}
+                  className="h-9"
+                  disabled={!draft.posDiscountType}
+                />
+              </div>
+            </div>
+            <p className="text-[11px] font-medium text-foreground/90">{t("marketingCollabDetailSectionScope")}</p>
             <p className="text-[11px] text-muted-foreground">{t("marketingCollabDetailScopeHint")}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {scopeCheckbox(
@@ -249,50 +300,41 @@ export function CollabManagementDetailForm(props: {
                 placeholder={t("marketingCollabDetailScopeNotePh")}
               />
             </div>
+            <div className="space-y-2 sm:col-span-2 border-t border-border/50 pt-3">
+              <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailDiscountStackingNote")}</Label>
+              <Textarea
+                value={draft.discountStackingNote}
+                onChange={(e) => set({ discountStackingNote: e.target.value })}
+                rows={2}
+                className="text-sm"
+                placeholder={t("marketingCollabDetailDiscountStackingPh")}
+              />
+            </div>
           </section>
 
           <section className="space-y-3 rounded-xl border border-border/60 bg-background px-4 py-3">
             <h3 className="text-sm font-semibold">{t("marketingCollabDetailSectionDiscountOps")}</h3>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailDiscountPercentStore")}</Label>
-                <Input
-                  value={draft.discountPercentStore}
-                  onChange={(e) => set({ discountPercentStore: e.target.value })}
-                  placeholder="10% / 20%"
-                  className="h-9"
+              <div className="space-y-2 sm:col-span-2">
+                <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailRulesNote")}</Label>
+                <Textarea
+                  value={draft.rulesNote}
+                  onChange={(e) => set({ rulesNote: e.target.value })}
+                  rows={3}
+                  className="text-sm"
+                  placeholder={t("marketingCollabDetailRulesNotePh")}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailDiscountStackingNote")}</Label>
+                <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailOpsFlowNote")}</Label>
                 <Textarea
-                  value={draft.discountStackingNote}
-                  onChange={(e) => set({ discountStackingNote: e.target.value })}
-                  rows={2}
+                  value={draft.opsFlowNote}
+                  onChange={(e) => set({ opsFlowNote: e.target.value })}
+                  rows={3}
                   className="text-sm"
-                  placeholder={t("marketingCollabDetailDiscountStackingPh")}
+                  placeholder={t("marketingCollabDetailOpsFlowNotePh")}
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailRulesNote")}</Label>
-              <Textarea
-                value={draft.rulesNote}
-                onChange={(e) => set({ rulesNote: e.target.value })}
-                rows={3}
-                className="text-sm"
-                placeholder={t("marketingCollabDetailRulesNotePh")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailOpsFlowNote")}</Label>
-              <Textarea
-                value={draft.opsFlowNote}
-                onChange={(e) => set({ opsFlowNote: e.target.value })}
-                rows={3}
-                className="text-sm"
-                placeholder={t("marketingCollabDetailOpsFlowNotePh")}
-              />
             </div>
           </section>
 

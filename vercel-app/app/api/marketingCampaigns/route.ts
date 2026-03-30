@@ -8,6 +8,14 @@ import {
 import { normalizeMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { parsePhasePeriodsFromUnknown } from '@/lib/marketing-campaign-periods'
 
+/** 저장 직후 목록 재조회가 이전 응답을 쓰지 않도록 (Vercel/브라우저 캐시 방지) */
+export const dynamic = 'force-dynamic'
+
+function noStoreHeaders(h: Headers) {
+  h.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  h.set('Pragma', 'no-cache')
+}
+
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
   const n = typeof val === 'number' ? val : parseFloat(String(val))
@@ -77,6 +85,7 @@ function toCampaignErrorMessage(e: unknown): string {
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  noStoreHeaders(headers)
 
   try {
     const { searchParams } = new URL(req.url)
@@ -139,7 +148,7 @@ export async function GET(req: NextRequest) {
 
     const rows = (await supabaseSelect('marketing_campaigns', {
       order: 'start_date.desc,id.desc',
-      limit: 500,
+      limit: 10000,
     })) as Record<string, unknown>[] | null
 
     const list = (rows || []).map((row) => ({
@@ -178,6 +187,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  noStoreHeaders(headers)
 
   try {
     const body = (await req.json()) as {

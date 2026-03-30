@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { Order, Table } from '@/lib/pos-types'
+import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import {
   markPosOrderItemServed,
   posDineInTableMerge,
@@ -84,6 +85,15 @@ export function TableOrderPanel({
     if (!order) return
     const id = Number(order.id)
     if (Number.isNaN(id)) return
+    if (!posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(
+        msg && msg !== 'posServedNeedsOrderId'
+          ? msg
+          : '이 주문은 아직 서버에 전송되지 않았습니다. 전송이 끝난 뒤 서빙 완료를 눌러 주세요.'
+      )
+      return
+    }
     const nextServed = !itemServed[itemId]
     setSavingItemId(itemId)
     try {
