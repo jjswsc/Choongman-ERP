@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Calculator, ChevronDown, ChevronRight, Download, Search, X, List, FlaskConical } from "lucide-react"
+import { Calculator, ChevronDown, ChevronRight, Search, X, List, FlaskConical } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -52,14 +52,6 @@ let posCostAnalysisLoadSeq = 0
 /** 목록·계산기에서 옵션까지 코드로 구분 (예: c101, c101-1, c101-2) */
 export type RowWithDisplayCode = PosMenuCostAnalysisRow & { displayCode: string }
 
-function toCsvRow(cells: (string | number)[]): string {
-  return cells.map((c) => {
-    const s = String(c)
-    const needsQuote = /[",\n\r]/.test(s)
-    return needsQuote ? `"${s.replace(/"/g, '""')}"` : s
-  }).join(",")
-}
-
 /** POS 메뉴 cooking_time_min(소수=초) → 목록 표시 */
 function formatCookingTimeList(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v) || v < 0) return ""
@@ -77,6 +69,8 @@ export default function PosCostAnalysisPage() {
   const canEdit = isOfficeRole(auth?.role || "")
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(false)
+  /** 목록 탭: [조회]를 누른 뒤에만 서버 데이터·표시 (배합 원가 탭과 동일 패턴) */
+  const [listQueried, setListQueried] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
@@ -108,11 +102,13 @@ export default function PosCostAnalysisPage() {
       if (seq !== posCostAnalysisLoadSeq) return null
       const next = Array.isArray(data) ? data : []
       setRows(next)
+      setListQueried(true)
       return next
     } catch (e) {
       if (seq !== posCostAnalysisLoadSeq) return null
       console.error("getPosMenuCostAnalysis:", e)
       setRows([])
+      setListQueried(false)
       return []
     } finally {
       if (seq === posCostAnalysisLoadSeq) {
@@ -124,21 +120,6 @@ export default function PosCostAnalysisPage() {
   const loadList = React.useCallback(() => {
     void refreshRows()
   }, [refreshRows])
-
-  /** POS 메뉴 관리와 동일: 페이지 진입 시 목록 1회 자동 조회 (배포·로컬 동일 데이터 확인) */
-  const initialCostAnalysisLoadRef = React.useRef(false)
-  React.useEffect(() => {
-    if (!allowed || initialCostAnalysisLoadRef.current) return
-    initialCostAnalysisLoadRef.current = true
-    void loadList()
-  }, [allowed, loadList])
-
-  /** 계산기 탭 진입 시 데이터 없으면 자동 조회 — 메뉴 검색 드롭다운용 */
-  React.useEffect(() => {
-    if (allowed && activeTab === "calculator" && rows.length === 0 && !loading) {
-      loadList()
-    }
-  }, [allowed, activeTab, rows.length, loading, loadList])
 
   const categories = React.useMemo(() => {
     const set = new Set(rows.map((r) => r.category).filter(Boolean))
@@ -261,54 +242,6 @@ export default function PosCostAnalysisPage() {
     return { n, avgPriceH, avgPriceD, avgCostH, avgCostD, avgRatioH, avgRatioD }
   }, [flatList])
 
-  const handleExportCsv = () => {
-    const csvRows: string[] = [
-      toCsvRow([
-        "코드",
-        "대분류",
-        "카테고리",
-        "메뉴명",
-        "옵션",
-        "조리시간",
-        "홀",
-        "배달앱",
-        "홀 원가",
-        "배달앱 원가",
-        "원가율(홀)%",
-        "원가율(배달앱)%",
-      ]),
-    ]
-    for (const r of flatList) {
-      const priceH = (r.priceHall ?? 0) || 1
-      const priceD = (r.priceDelivery ?? r.priceHall ?? 0) || 1
-      const costHMise = withMise(r.costHall ?? 0)
-      const costDMise = withMise(r.costDelivery ?? 0)
-      const ratioH = priceH > 0 ? (costHMise / priceH) * 100 : 0
-      const ratioD = priceD > 0 ? (costDMise / priceD) * 100 : 0
-      csvRows.push(toCsvRow([
-        r.displayCode,
-        r.categoryMain ?? "",
-        r.category ?? "",
-        r.menuName ?? "",
-        r.optionName ?? "",
-        formatCookingTimeList(r.cookingTimeMin) || "-",
-        r.priceHall ?? 0,
-        r.priceDelivery ?? r.priceHall ?? 0,
-        costHMise.toFixed(1),
-        costDMise.toFixed(1),
-        ratioH.toFixed(1),
-        ratioD.toFixed(1),
-      ]))
-    }
-    const blob = new Blob(["\uFEFF" + csvRows.join("\r\n")], { type: "text/csv;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `pos-cost-analysis-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   if (!allowed) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -349,7 +282,7 @@ export default function PosCostAnalysisPage() {
                 </TabsTrigger>
                 <TabsTrigger value="sauce" className={adminTabsTriggerCn}>
                   <FlaskConical className={adminTabsIconCn} aria-hidden />
-                  {t("posCostTabSauce") || "소스 원가"}
+                  {t("posCostTabSauce") || "배합 원가"}
                 </TabsTrigger>
                 <TabsTrigger value="calculator" className={adminTabsTriggerCn}>
                   <Calculator className={adminTabsIconCn} aria-hidden />
@@ -360,12 +293,6 @@ export default function PosCostAnalysisPage() {
           </div>
 
           <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
-        {loading && (
-          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-            {t("loading")}
-          </div>
-        )}
-
           <div className="mb-4 flex flex-wrap items-center gap-3">
           <Select
             value={mainCategoryFilter}
@@ -407,7 +334,12 @@ export default function PosCostAnalysisPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={t("posCostSearchPh") || "코드·메뉴명·옵션 검색"}
                 className="h-9 pl-9 pr-9 text-sm border-border"
-                onKeyDown={(e) => e.key === "Enter" && searchInputRef.current?.blur?.()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    loadList()
+                  }
+                }}
               />
               {searchTerm && (
                 <Button
@@ -431,12 +363,18 @@ export default function PosCostAnalysisPage() {
               {loading ? (t("loading") || "조회 중...") : (t("posCostBtnQuery") || "조회")}
             </Button>
           </div>
-          <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportCsv}>
-            <Download className="h-3.5 w-3.5" />
-            {t("posCostExportCsv") || "CSV 내보내기"}
-          </Button>
         </div>
 
+        {loading ? (
+          <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+            {t("loading")}
+          </div>
+        ) : !listQueried ? (
+          <div className="rounded-xl border bg-muted/30 px-6 py-12 text-center text-sm text-muted-foreground">
+            {t("posCostClickSearchToLoad") || "위에서 [조회] 버튼을 눌러 원가 분석 목록을 불러오세요."}
+          </div>
+        ) : (
+          <>
         {listSummary && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
             <span className="font-semibold text-amber-700">
@@ -627,6 +565,8 @@ export default function PosCostAnalysisPage() {
             </div>
           )}
         </div>
+          </>
+        )}
           </TabsContent>
 
           <TabsContent value="sauce" className={cn(adminTabsContentCn, "space-y-4")}>

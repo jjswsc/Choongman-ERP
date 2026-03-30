@@ -22,6 +22,7 @@ import {
   type MarketingCampaign,
 } from "@/lib/api-client"
 import { marketingCampaignEffectiveBounds } from "@/lib/marketing-campaign-periods"
+import { normalizeCampaignStatusForListFilter } from "@/lib/marketing-campaign-list-query"
 import { getCampaignTypeLabel } from "@/lib/marketing-campaign-type-utils"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +37,20 @@ function parseYmdUtc(s: string | null | undefined): number | null {
   const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (!m) return null
   return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+}
+
+/** A/B 비교용 기간 — 차수·메인 일정 + 메인 행 start/end 폴백(DB만 채워진 경우) */
+function compareEffectivePeriod(c: MarketingCampaign): { startDate: string | null; endDate: string | null } {
+  const eff = marketingCampaignEffectiveBounds(c)
+  const ymd = (v: string | null | undefined) => {
+    if (!v) return null
+    const t = String(v).trim().slice(0, 10)
+    return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null
+  }
+  return {
+    startDate: eff.startDate || ymd(c.startDate),
+    endDate: eff.endDate || ymd(c.endDate),
+  }
 }
 
 export type CompareRow = {
@@ -77,7 +92,8 @@ export function CampaignAbComparePanel() {
   const [rows, setRows] = React.useState<CompareRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [groupBy, setGroupBy] = React.useState<GroupBy>("topic")
-  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("finish")
+  /** 기본을 완료+진행중으로 두어, DB status 표기 차이로 목록이 비는 경우를 줄임 */
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("finish_or_ongoing")
   const [periodFilter, setPeriodFilter] = React.useState<PeriodFilter>("all")
   const [sortKey, setSortKey] = React.useState<SortKey>("roi")
   const [chartMode, setChartMode] = React.useState<ChartMode>("amounts")
@@ -92,19 +108,21 @@ export function CampaignAbComparePanel() {
       const cutoff = periodDays !== null ? today - periodDays * 86400000 : null
 
       const eligible = campaigns.filter((c) => {
-        const eff = marketingCampaignEffectiveBounds(c)
+        const ns = normalizeCampaignStatusForListFilter(c.status)
+        const eff = compareEffectivePeriod(c)
         if (statusFilter === "finish") {
-          if (c.status !== "finish" || !eff.startDate || !eff.endDate) return false
+          if (ns !== "finish") return false
+          if (!eff.startDate || !eff.endDate) return false
         } else {
-          if (c.status !== "finish" && c.status !== "ongoing") return false
+          if (ns !== "finish" && ns !== "ongoing") return false
           if (!eff.startDate) return false
         }
         if (cutoff === null) return true
         const endMs = parseYmdUtc(eff.endDate)
         const startMs = parseYmdUtc(eff.startDate)
-        if (c.status === "ongoing" && endMs == null && startMs != null && startMs < cutoff) return false
-        if (c.status === "finish" && endMs != null) return endMs >= cutoff
-        if (c.status === "ongoing") {
+        if (ns === "ongoing" && endMs == null && startMs != null && startMs < cutoff) return false
+        if (ns === "finish" && endMs != null) return endMs >= cutoff
+        if (ns === "ongoing") {
           if (endMs != null) return endMs >= cutoff
           return true
         }
@@ -117,7 +135,7 @@ export function CampaignAbComparePanel() {
         const slice = eligible.slice(i, i + BATCH)
         const part = await Promise.all(
           slice.map(async (c) => {
-            const eff = marketingCampaignEffectiveBounds(c)
+            const eff = compareEffectivePeriod(c)
             const [costRes, posRes] = await Promise.all([
               getMarketingCampaignCosts(c.id),
               getMarketingCampaignResults({ campaignId: c.id }),
@@ -266,9 +284,9 @@ export function CampaignAbComparePanel() {
         <p className="mt-1 text-xs leading-relaxed">
           {tr(
             lang,
-            "완료(또는 선택 시 진행 중) 캠페인의 예산·실비·POS 집계 매출을 한 화면에서 비교합니다. ROI% = (매출−실비)÷실비×100, ROAS = 매출÷실비입니다. 집계 방식은 캠페인별 성과/비용 화면과 동일합니다.",
-            "Compare budget, actual costs, and POS-attributed sales across campaigns. ROI% = (sales−costs)÷costs×100; ROAS = sales÷costs. Attribution matches each campaign’s Result/Cost view.",
-            "เปรียบเทียบงบประมาณ ต้นทุนจริง และยอดขาย POS ของแคมเปญ ROI% = (ยอดขาย−ต้นทุน)÷ต้นทุน×100; ROAS = ยอดขาย÷ต้นทุน",
+            "완료·진행 중 캠페인만 대상입니다(상단에서 ‘완료만’으로 좁힐 수 있음). ‘완료만’은 시작일·종료일이 모두 있는 행만 포함합니다. DB에 completed 등으로 저장된 경우에도 완료로 인식합니다. ROI% = (매출−실비)÷실비×100, ROAS = 매출÷실비. 집계는 캠페인별 성과/비용과 동일합니다.",
+            "Finished and ongoing campaigns only (switch to “Finished only” to narrow). “Finished only” requires both start and end dates. Values like completed in DB are treated as finished. ROI% = (sales−costs)÷costs×100; ROAS = sales÷costs. Attribution matches each campaign’s Result/Cost view.",
+            "เฉพาะแคมเปญที่เสร็จหรือกำลังดำเนินการ (เลือก ‘เฉพาะที่เสร็จ’ เพื่อแคบลง). ‘เฉพาะที่เสร็จ’ ต้องมีวันเริ่มและจบ ROI% = (ยอดขาย−ต้นทุน)÷ต้นทุน×100; ROAS = ยอดขาย÷ต้นทุน",
           )}
         </p>
       </div>
@@ -532,6 +550,14 @@ export function CampaignAbComparePanel() {
         <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/30 px-6 py-12 text-center text-muted-foreground">
           <GitCompare className="mx-auto mb-2 h-8 w-8 opacity-40" />
           <p className="text-sm">{t("adminMarketingAbNoData") || tr(lang, "조건에 맞는 캠페인이 없습니다.", "No campaigns match filters.", "ไม่มีแคมเปญที่ตรงตัวกรอง")}</p>
+          <p className="mt-2 text-xs leading-relaxed opacity-90">
+            {tr(
+              lang,
+              "‘완료만’이면 상태가 완료이고 시작·종료일이 모두 있어야 합니다. ‘완료 + 진행중’으로 바꾸거나 기간을 ‘전체’로 두어 보세요. 캠페인에 운영 시작일이 없으면 여기서 제외됩니다.",
+              "With “Finished only”, campaigns need status finished plus both start and end dates. Try “Finished + ongoing” or set period to “All periods”. Campaigns without a start date are excluded.",
+              "ถ้าเลือก ‘เฉพาะที่เสร็จ’ ต้องมีสถานะเสร็จและวันเริ่ม/จบครบ ลอง ‘เสร็จ + กำลังดำเนินการ’ หรือช่วง ‘ทั้งหมด’",
+            )}
+          </p>
         </div>
       )}
     </div>

@@ -49,6 +49,22 @@ function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
 }
 
+async function fileToAccrualAttachmentDataUrl(file: File): Promise<string> {
+  if (file.type.startsWith("image/")) {
+    return compressImageForUpload(file, 1200, 0.65)
+  }
+  const max = 1.5 * 1024 * 1024
+  if (file.size > max) {
+    throw new Error("FILE_TOO_LARGE")
+  }
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result || ""))
+    r.onerror = () => reject(new Error("read_fail"))
+    r.readAsDataURL(file)
+  })
+}
+
 /** 퇴사일(resign_date) 기준 재직(방콕): 퇴사일 **다음 날**부터 목록 제외(퇴사 당일까지는 표시). 미입력·형식 이상이면 표시 유지 */
 function isActiveEmployeeByResignBangkok(resign: string | undefined): boolean {
   const r = String(resign ?? "").trim().slice(0, 10)
@@ -126,6 +142,8 @@ export function WithdrawalManagementTab() {
   const [invoiceReceived, setInvoiceReceived] = React.useState(false)
   const [invoiceNo, setInvoiceNo] = React.useState("")
   const [invoicePhotoFile, setInvoicePhotoFile] = React.useState<File | null>(null)
+  /** 지출 등록(지급 예정만) 시 첨부 — 인보이스·영수증 이미지/PDF */
+  const [accrualAttachmentFiles, setAccrualAttachmentFiles] = React.useState<File[]>([])
   const [saving, setSaving] = React.useState(false)
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
   const [payeeCode, setPayeeCode] = React.useState("")
@@ -480,6 +498,27 @@ export function WithdrawalManagementTab() {
       await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
       return
     }
+    let attachmentUrls: string[] | undefined
+    if (
+      (categoryMain === "purchase" || categoryMain === "expense") &&
+      accrualAttachmentFiles.length > 0
+    ) {
+      try {
+        const urls: string[] = []
+        for (const f of accrualAttachmentFiles.slice(0, 3)) {
+          urls.push(await fileToAccrualAttachmentDataUrl(f))
+        }
+        attachmentUrls = urls
+      } catch (e) {
+        const msg =
+          e instanceof Error && e.message === "FILE_TOO_LARGE"
+            ? t("expenseAccrualAttachTooLarge") || "첨부 파일이 너무 큽니다. PDF는 1.5MB 이하로 올려 주세요."
+            : t("expenseAccrualAttachFail") || "첨부 처리에 실패했습니다."
+        await appAlert(msg)
+        return
+      }
+    }
+
     setSaving(true)
     try {
       if (isEditAccrualMode && editAccrualIdParam) {
@@ -500,6 +539,7 @@ export function WithdrawalManagementTab() {
           categoryMain,
           categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           userRole: auth?.role,
+          ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
         })
         if (!res.success) {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
@@ -509,6 +549,7 @@ export function WithdrawalManagementTab() {
         setMemo("")
         setPayeeCode("")
         setPayeeName("")
+        setAccrualAttachmentFiles([])
         hasAppliedParams.current = false
         router.replace("/admin/expense-management?tab=plan")
         await appAlert(t("wm_accrualUpdateSuccess") || "수정되었습니다. 지급예정 탭에서 확인하세요.")
@@ -527,6 +568,7 @@ export function WithdrawalManagementTab() {
           storeName: storeName || undefined,
           userName: auth?.user,
           userRole: auth?.role,
+          ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
         })
         if (!res.success) {
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
@@ -536,6 +578,7 @@ export function WithdrawalManagementTab() {
         setMemo("")
         setPayeeCode("")
         setPayeeName("")
+        setAccrualAttachmentFiles([])
         await appAlert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
       }
     } finally {
@@ -1518,6 +1561,30 @@ export function WithdrawalManagementTab() {
                 />
               </div>
             </div>
+            {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
+              <div className="max-w-xl space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
+                <Label className="text-sm font-medium">
+                  {tt("expenseAccrualAttachLabel", "인보이스·영수증 첨부")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {tt("expenseAccrualAttachHint", "이미지 또는 PDF, 최대 3개(비이미지는 파일당 1.5MB 이하 권장)")}
+                </p>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  className="block w-full text-sm file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1"
+                  onChange={(e) => setAccrualAttachmentFiles(Array.from(e.target.files || []).slice(0, 3))}
+                />
+                {accrualAttachmentFiles.length > 0 ? (
+                  <ul className="list-disc pl-5 text-xs text-muted-foreground">
+                    {accrualAttachmentFiles.map((f, i) => (
+                      <li key={`${f.name}-${i}`}>{f.name}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            )}
             {(categoryMain === "purchase" || categoryMain === "expense") && !isLaterPayment && effectivePaymentMethod === "bank" && (
               <div className="space-y-2 p-3 rounded-lg border bg-muted/20">
                 <div className="text-sm font-medium">{t("poInvoice") || "인보이스"}</div>

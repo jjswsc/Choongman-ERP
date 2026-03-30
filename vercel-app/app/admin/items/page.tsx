@@ -2,6 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Tags, Settings, FileSpreadsheet, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
@@ -54,6 +55,8 @@ const emptyForm: ItemFormData = {
 export default function ItemsPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const { auth } = useAuth()
   const canToggleOrderPaused = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
   const [products, setProducts] = React.useState<Product[]>([])
@@ -95,6 +98,40 @@ export default function ItemsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  const prefillAppliedKey = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    const qs = searchParams.toString()
+    if (!qs.includes("prefillFromSauce=1")) {
+      prefillAppliedKey.current = null
+      return
+    }
+    if (prefillAppliedKey.current === qs) return
+    prefillAppliedKey.current = qs
+
+    const name = (searchParams.get("name") || "").trim()
+    const unit = (searchParams.get("unit") || "g").trim() || "g"
+    const totalQtyRaw = parseFloat(searchParams.get("totalQty") || "")
+    const totalQty = Number.isFinite(totalQtyRaw) && totalQtyRaw > 0 ? totalQtyRaw : 1000
+    const batchRaw = parseFloat(searchParams.get("batchCost") || "")
+    const batchCost = Number.isFinite(batchRaw) && batchRaw >= 0 ? Math.round(batchRaw * 100) / 100 : 0
+    const sauceCode = (searchParams.get("sauceCode") || "").trim()
+
+    setItemsTab("list")
+    setEditingCode(null)
+    setFormData({
+      ...emptyForm,
+      name,
+      unit,
+      totalQuantity: String(totalQty),
+      standardUnits: [{ unit, totalQuantity: totalQty }],
+      cost: batchCost > 0 ? String(batchCost) : "",
+      price: "",
+      description: sauceCode ? `${t("itemsPrefillFromSauceNote") || "배합 연동"}: ${sauceCode}` : "",
+    })
+
+    router.replace("/admin/items", { scroll: false })
+  }, [searchParams, router, t])
 
   const handleNewRegister = () => {
     setFormData(emptyForm)

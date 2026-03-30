@@ -78,6 +78,22 @@ function formatMoneyComma(n: number): string {
   return x.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+/** 회계 PO: 매장명과 vendors.sales_outlet(매출처)가 같은 거래처 = 해당 매장 법인 */
+function vendorForSalesOutletStore(
+  vendors: VendorForPurchase[],
+  storeName: string
+): VendorForPurchase | null {
+  const s = String(storeName || "").trim()
+  if (!s || s === "_none") return null
+  const lower = s.toLowerCase()
+  for (const v of vendors) {
+    const out = String(v.salesOutlet ?? "").trim()
+    if (!out) continue
+    if (out === s || out.toLowerCase() === lower) return v
+  }
+  return null
+}
+
 interface CartItem {
   code: string
   name: string
@@ -121,16 +137,6 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [vendorDropdownOpen, setVendorDropdownOpen] = React.useState(false)
   const vendorInputRef = React.useRef<HTMLInputElement>(null)
   const vendorContainerRef = React.useRef<HTMLDivElement>(null)
-
-  const filteredVendors = React.useMemo(() => {
-    const q = vendorSearchQuery.trim().toLowerCase()
-    if (!q) return vendors
-    return vendors.filter(
-      (v) =>
-        (v.code || "").toLowerCase().includes(q) ||
-        (v.name || "").toLowerCase().includes(q)
-    )
-  }, [vendors, vendorSearchQuery])
 
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -185,6 +191,36 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     'royalty' | 'delivery_gp' | 'grab_gp' | 'all' | null
   >(null)
   const { stores: storeList } = useStoreList()
+
+  const filteredVendors = React.useMemo(() => {
+    let list = vendors
+    if (allowManualLines && relatedStore !== "_none") {
+      const hit = vendorForSalesOutletStore(vendors, relatedStore)
+      if (hit) list = [hit, ...vendors.filter((v) => v.code !== hit.code)]
+    }
+    const q = vendorSearchQuery.trim().toLowerCase()
+    if (!q) return list
+    return list.filter(
+      (v) =>
+        (v.code || "").toLowerCase().includes(q) ||
+        (v.name || "").toLowerCase().includes(q)
+    )
+  }, [vendors, vendorSearchQuery, allowManualLines, relatedStore])
+
+  const storeOutletVendor = React.useMemo(
+    () =>
+      allowManualLines && relatedStore !== "_none"
+        ? vendorForSalesOutletStore(vendors, relatedStore)
+        : null,
+    [allowManualLines, relatedStore, vendors]
+  )
+
+  const accountingVendorRequirementMet = React.useMemo(() => {
+    if (!allowManualLines) return false
+    if (vendorSelect) return true
+    if (vendorSearchQuery.trim()) return true
+    return !!storeOutletVendor
+  }, [allowManualLines, vendorSelect, vendorSearchQuery, storeOutletVendor])
 
   const billingMonthYm = React.useMemo(
     () => (billingStart.length >= 7 ? billingStart.slice(0, 7) : ''),
@@ -560,9 +596,15 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       await appAlert(t("purchaseOrderSelectLocation"))
       return
     }
-    const vendorToUse = resolveVendorForSave()
+    const vendorFromOutlet =
+      allowManualLines && relatedStore !== "_none"
+        ? vendorForSalesOutletStore(vendors, relatedStore)
+        : null
+    const vendorToUse = resolveVendorForSave() ?? vendorFromOutlet
     if (!vendorToUse) {
-      await appAlert(t("purchaseOrderSelectVendor"))
+      await appAlert(
+        allowManualLines ? t("purchaseOrderSelectVendorOrStore") : t("purchaseOrderSelectVendor")
+      )
       return
     }
     if (!auth?.user) {
@@ -620,7 +662,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={`grid gap-4 ${allowManualLines ? "lg:grid-cols-3" : "sm:grid-cols-2"}`}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">{t("purchaseOrderLocation")}</CardTitle>
@@ -729,25 +771,44 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
               )}
             </div>
             {allowManualLines ? (
-              <div className="mt-3 space-y-1">
-                <label className="text-xs text-muted-foreground">{t("expenseStoreSelect")}</label>
-                <Select value={relatedStore} onValueChange={setRelatedStore}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("expenseStoreSelect")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">{t("poRelatedStoreNone")}</SelectItem>
-                    {storeList.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{t("poStoreVendorHint")}</p>
             ) : null}
           </CardContent>
         </Card>
+
+        {allowManualLines ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{t("poRelatedStore")}</CardTitle>
+              <p className="mt-1 text-xs font-normal text-muted-foreground">{t("poVendorOrStoreHint")}</p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <label className="text-xs text-muted-foreground">{t("expenseStoreSelect")}</label>
+              <Select value={relatedStore} onValueChange={setRelatedStore}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("expenseStoreSelect")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">{t("poRelatedStoreNone")}</SelectItem>
+                  {storeList.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {relatedStore !== "_none" ? (
+                storeOutletVendor ? (
+                  <p className="text-xs text-foreground">
+                    {t("poStoreResolvedVendor").replace("{name}", storeOutletVendor.name)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-500">{t("poStoreNoVendorMatch")}</p>
+                )
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {allowManualLines ? (
@@ -1246,7 +1307,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             cart.length === 0 ||
             submitting ||
             !locationSelect ||
-            (!vendorSelect && !vendorSearchQuery.trim())
+            (allowManualLines ? !accountingVendorRequirementMet : !vendorSelect && !vendorSearchQuery.trim())
           }
         >
           {submitting ? t("loading") : t("purchaseOrderSave")}

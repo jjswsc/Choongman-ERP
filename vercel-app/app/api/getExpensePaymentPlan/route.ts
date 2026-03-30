@@ -19,6 +19,19 @@ type ExpenseAccrualRow = {
   rejected_by?: string
   rejected_at?: string
   rejection_note?: string
+  attachment_urls?: string | null
+}
+
+function parseAttachmentUrls(raw: string | null | undefined): string[] {
+  const s = String(raw ?? '').trim()
+  if (!s) return []
+  try {
+    const p = JSON.parse(s) as unknown
+    if (!Array.isArray(p)) return []
+    return p.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 8)
+  } catch {
+    return []
+  }
 }
 
 type PayableTxRow = {
@@ -69,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'id=gt.0', {
-        select: 'id,payee_code,payee_name,amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note',
+        select: 'id,payee_code,payee_name,amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls',
         order: 'due_date.asc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
@@ -105,6 +118,7 @@ export async function GET(request: NextRequest) {
         const planned = Math.abs(Number(r.amount || 0))
         const paid = paymentByAccrual.get(id) || 0
         const remaining = Math.max(0, planned - paid)
+        const attachmentUrls = parseAttachmentUrls(r.attachment_urls)
         return {
           id,
           payeeCode: decoded.payeeCode || '',
@@ -113,6 +127,7 @@ export async function GET(request: NextRequest) {
           plannedAmount: planned,
           paidAmount: paid,
           remainingAmount: remaining,
+          ...(attachmentUrls.length > 0 ? { attachmentUrls } : {}),
           expenseDate: r.expense_date || '',
           dueDate: r.due_date || '',
           memo: r.memo || '',

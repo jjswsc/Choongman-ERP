@@ -26,6 +26,26 @@ function normalizeWithdrawalCategory(mainRaw: string, subRaw: string, explicitRa
   return 'expense'
 }
 
+function normalizeAttachmentUrlsJson(body: { attachmentUrls?: unknown; attachment_urls?: unknown }): string | null {
+  const raw = body.attachmentUrls ?? body.attachment_urls
+  if (raw == null) return null
+  let urls: string[] = []
+  if (Array.isArray(raw)) {
+    urls = raw.map((x) => String(x ?? '').trim()).filter(Boolean)
+  } else if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const p = JSON.parse(raw) as unknown
+      if (Array.isArray(p)) urls = p.map((x) => String(x ?? '').trim()).filter(Boolean)
+    } catch {
+      return null
+    }
+  }
+  urls = urls.slice(0, 5).map((u) => (u.length > 400_000 ? u.slice(0, 400_000) : u))
+  if (urls.length === 0) return null
+  const json = JSON.stringify(urls)
+  return json.length > 2_000_000 ? JSON.stringify([urls[0]!.slice(0, 1_500_000)]) : json
+}
+
 function encodePayeeCode(payeeCode: string, withdrawalCategory: string): string {
   const base = String(payeeCode || '').trim()
   const cat = String(withdrawalCategory || '').trim().toLowerCase() || 'expense'
@@ -111,6 +131,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const attachmentUrlsJson = normalizeAttachmentUrlsJson(body as { attachmentUrls?: unknown; attachment_urls?: unknown })
+
     const accrualRow: Record<string, unknown> = {
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode,
@@ -121,6 +143,7 @@ export async function POST(request: NextRequest) {
       store_name: storeName || null,
       created_by: userName || null,
       status: 'planned',
+      ...(attachmentUrlsJson ? { attachment_urls: attachmentUrlsJson } : {}),
     }
     let subjectCode = '5520'
     let subjectName = '기타경비'

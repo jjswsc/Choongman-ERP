@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter } from '@/lib/supabase-server'
 
-/** POST: 소스 삭제 (CASCADE로 sauce_ingredients도 삭제) */
+/** POST: 배합 삭제 (CASCADE로 sauce_ingredients도 삭제) */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

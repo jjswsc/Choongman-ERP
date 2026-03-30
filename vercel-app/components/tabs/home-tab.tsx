@@ -21,7 +21,7 @@ import { Megaphone, Bell, Search, FileText } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
-const NOTICE_SERVER_FETCH_CAP = 600
+const NOTICE_SERVER_FETCH_CAP = 100
 
 const PushNotificationSetup = dynamic(
   () => import("@/components/push-notification-setup").then((m) => ({ default: m.PushNotificationSetup })),

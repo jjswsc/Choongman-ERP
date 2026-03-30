@@ -70,6 +70,7 @@ import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/l
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { printHtmlInHiddenIframe } from "@/lib/print-html-iframe"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
+import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -205,6 +206,7 @@ export default function PosOrderPage() {
   } | null>(null)
   const receiptRef = React.useRef<HTMLDivElement>(null)
   const autoPrintedKeyRef = React.useRef<string>("")
+  const [isMainPosDevice] = usePosMainDevice(storeCode || null)
 
   React.useEffect(() => {
     if (!receiptData) return
@@ -987,6 +989,7 @@ export default function PosOrderPage() {
 
   React.useEffect(() => {
     if (!receiptData) return
+    if (!isMainPosDevice) return
     if (!autoPrintReceiptOnPayment && !autoPrintKitchenSlipOnOrder) return
     const key = `${receiptData.orderNo}|${receiptData.storeCode}|${receiptData.total}|${receiptData.items.length}`
     if (autoPrintedKeyRef.current === key) return
@@ -1004,7 +1007,7 @@ export default function PosOrderPage() {
       }, autoPrintKitchenSlipOnOrder ? 780 : 180))
     }
     return () => timers.forEach((id) => clearTimeout(id))
-  }, [receiptData, autoPrintReceiptOnPayment, autoPrintKitchenSlipOnOrder, handlePrintReceipt, handlePrintKitchenSlip])
+  }, [receiptData, isMainPosDevice, autoPrintReceiptOnPayment, autoPrintKitchenSlipOnOrder, handlePrintReceipt, handlePrintKitchenSlip])
 
   const orderTypeLabels: Record<OrderType, string> = {
     dine_in: t("posOrderTypeDineIn") ?? "매장",

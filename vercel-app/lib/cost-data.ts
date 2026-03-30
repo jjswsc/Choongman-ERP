@@ -67,13 +67,36 @@ export function getRuntimeIngredients(): Array<{ code: number; name: string; bah
   return Array.from(runtimeIngredientMap.entries()).map(([code, v]) => ({ code, name: v.name, bahtPerUnit: v.bahtPerUnit, category: v.category }))
 }
 
-// Runtime sauces (소스 원가 탭에서 등록한 소스, 원가 계산기에서 선택 가능)
+// Runtime sauces (배합 원가 탭에서 등록한 항목; 원가 계산기에서 선택 가능)
 const SAUCE_CODE_OFFSET = 20000
-let runtimeSauceMap = new Map<number, { name: string; bahtPerUnit: number; itemCode: string }>()
+type RuntimeSauceEntry = { name: string; bahtPerUnit: number; itemCode: string; usageKind?: 'for_sale' | 'store_use' }
+let runtimeSauceMap = new Map<number, RuntimeSauceEntry>()
 
-export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; cost_per_unit?: number; costPerUnit?: number }>) {
+export type RuntimeSauceInput = {
+  code: string
+  name?: string
+  cost_per_unit?: number
+  costPerUnit?: number
+  /** for_sale: 계산기·배합 레시피에서 배합으로 선택 가능. store_use: 계산기 배합 목록에서 제외 */
+  usageKind?: 'for_sale' | 'store_use'
+  /** PostgREST/캐시 등에서 snake_case로 올 때 대비 */
+  usage_kind?: string
+}
+
+function runtimeSauceUsageKind(s: RuntimeSauceInput): 'for_sale' | 'store_use' {
+  const raw = String(s.usageKind ?? s.usage_kind ?? 'for_sale').trim().toLowerCase()
+  return raw === 'store_use' ? 'store_use' : 'for_sale'
+}
+
+/** mode calculator: 매장용 배합은 제외(원가 계산기에서 품목만 선택). full: 배합 원가 탭 레시피 편집용 전체 */
+export function setRuntimeSauces(sauces: RuntimeSauceInput[], opts?: { mode?: 'full' | 'calculator' }) {
+  const mode = opts?.mode ?? 'full'
+  const list =
+    mode === 'calculator'
+      ? sauces.filter((s) => runtimeSauceUsageKind(s) !== 'store_use')
+      : sauces
   runtimeSauceMap = new Map(
-    sauces.map((s, idx) => {
+    list.map((s, idx) => {
       const code = SAUCE_CODE_OFFSET + idx + 1
       const itemCode = String(s.code ?? '').trim()
       const cost = Number(s.costPerUnit ?? s.cost_per_unit) ?? 0
@@ -81,9 +104,49 @@ export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; co
         name: String(s.name ?? s.code ?? ''),
         bahtPerUnit: cost,
         itemCode: itemCode || String(code),
+        usageKind: runtimeSauceUsageKind(s),
       }]
     })
   )
+}
+
+function nextFreeSauceNumericCode(): number {
+  let max = SAUCE_CODE_OFFSET
+  for (const c of runtimeSauceMap.keys()) {
+    if (c >= SAUCE_CODE_OFFSET && c > max) max = c
+  }
+  return max + 1
+}
+
+/** 이미 같은 itemCode가 맵에 있으면 기존 code, 없으면 추가 후 code (원가 계산기·매장용 배합 다이얼로그용) */
+export function registerRuntimeSauceIfAbsent(entry: {
+  itemCode: string
+  name: string
+  bahtPerUnit: number
+  usageKind: 'for_sale' | 'store_use'
+}): number {
+  const ic = String(entry.itemCode ?? '').trim()
+  if (!ic) {
+    const code = nextFreeSauceNumericCode()
+    runtimeSauceMap.set(code, {
+      name: String(entry.name ?? ''),
+      bahtPerUnit: Number(entry.bahtPerUnit) || 0,
+      itemCode: String(code),
+      usageKind: entry.usageKind,
+    })
+    return code
+  }
+  for (const [c, v] of runtimeSauceMap) {
+    if (v.itemCode === ic) return c
+  }
+  const code = nextFreeSauceNumericCode()
+  runtimeSauceMap.set(code, {
+    name: String(entry.name ?? ic),
+    bahtPerUnit: Number(entry.bahtPerUnit) || 0,
+    itemCode: ic,
+    usageKind: entry.usageKind,
+  })
+  return code
 }
 
 // 품목 관리(API)에서 로드한 재료
@@ -198,8 +261,20 @@ export function getRuntimeApiItems(): Array<{
   }))
 }
 
-export function getRuntimeSauces(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" }> {
-  return Array.from(runtimeSauceMap.entries()).map(([code, v]) => ({ code, name: v.name, bahtPerUnit: v.bahtPerUnit, category: "food" as const }))
+export function getRuntimeSauces(): Array<{
+  code: number
+  name: string
+  bahtPerUnit: number
+  category: "food"
+  usageKind?: 'for_sale' | 'store_use'
+}> {
+  return Array.from(runtimeSauceMap.entries()).map(([code, v]) => ({
+    code,
+    name: v.name,
+    bahtPerUnit: v.bahtPerUnit,
+    category: "food" as const,
+    usageKind: v.usageKind,
+  }))
 }
 
 /** ingredientCode(number) → item_code(string) for API 저장 */
@@ -223,6 +298,13 @@ export function getIngredientCodeByItemCode(itemCode: string): number | undefine
   for (const [c, v] of runtimeSauceMap) {
     if (v.itemCode === code) return c
   }
+  const codeLower = code.toLowerCase()
+  for (const [c, v] of runtimeApiItemsMap) {
+    if (String(v.name ?? "").trim().toLowerCase() === codeLower) return c
+  }
+  for (const [c, v] of runtimeSauceMap) {
+    if (String(v.name ?? "").trim().toLowerCase() === codeLower) return c
+  }
   return undefined
 }
 
@@ -237,21 +319,43 @@ export function getIngredient(code: number): (Ingredient & { standardUnits?: { u
   return undefined
 }
 
+/** 동일 unit+용량이 품목 데이터에 중복돼 있으면 Select key 충돌·중복 옵션 방지 */
+function dedupeStandardUnitRows(arr: { unit: string; totalQuantity: number }[]): { unit: string; totalQuantity: number }[] {
+  const seen = new Set<string>()
+  const out: { unit: string; totalQuantity: number }[] = []
+  for (const o of arr) {
+    const u = String(o.unit ?? "").trim()
+    const tq = Number(o.totalQuantity)
+    if (!u || !Number.isFinite(tq) || tq <= 0) continue
+    const k = `${u.toLowerCase()}::${tq}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push({ unit: u, totalQuantity: tq })
+  }
+  return out
+}
+
 /** API 품목의 표준 단위 목록 (원가 계산기 수량 입력용). food는 항상 g 포함 (품목 관리 1g당 원가 기준). */
 export function getIngredientStandardUnits(code: number): { unit: string; totalQuantity: number }[] | undefined {
   const apiItem = runtimeApiItemsMap.get(code)
   const units = apiItem?.standardUnits
-  if (!apiItem) return units
+  if (!apiItem) return undefined
+  let raw: { unit: string; totalQuantity: number }[]
   if (apiItem.category === "food") {
     const hasG = units?.some((u) => String(u.unit || "").toLowerCase().trim() === "g")
     if (!hasG) {
       const tq = apiItem.bahtPerUnit > 0 && apiItem.price != null && apiItem.price >= 0
         ? Math.max(1, Math.round(apiItem.price / apiItem.bahtPerUnit))
         : 1
-      return [{ unit: "g", totalQuantity: tq }, ...(units ?? [])]
+      raw = [{ unit: "g", totalQuantity: tq }, ...(units ?? [])]
+    } else {
+      raw = [...(units ?? [])]
     }
+  } else {
+    raw = [...(units ?? [])]
   }
-  return units
+  const d = dedupeStandardUnitRows(raw)
+  return d.length ? d : undefined
 }
 
 /** 표준단위 key (unit::totalQuantity)에 대한 ฿/단위. API 품목만 지원. g는 항상 bahtPerUnit(1g당 원가) 사용. */

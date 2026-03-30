@@ -153,6 +153,8 @@ export async function supabaseFetch(
   throw lastErr
 }
 
+let warnedMissingServiceRole = false
+
 function getConfig() {
   const url = (process.env.SUPABASE_URL || '').trim()
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -162,6 +164,13 @@ function getConfig() {
     throw new Error(
       'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY(권장) 또는 SUPABASE_ANON_KEY가 필요합니다. ' +
         '보안을 위해 service_role 키 사용을 권장합니다.'
+    )
+  }
+  if (!serviceKey && anonKey && !warnedMissingServiceRole) {
+    warnedMissingServiceRole = true
+    console.warn(
+      '[supabase-server] SUPABASE_SERVICE_ROLE_KEY가 없어 anon 키로 PostgREST를 호출합니다. ' +
+        'RLS가 켜진 테이블(sauces, sauce_ingredients 등)은 0건·거부로 보일 수 있습니다. 서버(Vercel)에 service_role 키를 설정하세요.'
     )
   }
   const base = url.replace(/\/$/, '').replace(/^http:\/\//, 'https://')

@@ -30,3 +30,16 @@ export function subscribePosOrdersInsert(
     .subscribe()
   return channel
 }
+
+/** 결제 반영 등 pos_orders UPDATE (메인 포스에서 결제 영수증 자동 인쇄용) */
+export function subscribePosOrdersUpdate(
+  onUpdate: (payload: { new: Record<string, unknown>; old?: Record<string, unknown> }) => void
+): RealtimeChannel | null {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const channel = supabase
+    .channel('pos-orders-update')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pos_orders' }, onUpdate)
+    .subscribe()
+  return channel
+}

@@ -2102,6 +2102,8 @@ export interface ExpenseAccrualPlanItem {
   plannedAmount: number
   paidAmount: number
   remainingAmount: number
+  /** 인보이스·영수증 등 첨부 URL 목록 */
+  attachmentUrls?: string[]
   expenseDate: string
   dueDate?: string
   memo?: string
@@ -2183,6 +2185,8 @@ export async function addExpenseAccrual(params: {
   storeName?: string
   userName?: string
   userRole?: string
+  /** 인보이스·영수증 등 (data URL 또는 https) */
+  attachmentUrls?: string[]
 }) {
   const res = await apiFetchWithOffline('/api/addExpenseAccrual', {
     method: 'POST',
@@ -2257,6 +2261,7 @@ export async function updateExpenseAccrual(params: {
   categoryMain?: string
   categorySub?: string
   userRole?: string
+  attachmentUrls?: string[]
 }) {
   const res = await apiFetchWithOffline('/api/updateExpenseAccrual', {
     method: 'POST',
@@ -2332,7 +2337,8 @@ export async function getExpensePaymentPlan(params: {
   if (params.payeeFilter) q.set('payeeFilter', params.payeeFilter)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetchWithOffline(`/api/getExpensePaymentPlan?${q}`)
+  // 지급예정은 오프라인 큐/캐시 없이 항상 서버 조회 (검색·탭 전환 시 최신 데이터)
+  const res = await apiFetch(`/api/getExpensePaymentPlan?${q}`)
   return res.json() as Promise<ExpensePaymentPlanResponse>
 }
 
@@ -3994,7 +4000,7 @@ export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Pr
   return arr
 }
 
-// ─── 소스(합성품) 원가 ───
+// ─── 배합(합성품) 원가 — API 테이블명 sauces 유지 ───
 export interface SauceRow {
   id?: number
   code: string
@@ -4007,15 +4013,39 @@ export interface SauceRow {
   costPerUnit: number
   ingredients: { id?: number; itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number; unit: string }[]
   purchaseSource: 'hq' | 'store'
+  /** 판매용: 계산기에서 배합 선택·품목 등록 프리필·연결 품목 필수. 매장용: 연결 없음·매장용 전용 추가 경로 */
+  usageKind?: 'for_sale' | 'store_use'
+  /** usageKind=for_sale 일 때 품목관리 items.code (필수). 매장용은 보통 비움 */
+  linkedItemCode?: string
 }
 
+let warnedSaucesAnonEmpty = false
+
+/** 읽기 전용: apiFetch 사용(인증·응답 형식 일관). 배열이 아닌 200 응답은 조용히 빈 목록으로 두지 않고 오류 처리 */
 export async function getSauces() {
-  const res = await apiFetchWithOffline('/api/sauces')
+  const res = await apiFetch('/api/sauces')
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    throw new Error((data as { message?: string })?.message || `소스 목록 조회 실패 (${res.status})`)
+    throw new Error((data as { message?: string })?.message || `배합 목록 조회 실패 (${res.status})`)
   }
-  return Array.isArray(data) ? data : []
+  if (!Array.isArray(data)) {
+    const msg =
+      data && typeof data === 'object' && 'message' in data
+        ? String((data as { message?: unknown }).message)
+        : `배합 API 응답이 배열이 아닙니다 (${typeof data})`
+    throw new Error(msg)
+  }
+  if (
+    data.length === 0 &&
+    res.headers.get('X-CM-Supabase-Key-Mode') === 'anon' &&
+    !warnedSaucesAnonEmpty
+  ) {
+    warnedSaucesAnonEmpty = true
+    console.warn(
+      '[getSauces] 배합 0건이고 서버가 anon 키 모드입니다. DB에 데이터가 있어도 RLS 때문에 안 보일 수 있습니다. Vercel/로컬에 SUPABASE_SERVICE_ROLE_KEY를 설정하거나 vercel-app/sql/sauces_rls_anon_read_optional.sql 을 참고하세요.'
+    )
+  }
+  return data as SauceRow[]
 }
 
 export async function saveSauce(params: {
@@ -4026,6 +4056,8 @@ export async function saveSauce(params: {
   overheadPercent?: number
   totalQuantity?: number
   ingredients: { itemCode: string; quantity: number; lossRate?: number }[]
+  usageKind?: 'for_sale' | 'store_use'
+  linkedItemCode?: string
 }) {
   const res = await apiFetchWithOffline('/api/sauces', {
     method: 'POST',
@@ -6033,8 +6065,11 @@ export async function getPosOrders(params?: {
   storeCode?: string
   status?: string
   sinceId?: number
+  /** 단건 조회(결제 영수증 동기화 등). 지정 시 날짜·sinceId 없이 id 우선 조회 */
+  orderId?: number
 }): Promise<PosOrder[]> {
   const q = new URLSearchParams()
+  if (params?.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
   if (params?.storeCode) q.set('storeCode', params.storeCode)

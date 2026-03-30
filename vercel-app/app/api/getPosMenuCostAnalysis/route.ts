@@ -257,6 +257,16 @@ export async function GET(request: NextRequest) {
           purchaseSource: 'hq',
         }
       }
+      const name = String(r.name ?? '').trim()
+      if (name && !itemMap[name] && code) {
+        const cost = Number(r.cost_per_unit ?? 0) > 0 ? Number(r.cost_per_unit ?? 0) : (sauceCostComputed[code] ?? 0)
+        itemMap[name] = {
+          name: String(r.name ?? ''),
+          cost,
+          unit: String(r.unit ?? 'g'),
+          purchaseSource: 'hq',
+        }
+      }
     }
     itemLookup = buildItemLookup(itemMap)
 

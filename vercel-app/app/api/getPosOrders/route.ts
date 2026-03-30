@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   const status = String(searchParams.get('status') || '').trim()
   const sinceIdRaw = searchParams.get('sinceId')?.trim()
   const sinceId = sinceIdRaw && /^\d+$/.test(sinceIdRaw) ? parseInt(sinceIdRaw, 10) : null
+  const orderIdRaw = searchParams.get('orderId')?.trim()
+  const orderId = orderIdRaw && /^\d+$/.test(orderIdRaw) ? parseInt(orderIdRaw, 10) : null
 
   try {
     let rows: {
@@ -46,59 +48,96 @@ export async function GET(request: NextRequest) {
       created_at?: string
     }[] = []
 
-    const filters: string[] = []
     const startDate = startStr ? startStr.slice(0, 10) : ''
     const endDate = endStr ? endStr.slice(0, 10) : ''
-    if (startDate && endDate) {
-      const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
-      filters.push(`created_at=gte.${encodeURIComponent(startISO)}`)
-      filters.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
-    }
-    if (storeCode && storeCode !== 'All') {
-      filters.push(`store_code=ilike.${encodeURIComponent(storeCode)}`)
-    }
-    if (status && status !== 'all') {
-      filters.push(`status=eq.${encodeURIComponent(status)}`)
-    }
-    if (sinceId != null && sinceId > 0) {
-      filters.push(`id=gt.${sinceId}`)
-    }
-    const filterStr = filters.length ? filters.join('&') : ''
 
-    if (filterStr) {
-      rows = (await supabaseSelectFilter('pos_orders', filterStr, {
+    /** 단건 id 조회: Realtime UPDATE 후 풀 행 보강용 */
+    if (orderId != null && orderId > 0) {
+      const idFilters = [`id=eq.${orderId}`]
+      if (storeCode && storeCode !== 'All') {
+        idFilters.push(`store_code=ilike.${encodeURIComponent(storeCode)}`)
+      }
+      let idRows = (await supabaseSelectFilter('pos_orders', idFilters.join('&'), {
         order: 'created_at.desc',
-        limit: 10000,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+        limit: 1,
+        select:
+          'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
 
-      if (!rows?.length && storeCode) {
+      if (!idRows?.length && storeCode) {
         const variants = [
           storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
           storeCode.replace(/^CM\s+/i, '').trim(),
         ].filter((v) => v && v !== storeCode)
         for (const alt of variants) {
-          const altParts = [`store_code=ilike.${encodeURIComponent(alt)}`]
-          if (startDate && endDate) {
-            const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
-            altParts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
-            altParts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
-          }
-          const altFilter = altParts.join('&')
-          rows = (await supabaseSelectFilter('pos_orders', altFilter, {
+          const altFilter = `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`
+          idRows = (await supabaseSelectFilter('pos_orders', altFilter, {
             order: 'created_at.desc',
-            limit: 10000,
-            select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+            limit: 1,
+            select:
+              'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
           })) as typeof rows
-          if (rows?.length) break
+          if (idRows?.length) break
         }
       }
+
+      rows = idRows || []
     } else {
-      rows = (await supabaseSelect('pos_orders', {
-        order: 'created_at.desc',
-        limit: 10000,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
-      })) as typeof rows
+      const filters: string[] = []
+      if (startDate && endDate) {
+        const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+        filters.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+        filters.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+      }
+      if (storeCode && storeCode !== 'All') {
+        filters.push(`store_code=ilike.${encodeURIComponent(storeCode)}`)
+      }
+      if (status && status !== 'all') {
+        filters.push(`status=eq.${encodeURIComponent(status)}`)
+      }
+      if (sinceId != null && sinceId > 0) {
+        filters.push(`id=gt.${sinceId}`)
+      }
+      const filterStr = filters.length ? filters.join('&') : ''
+
+      if (filterStr) {
+        rows = (await supabaseSelectFilter('pos_orders', filterStr, {
+          order: 'created_at.desc',
+          limit: 10000,
+          select:
+            'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+        })) as typeof rows
+
+        if (!rows?.length && storeCode) {
+          const variants = [
+            storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
+            storeCode.replace(/^CM\s+/i, '').trim(),
+          ].filter((v) => v && v !== storeCode)
+          for (const alt of variants) {
+            const altParts = [`store_code=ilike.${encodeURIComponent(alt)}`]
+            if (startDate && endDate) {
+              const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+              altParts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+              altParts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+            }
+            const altFilter = altParts.join('&')
+            rows = (await supabaseSelectFilter('pos_orders', altFilter, {
+              order: 'created_at.desc',
+              limit: 10000,
+              select:
+                'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+            })) as typeof rows
+            if (rows?.length) break
+          }
+        }
+      } else {
+        rows = (await supabaseSelect('pos_orders', {
+          order: 'created_at.desc',
+          limit: 10000,
+          select:
+            'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+        })) as typeof rows
+      }
     }
 
     if (process.env.NODE_ENV === 'development') {

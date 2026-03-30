@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 
-/** POST: 모든 소스 원가 재계산 및 cost_per_unit 캐시 업데이트 */
+/** POST: 모든 배합 원가 재계산 및 cost_per_unit 캐시 업데이트 */
 export async function POST() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -12,7 +12,7 @@ export async function POST() {
       supabaseSelect('sauce_ingredients', { limit: 5000, select: 'sauce_id,item_code,quantity,loss_rate' }),
       supabaseSelect('items', { limit: 5000, select: 'code,cost,price,total_quantity,unit' }),
     ]) as [
-      { id?: number; code?: string; overhead_percent?: number }[] | null,
+      { id?: number; code?: string; name?: string; overhead_percent?: number; total_quantity?: number | null }[] | null,
       { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[] | null,
       { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string }[] | null,
     ]
@@ -29,6 +29,8 @@ export async function POST() {
     for (const s of sauceRowsArr) {
       const code = String(s.code ?? '').trim()
       if (code) sauceCostPerUnit[code] = 0
+      const name = String(s.name ?? '').trim()
+      if (name && sauceCostPerUnit[name] === undefined) sauceCostPerUnit[name] = 0
     }
 
     for (let pass = 0; pass < 5; pass++) {
@@ -52,12 +54,15 @@ export async function POST() {
           totalCost += cost * qty * (1 + lossRate / 100)
           totalQty += qty
         }
-        if (allResolved && totalQty > 0) {
+        const qtyForUnit = Number(s.total_quantity ?? 0) || totalQty
+        if (allResolved && qtyForUnit > 0) {
           const oh = Number(s.overhead_percent ?? 5)
-          const costPerUnit = (totalCost * (1 + oh / 100)) / totalQty
+          const costPerUnit = (totalCost * (1 + oh / 100)) / qtyForUnit
           const prev = sauceCostPerUnit[code]
           if (Math.abs((prev ?? 0) - costPerUnit) > 1e-9) {
             sauceCostPerUnit[code] = costPerUnit
+            const name = String(s.name ?? '').trim()
+            if (name) sauceCostPerUnit[name] = costPerUnit
             changed = true
           }
         }
@@ -68,11 +73,8 @@ export async function POST() {
     for (const s of sauceRowsArr) {
       const code = String(s.code ?? '').trim()
       const cpu = sauceCostPerUnit[code] ?? 0
-      const ings = (ingRows || []).filter((i) => Number(i.sauce_id) === Number(s.id))
-      const totalQty = ings.reduce((sum, i) => sum + Number(i.quantity ?? 1), 0)
       await supabaseUpdate('sauces', s.id!, {
         cost_per_unit: Math.round(cpu * 1000000) / 1000000,
-        total_quantity: totalQty,
         updated_at: new Date().toISOString(),
       })
     }

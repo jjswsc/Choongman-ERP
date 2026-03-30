@@ -21,7 +21,19 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
-import { getMembers, getPosMenus, getPosOrders, getPosPrinterSettings, getPosTodaySales, getPosDeliveryApps, updatePosOrder, updatePosOrderStatus, type PosMenu, type PosDeliveryApp } from '@/lib/api-client'
+import {
+  getMembers,
+  getPosMenus,
+  getPosOrders,
+  getPosPrinterSettings,
+  getPosTodaySales,
+  getPosDeliveryApps,
+  updatePosOrder,
+  updatePosOrderStatus,
+  type PosMenu,
+  type PosDeliveryApp,
+  type PosOrder,
+} from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import { warmAdminOfflineCache } from '@/lib/offline/pos-offline-warm'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
@@ -46,7 +58,13 @@ import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kit
 import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
-import { subscribePosOrdersInsert } from '@/lib/supabase-client'
+import {
+  isPosOrderPaidLikeStatus,
+  posOrderPaymentSum,
+  posOrderRowPaymentSum,
+  receiptModalDataFromPosOrderForPayment,
+} from '@/lib/pos-payment-receipt-from-order'
+import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 
 /** Supabase Realtime INSERT 페이로드의 id는 number가 아닐 수 있음(bigint 등 → 문자열) */
@@ -500,6 +518,24 @@ export default function PosTerminalPage() {
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
+  /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
+  const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    printedPaymentReceiptIdsRef.current = new Set()
+  }, [currentStoreId])
+
+  const pricingAdjustments = useMemo<PosPricingAdjustments>(() => ({
+    vatRate,
+    vatMode,
+    serviceRate,
+    serviceMode,
+    cardRate,
+    cardMode,
+    cardBaseMode,
+    otherRate,
+    otherMode,
+  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
+
   useEffect(() => {
     if (activeTab === 'tables' && !selectedTableId) {
       clearCartFromTerminal()
@@ -767,11 +803,76 @@ export default function PosTerminalPage() {
           })
           .catch((e) => console.error('Kitchen slip print:', e))
       }
+      if (autoPrintReceiptOnPayment) {
+        const st = String(row.status ?? '').toLowerCase()
+        const paySum = posOrderRowPaymentSum(row)
+        if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
+          printedPaymentReceiptIdsRef.current.add(orderId)
+          void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
+            const order = list[0] as PosOrder | undefined
+            if (!order?.items?.length) {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+              return
+            }
+            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+              printedPaymentReceiptIdsRef.current.delete(orderId)
+              return
+            }
+            setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments))
+          })
+        }
+      }
     })
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, menus, t, lang])
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    autoPrintReceiptOnOrder,
+    autoPrintKitchenSlipOnOrder,
+    autoPrintReceiptOnPayment,
+    pricingAdjustments,
+    menus,
+    t,
+    lang,
+  ])
+
+  useEffect(() => {
+    if (!isMainPosDevice || !currentStoreId || !autoPrintReceiptOnPayment) return
+    const channel = subscribePosOrdersUpdate((payload: { new?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      const rowStore = String(row.store_code ?? '').trim()
+      const variants = [
+        currentStoreId,
+        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
+        currentStoreId.replace(/^CM\s+/i, ''),
+      ].filter(Boolean)
+      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (!isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
+      if (posOrderRowPaymentSum(row) <= 0) return
+      if (printedPaymentReceiptIdsRef.current.has(orderId)) return
+      printedPaymentReceiptIdsRef.current.add(orderId)
+      void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
+        const order = list[0] as PosOrder | undefined
+        if (!order?.items?.length) {
+          printedPaymentReceiptIdsRef.current.delete(orderId)
+          return
+        }
+        if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+          printedPaymentReceiptIdsRef.current.delete(orderId)
+          return
+        }
+        setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments))
+      })
+    })
+    return () => {
+      if (channel) channel.unsubscribe()
+    }
+  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnPayment, pricingAdjustments])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) {
@@ -943,18 +1044,6 @@ export default function PosTerminalPage() {
       setActiveFloor(floors[0])
     }
   }, [currentLayout, activeFloor, selectedTableId, servingTableId])
-
-  const pricingAdjustments = useMemo<PosPricingAdjustments>(() => ({
-    vatRate,
-    vatMode,
-    serviceRate,
-    serviceMode,
-    cardRate,
-    cardMode,
-    cardBaseMode,
-    otherRate,
-    otherMode,
-  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
 
   const tryOpenDrawerForPayment = useCallback(
     async (payment: CartPanelPaymentPayload | null | undefined) => {
@@ -1353,6 +1442,9 @@ export default function PosTerminalPage() {
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
+                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
+                }
                 await tryOpenDrawerForPayment(payload.payment)
                 setReceiptData({
                   orderNo: pendingReceiptOrderNo ?? '',
@@ -1374,6 +1466,7 @@ export default function PosTerminalPage() {
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
                   receiptAutoPrintContext: 'payment',
+                  suppressReceiptModalAutoPrint: !isMainPosDevice,
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingDeliveryOrderId(null)
@@ -1414,6 +1507,9 @@ export default function PosTerminalPage() {
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
+                  printedPaymentReceiptIdsRef.current.add(existingOrderId)
+                }
                 await tryOpenDrawerForPayment(payload.payment)
                 setReceiptData({
                   orderNo: pendingReceiptOrderNo ?? '',
@@ -1435,6 +1531,7 @@ export default function PosTerminalPage() {
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
                   receiptAutoPrintContext: 'payment',
+                  suppressReceiptModalAutoPrint: !isMainPosDevice,
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingTakeoutOrderId(null)
@@ -1579,7 +1676,7 @@ export default function PosTerminalPage() {
                   cardPaymentAmount: 0,
                   adjustments: pricingAdjustments,
                 })
-                if (shouldAutoPrintReceipt && !skipLocalAutoPrint) {
+                if (isMainPosDevice && shouldAutoPrintReceipt && !skipLocalAutoPrint) {
                   void printReceiptNow(
                     {
                       orderNo: savedOrderNo,
@@ -1606,7 +1703,7 @@ export default function PosTerminalPage() {
                     true
                   )
                 }
-                if (autoPrintKitchenSlipOnOrder && !skipLocalAutoPrint && payload.items.length > 0) {
+                if (isMainPosDevice && autoPrintKitchenSlipOnOrder && !skipLocalAutoPrint && payload.items.length > 0) {
                   const orderNoStr = savedOrderNo
                   const kitchenCartLines =
                     isAddOrder && existingOrder
@@ -1811,6 +1908,9 @@ export default function PosTerminalPage() {
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                if (orderIdToComplete != null && orderIdToComplete > 0 && isMainPosDevice) {
+                  printedPaymentReceiptIdsRef.current.add(orderIdToComplete)
+                }
                 await tryOpenDrawerForPayment(payload.payment)
                 setReceiptData({
                   orderNo,
@@ -1832,6 +1932,7 @@ export default function PosTerminalPage() {
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
                   receiptAutoPrintContext: 'payment',
+                  suppressReceiptModalAutoPrint: !isMainPosDevice,
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
@@ -1877,9 +1978,9 @@ export default function PosTerminalPage() {
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const newOrderId = (res as { orderId?: number }).orderId ?? null
-                let suppressReceiptModalAutoPrint = false
+                let suppressReceiptModalAutoPrint = !isMainPosDevice
                 if (newOrderId != null && newOrderId > 0) {
-                  suppressReceiptModalAutoPrint = seenOrderIdsRef.current.has(newOrderId)
+                  if (seenOrderIdsRef.current.has(newOrderId)) suppressReceiptModalAutoPrint = true
                   seenOrderIdsRef.current.add(newOrderId)
                   if (newOrderId > lastSeenOrderIdRef.current) {
                     lastSeenOrderIdRef.current = newOrderId

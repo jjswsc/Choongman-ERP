@@ -25,7 +25,7 @@ import {
   MISE_DEFAULT,
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
-import type { PosMenuCostAnalysisRow, PosMenuIngredient } from "@/lib/api-client"
+import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
 import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis } from "@/lib/api-client"
@@ -116,8 +116,17 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
   const [foodItems, setFoodItems] = useState<RecipeItem[]>(emptyFoodRecipe)
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(emptyPackagingRecipe)
-  /** 재료·소스 API 로드 완료 시 재렌더 (소스 원가 반영) */
+  /** 재료·배합 API 로드 완료 시 재렌더 (배합 원가 반영) */
   const [runtimeReady, setRuntimeReady] = useState(false)
+  const [sauceRowsFull, setSauceRowsFull] = useState<SauceRow[]>([])
+
+  const storeUseSauceRowsForDialog = useMemo(
+    () =>
+      sauceRowsFull
+        .filter((s) => s.usageKind === "store_use")
+        .map((s) => ({ code: s.code, name: s.name, costPerUnit: s.costPerUnit })),
+    [sauceRowsFull]
+  )
 
   useEffect(() => {
     let done = 0
@@ -133,10 +142,17 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       .catch(check)
     getSauces()
       .then((list) => {
-        setRuntimeSauces(list)
+        const L = list || []
+        setSauceRowsFull(L)
+        setRuntimeSauces(L, { mode: "calculator" })
         check()
       })
-      .catch(check)
+      .catch((err) => {
+        console.error("[CostCalculatorTab] getSauces failed:", err)
+        setSauceRowsFull([])
+        setRuntimeSauces([], { mode: "calculator" })
+        check()
+      })
   }, [])
 
   useEffect(() => {
@@ -468,7 +484,15 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             }
           />
           <div className="space-y-6">
-            <IngredientTable title={t("posCostFoodIngredients")} type="food" items={foodItems} onItemsChange={setFoodItems} costTextDark />
+            <IngredientTable
+              title={t("posCostFoodIngredients")}
+              type="food"
+              items={foodItems}
+              onItemsChange={setFoodItems}
+              costTextDark
+              addSauceDialogStoreUseRows={storeUseSauceRowsForDialog}
+              ingredientPickerHideSauceUsageKinds={["store_use"]}
+            />
             <IngredientTable
               title={t("posCostPackagingDelivery")}
               type="packaging"

@@ -13,7 +13,7 @@ export interface NoticeItem {
   attachments: unknown[]
 }
 
-const DB_FETCH_LIMIT = 600
+const DB_FETCH_LIMIT = 100
 
 function isReadStatus(status: string): boolean {
   return /^(확인|Read|확인함)$/.test(String(status || '').trim())

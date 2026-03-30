@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Wallet, Link2, Check, X, Pencil, Trash2 } from "lucide-react"
+import { Search, Wallet, Link2, Check, X, Pencil, Trash2, Paperclip } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -113,6 +113,7 @@ export function ExpenseManagementTab() {
   const [approvingAll, setApprovingAll] = React.useState(false)
   const [rejectingAll, setRejectingAll] = React.useState(false)
   const [cleaningNoStore, setCleaningNoStore] = React.useState(false)
+  const [attachmentPreview, setAttachmentPreview] = React.useState<{ urls: string[]; title: string } | null>(null)
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
@@ -201,9 +202,14 @@ export function ExpenseManagementTab() {
     }
   }, [startStr, endStr, auth?.role])
 
+  const loadPlansRef = React.useRef(loadPlans)
+  loadPlansRef.current = loadPlans
+
+  /** 지급예정 탭 진입 시에만 자동 조회. 기간 변경 후에는 [조회] 버튼으로 불러옵니다. */
   React.useEffect(() => {
-    loadPlans()
-  }, [loadPlans])
+    if (tab !== "plan") return
+    void loadPlansRef.current()
+  }, [tab])
 
   const openLinkBank = async (row: ExpenseAccrualPlanItem) => {
     const accountId = payBankById[row.id]
@@ -667,7 +673,7 @@ export function ExpenseManagementTab() {
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={loadPlans} disabled={loading} className="h-9">
+            <Button size="sm" onClick={() => void loadPlans()} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
               {t("btn_query")}
             </Button>
@@ -700,22 +706,14 @@ export function ExpenseManagementTab() {
               {cleaningNoStore ? (t("loading") || "...") : (t("expenseCleanNoStore") || "매장 미선택 정리")}
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-lg border p-3">
               <div className="text-xs text-muted-foreground">{t("expensePlannedTotal") || "일반지출 발생합계"}</div>
               <div className="text-lg font-semibold tabular-nums">฿{(totals.expensePlanned || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{t("expenseRemainingTotal") || "일반지출 미지급합계"}</div>
-              <div className="text-lg font-semibold tabular-nums">฿{(totals.expenseRemaining || 0).toLocaleString()}</div>
-            </div>
-            <div className="rounded-lg border p-3">
               <div className="text-xs text-muted-foreground">{t("expenseLogisticsPlanTotal") || "물류 지출 지급예정"}</div>
               <div className="text-lg font-semibold tabular-nums">฿{(totals.logisticsRemaining || 0).toLocaleString()}</div>
-            </div>
-            <div className="rounded-lg border p-3 bg-primary/5">
-              <div className="text-xs text-muted-foreground">{t("total") || "합계"}</div>
-              <div className="text-lg font-bold tabular-nums text-primary">฿{(totals.expenseRemaining + totals.logisticsRemaining).toLocaleString()}</div>
             </div>
           </div>
           <Card>
@@ -724,30 +722,21 @@ export function ExpenseManagementTab() {
               {filteredExpensePlans.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm table-fixed">
-                    <colgroup>
-                      <col style={{ width: "96px" }} />
-                      <col style={{ width: "140px" }} />
-                      <col style={{ width: "220px" }} />
-                      <col style={{ width: "90px" }} />
-                      <col style={{ width: "100px" }} />
-                      <col style={{ width: "118px" }} />
-                      <col style={{ width: "200px" }} />
-                      <col style={{ width: "80px" }} />
-                      <col style={{ width: "116px" }} />
-                    </colgroup>
+                <div className="overflow-x-auto rounded-md border border-border/60">
+                  <table className="w-full min-w-[920px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
-                        <th className="text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
-                        <th className="text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="text-center py-2 px-2">{tt("vendor", "매입처")}</th>
-                        <th className="text-center py-2 px-2">{t("date") || "날짜"}</th>
-                        <th className="text-center py-2 px-2">{t("amount") || "금액"}</th>
-                        <th className="text-center py-2 px-2">{t("payColRemainingPayable") || "미지급액"}</th>
-                        <th className="text-center py-2 px-2">{t("memo") || "메모"}</th>
-                        <th className="text-center py-2 px-2">{tt("pay_actions", "실행")}</th>
-                        <th className="text-center py-2 px-2">{tt("att_approval", "승인")}</th>
+                        <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
+                        <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
+                        <th className="min-w-[100px] max-w-[140px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
+                        <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
+                        <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
+                        <th className="min-w-[120px] max-w-[160px] text-center py-2 px-2">{t("memo") || "메모"}</th>
+                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
+                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
+                        <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
+                          {tt("att_approval", "승인")}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -765,17 +754,37 @@ export function ExpenseManagementTab() {
                                   const codeLabel = r.payeeCode && !r.payeeCode.startsWith("auto_") ? ` (${r.payeeCode})` : ""
                                   return (
                                     <>
-                                      <td className="py-2 px-2 text-center">{renderWithdrawalType(r.withdrawalCategory)}</td>
-                                      <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                      <td className="py-2 px-2 whitespace-nowrap truncate">{r.payeeName}{codeLabel}</td>
+                                      <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
+                                      <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
+                                      <td className="py-2 px-2 align-top break-words text-xs leading-snug">{r.payeeName}{codeLabel}</td>
                                     </>
                                   )
                                 })()}
-                            <td className="py-2 px-2 text-center whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                            <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
-                            <td className="py-2 px-2 text-right tabular-nums font-semibold whitespace-nowrap">฿{(r.remainingAmount || 0).toLocaleString()}</td>
-                            <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{getMemo(r.memo)}</td>
-                            <td className="py-2 px-2 text-center">
+                            <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
+                            <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
+                            <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words max-w-[10rem]" title={r.memo || ""}>{getMemo(r.memo)}</td>
+                            <td className="py-2 px-1 text-center align-top">
+                              {(r.attachmentUrls?.length ?? 0) > 0 ? (
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 shrink-0 text-primary"
+                                  title={tt("expenseViewAttachment", "첨부 보기")}
+                                  onClick={() =>
+                                    setAttachmentPreview({
+                                      urls: r.attachmentUrls!,
+                                      title: `${r.payeeName || ""} #${r.id}`,
+                                    })
+                                  }
+                                >
+                                  <Paperclip className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-1 text-center align-top">
                               {r.status === "planned" ? (
                                 <Button
                                   size="icon"
@@ -814,69 +823,71 @@ export function ExpenseManagementTab() {
                                 <span className="text-xs text-muted-foreground">-</span>
                               )}
                             </td>
-                            <td className="py-2 px-2 text-center">
-                              <div className="flex items-center justify-center gap-1">
+                            <td className="py-2 px-1 text-center align-top sticky right-0 z-[1] border-l border-border/60 bg-card">
+                              <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">
                                 {canApproveByPolicy(r) && (
                                   (r.status === "planned" || approvalEditById[r.id]) && r.status !== "paid" ? (
                                   <>
-                                    <Button
-                                      size="icon"
-                                      variant="outline"
-                                      className="h-7 w-7 border-primary/40 text-primary"
-                                      onClick={() => handleApprove(r, "approve")}
-                                      disabled={payingId === r.id}
-                                      title={tt("att_approve", "승인")}
-                                    >
-                                      <Check className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="outline"
-                                      className="h-7 w-7 border-destructive/40 text-destructive"
-                                      onClick={() => handleApprove(r, "reject")}
-                                      disabled={payingId === r.id}
-                                      title={tt("att_reject", "반려")}
-                                    >
-                                      <X className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="outline"
-                                      className="h-7 w-7 border-destructive/40 text-destructive"
-                                      title={t("delete") || "삭제"}
-                                      onClick={() => handleDeletePlan(r)}
-                                      disabled={payingId === r.id || deletingPlanId === r.id}
-                                    >
-                                      {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
-                                    </Button>
+                                    <div className="flex flex-wrap items-center justify-center gap-1">
+                                      <Button
+                                        size="icon"
+                                        variant="outline"
+                                        className="h-7 w-7 shrink-0 border-primary/40 text-primary"
+                                        onClick={() => handleApprove(r, "approve")}
+                                        disabled={payingId === r.id}
+                                        title={tt("att_approve", "승인")}
+                                      >
+                                        <Check className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="outline"
+                                        className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
+                                        onClick={() => handleApprove(r, "reject")}
+                                        disabled={payingId === r.id}
+                                        title={tt("att_reject", "반려")}
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="outline"
+                                        className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
+                                        title={t("delete") || "삭제"}
+                                        onClick={() => handleDeletePlan(r)}
+                                        disabled={payingId === r.id || deletingPlanId === r.id}
+                                      >
+                                        {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
+                                      </Button>
+                                    </div>
                                   </>
                                   ) : (
                                     (r.status === "approved" || r.status === "rejected") && (
-                                      <div className="flex flex-col items-center gap-1">
+                                      <div className="flex flex-col items-center gap-1 w-full">
                                         {r.status === "approved" ? (
-                                          <span className="text-xs text-primary">{tt("att_approved", "승인 완료")}</span>
+                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>
                                         ) : (
-                                          <span className="text-xs text-destructive">{tt("att_rejected", "반려")}</span>
+                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>
                                         )}
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex flex-wrap items-center justify-center gap-1">
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            className="h-6 px-2 text-[11px]"
+                                            className="h-6 px-1.5 text-[10px]"
                                             title={tt("btnEdit", "수정")}
                                             onClick={() =>
                                               setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))
                                             }
                                             disabled={payingId === r.id}
                                           >
-                                            <Pencil className="h-3 w-3 mr-1" />
+                                            <Pencil className="h-3 w-3 mr-0.5" />
                                             {tt("btnEdit", "수정")}
                                           </Button>
                                           {r.status === "rejected" && (
                                             <Button
                                               size="icon"
                                               variant="outline"
-                                              className="h-7 w-7 border-destructive/40 text-destructive"
+                                              className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
                                               title={t("delete") || "삭제"}
                                               onClick={() => handleDeletePlan(r)}
                                               disabled={payingId === r.id || deletingPlanId === r.id}
@@ -890,9 +901,9 @@ export function ExpenseManagementTab() {
                                   )
                                 )}
                                 {!canApproveByPolicy(r) && r.status === "approved" ? (
-                                  <span className="text-xs text-primary">{tt("att_approved", "승인 완료")}</span>
+                                  <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>
                                 ) : !canApproveByPolicy(r) && r.status === "rejected" ? (
-                                  <span className="text-xs text-destructive">{tt("att_rejected", "반려")}</span>
+                                  <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>
                                 ) : r.status === "planned" && !approvalEditById[r.id] && !canApproveByPolicy(r) ? (
                                   <span className="text-xs text-muted-foreground">-</span>
                                 ) : null}
@@ -1001,30 +1012,21 @@ export function ExpenseManagementTab() {
               {filteredPurchasePlans.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 물류 지출 지급예정이 없습니다."}</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm table-fixed">
-                    <colgroup>
-                      <col style={{ width: "96px" }} />
-                      <col style={{ width: "140px" }} />
-                      <col style={{ width: "220px" }} />
-                      <col style={{ width: "90px" }} />
-                      <col style={{ width: "100px" }} />
-                      <col style={{ width: "118px" }} />
-                      <col style={{ width: "200px" }} />
-                      <col style={{ width: "80px" }} />
-                      <col style={{ width: "116px" }} />
-                    </colgroup>
+                <div className="overflow-x-auto rounded-md border border-border/60">
+                  <table className="w-full min-w-[920px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
-                        <th className="text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
-                        <th className="text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="text-center py-2 px-2">{tt("vendor", "매입처")}</th>
-                        <th className="text-center py-2 px-2">{t("date") || "날짜"}</th>
-                        <th className="text-center py-2 px-2">{t("amount") || "금액"}</th>
-                        <th className="text-center py-2 px-2">{t("payColRemainingPayable") || "미지급액"}</th>
-                        <th className="text-center py-2 px-2">{t("memo") || "메모"}</th>
-                        <th className="text-center py-2 px-2">{tt("pay_actions", "실행")}</th>
-                        <th className="text-center py-2 px-2">{tt("att_approval", "승인")}</th>
+                        <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
+                        <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
+                        <th className="min-w-[100px] max-w-[140px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
+                        <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
+                        <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
+                        <th className="min-w-[120px] max-w-[160px] text-center py-2 px-2">{t("memo") || "메모"}</th>
+                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
+                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
+                        <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
+                          {tt("att_approval", "승인")}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1038,14 +1040,34 @@ export function ExpenseManagementTab() {
                           {rows.map((r) => (
                             <React.Fragment key={r.id}>
                               <tr className="border-b">
-                                <td className="py-2 px-2 text-center">{renderWithdrawalType(r.withdrawalCategory)}</td>
-                                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                <td className="py-2 px-2 whitespace-nowrap truncate">{r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}</td>
-                                <td className="py-2 px-2 text-center whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
-                                <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
-                                <td className="py-2 px-2 text-right tabular-nums font-semibold whitespace-nowrap">฿{(r.remainingAmount || 0).toLocaleString()}</td>
-                                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{getMemo(r.memo)}</td>
-                                <td className="py-2 px-2 text-center">
+                                <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
+                                <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
+                                <td className="py-2 px-2 align-top break-words text-xs leading-snug">{r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}</td>
+                                <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
+                                <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
+                                <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words max-w-[10rem]" title={r.memo || ""}>{getMemo(r.memo)}</td>
+                                <td className="py-2 px-1 text-center align-top">
+                                  {(r.attachmentUrls?.length ?? 0) > 0 ? (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8 shrink-0 text-primary"
+                                      title={tt("expenseViewAttachment", "첨부 보기")}
+                                      onClick={() =>
+                                        setAttachmentPreview({
+                                          urls: r.attachmentUrls!,
+                                          title: `${r.payeeName || ""} #${r.id}`,
+                                        })
+                                      }
+                                    >
+                                      <Paperclip className="h-4 w-4" />
+                                    </Button>
+                                  ) : (
+                                    <span className="text-muted-foreground text-xs">—</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-1 text-center align-top">
                                   {r.status === "planned" ? (
                                     <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "수정")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                       <Pencil className="h-3.5 w-3.5" />
@@ -1062,42 +1084,42 @@ export function ExpenseManagementTab() {
                                     <span className="text-xs text-muted-foreground">-</span>
                                   )}
                                 </td>
-                                <td className="py-2 px-2 text-center">
-                                  <div className="flex items-center justify-center gap-1">
+                                <td className="py-2 px-1 text-center align-top sticky right-0 z-[1] border-l border-border/60 bg-card">
+                                  <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">
                                     {canApproveByPolicy(r) && (r.status === "planned" || approvalEditById[r.id]) && r.status !== "paid" ? (
-                                      <>
-                                        <Button size="icon" variant="outline" className="h-7 w-7 border-primary/40 text-primary" onClick={() => handleApprove(r, "approve")} disabled={payingId === r.id} title={tt("att_approve", "승인")}>
+                                      <div className="flex flex-wrap items-center justify-center gap-1">
+                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-primary/40 text-primary" onClick={() => handleApprove(r, "approve")} disabled={payingId === r.id} title={tt("att_approve", "승인")}>
                                           <Check className="h-3.5 w-3.5" />
                                         </Button>
-                                        <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" onClick={() => handleApprove(r, "reject")} disabled={payingId === r.id} title={tt("att_reject", "반려")}>
+                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" onClick={() => handleApprove(r, "reject")} disabled={payingId === r.id} title={tt("att_reject", "반려")}>
                                           <X className="h-3.5 w-3.5" />
                                         </Button>
-                                        <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                           {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                         </Button>
-                                      </>
+                                      </div>
                                     ) : (r.status === "approved" || r.status === "rejected") && (
-                                      <div className="flex flex-col items-center gap-1">
+                                      <div className="flex flex-col items-center gap-1 w-full">
                                         {r.status === "approved" ? (
-                                          <span className="text-xs text-primary">{tt("att_approved", "승인 완료")}</span>
+                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>
                                         ) : (
-                                          <span className="text-xs text-destructive">{tt("att_rejected", "반려")}</span>
+                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>
                                         )}
-                                        <div className="flex items-center gap-1">
-                                          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" title={tt("btnEdit", "수정")} onClick={() => setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))} disabled={payingId === r.id}>
-                                            <Pencil className="h-3 w-3 mr-1" />
+                                        <div className="flex flex-wrap items-center justify-center gap-1">
+                                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" title={tt("btnEdit", "수정")} onClick={() => setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))} disabled={payingId === r.id}>
+                                            <Pencil className="h-3 w-3 mr-0.5" />
                                             {tt("btnEdit", "수정")}
                                           </Button>
                                           {r.status === "rejected" && (
-                                            <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                            <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                               {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                             </Button>
                                           )}
                                         </div>
                                       </div>
                                     )}
-                                    {!canApproveByPolicy(r) && r.status === "approved" && <span className="text-xs text-primary">{tt("att_approved", "승인 완료")}</span>}
-                                    {!canApproveByPolicy(r) && r.status === "rejected" && <span className="text-xs text-destructive">{tt("att_rejected", "반려")}</span>}
+                                    {!canApproveByPolicy(r) && r.status === "approved" && <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>}
+                                    {!canApproveByPolicy(r) && r.status === "rejected" && <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>}
                                     {r.status === "planned" && !canApproveByPolicy(r) && !approvalEditById[r.id] && <span className="text-xs text-muted-foreground">-</span>}
                                   </div>
                                 </td>
@@ -1163,6 +1185,33 @@ export function ExpenseManagementTab() {
               )}
             </CardContent>
           </Card>
+
+          <Dialog open={!!attachmentPreview} onOpenChange={(open) => !open && setAttachmentPreview(null)}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {tt("expenseAttachmentTitle", "첨부")}
+                  {attachmentPreview?.title ? ` — ${attachmentPreview.title}` : ""}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {(attachmentPreview?.urls || []).map((url, i) => (
+                  <div key={i} className="rounded-md border border-border/60 p-2">
+                    {url.startsWith("data:image/") || /^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- 사용자·관리자 업로드 data URL
+                      <img src={url} alt="" className="max-h-[70vh] w-auto max-w-full rounded mx-auto" />
+                    ) : url.startsWith("data:application/pdf") || /\.pdf(\?|$)/i.test(url) ? (
+                      <iframe title={`pdf-${i}`} src={url} className="h-[min(70vh,520px)] w-full rounded border-0" />
+                    ) : (
+                      <a href={url} target="_blank" rel="noreferrer" className="text-primary underline break-all text-sm">
+                        {tt("expenseOpenFile", "파일 열기")} #{i + 1}
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="expenseRegister" className={adminTabsContentCn}>
