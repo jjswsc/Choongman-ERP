@@ -873,7 +873,7 @@ export function PosTableLayoutContent() {
           onValueChange={(v) => {
             const n = Number(v)
             setTableSeatsInput(n)
-            selectedId && handleUpdateSeats(selectedId, n)
+            if (selectedId) handleUpdateSeats(selectedId, n)
           }}
           disabled={!selectedId}
         >

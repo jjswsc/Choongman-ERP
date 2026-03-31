@@ -34,6 +34,7 @@ import {
   type PosMenuOption,
   type PosMenuCategoriesConfig,
   type PosPromo,
+  type PosPromoItem,
 } from "@/lib/api-client"
 import { POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 import {
@@ -117,6 +118,10 @@ type ComposerLine = {
   qty: number
   menuName: string
   optionLabel?: string
+  /** 행 단위 할인율(%) — 비우면 세트 규칙을 따름 */
+  lineDiscountPct?: string
+  /** 행 단위 판매가(총액) — 비우면 행 할인율/세트 규칙으로 계산 */
+  lineSalePrice?: string
 }
 
 type CostEntry = { hall: number; del: number }
@@ -230,7 +235,7 @@ export function PosSetMenuTabWorkspace({
       extras.push({ code: c, name: String(a.name || c).trim() || c })
     }
     return [...base, ...extras]
-  }, [remoteDeliveryApps, t, lang])
+  }, [remoteDeliveryApps, t])
 
   React.useEffect(() => {
     let cancelled = false
@@ -463,6 +468,145 @@ export function PosSetMenuTabWorkspace({
   const paMarginBaht = activePriceAnalysis === "hall" ? economics.marginBaht : economics.marginBahtDel
   const paSaleRef = activePriceAnalysis === "hall" ? saleHall : saleDel
 
+  /** 가격분석 채널 기준 — 조합 표 하단 요약 행·각 줄 정가/원가 표시에 사용 */
+  const composeSummaryReg = activePriceAnalysis === "hall" ? regularSum : regularSumDelivery
+  const composeSummaryDiscPct =
+    composeSummaryReg > 0 ? ((composeSummaryReg - paSaleRef) / composeSummaryReg) * 100 : 0
+  const analysisWarningKey = !costsReady
+    ? null
+    : paMarginBaht < 0
+      ? "posSetTabWarnNegativeMargin"
+      : paCostRate >= 100
+        ? "posSetTabWarnHighCostRate"
+        : null
+
+  const setActiveChannelSalePrice = React.useCallback(
+    (raw: string) => {
+      if (activePriceAnalysis === "hall") {
+        setForm((p) => ({ ...p, price: raw }))
+      } else {
+        setForm((p) => ({ ...p, priceDelivery: raw }))
+      }
+    },
+    [activePriceAnalysis]
+  )
+
+  const parseNum = React.useCallback((v: string | undefined) => {
+    const n = Number(String(v ?? "").replace(/,/g, "").trim())
+    return Number.isFinite(n) ? n : null
+  }, [])
+
+  const lineEconomicsMap = React.useMemo(() => {
+    const defaultLineDiscount = Number.isFinite(composeSummaryDiscPct) ? composeSummaryDiscPct : 0
+    const out: Record<string, { reg: number; cost: number; discountPct: number; sale: number; costRate: number; margin: number; marginPct: number }> = {}
+    for (const ln of lines) {
+      const menu = menuById[ln.menuId]
+      const opts = optionsByMenuId[ln.menuId] || []
+      const opt = ln.optionId ? opts.find((o) => String(o.id) === String(ln.optionId)) : null
+      const hallMenu = menu?.price ?? 0
+      const menuUnit =
+        activePriceAnalysis === "delivery" &&
+        menu != null &&
+        menu.priceDelivery != null &&
+        Number.isFinite(Number(menu.priceDelivery))
+          ? Number(menu.priceDelivery)
+          : hallMenu
+      const hallMod = opt?.priceModifier ?? 0
+      const optMod =
+        activePriceAnalysis === "delivery" &&
+        opt != null &&
+        opt.priceModifierDelivery != null &&
+        Number.isFinite(Number(opt.priceModifierDelivery))
+          ? Number(opt.priceModifierDelivery)
+          : hallMod
+      const reg = (menuUnit + optMod) * ln.qty
+      const ck = promoCostKey(ln.menuId, ln.optionId)
+      const ce =
+        resolveCostFromAnalysisMaps(costAnalysisMap, costAnalysisCodeMap, menuById, ln.menuId, ln.optionId) ?? costMap[ck]
+      const unitCost = activePriceAnalysis === "delivery" ? (ce?.del ?? 0) : (ce?.hall ?? 0)
+      const cost = unitCost * ln.qty
+
+      const lineDiscount = parseNum(ln.lineDiscountPct)
+      const discountPct = lineDiscount != null ? Math.max(0, lineDiscount) : Math.max(0, defaultLineDiscount)
+      const lineSaleRaw = parseNum(ln.lineSalePrice)
+      const sale = lineSaleRaw != null ? Math.max(0, lineSaleRaw) : Math.max(0, reg * (1 - discountPct / 100))
+      const margin = sale - cost
+      const costRate = sale > 0 ? (cost / sale) * 100 : 0
+      const marginPct = sale > 0 ? (margin / sale) * 100 : 0
+      out[ln.key] = { reg, cost, discountPct, sale, costRate, margin, marginPct }
+    }
+    return out
+  }, [
+    activePriceAnalysis,
+    composeSummaryDiscPct,
+    costAnalysisCodeMap,
+    costAnalysisMap,
+    costMap,
+    lines,
+    menuById,
+    optionsByMenuId,
+    parseNum,
+  ])
+
+  const lineAverages = React.useMemo(() => {
+    if (lines.length === 0) return null
+    let discount = 0
+    let sale = 0
+    for (const ln of lines) {
+      const row = lineEconomicsMap[ln.key]
+      if (!row) continue
+      discount += row.discountPct
+      sale += row.sale
+    }
+    return {
+      discountPctAvg: discount / lines.length,
+      saleAvg: sale / lines.length,
+    }
+  }, [lineEconomicsMap, lines])
+
+  const lineSummary = React.useMemo(() => {
+    if (lines.length === 0) return null
+    let discount = 0
+    let saleTotal = 0
+    for (const ln of lines) {
+      const row = lineEconomicsMap[ln.key]
+      if (!row) continue
+      discount += row.discountPct
+      saleTotal += row.sale
+    }
+    return {
+      discountPctAvg: discount / lines.length,
+      saleTotal,
+    }
+  }, [lineEconomicsMap, lines])
+
+  const syncSaleFromDiscount = React.useCallback(
+    (nextMode: "pct" | "baht", nextPct: string, nextBaht: string) => {
+      const nextSale = resolveBundleSalePriceThb({
+        regularPriceSum: composeSummaryReg,
+        salePriceDirectStr: "",
+        discountPctStr: nextPct,
+        discountBahtStr: nextBaht,
+        discountMode: nextMode,
+      })
+      setActiveChannelSalePrice(String(nextSale))
+    },
+    [composeSummaryReg, setActiveChannelSalePrice]
+  )
+
+  const syncDiscountFromSale = React.useCallback(
+    (saleRaw: string) => {
+      const sale = parseNum(saleRaw)
+      if (sale == null || composeSummaryReg <= 0) return
+      const clampedSale = Math.max(0, sale)
+      const discountPct = Math.max(0, ((composeSummaryReg - clampedSale) / composeSummaryReg) * 100)
+      const discountBaht = Math.max(0, composeSummaryReg - clampedSale)
+      setDiscountPctStr(discountPct.toFixed(2))
+      setDiscountBahtStr(discountBaht.toFixed(2))
+    },
+    [composeSummaryReg, parseNum]
+  )
+
   React.useEffect(() => {
     if (!editPromoId) {
       const base = emptyForm()
@@ -506,6 +650,8 @@ export function PosSetMenuTabWorkspace({
             qty: Number(it.quantity) || 1,
             menuName: menu?.name ?? `menu ${it.menuId}`,
             optionLabel: opt?.name,
+            lineDiscountPct: "",
+            lineSalePrice: "",
           }
         })
         setLines(nextLines)
@@ -615,6 +761,109 @@ export function PosSetMenuTabWorkspace({
     return entry ? entry[1] : []
   }, [mirrorMenusByPromoName, savedSetsNameKey])
 
+  type SavedSetComposePreviewEntry =
+    | { status: "loading" }
+    | { status: "ok"; previewLines: string[]; total: number }
+    | { status: "err" }
+
+  const [savedSetComposePreview, setSavedSetComposePreview] = React.useState<
+    Record<string, SavedSetComposePreviewEntry>
+  >({})
+
+  const mirrorRowPromoIds = React.useMemo(
+    () =>
+      [
+        ...new Set(
+          mirrorRowsForCurrentPromoName.map((m) => String(m.promoId ?? "").trim()).filter(Boolean)
+        ),
+      ].sort(),
+    [mirrorRowsForCurrentPromoName]
+  )
+  const mirrorRowPromoIdsKey = mirrorRowPromoIds.join("\u0001")
+
+  const optionPartLabelRef = React.useRef(optionPartLabel)
+  optionPartLabelRef.current = optionPartLabel
+
+  const buildSavedSetPreviewFromItems = React.useCallback(
+    (items: PosPromoItem[]) => {
+      const optPart = optionPartLabelRef.current
+      const allLines = items.map((it) => {
+        const mid = String(it.menuId)
+        const menu = menuById[mid]
+        const opts = optionsByMenuId[mid] || []
+        const opt = it.optionId ? opts.find((o) => String(o.id) === String(it.optionId)) : null
+        let label = menu?.name?.trim() || `#${mid.slice(0, 8)}`
+        if (opt?.name?.trim()) label += ` (${optPart(opt.name)})`
+        const q = Number(it.quantity) || 1
+        if (q !== 1) label += ` ×${q}`
+        return label
+      })
+      return { previewLines: allLines.slice(0, 4), total: items.length }
+    },
+    [menuById, optionsByMenuId]
+  )
+
+  const refreshSavedSetComposePreview = React.useCallback(
+    async (pid: string) => {
+      const id = String(pid ?? "").trim()
+      if (!id) return
+      setSavedSetComposePreview((prev) => ({ ...prev, [id]: { status: "loading" } }))
+      try {
+        const items = await getPosPromoItems({ promoId: id })
+        const { previewLines, total } = buildSavedSetPreviewFromItems(items)
+        setSavedSetComposePreview((prev) => ({ ...prev, [id]: { status: "ok", previewLines, total } }))
+      } catch {
+        setSavedSetComposePreview((prev) => ({ ...prev, [id]: { status: "err" } }))
+      }
+    },
+    [buildSavedSetPreviewFromItems]
+  )
+
+  React.useEffect(() => {
+    const ids = mirrorRowPromoIds
+    if (ids.length === 0) {
+      setSavedSetComposePreview({})
+      return
+    }
+    let cancelled = false
+
+    setSavedSetComposePreview((prev) => {
+      const next: Record<string, SavedSetComposePreviewEntry> = {}
+      for (const id of ids) {
+        if (prev[id]?.status === "ok") next[id] = prev[id]!
+      }
+      return next
+    })
+
+    for (const pid of ids) {
+      void (async () => {
+        setSavedSetComposePreview((prev) => {
+          if (prev[pid]?.status === "ok") return prev
+          return { ...prev, [pid]: { status: "loading" } }
+        })
+        try {
+          const items = await getPosPromoItems({ promoId: pid })
+          if (cancelled) return
+          const { previewLines, total } = buildSavedSetPreviewFromItems(items)
+          setSavedSetComposePreview((prev) => {
+            if (!ids.includes(pid)) return prev
+            return { ...prev, [pid]: { status: "ok", previewLines, total } }
+          })
+        } catch {
+          if (cancelled) return
+          setSavedSetComposePreview((prev) => {
+            if (!ids.includes(pid)) return prev
+            return { ...prev, [pid]: { status: "err" } }
+          })
+        }
+      })()
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [mirrorRowPromoIdsKey, mirrorRowPromoIds, menuById, optionsByMenuId, buildSavedSetPreviewFromItems])
+
   React.useEffect(() => {
     const id = focusPromoId?.trim()
     if (!id) return
@@ -683,6 +932,8 @@ export function PosSetMenuTabWorkspace({
           qty,
           menuName: menu.name ?? "",
           optionLabel: opt?.name,
+          lineDiscountPct: "",
+          lineSalePrice: "",
         },
       ])
     },
@@ -751,21 +1002,30 @@ export function PosSetMenuTabWorkspace({
     [regularSumDelivery, discountPctStr, discountBahtStr, discountMode]
   )
 
-  const applyDiscountToHallPrice = () => {
-    setForm((p) => ({ ...p, price: String(resolvedDiscountSaleHallThb) }))
-  }
-
-  const applyDiscountToDeliveryPrice = () => {
-    setForm((p) => ({ ...p, priceDelivery: String(resolvedDiscountSaleDeliveryThb) }))
-  }
-
-  const applyDiscountToHallAndDelivery = () => {
-    setForm((p) => ({
-      ...p,
-      price: String(resolvedDiscountSaleHallThb),
-      priceDelivery: String(resolvedDiscountSaleDeliveryThb),
-    }))
-  }
+  /** 할인 시뮬 → 판매가: 가격 분석에서 선택한 채널(홀/배달 토글)에만 반영. 채널이 하나뿐이면 해당 채널로 고정. */
+  const applyDiscountToActiveChannel = React.useCallback(() => {
+    if (showPricingHall && !showPricingDelivery) {
+      setForm((p) => ({ ...p, price: String(resolvedDiscountSaleHallThb) }))
+      return
+    }
+    if (!showPricingHall && showPricingDelivery) {
+      setForm((p) => ({ ...p, priceDelivery: String(resolvedDiscountSaleDeliveryThb) }))
+      return
+    }
+    if (showPricingHall && showPricingDelivery) {
+      if (priceAnalysisChannel === "hall") {
+        setForm((p) => ({ ...p, price: String(resolvedDiscountSaleHallThb) }))
+      } else {
+        setForm((p) => ({ ...p, priceDelivery: String(resolvedDiscountSaleDeliveryThb) }))
+      }
+    }
+  }, [
+    showPricingHall,
+    showPricingDelivery,
+    priceAnalysisChannel,
+    resolvedDiscountSaleHallThb,
+    resolvedDiscountSaleDeliveryThb,
+  ])
 
   const replacePromoItems = async (promoId: string) => {
     const existing = await getPosPromoItems({ promoId }).catch(() => [])
@@ -880,6 +1140,7 @@ export function PosSetMenuTabWorkspace({
     try {
       const itemsOk = await replacePromoItems(editPromoId)
       if (!itemsOk) return
+      void refreshSavedSetComposePreview(editPromoId)
       await appAlert(t("posSetTabSetCompositionSaved"))
       onAfterSave()
     } catch (e) {
@@ -937,9 +1198,12 @@ export function PosSetMenuTabWorkspace({
         <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(220px,1.01fr)_minmax(300px,1.63fr)_minmax(260px,0.95fr)] xl:items-start">
+      <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
         {/* 좌: 카테고리 + 메뉴 */}
-        <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 shadow-sm dark:bg-zinc-950/40">
+        <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 shadow-sm xl:col-span-4 dark:bg-zinc-950/40">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+            Step 1 · {t("posMenuBundleSimPickTitle")}
+          </p>
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-foreground">{t("posMenuBundleSimPickTitle")}</p>
             <span className="text-[10px] text-muted-foreground">{t("posSetTabCostFromAnalysis")}</span>
@@ -1048,7 +1312,7 @@ export function PosSetMenuTabWorkspace({
                               {hallCost != null ? hallCost.toFixed(1) : costAnalysisLoaded ? "—" : "…"}
                             </span>
                             <span className="text-emerald-700 dark:text-emerald-300">
-                              {t("itemsSellingPrice")} ฿{Math.round(listHall).toLocaleString()}
+                              {t("itemsPrice")} ฿{Math.round(listHall).toLocaleString()}
                             </span>
                           </div>
                         </div>
@@ -1098,10 +1362,13 @@ export function PosSetMenuTabWorkspace({
         </div>
 
         {/* 중앙: 세트 요약 + 구성 + 지표 */}
-        <div className="space-y-4">
+        <div className="space-y-4 xl:col-span-8">
           <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm ring-1 ring-emerald-500/10 dark:bg-zinc-950/35">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                  Step 2 · {t("posSetTabComposeHeader")}
+                </p>
                 <p className="text-sm font-bold tracking-tight">{t("posSetTabComposeHeader")}</p>
                 {lines.length > 0 ? (
                   <Badge variant="outline" className="border-emerald-500/40 font-mono text-[11px] text-emerald-700 dark:text-emerald-400">
@@ -1267,47 +1534,62 @@ export function PosSetMenuTabWorkspace({
 
           <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm">
             <p className="mb-2 text-sm font-bold">{t("posMenuBundleSimComposeTitle")}</p>
-            <div className="max-h-56 overflow-auto rounded-lg border border-border/60">
-              <table className="w-full text-sm">
+            <div className="max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-border/60">
+              <table className="w-full min-w-[56rem] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/60">
-                    <th className="px-2 py-2.5 text-left font-medium">{t("posPromoItems")}</th>
-                    <th className="w-14 px-2 py-2.5 text-right font-medium">{t("qty")}</th>
-                    <th className="w-20 px-2 py-2.5 text-right font-medium">{t("itemsCost")}</th>
-                    <th className="w-24 px-2 py-2.5 text-right font-medium">{t("posMenuBundleColReg")}</th>
-                    <th className="w-8" />
+                    <th className="w-10 px-1 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("posSetTabComposeColNo")}
+                    </th>
+                    <th className="min-w-[9rem] px-2 py-2.5 text-left text-sm font-semibold">{t("posPromoItems")}</th>
+                    <th className="w-16 px-2 py-2.5 text-right text-sm font-semibold">{t("qty")}</th>
+                    <th className="w-[5rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("itemsCost")}
+                    </th>
+                    <th className="w-[5rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("posMenuBundleColReg")}
+                    </th>
+                    <th className="w-[4.25rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("posPromoSimulatorDiscountPct")}
+                    </th>
+                    <th className="w-[6rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("posMenuBundleSalePrice")}
+                    </th>
+                    <th className="w-[4.25rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("posMenuBundleCostRate")}
+                    </th>
+                    <th className="w-[5rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("posMenuBundleMarginBaht")}
+                    </th>
+                    <th className="w-[4.25rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
+                      {t("posMenuBundleMarginPct")}
+                    </th>
+                    <th className="w-9 px-0 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      <td colSpan={11} className="px-3 py-8 text-center text-base text-muted-foreground">
                         {t("posSetTabLinesEmpty")}
                       </td>
                     </tr>
                   ) : (
-                    lines.map((ln) => {
-                      const menu = menuById[ln.menuId]
-                      const opts = optionsByMenuId[ln.menuId] || []
-                      const opt = ln.optionId ? opts.find((o) => String(o.id) === String(ln.optionId)) : null
-                      const unit = (menu?.price ?? 0) + (opt?.priceModifier ?? 0)
-                      const reg = unit * ln.qty
-                      const ck = promoCostKey(ln.menuId, ln.optionId)
-                      const ce =
-                        resolveCostFromAnalysisMaps(
-                          costAnalysisMap,
-                          costAnalysisCodeMap,
-                          menuById,
-                          ln.menuId,
-                          ln.optionId
-                        ) ?? costMap[ck]
-                      const lineCost = (ce?.hall ?? 0) * ln.qty
+                    lines.map((ln, idx) => {
+                      const row = lineEconomicsMap[ln.key]
+                      const reg = row?.reg ?? 0
+                      const lineCost = row?.cost ?? 0
+                      const rowSale = row?.sale ?? 0
+                      const rowCostRate = row?.costRate ?? 0
+                      const rowMargin = row?.margin ?? 0
+                      const rowMarginPct = row?.marginPct ?? 0
                       return (
                         <tr key={ln.key} className="border-b border-border/50 last:border-0">
-                          <td className="px-2 py-2">
-                            <span className="font-medium">{ln.menuName}</span>
+                          <td className="px-1 py-2.5 text-center text-sm tabular-nums text-muted-foreground">{idx + 1}</td>
+                          <td className="px-2 py-2.5">
+                            <span className="text-sm font-medium">{ln.menuName}</span>
                             {ln.optionLabel ? (
-                              <span className="text-muted-foreground"> ({optionPartLabel(ln.optionLabel)})</span>
+                              <span className="text-sm text-muted-foreground"> ({optionPartLabel(ln.optionLabel)})</span>
                             ) : null}
                           </td>
                           <td className="px-2 py-2 text-right">
@@ -1315,7 +1597,7 @@ export function PosSetMenuTabWorkspace({
                               type="number"
                               min={0.5}
                               step={0.5}
-                              className="ml-auto h-8 w-14 text-right text-sm tabular-nums"
+                              className="ml-auto h-9 w-16 text-right text-sm tabular-nums"
                               value={ln.qty}
                               onChange={(e) => {
                                 const v = Number(e.target.value)
@@ -1325,19 +1607,54 @@ export function PosSetMenuTabWorkspace({
                               }}
                             />
                           </td>
-                          <td className="px-2 py-1.5 text-right font-mono tabular-nums text-muted-foreground">
+                          <td className="px-1 py-2 text-right font-mono text-sm tabular-nums text-muted-foreground">
                             {!costsReady && lines.length > 0 ? "…" : `฿${lineCost.toFixed(1)}`}
                           </td>
-                          <td className="px-2 py-1.5 text-right font-mono tabular-nums">฿{Math.round(reg).toLocaleString()}</td>
-                          <td className="px-1 py-1 text-center">
+                          <td className="px-1 py-2 text-right font-mono text-sm tabular-nums">
+                            ฿{Math.round(reg).toLocaleString()}
+                          </td>
+                          <td className="px-1 py-1.5">
+                            <Input
+                              className="h-9 text-right text-sm tabular-nums"
+                              inputMode="decimal"
+                              placeholder={row?.discountPct != null ? row.discountPct.toFixed(1) : "0"}
+                              value={ln.lineDiscountPct ?? ""}
+                              onChange={(e) =>
+                                setLines((prev) =>
+                                  prev.map((x) =>
+                                    x.key === ln.key ? { ...x, lineDiscountPct: e.target.value, lineSalePrice: "" } : x
+                                  )
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="px-1 py-1.5">
+                            <Input
+                              className="h-9 text-right text-sm tabular-nums"
+                              inputMode="decimal"
+                              placeholder={Math.max(0, rowSale).toFixed(1)}
+                              value={ln.lineSalePrice ?? ""}
+                              onChange={(e) =>
+                                setLines((prev) => prev.map((x) => (x.key === ln.key ? { ...x, lineSalePrice: e.target.value } : x)))
+                              }
+                            />
+                          </td>
+                          <td className="px-1 py-2 text-right font-mono text-sm tabular-nums">{`${rowCostRate.toFixed(1)}%`}</td>
+                          <td className={cn("px-1 py-2 text-right font-mono text-sm tabular-nums", rowMargin >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-destructive")}>
+                            ฿{rowMargin.toFixed(1)}
+                          </td>
+                          <td className={cn("px-1 py-2 text-right font-mono text-sm tabular-nums", rowMarginPct >= 0 ? "text-rose-700 dark:text-rose-400" : "text-destructive")}>
+                            {`${rowMarginPct.toFixed(1)}%`}
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-destructive"
+                              className="h-8 w-8 text-destructive"
                               onClick={() => setLines((prev) => prev.filter((x) => x.key !== ln.key))}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </td>
                         </tr>
@@ -1345,332 +1662,265 @@ export function PosSetMenuTabWorkspace({
                     })
                   )}
                 </tbody>
+                {lines.length > 0 && (showPricingHall || showPricingDelivery) ? (
+                  <tfoot>
+                    <tr className="border-t-2 border-primary/25 bg-muted/45">
+                      <td className="px-1 py-3 text-center text-sm text-muted-foreground">—</td>
+                      <td className="px-2 py-3 text-sm font-semibold leading-snug">
+                        {activePriceAnalysis === "hall"
+                          ? t("posSetTabComposeSummaryLabelHall")
+                          : t("posSetTabComposeSummaryLabelDel")}
+                      </td>
+                      <td className="px-2 py-3 text-right text-sm text-muted-foreground">—</td>
+                      <td className="px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums">
+                        {!costsReady ? "…" : `฿${paCostTotal.toFixed(1)}`}
+                      </td>
+                      <td className="px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums">
+                        ฿{Math.round(composeSummaryReg).toLocaleString()}
+                      </td>
+                      <td className="px-1 py-3 text-right font-mono text-sm tabular-nums">
+                        {(lineSummary?.discountPctAvg ?? composeSummaryDiscPct).toFixed(1)}%
+                      </td>
+                      <td className="bg-amber-200/55 px-1 py-3 text-right font-mono text-sm font-bold tabular-nums dark:bg-amber-950/45">
+                        ฿{Math.round(lineSummary?.saleTotal ?? paSaleRef).toLocaleString()}
+                      </td>
+                      <td className="px-1 py-3 text-right font-mono text-sm tabular-nums">
+                        {lines.length ? `${paCostRate.toFixed(1)}%` : "—"}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums",
+                          lines.length && paMarginBaht >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"
+                        )}
+                      >
+                        {lines.length ? `฿${paMarginBaht.toFixed(1)}` : "—"}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums",
+                          lines.length && paMarginPct >= 0 ? "text-rose-700 dark:text-rose-400" : "text-destructive"
+                        )}
+                      >
+                        {lines.length ? `${paMarginPct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-1 py-3" />
+                    </tr>
+                  </tfoot>
+                ) : null}
               </table>
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm ring-1 ring-primary/10 space-y-4">
-            <p className="text-sm font-bold tracking-tight">{t("posSetTabPricingFlowTitle")}</p>
-
-            <div className="flex gap-3 rounded-lg border border-border/60 bg-muted/10 p-3">
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary"
-                aria-hidden
-              >
-                1
-              </span>
-              <div className="min-w-0 flex-1 space-y-3">
-                {showPricingHall || showPricingDelivery ? (
-                  <div
-                    className={cn(
-                      "grid w-full gap-3",
-                      showPricingHall && showPricingDelivery ? "sm:grid-cols-2" : "grid-cols-1"
-                    )}
+          <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+          <div
+            className={cn(
+              "min-w-0 rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm ring-1 ring-primary/10 space-y-4 xl:order-1",
+              !costsReady && lines.length > 0 && "opacity-95"
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                  Step 3 · {t("posSetTabPricingFlowTitle")}
+                </p>
+                <p className="text-base font-bold">{t("posSetTabPriceAnalysis")}</p>
+              </div>
+              {showPricingHall && showPricingDelivery ? (
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={priceAnalysisChannel === "hall" ? "default" : "outline"}
+                    className="h-9 text-sm"
+                    onClick={() => setPriceAnalysisChannel("hall")}
                   >
-                    {showPricingHall ? (
-                      <div className="rounded-lg border border-border/50 bg-background/40 px-3 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("posSetTabRegularSumHallLabel")}
-                        </p>
-                        <p className="mt-1 font-mono text-lg font-bold tabular-nums">฿{Math.round(regularSum).toLocaleString()}</p>
-                      </div>
-                    ) : null}
-                    {showPricingDelivery ? (
-                      <div className="rounded-lg border border-border/50 bg-background/40 px-3 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("posSetTabRegularSumDeliveryLabel")}
-                        </p>
-                        <p className="mt-1 font-mono text-lg font-bold tabular-nums text-muted-foreground">
-                          ฿{Math.round(regularSumDelivery).toLocaleString()}
-                        </p>
-                      </div>
-                    ) : null}
+                    {t("posMenuPriceHall")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={priceAnalysisChannel === "delivery" ? "default" : "outline"}
+                    className="h-9 text-sm"
+                    onClick={() => setPriceAnalysisChannel("delivery")}
+                  >
+                    {t("posOrderTypeDelivery")}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "grid gap-2",
+                  showPricingHall && showPricingDelivery && "sm:grid-cols-3",
+                  (showPricingHall || showPricingDelivery) && !(showPricingHall && showPricingDelivery) && "sm:grid-cols-2"
+                )}
+              >
+                {showPricingHall ? (
+                  <div className="flex min-h-[76px] flex-col justify-between rounded-lg border border-border/50 bg-background/40 px-3 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("posSetTabRegularSumHallLabel")}
+                    </p>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">฿{Math.round(regularSum).toLocaleString()}</p>
                   </div>
                 ) : null}
-                <label
-                  className={cn(
-                    "flex items-center gap-2 text-xs",
-                    (showPricingHall || showPricingDelivery) && "border-t border-border/50 pt-3"
-                  )}
-                >
-                  <Checkbox checked={form.vatIncluded} onCheckedChange={(c) => setForm((p) => ({ ...p, vatIncluded: c === true }))} />
-                  {t("posMenuVatIncluded")}
-                </label>
-              </div>
-            </div>
-
-            <div className="flex gap-3 rounded-lg border border-border/60 bg-muted/10 p-3">
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary"
-                aria-hidden
-              >
-                2
-              </span>
-              <div className="min-w-0 flex-1 space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("posSetTabDiscountBlock")}</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={discountMode === "pct" ? "default" : "outline"}
-                    className="h-8 text-xs"
-                    onClick={() => setDiscountMode("pct")}
-                  >
-                    {t("posMenuBundleDiscountModePct")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={discountMode === "baht" ? "default" : "outline"}
-                    className="h-8 text-xs"
-                    onClick={() => setDiscountMode("baht")}
-                  >
-                    {t("posMenuBundleDiscountModeBaht")}
-                  </Button>
-                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-initial">
-                    <label htmlFor="pos-set-discount-input" className="sr-only">
-                      {discountMode === "pct" ? t("posPromoSimulatorDiscountPct") : t("posMenuBundleDiscountBaht")}
-                    </label>
-                    <span className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap">
-                      {discountMode === "pct" ? t("posPromoSimulatorDiscountPct") : t("posMenuBundleDiscountBaht")}
-                    </span>
-                    {discountMode === "pct" ? (
-                      <Input
-                        id="pos-set-discount-input"
-                        className="h-8 w-[5.5rem] text-right text-xs tabular-nums sm:w-24"
-                        inputMode="decimal"
-                        value={discountPctStr}
-                        onChange={(e) => setDiscountPctStr(e.target.value)}
-                      />
-                    ) : (
-                      <Input
-                        id="pos-set-discount-input"
-                        className="h-8 w-[5.5rem] text-right text-xs tabular-nums sm:w-28"
-                        inputMode="decimal"
-                        value={discountBahtStr}
-                        onChange={(e) => setDiscountBahtStr(e.target.value)}
-                      />
-                    )}
+                {showPricingDelivery ? (
+                  <div className="flex min-h-[76px] flex-col justify-between rounded-lg border border-border/50 bg-background/40 px-3 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t("posSetTabRegularSumDeliveryLabel")}
+                    </p>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">฿{Math.round(regularSumDelivery).toLocaleString()}</p>
                   </div>
-                </div>
-                <div
-                  className={cn(
-                    "grid gap-2",
-                    showPricingHall && showPricingDelivery ? "sm:grid-cols-2" : "grid-cols-1"
-                  )}
-                >
-                  {showPricingHall ? (
-                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border/70 bg-background/50 px-2 py-2">
-                      <span className="text-[10px] font-medium text-muted-foreground">{t("posSetTabPricingSimNonDeliveryTag")}</span>
-                      <span className="text-[10px] text-muted-foreground">{t("posMenuBundleDiscountAmt")}</span>
-                      <span className="font-mono text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
-                        −฿{Math.max(0, Math.round(regularSum - resolvedDiscountSaleHallThb)).toLocaleString()}
-                      </span>
-                      <span className="text-muted-foreground/50">→</span>
-                      <span className="text-[10px] text-muted-foreground">{t("posSetTabDiscountSimResult")}</span>
-                      <span className="font-mono text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                        ฿{resolvedDiscountSaleHallThb.toLocaleString()}
-                      </span>
-                    </div>
-                  ) : null}
-                  {showPricingDelivery ? (
-                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border/70 bg-background/50 px-2 py-2">
-                      <span className="text-[10px] font-medium text-muted-foreground">{t("posOrderTypeDelivery")}</span>
-                      <span className="text-[10px] text-muted-foreground">{t("posMenuBundleDiscountAmt")}</span>
-                      <span className="font-mono text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400">
-                        −฿{Math.max(0, Math.round(regularSumDelivery - resolvedDiscountSaleDeliveryThb)).toLocaleString()}
-                      </span>
-                      <span className="text-muted-foreground/50">→</span>
-                      <span className="text-[10px] text-muted-foreground">{t("posSetTabDiscountSimResult")}</span>
-                      <span className="font-mono text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                        ฿{resolvedDiscountSaleDeliveryThb.toLocaleString()}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {showPricingHall ? (
-                    <Button type="button" size="sm" variant="secondary" className="h-8 text-xs" onClick={applyDiscountToHallPrice}>
-                      {t("posSetTabApplyDiscountToHall")}
-                    </Button>
-                  ) : null}
-                  {showPricingDelivery ? (
-                    <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={applyDiscountToDeliveryPrice}>
-                      {t("posSetTabApplyDiscountToDelivery")}
-                    </Button>
-                  ) : null}
-                  {showPricingHall && showPricingDelivery ? (
-                    <Button type="button" size="sm" variant="default" className="h-8 text-xs" onClick={applyDiscountToHallAndDelivery}>
-                      {t("posSetTabApplyDiscountToBoth")}
-                    </Button>
-                  ) : null}
-                </div>
-                <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posMenuBundleSalePriorityHint")}</p>
+                ) : null}
+                {showPricingHall || showPricingDelivery ? (
+                  <div className="flex min-h-[76px] flex-col justify-between rounded-lg border border-border/50 bg-background/40 px-3 py-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {activePriceAnalysis === "hall" ? t("posMenuPriceHall") : t("posOrderTypeDelivery")}
+                    </p>
+                    <Input
+                      className="mt-1 h-9 text-right text-sm tabular-nums"
+                      inputMode="decimal"
+                      value={String(paSaleRef)}
+                      onChange={(e) => {
+                        setActiveChannelSalePrice(e.target.value)
+                        syncDiscountFromSale(e.target.value)
+                      }}
+                    />
+                  </div>
+                ) : null}
               </div>
-            </div>
-
-            <div className="flex gap-3 rounded-lg border border-border/60 bg-muted/10 p-3">
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary"
-                aria-hidden
-              >
-                3
-              </span>
-              <div className="min-w-0 flex-1 space-y-2">
-                <div
-                  className={cn(
-                    "grid gap-3",
-                    showPricingHall && showPricingDelivery ? "sm:grid-cols-2" : "grid-cols-1"
-                  )}
-                >
-                  {showPricingHall ? (
-                    <div>
-                      <label className="text-[10px] font-medium text-muted-foreground">{t("posMenuPriceHall")} *</label>
-                      <Input
-                        className="mt-1 h-9 text-right text-sm tabular-nums"
-                        inputMode="decimal"
-                        value={form.price}
-                        onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
-                      />
-                    </div>
-                  ) : null}
-                  {showPricingDelivery ? (
-                    <div>
-                      <label className="text-[10px] font-medium text-muted-foreground">{t("posMenuPriceDelivery")}</label>
-                      <Input
-                        className="mt-1 h-9 text-right text-sm tabular-nums"
-                        inputMode="decimal"
-                        placeholder={t("posMenuBundleSaleDirectPh")}
-                        value={form.priceDelivery}
-                        onChange={(e) => setForm((p) => ({ ...p, priceDelivery: e.target.value }))}
-                      />
-                      <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPricingDeliveryHint")}</p>
-                    </div>
-                  ) : null}
-                </div>
-                <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPricingManualOverrideHint")}</p>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border/50 bg-muted/5 px-3 py-3">
-              <div className="grid gap-2 sm:grid-cols-2 sm:items-end">
-                <div>
-                  <label className="text-[10px] text-muted-foreground">{t("posSetTabSalesSetCount")}</label>
+              {showPricingHall || showPricingDelivery ? (
+                <div className="flex min-h-[72px] flex-col justify-between rounded-lg border border-border/50 bg-background/40 px-3 py-2.5">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("posSetTabSalesSetCount")}
+                  </label>
                   <Input
-                    className="mt-0.5 h-9 text-right tabular-nums"
+                    className="mt-1 h-9 text-right text-sm tabular-nums"
                     inputMode="numeric"
                     placeholder="0"
                     value={salesSetCountStr}
                     onChange={(e) => setSalesSetCountStr(e.target.value)}
                   />
+                  {t("posSetTabSalesSetCountHint") ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground leading-snug">{t("posSetTabSalesSetCountHint")}</p>
+                  ) : null}
                 </div>
-                <p className="text-[10px] text-muted-foreground sm:pb-1">{t("posSetTabSalesSetCountHint")}</p>
+              ) : null}
+            </div>
+            {lineAverages ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("posSetTabLineAvgDiscountPct")}
+                  </p>
+                  <p className="mt-1 font-mono text-base font-semibold tabular-nums">{lineAverages.discountPctAvg.toFixed(1)}%</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("posSetTabLineAvgSalePrice")}
+                  </p>
+                  <p className="mt-1 font-mono text-base font-semibold tabular-nums">฿{lineAverages.saleAvg.toFixed(1)}</p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("posSetTabDiscountBlock")}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant={discountMode === "pct" ? "default" : "outline"}
+                className="h-9 text-sm"
+                onClick={() => setDiscountMode("pct")}
+              >
+                {t("posMenuBundleDiscountModePct")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={discountMode === "baht" ? "default" : "outline"}
+                className="h-9 text-sm"
+                onClick={() => setDiscountMode("baht")}
+              >
+                {t("posMenuBundleDiscountModeBaht")}
+              </Button>
+              {discountMode === "pct" ? (
+                <Input
+                  className="h-9 w-28 text-right text-sm tabular-nums"
+                  inputMode="decimal"
+                  value={discountPctStr}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setDiscountPctStr(v)
+                    syncSaleFromDiscount("pct", v, discountBahtStr)
+                  }}
+                />
+              ) : (
+                <Input
+                  className="h-9 w-28 text-right text-sm tabular-nums"
+                  inputMode="decimal"
+                  value={discountBahtStr}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setDiscountBahtStr(v)
+                    syncSaleFromDiscount("baht", discountPctStr, v)
+                  }}
+                />
+              )}
+              {showPricingHall || showPricingDelivery ? (
+                <div className="ml-auto">
+                  <Button type="button" size="sm" variant="secondary" className="h-9 text-sm" onClick={applyDiscountToActiveChannel}>
+                    {t("posSetTabApplyDiscount")}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
+                <p className="text-xs font-semibold text-muted-foreground">{t("posPromoCostSum")}</p>
+                <p className="mt-1 font-mono text-base font-semibold tabular-nums">
+                  {lines.length === 0 || costsReady ? `฿${paCostTotal.toFixed(1)}` : t("posPromoSimulatorCalculating")}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5">
+                <p className="text-xs font-semibold text-muted-foreground">{t("posMenuBundleCostRate")}</p>
+                <p className="mt-1 font-mono text-base tabular-nums">{lines.length ? `${paCostRate.toFixed(1)}%` : "—"}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 dark:bg-emerald-950/20">
+                <p className="text-xs font-semibold text-muted-foreground">{t("posMenuBundleMarginPct")}</p>
+                <p className={cn("mt-1 font-mono text-base font-semibold tabular-nums", paMarginBaht >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+                  {lines.length ? `${paMarginPct.toFixed(1)}%` : "—"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 dark:bg-emerald-950/20">
+                <p className="text-xs font-semibold text-muted-foreground">{t("posMenuBundleMarginBaht")}</p>
+                <p className={cn("mt-1 font-mono text-base font-semibold tabular-nums", paMarginBaht >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+                  {lines.length ? `฿${paMarginBaht.toFixed(1)}` : "—"}
+                </p>
               </div>
             </div>
-          </div>
 
-          <div
-            className={cn(
-              "rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm",
-              !costsReady && lines.length > 0 && "opacity-90"
-            )}
-          >
-            <p className="mb-3 text-sm font-bold">{t("posSetTabPriceAnalysis")}</p>
-            <p className="mb-3 text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPriceAnalysisHint")}</p>
-            {showPricingHall || showPricingDelivery ? (
-              <>
-                {showPricingHall && showPricingDelivery ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={priceAnalysisChannel === "hall" ? "default" : "outline"}
-                      className="h-8 text-xs"
-                      onClick={() => setPriceAnalysisChannel("hall")}
-                    >
-                      {t("posMenuPriceHall")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={priceAnalysisChannel === "delivery" ? "default" : "outline"}
-                      className="h-8 text-xs"
-                      onClick={() => setPriceAnalysisChannel("delivery")}
-                    >
-                      {t("posOrderTypeDelivery")}
-                    </Button>
-                  </div>
-                ) : null}
-                {activePriceAnalysis === "delivery" ? (
-                  <div className="mb-2 flex flex-wrap justify-between gap-2 rounded-lg border border-border/50 bg-muted/15 px-3 py-2 text-xs">
-                    <span className="text-muted-foreground">{t("posSetTabEffectiveDeliverySale")}</span>
-                    <span className="text-right font-mono font-medium tabular-nums">
-                      ฿{paSaleRef.toLocaleString()}
-                      {form.priceDelivery.trim() === "" ? (
-                        <span className="ml-1 block text-[10px] font-normal text-muted-foreground sm:inline sm:ml-2">
-                          ({t("posSetTabEffectiveDeliverySaleFollowsHall")})
-                        </span>
-                      ) : null}
-                    </span>
-                  </div>
-                ) : null}
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {activePriceAnalysis === "hall" ? t("posPromoCostSum") : t("posMenuBundleCostDelivery")}
-                    </p>
-                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">
-                      {lines.length === 0 || costsReady ? `฿${paCostTotal.toFixed(1)}` : t("posPromoSimulatorCalculating")}
-                    </p>
-                    <p className="text-xs text-muted-foreground/80">
-                      {activePriceAnalysis === "hall" ? t("posMenuBundleHallChannel") : t("posMenuBundleDeliveryChannel")}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-3">
-                    <p className="text-xs font-medium text-muted-foreground">{t("posMenuBundleCostRate")}</p>
-                    <p className="mt-1 font-mono text-base tabular-nums">{lines.length ? `${paCostRate.toFixed(1)}%` : "—"}</p>
-                    <p className="text-xs text-muted-foreground/80">
-                      {activePriceAnalysis === "hall" ? t("posMenuPriceHall") : t("posOrderTypeDelivery")}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3 dark:bg-emerald-950/20">
-                    <p className="text-xs font-medium text-muted-foreground">{t("posMenuBundleMarginPct")}</p>
-                    <p
-                      className={cn(
-                        "mt-1 font-mono text-base font-semibold tabular-nums",
-                        paMarginBaht >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                      )}
-                    >
-                      {lines.length ? `${paMarginPct.toFixed(1)}%` : "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3 dark:bg-emerald-950/20 sm:col-span-2 lg:col-span-3">
-                    <p className="text-xs font-medium text-muted-foreground">{t("posMenuBundleMarginBaht")}</p>
-                    <p
-                      className={cn(
-                        "mt-1 font-mono text-xl font-bold tabular-nums",
-                        paMarginBaht >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"
-                      )}
-                    >
-                      {lines.length ? `฿${paMarginBaht.toFixed(1)}` : "—"}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      {activePriceAnalysis === "hall" ? t("posMenuPriceHall") : t("posOrderTypeDelivery")}
-                    </p>
-                  </div>
-                </div>
-              </>
+            {analysisWarningKey ? (
+              <div className="rounded-lg border border-amber-400/50 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+                {t(analysisWarningKey)}
+              </div>
             ) : null}
+
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox checked={form.vatIncluded} onCheckedChange={(c) => setForm((p) => ({ ...p, vatIncluded: c === true }))} />
+              {t("posMenuVatIncluded")}
+            </label>
+
             {projectedProfitHall != null && salesSetCount > 0 && showPricingHall ? (
-              <div className="mt-3 flex justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-base font-semibold">
+              <div className="flex justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-semibold">
                 <span className="text-muted-foreground">{t("posSetTabProjectedProfit")}</span>
                 <span className="font-mono text-primary tabular-nums">฿{Math.round(projectedProfitHall).toLocaleString()}</span>
               </div>
             ) : null}
-          </div>
 
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
               <Button
                 type="button"
                 className="h-10 bg-emerald-600 text-white hover:bg-emerald-700"
@@ -1680,15 +1930,36 @@ export function PosSetMenuTabWorkspace({
                 <Save className="mr-2 h-4 w-4" />
                 {savingPromo ? t("loading") : t("posSetTabSavePromo")}
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-10"
+                disabled={savingPromo || savingSet}
+                onClick={() => void handleSaveSetComposition()}
+              >
+                <Layers className="mr-2 h-4 w-4" />
+                {savingSet ? t("loading") : t("posSetTabSaveSetComposition")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10"
+                disabled={savingPromo || savingSet}
+                onClick={resetBundleOnly}
+              >
+                {t("posSetTabResetBundle")}
+              </Button>
             </div>
             <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSavePromoFooterHint")}</p>
           </div>
-        </div>
 
-        {/* 우: 프로모션명별 저장된 세트 */}
-        <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/15 p-4 shadow-sm dark:bg-zinc-950/40">
+        {/* 저장된 세트 (가격 분석과 동일 폭 1/2, 카드는 열 안에서 가로 전체) */}
+        <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 rounded-xl border border-border/80 bg-muted/15 p-4 shadow-sm xl:order-2 dark:bg-zinc-950/40">
+          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+            Step 4 · {t("posSetTabSavedSetsTitle")}
+          </p>
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-bold">{t("posSetTabSavedSetsTitle")}</p>
+            <p className="text-sm font-bold">{t("posSetTabSavedSetsTitle")}</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSavedSetsSamePromoHint")}</p>
             <p className="text-[10px] text-muted-foreground/90 leading-relaxed">{t("posSetTabSavedSetsInquiryLinkHint")}</p>
             <div className="flex flex-wrap gap-1.5">
@@ -1726,11 +1997,19 @@ export function PosSetMenuTabWorkspace({
               <p className="mt-1 text-[11px] text-muted-foreground/90">{t("posSetTabSavedSetsEmptyHint")}</p>
             </div>
           ) : (
-            <ul className="max-h-[min(520px,65vh)] space-y-1 overflow-y-auto pr-0.5">
+            <ul className="grid w-full max-h-[min(520px,65vh)] grid-cols-1 gap-2 overflow-y-auto overflow-x-hidden pr-0.5">
               {mirrorRowsForCurrentPromoName.map((m) => {
                 const pid = String(m.promoId ?? "").trim()
                 const pr = pid ? promoById[pid] : undefined
                 const active = editPromoId && pid === editPromoId
+                const preview = pid ? savedSetComposePreview[pid] : undefined
+                const hallOn = pr?.channelHall !== false
+                const takeOn = pr?.channelTakeout !== false
+                const delOn = pr?.channelDelivery !== false
+                const delCodes = normalizeDeliveryAppCodesList(pr?.deliveryAppCodes)
+                const disc = pr?.discountPercent != null ? Number(pr.discountPercent) : null
+                const showDisc = disc != null && !Number.isNaN(disc) && disc !== 0
+                const saleActive = pr?.isActive !== false
                 return (
                   <li key={m.id}>
                     <button
@@ -1738,53 +2017,134 @@ export function PosSetMenuTabWorkspace({
                       disabled={!pid || promosLoading}
                       onClick={() => pid && setEditPromoId(pid)}
                       className={cn(
-                        "w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
+                        "flex w-full flex-col gap-2.5 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
                         active
                           ? "border-emerald-500/50 bg-emerald-500/10"
                           : "border-border/60 bg-card/80 hover:bg-muted/60"
                       )}
                     >
-                      <p className="truncate font-medium">{pr?.code || m.code}</p>
-                      <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                        {t("posMenuPriceHall")} ฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}
-                        {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0
-                          ? ` · ${t("posMenuPriceDelivery")} ฿${Math.round(Number(pr.priceDelivery)).toLocaleString()}`
-                          : ""}
-                      </p>
+                      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="min-w-0 truncate text-sm font-semibold leading-tight">{pr?.code || m.code}</p>
+                            <Badge
+                              variant={saleActive ? "default" : "secondary"}
+                              className={cn(
+                                "shrink-0 px-1.5 py-0 text-[10px] font-normal",
+                                saleActive && "bg-emerald-600 hover:bg-emerald-600"
+                              )}
+                            >
+                              {saleActive ? t("posSetInquiryActive") : t("posSetInquiryInactive")}
+                            </Badge>
+                          </div>
+                          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
+                            {pr?.name || m.name || "—"}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {hallOn ? (
+                              <span className="rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {t("posOrderTypeDineIn")}
+                              </span>
+                            ) : null}
+                            {takeOn ? (
+                              <span className="rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {t("posOrderTypeTakeout")}
+                              </span>
+                            ) : null}
+                            {delOn ? (
+                              <span className="rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {t("posOrderTypeDelivery")}
+                              </span>
+                            ) : null}
+                          </div>
+                          {delOn && delCodes.length > 0 ? (
+                            <p className="line-clamp-2 text-[10px] leading-snug text-muted-foreground/90">
+                              {delCodes
+                                .map((c) => {
+                                  const row = DEFAULT_PICKER_DELIVERY_APPS.find((d) => d.code === c)
+                                  return row ? t(row.nameKey) : c
+                                })
+                                .join(" · ")}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex w-full min-w-0 flex-col gap-1 sm:max-w-[min(100%,22rem)] sm:flex-none sm:items-end sm:text-right">
+                          {showDisc ? (
+                            <p className="text-xs font-medium text-amber-800 dark:text-amber-200 sm:text-right">
+                              {t("posPromoSimulatorDiscountPct")}{" "}
+                              <span className="font-mono tabular-nums">{disc!.toFixed(1)}%</span>
+                            </p>
+                          ) : null}
+                          <p className="font-mono text-xs tabular-nums text-muted-foreground sm:text-right">
+                            {t("posMenuPriceHall")} ฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}
+                          </p>
+                          {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0 ? (
+                            <p className="font-mono text-xs tabular-nums text-muted-foreground sm:text-right">
+                              {t("posMenuPriceDelivery")} ฿{Math.round(Number(pr.priceDelivery)).toLocaleString()}
+                            </p>
+                          ) : null}
+                          {pr?.vatIncluded === false ? (
+                            <p className="text-[10px] text-muted-foreground sm:text-right">{t("posCostExclVat")}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="w-full border-t border-border/50 pt-2">
+                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:pt-0.5">
+                            {t("posSetTabSavedSetBundleLines")}
+                            {preview?.status === "ok" && preview.total > 0 ? (
+                              <span className="ml-1 font-normal normal-case text-muted-foreground/80">
+                                ({t("posSetTabMenuLineCount").replace("{{n}}", String(preview.total))})
+                              </span>
+                            ) : null}
+                          </p>
+                          <div className="min-w-0 flex-1">
+                            {preview?.status === "loading" ? (
+                              <p className="animate-pulse text-xs text-muted-foreground">…</p>
+                            ) : null}
+                            {preview?.status === "err" ? (
+                              <p className="text-xs text-destructive">{t("posSetTabSavedSetComposeLoadErr")}</p>
+                            ) : null}
+                            {preview?.status === "ok" && preview.total === 0 ? (
+                              <p className="text-xs text-muted-foreground">—</p>
+                            ) : null}
+                            {preview?.status === "ok" && preview.previewLines.length > 0 ? (
+                              <ul className="grid w-full grid-cols-1 gap-x-8 gap-y-0.5 sm:grid-cols-2">
+                                {preview.previewLines.map((line, i) => (
+                                  <li
+                                    key={`${pid}-${i}`}
+                                    className="line-clamp-2 min-w-0 text-left text-xs leading-snug text-foreground/90"
+                                  >
+                                    · {line}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                            {preview?.status === "ok" && preview.total > preview.previewLines.length ? (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {t("posSetTabSavedSetMoreLines").replace(
+                                  "{{n}}",
+                                  String(preview.total - preview.previewLines.length)
+                                )}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
                     </button>
                   </li>
                 )
               })}
             </ul>
           )}
-          <div className="mt-2 space-y-2 border-t border-border/60 pt-3">
-            <p className="text-[10px] font-semibold text-foreground">{t("posSetTabSavedSetActionsTitle")}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-10"
-                disabled={savingPromo || savingSet}
-                onClick={() => void handleSaveSetComposition()}
-              >
-                <Layers className="mr-2 h-4 w-4" />
-                {savingSet ? t("loading") : t("posSetTabSaveSetComposition")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10"
-                disabled={savingPromo || savingSet}
-                onClick={resetBundleOnly}
-              >
-                {t("posSetTabResetBundle")}
-              </Button>
-            </div>
+          <div className="mt-2 border-t border-border/60 pt-3">
             <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSaveSplitHint")}</p>
+          </div>
           </div>
         </div>
       </div>
     </div>
+  </div>
   )
 }
 

@@ -84,6 +84,8 @@ export function SauceCostTab() {
   const [loading, setLoading] = React.useState(false)
   const [listQueried, setListQueried] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
+  /** 목록 필터: 전체 / 판매용 / 매장용 */
+  const [listUsageFilter, setListUsageFilter] = React.useState<"all" | "for_sale" | "store_use">("all")
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [saveLoading, setSaveLoading] = React.useState(false)
@@ -135,14 +137,20 @@ export function SauceCostTab() {
   }, [])
 
   const displaySauces = React.useMemo(() => {
+    let list = sauces
+    if (listUsageFilter === "for_sale") {
+      list = list.filter((s) => (s.usageKind ?? "for_sale") !== "store_use")
+    } else if (listUsageFilter === "store_use") {
+      list = list.filter((s) => s.usageKind === "store_use")
+    }
     const q = searchTerm.trim().toLowerCase()
-    if (!q) return sauces
-    return sauces.filter(
+    if (!q) return list
+    return list.filter(
       (s) =>
         String(s.code ?? "").toLowerCase().includes(q) ||
         String(s.name ?? "").toLowerCase().includes(q)
     )
-  }, [sauces, searchTerm])
+  }, [sauces, searchTerm, listUsageFilter])
 
   const getNextSauceCode = React.useCallback((list: SauceRow[]) => {
     const match = /^S(\d+)$/i
@@ -386,6 +394,21 @@ export function SauceCostTab() {
             <Search className={cn("h-3.5 w-3.5", loading && "animate-pulse")} />
             {loading ? (t("loading") || "불러오는 중...") : (t("posCostBtnQuery") || "검색")}
           </Button>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:inline">
+            {t("posCostSauceUsageKind") || "구분"}
+          </span>
+          <Select value={listUsageFilter} onValueChange={(v) => setListUsageFilter(v as "all" | "for_sale" | "store_use")}>
+            <SelectTrigger className="h-9 w-[min(100vw-2rem,10.5rem)] sm:w-40 text-xs bg-background" aria-label={t("posCostSauceUsageKind") || "구분"}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[110]" position="popper">
+              <SelectItem value="all">{t("all")}</SelectItem>
+              <SelectItem value="for_sale">{t("posCostSauceUsageBtnForSale") || t("posCostSauceUsageForSale")}</SelectItem>
+              <SelectItem value="store_use">{t("posCostSauceUsageBtnStore") || t("posCostSauceUsageStore")}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <Button size="sm" className="h-9" onClick={() => void handleNew()} disabled={addOpenLoading || loading}>
           <Plus className={cn("h-3.5 w-3.5 mr-1.5", addOpenLoading && "animate-pulse")} />

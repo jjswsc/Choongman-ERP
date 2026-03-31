@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Camera, Download, Pencil, Save, Trash2 } from "lucide-react"
+import { Search, Plus, Camera, Download, Pencil, Save, Trash2, X } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -42,8 +42,8 @@ import {
   addPettyCashTransaction,
   updatePettyCashTransaction,
   deletePettyCashTransaction,
-  translateTexts,
   getAccountSubjects,
+  getAdminEmployeeList,
   type PettyCashItem,
   type AccountSubjectItem,
 } from "@/lib/api-client"
@@ -101,7 +101,6 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [addReceiptPreview, setAddReceiptPreview] = useState<string | null>(null)
   const [addSaving, setAddSaving] = useState(false)
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
-  const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
   const [accountSubjectOptions, setAccountSubjectOptions] = useState<AccountSubjectItem[]>([])
   const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
   const [pendingAccountSubjectByRowId, setPendingAccountSubjectByRowId] = useState<Record<number, string>>({})
@@ -128,6 +127,30 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const editReceiptCameraInputRef = useRef<HTMLInputElement>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const [nameToNick, setNameToNick] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!auth?.store) return
+    getAdminEmployeeList({ userStore: auth.store, userRole: auth.role || "" })
+      .then(({ list }) => {
+        const m: Record<string, string> = {}
+        for (const e of list || []) {
+          const legal = String(e.name || "").trim()
+          const nick = String(e.nick || "").trim()
+          if (legal && nick) m[legal] = nick
+        }
+        setNameToNick(m)
+      })
+      .catch(() => setNameToNick({}))
+  }, [auth?.store, auth?.role])
+
+  const displayUser = (userName: string) => {
+    const u = String(userName || "").trim()
+    if (!u) return "-"
+    const nick = nameToNick[u]
+    return nick && nick.trim() ? nick.trim() : u
+  }
+
   useEffect(() => {
     if (!showAccountSubjectEmptyFilter) setFilterAccountSubjectEmpty(false)
   }, [showAccountSubjectEmptyFilter])
@@ -170,29 +193,8 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     }).catch(() => setAccountSubjectOptions([]))
   }, [])
 
-  // 내용(memo) 로그인 언어로 번역
-  useEffect(() => {
-    const items = [...listData, ...monthlyData]
-    const memos = [...new Set(items.map((r) => (r.memo || "").trim()).filter(Boolean))]
-    if (memos.length === 0) {
-      setMemoTransMap({})
-      return
-    }
-    let cancelled = false
-    translateTexts(memos, lang)
-      .then((translated) => {
-        if (cancelled) return
-        const map: Record<string, string> = {}
-        memos.forEach((m, i) => {
-          map[m] = translated[i] ?? m
-        })
-        setMemoTransMap(map)
-      })
-      .catch(() => setMemoTransMap({}))
-    return () => { cancelled = true }
-  }, [listData, monthlyData, lang])
-
-  const getMemo = (memo: string) => (memo && memoTransMap[memo]) || memo || "-"
+  /** 저장된 원문 그대로 표시(관리자·모바일 동일, 브라우저 검색·대사 가능) */
+  const formatMemo = (memo: string) => String(memo || "").trim() || "-"
   const filteredListData = filterAccountSubjectEmpty
     ? listData.filter((r) => (r.accountSubjectId ?? r.account_subject_id) == null || (r.accountSubjectId ?? r.account_subject_id) === 0)
     : listData
@@ -545,8 +547,8 @@ ${rows.map((row, ri) => {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="shadow-sm">
-        <CardContent className="pt-6">
+      <Card className="shadow-md ring-1 ring-border/40">
+        <CardContent className="pt-5 sm:pt-6">
           <Tabs defaultValue="list" className="w-full">
             <div className={adminTabsBarCn}>
               <div className={adminTabsScrollCn}>
@@ -561,101 +563,125 @@ ${rows.map((row, ri) => {
               </div>
             </div>
 
-            <TabsContent value="list" className={cn("space-y-3", adminTabsContentFlushCn)}>
-              <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
-                {canSearchAll && (
-                  <Select value={listScope} onValueChange={(v) => { setListScope(v as "store" | "office"); setListStore("All"); setListDepartment("All"); }}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[70px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
-                      <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-                {listScope === "store" ? (
-                  <Select value={listStore} onValueChange={setListStore}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
-                      <SelectValue placeholder={t("store")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((st) => (
-                        <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Select value={listDepartment} onValueChange={setListDepartment}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
-                      <SelectValue placeholder={t("pettySelectDepartment")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {officeDepartments.map((d) => (
-                        <SelectItem key={d} value={d}>{d === "All" ? (t("all") || "전체") : d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
-                <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
-                {showAccountSubjectEmptyFilter && (
-                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                    <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
-                    <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
-                  </label>
-                )}
-                <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={() => loadList(1)} disabled={listLoading}>
-                  <Search className="mr-1 h-3.5 w-3.5" />
-                  {listLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
-                </Button>
-              </div>
-              <div className="rounded-lg border border-border/60 max-h-[240px] overflow-x-auto overflow-y-auto">
+            <TabsContent value="list" className={cn("space-y-5 px-3 pb-6 pt-1 sm:px-5 sm:pb-8 sm:pt-2", adminTabsContentFlushCn)}>
+              <section
+                className="rounded-xl border border-border/60 bg-gradient-to-b from-muted/35 to-muted/10 p-4 shadow-sm ring-1 ring-border/20 sm:p-5"
+                aria-label={t("outWhFilterBy")}
+              >
+                <h3 className="mb-4 border-b border-border/50 pb-3 text-sm font-semibold tracking-tight text-foreground">
+                  {t("outWhFilterBy")}
+                </h3>
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+                    {canSearchAll && (
+                      <div className="min-w-0 w-full flex-1 sm:w-auto sm:min-w-[8.5rem] sm:max-w-[12rem]">
+                        <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("pettyScopeStore")} / {t("pettyScopeOffice")}</span>
+                        <Select value={listScope} onValueChange={(v) => { setListScope(v as "store" | "office"); setListStore("All"); setListDepartment("All"); }}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
+                            <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="min-w-0 w-full flex-1 sm:w-auto sm:min-w-[10rem] sm:max-w-[14rem]">
+                      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        {listScope === "store" ? (t("store") || "매장") : (t("pettySelectDepartment") || "부서")}
+                      </span>
+                      {listScope === "store" ? (
+                        <Select value={listStore} onValueChange={setListStore}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue placeholder={t("store")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stores.map((st) => (
+                              <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Select value={listDepartment} onValueChange={setListDepartment}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue placeholder={t("pettySelectDepartment")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {officeDepartments.map((d) => (
+                              <SelectItem key={d} value={d}>{d === "All" ? (t("all") || "전체") : d}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="h-px w-full bg-border/50" />
+
+                  <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+                    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:min-w-[240px] sm:max-w-md">
+                      <span className="text-xs font-medium text-muted-foreground">{t("searchPeriod")}</span>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-10 min-w-0 flex-1 text-sm sm:min-w-[9.5rem]" />
+                        <span className="shrink-0 text-sm text-muted-foreground">~</span>
+                        <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-10 min-w-0 flex-1 text-sm sm:min-w-[9.5rem]" />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
+                      {showAccountSubjectEmptyFilter && (
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-background/80 px-3 py-2.5 shadow-sm">
+                          <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
+                          <span className="text-xs leading-snug text-foreground sm:text-sm">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                        </label>
+                      )}
+                      <Button size="default" className="h-10 shrink-0 gap-1.5 px-5" onClick={() => loadList(1)} disabled={listLoading}>
+                        <Search className="h-4 w-4" />
+                        {listLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+              <div className="max-h-[min(70vh,_420px)] overflow-x-auto overflow-y-auto sm:max-h-[240px]">
                 {filteredListData.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">{listData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
+                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">{listData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className={cn("w-full text-xs table-fixed", canSearchAll ? "min-w-[420px]" : "min-w-[360px]")}>
-                    <colgroup>
-                      <col style={{ width: "92px" }} />
-                      {canSearchAll && <col style={{ width: "88px" }} />}
-                      <col style={{ width: "42px" }} />
-                      <col style={{ width: "64px" }} />
-                      <col />
-                      <col style={{ width: "100px" }} />
-                      <col style={{ width: "36px" }} />
-                    </colgroup>
-                    <thead className="bg-muted/50 sticky top-0">
+                  <table className={cn("w-full text-xs", canSearchAll ? "min-w-[520px]" : "min-w-[460px]")}>
+                    <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
                       <tr>
-                        <th className="p-2 text-center">{t("pettyColDate") || "날짜"}</th>
-                        {canSearchAll && <th className="p-2 text-center">{t("store") || "매장"}</th>}
-                        <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
-                        <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
-                        <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
-                        <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColDate") || "날짜"}</th>
+                        {canSearchAll && <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("store") || "매장"}</th>}
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColType") || "유형"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColAmount") || "금액"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColUser") || "등록자"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredListData.map((r) => (
-                        <tr key={r.id} className="border-t border-border/40">
-                          <td className="p-2 text-center">{r.trans_date}</td>
-                          {canSearchAll && <td className="p-2 text-center truncate text-xs">{formatStoreLabel(r.store)}</td>}
-                          <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
-                          <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
+                        <tr key={r.id} className="border-t border-border/40 transition-colors hover:bg-muted/20">
+                          <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{r.trans_date}</td>
+                          {canSearchAll && <td className="px-3 py-2.5 text-center align-top truncate text-xs max-w-[6rem]">{formatStoreLabel(r.store)}</td>}
+                          <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
+                          <td className={`px-3 py-2.5 text-center align-top whitespace-nowrap tabular-nums text-sm ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
-                          <td className="p-2 text-center truncate" title={getMemo(r.memo || "")}>{getMemo(r.memo || "")}</td>
-                          <td className="p-2 text-center text-xs text-muted-foreground truncate" title={r.user_name || "-"}>{r.user_name || "-"}</td>
-                          <td className="p-2 text-center w-9">
+                          <td className="px-3 py-2.5 align-top text-left text-sm whitespace-normal break-words min-w-[12rem] max-w-[min(85vw,_22rem)]">{formatMemo(r.memo || "")}</td>
+                          <td className="px-3 py-2.5 text-center align-top text-xs text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
+                          <td className="px-3 py-2.5 text-center align-top w-9">
                             {r.receipt_url ? (
                               <button
                                 type="button"
-                                className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted text-[10px] flex items-center justify-center mx-auto"
+                                className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted flex items-center justify-center mx-auto text-muted-foreground"
                                 onClick={() => setReceiptModalUrl(r.receipt_url!)}
                                 title={t("pettyColReceipt") || "영수증"}
+                                aria-label={t("pettyColReceipt") || "영수증"}
                               >
-                                📷
+                                <Camera className="h-3.5 w-3.5" />
                               </button>
                             ) : (
                               "-"
@@ -667,8 +693,9 @@ ${rows.map((row, ri) => {
                   </table>
                 )}
               </div>
+              </div>
               <ListPaginationBar
-                className="mt-2"
+                className="mt-1 sm:mt-2"
                 page={listPage}
                 pageSize={listPageSize}
                 total={listTotal}
@@ -676,9 +703,9 @@ ${rows.map((row, ri) => {
                 disabled={listLoading}
               />
 
-              <div className="border-t pt-3 mt-3">
-                <p className="text-sm font-medium mb-2">{t("pettyAddTitle") || "등록"}</p>
-                <div className="flex flex-col gap-2">
+              <div className="mt-2 rounded-xl border border-border/50 bg-muted/10 p-4 sm:mt-3 sm:p-5">
+                <p className="mb-4 text-sm font-semibold text-foreground">{t("pettyAddTitle") || "등록"}</p>
+                <div className="flex flex-col gap-3">
                   {canSearchAll && (
                     <Select value={addTargetType} onValueChange={(v) => { setAddTargetType(v as "store" | "office"); setAddStore(stores.find((s) => s !== "All") || ""); setAddDepartment(officeDepartments.find((d) => d !== "All") || ""); }}>
                       <SelectTrigger className="h-9 text-xs">
@@ -804,127 +831,158 @@ ${rows.map((row, ri) => {
               </div>
             </TabsContent>
 
-            <TabsContent value="monthly" className={cn("space-y-3", adminTabsContentFlushCn)}>
-              <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
-                {canSearchAll && (
-                  <Select value={monthlyScope} onValueChange={(v) => { setMonthlyScope(v as "store" | "office"); setMonthlyStore("All"); setMonthlyDepartment("All"); }}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[70px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
-                      <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-                {monthlyScope === "store" ? (
-                  <Select value={monthlyStore} onValueChange={setMonthlyStore}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
-                      <SelectValue placeholder={t("store")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((st) => (
-                        <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Select value={monthlyDepartment} onValueChange={setMonthlyDepartment}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
-                      <SelectValue placeholder={t("pettySelectDepartment")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {officeDepartments.map((d) => (
-                        <SelectItem key={d} value={d}>{d === "All" ? (t("all") || "전체") : d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Select value={monthlySearchMode} onValueChange={(v) => setMonthlySearchMode(v as "month" | "period")}>
-                  <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[70px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="month">{t("pettySearchByMonth") || "월별"}</SelectItem>
-                    <SelectItem value="period">{t("pettySearchByPeriod") || "기간별"}</SelectItem>
-                  </SelectContent>
-                </Select>
-                {monthlySearchMode === "month" ? (
-                  <Select value={monthlyYm} onValueChange={setMonthlyYm}>
-                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[100px]">
-                      <SelectValue placeholder={t("pettyYearMonth") || "연월"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {monthlyYmOptions.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <>
-                    <Input type="date" value={monthlyPeriodStart} onChange={(e) => setMonthlyPeriodStart(e.target.value)} className="date-input-compact h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
-                    <span className="text-xs text-muted-foreground shrink-0">~</span>
-                    <Input type="date" value={monthlyPeriodEnd} onChange={(e) => setMonthlyPeriodEnd(e.target.value)} className="date-input-compact h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
-                  </>
-                )}
-                {showAccountSubjectEmptyFilter && (
-                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                    <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
-                    <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
-                  </label>
-                )}
-                <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadMonthly} disabled={monthlyLoading}>
-                  <Search className="mr-1 h-3.5 w-3.5" />
-                  {monthlyLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
-                </Button>
-                <Button size="sm" variant="outline" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={downloadMonthlyExcel} disabled={filteredMonthlyData.length === 0} title={t("pettyExcelHint") || ""}>
-                  <Download className="mr-1 h-3.5 w-3.5" />
-                  {t("excelBtn") || "Excel"}
-                </Button>
-              </div>
-              <div className="rounded-lg border border-border/60 max-h-[320px] overflow-x-auto overflow-y-auto">
+            <TabsContent value="monthly" className={cn("space-y-5 px-3 pb-6 pt-1 sm:px-5 sm:pb-8 sm:pt-2", adminTabsContentFlushCn)}>
+              <section
+                className="rounded-xl border border-border/60 bg-gradient-to-b from-muted/35 to-muted/10 p-4 shadow-sm ring-1 ring-border/20 sm:p-5"
+                aria-label={t("outWhFilterBy")}
+              >
+                <h3 className="mb-4 border-b border-border/50 pb-3 text-sm font-semibold tracking-tight text-foreground">
+                  {t("outWhFilterBy")}
+                </h3>
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+                    {canSearchAll && (
+                      <div className="min-w-0 w-full flex-1 sm:w-auto sm:min-w-[8.5rem] sm:max-w-[12rem]">
+                        <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("pettyScopeStore")} / {t("pettyScopeOffice")}</span>
+                        <Select value={monthlyScope} onValueChange={(v) => { setMonthlyScope(v as "store" | "office"); setMonthlyStore("All"); setMonthlyDepartment("All"); }}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
+                            <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="min-w-0 w-full flex-1 sm:w-auto sm:min-w-[10rem] sm:max-w-[14rem]">
+                      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        {monthlyScope === "store" ? (t("store") || "매장") : (t("pettySelectDepartment") || "부서")}
+                      </span>
+                      {monthlyScope === "store" ? (
+                        <Select value={monthlyStore} onValueChange={setMonthlyStore}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue placeholder={t("store")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stores.map((st) => (
+                              <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Select value={monthlyDepartment} onValueChange={setMonthlyDepartment}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue placeholder={t("pettySelectDepartment")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {officeDepartments.map((d) => (
+                              <SelectItem key={d} value={d}>{d === "All" ? (t("all") || "전체") : d}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="h-px w-full bg-border/50" />
+
+                  <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+                    <div className="min-w-0 flex-1 lg:max-w-[14rem]">
+                      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("pettySearchByMonth")} / {t("pettySearchByPeriod")}</span>
+                      <Select value={monthlySearchMode} onValueChange={(v) => setMonthlySearchMode(v as "month" | "period")}>
+                        <SelectTrigger className="h-10 w-full text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="month">{t("pettySearchByMonth") || "월별"}</SelectItem>
+                          <SelectItem value="period">{t("pettySearchByPeriod") || "기간별"}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {monthlySearchMode === "month" ? (
+                      <div className="min-w-0 w-full flex-1 sm:max-w-xs lg:max-w-sm">
+                        <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("pettyYearMonth") || "연월"}</span>
+                        <Select value={monthlyYm} onValueChange={setMonthlyYm}>
+                          <SelectTrigger className="h-10 w-full text-sm">
+                            <SelectValue placeholder={t("pettyYearMonth") || "연월"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {monthlyYmOptions.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="flex min-w-0 w-full flex-1 flex-col gap-2 sm:max-w-md">
+                        <span className="text-xs font-medium text-muted-foreground">{t("searchPeriod")}</span>
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                          <Input type="date" value={monthlyPeriodStart} onChange={(e) => setMonthlyPeriodStart(e.target.value)} className="date-input-compact h-10 min-w-0 flex-1 text-sm sm:min-w-[9.5rem]" />
+                          <span className="shrink-0 text-sm text-muted-foreground">~</span>
+                          <Input type="date" value={monthlyPeriodEnd} onChange={(e) => setMonthlyPeriodEnd(e.target.value)} className="date-input-compact h-10 min-w-0 flex-1 text-sm sm:min-w-[9.5rem]" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    className={cn(
+                      "flex flex-col gap-3 border-t border-border/40 pt-4 sm:flex-row sm:flex-wrap sm:items-center",
+                      showAccountSubjectEmptyFilter ? "sm:justify-between" : "sm:justify-end",
+                    )}
+                  >
+                    {showAccountSubjectEmptyFilter && (
+                      <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/50 bg-background/80 px-3 py-2.5 shadow-sm">
+                        <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
+                        <span className="text-xs leading-snug text-foreground sm:text-sm">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                      </label>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <Button size="default" className="h-10 gap-1.5 px-5" onClick={loadMonthly} disabled={monthlyLoading}>
+                        <Search className="h-4 w-4" />
+                        {monthlyLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
+                      </Button>
+                      <Button size="default" variant="outline" className="h-10 gap-1.5 px-5" onClick={downloadMonthlyExcel} disabled={filteredMonthlyData.length === 0} title={t("pettyExcelHint") || ""}>
+                        <Download className="h-4 w-4" />
+                        {t("excelBtn") || "Excel"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+              <div className="max-h-[min(78vh,_560px)] overflow-x-auto overflow-y-auto sm:max-h-[320px]">
                 {filteredMonthlyData.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
+                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed min-w-[620px]">
-                    <colgroup>
-                      <col style={{ width: "92px" }} />
-                      <col style={{ width: "88px" }} />
-                      <col style={{ width: "42px" }} />
-                      <col style={{ width: "64px" }} />
-                      <col style={{ width: "72px" }} />
-                      <col style={{ width: "100px" }} />
-                      <col />
-                      <col style={{ width: "100px" }} />
-                      <col style={{ width: "36px" }} />
-                      <col style={{ width: "72px" }} />
-                    </colgroup>
-                    <thead className="bg-muted/50 sticky top-0">
+                  <table className="w-full text-xs min-w-[720px]">
+                    <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
                       <tr>
-                        <th className="p-2 text-center">{t("pettyColDate") || "날짜"}</th>
-                        <th className="p-2 text-center">{t("store") || "매장"}</th>
-                        <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
-                        <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-center font-medium">{t("pettyColBalance") || "잔액"}</th>
-                        <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
-                        <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
-                        <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
-                        <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
-                        <th className="p-2 text-center whitespace-nowrap">{t("pettyColActions") || "수정·삭제"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColDate") || "날짜"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("store") || "매장"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColType") || "유형"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColAmount") || "금액"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColBalance") || "잔액"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap min-w-[7rem]">{t("accountSubject") || "계정과목"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColUser") || "등록자"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-muted-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColActions") || "수정·삭제"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredMonthlyData.map((r) => (
-                        <tr key={r.id} className="border-t border-border/40">
-                          <td className="p-2 text-center">{r.trans_date}</td>
-                          <td className="p-2 text-center truncate">{formatStoreLabel(r.store)}</td>
-                          <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
-                          <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
+                        <tr key={r.id} className="border-t border-border/40 transition-colors hover:bg-muted/20">
+                          <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{r.trans_date}</td>
+                          <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[5.5rem]">{formatStoreLabel(r.store)}</td>
+                          <td className="px-3 py-2.5 text-center align-top whitespace-nowrap text-sm">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
+                          <td className={`px-3 py-2.5 text-center align-top whitespace-nowrap tabular-nums text-sm ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
-                          <td className="p-2 text-center font-medium">{fmt(r.balance_after ?? 0)}</td>
-                          <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-3 py-2.5 text-center align-top font-medium whitespace-nowrap tabular-nums text-sm">{fmt(r.balance_after ?? 0)}</td>
+                          <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
                               <Select
                                 value={pendingAccountSubjectByRowId[r.id] ?? ((r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__")}
@@ -962,23 +1020,24 @@ ${rows.map((row, ri) => {
                               )}
                             </div>
                           </td>
-                          <td className="p-2 text-center truncate" title={getMemo(r.memo || "")}>{getMemo(r.memo || "")}</td>
-                          <td className="p-2 text-center text-xs text-muted-foreground truncate" title={r.user_name || "-"}>{r.user_name || "-"}</td>
-                          <td className="p-2 text-center w-9">
+                          <td className="px-3 py-2.5 align-top text-left text-sm whitespace-normal break-words min-w-[12rem] max-w-[min(85vw,_22rem)]">{formatMemo(r.memo || "")}</td>
+                          <td className="px-3 py-2.5 text-center align-top text-xs text-muted-foreground max-w-[5.5rem] break-words" title={displayUser(r.user_name)}>{displayUser(r.user_name)}</td>
+                          <td className="px-3 py-2.5 text-center w-9">
                             {r.receipt_url ? (
                               <button
                                 type="button"
-                                className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted text-[10px] flex items-center justify-center mx-auto"
+                                className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted flex items-center justify-center mx-auto text-muted-foreground"
                                 onClick={() => setReceiptModalUrl(r.receipt_url!)}
                                 title={t("pettyColReceipt") || "영수증"}
+                                aria-label={t("pettyColReceipt") || "영수증"}
                               >
-                                📷
+                                <Camera className="h-3.5 w-3.5" />
                               </button>
                             ) : (
                               "-"
                             )}
                           </td>
-                          <td className="p-2 text-center">
+                          <td className="px-3 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-0.5">
                               <Button
                                 type="button"
@@ -1009,6 +1068,7 @@ ${rows.map((row, ri) => {
                     </tbody>
                   </table>
                 )}
+              </div>
               </div>
             </TabsContent>
           </Tabs>
@@ -1143,8 +1203,9 @@ ${rows.map((row, ri) => {
               size="sm"
               className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70"
               onClick={() => setReceiptModalUrl(null)}
+              aria-label={t("cancel")}
             >
-              ✕
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </div>

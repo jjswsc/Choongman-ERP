@@ -15,7 +15,6 @@ export async function GET(request: NextRequest) {
 
   try {
     const dayStart = settleDate + 'T00:00:00.000Z'
-    const dayEnd = settleDate + 'T23:59:59.999Z'
     const nextDay = new Date(settleDate)
     nextDay.setDate(nextDay.getDate() + 1)
     const nextDayStr = nextDay.toISOString().slice(0, 10) + 'T00:00:00.000Z'
@@ -59,7 +58,10 @@ export async function GET(request: NextRequest) {
       qr_breakdown?: Record<string, number>
       delivery_app_amt?: number
       delivery_app_breakdown?: Record<string, number>
+      dine_in_delivery_amt?: number
+      dine_in_delivery_breakdown?: Record<string, number>
       other_amt?: number
+      other_breakdown?: Record<string, number>
       memo?: string
       closed?: boolean
     }[] | null
@@ -76,7 +78,14 @@ export async function GET(request: NextRequest) {
       qrBreakdown: (s.qr_breakdown && typeof s.qr_breakdown === 'object') ? s.qr_breakdown : {},
       deliveryAppAmt: Number(s.delivery_app_amt) ?? 0,
       deliveryAppBreakdown: (s.delivery_app_breakdown && typeof s.delivery_app_breakdown === 'object') ? s.delivery_app_breakdown : {},
+      dineInDeliveryAmt: Number(s.dine_in_delivery_amt) ?? 0,
+      dineInDeliveryBreakdown:
+        s.dine_in_delivery_breakdown && typeof s.dine_in_delivery_breakdown === 'object'
+          ? s.dine_in_delivery_breakdown
+          : {},
       otherAmt: Number(s.other_amt) ?? 0,
+      otherBreakdown:
+        s.other_breakdown && typeof s.other_breakdown === 'object' ? s.other_breakdown : {},
       memo: String(s.memo ?? ''),
       closed: !!s.closed,
     }))

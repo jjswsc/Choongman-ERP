@@ -1,5 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  resolvePosPaymentKeysForStore,
+  syntheticPaymentMethodItemsFromKeys,
+} from '@/lib/pos-payment-settings-resolve'
+
+type MergedRow = {
+  id: number
+  store_code: string | null
+  category: string
+  name: string
+  hidden: boolean
+  sort_order: number
+}
+
+function sortPaymentMethodApiRows<T extends { category: string; sortOrder: number; name: string }>(rows: T[]): T[] {
+  return [...rows].sort(
+    (a, b) => a.category.localeCompare(b.category) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+  )
+}
+
+/** DB에 특정 분류 행이 전혀 없을 때 POS와 동일하게 resolve 기본 키를 syn: 행으로 채움 */
+function augmentMissingCategoriesWithSynthetic(
+  merged: MergedRow[],
+  storeCode: string,
+  keys: Awaited<ReturnType<typeof resolvePosPaymentKeysForStore>>
+) {
+  const mapped = merged.map((r) => ({
+    id: String(r.id),
+    storeCode: r.store_code,
+    category: r.category,
+    name: r.name,
+    hidden: Boolean(r.hidden),
+    sortOrder: Number(r.sort_order) || 0,
+  }))
+  const cats: Array<keyof Pick<typeof keys, 'cardKeys' | 'qrKeys' | 'deliveryKeys' | 'otherKeys'>> = [
+    'cardKeys',
+    'qrKeys',
+    'deliveryKeys',
+    'otherKeys',
+  ]
+  const catMap: Record<(typeof cats)[number], 'card' | 'qr' | 'delivery' | 'other'> = {
+    cardKeys: 'card',
+    qrKeys: 'qr',
+    deliveryKeys: 'delivery',
+    otherKeys: 'other',
+  }
+  for (const k of cats) {
+    const cat = catMap[k]
+    if (merged.some((r) => r.category === cat)) continue
+    const names = keys[k]
+    names.forEach((name, idx) => {
+      mapped.push({
+        id: `syn:${cat}:${idx}`,
+        storeCode: storeCode || null,
+        category: cat,
+        name,
+        hidden: false,
+        sortOrder: idx,
+      })
+    })
+  }
+  return sortPaymentMethodApiRows(mapped)
+}
 
 /** POS 결제 수단 항목 조회 (매장별 or 전역) */
 export async function GET(request: NextRequest) {
@@ -39,20 +102,24 @@ export async function GET(request: NextRequest) {
     const storeItems = storeCode ? (byStore.get(storeCode) || []) : []
     const merged = mergeItems(globalItems, storeItems)
 
-    return NextResponse.json(
-      merged.map((r) => ({
-        id: String(r.id),
-        storeCode: r.store_code,
-        category: r.category,
-        name: r.name,
-        hidden: Boolean(r.hidden),
-        sortOrder: Number(r.sort_order) || 0,
-      })),
-      { headers }
-    )
+    if (merged.length > 0) {
+      const keys = await resolvePosPaymentKeysForStore(storeCode)
+      const payload = augmentMissingCategoriesWithSynthetic(merged, storeCode || '', keys)
+      return NextResponse.json(payload, { headers })
+    }
+
+    const keys = await resolvePosPaymentKeysForStore(storeCode)
+    const synthetic = syntheticPaymentMethodItemsFromKeys(keys, storeCode ? storeCode : null)
+    return NextResponse.json(synthetic, { headers })
   } catch (e) {
     console.error('getPosPaymentMethodItems:', e)
-    return NextResponse.json([], { headers })
+    try {
+      const keys = await resolvePosPaymentKeysForStore(storeCode)
+      const synthetic = syntheticPaymentMethodItemsFromKeys(keys, storeCode ? storeCode : null)
+      return NextResponse.json(synthetic, { headers })
+    } catch {
+      return NextResponse.json([], { headers })
+    }
   }
 }
 

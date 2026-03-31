@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { isSyntheticPosPaymentMethodId } from '@/lib/pos-payment-settings-resolve'
 
 /** POS 결제 수단 항목 삭제 */
 export async function POST(req: NextRequest) {
@@ -12,6 +13,16 @@ export async function POST(req: NextRequest) {
     if (!id) {
       return NextResponse.json(
         { success: false, message: '항목 ID가 필요합니다.' },
+        { headers }
+      )
+    }
+    if (isSyntheticPosPaymentMethodId(id)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '기본(폴백) 항목은 DB에 없어 삭제할 수 없습니다. 목록을 바꾸려면 저장으로 매장 항목을 추가하거나, Supabase에 pos_payment_method_items를 등록하세요.',
+        },
         { headers }
       )
     }

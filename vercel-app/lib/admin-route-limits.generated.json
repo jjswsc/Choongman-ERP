@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-03-30T06:34:49.807Z",
-  "entryCount": 605,
+  "generatedAt": "2026-03-31T11:14:03.097Z",
+  "entryCount": 615,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -102,7 +102,7 @@
     },
     {
       "path": "app/api/addExpenseAccrual/route.ts",
-      "line": 133,
+      "line": 156,
       "kind": "limit",
       "value": 1,
       "apiLabel": "addExpenseAccrual"
@@ -123,7 +123,7 @@
     },
     {
       "path": "app/api/approveExpenseAccrual/route.ts",
-      "line": 45,
+      "line": 32,
       "kind": "limit",
       "value": 1,
       "apiLabel": "approveExpenseAccrual"
@@ -241,6 +241,13 @@
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
+      "path": "app/api/debug-sauces/route.ts",
+      "line": 15,
+      "kind": "limit",
+      "value": 5,
+      "apiLabel": "debug-sauces"
+    },
+    {
       "path": "app/api/debugPushStatus/route.ts",
       "line": 20,
       "kind": "limit",
@@ -253,6 +260,13 @@
       "kind": "limit",
       "value": 500,
       "apiLabel": "debugPushStatus"
+    },
+    {
+      "path": "app/api/debugSauces/route.ts",
+      "line": 15,
+      "kind": "limit",
+      "value": 5,
+      "apiLabel": "debugSauces"
     },
     {
       "path": "app/api/deleteAccountSubject/route.ts",
@@ -375,7 +389,7 @@
     },
     {
       "path": "app/api/deletePosPaymentMethodItem/route.ts",
-      "line": 22,
+      "line": 33,
       "kind": "limit",
       "value": 1,
       "apiLabel": "deletePosPaymentMethodItem"
@@ -956,14 +970,14 @@
     },
     {
       "path": "app/api/getExpensePaymentPlan/route.ts",
-      "line": 74,
+      "line": 148,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getExpensePaymentPlan"
     },
     {
       "path": "app/api/getExpensePaymentPlan/route.ts",
-      "line": 79,
+      "line": 153,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getExpensePaymentPlan"
@@ -1824,45 +1838,45 @@
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 71,
+      "line": 62,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getPosOrders"
+    },
+    {
+      "path": "app/api/getPosOrders/route.ts",
+      "line": 76,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "getPosOrders"
+    },
+    {
+      "path": "app/api/getPosOrders/route.ts",
+      "line": 106,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 90,
+      "line": 126,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 99,
+      "line": 136,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosPaymentMethodItems/route.ts",
-      "line": 17,
+      "line": 80,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getPosPaymentMethodItems"
-    },
-    {
-      "path": "app/api/getPosPaymentSettings/route.ts",
-      "line": 26,
-      "kind": "limit",
-      "value": 300,
-      "apiLabel": "getPosPaymentSettings"
-    },
-    {
-      "path": "app/api/getPosPaymentSettings/route.ts",
-      "line": 72,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "getPosPaymentSettings"
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
@@ -2958,51 +2972,93 @@
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 18,
+      "line": 35,
       "kind": "limit",
       "value": 500,
       "apiLabel": "sauces"
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 19,
+      "line": 43,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "sauces"
+    },
+    {
+      "path": "app/api/sauces/route.ts",
+      "line": 50,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "sauces"
+    },
+    {
+      "path": "app/api/sauces/route.ts",
+      "line": 59,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "sauces"
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 20,
+      "line": 65,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "sauces"
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 104,
+      "line": 75,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "sauces"
+    },
+    {
+      "path": "app/api/sauces/route.ts",
+      "line": 82,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "sauces"
+    },
+    {
+      "path": "app/api/sauces/route.ts",
+      "line": 187,
       "kind": "limit",
       "value": 1,
       "apiLabel": "sauces"
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 105,
+      "line": 188,
       "kind": "limit",
       "value": 200,
       "apiLabel": "sauces"
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 106,
+      "line": 189,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "sauces"
     },
     {
       "path": "app/api/sauces/route.ts",
-      "line": 107,
+      "line": 190,
       "kind": "limit",
       "value": 500,
+      "apiLabel": "sauces"
+    },
+    {
+      "path": "app/api/sauces/route.ts",
+      "line": 305,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "sauces"
+    },
+    {
+      "path": "app/api/sauces/route.ts",
+      "line": 324,
+      "kind": "limit",
+      "value": 1,
       "apiLabel": "sauces"
     },
     {
@@ -3245,7 +3301,7 @@
     },
     {
       "path": "app/api/savePosPaymentMethodItem/route.ts",
-      "line": 40,
+      "line": 42,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosPaymentMethodItem"
@@ -3448,21 +3504,21 @@
     },
     {
       "path": "app/api/updateExpenseAccrual/route.ts",
-      "line": 88,
+      "line": 112,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updateExpenseAccrual"
     },
     {
       "path": "app/api/updateExpenseAccrual/route.ts",
-      "line": 173,
+      "line": 202,
       "kind": "limit",
       "value": 50,
       "apiLabel": "updateExpenseAccrual"
     },
     {
       "path": "app/api/updateExpenseAccrual/route.ts",
-      "line": 196,
+      "line": 225,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updateExpenseAccrual"
@@ -3623,7 +3679,7 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 246,
+      "line": 264,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
@@ -4096,6 +4152,20 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-main-devices-server"
+    },
+    {
+      "path": "lib/pos-payment-settings-resolve.ts",
+      "line": 47,
+      "kind": "limit",
+      "value": 300,
+      "apiLabel": "lib:pos-payment-settings-resolve"
+    },
+    {
+      "path": "lib/pos-payment-settings-resolve.ts",
+      "line": 94,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:pos-payment-settings-resolve"
     },
     {
       "path": "lib/pos-promo-mirror-menu.ts",

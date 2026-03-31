@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
@@ -20,26 +20,23 @@ import {
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
 
-function AdminLayoutLoading() {
-  const [stuck, setStuck] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setStuck(true), 6000)
-    return () => clearTimeout(t)
-  }, [])
-  if (stuck) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-4">
-        <p className="text-center text-sm text-slate-300">로딩이 오래 걸립니다. 새로고침해 보세요.</p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-        >
-          새로고침
-        </button>
-      </div>
-    )
+/** usePathname()이 첫 렌더에서 null이면 /admin/login인데도 로그인 분기로 못 들어가 스피너에 고정될 수 있음 */
+function normalizePathname(p: string | null): string {
+  if (p == null || p === "") return ""
+  return p.endsWith("/") && p.length > 1 ? p.slice(0, -1) : p
+}
+
+function isAdminLoginPath(pathname: string | null): boolean {
+  const p = normalizePathname(pathname)
+  if (p === "/admin/login") return true
+  if (typeof window !== "undefined") {
+    const w = normalizePathname(window.location.pathname)
+    if (w === "/admin/login") return true
   }
+  return false
+}
+
+function AdminLayoutLoading() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950">
       <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -57,17 +54,24 @@ export default function AdminLayout({
   const { auth, initialized, setAuth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const isLoginPage = pathname === "/admin/login"
+  const isLoginPage = isAdminLoginPath(pathname)
+
+  // 미로그인: 로그인 URL이 아니면 즉시 이동 (pathname null 대비로 window 경로도 함께 판별)
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+    if (!initialized) return
+    const onLogin = normalizePathname(window.location.pathname) === "/admin/login"
+    if (onLogin) return
+    if (!auth) {
+      window.location.replace("/admin/login")
+    }
+  }, [initialized, auth])
 
   useEffect(() => {
     if (!initialized) return
-    if (!auth && !isLoginPage) {
-      router.replace("/admin/login")
-      return
-    }
     if (auth && !isLoginPage && !canAccessAdmin(auth.role || "")) {
       setAuth(null)
-      router.replace("/admin/login?msg=no_admin")
+      window.location.replace("/admin/login?msg=no_admin")
       return
     }
     if (auth && !isLoginPage && (isManagerRole(auth.role || "") || isFranchiseeRole(auth.role || "")) && !canManagerAccessPath(pathname)) {

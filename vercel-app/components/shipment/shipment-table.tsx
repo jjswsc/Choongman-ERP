@@ -1,19 +1,21 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { ChevronDown, ChevronRight, Image, MessageSquare } from "lucide-react"
+import { ChevronDown, ChevronRight, Image as ImageIcon, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
 type StatusBadgeKey = "outTypeOrder" | "statusPartialDelivered" | "statusInTransit" | "statusDelivered" | "outTypeForce"
 
+/** 주문 유형 = 중립, 배송중 = 스카이, 배송완료 = 초록 — 관리자·모바일 동일 의미 */
 const statusStyles: Record<StatusBadgeKey, string> = {
-  outTypeOrder: "bg-[#22C55E] text-white",
-  statusPartialDelivered: "bg-[#F59E0B] text-white",
-  statusInTransit: "bg-[#22C55E] text-white",
-  statusDelivered: "bg-[#22C55E] text-white",
-  outTypeForce: "bg-[#F59E0B] text-white",
+  outTypeOrder:
+    "border border-border bg-muted text-foreground shadow-none dark:border-border dark:bg-muted/80",
+  statusPartialDelivered: "bg-amber-500 text-white dark:bg-amber-600",
+  statusInTransit: "bg-sky-600 text-white dark:bg-sky-600",
+  statusDelivered: "bg-emerald-600 text-white dark:bg-emerald-600",
+  outTypeForce: "bg-amber-500 text-white dark:bg-amber-600",
 }
 
 /** 미수령 품목 배지 스타일 */
@@ -172,7 +174,6 @@ export function ShipmentTable({
               <TableRow
                 key={row.id}
                 row={row}
-                idx={idx}
                 isExpanded={expandedRows.has(idx)}
                 isSelected={selectedIndices.has(idx)}
                 onToggleExpand={() => toggleExpand(idx)}
@@ -194,7 +195,6 @@ export function ShipmentTable({
 
 function TableRow({
   row,
-  idx,
   isExpanded,
   isSelected,
   onToggleExpand,
@@ -207,7 +207,6 @@ function TableRow({
   t,
 }: {
   row: ShipmentTableRow
-  idx: number
   isExpanded: boolean
   isSelected: boolean
   onToggleExpand: () => void
@@ -282,7 +281,7 @@ function TableRow({
                 className="inline-flex items-center justify-center w-9 h-9 rounded border border-border hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
                 title={t("outPhotoView")}
               >
-                <Image className="h-4 w-4 text-primary" />
+                <ImageIcon className="h-4 w-4 text-primary" aria-hidden />
               </button>
             ) : (
               <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />

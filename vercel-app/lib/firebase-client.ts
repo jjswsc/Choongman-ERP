@@ -1,7 +1,7 @@
 "use client"
 
 import { getApps, initializeApp, getApp, type FirebaseApp } from "firebase/app"
-import { getMessaging, getToken, isSupported, onMessage, type Messaging } from "firebase/messaging"
+import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging"
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -49,6 +49,8 @@ export type FcmTokenError = "unsupported" | "webview" | "permission" | "network"
  */
 export function preRegisterServiceWorker(): void {
   if (typeof window === "undefined" || !navigator?.serviceWorker?.register) return
+  // Local dev + HMR에서 SW 캐시가 _next 청크를 오염시키면 ChunkLoadError/SyntaxError가 반복된다.
+  if (process.env.NODE_ENV !== "production") return
   navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {})
 }
 

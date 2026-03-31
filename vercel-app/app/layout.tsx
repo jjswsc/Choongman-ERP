@@ -52,8 +52,8 @@ export default function RootLayout({
     <html lang="ko">
       <body className={`${pretendard.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased`}>
         <ErrorBoundary>
-          <SwPreregister />
           <AuthProvider>
+            <SwPreregister />
             <LangProvider>
               <AppMessageProvider>{children}</AppMessageProvider>
             </LangProvider>

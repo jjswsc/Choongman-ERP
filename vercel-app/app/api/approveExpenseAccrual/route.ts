@@ -1,24 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { canApproveExpenseAccrual } from '@/lib/expense-accrual-approve-policy'
 
 type ExpenseAccrualRow = {
   id?: number
   status?: string
   store_name?: string
-}
-
-function isHqStoreName(storeName: string): boolean {
-  const s = String(storeName || '').trim().toLowerCase()
-  if (!s) return true
-  return s.includes('office') || s.includes('본사') || s.includes('hq') || s.includes('오피스')
-}
-
-function canApproveByPolicy(userRoleRaw: string, storeName: string): boolean {
-  const role = String(userRoleRaw || '').toLowerCase()
-  const isDirector = role.includes('director')
-  const isOfficer = role.includes('officer')
-  if (isHqStoreName(storeName)) return isDirector
-  return isOfficer
 }
 
 export async function POST(request: NextRequest) {
@@ -48,9 +35,13 @@ export async function POST(request: NextRequest) {
     if (!row?.id) {
       return NextResponse.json({ success: false, message: '지급 예정 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
     }
-    if (!canApproveByPolicy(userRole, String(row.store_name || ''))) {
+    if (!canApproveExpenseAccrual(userRole, String(row.store_name || ''))) {
       return NextResponse.json(
-        { success: false, message: '승인 권한이 없습니다. 본사 출금은 director, 매장 출금은 officer만 승인 가능합니다.' },
+        {
+          success: false,
+          message:
+            '승인 권한이 없습니다. 본사(Office·본사 등) 명의 건은 임원(director·ceo·hr), 그 외 매장 건은 본사(임원·오피스) 또는 회계에서 승인할 수 있습니다.',
+        },
         { status: 403, headers }
       )
     }

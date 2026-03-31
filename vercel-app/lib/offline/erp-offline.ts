@@ -7,6 +7,12 @@ import { isOnline, shouldPreferOfflineCache } from './network'
 import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } from './cache'
 import { apiFetch } from '../api/fetch'
 
+function sendOfflineDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
+  // #region agent log
+  fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'631010'},body:JSON.stringify({sessionId:'631010',runId:'initial',hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{})
+  // #endregion
+}
+
 const CACHE_KEYS = {
   STORE_LIST: 'erp:storeList',
   VENDORS_PURCHASE: 'erp:vendorsPurchase',
@@ -500,7 +506,11 @@ export interface LoginDataResult {
 export async function getLoginDataWithCache(): Promise<LoginDataResult> {
   const key = 'erp:loginData'
   const fallback: LoginDataResult = { users: {}, vendors: [], _source: 'fallback' }
-  if (isOnline()) {
+  const online = isOnline()
+  sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:entry", "getLoginDataWithCache entered", {
+    online,
+  })
+  if (online) {
     try {
       const res = await apiFetch('/api/getLoginData')
       const data = (await res.json()) as { users?: Record<string, string[]>; vendors?: string[]; error?: string }
@@ -511,20 +521,31 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
         vendors: data.vendors ?? [],
         _source: 'api',
       }
+      sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiSuccess", "login data from api", {
+        storeCount: Object.keys(result.users || {}).length,
+      })
       await setErpCache(key, { users: result.users, vendors: result.vendors })
       return result
     } catch {
       const cached = await getFromErpCache<{ users: Record<string, string[]>; vendors: string[] }>(key)
       if (cached && Object.keys(cached.users || {}).length > 0) {
+        sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiCatchCacheHit", "api failed, using cached login data", {
+          storeCount: Object.keys(cached.users || {}).length,
+        })
         return { ...cached, _source: 'cache' }
       }
+      sendOfflineDebugLog("H3", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiCatchFallback", "api failed, fallback login data", {})
       return fallback
     }
   }
   const cached = await getFromErpCache<{ users: Record<string, string[]>; vendors: string[] }>(key)
   if (cached && Object.keys(cached.users || {}).length > 0) {
+    sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:offlineCacheHit", "offline mode with cache", {
+      storeCount: Object.keys(cached.users || {}).length,
+    })
     return { ...cached, _source: 'cache' }
   }
+  sendOfflineDebugLog("H3", "lib/offline/erp-offline.ts:getLoginDataWithCache:offlineFallback", "offline mode fallback login data", {})
   return fallback
 }
 

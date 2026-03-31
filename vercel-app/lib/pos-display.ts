@@ -1,6 +1,7 @@
 /**
  * POS Display Configuration
- * Oll star pos 15dlscl (8G 256G) / 1024x768, 1366x768 최적화
+ * 좁은 뷰포트(≤1024)를 기본 틀로 두고, 그 이상에서 열·패딩만 단계적으로 늘림.
+ * 대표 해상도: 1024×768, 1280×800, 1366×768 등.
  */
 export const POS_BREAKPOINTS = {
   small: 1024,

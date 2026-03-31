@@ -25,8 +25,16 @@ import {
   getPosDeliveryApps,
   getPosPaymentSettings,
   useStoreList,
+  type PosDeliveryApp,
   type PosSettlement,
 } from '@/lib/api-client'
+import {
+  computeSettlementDeliveryKeys,
+  deliverySettlementKeyIsDineIn,
+  POS_SETTLEMENT_DINE_IN_CODE,
+} from '@/lib/pos-settlement-delivery-split'
+import { hydrateSettlementQrOtherBreakdowns } from '@/lib/pos-settlement-breakdown-hydrate'
+import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
 import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
@@ -119,10 +127,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [cardAmt, setCardAmt] = React.useState<string>('')
   const [qrAmt, setQrAmt] = React.useState<string>('')
   const [deliveryAppAmt, setDeliveryAppAmt] = React.useState<string>('')
+  /** 예전 결산: other_breakdown 없이 other_amt만 있는 경우 폴백 */
   const [otherAmt, setOtherAmt] = React.useState<string>('')
   const [cardBreakdown, setCardBreakdown] = React.useState<Record<string, string>>({})
   const [qrBreakdown, setQrBreakdown] = React.useState<Record<string, string>>({})
+  const [otherBreakdown, setOtherBreakdown] = React.useState<Record<string, string>>({})
   const [deliveryAppBreakdown, setDeliveryAppBreakdown] = React.useState<Record<string, string>>({})
+  const [dineInDeliveryBreakdown, setDineInDeliveryBreakdown] = React.useState<Record<string, string>>({})
+  const [deliveryApps, setDeliveryApps] = React.useState<PosDeliveryApp[]>([])
   const [memo, setMemo] = React.useState('')
   const [closed, setClosed] = React.useState(false)
   /** 영업 시작: 단위별 현금 수량 (장/개) */
@@ -134,26 +146,45 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   /** 결산: 카드/QR/배달앱 상세 펼침 */
   const [cardExpanded, setCardExpanded] = React.useState(false)
   const [qrExpanded, setQrExpanded] = React.useState(false)
+  const [otherExpanded, setOtherExpanded] = React.useState(false)
+  /** 배달앱: 실제 배달 + 홀(Dine in) 한 블록 안에서 두 종류로 입력 */
   const [deliveryExpanded, setDeliveryExpanded] = React.useState(false)
 
   const [cardKeys, setCardKeys] = React.useState<string[]>(['Visa', 'Master', 'Amex', 'JCB', 'Other'])
-  const [qrKeys, setQrKeys] = React.useState<string[]>(['QR', 'TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'])
+  const [qrKeys, setQrKeys] = React.useState<string[]>([...DEFAULT_QR_KEYS])
+  const [otherKeys, setOtherKeys] = React.useState<string[]>([...DEFAULT_OTHER_KEYS])
   const [deliveryAppKeys, setDeliveryAppKeys] = React.useState<string[]>(['Grab', 'Line Man', 'Shopee', 'Other'])
   const CARD_KEYS = cardKeys.length > 0 ? cardKeys : ['Visa', 'Master', 'Amex', 'JCB', 'Other']
-  const QR_KEYS = qrKeys.length > 0 ? qrKeys : ['QR', 'TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other']
-  const DELIVERY_KEYS = deliveryAppKeys.length > 0 ? deliveryAppKeys : ['Grab', 'Line Man', 'Shopee', 'Other']
+  const QR_KEYS = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
+  const OTHER_KEYS = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
+  const displayQrKeyList = React.useMemo(() => {
+    const extra = Object.keys(qrBreakdown).filter((k) => !QR_KEYS.includes(k))
+    return [...QR_KEYS, ...extra.sort()]
+  }, [QR_KEYS, qrBreakdown])
+  const { platformKeys: PLATFORM_DELIVERY_KEYS, dineInKeys: DINE_IN_DELIVERY_KEYS } = React.useMemo(
+    () => computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps),
+    [deliveryAppKeys, deliveryApps]
+  )
 
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canUnclose = canAccessSettings(auth?.role || '')
   const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
 
+  React.useEffect(() => {
+    if (!effectiveStore) return
+    getPosDeliveryApps({ storeCode: effectiveStore })
+      .then((list) => setDeliveryApps(Array.isArray(list) ? list : []))
+      .catch(() => setDeliveryApps([]))
+  }, [effectiveStore])
+
   /** 카드/QR/배달앱 breakdown 키 - 관리자 결제 관리(pos_payment_method_items)와 연동 */
   React.useEffect(() => {
     if (!effectiveStore) return
     getPosPaymentSettings({ storeCode: effectiveStore })
-      .then(({ cardKeys: ck, qrKeys: qk, deliveryKeys: dk }) => {
+      .then(({ cardKeys: ck, qrKeys: qk, otherKeys: ok, deliveryKeys: dk }) => {
         setCardKeys(Array.isArray(ck) && ck.length > 0 ? ck : ['Visa', 'Master', 'Amex', 'JCB', 'Other'])
-        setQrKeys(Array.isArray(qk) && qk.length > 0 ? qk : ['QR', 'TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'])
+        setQrKeys(Array.isArray(qk) && qk.length > 0 ? qk : [...DEFAULT_QR_KEYS])
+        setOtherKeys(Array.isArray(ok) && ok.length > 0 ? ok : [...DEFAULT_OTHER_KEYS])
         if (Array.isArray(dk) && dk.length > 0) {
           setDeliveryAppKeys(dk)
         } else {
@@ -166,6 +197,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         }
       })
       .catch(() => {
+        setOtherKeys([...DEFAULT_OTHER_KEYS])
         getPosDeliveryApps({ storeCode: effectiveStore })
           .then((list) => {
             const names = (list || []).filter((a) => a.enabled).map((a) => a.name)
@@ -191,6 +223,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       : Promise.resolve(null)
     Promise.all([mainPromise, prevDayPromise])
       .then(([main, prev]) => {
+        const { platformKeys, dineInKeys } = computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps)
         const { systemTotal: st, systemSubtotal: sub, systemVat: vat, settlement: s } = main
         setSystemTotal(st)
         setSystemSubtotal(sub ?? st)
@@ -209,16 +242,40 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
           })
           setCardBreakdown(cb)
-          const qb: Record<string, string> = {}
-          QR_KEYS.forEach((k) => {
-            qb[k] = String((single.qrBreakdown ?? {})[k] ?? '')
-          })
-          setQrBreakdown(qb)
+          const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
+          const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
+          const hydrated = hydrateSettlementQrOtherBreakdowns(single, qk, ok)
+          setQrBreakdown(hydrated.qrBreakdown)
+          setOtherBreakdown(hydrated.otherBreakdown)
+          const oldDel = (single.deliveryAppBreakdown ?? {}) as Record<string, number>
+          const newDine = (single.dineInDeliveryBreakdown ?? {}) as Record<string, number>
           const db: Record<string, string> = {}
-          DELIVERY_KEYS.forEach((k) => {
-            db[k] = String((single.deliveryAppBreakdown ?? {})[k] ?? '')
+          platformKeys.forEach((k) => {
+            db[k] = String(oldDel[k] ?? '')
           })
           setDeliveryAppBreakdown(db)
+          const di: Record<string, string> = {}
+          dineInKeys.forEach((k) => {
+            di[k] = String(newDine[k] ?? oldDel[k] ?? '')
+          })
+          let extraDine = 0
+          for (const [k, v] of Object.entries(oldDel)) {
+            if (deliverySettlementKeyIsDineIn(k, deliveryApps) && !dineInKeys.includes(k)) {
+              extraDine += Number(v) || 0
+            }
+          }
+          if (extraDine > 0 && dineInKeys.length > 0) {
+            const pk = dineInKeys[0]
+            di[pk] = String((parseFloat(di[pk] || '0') || 0) + extraDine)
+          }
+          if (
+            dineInKeys.length === 1 &&
+            (parseFloat(di[dineInKeys[0]] || '0') || 0) === 0 &&
+            (single.dineInDeliveryAmt ?? 0) > 0
+          ) {
+            di[dineInKeys[0]] = String(single.dineInDeliveryAmt)
+          }
+          setDineInDeliveryBreakdown(di)
           setMemo(single.memo ?? '')
           setClosed(single.closed ?? false)
         } else {
@@ -232,8 +289,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setDeliveryAppAmt('0')
           setOtherAmt('0')
           setCardBreakdown(Object.fromEntries(CARD_KEYS.map((k) => [k, ''])))
-          setQrBreakdown(Object.fromEntries(QR_KEYS.map((k) => [k, ''])))
-          setDeliveryAppBreakdown(Object.fromEntries(DELIVERY_KEYS.map((k) => [k, ''])))
+          {
+            const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
+            const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
+            setQrBreakdown(Object.fromEntries(qk.map((k) => [k, ''])))
+            setOtherBreakdown(Object.fromEntries(ok.map((k) => [k, ''])))
+          }
+          setDeliveryAppBreakdown(Object.fromEntries(platformKeys.map((k) => [k, ''])))
+          setDineInDeliveryBreakdown(Object.fromEntries(dineInKeys.map((k) => [k, ''])))
           setMemo('')
           setClosed(false)
         }
@@ -250,9 +313,20 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSystemVat(0)
         setSettlement(null)
         setPrevDayCashActual(null)
+        setDineInDeliveryBreakdown({})
       })
       .finally(() => setLoading(false))
-  }, [settleDate, effectiveStore, deliveryAppKeys, cardKeys, qrKeys, openMode, offlineAware])
+  }, [
+    settleDate,
+    effectiveStore,
+    deliveryAppKeys,
+    deliveryApps,
+    cardKeys,
+    qrKeys,
+    otherKeys,
+    openMode,
+    offlineAware,
+  ])
 
   React.useEffect(() => {
     if (canSearchAll && stores.length && !storeFilter) {
@@ -297,6 +371,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
               Number(s.cardAmt ?? 0) +
               Number(s.qrAmt ?? 0) +
               Number(s.deliveryAppAmt ?? 0) +
+              Number(s.dineInDeliveryAmt ?? 0) +
               Number(s.otherAmt ?? 0)
             : 0
           return {
@@ -332,18 +407,26 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const cashActualNum = denomTotal
   const cashAmtNum = parseFloat(cashAmt) || 0
   const cardNum = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0) || parseFloat(cardAmt) || 0
-  const qrNum = QR_KEYS.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0) || parseFloat(qrAmt) || 0
-  const deliveryNum = DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(deliveryAppBreakdown[k]) || 0), 0) || parseFloat(deliveryAppAmt) || 0
-  const otherNum = parseFloat(otherAmt) || 0
-  const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + otherNum
+  const qrFromLines = displayQrKeyList.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0)
+  const qrNum = qrFromLines > 0.005 ? qrFromLines : parseFloat(qrAmt) || 0
+  const otherFromLines = OTHER_KEYS.reduce((s, k) => s + (parseFloat(otherBreakdown[k]) || 0), 0)
+  const otherNum = otherFromLines > 0.005 ? otherFromLines : parseFloat(otherAmt) || 0
+  const deliveryNum =
+    PLATFORM_DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(deliveryAppBreakdown[k]) || 0), 0) ||
+    parseFloat(deliveryAppAmt) ||
+    0
+  const dineInNum = DINE_IN_DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(dineInDeliveryBreakdown[k]) || 0), 0)
+  const deliveryAppTotalNum = deliveryNum + dineInNum
+  const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + dineInNum + otherNum
   const diff = totalInput - systemTotal
   const currencySuffix = ' ฿'
   const savedCash = Number(settlement?.cashAmt ?? 0)
   const savedCard = Number(settlement?.cardAmt ?? 0)
   const savedQr = Number(settlement?.qrAmt ?? 0)
   const savedDelivery = Number(settlement?.deliveryAppAmt ?? 0)
+  const savedDineIn = Number(settlement?.dineInDeliveryAmt ?? 0)
   const savedOther = Number(settlement?.otherAmt ?? 0)
-  const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedOther
+  const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther
 
   /** 서버에 마감 확정된 건만 잠금. 체크만 한 뒤에는 저장까지 입력·저장 가능 */
   const inputsLocked = Boolean(settlement?.closed) && !canUnclose
@@ -366,13 +449,20 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         ) as Record<string, number>,
         qrAmt: qrNum,
         qrBreakdown: Object.fromEntries(
-          QR_KEYS.map((k) => [k, parseFloat(qrBreakdown[k]) || 0])
+          displayQrKeyList.map((k) => [k, parseFloat(qrBreakdown[k]) || 0])
         ) as Record<string, number>,
         deliveryAppAmt: deliveryNum,
         deliveryAppBreakdown: Object.fromEntries(
-          DELIVERY_KEYS.map((k) => [k, parseFloat(deliveryAppBreakdown[k]) || 0])
+          PLATFORM_DELIVERY_KEYS.map((k) => [k, parseFloat(deliveryAppBreakdown[k]) || 0])
+        ) as Record<string, number>,
+        dineInDeliveryAmt: dineInNum,
+        dineInDeliveryBreakdown: Object.fromEntries(
+          DINE_IN_DELIVERY_KEYS.map((k) => [k, parseFloat(dineInDeliveryBreakdown[k]) || 0])
         ) as Record<string, number>,
         otherAmt: otherNum,
+        otherBreakdown: Object.fromEntries(
+          OTHER_KEYS.map((k) => [k, parseFloat(otherBreakdown[k]) || 0])
+        ) as Record<string, number>,
         memo,
         closed,
       })
@@ -404,9 +494,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       <tr class="t"><td class="b">${t('posSystemTotal') || '시스템 매출'}</td><td class="r b">${systemTotal.toLocaleString()} ฿</td></tr>
       <tr><td>${t('posCashActual') || '돈통 시제'}</td><td class="r">${cashActualNum.toLocaleString()} ฿</td></tr>
       <tr><td>${t('posCard') || '카드'}</td><td class="r">${cardNum.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posQr') || 'QR/모바일'}</td><td class="r">${qrNum.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posDeliveryApp') || '배달앱'}</td><td class="r">${deliveryNum.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posOther') || '기타'}</td><td class="r">${otherNum.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posPaymentQrCode') || 'QR 코드'}</td><td class="r">${qrNum.toLocaleString()} ฿</td></tr>
+      <tr class="t"><td class="b">${t('posPaymentDeliveryApp') || '배달앱'}</td><td class="r b">${deliveryAppTotalNum.toLocaleString()} ฿</td></tr>
+      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}</td><td class="r">${deliveryNum.toLocaleString()} ฿</td></tr>
+      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}</td><td class="r">${dineInNum.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posPaymentOther') || '기타'}</td><td class="r">${otherNum.toLocaleString()} ฿</td></tr>
       <tr class="t"><td class="b">${t('posInputTotal') || '입력 합계'}</td><td class="r b">${totalInput.toLocaleString()} ฿</td></tr>
       <tr class="t"><td class="b">${t('posDifference') || '차액'}</td><td class="r b">${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ฿</td></tr>
       </table>
@@ -666,7 +758,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <Collapsible open={qrExpanded} onOpenChange={setQrExpanded}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
-                      <span className="font-medium">{t('posQr') || 'QR'} ({t('posQrBankTransfer') || '계좌이체'})</span>
+                      <span className="font-medium">
+                        {t('posPaymentQrCode') || 'QR 코드'} ({t('posQrBankTransfer') || 'PromptPay 등'})
+                      </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">{qrNum.toLocaleString()}{currencySuffix}</span>
                         {qrExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -675,7 +769,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="grid grid-cols-2 gap-2 pl-2 pt-2 border-t mt-2">
-                      {QR_KEYS.map((k) => (
+                      {displayQrKeyList.map((k) => (
                         <label key={k} className="flex items-center gap-2 text-xs">
                           <span className="w-16 shrink-0">{k}</span>
                           <Input
@@ -694,20 +788,117 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   </CollapsibleContent>
                 </Collapsible>
 
-                {/* 배달앱: 큰 제목 + 펼치기/접기 */}
+                {/* 배달앱: 결산 시 한 묶음 안에서 ①실제 배달 ②홀(Dine in) 두 종류 */}
                 <Collapsible open={deliveryExpanded} onOpenChange={setDeliveryExpanded}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
-                      <span className="font-medium">{t('posDeliveryApp') || '배달앱'}</span>
+                      <span className="font-medium">{t('posPaymentDeliveryApp') || '배달앱'}</span>
                       <span className="flex items-center gap-2">
-                        <span className="tabular-nums font-semibold">{deliveryNum.toLocaleString()}{currencySuffix}</span>
+                        <span className="tabular-nums font-semibold">
+                          {deliveryAppTotalNum.toLocaleString()}
+                          {currencySuffix}
+                        </span>
                         {deliveryExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </span>
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
+                    <p className="mt-2 pl-2 text-[10px] leading-snug text-muted-foreground">
+                      {t('posSettlementDeliveryAppIntro') ||
+                        '홀에서 배달앱으로 결제한 금액도 결산에서는 「배달앱」 안에 넣되, 아래 두 종류로 나눕니다: 실제 배달 vs 홀(Dine in).'}
+                    </p>
+                    <div className="mt-3 space-y-3 rounded-lg border border-border/80 bg-muted/15 p-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          {t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}
+                          <span className="ml-2 tabular-nums font-normal text-muted-foreground">
+                            {deliveryNum.toLocaleString()}
+                            {currencySuffix}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                          {t('posSettlementDeliveryPlatformHint') ||
+                            'Grab·Line Man·Shopee 등 실제 배달 플랫폼 매출.'}
+                        </p>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {PLATFORM_DELIVERY_KEYS.map((k) => (
+                            <label key={k} className="flex items-center gap-2 text-xs">
+                              <span className="w-16 shrink-0">{k}</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                className="h-8 text-right"
+                                value={deliveryAppBreakdown[k] ?? ''}
+                                onChange={(e) =>
+                                  setDeliveryAppBreakdown((prev) => ({ ...prev, [k]: e.target.value }))
+                                }
+                                disabled={inputsLocked}
+                              />
+                              <span className="text-muted-foreground w-5">฿</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="border-t border-border/60 pt-3">
+                        <p className="text-xs font-semibold text-foreground">
+                          {t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}
+                          <span className="ml-2 tabular-nums font-normal text-muted-foreground">
+                            {dineInNum.toLocaleString()}
+                            {currencySuffix}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                          {t('posSettlementDineInDeliveryHint') ||
+                            '홀 주문인데 POS 배달앱 탭·채널 Dine in 으로 받은 금액.'}
+                        </p>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {DINE_IN_DELIVERY_KEYS.map((k) => (
+                            <label key={k} className="flex items-center gap-2 text-xs">
+                              <span className="w-16 shrink-0">
+                                {k === POS_SETTLEMENT_DINE_IN_CODE
+                                  ? t('posDeliveryPayDineIn') || 'Dine in'
+                                  : k}
+                              </span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                className="h-8 text-right"
+                                value={dineInDeliveryBreakdown[k] ?? ''}
+                                onChange={(e) =>
+                                  setDineInDeliveryBreakdown((prev) => ({ ...prev, [k]: e.target.value }))
+                                }
+                                disabled={inputsLocked}
+                              />
+                              <span className="text-muted-foreground w-5">฿</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                <Collapsible open={otherExpanded} onOpenChange={setOtherExpanded}>
+                  <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
+                      <span className="font-medium">
+                        {t('posPaymentOther') || '기타'} · {t('posPaymentOtherExpand') || '세부 수단'}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums font-semibold">{otherNum.toLocaleString()}{currencySuffix}</span>
+                        {otherExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </span>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <p className="mt-2 pl-2 text-[10px] leading-snug text-muted-foreground">
+                      {t('posSettlementOtherMatchPaymentHint') ||
+                        'POS 결제 화면의 「기타」탭·결제 관리의 기타 항목과 같은 줄로 맞춥니다.'}
+                    </p>
                     <div className="grid grid-cols-2 gap-2 pl-2 pt-2 border-t mt-2">
-                      {DELIVERY_KEYS.map((k) => (
+                      {OTHER_KEYS.map((k) => (
                         <label key={k} className="flex items-center gap-2 text-xs">
                           <span className="w-16 shrink-0">{k}</span>
                           <Input
@@ -715,32 +906,33 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                             min={0}
                             step="0.01"
                             className="h-8 text-right"
-                            value={deliveryAppBreakdown[k] ?? ''}
-                            onChange={(e) => setDeliveryAppBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                            value={otherBreakdown[k] ?? ''}
+                            onChange={(e) =>
+                              setOtherBreakdown((prev) => ({ ...prev, [k]: e.target.value }))
+                            }
                             disabled={inputsLocked}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
                         </label>
                       ))}
                     </div>
+                    <label className="mt-3 flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                      <span>{t('posSettlementOtherLegacyAmt') || '구 방식 합계(상세 없음)'}</span>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-8 w-28 text-right"
+                          value={otherAmt}
+                          onChange={(e) => setOtherAmt(e.target.value)}
+                          disabled={inputsLocked}
+                        />
+                        <span className="w-5">{currencySuffix}</span>
+                      </div>
+                    </label>
                   </CollapsibleContent>
                 </Collapsible>
-
-                <label className="flex items-center justify-between text-sm">
-                  <span>{t('posOther') || '기타'}</span>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className="ml-2 h-9 w-32 text-right"
-                      value={otherAmt}
-                      onChange={(e) => setOtherAmt(e.target.value)}
-                      disabled={inputsLocked}
-                    />
-                    <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
-                  </div>
-                </label>
               </div>
 
               <div className="space-y-1 rounded-lg border px-4 py-2 text-sm">
@@ -749,7 +941,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   <span className="tabular-nums">{cashActualNum.toLocaleString()}{currencySuffix}</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posCash') || '현금'} + {t('posCard') || '카드'} + {t('posQr') || 'QR'} + {t('posDeliveryApp') || '배달앱'} + {t('posOther') || '기타'}</span>
+                  <span>
+                    {t('posCash') || '현금'} + {t('posCard') || '카드'} + {t('posPaymentQrCode') || 'QR'} +{' '}
+                    {t('posPaymentDeliveryApp') || '배달앱'}(2종) + {t('posPaymentOther') || '기타'}
+                  </span>
                   <span className="tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
                 </div>
                 <div className="flex justify-between items-center pt-1 border-t font-medium">
@@ -898,7 +1093,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                     </Collapsible>
                     <Collapsible className="group">
                       <CollapsibleTrigger className="flex w-full items-center justify-between py-1 hover:bg-muted/30 rounded">
-                        <span>{t('posQr') || 'QR'} ({t('posQrBankTransfer') || '계좌이체'})</span>
+                        <span>{t('posPaymentQrCode') || 'QR 코드'}</span>
                         <span className="flex items-center gap-1 tabular-nums">
                           {savedQr.toLocaleString()} ฿
                           <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
@@ -917,27 +1112,102 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                     </Collapsible>
                     <Collapsible className="group">
                       <CollapsibleTrigger className="flex w-full items-center justify-between py-1 hover:bg-muted/30 rounded">
-                        <span>{t('posDeliveryApp') || '배달앱'}</span>
+                        <span>{t('posPaymentDeliveryApp') || '배달앱'}</span>
                         <span className="flex items-center gap-1 tabular-nums">
-                          {savedDelivery.toLocaleString()} ฿
+                          {(savedDelivery + savedDineIn).toLocaleString()} ฿
+                          <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
+                        </span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="pl-2 pt-2 space-y-2 border-t mt-1 text-xs">
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            {t('posSettlementDeliveryAppIntro') ||
+                              '배달앱 결산은 실제 배달과 홀(Dine in) 두 종류로 구분합니다.'}
+                          </p>
+                          <div>
+                            <p className="font-medium text-foreground">
+                              {t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}
+                              <span className="ml-2 tabular-nums text-muted-foreground">
+                                {savedDelivery.toLocaleString()} ฿
+                              </span>
+                            </p>
+                            <div className="mt-1 space-y-0.5 pl-1">
+                              {settlement.deliveryAppBreakdown &&
+                                Object.entries(settlement.deliveryAppBreakdown)
+                                  .filter(([, v]) => (v ?? 0) > 0)
+                                  .map(([k, v]) => (
+                                    <div key={k} className="flex justify-between text-muted-foreground">
+                                      <span>{k}</span>
+                                      <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                                    </div>
+                                  ))}
+                            </div>
+                          </div>
+                          <div className="border-t border-border/60 pt-2">
+                            <p className="font-medium text-foreground">
+                              {t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}
+                              <span className="ml-2 tabular-nums text-muted-foreground">
+                                {savedDineIn.toLocaleString()} ฿
+                              </span>
+                            </p>
+                            <div className="mt-1 space-y-0.5 pl-1">
+                              {settlement.dineInDeliveryBreakdown &&
+                                Object.entries(settlement.dineInDeliveryBreakdown)
+                                  .filter(([, v]) => (v ?? 0) > 0)
+                                  .map(([k, v]) => (
+                                    <div key={k} className="flex justify-between text-muted-foreground">
+                                      <span>
+                                        {k === POS_SETTLEMENT_DINE_IN_CODE
+                                          ? t('posDeliveryPayDineIn') || 'Dine in'
+                                          : k}
+                                      </span>
+                                      <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                                    </div>
+                                  ))}
+                              {savedDineIn > 0 &&
+                                (!settlement.dineInDeliveryBreakdown ||
+                                  Object.keys(settlement.dineInDeliveryBreakdown).length === 0) && (
+                                  <div className="text-muted-foreground">
+                                    {t('posSettlementDineInNoBreakdown') || '세부 항목 없음'}
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                    <Collapsible className="group">
+                      <CollapsibleTrigger className="flex w-full items-center justify-between py-1 hover:bg-muted/30 rounded">
+                        <span>
+                          {t('posPaymentOther') || '기타'} · {t('posPaymentOtherExpand') || '세부'}
+                        </span>
+                        <span className="flex items-center gap-1 tabular-nums">
+                          {savedOther.toLocaleString()} ฿
                           <ChevronRight className="h-4 w-4 transition-transform group-data-[state=open]:rotate-90" />
                         </span>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="pl-2 pt-1 space-y-0.5 border-t mt-1">
-                          {settlement.deliveryAppBreakdown && Object.entries(settlement.deliveryAppBreakdown).filter(([, v]) => (v ?? 0) > 0).map(([k, v]) => (
-                            <div key={k} className="flex justify-between text-xs text-muted-foreground">
-                              <span>{k}</span>
-                              <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
-                            </div>
-                          ))}
+                          {settlement.otherBreakdown &&
+                            Object.entries(settlement.otherBreakdown)
+                              .filter(([, v]) => (v ?? 0) > 0)
+                              .map(([k, v]) => (
+                                <div key={k} className="flex justify-between text-xs text-muted-foreground">
+                                  <span>{k}</span>
+                                  <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
+                                </div>
+                              ))}
+                          {savedOther > 0 &&
+                            (!settlement.otherBreakdown ||
+                              Object.keys(settlement.otherBreakdown).length === 0 ||
+                              Object.values(settlement.otherBreakdown).every((v) => !v || Number(v) <= 0)) && (
+                              <div className="text-xs text-muted-foreground">
+                                {t('posSettlementOtherLegacyAmt') || '구 방식 합계만 저장됨'}
+                              </div>
+                            )}
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
-                    <div className="flex justify-between">
-                      <span>{t('posOther') || '기타'}</span>
-                      <span className="tabular-nums">{savedOther.toLocaleString()} ฿</span>
-                    </div>
                   </div>
 
                   {!!settlement.memo && (

@@ -37,7 +37,6 @@ import {
   getBankAccounts,
   getExpensePaymentPlan,
   getUnlinkedBankWithdrawals,
-  updateExpenseAccrual,
   getVendorsForPurchase,
   translateTexts,
   type AccountSubjectItem,
@@ -45,6 +44,7 @@ import {
   type ExpenseAccrualPlanItem,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { canApproveExpenseAccrual } from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
@@ -96,16 +96,6 @@ export function ExpenseManagementTab() {
   const [payEditorOpenById, setPayEditorOpenById] = React.useState<Record<number, boolean>>({})
   const [payingId, setPayingId] = React.useState<number | null>(null)
   const [approvalEditById, setApprovalEditById] = React.useState<Record<number, boolean>>({})
-  const [editingPlanRow, setEditingPlanRow] = React.useState<ExpenseAccrualPlanItem | null>(null)
-  const [editPlanAmount, setEditPlanAmount] = React.useState("")
-  const [editPlanExpenseDate, setEditPlanExpenseDate] = React.useState("")
-  const [editPlanDueDate, setEditPlanDueDate] = React.useState("")
-  const [editPlanMemo, setEditPlanMemo] = React.useState("")
-  const [editPlanPayeeCode, setEditPlanPayeeCode] = React.useState("")
-  const [editPlanPayeeName, setEditPlanPayeeName] = React.useState("")
-  const [editPlanAccountSubjectId, setEditPlanAccountSubjectId] = React.useState<string>("")
-  const [editPlanStoreName, setEditPlanStoreName] = React.useState("")
-  const [editPlanSaving, setEditPlanSaving] = React.useState(false)
   const [deletingPlanId, setDeletingPlanId] = React.useState<number | null>(null)
   const [linkBankRow, setLinkBankRow] = React.useState<ExpenseAccrualPlanItem | null>(null)
   const [unlinkedList, setUnlinkedList] = React.useState<{ id: number; transDate: string; amount: number; memo: string }[]>([])
@@ -118,13 +108,6 @@ export function ExpenseManagementTab() {
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
-  const vendorBankMap = React.useMemo(() => {
-    const m: Record<string, string> = {}
-    for (const v of vendors) {
-      if (v.code && v.bankAccountNo) m[v.code] = v.bankAccountNo
-    }
-    return m
-  }, [vendors])
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
@@ -189,7 +172,15 @@ export function ExpenseManagementTab() {
         startStr,
         endStr,
         userRole: auth?.role,
+        userStore: auth?.store,
       })
+      if (!res.success) {
+        await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
+        setExpensePlans([])
+        setPurchasePlans([])
+        setTotals({ expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 })
+        return
+      }
       setExpensePlans(res.expensePlans || [])
       setPurchasePlans(res.purchasePlans || [])
       setTotals(res.totals || { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 })
@@ -200,16 +191,16 @@ export function ExpenseManagementTab() {
     } finally {
       setLoading(false)
     }
-  }, [startStr, endStr, auth?.role])
+  }, [startStr, endStr, auth?.role, auth?.store, t])
 
   const loadPlansRef = React.useRef(loadPlans)
   loadPlansRef.current = loadPlans
 
-  /** 지급예정 탭 진입 시에만 자동 조회. 기간 변경 후에는 [조회] 버튼으로 불러옵니다. */
+  /** 지급예정 탭 진입 시 자동 조회. auth.role이 늦게 채워지면 재조회. 기간 변경 후에는 [조회] 버튼으로 불러옵니다. */
   React.useEffect(() => {
     if (tab !== "plan") return
     void loadPlansRef.current()
-  }, [tab])
+  }, [tab, auth?.role])
 
   const openLinkBank = async (row: ExpenseAccrualPlanItem) => {
     const accountId = payBankById[row.id]
@@ -252,7 +243,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         return
       }
       setLinkBankRow(null)
@@ -292,7 +283,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         return
       }
       setApprovalEditById((prev) => ({ ...prev, [row.id]: false }))
@@ -300,13 +291,6 @@ export function ExpenseManagementTab() {
     } finally {
       setPayingId(null)
     }
-  }
-
-  const renderStatus = (status: ExpenseAccrualPlanItem["status"]) => {
-    if (status === "paid") return t("payStatusPaid") || "지급"
-    if (status === "approved") return t("att_approved") || "승인"
-    if (status === "rejected") return t("att_rejected") || "반려"
-    return t("payStatusPlanned") || "요청"
   }
 
   const renderWithdrawalType = (cat?: string) => {
@@ -397,19 +381,10 @@ export function ExpenseManagementTab() {
     return Array.from(map.entries()).sort((a, b) => (a[0] === "—" ? 1 : b[0] === "—" ? -1 : a[0].localeCompare(b[0])))
   }, [filteredPurchasePlans])
 
-  const isHqStoreName = React.useCallback((storeName?: string) => {
-    const s = String(storeName || "").trim().toLowerCase()
-    if (!s) return false // 매장 미선택(—)은 본사로 간주하지 않음 → officer도 승인 가능
-    return s.includes("office") || s.includes("본사") || s.includes("hq") || s.includes("오피스")
-  }, [])
-
-  const canApproveByPolicy = React.useCallback((row: ExpenseAccrualPlanItem) => {
-    const role = String(auth?.role || "").toLowerCase()
-    const isDirector = role.includes("director")
-    const isOfficer = role.includes("officer")
-    if (isHqStoreName(row.storeName)) return isDirector
-    return isOfficer
-  }, [auth?.role, isHqStoreName])
+  const canApproveByPolicy = React.useCallback(
+    (row: ExpenseAccrualPlanItem) => canApproveExpenseAccrual(auth?.role, row.storeName),
+    [auth?.role]
+  )
 
   const approvablePlansForDay = React.useMemo(
     () =>
@@ -438,7 +413,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         return
       }
       setPayEditorOpenById((prev) => ({ ...prev, [row.id]: false }))
@@ -470,59 +445,6 @@ export function ExpenseManagementTab() {
     [router]
   )
 
-  const openEditPlan = React.useCallback((row: ExpenseAccrualPlanItem) => {
-    setEditingPlanRow(row)
-    setEditPlanAmount(String(row.plannedAmount ?? ""))
-    setEditPlanExpenseDate((row.expenseDate || "").slice(0, 10))
-    setEditPlanDueDate((row.dueDate || "").slice(0, 10))
-    setEditPlanMemo(row.memo || "")
-    setEditPlanPayeeCode(row.payeeCode || "")
-    setEditPlanPayeeName(row.payeeName || "")
-    setEditPlanAccountSubjectId(row.accountSubjectId ? String(row.accountSubjectId) : "__none__")
-    setEditPlanStoreName(row.storeName || "")
-  }, [])
-
-  const handleSavePlanEdit = React.useCallback(async () => {
-    if (!editingPlanRow?.id) return
-    const amount = Number(String(editPlanAmount || "").replace(/,/g, ""))
-    if (!amount || amount <= 0) {
-      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
-      return
-    }
-    if (!editPlanExpenseDate || !/^\d{4}-\d{2}-\d{2}$/.test(editPlanExpenseDate)) {
-      await appAlert(t("msg_select_date") || "날짜를 선택해 주세요.")
-      return
-    }
-    if (!editPlanStoreName?.trim()) {
-      await appAlert(t("expenseStoreSelect") || "매장을 선택해 주세요.")
-      return
-    }
-    setEditPlanSaving(true)
-    try {
-      const res = await updateExpenseAccrual({
-        expenseAccrualId: editingPlanRow.id,
-        amount,
-        expenseDate: editPlanExpenseDate,
-        dueDate: editPlanDueDate || undefined,
-        memo: editPlanMemo || undefined,
-        payeeCode: editPlanPayeeCode || undefined,
-        payeeName: editPlanPayeeName || undefined,
-        accountSubjectId: editPlanAccountSubjectId && editPlanAccountSubjectId !== "__none__" ? Number(editPlanAccountSubjectId) : null,
-        storeName: editPlanStoreName?.trim() || undefined,
-        userRole: auth?.role,
-      })
-      if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-        return
-      }
-      setEditingPlanRow(null)
-      await loadPlans()
-    } finally {
-      setEditPlanSaving(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
-  }, [auth?.role, editPlanAccountSubjectId, editPlanAmount, editPlanDueDate, editPlanExpenseDate, editPlanMemo, editPlanPayeeCode, editPlanPayeeName, editPlanStoreName, editingPlanRow?.id, loadPlans])
-
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
     if (!row?.id) return
     const ok = await appConfirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
@@ -534,7 +456,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_delete_fail"))
+        await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("msg_delete_fail"))
         return
       }
       await loadPlans()
@@ -551,7 +473,7 @@ export function ExpenseManagementTab() {
     try {
       const res = await deleteExpenseAccrualsWithoutStore({ userRole: auth?.role })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
         return
       }
       await appAlert(res.message || `${res.deletedCount ?? 0}건 삭제되었습니다.`)
@@ -581,7 +503,7 @@ export function ExpenseManagementTab() {
           userRole: auth?.role,
         })
         if (!res.success) {
-          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
           break
         }
       }
@@ -611,7 +533,7 @@ export function ExpenseManagementTab() {
           userRole: auth?.role,
         })
         if (!res.success) {
-          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage((res as { message?: string }).message, t) || (res as { message?: string }).message || t("processFail"))
           break
         }
       }
@@ -728,10 +650,10 @@ export function ExpenseManagementTab() {
                       <tr className="border-b bg-muted/40">
                         <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
                         <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="min-w-[100px] max-w-[140px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
+                        <th className="min-w-[80px] max-w-[112px] w-[112px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
                         <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
-                        <th className="min-w-[120px] max-w-[160px] text-center py-2 px-2">{t("memo") || "메모"}</th>
+                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
                         <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
                         <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
                         <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
@@ -756,13 +678,13 @@ export function ExpenseManagementTab() {
                                     <>
                                       <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                       <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                      <td className="py-2 px-2 align-top break-words text-xs leading-snug">{r.payeeName}{codeLabel}</td>
+                                      <td className="py-2 px-2 align-top text-xs leading-snug min-w-[80px] max-w-[112px] w-[112px] break-words" title={`${r.payeeName}${codeLabel}`}>{r.payeeName}{codeLabel}</td>
                                     </>
                                   )
                                 })()}
                             <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
                             <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
-                            <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words max-w-[10rem]" title={r.memo || ""}>{getMemo(r.memo)}</td>
+                            <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px]" title={r.memo || ""}>{getMemo(r.memo)}</td>
                             <td className="py-2 px-1 text-center align-top">
                               {(r.attachmentUrls?.length ?? 0) > 0 ? (
                                 <Button
@@ -1018,10 +940,10 @@ export function ExpenseManagementTab() {
                       <tr className="border-b bg-muted/40">
                         <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
                         <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="min-w-[100px] max-w-[140px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
+                        <th className="min-w-[80px] max-w-[112px] w-[112px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
                         <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
-                        <th className="min-w-[120px] max-w-[160px] text-center py-2 px-2">{t("memo") || "메모"}</th>
+                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
                         <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
                         <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
                         <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
@@ -1042,10 +964,15 @@ export function ExpenseManagementTab() {
                               <tr className="border-b">
                                 <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                 <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                <td className="py-2 px-2 align-top break-words text-xs leading-snug">{r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}</td>
+                                <td
+                                  className="py-2 px-2 align-top text-xs leading-snug min-w-[80px] max-w-[112px] w-[112px] break-words"
+                                  title={r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}
+                                >
+                                  {r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}
+                                </td>
                                 <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
                                 <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
-                                <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words max-w-[10rem]" title={r.memo || ""}>{getMemo(r.memo)}</td>
+                                <td className="py-2 px-2 text-muted-foreground align-top text-xs leading-snug break-words min-w-[148px] max-w-[188px]" title={r.memo || ""}>{getMemo(r.memo)}</td>
                                 <td className="py-2 px-1 text-center align-top">
                                   {(r.attachmentUrls?.length ?? 0) > 0 ? (
                                     <Button
@@ -1226,71 +1153,6 @@ export function ExpenseManagementTab() {
           <CardManagementTab />
         </TabsContent>
       </Tabs>
-
-      <Dialog open={!!editingPlanRow} onOpenChange={(open) => !open && setEditingPlanRow(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{tt("btnEdit", "수정")}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("pettyColAmount") || "금액"}</label>
-              <Input value={editPlanAmount} onChange={(e) => setEditPlanAmount(e.target.value)} type="number" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("date") || "날짜"}</label>
-              <Input value={editPlanExpenseDate} onChange={(e) => setEditPlanExpenseDate(e.target.value)} type="date" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{tt("payableDate", "지급예정일")}</label>
-              <Input value={editPlanDueDate} onChange={(e) => setEditPlanDueDate(e.target.value)} type="date" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("store") || "매장"}</label>
-              <Select value={editPlanStoreName || (stores?.[0] ?? "")} onValueChange={(v) => setEditPlanStoreName(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t("store") || "매장"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(stores || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("vendor") || "거래처"}</label>
-              <Input value={editPlanPayeeCode} onChange={(e) => setEditPlanPayeeCode(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("expensePayeeName") || "지급처명"}</label>
-              <Input value={editPlanPayeeName} onChange={(e) => setEditPlanPayeeName(e.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-xs text-muted-foreground block mb-1">{t("accountSubject") || "계정과목"}</label>
-              <Select value={editPlanAccountSubjectId || "__none__"} onValueChange={(v) => setEditPlanAccountSubjectId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t("accountSubject") || "계정과목"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
-                  {subjects.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.code} {s.nameEn || (s.id != null ? subjectEnglishNames[s.id] : undefined) || s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-xs text-muted-foreground block mb-1">{t("memo") || "메모"}</label>
-              <Input value={editPlanMemo} onChange={(e) => setEditPlanMemo(e.target.value)} />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditingPlanRow(null)}>{t("cancel") || "취소"}</Button>
-            <Button onClick={handleSavePlanEdit} disabled={editPlanSaving}>
-              {editPlanSaving ? "..." : (t("btnSave") || "저장")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!linkBankRow} onOpenChange={(open) => !open && setLinkBankRow(null)}>
         <DialogContent className="max-w-lg">

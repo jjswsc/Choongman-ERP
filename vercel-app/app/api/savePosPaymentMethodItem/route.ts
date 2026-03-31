@@ -4,6 +4,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdate,
 } from '@/lib/supabase-server'
+import { isSyntheticPosPaymentMethodId } from '@/lib/pos-payment-settings-resolve'
 
 /** POS 결제 수단 항목 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -11,7 +12,8 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   try {
     const body = await request.json()
-    const id = body.id != null ? String(body.id).trim() : ''
+    const rawId = body.id != null ? String(body.id).trim() : ''
+    const id = isSyntheticPosPaymentMethodId(rawId) ? '' : rawId
     const storeCode = (body.storeCode ?? body.store_code ?? '').toString().trim() || null
     const category = String(body.category || 'other').trim()
     const validCategory = ['card', 'qr', 'delivery', 'other'].includes(category)

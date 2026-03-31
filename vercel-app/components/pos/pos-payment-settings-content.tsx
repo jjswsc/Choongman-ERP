@@ -25,6 +25,10 @@ import {
 import { isOfficeRole } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
+function isSyntheticPaymentMethodId(id: string | undefined): boolean {
+  return Boolean(id?.startsWith('syn:'))
+}
+
 const CATEGORIES = [
   { value: 'card', label: '카드' },
   { value: 'qr', label: 'QR/모바일' },
@@ -250,6 +254,11 @@ export function PosPaymentSettingsContent() {
                           </td>
                           <td className="px-2 py-1.5">
                             {item.name}
+                            {isSyntheticPaymentMethodId(item.id) && (
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                ({t('posPaymentMethodDefaultBadge') || '기본'})
+                              </span>
+                            )}
                             {item.hidden && (
                               <span className="ml-1 text-xs text-muted-foreground">(숨김)</span>
                             )}
@@ -308,7 +317,7 @@ export function PosPaymentSettingsContent() {
                   <Save className="h-4 w-4" />
                   {saving ? '...' : t('itemsBtnSave') || '저장'}
                 </Button>
-                {selected && (
+                {selected && !isSyntheticPaymentMethodId(selected.id) && (
                   <Button
                     variant="outline"
                     className="gap-1.5 text-destructive hover:text-destructive"
@@ -322,7 +331,7 @@ export function PosPaymentSettingsContent() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {t('posPaymentSettingsGuide') ||
-                  'POS 결제 화면「기타」세부 수단(QR·모바일·기타 분류)과 결산의 카드·QR·배달앱 breakdown에 연동됩니다. 목록이 비면 Supabase에 테이블 pos_payment_method_items가 있는지(scripts/pos_payment_method_items.sql) 확인하세요.'}
+                  'POS 결제 화면「기타」세부(QR 분류)와 결산 카드·QR·배달앱 breakdown에 연동됩니다. (기본)은 DB에 행이 없을 때 결산과 같은 기본 목록입니다. 저장하면 매장 항목이 DB에 추가됩니다.'}
               </p>
             </div>
           </div>

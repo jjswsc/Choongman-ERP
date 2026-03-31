@@ -4,7 +4,7 @@
 export function LoginFormShellFallback() {
   return (
     <div className="login-page">
-      <div className="login-loading">
+      <div className="login-fullscreen-loading">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
         <p className="mt-4 text-sm text-white/80">로딩 중...</p>
       </div>

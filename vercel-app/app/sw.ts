@@ -61,13 +61,45 @@ const posWarmGetApis = {
   }),
 }
 
+/**
+ * defaultCache는 `/_next/static/*.js`를 CacheFirst로 캐시함.
+ * 배포 직후·일시 오류로 HTML이 JS 청크 URL에 캐시되면 실행 시 SyntaxError(Invalid or unexpected token)가 난다.
+ * 동일 경로는 네트워크 우선으로 덮어쓴다(캐시 이름 분리로 과거 오염 캐시와 분리).
+ */
+const nextStaticBuildAssets = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && /\/_next\/static\/.+\.(?:js|css)$/i.test(pathname)
+  },
+  method: "GET" as const,
+  handler: new NetworkFirst({
+    /** 이름 변경 시 기존 `next-static-build-assets`에 남은 오염 엔트리를 더 이상 쓰지 않음 */
+    cacheName: "next-static-build-assets-v2",
+    networkTimeoutSeconds: 10,
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 120,
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        maxAgeFrom: "last-used",
+      }),
+    ],
+  }),
+}
+
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  /** POS GET을 먼저 매칭 — defaultCache의 `/api/` 16건 제한에 메뉴가 쫓겨나지 않게 함 */
-  runtimeCaching: [posWarmGetApis, ...defaultCache],
+  /** `/_next/static` → POS warm API → 나머지 defaultCache */
+  runtimeCaching: [nextStaticBuildAssets, posWarmGetApis, ...defaultCache],
   fallbacks: {
     entries: [
       {

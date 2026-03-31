@@ -22,7 +22,6 @@ import {
   getAppDataWithCache,
   getMyOrderHistoryWithCache,
   getMyUsageHistoryWithCache,
-  getLoginDataWithCache,
   invalidateAppDataCache as invalidateAppDataCacheOffline,
 } from './offline/erp-offline'
 import { fetchPosCatalogCached } from './offline/pos-catalog-offline'
@@ -2126,6 +2125,7 @@ export interface LogisticsPaymentPlanItem {
 
 export interface ExpensePaymentPlanResponse {
   success: boolean
+  message?: string
   expensePlans: ExpenseAccrualPlanItem[]
   purchasePlans: ExpenseAccrualPlanItem[]
   logisticsPlans: LogisticsPaymentPlanItem[]
@@ -2329,6 +2329,8 @@ export async function getExpensePaymentPlan(params: {
   payeeFilter?: string
   vendorFilter?: string
   userRole?: string
+  /** 매니저·가맹점주: 자기 매장 지급예정만 (서버는 JWT store 우선) */
+  userStore?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -2336,7 +2338,8 @@ export async function getExpensePaymentPlan(params: {
   })
   if (params.payeeFilter) q.set('payeeFilter', params.payeeFilter)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
-  if (params.userRole) q.set('userRole', params.userRole)
+  q.set('userRole', params.userRole ?? '')
+  q.set('userStore', params.userStore ?? '')
   // 지급예정은 오프라인 큐/캐시 없이 항상 서버 조회 (검색·탭 전환 시 최신 데이터)
   const res = await apiFetch(`/api/getExpensePaymentPlan?${q}`)
   return res.json() as Promise<ExpensePaymentPlanResponse>
@@ -5920,7 +5923,13 @@ export async function getPosPaymentSettings(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
   const res = await apiFetchWithOffline('/api/getPosPaymentSettings?' + q.toString())
-  return res.json() as Promise<{ storeCode: string; cardKeys: string[]; qrKeys: string[]; deliveryKeys?: string[] }>
+  return res.json() as Promise<{
+    storeCode: string
+    cardKeys: string[]
+    qrKeys: string[]
+    otherKeys: string[]
+    deliveryKeys?: string[]
+  }>
 }
 
 export interface PosPaymentMethodItem {
@@ -6093,7 +6102,11 @@ export interface PosSettlement {
   qrBreakdown?: Record<string, number>
   deliveryAppAmt: number
   deliveryAppBreakdown?: Record<string, number>
+  /** 매장 홀에서 배달앱 탭·Dine in 채널 (플랫폼 배달과 별도) */
+  dineInDeliveryAmt?: number
+  dineInDeliveryBreakdown?: Record<string, number>
   otherAmt: number
+  otherBreakdown?: Record<string, number>
   memo: string
   closed: boolean
 }
@@ -6125,7 +6138,10 @@ export async function savePosSettlement(params: {
   qrBreakdown?: Record<string, number>
   deliveryAppAmt?: number
   deliveryAppBreakdown?: Record<string, number>
+  dineInDeliveryAmt?: number
+  dineInDeliveryBreakdown?: Record<string, number>
   otherAmt?: number
+  otherBreakdown?: Record<string, number>
   memo?: string
   closed?: boolean
 }) {

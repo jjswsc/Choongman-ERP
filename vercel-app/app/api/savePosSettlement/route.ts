@@ -18,7 +18,11 @@ export async function POST(req: NextRequest) {
     const qrBreakdown = body.qrBreakdown && typeof body.qrBreakdown === 'object' ? body.qrBreakdown : {}
     const deliveryAppAmt = Number(body.deliveryAppAmt) ?? 0
     const deliveryAppBreakdown = body.deliveryAppBreakdown && typeof body.deliveryAppBreakdown === 'object' ? body.deliveryAppBreakdown : {}
+    const dineInDeliveryAmt = Number(body.dineInDeliveryAmt) ?? 0
+    const dineInDeliveryBreakdown =
+      body.dineInDeliveryBreakdown && typeof body.dineInDeliveryBreakdown === 'object' ? body.dineInDeliveryBreakdown : {}
     const otherAmt = Number(body.otherAmt) ?? 0
+    const otherBreakdown = body.otherBreakdown && typeof body.otherBreakdown === 'object' ? body.otherBreakdown : {}
     const memo = String(body.memo ?? '').trim()
     const closed = !!body.closed
 
@@ -37,7 +41,10 @@ export async function POST(req: NextRequest) {
       qr_breakdown: qrBreakdown,
       delivery_app_amt: deliveryAppAmt,
       delivery_app_breakdown: deliveryAppBreakdown,
+      dine_in_delivery_amt: dineInDeliveryAmt,
+      dine_in_delivery_breakdown: dineInDeliveryBreakdown,
       other_amt: otherAmt,
+      other_breakdown: otherBreakdown,
       memo,
       closed,
       updated_at: new Date().toISOString(),

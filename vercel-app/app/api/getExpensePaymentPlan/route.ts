@@ -1,5 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { verifyToken } from '@/lib/jwt-auth'
+import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
+
+/** Bearer JWT 우선(로그인 시 정규화된 role), 없으면 쿼리 파라미터 — 세션과 URL 불일치로 빈 목록 나오는 경우 방지 */
+async function resolveCaller(
+  request: NextRequest,
+  searchParams: URLSearchParams
+): Promise<{ role: string; store: string }> {
+  const auth = request.headers.get('authorization') || ''
+  const m = auth.match(/^Bearer\s+(\S+)/i)
+  if (m?.[1]) {
+    const payload = await verifyToken(m[1].trim())
+    if (payload?.role != null || payload?.store != null) {
+      return {
+        role: String(payload?.role ?? '').trim(),
+        store: String(payload?.store ?? '').trim(),
+      }
+    }
+  }
+  return {
+    role: String(searchParams.get('userRole') || '').trim(),
+    store: String(searchParams.get('userStore') || '').trim(),
+  }
+}
+
+function canViewExpensePaymentPlan(role: string): boolean {
+  return (
+    isOfficeRole(role) ||
+    isAccountingRole(role) ||
+    isManagerRole(role) ||
+    isFranchiseeRole(role)
+  )
+}
+
+function callerSeesAllAccrualStores(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role)
+}
 
 type ExpenseAccrualRow = {
   id?: number
@@ -61,6 +98,18 @@ function inRange(dateStr: string | undefined, startStr: string, endStr: string):
   return (!startStr || d >= startStr) && (!endStr || d <= endStr)
 }
 
+/** 발생일 또는 지급예정일 중 하나라도 기간에 들어오면 포함 (지급예정일만 미래인 건이 발생일 검색에서 누락되지 않도록) */
+function accrualMatchesPlanDateRange(
+  r: ExpenseAccrualRow,
+  startStr: string,
+  endStr: string
+): boolean {
+  if (!startStr && !endStr) return true
+  const expOk = inRange(r.expense_date, startStr, endStr)
+  const dueOk = inRange(r.due_date, startStr, endStr)
+  return expOk || dueOk
+}
+
 function isPurchaseWithdrawalCategory(cat: string | undefined): boolean {
   const c = String(cat || '').trim().toLowerCase()
   return c === 'purchase_payment' || c === 'purchase_advance'
@@ -76,13 +125,25 @@ export async function GET(request: NextRequest) {
     const endStr = String(searchParams.get('endStr') || '').slice(0, 10)
     const payeeFilter = String(searchParams.get('payeeFilter') || '').trim().toLowerCase()
     const vendorFilter = String(searchParams.get('vendorFilter') || '').trim().toLowerCase()
-    const userRole = String(searchParams.get('userRole') || '').toLowerCase()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) return NextResponse.json({ success: true, expensePlans: [], purchasePlans: [], totals: { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 }, logisticsPlans: [] }, { headers })
+    const { role: userRole, store: callerStore } = await resolveCaller(request, searchParams)
+    if (!canViewExpensePaymentPlan(userRole)) {
+      return NextResponse.json(
+        {
+          success: true,
+          expensePlans: [],
+          purchasePlans: [],
+          totals: { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 },
+          logisticsPlans: [],
+        },
+        { headers }
+      )
+    }
+    const restrictToStore =
+      !callerSeesAllAccrualStores(userRole) ? String(callerStore || '').trim() : ''
 
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'id=gt.0', {
-        select: 'id,payee_code,payee_name,amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls',
+        select: 'id,payee_code,payee_name,amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note',
         order: 'due_date.asc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
@@ -103,12 +164,16 @@ export async function GET(request: NextRequest) {
 
     const mappedAccrualPlans = (accrualRows || [])
       .filter((r) => {
-        const decoded = decodePayeeCode(r.payee_code)
-        const dateBase = r.due_date || r.expense_date
-        if ((startStr || endStr) && !inRange(dateBase, startStr, endStr)) return false
-        if (payeeFilter) {
+        if (restrictToStore) {
+          const sn = String(r.store_name || '').trim()
+          if (sn !== restrictToStore) return false
+        }
+        if ((startStr || endStr) && !accrualMatchesPlanDateRange(r, startStr, endStr)) return false
+        if (payeeFilter || vendorFilter) {
+          const decoded = decodePayeeCode(r.payee_code)
           const target = `${decoded.payeeCode || ''} ${r.payee_name || ''} ${decoded.withdrawalCategory}`.toLowerCase()
-          if (!target.includes(payeeFilter)) return false
+          if (payeeFilter && !target.includes(payeeFilter)) return false
+          if (vendorFilter && !target.includes(vendorFilter)) return false
         }
         return true
       })

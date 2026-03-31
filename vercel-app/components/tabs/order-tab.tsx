@@ -263,9 +263,9 @@ export function OrderTab() {
   }
 
   const deliveryStatusColor = (d: string) => {
-    if (d === "배송중") return "bg-[#2563eb] text-white"
-    if (d === "배송완료" || d === "배송 완료") return "bg-[#16a34a] text-white"
-    if (d === "일부배송완료" || d === "일부 배송 완료") return "bg-[#d97706] text-white"
+    if (d === "배송중") return "bg-sky-600 text-white dark:bg-sky-600"
+    if (d === "배송완료" || d === "배송 완료") return "bg-emerald-600 text-white dark:bg-emerald-600"
+    if (d === "일부배송완료" || d === "일부 배송 완료") return "bg-amber-500 text-white dark:bg-amber-600"
     return ""
   }
 
@@ -425,8 +425,8 @@ export function OrderTab() {
             receivedQtys: receivedQtysMap,
           })
         if (res && res.success === true) {
-          receiveCameraRef.current && (receiveCameraRef.current.value = "")
-          receiveFileRef.current && (receiveFileRef.current.value = "")
+          if (receiveCameraRef.current) receiveCameraRef.current.value = ""
+          if (receiveFileRef.current) receiveFileRef.current.value = ""
           loadHistory()
           if (effectiveStore) {
             getAppData(effectiveStore, { scope: 'order' }).then((r) => setStock(r.stock || {}))
@@ -906,7 +906,7 @@ export function OrderTab() {
                                           />
                                         )}
                                         {!showCheck && isReceived && (
-                                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-[10px] text-white" title={t("itemReceived")}>✓</span>
+                                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white dark:bg-emerald-600" title={t("itemReceived")}>✓</span>
                                         )}
                                         {!showCheck && !isReceived && (o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
                                           <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0" title={t("outItemUnreceived") || "미수령"}>

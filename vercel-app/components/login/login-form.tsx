@@ -1,7 +1,7 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
@@ -12,17 +12,23 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
-import { useAuth, loadOfflineResumeAuth } from "@/lib/auth-context"
+import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-context"
 import { isLangCode, useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
+
+function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
+  // #region agent log
+  fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'631010'},body:JSON.stringify({sessionId:'631010',runId:'initial',hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{})
+  // #endregion
+}
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
   msg_login_network_error:
     "Cannot connect to the network. You may be offline or the server may be unreachable.",
   msg_login_offline_connect_detail:
-    "If this browser has no saved prior session (or site data was cleared), you cannot sign in with PIN while offline. Connect to the internet and sign in once. Wi‑Fi can look connected even when the server is unreachable.",
+    "If this browser has no saved prior session (or site data was cleared), you cannot sign in with PIN while offline. Connect to the internet and sign in once. Wi-Fi can look connected even when the server is unreachable.",
 }
 
 function pickLoginStr(tMsg: (k: string) => string, key: string): string {
@@ -88,8 +94,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
   }, [])
 
-  /** 매 렌더마다 읽음 — Wi‑Fi ON + 캐시 목록이 있을 때도 스냅샷이 있으면 폼 위 배너·에러 시 CTA에 반영 */
-  const offlineResume = loadOfflineResumeAuth()
+  /**
+   * localStorage 스냅샷은 렌더 중에 읽으면 SSR(또는 서버 프리렌더)은 null·클라 첫 렌더는 값 있음으로 달라져
+   * 하이드레이션 불일치 → 런타임 오류·Fast Refresh 전체 리로드가 난다. 마운트 후에만 채운다.
+   */
+  const [offlineResume, setOfflineResume] = useState<AuthState | null>(null)
+  useLayoutEffect(() => {
+    setOfflineResume(loadOfflineResumeAuth())
+  }, [])
 
   const clearFormError = useCallback(() => {
     setError("")
@@ -99,6 +111,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const fetchLoginData = useCallback(() => {
     setLoadError(null)
     setLoading(true)
+    sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:start", "fetchLoginData started", {
+      browserOnlineNow: typeof navigator !== "undefined" ? navigator.onLine : null,
+    })
     const timeoutMs = 6000
     const withTimeout = Promise.race([
       getLoginData(),
@@ -108,6 +123,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     ])
     withTimeout
       .then((d) => {
+        sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:then", "fetchLoginData resolved", {
+          source: d?._source ?? null,
+          storeCount: Object.keys(d?.users || {}).length,
+        })
         setLoginData(d.users || {})
         if (d._source === 'fallback') {
           setLoadError('SERVER_ERROR')
@@ -118,6 +137,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       })
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e)
+        sendLoginDebugLog("H3", "components/login/login-form.tsx:fetchLoginData:catch", "fetchLoginData rejected", {
+          error: msg,
+        })
         setLoadError(
           msg.includes('연결') || msg.includes('시간 초과') || msg.includes('fetch') || msg.includes('Failed')
             ? 'SERVER_ERROR'
@@ -129,11 +151,27 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [])
 
   useEffect(() => {
+    sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authGate", "login effect entered", {
+      hasAuth: Boolean(auth),
+      redirectTo,
+    })
     if (auth) {
+      sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authRedirect", "auth exists, redirecting", {
+        redirectTo,
+      })
       router.replace(redirectTo)
       return
     }
-    fetchLoginData()
+    /** HMR/라우트 전환 직후 unmount 레이스를 피하려고 취소 가능한 매크로태스크로 지연 */
+    const timer = window.setTimeout(() => {
+      sendLoginDebugLog("H4", "components/login/login-form.tsx:useEffect:setTimeout", "setTimeout executed fetchLoginData", {
+        delayMs: 0,
+      })
+      fetchLoginData()
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [auth, redirectTo, router, fetchLoginData])
 
   useEffect(() => {
@@ -142,13 +180,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setError(tMsg(initialNoticeKey))
     setErrorIsConnectivity(false)
   }, [auth, initialNoticeKey, tMsg])
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem("cm_lang")
-      if (saved && isLangCode(saved)) setLang(saved)
-    }
-  }, [setLang])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -426,8 +457,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           </div>
 
           {loading ? (
-            <div className="login-loading py-6">
-              <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
+            <div className="login-inline-loading">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
               <p className="mt-4 text-center text-sm text-white/80">{t.connectingToServer}</p>
             </div>
           ) : offlineOnlyScreen ? (
@@ -507,14 +538,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="login-select-content">
-                <SelectItem value="ko">🇰🇷 한국어</SelectItem>
-                <SelectItem value="en">🇺🇸 English</SelectItem>
-                <SelectItem value="th">🇹🇭 ภาษาไทย</SelectItem>
-                <SelectItem value="mm">🇲🇲 မြန်မာ</SelectItem>
-                <SelectItem value="la">🇱🇦 ພາສາລາວ</SelectItem>
-                <SelectItem value="kh">🇰🇭 ភាសាខ្មែរ</SelectItem>
-                <SelectItem value="vi">🇻🇳 Tiếng Việt</SelectItem>
-                <SelectItem value="ms">🇲🇾 Bahasa Melayu</SelectItem>
+                <SelectItem value="ko">한국어</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="th">ภาษาไทย</SelectItem>
+                <SelectItem value="mm">မြန်မာ</SelectItem>
+                <SelectItem value="la">ພາສາລາວ</SelectItem>
+                <SelectItem value="kh">ភាសាខ្មែរ</SelectItem>
+                <SelectItem value="vi">Tiếng Việt</SelectItem>
+                <SelectItem value="ms">Bahasa Melayu</SelectItem>
               </SelectContent>
             </Select>
 
