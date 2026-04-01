@@ -1,7 +1,9 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,12 +15,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { apiFetch, useStoreList, sendNotice } from "@/lib/api-client"
-import { Megaphone, FileSpreadsheet } from "lucide-react"
+import { Megaphone, FileSpreadsheet, Calendar, Clock, ChevronDown } from "lucide-react"
 
 function toMonthStr(d?: Date): string {
   const x = d || new Date()
@@ -57,6 +65,25 @@ function sumDeduct(r: RecordRow): number {
   return (r.late_ded || 0) + (r.sso || 0) + (r.tax || 0) + (r.other_ded || 0)
 }
 
+function payrollLeaveHref(month: string, store: string, name: string): string {
+  const q = new URLSearchParams()
+  q.set("tab", "approval")
+  q.set("month", month)
+  q.set("status", "all")
+  if (store) q.set("store", store)
+  if (name) q.set("name", name)
+  return `/admin/leave?${q.toString()}`
+}
+
+function payrollAttendanceHref(month: string, store: string, name: string): string {
+  const q = new URLSearchParams()
+  q.set("tab", "status")
+  q.set("month", month)
+  if (store) q.set("store", store)
+  if (name) q.set("employee", name)
+  return `/admin/attendance?${q.toString()}`
+}
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -69,6 +96,9 @@ export function AdminPayrollRecords() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const isManager = isManagerRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
 
@@ -96,14 +126,21 @@ export function AdminPayrollRecords() {
   const filteredList = list.filter((r) => storeFilter === "All" || r.store === storeFilter)
   const totalAmount = filteredList.reduce((sum, r) => sum + (r.net_pay || 0), 0)
 
-  const handleQuery = async () => {
-    setLoading(true)
-    setError(null)
-    setSelected(new Set())
-    setSelectAll(false)
-    try {
-      const effectiveStore = isManager && userStore ? userStore : (storeFilter === "All" ? "" : storeFilter)
-      const params = new URLSearchParams({ monthStr })
+  const syncRecordsUrl = useCallback(
+    (month: string, storeSel: string) => {
+      const p = new URLSearchParams(searchParams.toString())
+      p.set("tab", "records")
+      p.set("month", month)
+      p.set("store", storeSel)
+      router.replace(`${pathname}?${p.toString()}`, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
+
+  const fetchPayrollRecords = useCallback(
+    async (month: string, storeSel: string) => {
+      const effectiveStore = isManager && userStore ? userStore : (storeSel === "All" ? "" : storeSel)
+      const params = new URLSearchParams({ monthStr: month })
       if (effectiveStore) params.set("storeFilter", effectiveStore)
       if (isManager) {
         params.set("userStore", userStore)
@@ -113,10 +150,28 @@ export function AdminPayrollRecords() {
       const data = await res.json()
       if (data.success && Array.isArray(data.list)) {
         setList(data.list)
+        setError(null)
       } else {
         setList([])
-        setError(translateApiMessage(data.msg) || t("pay_error"))
+        const raw = typeof data.msg === "string" ? data.msg.trim() : ""
+        let err = t("pay_error")
+        if (raw === "조회할 월(yyyy-MM)을 선택해주세요.") err = t("pay_month_select")
+        else if (raw === "급여 내역 조회 중 오류가 발생했습니다.") err = t("pay_records_error")
+        else if (raw) err = String(data.msg)
+        setError(err)
       }
+    },
+    [auth?.role, isManager, t, userStore]
+  )
+
+  const handleQuery = async () => {
+    setLoading(true)
+    setError(null)
+    setSelected(new Set())
+    setSelectAll(false)
+    try {
+      await fetchPayrollRecords(monthStr, storeFilter)
+      syncRecordsUrl(monthStr, storeFilter)
     } catch {
       setList([])
       setError(t("pay_error"))
@@ -125,6 +180,45 @@ export function AdminPayrollRecords() {
       setQueried(true)
     }
   }
+
+  /**
+   * 명세서 탭 마운트 시 URL(?tab=records&month=&store=)으로 폼·목록 복원.
+   * searchParams는 deps에 넣지 않음 — 검색 후 router.replace 시 중복 조회 방지.
+   */
+  useEffect(() => {
+    if (!auth?.store) return
+    if (searchParams.get("tab") !== "records") return
+    const m = searchParams.get("month")
+    if (!m || !/^\d{4}-\d{2}$/.test(m)) return
+    const s = searchParams.get("store") || "All"
+    const storeToUse = isManager && userStore ? userStore : s
+    setMonthStr(m)
+    setStoreFilter(storeToUse)
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      setSelected(new Set())
+      setSelectAll(false)
+      try {
+        await fetchPayrollRecords(m, storeToUse)
+      } catch {
+        if (!cancelled) {
+          setList([])
+          setError(t("pay_error"))
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+          setQueried(true)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- URL 동기화 시 같은 탭에서 effect 재실행·이중 조회 방지
+  }, [auth?.store, fetchPayrollRecords, isManager, t, userStore])
 
   const handleToggleRow = (idx: number) => {
     setSelected((prev) => {
@@ -255,14 +349,6 @@ ${rows.map((row, ri) => {
 
   const hasResult = filteredList.length > 0
 
-  const translateApiMessage = (msg: string | undefined): string => {
-    if (!msg) return ""
-    const m = msg.trim()
-    if (m === "조회할 월(yyyy-MM)을 선택해주세요.") return t("pay_month_select")
-    if (m === "급여 내역 조회 중 오류가 발생했습니다.") return t("pay_records_error")
-    return msg
-  }
-
   return (
     <Card className="shadow-sm">
       <CardContent className="pt-6">
@@ -353,12 +439,14 @@ ${rows.map((row, ri) => {
                   <th className="p-2 text-right font-medium text-destructive">{t("pay_deduct_sum")}</th>
                   <th className="p-2 text-right font-medium font-semibold">{t("pay_net")}</th>
                   <th className="p-2 text-center font-medium">{t("wl_status")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("pay_records_verify_col")}</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredList.map((r, i) => {
                   const allowSum = sumAllowance(r)
                   const deductSum = sumDeduct(r)
+                  const periodMonth = (r.month && /^\d{4}-\d{2}/.test(r.month) ? r.month.slice(0, 7) : monthStr) || monthStr
                     return (
                     <tr key={`${r.store}_${r.name}_${i}`} className="border-b border-border/60 hover:bg-muted/30">
                       <td className="p-2 text-center">
@@ -378,6 +466,35 @@ ${rows.map((row, ri) => {
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted">
                           {r.status === "확정" ? t("pay_status_confirmed") : r.status === "지급대기" ? t("pay_status_pending") : (r.status ? r.status : t("pay_status_pending"))}
                         </span>
+                      </td>
+                      <td className="p-2 text-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 px-2 text-[10px]"
+                            >
+                              {t("pay_records_verify_btn")}
+                              <ChevronDown className="h-3 w-3 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem asChild className="text-xs cursor-pointer">
+                              <Link className="flex items-center gap-2" href={payrollLeaveHref(periodMonth, r.store, r.name)}>
+                                <Calendar className="h-3.5 w-3.5 shrink-0" />
+                                {t("pay_modal_link_leave")}
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild className="text-xs cursor-pointer">
+                              <Link className="flex items-center gap-2" href={payrollAttendanceHref(periodMonth, r.store, r.name)}>
+                                <Clock className="h-3.5 w-3.5 shrink-0" />
+                                {t("pay_modal_link_attendance")}
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   )

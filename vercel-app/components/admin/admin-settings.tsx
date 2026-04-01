@@ -28,6 +28,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
+import { canAccessSettings } from "@/lib/permissions"
 import {
   useStoreList,
   getAdminEmployeeList,
@@ -41,6 +42,8 @@ import {
   getAdminDataLimits,
   type AdminDataLimits,
   type AdminTableUsageRow,
+  getFranchiseeMultiStoreSettings,
+  saveFranchiseeMultiStoreSettings,
 } from "@/lib/api-client"
 
 function dataLimitKindLabel(kind: string, t: (key: string) => string): string {
@@ -60,7 +63,7 @@ function sortTableUsage(rows: AdminTableUsageRow[]): AdminTableUsageRow[] {
 
 const CM_ADMIN_DATA_LIMITS_NOTE_KEY = "cm_admin_data_limits_note"
 
-type SettingsTab = "office" | "permission" | "notification" | "dataLimits" | "about"
+type SettingsTab = "office" | "permission" | "notification" | "dataLimits" | "franchisee" | "about"
 
 const MENU_IDS = [
   "dashboard", "notices", "work-log", "item-manage", "vendor-manage",
@@ -122,6 +125,11 @@ export function AdminSettings() {
   const [limitsLoading, setLimitsLoading] = useState(false)
   const [limitsError, setLimitsError] = useState("")
   const [limitsNote, setLimitsNote] = useState("")
+
+  const [franchiseeMultiEnabled, setFranchiseeMultiEnabled] = useState(false)
+  const [franchiseeMultiMax, setFranchiseeMultiMax] = useState(5)
+  const [franchiseeMultiLoading, setFranchiseeMultiLoading] = useState(false)
+  const [franchiseeMultiSaving, setFranchiseeMultiSaving] = useState(false)
 
   const loadHeadOffice = useCallback(async () => {
     try {
@@ -217,6 +225,26 @@ export function AdminSettings() {
     if (tab === "dataLimits") void loadDataLimits()
   }, [tab, loadDataLimits])
 
+  const loadFranchiseeMulti = useCallback(async () => {
+    setFranchiseeMultiLoading(true)
+    try {
+      const r = await getFranchiseeMultiStoreSettings()
+      if (r?.settings) {
+        setFranchiseeMultiEnabled(!!r.settings.enabled)
+        setFranchiseeMultiMax(Math.min(20, Math.max(1, Number(r.settings.maxStores) || 5)))
+      }
+    } catch {
+      setFranchiseeMultiEnabled(false)
+      setFranchiseeMultiMax(5)
+    } finally {
+      setFranchiseeMultiLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === "franchisee") void loadFranchiseeMulti()
+  }, [tab, loadFranchiseeMulti])
+
   useEffect(() => {
     loadPermOptions()
   }, [loadPermOptions])
@@ -299,6 +327,28 @@ export function AdminSettings() {
     }
   }
 
+  const handleSaveFranchiseeMulti = async () => {
+    if (!canAccessSettings(auth?.role || "")) {
+      await appAlert(t("apiPermissionDenied"))
+      return
+    }
+    setFranchiseeMultiSaving(true)
+    try {
+      const res = await saveFranchiseeMultiStoreSettings({
+        enabled: franchiseeMultiEnabled,
+        maxStores: franchiseeMultiMax,
+      })
+      await appAlert(
+        res.success ? (t("settings_saved") || "저장되었습니다.") : (t("msg_save_fail") || "저장에 실패했습니다.")
+      )
+      if (res.success) void loadFranchiseeMulti()
+    } catch (e) {
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setFranchiseeMultiSaving(false)
+    }
+  }
+
   const handleCopyLimits = async () => {
     if (!limitsData) {
       await appAlert(t("settings_data_limits_no_data"))
@@ -338,6 +388,9 @@ export function AdminSettings() {
                 </TabsTrigger>
                 <TabsTrigger value="dataLimits" className={adminTabsTriggerCn}>
                   {t("settings_data_limits_tab")}
+                </TabsTrigger>
+                <TabsTrigger value="franchisee" className={adminTabsTriggerCn}>
+                  {t("settings_franchisee_multi_tab")}
                 </TabsTrigger>
                 <TabsTrigger value="about" className={adminTabsTriggerCn}>
                   {t("settings_permission_title")}
@@ -646,6 +699,56 @@ export function AdminSettings() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="franchisee" className={adminTabsContentCn}>
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-foreground">{t("settings_franchisee_multi_title")}</h2>
+                  <p className="text-xs text-muted-foreground mt-1">{t("settings_franchisee_multi_desc")}</p>
+                </div>
+                {franchiseeMultiLoading ? (
+                  <p className="py-6 text-center text-muted-foreground text-xs">{t("loading")}</p>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 rounded-lg border p-4">
+                      <Checkbox
+                        id="franchisee_multi_enabled"
+                        checked={franchiseeMultiEnabled}
+                        onCheckedChange={(c) => setFranchiseeMultiEnabled(c === true)}
+                        disabled={!canAccessSettings(auth?.role || "")}
+                      />
+                      <label htmlFor="franchisee_multi_enabled" className="text-sm cursor-pointer">
+                        {t("settings_franchisee_multi_enabled")}
+                      </label>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold block mb-1">{t("settings_franchisee_multi_max")}</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={20}
+                        className="h-9 w-32 text-xs"
+                        value={franchiseeMultiMax}
+                        onChange={(e) => {
+                          const n = Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1))
+                          setFranchiseeMultiMax(n)
+                        }}
+                        disabled={!franchiseeMultiEnabled || !canAccessSettings(auth?.role || "")}
+                      />
+                    </div>
+                    <Button
+                      className="h-9"
+                      onClick={() => void handleSaveFranchiseeMulti()}
+                      disabled={franchiseeMultiSaving || !canAccessSettings(auth?.role || "")}
+                    >
+                      {franchiseeMultiSaving ? t("loading") : t("settings_franchisee_multi_save")}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="about" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6 space-y-6">
@@ -660,6 +763,9 @@ export function AdminSettings() {
 
                   <h3 className="text-sm font-bold text-foreground mt-4">{t("settings_perm_role_manager")}</h3>
                   <p className="text-sm text-muted-foreground pl-2">{t("settings_perm_role_manager_desc")}</p>
+
+                  <h3 className="text-sm font-bold text-foreground mt-4">{t("settings_perm_role_franchisee")}</h3>
+                  <p className="text-sm text-muted-foreground pl-2">{t("settings_perm_role_franchisee_desc")}</p>
                 </div>
 
                 <p className="text-sm text-muted-foreground pl-2 border-l-2 border-primary/40 py-1">

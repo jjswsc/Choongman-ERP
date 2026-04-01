@@ -1,7 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
-import { isAccountingRole } from '@/lib/permissions'
+import { isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
+import {
+  franchiseeQueryStoreAllowed,
+  getFranchiseeMultiStoreSettings,
+  normalizedAllowedStoresFromJwt,
+  rowRoleLooksFranchisee,
+} from '@/lib/franchisee-multi-store'
 
 function toDateStr(val: unknown): string | null {
   if (!val) return null
@@ -14,7 +22,7 @@ function toDateStr(val: unknown): string | null {
 }
 
 /** 직원 저장 (신규/수정) */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
@@ -23,13 +31,32 @@ export async function POST(req: Request) {
     const d = body.d || body
     const userStore = String(body.userStore || '').trim()
     const userRole = String(body.userRole || '').toLowerCase()
+    const jwt = await tryVerifyBearerFromRequest(req)
+    const effectiveRole = String(jwt?.role || userRole).toLowerCase()
 
-    const isTop = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r)) || isAccountingRole(userRole)
-    if (!isTop && userStore && String(d.store || '').trim() !== userStore) {
-      return NextResponse.json(
-        { success: false, message: '❌ 해당 매장 직원만 수정할 수 있습니다.' },
-        { headers }
-      )
+    const isTop =
+      ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r)) || isAccountingRole(userRole)
+    const franchiseeJwtList =
+      jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
+
+    if (!isTop) {
+      if (jwt && isFranchiseeRole(effectiveRole) && !franchiseeQueryStoreAllowed(jwt, userStore)) {
+        return NextResponse.json(
+          { success: false, message: '❌ 선택한 매장에 대한 권한이 없습니다.' },
+          { status: 403, headers }
+        )
+      }
+      const targetStore = String(d.store || '').trim()
+      if (
+        !userCanAccessEmployeeStore(effectiveRole, userStore, targetStore, {
+          allowedStores: franchiseeJwtList && franchiseeJwtList.length > 0 ? franchiseeJwtList : undefined,
+        })
+      ) {
+        return NextResponse.json(
+          { success: false, message: '❌ 해당 매장 직원만 수정할 수 있습니다.' },
+          { headers }
+        )
+      }
     }
 
     const rawPw = String(d.pw || '').trim()
@@ -67,6 +94,35 @@ export async function POST(req: Request) {
       haz_allow: d.riskAllowance != null ? Number(d.riskAllowance) : 0,
       grade: d.grade != null ? String(d.grade).trim() : '',
       photo: d.photo != null ? String(d.photo).trim() : '',
+    }
+
+    const multiSettings = await getFranchiseeMultiStoreSettings()
+    const roleStr = String(d.role || '').trim()
+    const franchiseeRow = rowRoleLooksFranchisee(roleStr)
+    if (isTop) {
+      if (franchiseeRow && multiSettings.enabled) {
+        const primary = String(d.store || '').trim()
+        const fromTop = (body as { extraStores?: unknown }).extraStores
+        const fromD = (d as { extraStores?: unknown }).extraStores
+        const rawExtra = Array.isArray(fromTop)
+          ? (fromTop as unknown[])
+          : Array.isArray(fromD)
+            ? (fromD as unknown[])
+            : []
+        const seen = new Set<string>()
+        const extras: string[] = []
+        const maxExtra = Math.max(0, multiSettings.maxStores - 1)
+        for (const x of rawExtra) {
+          const s = String(x || '').trim()
+          if (!s || s === primary || seen.has(s)) continue
+          seen.add(s)
+          extras.push(s)
+          if (extras.length >= maxExtra) break
+        }
+        payload.extra_stores = extras
+      } else {
+        payload.extra_stores = []
+      }
     }
 
     const rowId = Number(d.row)

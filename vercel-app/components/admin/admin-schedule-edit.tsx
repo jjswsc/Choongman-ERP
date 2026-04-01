@@ -26,6 +26,7 @@ import {
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
 import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { cn, displayLabelShort } from "@/lib/utils"
+import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 
 function get30MinIntervals(start: string, end: string): string[] {
   const result: string[] = []
@@ -44,11 +45,6 @@ function get30MinIntervals(start: string, end: string): string[] {
 
 const AREAS = ["Service", "Kitchen", "Office"] as const
 const DAY_LABELS = ["att_mon", "att_tue", "att_wed", "att_thu", "att_fri", "att_sat", "att_sun"] as const
-const LEAVE_TYPE_KEYS: Record<string, string> = {
-  연차: "annual", 반차: "half", 병가: "sick", 무급휴가: "unpaid",
-  "ลากิจ": "lakij", Annual: "annual", Half: "half", Sick: "sick", Unpaid: "unpaid",
-}
-
 interface StaffItem {
   name: string
   nick: string
@@ -810,7 +806,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                           <span className="font-semibold">{displayLabelShort(staffList.find((x) => x.name === name)?.nick) || name}</span>
                           <span className="text-muted-foreground ml-1">: </span>
                           <span>{items.map((i) => {
-                            const typeLabel = LEAVE_TYPE_KEYS[i.type] ? t(LEAVE_TYPE_KEYS[i.type]) : i.type
+                            const typeLabel = translateLeaveTypeFromDb(i.type, t)
                             return `${t(DAY_LABELS[i.dayIdx])} ${i.dateStr} ${typeLabel}`
                           }).join(", ")}</span>
                         </div>

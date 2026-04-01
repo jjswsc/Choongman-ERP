@@ -1,5 +1,7 @@
 "use client"
 
+import { Suspense } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Wallet } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
@@ -20,10 +22,34 @@ import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { isOfficeRole, isManagerRole, isFranchiseeRole } from "@/lib/permissions"
 
-export default function Page() {
+const PAYROLL_TABS = ["calc", "records", "salary_history", "holidays", "help"] as const
+type PayrollTab = (typeof PAYROLL_TABS)[number]
+
+function isPayrollTab(v: string | null): v is PayrollTab {
+  return !!v && (PAYROLL_TABS as readonly string[]).includes(v)
+}
+
+function PayrollPageInner() {
   const { auth } = useAuth()
   const t = useT(useLang().lang)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const canAccessPayroll = isOfficeRole(auth?.role || "") || isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
+
+  const rawTab = searchParams.get("tab")
+  const tabValue: PayrollTab = isPayrollTab(rawTab) ? rawTab : "calc"
+
+  const setTab = (v: string) => {
+    const p = new URLSearchParams(searchParams.toString())
+    if (v === "calc") {
+      p.delete("tab")
+    } else {
+      p.set("tab", v)
+    }
+    const qs = p.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
 
   if (!canAccessPayroll) {
     return (
@@ -48,7 +74,7 @@ export default function Page() {
             <p className="text-xs text-muted-foreground">{t("pay_month")}</p>
           </div>
         </div>
-        <Tabs defaultValue="calc" className={adminTabsRootCn}>
+        <Tabs value={tabValue} onValueChange={setTab} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -107,5 +133,18 @@ export default function Page() {
         </Tabs>
       </div>
     </div>
+  )
+}
+
+export default function Page() {
+  const t = useT(useLang().lang)
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t("loading")}</div>
+      }
+    >
+      <PayrollPageInner />
+    </Suspense>
   )
 }

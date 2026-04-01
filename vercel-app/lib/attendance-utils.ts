@@ -16,6 +16,18 @@ export function toDateStrBangkok(val: string | Date | null | undefined): string 
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })
 }
 
+/** schedules.schedule_date: date 컬럼·ISO 문자열 모두 YYYY-MM-DD로 (UTC slice와 근태 그리드 키 불일치 방지) */
+export function scheduleDateKey(val: string | Date | null | undefined): string {
+  if (val == null) return ''
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
+  }
+  const d = new Date(val as string | Date)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })
+}
+
 /** log_at(ISO) → 방콕 기준 시각의 시(hour) 0~23. 자정 넘김 퇴근 판별용 */
 export function getBangkokHour(iso: string | Date | null | undefined): number {
   if (iso == null) return 12
@@ -186,4 +198,171 @@ export function addDaysSchedule(dateStr: string, delta: number): string {
   const [y, m, d] = s.split('-').map(Number)
   const utc = Date.UTC(y, m - 1, d + delta)
   return new Date(utc).toISOString().slice(0, 10)
+}
+
+/** 스케줄 plan_in/plan_out 문자열 → 당일 기준 분 (급여·근태 동일) */
+export function parsePlanToMinutes(plan: string | null | undefined): number {
+  if (!plan || typeof plan !== 'string') return 0
+  const m = plan.trim().match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
+  if (!m) return 0
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+}
+
+/**
+ * 스케줄상 순수 근무 분(휴게 차감). 급여 getPayrollCalc·근태 그리드 차이(분) 계산에 공통 사용.
+ * plan_out이 당일 시각으로 새벽(예: 02:00)이고 plan_in이 오후면 익일 퇴근으로 간주(plan_in_prev_day 미체크 DB 보정).
+ */
+export function plannedWorkMinutesFromPlans(
+  planIn: string,
+  planOut: string,
+  breakStart: string,
+  breakEnd: string,
+  planInPrevDay?: boolean
+): number {
+  const inMin = parsePlanToMinutes(planIn)
+  let outMin = parsePlanToMinutes(planOut)
+  if (outMin < inMin && (planInPrevDay || inMin >= 15 * 60)) {
+    outMin += 24 * 60
+  }
+  if (inMin >= outMin) return 0
+  let workMin = outMin - inMin
+  const bsMin = parsePlanToMinutes(breakStart)
+  const beMin = parsePlanToMinutes(breakEnd)
+  if (bsMin && beMin && beMin > bsMin) workMin -= beMin - bsMin
+  return Math.max(0, workMin)
+}
+
+export type ScheduleRowForPlan = {
+  plan_in?: string
+  plan_out?: string
+  break_start?: string
+  break_end?: string
+  plan_in_prev_day?: boolean
+}
+
+function normSchedEmployeeName(name: string): string {
+  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+}
+
+/** grid: 근태 그리드(부분 이름 매칭 허용). payroll: 급여 집계 — 모호한 퍼지는 제외해 잘못된 조퇴 방지 */
+export type ScheduleResolveMode = 'grid' | 'payroll'
+
+/**
+ * 같은 날·매장에 스케줄 후보가 여러 개일 때(부분 이름 일치 등) 첫 키가 아니라
+ * 실제 근무분과 계획 분 차이가 가장 작은 행을 선택 — 잘못된 조퇴·연장 방지.
+ * 실근무 0(미퇴근 등)이면 정확 키만 사용.
+ * mode=payroll: 퍼지 후보가 2개 이상이면 스케줄 키 이름이 근태명(정규화)과 완전 일치하는 행만 남기고, 없으면 퍼지 전부 제외.
+ */
+export function resolveScheduleForAttendanceDay(
+  rowDate: string,
+  store: string,
+  name: string,
+  scheduleMap: Record<string, ScheduleRowForPlan>,
+  actualWorkMin: number,
+  mode: ScheduleResolveMode = 'grid'
+): ScheduleRowForPlan | null {
+  const exactFull = `${rowDate}|${store}|${name}`
+  const exactNorm = `${rowDate}|${store}|${normSchedEmployeeName(name)}`
+  const recNorm = normSchedEmployeeName(name)
+  const prefix = `${rowDate}|${store}|`
+
+  if (actualWorkMin <= 0) {
+    const ex = scheduleMap[exactFull] || scheduleMap[exactNorm]
+    if (ex) return ex
+    if (mode === 'payroll') return null
+    const fuzzyKeys0 = Object.keys(scheduleMap)
+      .filter((k) => k.startsWith(prefix))
+      .sort()
+    for (const key of fuzzyKeys0) {
+      const schName = key.slice(prefix.length)
+      if (!schName) continue
+      if (recNorm.includes(schName) || schName.includes(recNorm)) {
+        return scheduleMap[key]
+      }
+    }
+    return null
+  }
+
+  type Cand = { sch: ScheduleRowForPlan; pref: number; keySuffix: string }
+  const candidates: Cand[] = []
+  const seen = new Set<ScheduleRowForPlan>()
+  const add = (sch: ScheduleRowForPlan | undefined, pref: number, keySuffix: string) => {
+    if (!sch || seen.has(sch)) return
+    seen.add(sch)
+    candidates.push({ sch, pref, keySuffix })
+  }
+
+  add(scheduleMap[exactFull], 0, String(name).trim())
+  add(scheduleMap[exactNorm], 1, recNorm)
+
+  const fuzzyKeys = Object.keys(scheduleMap)
+    .filter((k) => k.startsWith(prefix))
+    .sort()
+  for (const key of fuzzyKeys) {
+    const schName = key.slice(prefix.length)
+    if (!schName) continue
+    if (recNorm.includes(schName) || schName.includes(recNorm)) {
+      add(scheduleMap[key], 2, schName)
+    }
+  }
+
+  let workCandidates = candidates
+  if (mode === 'payroll') {
+    const hasExact = workCandidates.some((c) => c.pref <= 1)
+    if (!hasExact) {
+      const fOnly = workCandidates.filter((c) => c.pref === 2)
+      const loneFullName =
+        fOnly.length === 1 && fOnly[0].keySuffix.trim() === recNorm.trim()
+      workCandidates = loneFullName ? workCandidates : []
+    }
+    const fuzzy = workCandidates.filter((c) => c.pref === 2)
+    if (fuzzy.length > 1) {
+      const sameName = fuzzy.filter((c) => c.keySuffix.trim() === recNorm.trim())
+      if (sameName.length === 1) {
+        const keep = sameName[0].sch
+        workCandidates = workCandidates.filter((c) => c.pref !== 2 || c.sch === keep)
+      } else {
+        workCandidates = workCandidates.filter((c) => c.pref !== 2)
+      }
+    }
+  }
+
+  type PickMeta = { score: number; earlyRisk: number; pref: number; planned: number }
+  const beats = (c: PickMeta, b: PickMeta): boolean => {
+    if (c.score < b.score) return true
+    if (c.score > b.score) return false
+    if (c.earlyRisk < b.earlyRisk) return true
+    if (c.earlyRisk > b.earlyRisk) return false
+    if (c.pref < b.pref) return true
+    if (c.pref > b.pref) return false
+    if (c.earlyRisk === 1) return c.planned < b.planned
+    return c.planned > b.planned
+  }
+
+  let best: ScheduleRowForPlan | null = null
+  let bestMeta: PickMeta | null = null
+
+  for (const { sch, pref } of workCandidates) {
+    const planned = plannedWorkMinutesFromPlans(
+      String(sch.plan_in || ''),
+      String(sch.plan_out || ''),
+      String(sch.break_start || ''),
+      String(sch.break_end || ''),
+      !!sch.plan_in_prev_day
+    )
+    if (planned <= 0) continue
+    const score = Math.abs(planned - actualWorkMin)
+    const earlyRisk = planned > actualWorkMin ? 1 : 0
+    const meta: PickMeta = { score, earlyRisk, pref, planned }
+    if (!bestMeta || beats(meta, bestMeta)) {
+      bestMeta = meta
+      best = sch
+    }
+  }
+
+  if (best) return best
+  if (mode === 'payroll') {
+    return scheduleMap[exactFull] || scheduleMap[exactNorm] || null
+  }
+  return scheduleMap[exactFull] || scheduleMap[exactNorm] || candidates[0]?.sch || null
 }

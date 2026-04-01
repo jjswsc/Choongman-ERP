@@ -87,6 +87,11 @@ function getDeliveryGroupClass(category: string): string {
   return ''
 }
 
+function parsePositiveIntQty(s: string): number {
+  const n = parseInt(String(s).replace(/\D/g, ""), 10)
+  return Number.isFinite(n) && n >= 1 ? n : 1
+}
+
 interface CartItem {
   code: string
   name: string
@@ -105,7 +110,7 @@ export function OrderTab() {
   const [items, setItems] = useState<AppItem[]>([])
   const [stock, setStock] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [quantity, setQuantity] = useState(1)
+  const [quantityInput, setQuantityInput] = useState("1")
   const [selectedItem, setSelectedItem] = useState<AppItem | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -171,17 +176,18 @@ export function OrderTab() {
 
   const addToCart = () => {
     if (!selectedItem) return
+    const qty = parsePositiveIntQty(quantityInput)
     setCart((prev) => {
       const existing = prev.find((x) => x.code === selectedItem.code)
       if (existing) {
         return prev.map((x) =>
-          x.code === selectedItem.code ? { ...x, qty: x.qty + quantity } : x
+          x.code === selectedItem.code ? { ...x, qty: x.qty + qty } : x
         )
       }
-      return [...prev, { code: selectedItem.code, name: selectedItem.name, price: selectedItem.price, qty: quantity, taxType: selectedItem.taxType }]
+      return [...prev, { code: selectedItem.code, name: selectedItem.name, price: selectedItem.price, qty, taxType: selectedItem.taxType }]
     })
     setSelectedItem(null)
-    setQuantity(1)
+    setQuantityInput("1")
   }
 
   const removeFromCart = (code: string) => {
@@ -720,11 +726,32 @@ export function OrderTab() {
 
           <div className="flex items-center gap-3">
             <div className="flex items-center rounded-xl border border-border bg-card">
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity((q) => Math.max(1, q - 1))}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-l-xl text-primary"
+                onClick={() =>
+                  setQuantityInput(String(Math.max(1, parsePositiveIntQty(quantityInput) - 1)))
+                }
+              >
                 <Minus className="h-4 w-4" />
               </Button>
-              <span className="w-10 text-center text-sm font-semibold text-foreground">{quantity}</span>
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity((q) => q + 1)}>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                aria-label={t("qty")}
+                className="h-10 w-[4.5rem] min-w-[3.25rem] max-w-[7rem] rounded-none border-0 border-x border-border bg-transparent text-center text-sm font-semibold shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                value={quantityInput}
+                onChange={(e) => setQuantityInput(e.target.value.replace(/\D/g, ""))}
+                onBlur={() => setQuantityInput(String(parsePositiveIntQty(quantityInput)))}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-r-xl text-primary"
+                onClick={() => setQuantityInput(String(parsePositiveIntQty(quantityInput) + 1))}
+              >
                 <Plus className="h-4 w-4" />
               </Button>
             </div>

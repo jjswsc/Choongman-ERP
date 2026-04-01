@@ -4,7 +4,6 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 import * as React from "react"
 import {
   LayoutGrid,
-  Plus,
   Save,
   Trash2,
   RotateCcw,
@@ -49,10 +48,10 @@ const FLOOR_PREF_KEY = "pos-table-layout-floor:"
 
 type TableShape = "rect" | "rect-wide" | "square"
 
-const SHAPE_PRESETS: { shape: TableShape; w: number; h: number; label: string; defaultSeats: number }[] = [
-  { shape: "rect", w: 80, h: 60, label: "일반", defaultSeats: 4 },
-  { shape: "rect-wide", w: 100, h: 56, label: "긴형", defaultSeats: 6 },
-  { shape: "square", w: 64, h: 64, label: "정사각", defaultSeats: 2 },
+const SHAPE_PRESETS: { shape: TableShape; w: number; h: number; labelKey: string; defaultSeats: number }[] = [
+  { shape: "rect", w: 96, h: 72, labelKey: "posTableShapeNormal", defaultSeats: 4 },
+  { shape: "rect-wide", w: 120, h: 64, labelKey: "posTableShapeLong", defaultSeats: 6 },
+  { shape: "square", w: 76, h: 76, labelKey: "posTableShapeSquare", defaultSeats: 2 },
 ]
 
 const SEAT_OPTIONS = [2, 3, 4, 5, 6, 8, 10]
@@ -753,7 +752,7 @@ export function PosTableLayoutContent() {
                 title={t("posTableLayoutCopyFromHint") || ""}
               >
                 <ClipboardCopy className="h-4 w-4" />
-                {copyLoading ? "..." : (t("posTableLayoutCopyFrom") || "복사")}
+                {copyLoading ? "…" : t("posTableLayoutCopyBtn")}
               </Button>
             </>
           )}
@@ -799,7 +798,7 @@ export function PosTableLayoutContent() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[4, 5, 6, 8, 10, 12].map((n) => (
+              {[4, 5, 6, 8, 10, 12, 15, 18, 20, 24, 30].map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   {n}
                 </SelectItem>
@@ -814,7 +813,7 @@ export function PosTableLayoutContent() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[4, 5, 6, 8, 10].map((n) => (
+              {[4, 5, 6, 8, 10, 12, 14, 16, 20].map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   {n}
                 </SelectItem>
@@ -836,7 +835,7 @@ export function PosTableLayoutContent() {
             ) : (
               <RectangleVertical className="h-4 w-4" />
             )}
-            {preset.label}
+            {t(preset.labelKey)}
           </Button>
         ))}
         <div className="h-6 w-px bg-slate-200" />
@@ -846,7 +845,7 @@ export function PosTableLayoutContent() {
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleAutoName}>
           <Copy className="h-4 w-4" />
-          ABC
+          {t("posTableAutoNameAbc")}
         </Button>
       </div>
 
@@ -890,9 +889,7 @@ export function PosTableLayoutContent() {
           </SelectContent>
         </Select>
         <div className="h-6 w-px bg-slate-200" />
-        <span className="text-[11px] text-slate-500">
-          Shift/Ctrl+Click 또는 드래그: 다중 선택
-        </span>
+        <span className="text-[11px] text-slate-500">{t("posTableMultiSelectHint")}</span>
         <div className="h-6 w-px bg-slate-200" />
         <div className="flex gap-1">
           <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("left")} disabled={currentFloorLayout.length === 0} title={t("posAlignLeft") || "왼쪽 정렬"}>
@@ -904,13 +901,34 @@ export function PosTableLayoutContent() {
           <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("right")} disabled={currentFloorLayout.length === 0} title={t("posAlignRight") || "오른쪽 정렬"}>
             <AlignRight className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => distributeTables("horizontal")} disabled={selectedCount < 3} title="가로 균등 간격">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => distributeTables("horizontal")}
+            disabled={selectedCount < 3}
+            title={t("posTableDistributeHorizontal")}
+          >
             <AlignStartVertical className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => distributeTables("vertical")} disabled={selectedCount < 3} title="세로 균등 간격">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => distributeTables("vertical")}
+            disabled={selectedCount < 3}
+            title={t("posTableDistributeVertical")}
+          >
             <AlignCenterVertical className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={distributeTablesBoth} disabled={selectedCount < 3} title="가로/세로 균등 간격">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={distributeTablesBoth}
+            disabled={selectedCount < 3}
+            title={t("posTableDistributeBoth")}
+          >
             <AlignEndVertical className="h-4 w-4" />
           </Button>
         </div>

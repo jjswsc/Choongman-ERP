@@ -38,13 +38,20 @@ export function PosTerminalSettingsContent() {
   const [mainDeviceTokens, setMainDeviceTokens] = React.useState<string[]>([])
   const [devices, setDevices] = React.useState<PosDeviceItem[]>([])
   const [actionToken, setActionToken] = React.useState<string | null>(null)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || '')
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ''
 
   const loadData = React.useCallback(() => {
-    if (!effectiveStore) return
+    if (!effectiveStore) {
+      setMainDeviceTokens([])
+      setDevices([])
+      setLoadError(null)
+      return
+    }
     setLoading(true)
+    setLoadError(null)
     Promise.all([
       getPosPrinterSettings({ storeCode: effectiveStore }),
       getPosDevices({ storeCode: effectiveStore }),
@@ -59,6 +66,14 @@ export function PosTerminalSettingsContent() {
             : []
         setMainDeviceTokens(fromApi.length > 0 ? fromApi : legacy)
         setDevices(devRes.devices ?? [])
+        if (devRes.success === false && devRes.message) {
+          setLoadError(devRes.message)
+        }
+      })
+      .catch((e) => {
+        setDevices([])
+        setMainDeviceTokens([])
+        setLoadError(String(e))
       })
       .finally(() => setLoading(false))
   }, [effectiveStore])
@@ -179,6 +194,26 @@ export function PosTerminalSettingsContent() {
         </div>
       )}
 
+      {!effectiveStore && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100"
+        >
+          {t('posTerminalNoStoreHint')}
+        </div>
+      )}
+
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          <p className="font-medium">{t('posTerminalLoadErrorTitle')}</p>
+          <p className="mt-1 font-mono text-xs break-words opacity-90">{loadError}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t('posTerminalDbTableHint')}</p>
+        </div>
+      )}
+
       {/* 현재 등록 현황: 메인 / 주문 단말 */}
       <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
         <h4 className="text-sm font-semibold">
@@ -247,9 +282,15 @@ export function PosTerminalSettingsContent() {
         {loading ? (
           <p className="text-sm text-muted-foreground">…</p>
         ) : devices.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t('posTerminalDeviceListEmpty') || '접속한 기기가 없습니다. 포스 터미널(/pos/terminal)을 연 기기가 목록에 표시됩니다.'}
-          </p>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              {t('posTerminalDeviceListEmpty') || '접속한 기기가 없습니다. 포스 터미널(/pos/terminal)을 연 기기가 목록에 표시됩니다.'}
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-xs">
+              <li>{t('posTerminalDeviceListHintStore')}</li>
+              <li>{t('posTerminalDeviceListHintPages')}</li>
+            </ul>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">

@@ -215,6 +215,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           user: res.userName,
           role: res.role || "",
           token: res.token,
+          ...(Array.isArray(res.allowedStores) && res.allowedStores.length > 0
+            ? { allowedStores: res.allowedStores }
+            : {}),
         })
         router.replace(redirectTo)
       } else {

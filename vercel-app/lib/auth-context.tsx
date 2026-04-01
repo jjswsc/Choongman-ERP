@@ -7,9 +7,12 @@ export interface AuthState {
   user: string
   role: string
   token?: string
+  /** 가맹점주 복수 매장 허용 목록(로그인 응답·JWT와 동기) */
+  allowedStores?: string[]
 }
 
 const LAST_LOGIN_SNAPSHOT_KEY = 'cm_last_login_snapshot'
+const CM_ALLOWED_STORES_KEY = 'cm_allowed_stores'
 
 function resolveLoginPathByCurrentRoute(): string {
   if (typeof window === 'undefined') return '/login'
@@ -43,7 +46,18 @@ function loadAuth(): AuthState | null {
           }
         } catch {}
       }
-      return { store, user, role, token: token || undefined }
+      let allowedStores: string[] | undefined
+      try {
+        const rawA = sessionStorage.getItem(CM_ALLOWED_STORES_KEY)
+        if (rawA) {
+          const p = JSON.parse(rawA) as unknown
+          if (Array.isArray(p)) {
+            allowedStores = p.map((x) => String(x || '').trim()).filter(Boolean)
+            if (allowedStores.length === 0) allowedStores = undefined
+          }
+        }
+      } catch {}
+      return { store, user, role, token: token || undefined, allowedStores }
     }
   } catch {}
   return null
@@ -60,7 +74,7 @@ export function loadOfflineResumeAuth(): AuthState | null {
   try {
     const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
     if (!raw) return null
-    const o = JSON.parse(raw) as { store?: string; user?: string; role?: string }
+    const o = JSON.parse(raw) as { store?: string; user?: string; role?: string; allowedStores?: string[] }
     const store = String(o.store ?? '').trim()
     const user = String(o.user ?? '').trim()
     if (!store || !user) return null
@@ -68,7 +82,12 @@ export function loadOfflineResumeAuth(): AuthState | null {
     try {
       token = sessionStorage.getItem('cm_token') || undefined
     } catch {}
-    return { store, user, role: String(o.role || '').trim(), token }
+    let allowedStores: string[] | undefined
+    if (Array.isArray(o.allowedStores)) {
+      allowedStores = o.allowedStores.map((x) => String(x || '').trim()).filter(Boolean)
+      if (allowedStores.length === 0) allowedStores = undefined
+    }
+    return { store, user, role: String(o.role || '').trim(), token, allowedStores }
   } catch {
     return null
   }
@@ -80,9 +99,19 @@ function saveAuth(auth: AuthState) {
     sessionStorage.setItem('cm_user', auth.user)
     sessionStorage.setItem('cm_role', auth.role)
     if (auth.token) sessionStorage.setItem('cm_token', auth.token)
+    if (auth.allowedStores && auth.allowedStores.length > 0) {
+      sessionStorage.setItem(CM_ALLOWED_STORES_KEY, JSON.stringify(auth.allowedStores))
+    } else {
+      sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
+    }
     localStorage.setItem(
       LAST_LOGIN_SNAPSHOT_KEY,
-      JSON.stringify({ store: auth.store, user: auth.user, role: auth.role })
+      JSON.stringify({
+        store: auth.store,
+        user: auth.user,
+        role: auth.role,
+        ...(auth.allowedStores && auth.allowedStores.length > 0 ? { allowedStores: auth.allowedStores } : {}),
+      })
     )
   } catch {}
 }
@@ -94,6 +123,7 @@ function clearAuth() {
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
     sessionStorage.removeItem('cm_token')
+    sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
   } catch {}
 }
 

@@ -7053,6 +7053,27 @@ export interface AdminEmployeeItem {
   riskAllowance: number
   grade: string
   photo: string
+  /** 가맹점주 추가 매장 (대표 store 제외) */
+  extraStores?: string[]
+}
+
+export type FranchiseeMultiStoreSettings = {
+  enabled: boolean
+  maxStores: number
+}
+
+export async function getFranchiseeMultiStoreSettings() {
+  const res = await apiFetch('/api/franchiseeMultiStoreSettings')
+  return res.json() as Promise<{ success?: boolean; settings?: FranchiseeMultiStoreSettings; message?: string }>
+}
+
+export async function saveFranchiseeMultiStoreSettings(settings: FranchiseeMultiStoreSettings) {
+  const res = await apiFetch('/api/franchiseeMultiStoreSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  return res.json() as Promise<{ success?: boolean; settings?: FranchiseeMultiStoreSettings; message?: string }>
 }
 
 export async function getAdminEmployeeList(params: { userStore: string; userRole: string; forPettyTransfer?: boolean }) {
@@ -7081,6 +7102,8 @@ export async function saveAdminEmployee(params: {
   userStore: string
   userRole: string
   userName?: string
+  /** 본사만: 가맹점주 추가 매장 */
+  extraStores?: string[]
 }) {
   const res = await apiFetchWithOffline('/api/saveAdminEmployee', {
     method: 'POST',

@@ -5,7 +5,7 @@
  * - Director급: director, ceo, hr → 전체 권한, Office 검색 가능
  * - Officer: officer → Office 제외한 전체 권한 (급여/직원 관리)
  * - Manager: manager → 매장 매니저, 자기 매장 한정
- * - Franchisee: franchisee → 매장 소유자, 매니저와 동일 수준 (자기 매장 한정)
+ * - Franchisee: franchisee → 매장 소유자, 기본은 매니저와 동일(자기 매장). 시스템 설정+extra_stores로 복수 매장 허용 시 JWT·ERP 매장 전환
  *
  * store=Office → Officer로 인식 (employees.store가 본사/Office/오피스/본점이면)
  */

@@ -8,6 +8,8 @@ export interface JwtPayload {
   store: string
   name: string
   role: string
+  /** 가맹점주 복수 매장 시 JWT에 허용 매장(대표+추가), 없으면 store만 사용 */
+  allowedStores?: string[]
   iat?: number
   exp?: number
 }
@@ -33,7 +35,15 @@ function getSecret(): Uint8Array {
 /** 로그인 성공 시 토큰 발급 */
 export async function signToken(payload: JwtPayload): Promise<string> {
   const secret = getSecret()
-  return new jose.SignJWT({ ...payload })
+  const body: Record<string, unknown> = {
+    store: payload.store,
+    name: payload.name,
+    role: payload.role,
+  }
+  if (Array.isArray(payload.allowedStores) && payload.allowedStores.length > 0) {
+    body.allowedStores = payload.allowedStores
+  }
+  return new jose.SignJWT(body)
     .setProtectedHeader({ alg: ALG })
     .setIssuedAt()
     .setExpirationTime(EXPIRY)
@@ -45,10 +55,17 @@ export async function verifyToken(token: string): Promise<JwtPayload | null> {
   try {
     const secret = getSecret()
     const { payload } = await jose.jwtVerify(token, secret)
+    const allowedRaw = payload.allowedStores
+    let allowedStores: string[] | undefined
+    if (Array.isArray(allowedRaw)) {
+      allowedStores = allowedRaw.map((x) => String(x || '').trim()).filter(Boolean)
+      if (allowedStores.length === 0) allowedStores = undefined
+    }
     return {
       store: String(payload.store || ''),
       name: String(payload.name || ''),
       role: String(payload.role || ''),
+      ...(allowedStores ? { allowedStores } : {}),
     }
   } catch {
     return null

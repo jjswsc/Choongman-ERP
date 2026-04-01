@@ -6,6 +6,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, type JwtPayload } from './jwt-auth'
 import { isAccountingRole } from '@/lib/permissions'
 
+/** API Route의 Request/NextRequest에서 Bearer JWT만 검증 (선택) */
+export async function tryVerifyBearerFromRequest(req: Request | NextRequest): Promise<JwtPayload | null> {
+  const auth = req.headers.get('Authorization') || ''
+  const m = auth.match(/^Bearer\s+(\S+)/i)
+  if (!m?.[1]) return null
+  return verifyToken(m[1].trim())
+}
+
 export type AuthLevel = 'any' | 'manager' | 'office' | 'director'
 
 /**

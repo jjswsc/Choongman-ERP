@@ -11,8 +11,18 @@ import {
   canAccessPosOrder,
   canAccessPosOrders,
   canAccessPosSettlement,
+  isFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
+
+async function franchiseeStoreAccessOpts(req: NextRequest): Promise<{ allowedStores?: string[] }> {
+  const jwt = await tryVerifyBearerFromRequest(req)
+  if (!jwt || !isFranchiseeRole(jwt.role || '')) return {}
+  const list = normalizedAllowedStoresFromJwt(jwt)
+  return list.length > 0 ? { allowedStores: list } : {}
+}
 
 const cors = () => {
   const h = new Headers()
@@ -41,9 +51,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
     }
 
+    const accessOpts = await franchiseeStoreAccessOpts(req)
     const authorized =
       isOfficeRole(userRole) ||
-      (!!storeCode && assertStoreAccess(userRole, userStore, storeCode))
+      (!!storeCode && assertStoreAccess(userRole, userStore, storeCode, accessOpts))
     if (!authorized) {
       if (!storeCode) {
         return NextResponse.json({ success: false, message: 'storeCode가 필요합니다.' }, { status: 400, headers })
@@ -81,7 +92,8 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode가 필요합니다.' }, { status: 400, headers })
     }
-    if (!assertStoreAccess(userRole, userStore, storeCode)) {
+    const postAccessOpts = await franchiseeStoreAccessOpts(req)
+    if (!assertStoreAccess(userRole, userStore, storeCode, postAccessOpts)) {
       return NextResponse.json({ success: false, message: '매장 접근 권한이 없습니다.' }, { status: 403, headers })
     }
 
@@ -138,9 +150,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: false, message: '데이터가 없습니다.' }, { status: 404, headers })
     }
     const sc = existing[0].store_code
+    const patchAccessOpts = await franchiseeStoreAccessOpts(req)
     if (
       sc !== POS_TAX_INVOICE_SHARED_STORE_CODE &&
-      !assertStoreAccess(userRole, userStore, sc)
+      !assertStoreAccess(userRole, userStore, sc, patchAccessOpts)
     ) {
       return NextResponse.json({ success: false, message: '매장 접근 권한이 없습니다.' }, { status: 403, headers })
     }

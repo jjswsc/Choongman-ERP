@@ -94,6 +94,9 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   const t = useT(lang)
   const allowEdit = !readOnly
   const searchParams = useSearchParams()
+  const focusDateParam = String(searchParams.get("focusDate") || "").trim()
+  const focusStoreParam = String(searchParams.get("store") || "").trim()
+  const focusEmployeeParam = String(searchParams.get("employee") || "").trim()
 
   const [attTab, setAttTab] = React.useState("status")
 
@@ -255,6 +258,31 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       : statusFilter === "exceptNormal"
         ? list.filter((r) => r.status !== "정상")
         : list.filter((r) => r.status === statusFilter)
+
+  const isFocusedRow = React.useCallback((row: AttendanceDailyRow) => {
+    if (!focusDateParam || row.date !== focusDateParam) return false
+    if (focusStoreParam && focusStoreParam !== "All" && row.store !== focusStoreParam) return false
+    if (focusEmployeeParam && focusEmployeeParam !== "All" && row.name !== focusEmployeeParam) return false
+    return true
+  }, [focusDateParam, focusStoreParam, focusEmployeeParam])
+
+  const getFocusRowId = React.useCallback(
+    (row: AttendanceDailyRow) =>
+      `att-focus-${encodeURIComponent(row.date)}-${encodeURIComponent(row.store)}-${encodeURIComponent(row.name)}`,
+    []
+  )
+
+  React.useEffect(() => {
+    if (!focusDateParam || displayList.length === 0) return
+    const target = displayList.find((row) => isFocusedRow(row))
+    if (!target) return
+    const id = getFocusRowId(target)
+    const el = document.getElementById(id)
+    if (!el) return
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "center", behavior: "smooth" })
+    })
+  }, [displayList, focusDateParam, getFocusRowId, isFocusedRow])
 
   const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
     const res = await createAttendanceFromSchedule({
@@ -566,8 +594,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       return (
                         <tr
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
+                          id={getFocusRowId(row)}
                           className={cn(
-                            row.plannedWorkHrs === 0 && !row.isPartTime && "bg-red-100 dark:bg-red-950/40"
+                            row.plannedWorkHrs === 0 && !row.isPartTime && "bg-red-100 dark:bg-red-950/40",
+                            isFocusedRow(row) && "ring-2 ring-amber-400/80 ring-inset bg-amber-50/70 dark:bg-amber-950/20"
                           )}
                         >
                           <td className="px-3 py-2.5 text-center">{row.date}</td>

@@ -32,16 +32,19 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
   })
   const [serverMainTokens, setServerMainTokens] = React.useState<string[]>([])
   const [deviceToken] = React.useState(() => getOrCreateDeviceToken())
+  /** 늦게 도착한 getPosPrinterSettings / 사용자 토글이 겹치면 낙관적 상태를 덮어쓰지 않도록 함 */
+  const settingsFetchSeqRef = React.useRef(0)
 
   React.useEffect(() => {
     if (!storeCode || !deviceToken) {
       setServerMainTokens([])
       return
     }
+    const seq = ++settingsFetchSeqRef.current
     let cancelled = false
     getPosPrinterSettings({ storeCode })
       .then((s) => {
-        if (cancelled) return
+        if (cancelled || seq !== settingsFetchSeqRef.current) return
         const list = Array.isArray(s?.mainDeviceTokens)
           ? s.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
           : []
@@ -51,17 +54,21 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
         setServerMainTokens(list.length > 0 ? list : legacy)
       })
       .catch(() => {
-        if (!cancelled) setServerMainTokens([])
+        if (!cancelled && seq === settingsFetchSeqRef.current) setServerMainTokens([])
       })
     return () => {
       cancelled = true
     }
   }, [storeCode, deviceToken])
 
-  const isMain = React.useMemo(() => {
-    if (serverMainTokens.length > 0) return serverMainTokens.includes(deviceToken)
-    return localIsMain
-  }, [serverMainTokens, deviceToken, localIsMain])
+  /**
+   * 서버에 다른 메인 기기만 있고 아직 본인 토큰이 목록에 없을 때도, 사용자가 메인으로 켠 직후(local)는 반영해야 함.
+   * (기존: server 목록 length>0 이면 localIsMain 무시 → 메인 버튼이 계속 주문으로 돌아가는 현상)
+   */
+  const isMain = React.useMemo(
+    () => localIsMain || serverMainTokens.includes(deviceToken),
+    [serverMainTokens, deviceToken, localIsMain]
+  )
 
   const setValue = React.useCallback(
     (value: boolean) => {
@@ -77,6 +84,7 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
         applyLocal(value)
         return
       }
+      settingsFetchSeqRef.current += 1
       const role = value ? 'main' : 'order'
       registerPosDevice({ storeCode, deviceToken, role }).catch(() => {})
       if (value) {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
-import { clockOutCountsForPayroll } from '@/lib/payroll-utils'
+import { calcSSO, clockOutCountsForPayroll, grossWageBeforeSSO, otMinutesForPayroll } from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -18,13 +18,6 @@ function addDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + delta)
   return d.toISOString().slice(0, 10)
-}
-
-function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
-  if (year <= 2025) return { ceiling: 15000, maxDed: 750 }
-  if (year <= 2028) return { ceiling: 17500, maxDed: 875 }
-  if (year <= 2031) return { ceiling: 20000, maxDed: 1000 }
-  return { ceiling: 23000, maxDed: 1150 }
 }
 
 /** 근태 집계: 지각분, 연장분, 근무분, 출근일수 (store|name 기준). 방콕 기준 + 자정 넘김은 출근일로 합침 */
@@ -90,7 +83,6 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     } else if (type === '퇴근') {
       if (!v.outMs || dt > v.outMs) {
         v.outMs = dt
-        v.breakMin = Number(r.break_min) || 0
         v.outApproved = clockOutCountsForPayroll(r.approved, r.status)
         v.otMin = Number(r.ot_min) || 0
         v.earlyMin = Number(r.early_min) || 0
@@ -131,7 +123,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     map[key].workMin += Math.max(0, Math.floor((v.outMs - v.inMs) / 60000) - v.breakMin)
     map[key].lateMin += v.lateMin
     map[key].earlyMin += v.earlyMin || 0
-    map[key].otMin += v.otMin
+    map[key].otMin += otMinutesForPayroll(v.otMin)
     map[key].workDays += 1
   }
   return map
@@ -144,7 +136,8 @@ async function getHolidayWorkDaysMap(
 ): Promise<Record<string, number>> {
   const year = parseInt(monthStr.slice(0, 4), 10)
   const startStr = monthStr + '-01'
-  const lastDay = new Date(year, parseInt(monthStr.slice(5, 7), 10) - 1, 0)
+  const mo = parseInt(monthStr.slice(5, 7), 10)
+  const lastDay = new Date(year, mo, 0)
   const endStr = lastDay.toISOString().slice(0, 10)
 
   const holidayRows = (await supabaseSelectFilter('public_holidays', `year=eq.${year}`, { order: 'date.asc' })) as { date?: string }[]
@@ -273,8 +266,6 @@ export async function GET(request: NextRequest) {
     const holidayWorkMap = await getHolidayWorkDaysMap(monthStr, storeFilter || undefined)
     const targetDate = new Date(monthStr + '-01')
     const targetMonth = targetDate.getMonth()
-    const ssoLimits = getSSOLimitsByYear(targetDate.getFullYear())
-
     const list: PayrollPreviewRow[] = []
 
     for (const e of empRows || []) {
@@ -346,13 +337,23 @@ export async function GET(request: NextRequest) {
           const hourlyRateForOt = hoursBase > 0 && salary > 0 ? salary / hoursBase : 0
           otAmt = hourlyRateForOt > 0 ? Math.floor((otMin / 60) * hourlyRateForOt * OT_MULTIPLIER) : 0
         }
-        const contributable = Math.min(salary, ssoLimits.ceiling)
-        sso = Math.min(Math.floor(contributable * 0.05), ssoLimits.maxDed)
         const holidayWorkDays = holidayWorkMap[attKey] || 0
         if (holidayWorkDays > 0) {
           if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt)
           else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
         }
+        const previewYear = targetDate.getFullYear()
+        const grossForSso = grossWageBeforeSSO({
+          salary,
+          posAllow,
+          hazAllow,
+          birthBonus,
+          holidayPay,
+          otAmt,
+          lateDed,
+          earlyDed,
+        })
+        sso = calcSSO(grossForSso, previewYear)
       }
 
       const effectivePosAllow = isDirectorRole ? 0 : posAllow

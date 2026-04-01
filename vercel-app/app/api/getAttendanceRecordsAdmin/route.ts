@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_ADMIN_GRID_COLS } from '@/lib/postgrest-narrow-select'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import {
+  bangkokDateRangeToUtc,
+  plannedWorkMinutesFromPlans,
+  resolveScheduleForAttendanceDay,
+  scheduleDateKey,
+} from '@/lib/attendance-utils'
+import { otMinutesForPayroll } from '@/lib/payroll-utils'
 
 const TZ = 'Asia/Bangkok'
 
@@ -9,18 +15,6 @@ const TZ = 'Asia/Bangkok'
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
-}
-
-/** schedules.schedule_date: date 컬럼·ISO 문자열 모두 YYYY-MM-DD로 (타임존 시프트로 키 불일치 방지) */
-function scheduleDateKey(val: string | Date | null | undefined): string {
-  if (val == null) return ''
-  if (typeof val === 'string') {
-    const s = val.trim()
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
-  }
-  const d = new Date(val as string | Date)
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
@@ -53,28 +47,9 @@ function getBangkokHour(iso: string): number {
   return parseInt(str, 10) || 0
 }
 
-function parsePlanToMinutes(plan: string | null | undefined): number {
-  if (!plan || typeof plan !== 'string') return 0
-  const m = plan.trim().match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
-  if (!m) return 0
-  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
-}
-
 /** Mr./Ms./Mrs. 접두어 제거 - 스케줄(이름만)과 근태(호칭 포함) 매칭용 */
 function normalizeNameForSchedule(name: string): string {
   return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
-}
-
-function plannedHrsFromPlans(planIn: string, planOut: string, planBS: string, planBE: string, planInPrevDay?: boolean): number {
-  const inMin = parsePlanToMinutes(planIn)
-  let outMin = parsePlanToMinutes(planOut)
-  if (planInPrevDay && outMin < inMin) outMin += 24 * 60 // 익일 퇴근(02:00 등) → 26:00=1560분
-  const bsMin = parsePlanToMinutes(planBS)
-  const beMin = parsePlanToMinutes(planBE)
-  if (inMin >= outMin) return 0
-  let workMin = outMin - inMin
-  if (bsMin && beMin && beMin > bsMin) workMin -= beMin - bsMin
-  return Math.max(0, workMin) / 60
 }
 
 export interface AttendanceDailyRow {
@@ -349,56 +324,52 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      let sch =
-        scheduleMap[`${dateForRow}|${rec.store}|${rec.name}`] ||
-        scheduleMap[`${dateForRow}|${rec.store}|${normalizeNameForSchedule(rec.name)}`]
-      // 스케줄은 닉네임/이름만, 근태는 풀네임인 경우: 같은 날·매장에서 이름 부분 일치로 매칭
-      if (!sch) {
-        const recNorm = normalizeNameForSchedule(rec.name)
-        const prefix = `${dateForRow}|${rec.store}|`
-        for (const key of Object.keys(scheduleMap)) {
-          if (!key.startsWith(prefix)) continue
-          const schName = key.slice(prefix.length)
-          if (!schName) continue
-          if (recNorm.includes(schName) || schName.includes(recNorm)) {
-            sch = scheduleMap[key]
-            break
-          }
-        }
-      }
-      const planIn = sch?.plan_in || ''
-      const planOut = sch?.plan_out || ''
-      const planBS = sch?.break_start || ''
-      const planBE = sch?.break_end || ''
-      const planInPrevDay = !!sch?.plan_in_prev_day
-      const plannedWorkHrs = plannedHrsFromPlans(planIn, planOut, planBS, planBE, planInPrevDay)
-
       let actualWorkMin = 0
       if (inTimeForRow && outTimeForRow) {
         const inMs = new Date(inTimeForRow).getTime()
         const outMs = new Date(outTimeForRow).getTime()
         actualWorkMin = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMinForRow)
       }
+
+      const sch = resolveScheduleForAttendanceDay(
+        dateForRow,
+        rec.store,
+        rec.name,
+        scheduleMap,
+        actualWorkMin,
+        'payroll'
+      )
+      const planIn = sch?.plan_in || ''
+      const planOut = sch?.plan_out || ''
+      const planBS = sch?.break_start || ''
+      const planBE = sch?.break_end || ''
+      const planInPrevDay = !!sch?.plan_in_prev_day
+      const plannedWorkMin = sch
+        ? plannedWorkMinutesFromPlans(planIn, planOut, planBS, planBE, planInPrevDay)
+        : 0
+      const plannedWorkHrs = Math.round((plannedWorkMin / 60) * 100) / 100
       const actualWorkHrs = actualWorkMin / 60
-      const plannedWorkMin = plannedWorkHrs * 60
       const diffMin = Math.round(actualWorkMin - plannedWorkMin)
 
       const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
       const isPending = inIdForRow != null || outIdForRow != null
 
-      // 실제 근무시간이 0이면 지각/연장은 의미 없음 → 0으로 통일해 잘못된 표시 방지
-      const effectiveLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
-      // 계획 시간이 0(스케줄 없음)이면 연장으로 보지 않음 → 일반 근무로만 계산
-      const otCap = plannedWorkMin <= 0 ? 0 : Math.max(0, diffMin + lateMinForRow)
-      // DB에 저장된 연장(조정 반영값)이 있으면 그대로 사용. 0도 명시적 조정값이므로 반영
+      // 실제 근무시간이 0이면 지각 의미 없음. 스케줄 대비 순증 근무(diff>0)면 지각 분 숨김(급여 지각 공제와 동일)
+      const rawLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
+      const effectiveLateMin = plannedWorkMin > 0 && diffMin > 0 ? 0 : rawLateMin
+      // 연장: 차이가 음수(조퇴)면 OT 없음. 그 외는 DB 조정값 또는 스케줄 차이(급여 집계와 동일)
       const effectiveOtMin =
-        actualWorkMin <= 0 || plannedWorkMin <= 0
+        actualWorkMin <= 0 || plannedWorkMin <= 0 || diffMin < 0
           ? 0
           : otMinForRow != null
             ? otMinForRow
-            : Math.min(Math.max(0, diffMin), otCap)
-      // DB에 저장된 조정값이 있으면 그대로 표시. 계산값만 30분 미만이면 0으로 표시
-      const displayOtMin = otMinForRow != null ? effectiveOtMin : (effectiveOtMin >= 30 ? effectiveOtMin : 0)
+            : Math.max(0, diffMin)
+      const displayOtMin =
+        diffMin < 0
+          ? 0
+          : otMinForRow != null
+            ? effectiveOtMin
+            : otMinutesForPayroll(Math.max(0, diffMin))
 
       if (pendingOnly && !isPending) continue
 
@@ -410,7 +381,7 @@ export async function GET(request: NextRequest) {
             ? statusForRow
             : diffMin < 0
               ? '조퇴'
-              : effectiveOtMin >= 30
+              : displayOtMin >= 30
                 ? '연장'
                 : statusForRow === '조퇴'
                   ? '정상'
@@ -434,7 +405,7 @@ export async function GET(request: NextRequest) {
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,
         lateMin: effectiveLateMin,
-        earlyMin: earlyMinForRow,
+        earlyMin: plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0,
         otMin: displayOtMin,
         status: displayStatus,
         approval: approval || '대기',

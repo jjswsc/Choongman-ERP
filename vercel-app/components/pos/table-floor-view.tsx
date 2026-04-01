@@ -10,8 +10,8 @@ const FLOOR_W = 720
 const FLOOR_H = 480
 const SEAT_R = 6
 const SEAT_INSET = 6
-/** 포스 테이블 현황에서만 표시 크기 확대 (저장 좌표는 그대로, 중심 기준) */
-const TABLE_FLOOR_DISPLAY_SCALE = 1.3
+/** 포스 테이블 현황에서만 표시 크기 확대 (저장 좌표는 그대로, 중심 기준). 터치·가독성 우선. */
+const TABLE_FLOOR_DISPLAY_SCALE = 1.55
 
 /** 조리중 구간: 0~10분 연두, 10~15분 주황, 15분~ 빨강 */
 export type TableStatus = 'preparing' | 'partial_served' | 'completed' | null
@@ -196,13 +196,15 @@ export function TableFloorView({
         const baseH = ((Number(item.h ?? 60) || 60) / FLOOR_H) * 100
         const cx = baseLeft + baseW / 2
         const cy = baseTop + baseH / 2
-        const widthPct = baseW * TABLE_FLOOR_DISPLAY_SCALE
-        const heightPct = baseH * TABLE_FLOOR_DISPLAY_SCALE
+        const widthPct = Math.min(100, baseW * TABLE_FLOOR_DISPLAY_SCALE)
+        const heightPct = Math.min(100, baseH * TABLE_FLOOR_DISPLAY_SCALE)
+        const leftPct = Math.max(0, Math.min(100 - widthPct, cx - widthPct / 2))
+        const topPct = Math.max(0, Math.min(100 - heightPct, cy - heightPct / 2))
         return {
           id: item.id,
           name: String(item.name ?? '').trim() || item.id,
-          leftPct: cx - widthPct / 2,
-          topPct: cy - heightPct / 2,
+          leftPct,
+          topPct,
           widthPct,
           heightPct,
           w: Number(item.w ?? 80) || 80,

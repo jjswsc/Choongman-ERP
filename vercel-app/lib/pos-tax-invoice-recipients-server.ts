@@ -12,6 +12,7 @@ import {
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
 import { isOfficeRole } from '@/lib/permissions'
+import { storeMatches } from '@/lib/admin-employee-store-access'
 
 export { POS_TAX_INVOICE_SHARED_STORE_CODE } from '@/lib/pos-tax-invoice'
 
@@ -40,11 +41,20 @@ export function normalizePhoneDigits(phone: string): string {
   return String(phone || '').replace(/\D/g, '')
 }
 
-export function assertStoreAccess(userRole: string, userStore: string, targetStore: string): boolean {
+export function assertStoreAccess(
+  userRole: string,
+  userStore: string,
+  targetStore: string,
+  opts?: { allowedStores?: string[] }
+): boolean {
   const t = String(targetStore || '').trim()
   if (!t) return false
   if (isOfficeRole(userRole)) return true
-  return String(userStore || '').trim() === t
+  const list = (opts?.allowedStores ?? []).map((s) => String(s || '').trim()).filter(Boolean)
+  if (list.length > 0) {
+    return list.some((s) => storeMatches(s, t))
+  }
+  return storeMatches(String(userStore || '').trim(), t)
 }
 
 export type UpsertTaxRecipientInput = {

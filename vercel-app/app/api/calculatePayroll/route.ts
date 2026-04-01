@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
-import { clockOutCountsForPayroll } from '@/lib/payroll-utils'
+import { calcSSO, clockOutCountsForPayroll, grossWageBeforeSSO, otMinutesForPayroll } from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -18,14 +18,6 @@ function addDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + delta)
   return d.toISOString().slice(0, 10)
-}
-
-function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
-  const y = year || new Date().getFullYear()
-  if (y <= 2025) return { ceiling: 15000, maxDed: 750 }
-  if (y <= 2028) return { ceiling: 17500, maxDed: 875 }
-  if (y <= 2031) return { ceiling: 20000, maxDed: 1000 }
-  return { ceiling: 23000, maxDed: 1150 }
 }
 
 /** 공휴일 목록 (public_holidays 또는 기본값) */
@@ -90,7 +82,15 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     approved?: string
   }[]
 
-  type DayRec = { inMs: number | null; outMs: number | null; breakMin: number; otMin: number; earlyMin: number; outApproved: boolean }
+  type DayRec = {
+    inMs: number | null
+    outMs: number | null
+    breakMin: number
+    otMin: number
+    earlyMin: number
+    outApproved: boolean
+    lateMin: number
+  }
   const byDay: Record<string, DayRec> = {}
   const map: Record<string, AttSummaryRow> = {}
 
@@ -109,7 +109,9 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const key = store + '_' + name
     const dayKey = rowDate + '_' + key
     if (!map[key]) map[key] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
-    if (!byDay[dayKey]) byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, otMin: 0, earlyMin: 0, outApproved: false }
+    if (!byDay[dayKey]) {
+      byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, otMin: 0, earlyMin: 0, outApproved: false, lateMin: 0 }
+    }
 
     const approval = String(r.approved || '').trim()
     const status = String(r.status || '').trim()
@@ -119,16 +121,24 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
 
     if (type === '출근') {
       const lateWaived = status === '정상(승인)'
-      if ((!needsApproval || isApproved) && !lateWaived) map[key].lateMin += Number(r.late_min) || 0
-      if (!byDay[dayKey].inMs || dt < (byDay[dayKey].inMs || 0)) byDay[dayKey].inMs = dt
+      const lateMinRow = Number(r.late_min) || 0
+      if (!byDay[dayKey].inMs || dt < (byDay[dayKey].inMs || 0)) {
+        byDay[dayKey].inMs = dt
+        if ((!needsApproval || isApproved) && !lateWaived) {
+          byDay[dayKey].lateMin = lateMinRow
+        } else {
+          byDay[dayKey].lateMin = 0
+        }
+      }
     } else if (type === '퇴근') {
       if (!byDay[dayKey].outMs || dt > (byDay[dayKey].outMs || 0)) {
         byDay[dayKey].outMs = dt
-        byDay[dayKey].breakMin = Number(r.break_min) || 0
         byDay[dayKey].outApproved = clockOutCountsForPayroll(r.approved, r.status)
         byDay[dayKey].otMin = Number(r.ot_min) || 0
         byDay[dayKey].earlyMin = Number((r as { early_min?: number }).early_min) || 0
       }
+    } else if (type === '휴식종료') {
+      byDay[dayKey].breakMin += Number((r as { break_min?: number }).break_min) || 0
     }
   }
 
@@ -155,11 +165,15 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const v = byDay[dk]
     const attKey = dk.slice(11)
     const rowDate = dk.slice(0, 10)
+    if (rowDate >= startStr && rowDate <= endStr) {
+      if (!map[attKey]) map[attKey] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
+      map[attKey].lateMin += v.lateMin || 0
+    }
     if (v.inMs != null && v.outMs != null && v.outApproved && v.outMs > v.inMs) {
       if (!map[attKey]) map[attKey] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
       const minWork = Math.max(0, Math.floor((v.outMs - v.inMs) / 60000) - (v.breakMin || 0))
       map[attKey].workMin += minWork
-      map[attKey].otMin += v.otMin || 0
+      map[attKey].otMin += otMinutesForPayroll(v.otMin)
       map[attKey].earlyMin += v.earlyMin || 0
       map[attKey].workDays += 1
       if (rowDate && !map[attKey].workDates.includes(rowDate)) map[attKey].workDates.push(rowDate)
@@ -222,7 +236,6 @@ export async function GET(request: NextRequest) {
     const targetDate = new Date(monthStr + '-01')
     const targetMonth = targetDate.getMonth()
     const payrollYear = targetDate.getFullYear()
-    const ssoLimits = getSSOLimitsByYear(payrollYear)
     const holidays = await getPublicHolidays(payrollYear)
     const startStr = monthStr + '-01'
     const lastDay = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0)
@@ -312,10 +325,18 @@ export async function GET(request: NextRequest) {
         else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
       }
 
-      const contributable = Math.min(salary, ssoLimits.ceiling)
-      const sso = Math.min(Math.floor(contributable * 0.05), ssoLimits.maxDed)
-
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
+      const grossForSso = grossWageBeforeSSO({
+        salary,
+        posAllow,
+        hazAllow,
+        birthBonus,
+        holidayPay,
+        otAmt,
+        lateDed,
+        earlyDed,
+      })
+      const sso = calcSSO(grossForSso, payrollYear)
       const deduct = lateDed + earlyDed + sso
       const netPay = Math.max(0, income - deduct)
 

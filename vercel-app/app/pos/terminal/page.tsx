@@ -2299,12 +2299,12 @@ export default function PosTerminalPage() {
               ) : (
                 <>
                   {loadingTables && (
-                    <div className="h-full flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm min-h-[min(320px,40vh)]">
+                    <div className="h-full flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm min-h-[min(420px,50vh)]">
                       {t('loading')}
                     </div>
                   )}
                   {(!loadingTables && currentLayout.length > 0) && (
-                    <div className="h-full min-h-[min(320px,40vh)] min-w-0">
+                    <div className="h-full min-h-[min(420px,50vh)] min-w-0">
                       <TableFloorView
                         layout={currentLayout}
                         tableListMode={tableListMode}
@@ -2350,7 +2350,7 @@ export default function PosTerminalPage() {
                         activeFloor={activeFloor}
                         onFloorChange={setActiveFloor}
                         t={t}
-                        className="h-full min-h-[min(320px,40vh)]"
+                        className="h-full min-h-[min(420px,50vh)]"
                         freshMaxMin={cookingRules.freshMaxMin}
                         warningMaxMin={cookingRules.warningMaxMin}
                         ruleMode={cookingRules.mode}

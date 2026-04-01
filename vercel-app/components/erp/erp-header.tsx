@@ -28,7 +28,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { useStoreList } from "@/lib/api-client"
-import { isOfficeRole } from "@/lib/permissions"
+import { isFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import { warmAdminOfflineCache } from "@/lib/offline/pos-offline-warm"
 import { useAutoTranslate } from "@/lib/auto-translate"
 
@@ -49,17 +49,25 @@ const ERP_HISTORY_KEY_PREV = "erp_back_prev"
 export function ErpHeader() {
   const router = useRouter()
   const pathname = usePathname()
-  const { auth, logout } = useAuth()
+  const { auth, logout, setAuth } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { enabled: autoTranslateEnabled, setEnabled: setAutoTranslateEnabled } = useAutoTranslate()
   const { stores } = useStoreList()
   const [prefetchBusy, setPrefetchBusy] = useState(false)
+  const franchiseeSwitchStores = useMemo(() => {
+    if (!auth || !isFranchiseeRole(auth.role || "")) return null
+    const a = auth.allowedStores
+    if (!a || a.length <= 1) return null
+    return a
+  }, [auth])
+
   const warmStoreCodes = useMemo(() => {
     if (isOfficeRole(auth?.role || "")) return stores
+    if (franchiseeSwitchStores && franchiseeSwitchStores.length > 0) return franchiseeSwitchStores
     if (auth?.store) return [auth.store]
     return stores.length ? [stores[0]] : []
-  }, [auth?.role, auth?.store, stores])
+  }, [auth?.role, auth?.store, stores, franchiseeSwitchStores])
   const handlePrefetchOffline = useCallback(async () => {
     setPrefetchBusy(true)
     const r = await warmAdminOfflineCache({ storeCodes: warmStoreCodes })
@@ -166,6 +174,26 @@ export function ErpHeader() {
           <span className="text-[10px] font-semibold">{autoTranslateEnabled ? "ON" : "OFF"}</span>
         </Button>
         <Separator orientation="vertical" className="mx-1 h-5" />
+        {franchiseeSwitchStores && auth && (
+          <>
+            <Select
+              value={auth.store || franchiseeSwitchStores[0]}
+              onValueChange={(v) => setAuth({ ...auth, store: v })}
+            >
+              <SelectTrigger className="h-8 w-[min(12rem,32vw)] text-xs" aria-label={t("header_view_store")}>
+                <SelectValue placeholder={t("header_view_store")} />
+              </SelectTrigger>
+              <SelectContent>
+                {franchiseeSwitchStores.map((s) => (
+                  <SelectItem key={s} value={s} className="text-xs">
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Separator orientation="vertical" className="mx-1 h-5" />
+          </>
+        )}
         {/* Language */}
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
           <SelectTrigger className="h-8 w-[7rem] text-xs">

@@ -26,6 +26,15 @@ import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { apiFetch, useStoreList } from "@/lib/api-client"
+import {
+  i18nVar,
+  isPayrollExplainSumRow,
+  translatePayrollExplainDetail,
+  translatePayrollExplainReason,
+} from "@/lib/payroll-explain-i18n"
+
+/** 급여 산출 상세에서 날짜 클릭 시 휴가 관리로 보낼 사유(API reason 원문) */
+const PAYROLL_EXPLAIN_DATE_TO_LEAVE_REASONS = new Set(["결석 공제", "무급휴가"])
 
 function toMonthStr(d?: Date): string {
   const x = d || new Date()
@@ -59,6 +68,41 @@ type PayrollRow = {
   otherDed: number
   netPay: number
   status?: string
+  calcExplain?: PayrollCalcExplain
+}
+
+type PayrollExplainEntry = {
+  date?: string
+  reason: string
+  detail?: string
+  amount?: number
+  minutes?: number
+}
+
+type PayrollCalcExplain = {
+  salary: PayrollExplainEntry[]
+  posAllow: PayrollExplainEntry[]
+  hazAllow: PayrollExplainEntry[]
+  birthBonus: PayrollExplainEntry[]
+  holidayPay: PayrollExplainEntry[]
+  splBonus: PayrollExplainEntry[]
+  ot: PayrollExplainEntry[]
+  lateEarly: PayrollExplainEntry[]
+  sso: PayrollExplainEntry[]
+  otherDed: PayrollExplainEntry[]
+}
+
+const PAYROLL_EXPLAIN_TITLE_KEY: Partial<Record<keyof PayrollCalcExplain, string>> = {
+  salary: "pay_salary",
+  posAllow: "pay_pos_allow",
+  hazAllow: "pay_haz_allow",
+  birthBonus: "pay_birth",
+  holidayPay: "pay_holiday",
+  splBonus: "pay_spl_bonus",
+  ot: "pay_modal_ot",
+  lateEarly: "pay_explain_title_late_early",
+  sso: "pay_explain_reason_sso",
+  otherDed: "pay_other_ded",
 }
 
 function fmt(n: number): string {
@@ -100,6 +144,12 @@ export function AdminPayrollCalc() {
   const [editOtAmt, setEditOtAmt] = useState("0")
   const [editLateDed, setEditLateDed] = useState("0")
   const [editOtherDed, setEditOtherDed] = useState("0")
+  const [explainOpen, setExplainOpen] = useState(false)
+  const [explainTitle, setExplainTitle] = useState("")
+  const [explainItems, setExplainItems] = useState<PayrollExplainEntry[]>([])
+  const [explainTargetAmount, setExplainTargetAmount] = useState<number>(0)
+  const [explainStore, setExplainStore] = useState("")
+  const [explainEmployee, setExplainEmployee] = useState("")
 
   const { stores: storeList } = useStoreList()
   useEffect(() => {
@@ -225,6 +275,7 @@ export function AdminPayrollCalc() {
             otherDed: Number(r.otherDed) || 0,
           } as PayrollRow),
           status: String(r.status || "대기"),
+          calcExplain: (r.calcExplain as PayrollCalcExplain | undefined),
         }))
         setList(rows)
         await appAlert("✅ " + t("pay_calc_done"))
@@ -244,6 +295,13 @@ export function AdminPayrollCalc() {
   }
 
   const hasResult = list.length > 0
+  const explainDetailSum = explainItems.reduce((sum, item) => {
+    if (item.amount == null) return sum
+    if (isPayrollExplainSumRow(item.reason)) return sum
+    return sum + item.amount
+  }, 0)
+  const explainDiff = explainDetailSum - explainTargetAmount
+  const explainMismatch = explainDiff !== 0
 
   const translateApiMessage = (msg: string | undefined): string => {
     if (!msg) return ""
@@ -281,6 +339,33 @@ export function AdminPayrollCalc() {
     }
     setList((prev) => prev.map((row, i) => (i === editIdx ? updated : row)))
     setEditOpen(false)
+  }
+
+  const openExplain = (row: PayrollRow, key: keyof PayrollCalcExplain) => {
+    const items = row.calcExplain?.[key] || []
+    if (!items.length) {
+      void appAlert(t("pay_explain_no_calc_alert"))
+      return
+    }
+    const targetAmountByKey: Partial<Record<keyof PayrollCalcExplain, number>> = {
+      salary: row.salary,
+      posAllow: row.posAllow,
+      hazAllow: row.hazAllow,
+      birthBonus: row.birthBonus,
+      holidayPay: row.holidayPay,
+      splBonus: row.splBonus,
+      ot: row.otAmt,
+      lateEarly: (row.lateDed || 0) + (row.earlyDed ?? 0),
+      sso: row.sso,
+      otherDed: row.otherDed,
+    }
+    const titleKey = PAYROLL_EXPLAIN_TITLE_KEY[key] || "pay_explain_title_fallback"
+    setExplainTargetAmount(targetAmountByKey[key] ?? 0)
+    setExplainTitle(`${row.store} ${row.name} - ${t(titleKey)}`)
+    setExplainStore(row.store)
+    setExplainEmployee(row.name)
+    setExplainItems(items)
+    setExplainOpen(true)
   }
 
   const handleSave = async () => {
@@ -330,7 +415,9 @@ export function AdminPayrollCalc() {
         setError(null)
         const created = Number(data?.payrollExpenseSync?.created || 0)
         const updated = Number(data?.payrollExpenseSync?.updated || 0)
-        await appAlert(`${t("pay_save_success")}\n지출관리 지급예정 연동: 신규 ${created}건, 갱신 ${updated}건`)
+        await appAlert(
+          `${t("pay_save_success")}\n${i18nVar(t("pay_save_expense_sync"), { c: created, u: updated })}`
+        )
       } else {
         setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }
@@ -412,18 +499,23 @@ export function AdminPayrollCalc() {
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse min-w-[1200px]">
+            <table className="w-full text-xs border-collapse min-w-[1040px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th rowSpan={2} className="p-2 text-center font-medium min-w-[2rem]">No</th>
-                  <th rowSpan={2} className="p-2 text-left font-medium min-w-[5rem]">{t("pay_col_store")}</th>
-                  <th rowSpan={2} className="p-2 text-left font-medium min-w-[6rem]">{t("pay_col_name")}</th>
-                  <th rowSpan={2} className="p-2 text-right font-medium bg-muted/70">{t("pay_col_base")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
+                  <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4rem] max-w-[5.5rem]">{t("pay_col_store")}</th>
+                  <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4.5rem] max-w-[6.5rem]">{t("pay_col_name")}</th>
+                  <th rowSpan={2} className="p-1.5 text-right font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
                   <th colSpan={5} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
                   <th colSpan={3} className="p-2 text-center font-medium text-destructive">{t("pay_deduct")}</th>
-                  <th rowSpan={2} className="p-2 text-right font-medium font-semibold bg-muted/70">{t("pay_net")}</th>
-                  <th rowSpan={2} className="p-2 text-center font-medium min-w-[4rem]">{t("pay_edit")}</th>
+                  <th rowSpan={2} className="p-1.5 text-right font-medium font-semibold bg-muted/70 whitespace-nowrap tabular-nums">{t("pay_net")}</th>
+                  <th
+                    rowSpan={2}
+                    className="p-1.5 text-center font-medium w-[4.5rem] min-w-[4.5rem] sticky right-0 z-20 bg-muted/95 backdrop-blur-sm border-l border-border shadow-[-6px_0_12px_-8px_rgba(0,0,0,0.25)] dark:bg-muted/95 dark:shadow-[-6px_0_12px_-8px_rgba(0,0,0,0.5)]"
+                  >
+                    {t("pay_edit")}
+                  </th>
                 </tr>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_role")}</th>
@@ -442,38 +534,110 @@ export function AdminPayrollCalc() {
                 {list.map((r, i) => (
                   <tr
                     key={`${r.store}_${r.name}_${i}`}
-                    className="border-b border-border/60 hover:bg-muted/30"
+                    className="group border-b border-border/60 hover:bg-muted/30"
                   >
-                    <td className="p-2 text-center">{i + 1}</td>
-                    <td className="p-2 font-medium">{r.store}</td>
-                    <td className="p-2">
-                      <span className="font-medium">{r.name}</span>
-                      {r.role ? <><br /><small className="text-muted-foreground">{r.role}</small></> : null}
+                    <td className="p-1.5 text-center">{i + 1}</td>
+                    <td className="p-1.5 font-medium truncate max-w-[5.5rem]" title={r.store}>{r.store}</td>
+                    <td className="p-1.5 min-w-0 max-w-[6.5rem]">
+                      <span className="font-medium block truncate" title={r.name}>{r.name}</span>
+                      {r.role ? <small className="text-muted-foreground block truncate" title={r.role}>{r.role}</small> : null}
                     </td>
-                    <td className="p-2 text-right">{fmt(r.salary)}</td>
-                    <td className="p-2 text-right">{fmt(r.posAllow)}</td>
-                    <td className="p-2 text-right">{fmt(r.hazAllow)}</td>
-                    <td className="p-2 text-right">{fmt(r.birthBonus)}</td>
-                    <td className="p-2 text-right">
-                      {fmt(r.holidayPay)}
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(r.salary)}</td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "posAllow")}
+                      >
+                        {fmt(r.posAllow)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "hazAllow")}
+                      >
+                        {fmt(r.hazAllow)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "birthBonus")}
+                      >
+                        {fmt(r.birthBonus)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "holidayPay")}
+                      >
+                        {fmt(r.holidayPay)}
+                      </button>
                       {r.holidayWorkDays != null && r.holidayWorkDays > 0 && (
-                        <small className="text-muted-foreground ml-0.5">({r.holidayWorkDays}일)</small>
+                        <small className="text-muted-foreground ml-0.5">
+                          {i18nVar(t("pay_explain_holiday_days_suffix"), { n: r.holidayWorkDays })}
+                        </small>
                       )}
                     </td>
-                    <td className="p-2 text-right font-medium">{fmt(r.splBonus)}</td>
-                    <td className="p-2 text-center text-muted-foreground">
-                      (1.5: {r.ot15 ?? 0}h)
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums font-medium">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "splBonus")}
+                      >
+                        {fmt(r.splBonus)}
+                      </button>
                     </td>
-                    <td className="p-2 text-right font-medium">{fmt(r.otAmt)}</td>
-                    <td className="p-2 text-right">{fmt((r.lateDed || 0) + (r.earlyDed ?? 0))}</td>
-                    <td className="p-2 text-right">{fmt(r.sso)}</td>
-                    <td className="p-2 text-right font-medium">{fmt(r.otherDed)}</td>
-                    <td className="p-2 text-right font-semibold">{fmt(r.netPay)}</td>
-                    <td className="p-2 text-center">
+                    <td className="p-1.5 text-center text-muted-foreground whitespace-nowrap">
+                      {i18nVar(t("pay_explain_ot_line"), { h: r.ot15 ?? 0 })}
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums font-medium">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "ot")}
+                      >
+                        {fmt(r.otAmt)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "lateEarly")}
+                      >
+                        {fmt((r.lateDed || 0) + (r.earlyDed ?? 0))}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "sso")}
+                      >
+                        {fmt(r.sso)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums font-medium">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "otherDed")}
+                      >
+                        {fmt(r.otherDed)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right font-semibold whitespace-nowrap tabular-nums">{fmt(r.netPay)}</td>
+                    <td className="p-1.5 text-center sticky right-0 z-10 bg-background border-l border-border shadow-[-6px_0_12px_-8px_rgba(0,0,0,0.12)] group-hover:bg-muted/30 dark:bg-card dark:shadow-[-6px_0_12px_-8px_rgba(0,0,0,0.45)]">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[10px]"
+                        className="h-7 px-1.5 text-[10px] shrink-0"
                         onClick={() => openEdit(i)}
                       >
                         ✏️ {t("pay_edit")}
@@ -577,6 +741,93 @@ export function AdminPayrollCalc() {
               {t("pay_modal_cancel")}
             </Button>
             <Button onClick={applyEdit}>{t("pay_modal_apply")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={explainOpen} onOpenChange={setExplainOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{explainTitle || t("pay_explain_title_fallback")}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+            {explainItems.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground">{t("pay_explain_no_rows")}</div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                  <tr className="border-b">
+                    <th className="p-2 text-left font-medium w-[7.5rem]">{t("pay_explain_th_date")}</th>
+                    <th className="p-2 text-left font-medium">{t("pay_explain_th_reason")}</th>
+                    <th className="p-2 text-left font-medium">{t("pay_explain_th_detail")}</th>
+                    <th className="p-2 text-right font-medium w-[7rem]">{t("pay_explain_th_amount")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {explainItems.map((item, idx) => {
+                    const isSumRow = isPayrollExplainSumRow(item.reason)
+                    const highlightRow = explainMismatch && !isSumRow && item.amount != null
+                    const detailCell =
+                      item.detail != null && String(item.detail).trim() !== ""
+                        ? translatePayrollExplainDetail(String(item.detail), t)
+                        : item.minutes != null
+                          ? i18nVar(t("pay_explain_detail_minutes_only"), { n: item.minutes })
+                          : t("pay_explain_dash")
+                    return (
+                    <tr
+                      key={`${item.date || "nodate"}_${item.reason}_${idx}`}
+                      className={`border-b border-border/60 ${highlightRow ? "bg-amber-50/70 dark:bg-amber-950/20" : ""}`}
+                    >
+                      <td className="p-2">
+                        {item.date ? (() => {
+                          const qStore = explainStore ? `&store=${encodeURIComponent(explainStore)}` : ""
+                          const toLeave = PAYROLL_EXPLAIN_DATE_TO_LEAVE_REASONS.has(item.reason)
+                          const href = toLeave
+                            ? `/admin/leave?tab=approval&month=${encodeURIComponent(monthStr)}&status=all${qStore}${explainEmployee ? `&name=${encodeURIComponent(explainEmployee)}` : ""}&focusDate=${encodeURIComponent(item.date)}`
+                            : `/admin/attendance?tab=status&month=${encodeURIComponent(monthStr)}${qStore}${explainEmployee ? `&employee=${encodeURIComponent(explainEmployee)}` : ""}&focusDate=${encodeURIComponent(item.date)}`
+                          return (
+                            <Link href={href} className="text-blue-600 hover:underline">
+                              {item.date}
+                            </Link>
+                          )
+                        })() : (
+                          t("pay_explain_dash")
+                        )}
+                      </td>
+                      <td className="p-2">{translatePayrollExplainReason(item.reason, t)}</td>
+                      <td className="p-2 text-muted-foreground">{detailCell}</td>
+                      <td className="p-2 text-right">{item.amount != null ? fmt(item.amount) : t("pay_explain_dash")}</td>
+                    </tr>
+                  )})}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div className="mt-3 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">{t("pay_explain_sum_excl_total")}</span>
+              <span className="font-medium">{fmt(explainDetailSum)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">{t("pay_explain_table_value")}</span>
+              <span className="font-medium">{fmt(explainTargetAmount)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">{t("pay_explain_diff_label")}</span>
+              <span className={explainMismatch ? "font-medium text-destructive" : "font-medium text-emerald-600"}>
+                {explainDiff > 0 ? `+${fmt(explainDiff)}` : fmt(explainDiff)}
+              </span>
+            </div>
+            {explainMismatch && (
+              <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+                {t("pay_explain_mismatch_hint")}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExplainOpen(false)}>
+              {t("pay_explain_close")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

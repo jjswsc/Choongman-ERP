@@ -31,6 +31,7 @@ export async function loginCheck(params: {
     userName?: string
     role?: string
     token?: string
+    allowedStores?: string[]
   }>
 }
 

@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
-import { isOfficeStore, OFFICE_STORES, isAccountingRole } from '@/lib/permissions'
+import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import {
+  franchiseeQueryStoreAllowed,
+  normalizedAllowedStoresFromJwt,
+  parseExtraStoresColumn,
+} from '@/lib/franchisee-multi-store'
 
 function toDateStr(val: unknown): string {
   if (!val) return ''
@@ -11,7 +17,7 @@ function toDateStr(val: unknown): string {
 }
 
 /** 직원 관리용 직원 목록. userStore/userRole로 필터링 */
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
@@ -22,31 +28,72 @@ export async function GET(req: Request) {
     const forPettyTransfer =
       searchParams.get('forPettyTransfer') === '1' || searchParams.get('forPettyTransfer') === 'true'
 
+    const jwt = await tryVerifyBearerFromRequest(req)
+    const effectiveRole = String(jwt?.role || userRole || '')
+      .toLowerCase()
+      .trim()
+    if (jwt && isFranchiseeRole(effectiveRole) && !franchiseeQueryStoreAllowed(jwt, userStore)) {
+      return NextResponse.json(
+        { list: [], stores: [], jobOptions: [], message: '선택한 매장에 대한 권한이 없습니다.' },
+        { status: 403, headers }
+      )
+    }
+    const franchiseeAllowedList =
+      jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
+
     const empSelectFull =
-      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo,extra_stores'
     const empSelectFallback =
       'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
     let rows: Record<string, unknown>[] | null = null
+    const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
     try {
       rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFull, limit: 5000 })) as Record<string, unknown>[] | null
     } catch (colErr) {
       const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
       if (
-        /column.*(id_number|id_card_photo|tax_id|sso_number|address|name_title).*does not exist/i.test(errMsg) ||
+        /column.*(id_number|id_card_photo|tax_id|sso_number|address|name_title|extra_stores).*does not exist/i.test(errMsg) ||
         /does not exist/i.test(errMsg)
       ) {
-        rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFallback, limit: 5000 })) as Record<string, unknown>[] | null
+        try {
+          rows = (await supabaseSelect('employees', {
+            order: 'id.asc',
+            select: empSelectFullNoExtra,
+            limit: 5000,
+          })) as Record<string, unknown>[] | null
+        } catch (colErr2) {
+          const err2 = colErr2 instanceof Error ? colErr2.message : String(colErr2)
+          if (
+            /column.*(id_number|id_card_photo|tax_id|sso_number|address|name_title).*does not exist/i.test(err2) ||
+            /does not exist/i.test(err2)
+          ) {
+            rows = (await supabaseSelect('employees', {
+              order: 'id.asc',
+              select: empSelectFallback,
+              limit: 5000,
+            })) as Record<string, unknown>[] | null
+          } else {
+            throw colErr2
+          }
+        }
       } else {
         throw colErr
       }
     }
-    const role = userRole
+    const role = effectiveRole
     const list: Record<string, unknown>[] = []
 
     for (const r of rows || []) {
       if (!r.store && !r.name) continue
       const empStore = String(r.store || '').trim()
-      if (!userCanAccessEmployeeStore(role, userStore, empStore, { forPettyTransfer })) continue
+      if (
+        !userCanAccessEmployeeStore(role, userStore, empStore, {
+          forPettyTransfer,
+          allowedStores:
+            franchiseeAllowedList && franchiseeAllowedList.length > 0 ? franchiseeAllowedList : undefined,
+        })
+      )
+        continue
       list.push({
         row: r.id,
         store: empStore,
@@ -75,6 +122,7 @@ export async function GET(req: Request) {
         riskAllowance: r.haz_allow != null ? Number(r.haz_allow) : 0,
         grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
         photo: r.photo != null && r.photo !== '' ? String(r.photo).trim() : '',
+        extraStores: parseExtraStoresColumn(r.extra_stores),
       })
     }
 

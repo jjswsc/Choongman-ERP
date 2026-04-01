@@ -1,4 +1,4 @@
-import { isAccountingRole, isOfficeStore } from '@/lib/permissions'
+import { isAccountingRole, isFranchiseeRole, isOfficeStore } from '@/lib/permissions'
 
 /** userStore와 empStore 매칭 - "CM " 접두사 차이 허용 (getAdminEmployeeList와 동일) */
 export function storeMatches(userStore: string, empStore: string): boolean {
@@ -8,7 +8,7 @@ export function storeMatches(userStore: string, empStore: string): boolean {
   return userStore === cmPrefixed || empStore === cmPrefixed
 }
 
-type EmployeeStoreAccessOpts = { forPettyTransfer?: boolean }
+type EmployeeStoreAccessOpts = { forPettyTransfer?: boolean; allowedStores?: string[] }
 
 /** 직원/적정인원 등 매장 단위 데이터 조회·수정 권한 (getAdminEmployeeList 필터와 동일) */
 export function userCanAccessEmployeeStore(
@@ -25,7 +25,14 @@ export function userCanAccessEmployeeStore(
     if (opts?.forPettyTransfer && isOfficeStore(targetStore)) return true
     return !isOfficeStore(targetStore)
   }
-  if (role.includes('manager') || role.includes('franchisee')) {
+  if (isFranchiseeRole(role)) {
+    const list = opts?.allowedStores?.map((s) => String(s || '').trim()).filter(Boolean) ?? []
+    if (list.length > 0) {
+      return list.some((s) => storeMatches(s, targetStore))
+    }
+    return storeMatches(userStore, targetStore)
+  }
+  if (role.includes('manager')) {
     return storeMatches(userStore, targetStore)
   }
   return storeMatches(userStore, targetStore)

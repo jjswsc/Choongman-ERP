@@ -78,6 +78,12 @@ function formatMoneyComma(n: number): string {
   return x.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+/** 수량 입력(문자열) → 1 이상 정수 */
+function parsePositiveIntQty(s: string): number {
+  const n = parseInt(String(s).replace(/\D/g, ""), 10)
+  return Number.isFinite(n) && n >= 1 ? n : 1
+}
+
 /** 회계 PO: 매장명과 vendors.sales_outlet(매출처)가 같은 거래처 = 해당 매장 법인 */
 function vendorForSalesOutletStore(
   vendors: VendorForPurchase[],
@@ -128,7 +134,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [items, setItems] = React.useState<ItemByVendor[]>([])
   const [stock, setStock] = React.useState<Record<string, number>>({})
   const [loading, setLoading] = React.useState(false)
-  const [quantity, setQuantity] = React.useState(1)
+  const [quantityInput, setQuantityInput] = React.useState("1")
   const [selectedItem, setSelectedItem] = React.useState<ItemByVendor | null>(null)
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [submitting, setSubmitting] = React.useState(false)
@@ -405,11 +411,12 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
 
   const addToCart = () => {
     if (!selectedItem) return
+    const qty = parsePositiveIntQty(quantityInput)
     setCart((prev) => {
       const existing = prev.find((x) => x.code === selectedItem.code)
       if (existing) {
         return prev.map((x) =>
-          x.code === selectedItem.code ? { ...x, qty: x.qty + quantity } : x
+          x.code === selectedItem.code ? { ...x, qty: x.qty + qty } : x
         )
       }
       return [
@@ -418,13 +425,13 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
           code: selectedItem.code,
           name: selectedItem.name,
           price: selectedItem.cost > 0 ? selectedItem.cost : selectedItem.price,
-          qty: quantity,
+          qty,
           taxType: selectedItem.taxType ?? 'taxable',
         },
       ]
     })
     setSelectedItem(null)
-    setQuantity(1)
+    setQuantityInput("1")
   }
 
   const removeFromCart = (codeOrIdx: string | number) => {
@@ -1161,16 +1168,29 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   variant="ghost"
                   size="icon"
                   className="h-10 w-10 rounded-l-xl text-primary"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  onClick={() =>
+                    setQuantityInput(String(Math.max(1, parsePositiveIntQty(quantityInput) - 1)))
+                  }
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
-                <span className="w-10 text-center text-sm font-semibold text-foreground">{quantity}</span>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  aria-label={t("qty")}
+                  className="h-10 w-[4.5rem] min-w-[3.25rem] max-w-[7rem] rounded-none border-0 border-x border-border bg-transparent text-center text-sm font-semibold shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  value={quantityInput}
+                  onChange={(e) => setQuantityInput(e.target.value.replace(/\D/g, ""))}
+                  onBlur={() => setQuantityInput(String(parsePositiveIntQty(quantityInput)))}
+                />
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-10 w-10 rounded-r-xl text-primary"
-                  onClick={() => setQuantity((q) => q + 1)}
+                  onClick={() =>
+                    setQuantityInput(String(parsePositiveIntQty(quantityInput) + 1))
+                  }
                 >
                   <Plus className="h-4 w-4" />
                 </Button>

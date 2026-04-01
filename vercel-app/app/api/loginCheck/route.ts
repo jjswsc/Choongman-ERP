@@ -4,6 +4,11 @@ import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore } from '@/lib/permissions'
+import {
+  buildAllowedStoresForToken,
+  getFranchiseeMultiStoreSettings,
+  parseExtraStoresColumn,
+} from '@/lib/franchisee-multi-store'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -18,7 +23,27 @@ export async function POST(req: NextRequest) {
     const { store, name, pw, isAdminPage } = validated.parsed
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const rows = (await supabaseSelectFilter('employees', filter, { limit: 1, select: 'store,name,password,role,job,resign_date' })) as { store?: string; name?: string; password?: string; role?: string; job?: string; resign_date?: string | null }[]
+    type EmpLoginRow = {
+      store?: string
+      name?: string
+      password?: string
+      role?: string
+      job?: string
+      resign_date?: string | null
+      extra_stores?: unknown
+    }
+    let rows: EmpLoginRow[]
+    try {
+      rows = (await supabaseSelectFilter('employees', filter, {
+        limit: 1,
+        select: 'store,name,password,role,job,resign_date,extra_stores',
+      })) as EmpLoginRow[]
+    } catch {
+      rows = (await supabaseSelectFilter('employees', filter, {
+        limit: 1,
+        select: 'store,name,password,role,job,resign_date',
+      })) as EmpLoginRow[]
+    }
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
@@ -56,15 +81,28 @@ export async function POST(req: NextRequest) {
     }
 
     const userName = String(row.name || '').trim()
-    const token = await signToken({ store: storeName, name: userName, role: finalRole })
+    const multiSettings = await getFranchiseeMultiStoreSettings()
+    const extraParsed = parseExtraStoresColumn(row.extra_stores)
+    const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
+    const tokenPayload: Parameters<typeof signToken>[0] = { store: storeName, name: userName, role: finalRole }
+    if (finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0) {
+      tokenPayload.allowedStores = allowedStores
+    }
+    const token = await signToken(tokenPayload)
 
-    return NextResponse.json({
-      success: true,
-      storeName,
-      userName,
-      role: finalRole,
-      token,
-    }, { headers })
+    return NextResponse.json(
+      {
+        success: true,
+        storeName,
+        userName,
+        role: finalRole,
+        token,
+        ...(finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0
+          ? { allowedStores }
+          : {}),
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('loginCheck:', e)
     return NextResponse.json(

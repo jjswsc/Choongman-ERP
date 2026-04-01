@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-03-31T11:14:03.097Z",
-  "entryCount": 615,
+  "generatedAt": "2026-04-01T03:39:25.038Z",
+  "entryCount": 618,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -179,14 +179,14 @@
     },
     {
       "path": "app/api/calculatePayroll/route.ts",
-      "line": 77,
+      "line": 69,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "calculatePayroll"
     },
     {
       "path": "app/api/calculatePayroll/route.ts",
-      "line": 78,
+      "line": 70,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "calculatePayroll"
@@ -277,7 +277,7 @@
     },
     {
       "path": "app/api/deleteAdminEmployee/route.ts",
-      "line": 20,
+      "line": 30,
       "kind": "limit",
       "value": 1,
       "apiLabel": "deleteAdminEmployee"
@@ -585,14 +585,21 @@
     },
     {
       "path": "app/api/getAdminEmployeeList/route.ts",
-      "line": 31,
+      "line": 51,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAdminEmployeeList"
     },
     {
       "path": "app/api/getAdminEmployeeList/route.ts",
-      "line": 38,
+      "line": 62,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getAdminEmployeeList"
+    },
+    {
+      "path": "app/api/getAdminEmployeeList/route.ts",
+      "line": 73,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAdminEmployeeList"
@@ -1621,49 +1628,49 @@
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 248,
+      "line": 289,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 249,
+      "line": 290,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 267,
+      "line": 308,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 43,
+      "line": 36,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollPreview"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 44,
+      "line": 37,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollPreview"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 164,
+      "line": 158,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollPreview"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 165,
+      "line": 159,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollPreview"
@@ -1957,14 +1964,14 @@
     },
     {
       "path": "app/api/getPosSettlement/route.ts",
-      "line": 28,
+      "line": 27,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "getPosSettlement"
     },
     {
       "path": "app/api/getPosSettlement/route.ts",
-      "line": 49,
+      "line": 48,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getPosSettlement"
@@ -2468,7 +2475,14 @@
     },
     {
       "path": "app/api/loginCheck/route.ts",
-      "line": 21,
+      "line": 38,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "loginCheck"
+    },
+    {
+      "path": "app/api/loginCheck/route.ts",
+      "line": 43,
       "kind": "limit",
       "value": 1,
       "apiLabel": "loginCheck"
@@ -2783,14 +2797,14 @@
     },
     {
       "path": "app/api/posTaxInvoiceRecipients/route.ts",
-      "line": 134,
+      "line": 146,
       "kind": "limit",
       "value": 1,
       "apiLabel": "posTaxInvoiceRecipients"
     },
     {
       "path": "app/api/posTaxInvoiceRecipients/route.ts",
-      "line": 173,
+      "line": 186,
       "kind": "limit",
       "value": 1,
       "apiLabel": "posTaxInvoiceRecipients"
@@ -3091,7 +3105,7 @@
     },
     {
       "path": "app/api/saveAdminEmployee/route.ts",
-      "line": 85,
+      "line": 137,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveAdminEmployee"
@@ -3923,6 +3937,13 @@
       "apiLabel": "lib:firebase-admin"
     },
     {
+      "path": "lib/franchisee-multi-store.ts",
+      "line": 36,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:franchisee-multi-store"
+    },
+    {
       "path": "lib/line-crm-import.ts",
       "line": 200,
       "kind": "limit",
@@ -4225,21 +4246,21 @@
     },
     {
       "path": "lib/pos-tax-invoice-recipients-server.ts",
-      "line": 126,
+      "line": 136,
       "kind": "limit",
       "value": 2,
       "apiLabel": "lib:pos-tax-invoice-recipients-server"
     },
     {
       "path": "lib/pos-tax-invoice-recipients-server.ts",
-      "line": 139,
+      "line": 149,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-tax-invoice-recipients-server"
     },
     {
       "path": "lib/pos-tax-invoice-recipients-server.ts",
-      "line": 215,
+      "line": 225,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:pos-tax-invoice-recipients-server"

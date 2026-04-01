@@ -26,13 +26,22 @@ function normalizePathname(p: string | null): string {
   return p.endsWith("/") && p.length > 1 ? p.slice(0, -1) : p
 }
 
+/**
+ * 로그인 직후 router.replace("/admin") 시 usePathname()과 window.location이 한 틱 어긋날 수 있음
+ * (한쪽만 /admin/login으로 남는 경우). 한쪽이라도 로그인 URL이 아니면 사이드바 있는 관리자 셸을 쓴다.
+ */
 function isAdminLoginPath(pathname: string | null): boolean {
   const p = normalizePathname(pathname)
-  if (p === "/admin/login") return true
-  if (typeof window !== "undefined") {
-    const w = normalizePathname(window.location.pathname)
-    if (w === "/admin/login") return true
+  if (typeof window === "undefined") {
+    return p === "/admin/login"
   }
+  const w = normalizePathname(window.location.pathname)
+  const wLogin = w === "/admin/login"
+  const pLogin = p === "/admin/login"
+  const pUnknown = p === ""
+  if (!wLogin) return false
+  if (pLogin) return true
+  if (pUnknown) return true
   return false
 }
 

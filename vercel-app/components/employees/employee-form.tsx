@@ -19,12 +19,13 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
-const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
+const ROLE_OPTIONS = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
 export const EMP_NAME_TITLE_OPTIONS = ["Mr.", "Mrs.", "Ms.", "Miss"] as const
@@ -57,6 +58,8 @@ export interface EmployeeFormData {
   riskAllowance: number
   grade: string
   photo: string
+  /** 가맹점주 추가 매장 (대표 store 제외) */
+  extraStores: string[]
 }
 
 const emptyForm: EmployeeFormData = {
@@ -87,6 +90,7 @@ const emptyForm: EmployeeFormData = {
   riskAllowance: 0,
   grade: "",
   photo: "",
+  extraStores: [],
 }
 
 interface EmployeeFormProps {
@@ -100,6 +104,14 @@ interface EmployeeFormProps {
   saving?: boolean
   /** 매장 매니저일 때 true — 권한(role) 수정 불가 */
   roleDisabled?: boolean
+  /** 시스템 설정: 가맹점주 복수 매장 사용 */
+  franchiseeMultiEnabled?: boolean
+  /** 본사 등 추가 매장 편집 가능 */
+  canEditFranchiseeExtraStores?: boolean
+  /** 추가 매장 체크박스 후보(전체 매장 목록) */
+  allStoresForFranchiseePick?: string[]
+  /** 대표 매장 포함 최대 매장 수 */
+  franchiseeMultiMaxStores?: number
 }
 
 const DEFAULT_JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director", "Logistic"]
@@ -113,6 +125,10 @@ export function EmployeeForm({
   onNew,
   saving = false,
   roleDisabled = false,
+  franchiseeMultiEnabled = false,
+  canEditFranchiseeExtraStores = false,
+  allStoresForFranchiseePick = [],
+  franchiseeMultiMaxStores = 5,
 }: EmployeeFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -120,6 +136,26 @@ export function EmployeeForm({
   const photoInputRef = React.useRef<HTMLInputElement>(null)
   const update = (k: keyof EmployeeFormData, v: string | number) => {
     onChange({ ...form, [k]: v })
+  }
+
+  const roleLower = String(form.role || "").toLowerCase()
+  const showFranchiseeExtras =
+    canEditFranchiseeExtraStores &&
+    franchiseeMultiEnabled &&
+    (roleLower.includes("franchisee") || form.role.includes("가맹") || form.role.includes("점주"))
+
+  const toggleExtraStore = (storeName: string) => {
+    const s = String(storeName || "").trim()
+    if (!s) return
+    const set = new Set(form.extraStores)
+    const maxExtra = Math.max(0, franchiseeMultiMaxStores - 1)
+    if (set.has(s)) {
+      set.delete(s)
+    } else {
+      if (set.size >= maxExtra) return
+      set.add(s)
+    }
+    onChange({ ...form, extraStores: [...set] })
   }
 
   return (
@@ -341,6 +377,24 @@ export function EmployeeForm({
             </SelectContent>
           </Select>
         </div>
+        {showFranchiseeExtras && (
+          <div className="col-span-2 space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+            <label className="text-xs font-semibold block">{t("emp_franchisee_extra_stores")}</label>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {allStoresForFranchiseePick
+                .filter((st) => String(st || "").trim() && String(st).trim() !== String(form.store || "").trim())
+                .map((st) => (
+                  <label key={st} className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={form.extraStores.includes(st)}
+                      onCheckedChange={() => toggleExtraStore(st)}
+                    />
+                    <span>{st}</span>
+                  </label>
+                ))}
+            </div>
+          </div>
+        )}
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_grade")}</label>
           <Select value={form.grade || "__none__"} onValueChange={(v) => update("grade", v === "__none__" ? "" : v)}>

@@ -31,10 +31,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
   getEmployeeLatestGrades,
+  getFranchiseeMultiStoreSettings,
   saveAdminEmployee,
   deleteAdminEmployee,
   useStoreList,
   type AdminEmployeeItem,
+  type FranchiseeMultiStoreSettings,
 } from "@/lib/api-client"
 import {
   EmployeeFilterBar,
@@ -132,6 +134,9 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     riskAllowance: e.riskAllowance ?? 0,
     grade: e.grade || "",
     photo: e.photo || "",
+    extraStores: Array.isArray((e as AdminEmployeeItem).extraStores)
+      ? [...((e as AdminEmployeeItem).extraStores as string[])]
+      : [],
   }
 }
 
@@ -157,6 +162,21 @@ export default function EmployeesPage() {
   const fullListRef = React.useRef<EmployeeTableRow[]>([])
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
+  const [franchiseeMulti, setFranchiseeMulti] = React.useState<FranchiseeMultiStoreSettings | null>(null)
+
+  React.useEffect(() => {
+    if (!isOfficeRole(userRole) && !isAccountingRole(userRole)) {
+      setFranchiseeMulti(null)
+      return
+    }
+    let cancelled = false
+    void getFranchiseeMultiStoreSettings().then((r) => {
+      if (!cancelled && r?.settings) setFranchiseeMulti(r.settings)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userRole])
 
   const loadEmployeeList = React.useCallback(
     async (opts?: { updateDisplay?: boolean }, callback?: () => void) => {
@@ -313,6 +333,11 @@ export default function EmployeesPage() {
         userStore,
         userRole,
         userName: auth?.user || userStore,
+        // 본사/회계: 항상 전달. 서버가 system_settings·역할로 실제 반영 여부 결정.
+        // franchiseeMulti 로드 전 저장 시 undefined면 서버가 []로 저장해 추가 매장이 사라지는 문제 방지.
+        ...(isOfficeRole(userRole) || isAccountingRole(userRole)
+          ? { extraStores: form.extraStores }
+          : {}),
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("msg_saved"))
@@ -337,19 +362,34 @@ export default function EmployeesPage() {
 
   const handleNew = () => {
     const base = { ...emptyForm }
-    if (isManager && userStore) base.store = userStore
+    if ((isManager || isFranchiseeRole(userRole)) && userStore) base.store = userStore
     setForm(base)
   }
   const storesForFilter = React.useMemo(() => {
     let list: string[] = stores.length > 0 ? stores : (storeListFromApi || [])
     if (isManager && userStore && list.length === 0) list = [userStore]
+    const frList = auth?.allowedStores
+    if (isFranchiseeRole(userRole) && frList && frList.length > 0 && list.length === 0) {
+      list = [...frList]
+    }
     return [...list].sort((a, b) => {
       if (isOfficeStore(a) && !isOfficeStore(b)) return -1
       if (!isOfficeStore(a) && isOfficeStore(b)) return 1
       return a.localeCompare(b)
     })
-  }, [stores, isManager, userStore, storeListFromApi])
-  const storesForForm = isManager && userStore ? [userStore] : storesForFilter
+  }, [stores, isManager, userStore, storeListFromApi, userRole, auth?.allowedStores])
+  const storesForForm = React.useMemo(() => {
+    const fr = auth?.allowedStores
+    if (isFranchiseeRole(userRole) && fr && fr.length > 0) {
+      return [...fr].sort((a, b) => {
+        if (isOfficeStore(a) && !isOfficeStore(b)) return -1
+        if (!isOfficeStore(a) && isOfficeStore(b)) return 1
+        return a.localeCompare(b)
+      })
+    }
+    if (isManager && userStore) return [userStore]
+    return storesForFilter
+  }, [auth?.allowedStores, userRole, isManager, userStore, storesForFilter])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -423,7 +463,11 @@ export default function EmployeesPage() {
                   onSave={handleSave}
                   onNew={handleNew}
                   saving={saving}
-                  roleDisabled={isManager}
+                  roleDisabled={isManager || isFranchiseeRole(userRole)}
+                  franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
+                  canEditFranchiseeExtraStores={isOffice}
+                  allStoresForFranchiseePick={storesForFilter}
+                  franchiseeMultiMaxStores={franchiseeMulti?.maxStores ?? 5}
                 />
               </div>
               <div className="lg:col-span-8 space-y-3">

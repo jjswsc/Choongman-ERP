@@ -23,6 +23,7 @@ import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-mess
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
 import { displayLabelShort } from "@/lib/utils"
+import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -71,10 +72,13 @@ export function AdminLeaveApproval() {
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return
 
     const [y, mo] = month.split("-").map(Number)
-    const start = `${month}-01`
     const lastD = new Date(y, mo, 0)
     const mm = String(mo).padStart(2, "0")
-    const end = `${y}-${mm}-${String(lastD.getDate()).padStart(2, "0")}`
+    const monthEnd = `${y}-${mm}-${String(lastD.getDate()).padStart(2, "0")}`
+    const focusRaw = String(searchParams.get("focusDate") || "").trim()
+    const useFocusDay = /^\d{4}-\d{2}-\d{2}$/.test(focusRaw)
+    const start = useFocusDay ? focusRaw : `${month}-01`
+    const end = useFocusDay ? focusRaw : monthEnd
 
     const storeRaw = searchParams.get("store")
     const decStore = storeRaw ? decodeURIComponent(storeRaw).trim() : ""
@@ -116,8 +120,7 @@ export function AdminLeaveApproval() {
   }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
-  const leaveTypeToKey: Record<string, string> = { "연차": "annual", "ลากิจ": "lakij", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }
-  const translateLeaveType = (type: string) => leaveTypeToKey[type] ? t(leaveTypeToKey[type] as "annual" | "half" | "sick" | "unpaid" | "lakij") : type
+  const translateLeaveType = (type: string) => translateLeaveTypeFromDb(type, t)
 
   const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
 

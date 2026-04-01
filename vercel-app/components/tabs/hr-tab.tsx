@@ -21,6 +21,7 @@ import {
   type AttendanceDailyRow,
 } from "@/lib/api-client"
 import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ } from "@/lib/attendance-utils"
+import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { cn, compressImageForUpload } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -60,14 +61,6 @@ function translateAttType(type: string, t: (k: I18nKeys) => string): string {
   return key ? t(key as I18nKeys) : type
 }
 
-const LEAVE_TYPE_TO_KEY: Record<string, string> = {
-  연차: "annual",
-  반차: "half",
-  병가: "sick",
-  무급휴가: "unpaid",
-  ลากิจ: "lakij",
-}
-
 const LEAVE_STATUS_TO_KEY: Record<string, string> = {
   승인: "statusApproved",
   Approved: "statusApproved",
@@ -79,8 +72,7 @@ const LEAVE_STATUS_TO_KEY: Record<string, string> = {
 }
 
 function translateLeaveType(type: string, t: (k: I18nKeys) => string): string {
-  const key = LEAVE_TYPE_TO_KEY[type] || LEAVE_TYPE_TO_KEY[type.trim()]
-  return key ? t(key as I18nKeys) : type
+  return translateLeaveTypeFromDb(type, t as (k: string) => string)
 }
 
 function translateLeaveStatus(status: string, t: (k: I18nKeys) => string): string {
