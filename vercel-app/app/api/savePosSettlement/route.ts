@@ -54,6 +54,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('savePosSettlement:', e)
-    return NextResponse.json({ success: false, message: String(e) }, { headers })
+    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
   }
 }

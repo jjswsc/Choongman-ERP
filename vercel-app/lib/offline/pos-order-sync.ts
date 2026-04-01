@@ -5,7 +5,6 @@
 
 import { savePosOrder } from '@/lib/api-client'
 import { addToQueue } from './queue'
-import { syncPending } from './sync'
 
 export type SavePosOrderResult = {
   success: boolean
@@ -18,9 +17,32 @@ function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError && e.message?.toLowerCase().includes('fetch')) return true
   if (e instanceof Error) {
     const msg = e.message?.toLowerCase() ?? ''
-    if (msg.includes('network') || msg.includes('failed') || msg.includes('load')) return true
+    if (
+      msg.includes('network') ||
+      msg.includes('failed') ||
+      msg.includes('load') ||
+      msg.includes('enotfound') ||
+      msg.includes('getaddrinfo') ||
+      msg.includes('econnrefused') ||
+      msg.includes('etimedout') ||
+      msg.includes('supabase.co')
+    )
+      return true
   }
   return false
+}
+
+/** 구버전 API가 200 + success:false 로 DB 오류를 줄 때(큐 미적재) 보강 */
+function looksLikeInfraFailureMessage(message: string | undefined): boolean {
+  const m = String(message || '').toLowerCase()
+  return (
+    m.includes('getaddrinfo') ||
+    m.includes('enotfound') ||
+    m.includes('econnrefused') ||
+    m.includes('etimedout') ||
+    m.includes('supabase.co') ||
+    m.includes('fetch failed')
+  )
 }
 
 /**
@@ -30,6 +52,16 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
   try {
     const res = await savePosOrder(params)
     if (res.success) return res
+    if (looksLikeInfraFailureMessage(res.message)) {
+      const localOrderNo = `LOCAL-${Date.now()}`
+      await addToQueue({
+        api: '/api/savePosOrder',
+        method: 'POST',
+        body: JSON.stringify(params),
+        metadata: { localOrderNo },
+      })
+      return { success: true, orderNo: localOrderNo }
+    }
     return res
   } catch (e) {
     if (!isNetworkError(e)) {

@@ -142,9 +142,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, pointEarned }, { headers })
   } catch (e) {
     console.error('updatePosOrder:', e)
-    return NextResponse.json(
-      { success: false, message: String(e) },
-      { headers }
-    )
+    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
   }
 }

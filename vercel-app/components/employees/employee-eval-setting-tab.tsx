@@ -29,11 +29,17 @@ export interface EvaluationItemRow {
 }
 
 export interface EmployeeEvalSettingTabProps {
-  type: "kitchen" | "service"
+  type: "kitchen" | "service" | "manager"
   readOnly?: boolean
+  /** true면 카드/제목 없이 본문만 (평가 항목설정 하위 탭용) */
+  embedded?: boolean
 }
 
-export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalSettingTabProps) {
+export function EmployeeEvalSettingTab({
+  type,
+  readOnly = false,
+  embedded = false,
+}: EmployeeEvalSettingTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
@@ -110,6 +116,9 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
     if (type === "service") {
       setAddMain("서비스")
       setAddSub("")
+    } else if (type === "manager") {
+      setAddMain("매니저")
+      setAddSub("")
     } else {
       setAddMain("메뉴숙련")
       setAddSub("")
@@ -179,16 +188,35 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
   }
 
   const descKey =
-    type === "kitchen" ? "eval_setting_desc_kitchen" : "eval_setting_desc"
+    type === "kitchen"
+      ? "eval_setting_desc_kitchen"
+      : type === "manager"
+        ? "eval_setting_desc_manager"
+        : "eval_setting_desc"
   const titleKey =
-    type === "kitchen" ? "tab_eval_kitchen_setting" : "tab_eval_service_setting"
+    type === "kitchen"
+      ? "tab_eval_kitchen_setting"
+      : type === "manager"
+        ? "tab_eval_manager_setting"
+        : "tab_eval_service_setting"
+
+  const shellClass = embedded
+    ? "space-y-4"
+    : "rounded-lg border border-border bg-card p-4"
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h6 className="font-bold border-b border-border pb-2 mb-3">
-        {t(titleKey)}
-      </h6>
-      <p className="text-sm text-muted-foreground mb-4">{t(descKey)}</p>
+    <div className={shellClass}>
+      {!embedded && (
+        <>
+          <h6 className="font-bold border-b border-border pb-2 mb-3">
+            {t(titleKey)}
+          </h6>
+          <p className="text-sm text-muted-foreground mb-4">{t(descKey)}</p>
+        </>
+      )}
+      {embedded && (
+        <p className="text-sm text-muted-foreground mb-4">{t(descKey)}</p>
+      )}
 
       <div className="overflow-x-auto max-h-[400px] rounded border border-border">
         <table className="w-full text-sm">

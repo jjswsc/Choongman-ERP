@@ -553,3 +553,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
 export async function invalidateAppDataCache(): Promise<void> {
   await deleteErpCacheByPrefix('erp:appData')
 }
+
+/** 품목 저장/삭제 후 getAdminItems 캐시 무효화 */
+export async function invalidateAdminItemsCache(): Promise<void> {
+  await deleteErpCacheByPrefix('erp:items')
+}

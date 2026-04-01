@@ -161,10 +161,12 @@ async function fetchRowsForFallback(
   }
   const t = evalType.toLowerCase()
   if (t === 'all' || t === '') {
-    const [a, b] = await Promise.all([one('kitchen'), one('service')])
-    return [...a, ...b]
+    const [a, b, c] = await Promise.all([one('kitchen'), one('service'), one('manager')])
+    return [...a, ...b, ...c]
   }
-  return one(t === 'service' ? 'service' : 'kitchen')
+  if (t === 'service') return one('service')
+  if (t === 'manager') return one('manager')
+  return one('kitchen')
 }
 
 export type LoadEvalAnalyticsParams = {
@@ -198,7 +200,9 @@ export async function loadEvaluationAnalytics(
         : null
 
   const type = params.type.trim()
-  const pType = type.toLowerCase() === 'kitchen' || type.toLowerCase() === 'service' ? type.toLowerCase() : 'all'
+  const tl = type.toLowerCase()
+  const pType =
+    tl === 'kitchen' || tl === 'service' || tl === 'manager' ? tl : 'all'
 
   try {
     const raw = await supabaseRpc<unknown>('get_evaluation_analytics', {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_ADMIN_GRID_COLS } from '@/lib/postgrest-narrow-select'
 import {
   bangkokDateRangeToUtc,
@@ -127,20 +127,25 @@ export async function GET(request: NextRequest) {
       approved?: string
     }
 
-    let attRows: AttRow[] = []
-    if (isAllStores) {
-      attRows = (await supabaseSelectFilter(
-        'attendance_logs',
-        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { order: 'log_at.asc', limit: 2000, select: ATTENDANCE_LOG_ADMIN_GRID_COLS }
-      )) as AttRow[]
-    } else {
-      attRows = (await supabaseSelectFilter(
-        'attendance_logs',
-        `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { order: 'log_at.asc', limit: 2000, select: ATTENDANCE_LOG_ADMIN_GRID_COLS }
-      )) as AttRow[]
+    // 급여(getPayrollCalc)와 동일 구간의 로그를 모두 수집. limit 2000만 쓰면 log_at.asc 앞쪽 행만 오고
+    // 직원 필터는 루프에서 적용되어 말일·특정 직원 행이 누락될 수 있음(지각 공제는 있는데 근태 표에 없음).
+    const attLogFilterParts = [
+      `log_at=gte.${encodeURIComponent(startISO)}`,
+      `log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
+    ]
+    if (!isAllStores && storeFilter) {
+      attLogFilterParts.unshift(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
     }
+    if (!isAllEmployees && employeeFilter) {
+      attLogFilterParts.push(`name=eq.${encodeURIComponent(employeeFilter)}`)
+    }
+    const attLogFilter = attLogFilterParts.join('&')
+    const attRows = (await supabaseSelectFilterAllPages('attendance_logs', attLogFilter, {
+      order: 'log_at.asc',
+      select: ATTENDANCE_LOG_ADMIN_GRID_COLS,
+      pageSize: 2500,
+      maxRows: 120_000,
+    })) as AttRow[]
 
     /** 파트타임/시급 직원 식별: store|name (정규화 포함) → 계획 0이어도 빨간 행 미적용 */
     const partTimeKeys = new Set<string>()

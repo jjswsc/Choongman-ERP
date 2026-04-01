@@ -22,7 +22,12 @@ function isNetworkError(e: unknown): boolean {
       msg.includes('load') ||
       msg.includes('internet') ||
       msg.includes('disconnected') ||
-      msg.includes('aborted')
+      msg.includes('aborted') ||
+      msg.includes('enotfound') ||
+      msg.includes('getaddrinfo') ||
+      msg.includes('econnrefused') ||
+      msg.includes('etimedout') ||
+      msg.includes('supabase.co')
     )
       return true
   }

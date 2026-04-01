@@ -162,6 +162,7 @@ export function EmployeeEvalAnalyticsTab({
                 <SelectItem value="all">{t("eval_analytics_type_all")}</SelectItem>
                 <SelectItem value="kitchen">{t("eval_analytics_type_kitchen")}</SelectItem>
                 <SelectItem value="service">{t("eval_analytics_type_service")}</SelectItem>
+                <SelectItem value="manager">{t("eval_analytics_type_manager")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -28,6 +28,7 @@ export interface PayrollSaveRow {
   salary?: number
   posAllow?: number
   hazAllow?: number
+  diligenceAllow?: number
   birthBonus?: number
   holidayPay?: number
   splBonus?: number
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
       salary: Number(r.salary) || 0,
       pos_allow: Number(r.posAllow) || 0,
       haz_allow: Number(r.hazAllow) || 0,
+      diligence_allow: Number(r.diligenceAllow) || 0,
       birth_bonus: Number(r.birthBonus) || 0,
       holiday_pay: Number(r.holidayPay) ?? 0,
       spl_bonus: Number(r.splBonus) || 0,

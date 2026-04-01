@@ -1,5 +1,5 @@
 -- 직원 평가 집계 RPC (Supabase SQL Editor에서 실행)
--- 파라미터: 기간(date), 유형(all|kitchen|service), 매장(빈 문자열이면 전체)
+-- 파라미터: 기간(date), 유형(all|kitchen|service|manager), 매장(빈 문자열이면 전체)
 
 CREATE OR REPLACE FUNCTION public.eval_json_total_score(data text)
 RETURNS numeric

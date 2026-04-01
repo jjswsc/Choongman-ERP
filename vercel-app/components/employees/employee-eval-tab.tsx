@@ -25,7 +25,6 @@ import { Button } from "@/components/ui/button"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload } from "@/lib/utils"
 
-const EVAL_WEIGHTS = { 메뉴숙련: 0.4, 원가정확도: 0.2, 위생: 0.2, 태도: 0.2 }
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
 const EVAL_INCIDENT_KEYS = [
@@ -35,8 +34,6 @@ const EVAL_INCIDENT_KEYS = [
   "eval_incident_4",
   "eval_incident_5",
 ] as const
-const SHIFT_OPTIONS = ["Kitchen", "Service", "Morning", "Evening", "Full"]
-
 interface EvalItem {
   id: string | number
   main: string
@@ -77,11 +74,10 @@ export function EmployeeEvalTab({
 
   const [evalStore, setEvalStore] = React.useState("")
   const [evalEmployee, setEvalEmployee] = React.useState("")
-  const [evalType, setEvalType] = React.useState<"kitchen" | "service">("kitchen")
+  const [evalType, setEvalType] = React.useState<"kitchen" | "service" | "manager">("kitchen")
   const [evalDate, setEvalDate] = React.useState(
     () => new Date().toISOString().slice(0, 10)
   )
-  const [evalShift, setEvalShift] = React.useState("Kitchen")
   const [evalId, setEvalId] = React.useState("")
   const [sections, setSections] = React.useState<EvalSection[]>([])
   const [scores, setScores] = React.useState<Record<string, string>>({})
@@ -121,10 +117,20 @@ export function EmployeeEvalTab({
     coach: string
   }>({ totalMemo: "", incidents: [], remarks: {}, trainingNeeded: "", coach: "" })
 
+  const normStoreName = React.useCallback(
+    (s: string) => String(s || "").trim().replace(/\s+/g, " "),
+    []
+  )
+
   const employeeList = React.useMemo(() => {
     if (!evalStore || evalStore === "All") return []
-    return employees.filter((e) => String(e.store || "").trim() === evalStore)
-  }, [employees, evalStore])
+    const target = normStoreName(evalStore)
+    return employees.filter((e) => {
+      if (normStoreName(e.store || "") === target) return true
+      const extras = Array.isArray(e.extraStores) ? e.extraStores : []
+      return extras.some((x) => normStoreName(x) === target)
+    })
+  }, [employees, evalStore, normStoreName])
 
   const selectedEmp = React.useMemo(
     () => employeeList.find((e) => (e.name || "__unnamed__") === evalEmployee),
@@ -147,6 +153,8 @@ export function EmployeeEvalTab({
         "Hygiene": "위생",
         "Attitude": "태도",
         "Service": "서비스",
+        Manager: "매니저",
+        Leadership: "리더십",
       }
       for (const it of items) {
         let sec = (it.main || "").trim()
@@ -157,7 +165,9 @@ export function EmployeeEvalTab({
       const order =
         evalType === "service"
           ? ["서비스"]
-          : ["메뉴숙련", "원가정확도", "위생", "태도"]
+          : evalType === "manager"
+            ? ["매니저"]
+            : ["메뉴숙련", "원가정확도", "위생", "태도"]
       const secs: EvalSection[] = order
         .filter((o) => bySection[o]?.length)
         .map((o) => ({ main: o, items: bySection[o] }))
@@ -324,12 +334,15 @@ export function EmployeeEvalTab({
       hygieneN = 0,
       attitudeN = 0,
       serviceN = 0
+    let managerAvg = 0
+    let managerN = 0
     const toCategory = (m: string) =>
       m === "메뉴숙련" || m === "Menu skill" ? "menu" :
       m === "원가정확도" || m === "Cooking Accuracy & Cost Control" ? "cost" :
       m === "위생" || m === "Hygiene" ? "hygiene" :
       m === "태도" || m === "Attitude" ? "attitude" :
-      m === "서비스" || m === "Service" ? "service" : null
+      m === "서비스" || m === "Service" ? "service" :
+      m === "매니저" || m === "Manager" || m === "리더십" ? "manager" : null
     for (const s of sections) {
       const cat = toCategory(s.main)
       for (const it of s.items) {
@@ -339,6 +352,7 @@ export function EmployeeEvalTab({
         else if (cat === "hygiene") { hygieneAvg += v; hygieneN++ }
         else if (cat === "attitude") { attitudeAvg += v; attitudeN++ }
         else if (cat === "service") { serviceAvg += v; serviceN++ }
+        else if (cat === "manager") { managerAvg += v; managerN++ }
       }
     }
     if (menuN) menuAvg /= menuN
@@ -346,9 +360,16 @@ export function EmployeeEvalTab({
     if (hygieneN) hygieneAvg /= hygieneN
     if (attitudeN) attitudeAvg /= attitudeN
     if (serviceN) serviceAvg /= serviceN
+    if (managerN) managerAvg /= managerN
 
-    const totalItems = menuN + costN + hygieneN + attitudeN + serviceN
-    const sumAll = menuAvg * menuN + costAvg * costN + hygieneAvg * hygieneN + attitudeAvg * attitudeN + serviceAvg * serviceN
+    const totalItems = menuN + costN + hygieneN + attitudeN + serviceN + managerN
+    const sumAll =
+      menuAvg * menuN +
+      costAvg * costN +
+      hygieneAvg * hygieneN +
+      attitudeAvg * attitudeN +
+      serviceAvg * serviceN +
+      managerAvg * managerN
     const total = totalItems > 0 ? sumAll / totalItems : 0
 
     let grade = "-"
@@ -381,12 +402,14 @@ export function EmployeeEvalTab({
         위생: "hygiene", Hygiene: "hygiene",
         태도: "attitude", Attitude: "attitude",
         서비스: "menu", Service: "menu",
+        매니저: "manager", Manager: "manager", 리더십: "manager",
       }
       const payloadSections: Record<string, unknown[]> = {
         menu: [],
         cost: [],
         hygiene: [],
         attitude: [],
+        manager: [],
       }
       for (const s of sections) {
         const key = sectionKey[s.main]
@@ -509,12 +532,18 @@ export function EmployeeEvalTab({
   const sectionTitles: Record<string, string> =
     evalType === "service"
       ? { 서비스: t("eval_section_service") }
-      : {
-          메뉴숙련: t("eval_section_menu"),
-          원가정확도: t("eval_section_cost"),
-          위생: t("eval_section_hygiene"),
-          태도: t("eval_section_attitude"),
-        }
+      : evalType === "manager"
+        ? {
+            매니저: t("eval_section_manager"),
+            Manager: t("eval_section_manager"),
+            리더십: t("eval_section_leadership"),
+          }
+        : {
+            메뉴숙련: t("eval_section_menu"),
+            원가정확도: t("eval_section_cost"),
+            위생: t("eval_section_hygiene"),
+            태도: t("eval_section_attitude"),
+          }
 
   const hasUserTrans =
     userTextTrans.totalMemo ||
@@ -635,7 +664,7 @@ export function EmployeeEvalTab({
             </label>
             <Select
               value={evalType}
-              onValueChange={(v) => setEvalType(v as "kitchen" | "service")}
+              onValueChange={(v) => setEvalType(v as "kitchen" | "service" | "manager")}
             >
               <SelectTrigger className="h-8 w-[150px] text-xs">
                 <SelectValue />
@@ -643,6 +672,7 @@ export function EmployeeEvalTab({
               <SelectContent>
                 <SelectItem value="kitchen">{t("eval_type_kitchen_emp")}</SelectItem>
                 <SelectItem value="service">{t("eval_type_service_emp")}</SelectItem>
+                <SelectItem value="manager">{t("eval_type_manager_emp")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -656,23 +686,6 @@ export function EmployeeEvalTab({
               onChange={(e) => setEvalDate(e.target.value)}
               className="h-8 w-[130px] text-xs"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold">
-              {t("eval_shift")}
-            </label>
-            <Select value={evalShift} onValueChange={setEvalShift}>
-              <SelectTrigger className="h-8 w-[100px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SHIFT_OPTIONS.map((o) => (
-                  <SelectItem key={o} value={o}>
-                    {o}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           {selectedEmp?.photo && (
             <div className="h-10 w-10 overflow-hidden rounded-lg border bg-muted">

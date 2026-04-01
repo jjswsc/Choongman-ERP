@@ -20,7 +20,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import Link from "next/link"
-import { Calculator, Save, Pencil, FolderOpen, Calendar, Clock } from "lucide-react"
+import { Calculator, Save, FolderOpen, Calendar, Clock } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -51,6 +51,7 @@ type PayrollRow = {
   salary: number
   posAllow: number
   hazAllow: number
+  diligenceAllow: number
   birthBonus: number
   holidayPay: number
   holidayWorkDays?: number
@@ -83,6 +84,7 @@ type PayrollCalcExplain = {
   salary: PayrollExplainEntry[]
   posAllow: PayrollExplainEntry[]
   hazAllow: PayrollExplainEntry[]
+  diligenceAllow: PayrollExplainEntry[]
   birthBonus: PayrollExplainEntry[]
   holidayPay: PayrollExplainEntry[]
   splBonus: PayrollExplainEntry[]
@@ -96,6 +98,7 @@ const PAYROLL_EXPLAIN_TITLE_KEY: Partial<Record<keyof PayrollCalcExplain, string
   salary: "pay_salary",
   posAllow: "pay_pos_allow",
   hazAllow: "pay_haz_allow",
+  diligenceAllow: "pay_diligence_allow",
   birthBonus: "pay_birth",
   holidayPay: "pay_holiday",
   splBonus: "pay_spl_bonus",
@@ -110,10 +113,12 @@ function fmt(n: number): string {
 }
 
 function calcNetPay(r: PayrollRow): number {
+  const diligence = r.diligenceAllow ?? 0
   const income =
     r.salary +
     r.posAllow +
     r.hazAllow +
+    diligence +
     r.birthBonus +
     r.holidayPay +
     r.splBonus +
@@ -143,6 +148,7 @@ export function AdminPayrollCalc() {
   const [editSplBonus, setEditSplBonus] = useState("0")
   const [editOtAmt, setEditOtAmt] = useState("0")
   const [editLateDed, setEditLateDed] = useState("0")
+  const [editSso, setEditSso] = useState("0")
   const [editOtherDed, setEditOtherDed] = useState("0")
   const [explainOpen, setExplainOpen] = useState(false)
   const [explainTitle, setExplainTitle] = useState("")
@@ -185,6 +191,7 @@ export function AdminPayrollCalc() {
           salary: Number(r.salary) || 0,
           posAllow: Number(r.pos_allow) ?? 0,
           hazAllow: Number(r.haz_allow) ?? 0,
+          diligenceAllow: Number(r.diligence_allow) || 0,
           birthBonus: Number(r.birth_bonus) ?? 0,
           holidayPay: Number(r.holiday_pay) ?? 0,
           holidayWorkDays: 0,
@@ -244,6 +251,7 @@ export function AdminPayrollCalc() {
           salary: Number(r.salary) || 0,
           posAllow: Number(r.posAllow) || 0,
           hazAllow: Number(r.hazAllow) || 0,
+          diligenceAllow: Number(r.diligenceAllow) || 0,
           birthBonus: Number(r.birthBonus) || 0,
           holidayPay: Number(r.holidayPay) || 0,
           holidayWorkDays: Number(r.holidayWorkDays) || 0,
@@ -264,6 +272,7 @@ export function AdminPayrollCalc() {
             salary: Number(r.salary) || 0,
             posAllow: Number(r.posAllow) || 0,
             hazAllow: Number(r.hazAllow) || 0,
+            diligenceAllow: Number(r.diligenceAllow) || 0,
             birthBonus: Number(r.birthBonus) || 0,
             holidayPay: Number(r.holidayPay) || 0,
             splBonus: Number(r.splBonus) || 0,
@@ -318,6 +327,7 @@ export function AdminPayrollCalc() {
     setEditSplBonus(String(r.splBonus || 0))
     setEditOtAmt(String(r.otAmt || 0))
     setEditLateDed(String(r.lateDed || 0))
+    setEditSso(String(r.sso || 0))
     setEditOtherDed(String(r.otherDed || 0))
     setEditOpen(true)
   }
@@ -328,14 +338,16 @@ export function AdminPayrollCalc() {
     const splBonus = Number(editSplBonus) || 0
     const otAmt = Number(editOtAmt) || 0
     const lateDed = Number(editLateDed) || 0
+    const sso = Math.max(0, Math.floor(Number(editSso) || 0))
     const otherDed = Number(editOtherDed) || 0
     const updated: PayrollRow = {
       ...r,
       splBonus,
       otAmt,
       lateDed,
+      sso,
       otherDed,
-      netPay: calcNetPay({ ...r, splBonus, otAmt, lateDed, otherDed }),
+      netPay: calcNetPay({ ...r, splBonus, otAmt, lateDed, sso, otherDed }),
     }
     setList((prev) => prev.map((row, i) => (i === editIdx ? updated : row)))
     setEditOpen(false)
@@ -351,6 +363,7 @@ export function AdminPayrollCalc() {
       salary: row.salary,
       posAllow: row.posAllow,
       hazAllow: row.hazAllow,
+      diligenceAllow: row.diligenceAllow,
       birthBonus: row.birthBonus,
       holidayPay: row.holidayPay,
       splBonus: row.splBonus,
@@ -386,6 +399,7 @@ export function AdminPayrollCalc() {
           salary: r.salary,
           posAllow: r.posAllow,
           hazAllow: r.hazAllow,
+          diligenceAllow: r.diligenceAllow,
           birthBonus: r.birthBonus,
           holidayPay: r.holidayPay,
           holidayWorkDays: r.holidayWorkDays || 0,
@@ -499,14 +513,14 @@ export function AdminPayrollCalc() {
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse min-w-[1040px]">
+            <table className="w-full text-xs border-collapse min-w-[1120px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
                   <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4rem] max-w-[5.5rem]">{t("pay_col_store")}</th>
                   <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4.5rem] max-w-[6.5rem]">{t("pay_col_name")}</th>
                   <th rowSpan={2} className="p-1.5 text-right font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
-                  <th colSpan={5} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
+                  <th colSpan={6} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
                   <th colSpan={3} className="p-2 text-center font-medium text-destructive">{t("pay_deduct")}</th>
                   <th rowSpan={2} className="p-1.5 text-right font-medium font-semibold bg-muted/70 whitespace-nowrap tabular-nums">{t("pay_net")}</th>
@@ -520,6 +534,7 @@ export function AdminPayrollCalc() {
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_role")}</th>
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_risk")}</th>
+                  <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_diligence")}</th>
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_birth")}</th>
                   <th className="p-1.5 text-center font-medium text-primary" title={t("pay_col_holiday")}>{t("pay_col_holiday")}</th>
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_bonus")}</th>
@@ -559,6 +574,15 @@ export function AdminPayrollCalc() {
                         onClick={() => openExplain(r, "hazAllow")}
                       >
                         {fmt(r.hazAllow)}
+                      </button>
+                    </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "diligenceAllow")}
+                      >
+                        {fmt(r.diligenceAllow ?? 0)}
                       </button>
                     </td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
@@ -699,6 +723,16 @@ export function AdminPayrollCalc() {
                     type="number"
                     value={editLateDed}
                     onChange={(e) => setEditLateDed(e.target.value)}
+                    className="text-end"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-destructive block mb-1">➖ {t("pay_col_sso")}</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editSso}
+                    onChange={(e) => setEditSso(e.target.value)}
                     className="text-end"
                   />
                 </div>

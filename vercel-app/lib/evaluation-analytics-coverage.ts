@@ -59,12 +59,16 @@ export function isEmployeeActiveInPeriod(
 type EvalKeyRow = { store_name?: string; employee_name?: string; eval_type?: string }
 
 /** 기간 내 평가 행으로부터 (매장+이름 변형) 키 집합 */
-export function buildEvaluatedEmployeeKeys(rows: EvalKeyRow[], evalTypeFilter: 'all' | 'kitchen' | 'service'): Set<string> {
+export function buildEvaluatedEmployeeKeys(
+  rows: EvalKeyRow[],
+  evalTypeFilter: 'all' | 'kitchen' | 'service' | 'manager'
+): Set<string> {
   const set = new Set<string>()
   for (const r of rows) {
     const et = String(r.eval_type || '').toLowerCase().trim()
     if (evalTypeFilter === 'kitchen' && et !== 'kitchen') continue
     if (evalTypeFilter === 'service' && et !== 'service') continue
+    if (evalTypeFilter === 'manager' && et !== 'manager') continue
     const st = String(r.store_name || '').trim().replace(/\s+/g, ' ')
     const en = String(r.employee_name || '').trim().replace(/\s+/g, ' ')
     if (!st || !en) continue
@@ -138,10 +142,12 @@ async function fetchEvalKeyRows(
   }
   const t = evalType.toLowerCase()
   if (t === 'all' || t === '') {
-    const [a, b] = await Promise.all([one('kitchen'), one('service')])
-    return [...a, ...b]
+    const [a, b, c] = await Promise.all([one('kitchen'), one('service'), one('manager')])
+    return [...a, ...b, ...c]
   }
-  return one(t === 'service' ? 'service' : 'kitchen')
+  if (t === 'service') return one('service')
+  if (t === 'manager') return one('manager')
+  return one('kitchen')
 }
 
 export type ComputeCoverageParams = {
@@ -162,8 +168,14 @@ export async function computeEvalCoverageStats(params: ComputeCoverageParams): P
   const start = params.periodStart.slice(0, 10)
   const end = params.periodEnd.slice(0, 10)
   const typeLower = params.evalType.toLowerCase()
-  const evalFilter: 'all' | 'kitchen' | 'service' =
-    typeLower === 'kitchen' ? 'kitchen' : typeLower === 'service' ? 'service' : 'all'
+  const evalFilter: 'all' | 'kitchen' | 'service' | 'manager' =
+    typeLower === 'kitchen'
+      ? 'kitchen'
+      : typeLower === 'service'
+        ? 'service'
+        : typeLower === 'manager'
+          ? 'manager'
+          : 'all'
 
   let empRows: Record<string, unknown>[]
   try {

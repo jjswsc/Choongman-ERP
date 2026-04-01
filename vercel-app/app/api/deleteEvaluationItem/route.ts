@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { normalizeEvalItemType } from '@/lib/eval-item-type'
 
 /** 평가 항목 삭제 */
 export async function POST(req: Request) {
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const typeVal = type === 'service' ? 'service' : 'kitchen'
+    const typeVal = normalizeEvalItemType(type)
 
     const rows = (await supabaseSelectFilter(
       'evaluation_items',

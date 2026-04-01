@@ -42,44 +42,34 @@ export async function GET(req: NextRequest) {
       jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
 
     const empSelectFull =
-      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo,extra_stores'
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores'
     const empSelectFallback =
       'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
     let rows: Record<string, unknown>[] | null = null
     const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
-    try {
-      rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFull, limit: 5000 })) as Record<string, unknown>[] | null
-    } catch (colErr) {
-      const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
-      if (
-        /column.*(id_number|id_card_photo|tax_id|sso_number|address|name_title|extra_stores).*does not exist/i.test(errMsg) ||
-        /does not exist/i.test(errMsg)
-      ) {
-        try {
-          rows = (await supabaseSelect('employees', {
-            order: 'id.asc',
-            select: empSelectFullNoExtra,
-            limit: 5000,
-          })) as Record<string, unknown>[] | null
-        } catch (colErr2) {
-          const err2 = colErr2 instanceof Error ? colErr2.message : String(colErr2)
-          if (
-            /column.*(id_number|id_card_photo|tax_id|sso_number|address|name_title).*does not exist/i.test(err2) ||
-            /does not exist/i.test(err2)
-          ) {
-            rows = (await supabaseSelect('employees', {
-              order: 'id.asc',
-              select: empSelectFallback,
-              limit: 5000,
-            })) as Record<string, unknown>[] | null
-          } else {
-            throw colErr2
-          }
-        }
-      } else {
-        throw colErr
+    const empSelectFullNoSsoExempt = empSelectFull.replace(',sso_exempt', '')
+    const empSelectFullNoExtraNoSsoExempt = empSelectFullNoExtra.replace(',sso_exempt', '')
+    const empSelectCandidates = [
+      empSelectFull,
+      empSelectFullNoSsoExempt,
+      empSelectFullNoExtra,
+      empSelectFullNoExtraNoSsoExempt,
+      empSelectFallback,
+    ]
+    let loadErr: unknown = null
+    for (const sel of empSelectCandidates) {
+      try {
+        rows = (await supabaseSelect('employees', { order: 'id.asc', select: sel, limit: 5000 })) as Record<
+          string,
+          unknown
+        >[] | null
+        loadErr = null
+        break
+      } catch (e) {
+        loadErr = e
       }
     }
+    if (loadErr) throw loadErr
     const role = effectiveRole
     const list: Record<string, unknown>[] = []
 
@@ -115,11 +105,16 @@ export async function GET(req: NextRequest) {
         idCardPhoto: r.id_card_photo != null && String(r.id_card_photo).trim() ? String(r.id_card_photo).trim() : '',
         taxId: r.tax_id != null ? String(r.tax_id).trim() : '',
         ssoNumber: r.sso_number != null ? String(r.sso_number).trim() : '',
+        ssoExempt: r.sso_exempt === true || r.sso_exempt === 'true' || r.sso_exempt === 1,
         address: r.address != null ? String(r.address).trim() : '',
         bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
         accountNumber: r.account_number != null ? String(r.account_number).trim() : '',
         positionAllowance: r.position_allowance != null ? Number(r.position_allowance) : 0,
         riskAllowance: r.haz_allow != null ? Number(r.haz_allow) : 0,
+        attendanceAllowance:
+          r.attendance_allowance != null && r.attendance_allowance !== ''
+            ? Number(r.attendance_allowance)
+            : 500,
         grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
         photo: r.photo != null && r.photo !== '' ? String(r.photo).trim() : '',
         extraStores: parseExtraStoresColumn(r.extra_stores),

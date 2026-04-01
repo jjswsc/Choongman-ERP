@@ -19,6 +19,8 @@ const REASON_KEY: Record<string, string> = {
   직책수당: "pay_pos_allow",
   "주방 위험수당": "pay_explain_reason_haz_kitchen",
   "위험수당 합계": "pay_explain_reason_haz_sum",
+  근면수당: "pay_explain_reason_diligence",
+  "근면수당 미지급": "pay_explain_reason_diligence_miss",
   "생일 보너스": "pay_birth",
   "공휴일 근무수당": "pay_explain_reason_holiday_work",
   "공휴일 수당 합계": "pay_explain_reason_holiday_sum",
@@ -51,6 +53,14 @@ const DETAIL_FIXED: Record<string, string> = {
   "시급제 8시간분": "pay_explain_d_holiday_hourly8",
   "월급제 일당 1회분": "pay_explain_d_holiday_monthly_daily",
   "무급 결석 1일": "pay_explain_d_absence_unpaid_day",
+  "해당 월 휴가 미사용(유급·무급 승인 건 포함), 지각·조퇴·결석 없음": "pay_explain_d_diligence_perfect",
+  "승인 휴가 사용(유급·무급 포함)": "pay_explain_d_diligence_miss_any_leave",
+  "해당 월 승인 휴가·지각·조퇴·결석·무급휴가 없음": "pay_explain_d_diligence_perfect",
+  "승인된 휴가 있음": "pay_explain_d_diligence_miss_leave",
+  "무급휴가 또는 결석": "pay_explain_d_diligence_miss_absence",
+  "지각·조퇴 또는 반차 공제 대상": "pay_explain_d_diligence_miss_late",
+  "조건 미충족": "pay_explain_d_diligence_miss_other",
+  "인사 설정: SSO 공제 제외 (미가입 등)": "pay_explain_d_sso_exempt_hr",
 }
 
 export function translatePayrollExplainDetail(detail: string, t: (k: string) => string): string {
@@ -98,8 +108,11 @@ export function translatePayrollExplainDetail(detail: string, t: (k: string) => 
   m = d.match(/^무급휴가 (\d+)일 \+ 결석 (\d+)일$/)
   if (m) return i18nVar(t("pay_explain_d_other_sum"), { ul: m[1], ab: m[2] })
 
+  m = d.match(/^기본급 기준 (.+) × 5% \(연도 상한 적용\)$/)
+  if (m) return i18nVar(t("pay_explain_d_sso_formula"), { base: m[1] })
+
   m = d.match(/^산정기준 (.+) × 5% \(연도 상한 적용\)$/)
-  if (m) return i18nVar(t("pay_explain_d_sso_formula"), { gross: m[1] })
+  if (m) return i18nVar(t("pay_explain_d_sso_formula_legacy"), { gross: m[1] })
 
   const leaveLine = tryTranslatePayrollLeaveDetail(d, t)
   if (leaveLine != null) return leaveLine

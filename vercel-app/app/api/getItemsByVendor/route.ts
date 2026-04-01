@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
+function normalizeOutboundKey(s: string): string {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+/**
+ * 품목의 outbound_location과 발주 화면 출고지 선택값이 같은 창고인지 판별.
+ * - 비어 있으면 모든 출고지에 표시(기존 동작)
+ * - code·name 불일치, 대소문자/공백, "S&J Global" vs "S&J Global Co., Ltd." 등 완화 매칭
+ */
+function itemOutboundMatchesSelection(itemOutboundRaw: string, selectedParts: string[]): boolean {
+  const itemRaw = String(itemOutboundRaw || '').trim()
+  if (!itemRaw) return true
+  const candidates = [...new Set(selectedParts.map((x) => String(x || '').trim()).filter(Boolean))]
+  if (candidates.length === 0) return true
+  const itemNorm = normalizeOutboundKey(itemRaw)
+  for (const c of candidates) {
+    const cn = normalizeOutboundKey(c)
+    if (!cn) continue
+    if (itemNorm === cn) return true
+    const minLen = Math.min(itemNorm.length, cn.length)
+    // 짧은 코드/이름 오매칭 방지: 충분히 긴 문자열끼리만 부분 일치 허용
+    if (minLen >= 6 && (itemNorm.includes(cn) || cn.includes(itemNorm))) return true
+  }
+  return false
+}
+
 /** 본사 발주용: vendor 코드 또는 이름으로 품목 목록 조회
  * - items.vendor = code/name (기존) + item_vendors 매핑 (다대다)
  */
@@ -11,6 +40,7 @@ export async function GET(request: NextRequest) {
   const vendorCode = String(searchParams.get('vendorCode') || searchParams.get('vendor') || '').trim()
   const vendorName = String(searchParams.get('vendorName') || '').trim()
   const outboundLocation = String(searchParams.get('outboundLocation') || '').trim()
+  const outboundLocationName = String(searchParams.get('outboundLocationName') || '').trim()
 
   if (!vendorCode && !vendorName) {
     return NextResponse.json([], { headers })
@@ -170,9 +200,10 @@ export async function GET(request: NextRequest) {
     let filtered = Array.from(rowsMap.values())
       .filter((r) => isHqItem(r as ItemRow & { purchase_source?: string }))
       .sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')))
-    if (outboundLocation) {
-      filtered = filtered.filter(
-        (r) => !r.outbound_location || r.outbound_location === outboundLocation
+    if (outboundLocation || outboundLocationName) {
+      const selectedParts = [outboundLocation, outboundLocationName]
+      filtered = filtered.filter((r) =>
+        itemOutboundMatchesSelection(String(r.outbound_location || ''), selectedParts)
       )
     }
 

@@ -15,7 +15,7 @@ export async function GET() {
   try {
     const out: Record<string, { grade: string; date?: Date }> = {}
 
-    for (const type of ['kitchen', 'service']) {
+    for (const type of ['kitchen', 'service', 'manager']) {
       const rows = (await supabaseSelectFilter(
         'evaluation_results',
         `eval_type=eq.${encodeURIComponent(type)}`,

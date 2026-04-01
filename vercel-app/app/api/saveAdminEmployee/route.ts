@@ -87,11 +87,16 @@ export async function POST(req: NextRequest) {
       id_card_photo: d.idCardPhoto != null && String(d.idCardPhoto).trim() ? String(d.idCardPhoto).trim() : null,
       tax_id: d.taxId != null ? String(d.taxId).trim() : '',
       sso_number: d.ssoNumber != null ? String(d.ssoNumber).trim() : '',
+      sso_exempt: !!(d as { ssoExempt?: unknown }).ssoExempt,
       address: d.address != null ? String(d.address).trim() : '',
       bank_name: d.bankName != null ? String(d.bankName).trim() : '',
       account_number: d.accountNumber != null ? String(d.accountNumber).trim() : '',
       position_allowance: d.positionAllowance != null ? Number(d.positionAllowance) : 0,
       haz_allow: d.riskAllowance != null ? Number(d.riskAllowance) : 0,
+      attendance_allowance: (() => {
+        const aa = (d as { attendanceAllowance?: unknown }).attendanceAllowance
+        return aa == null || aa === '' ? 500 : Number(aa)
+      })(),
       grade: d.grade != null ? String(d.grade).trim() : '',
       photo: d.photo != null ? String(d.photo).trim() : '',
     }
@@ -132,7 +137,17 @@ export async function POST(req: NextRequest) {
 
     if (rowId === 0) {
       payload.password = passwordValue || ''
-      await supabaseInsert('employees', payload)
+      try {
+        await supabaseInsert('employees', payload)
+      } catch (insErr) {
+        const em = insErr instanceof Error ? insErr.message : String(insErr)
+        if (/attendance_allowance|42703|column/i.test(em)) {
+          const { attendance_allowance: _aa, ...withoutAa } = payload
+          await supabaseInsert('employees', withoutAa)
+        } else {
+          throw insErr
+        }
+      }
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
 
@@ -168,7 +183,17 @@ export async function POST(req: NextRequest) {
       oldHazAllow !== newHazAllow
 
     if (passwordValue) payload.password = passwordValue
-    await supabaseUpdate('employees', rowId, payload)
+    try {
+      await supabaseUpdate('employees', rowId, payload)
+    } catch (updErr) {
+      const em = updErr instanceof Error ? updErr.message : String(updErr)
+      if (/attendance_allowance|42703|column/i.test(em)) {
+        const { attendance_allowance: _aa, ...withoutAa } = payload
+        await supabaseUpdate('employees', rowId, withoutAa)
+      } else {
+        throw updErr
+      }
+    }
 
     if (salaryChanged) {
       try {

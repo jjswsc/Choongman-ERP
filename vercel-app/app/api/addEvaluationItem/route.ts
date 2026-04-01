@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
+import { normalizeEvalItemType } from '@/lib/eval-item-type'
 
 /** 평가 항목 추가 */
 export async function POST(req: Request) {
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
       itemName = '(새 항목)',
     } = body
 
-    const typeVal = type === 'service' ? 'service' : 'kitchen'
+    const typeVal = normalizeEvalItemType(type)
 
     let maxId = 0
     try {

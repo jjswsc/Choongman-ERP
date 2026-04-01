@@ -15,8 +15,17 @@ function parseStockUnitOptions(val: unknown): { unit: string; factor: number }[]
 function parseStandardUnits(val: unknown): { unit: string; totalQuantity: number }[] {
   if (!Array.isArray(val)) return []
   return val
-    .filter((x): x is { unit?: string; total_quantity?: number } => x != null && typeof x === 'object')
-    .map((x) => ({ unit: String(x.unit ?? '').trim(), totalQuantity: Number(x.total_quantity) || 1 }))
+    .filter((x): x is Record<string, unknown> => x != null && typeof x === 'object')
+    .map((x) => {
+      const raw =
+        x.total_quantity != null
+          ? Number(x.total_quantity)
+          : x.totalQuantity != null
+            ? Number(x.totalQuantity)
+            : NaN
+      const totalQuantity = Number.isFinite(raw) && raw > 0 ? raw : 1
+      return { unit: String(x.unit ?? '').trim(), totalQuantity }
+    })
     .filter((x) => x.unit.length > 0 && x.totalQuantity > 0)
 }
 

@@ -7,6 +7,7 @@ import {
 } from '@/lib/supabase-server'
 
 import { isAccountingRole } from '@/lib/permissions'
+import { normalizeEvalItemType } from '@/lib/eval-item-type'
 
 const OFFICE_ROLES = ['director', 'ceo', 'hr', 'officer']
 
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: '날짜 형식 오류' }, { status: 400, headers })
     }
 
-    const typeVal = type === 'service' ? 'service' : 'kitchen'
+    const typeVal = normalizeEvalItemType(type)
     const storeTrim = String(store || '').trim()
     const empTrim = String(employeeName || '').trim()
     const evalTrim = String(evaluator || '').trim()

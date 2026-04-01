@@ -4,10 +4,9 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 import * as React from "react"
 import {
   BarChart2,
-  ChefHat,
   ClipboardList,
   ClipboardPenLine,
-  Headphones,
+  LayoutList,
   LineChart,
   ListChecks,
   Users,
@@ -45,7 +44,7 @@ import {
   EmployeeEvalTab,
   EmployeeEvalListTab,
   EmployeeEvalAnalyticsTab,
-  EmployeeEvalSettingTab,
+  EmployeeEvalItemsSettingsTab,
   EmployeeMovementTab,
   EmployeeHeadcountTab,
   emptyForm,
@@ -127,11 +126,13 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     idCardPhoto: e.idCardPhoto || "",
     taxId: e.taxId || "",
     ssoNumber: e.ssoNumber || "",
+    ssoExempt: !!(e as AdminEmployeeItem).ssoExempt,
     address: e.address || "",
     bankName: e.bankName || "",
     accountNumber: e.accountNumber || "",
     positionAllowance: e.positionAllowance ?? 0,
     riskAllowance: e.riskAllowance ?? 0,
+    attendanceAllowance: e.attendanceAllowance ?? 500,
     grade: e.grade || "",
     photo: e.photo || "",
     extraStores: Array.isArray((e as AdminEmployeeItem).extraStores)
@@ -391,6 +392,12 @@ export default function EmployeesPage() {
     return storesForFilter
   }, [auth?.allowedStores, userRole, isManager, userStore, storesForFilter])
 
+  // 직원 평가 탭은 allEmployees를 쓰는데, 목록 탭 '조회' 없이 오면 비어 있음 → 본사·회계는 백그라운드로 전체 로드
+  React.useEffect(() => {
+    if (!isOffice) return
+    void loadEmployeeList({ updateDisplay: false })
+  }, [isOffice, loadEmployeeList])
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
@@ -437,16 +444,10 @@ export default function EmployeesPage() {
                   {t("tab_eval_list")}
                 </TabsTrigger>
                 {isOffice && (
-                  <>
-                    <TabsTrigger value="kitchen-setting" className={adminTabsTriggerCn}>
-                      <ChefHat className={adminTabsIconCn} aria-hidden />
-                      {t("tab_eval_kitchen_setting")}
-                    </TabsTrigger>
-                    <TabsTrigger value="service-setting" className={adminTabsTriggerCn}>
-                      <Headphones className={adminTabsIconCn} aria-hidden />
-                      {t("tab_eval_service_setting")}
-                    </TabsTrigger>
-                  </>
+                  <TabsTrigger value="eval-items-setting" className={adminTabsTriggerCn}>
+                    <LayoutList className={adminTabsIconCn} aria-hidden />
+                    {t("tab_eval_items_setting")}
+                  </TabsTrigger>
                 )}
               </TabsList>
             </div>
@@ -549,14 +550,9 @@ export default function EmployeesPage() {
             <EmployeeEvalListTab stores={storesForFilter} />
           </TabsContent>
           {isOffice && (
-            <>
-              <TabsContent value="kitchen-setting" className={adminTabsContentCn}>
-                <EmployeeEvalSettingTab type="kitchen" readOnly={isManager} />
-              </TabsContent>
-              <TabsContent value="service-setting" className={adminTabsContentCn}>
-                <EmployeeEvalSettingTab type="service" readOnly={isManager} />
-              </TabsContent>
-            </>
+            <TabsContent value="eval-items-setting" className={adminTabsContentCn}>
+              <EmployeeEvalItemsSettingsTab />
+            </TabsContent>
           )}
         </Tabs>
       </div>

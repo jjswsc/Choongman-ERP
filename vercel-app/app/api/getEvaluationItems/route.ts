@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { normalizeEvalItemType } from '@/lib/eval-item-type'
 
 export interface EvaluationItem {
   id: string | number
@@ -9,19 +10,15 @@ export interface EvaluationItem {
   use?: boolean
 }
 
-/** 평가 항목 조회 (kitchen | service). activeOnly=true면 use_flag=true만 */
+/** 평가 항목 조회 (kitchen | service | manager). activeOnly=true면 use_flag=true만 */
 export async function GET(req: Request) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
     const { searchParams } = new URL(req.url)
-    const type = (searchParams.get('type') || 'kitchen').trim()
+    const type = normalizeEvalItemType(searchParams.get('type'))
     const activeOnly = searchParams.get('activeOnly') === 'true'
-
-    if (!['kitchen', 'service'].includes(type)) {
-      return NextResponse.json([], { headers })
-    }
 
     let filter = `eval_type=eq.${encodeURIComponent(type)}`
     if (activeOnly) filter += '&use_flag=eq.true'

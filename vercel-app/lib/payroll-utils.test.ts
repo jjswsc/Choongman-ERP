@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { getSSOLimitsByYear, calcSSO, grossWageBeforeSSO, otMinutesForPayroll } from './payroll-utils'
+import {
+  getSSOLimitsByYear,
+  calcSSO,
+  grossWageBeforeSSO,
+  otMinutesForPayroll,
+  ssoContributionBaseWage,
+} from './payroll-utils'
 
 describe('payroll-utils', () => {
   describe('getSSOLimitsByYear', () => {
@@ -44,6 +50,7 @@ describe('payroll-utils', () => {
           salary: 20000,
           posAllow: 2000,
           hazAllow: 500,
+          diligenceAllow: 0,
           birthBonus: 0,
           holidayPay: 1000,
           otAmt: 3000,
@@ -67,6 +74,15 @@ describe('payroll-utils', () => {
           earlyDed: 0,
         })
       ).toBe(0)
+    })
+  })
+
+  describe('ssoContributionBaseWage', () => {
+    it('월급제 → sal_amt', () => {
+      expect(ssoContributionBaseWage(false, 18000, 9000)).toBe(18000)
+    })
+    it('시급제 → 해당 월 기본급', () => {
+      expect(ssoContributionBaseWage(true, 70, 15000)).toBe(15000)
     })
   })
 

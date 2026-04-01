@@ -26,11 +26,7 @@ import { cn, compressImageForUpload } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
-import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image, Upload } from "lucide-react"
-
-function todayStr() {
-  return todayStrBangkok()
-}
+import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image as ImageIcon, Upload } from "lucide-react"
 
 function getAttendanceDateRange() {
   const now = new Date()
@@ -42,23 +38,11 @@ function getAttendanceDateRange() {
   return { startDate: today, endDate: today }
 }
 
-const ATT_TYPE_TO_KEY: Record<string, string> = {
-  출근: "attIn",
-  퇴근: "attOut",
-  휴식시작: "attBreak",
-  휴식종료: "attResume",
-}
-
 const ATT_TYPE_TO_CONFIRM_KEY: Record<string, string> = {
   출근: "attConfirmIn",
   퇴근: "attConfirmOut",
   휴식시작: "attConfirmBreak",
   휴식종료: "attConfirmResume",
-}
-
-function translateAttType(type: string, t: (k: I18nKeys) => string): string {
-  const key = ATT_TYPE_TO_KEY[type]
-  return key ? t(key as I18nKeys) : type
 }
 
 const LEAVE_STATUS_TO_KEY: Record<string, string> = {
@@ -127,6 +111,7 @@ export function HrTab() {
     salary: number
     pos_allow: number
     haz_allow: number
+    diligence_allow: number
     birth_bonus: number
     holiday_pay: number
     spl_bonus: number
@@ -380,6 +365,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
 <tr><td>${t("pay_salary")}</td><td class="num">${fmt(payrollData.salary)} THB</td></tr>
 <tr><td>${t("pay_pos_allow")}</td><td class="num">+${fmt(payrollData.pos_allow)}</td></tr>
 <tr><td>${t("pay_haz_allow")}</td><td class="num">+${fmt(payrollData.haz_allow)}</td></tr>
+<tr><td>${t("pay_diligence_allow")}</td><td class="num">+${fmt(payrollData.diligence_allow ?? 0)}</td></tr>
 <tr><td>${t("pay_birth")}</td><td class="num">+${fmt(payrollData.birth_bonus)}</td></tr>
 <tr><td>${t("pay_holiday")}</td><td class="num">+${fmt(payrollData.holiday_pay)}</td></tr>
 <tr><td>${t("pay_spl_bonus")}</td><td class="num">+${fmt(payrollData.spl_bonus)}</td></tr>
@@ -677,7 +663,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                           className="h-7 px-2 text-xs text-green-600"
                           onClick={() => setCertPreviewUrl(h.certificateUrl!)}
                         >
-                          <Image className="mr-1 h-3 w-3" />
+                          <ImageIcon className="mr-1 h-3 w-3" aria-hidden />
                           {h.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}
                         </Button>
                       )}
@@ -744,6 +730,10 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                 <div className="px-3 py-2 flex justify-between border-t border-border/40">
                   <span className="text-muted-foreground">{t("pay_haz_allow")}</span>
                   <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.haz_allow)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_diligence_allow")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.diligence_allow ?? 0)}</span>
                 </div>
                 <div className="px-3 py-2 flex justify-between border-t border-border/40">
                   <span className="text-muted-foreground">{t("pay_birth")}</span>

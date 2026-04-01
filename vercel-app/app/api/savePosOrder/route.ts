@@ -211,9 +211,7 @@ export async function POST(req: NextRequest) {
     }, { headers })
   } catch (e) {
     console.error('savePosOrder:', e)
-    return NextResponse.json(
-      { success: false, message: String(e) },
-      { headers }
-    )
+    /** 503이어야 클라이언트 apiFetchWithOffline이 오프라인 큐로 적재(200+success:false는 큐 미동작 → ENOTFOUND 등 노출) */
+    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
   }
 }

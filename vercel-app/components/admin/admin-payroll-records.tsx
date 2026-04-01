@@ -40,6 +40,7 @@ type RecordRow = {
   salary: number
   pos_allow: number
   haz_allow: number
+  diligence_allow: number
   birth_bonus: number
   holiday_pay: number
   spl_bonus: number
@@ -58,7 +59,14 @@ function fmt(n: number): string {
 }
 
 function sumAllowance(r: RecordRow): number {
-  return (r.pos_allow || 0) + (r.haz_allow || 0) + (r.birth_bonus || 0) + (r.holiday_pay || 0) + (r.spl_bonus || 0)
+  return (
+    (r.pos_allow || 0) +
+    (r.haz_allow || 0) +
+    (r.diligence_allow || 0) +
+    (r.birth_bonus || 0) +
+    (r.holiday_pay || 0) +
+    (r.spl_bonus || 0)
+  )
 }
 
 function sumDeduct(r: RecordRow): number {

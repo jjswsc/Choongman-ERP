@@ -194,6 +194,8 @@ interface IngredientTableProps {
   addSauceDialogStoreUseRows?: Array<{ code: string; name: string; costPerUnit: number }>
   /** 행 재료 선택기에서 배합(소스) 중 숨길 usage_kind (예: 계산기에서 매장용은 전용 버튼으로만 추가) */
   ingredientPickerHideSauceUsageKinds?: Array<"for_sale" | "store_use">
+  /** 「원재료 추가」열기 직전 품목 목록 갱신(품목 수정 직후 런타임 스냅샷 동기화) */
+  refreshApiItemsBeforeAddDialog?: () => void | Promise<void>
 }
 
 export function IngredientTable({
@@ -207,6 +209,7 @@ export function IngredientTable({
   costTextDark = false,
   addSauceDialogStoreUseRows,
   ingredientPickerHideSauceUsageKinds,
+  refreshApiItemsBeforeAddDialog,
 }: IngredientTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -239,19 +242,25 @@ export function IngredientTable({
     ...runtimeByType.map((i) => ({ ...i, source: "ingredient" as const })),
     ...sauceIngs.map((i) => ({ ...i, source: "sauce" as const })),
   ]
-  /** 재료 추가 팝업: 품목 관리 + (옵션) 배합 */
-  const addDialogItemsOnly = useMemo(() => {
+  /** 재료 추가 팝업: 품목 관리 + (옵션) 배합 — 런타임 스토어 갱신을 반영하려 매 렌더 계산 */
+  const addDialogItemsOnly = (() => {
+    const runtimeByTypeLocal = getRuntimeIngredients().filter((i) => i.category === type)
+    const usedCodes = excludeCodes ?? new Set(runtimeByTypeLocal.map((i) => i.code))
     const apiFiltered = apiItemsForAddDialog
-      .filter((i) => !usedRuntimeCodes.has(i.code))
-      .filter((i) => addDialogRequireStandardUnits ? (i.standardUnits?.length ?? 0) > 0 : true)
+      .filter((i) => !usedCodes.has(i.code))
+      .filter((i) => {
+        if (!addDialogRequireStandardUnits) return true
+        /** DB standardUnits만 보면 음식 품목이 누락됨 — 행 단위와 동일하게 getIngredientStandardUnits(음식은 g 보강) 사용 */
+        return (getIngredientStandardUnits(i.code)?.length ?? 0) > 0
+      })
       .map((i) => ({ ...i, source: "api" as const }))
     const sauceFiltered = addDialogIncludeSauces && type === "food"
-      ? sauceIngsAll.filter((i) => !usedRuntimeCodes.has(i.code)).map((i) => ({ ...i, source: "sauce" as const, categoryRaw: t("posCostCategorySauce") || "배합" }))
+      ? sauceIngsAll.filter((i) => !usedCodes.has(i.code)).map((i) => ({ ...i, source: "sauce" as const, categoryRaw: t("posCostCategorySauce") || "배합" }))
       : []
     return [...apiFiltered, ...sauceFiltered]
-  }, [apiItemsForAddDialog, sauceIngsAll, usedRuntimeCodes, addDialogIncludeSauces, addDialogRequireStandardUnits, type, t])
+  })()
   /** 품목 관리 카테고리 목록 (추가 다이얼로그 필터용) - 품목의 categoryRaw만 사용 */
-  const itemCategories = useMemo(() => {
+  const itemCategories = (() => {
     const set = new Set(
       apiItemsForAddDialog
         .map((i) => i.categoryRaw)
@@ -261,7 +270,7 @@ export function IngredientTable({
       set.add(t("posCostCategorySauce") || "배합")
     }
     return Array.from(set).sort()
-  }, [apiItemsForAddDialog, addDialogIncludeSauces, type, sauceIngsAll.length, t])
+  })()
 
   const updateQuantity = useCallback(
     (index: number, quantity: number) => {
@@ -382,10 +391,17 @@ export function IngredientTable({
   )
 
   const openAddDialog = useCallback(() => {
-    setAddSearchTerm("")
-    setAddCategoryFilter("all")
-    setAddDialogOpen(true)
-  }, [])
+    void (async () => {
+      try {
+        await refreshApiItemsBeforeAddDialog?.()
+      } catch {
+        /* ignore */
+      }
+      setAddSearchTerm("")
+      setAddCategoryFilter("all")
+      setAddDialogOpen(true)
+    })()
+  }, [refreshApiItemsBeforeAddDialog])
 
   useEffect(() => {
     setRowUnitKeys((prev) => {

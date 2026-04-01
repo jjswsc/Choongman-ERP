@@ -11,6 +11,7 @@ export interface PayrollRecordRow {
   salary: number
   pos_allow: number
   haz_allow: number
+  diligence_allow: number
   birth_bonus: number
   holiday_pay: number
   spl_bonus: number
@@ -73,6 +74,7 @@ export async function GET(request: NextRequest) {
       salary: Number(r.salary) || 0,
       pos_allow: Number(r.pos_allow) || 0,
       haz_allow: Number(r.haz_allow) || 0,
+      diligence_allow: Number(r.diligence_allow) || 0,
       birth_bonus: Number(r.birth_bonus) || 0,
       holiday_pay: Number(r.holiday_pay) ?? 0,
       spl_bonus: Number(r.spl_bonus) || 0,

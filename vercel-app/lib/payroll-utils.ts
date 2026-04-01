@@ -36,12 +36,13 @@ export function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: num
 
 /**
  * SSO 산정 기준 임금총액(음수는 0).
- * 기본급 + 직책·위험 수당 등 + 생일·공휴일 가산 + OT − 지각·조퇴 − 무급결석/무급휴가 공제 (SSO 본인 부담금 적용 전).
+ * 기본급 + 직책·위험·근면 수당 등 + 생일·공휴일 가산 + OT − 지각·조퇴 − 무급결석/무급휴가 공제 (SSO 본인 부담금 적용 전).
  */
 export function grossWageBeforeSSO(params: {
   salary: number
   posAllow: number
   hazAllow: number
+  diligenceAllow?: number
   birthBonus: number
   holidayPay: number
   otAmt: number
@@ -50,10 +51,12 @@ export function grossWageBeforeSSO(params: {
   unpaidAbsenceDed?: number
 }): number {
   const u = params.unpaidAbsenceDed ?? 0
+  const d = params.diligenceAllow ?? 0
   const raw =
     params.salary +
     params.posAllow +
     params.hazAllow +
+    d +
     params.birthBonus +
     params.holidayPay +
     params.otAmt -
@@ -63,9 +66,24 @@ export function grossWageBeforeSSO(params: {
   return Math.max(0, raw)
 }
 
-/** SSO 공제액: grossWageBeforeSSO 결과(또는 동일 의미의 산정액)의 5%, ceiling·maxDed 한도 */
-export function calcSSO(grossForContribution: number, year: number): number {
+/**
+ * 태국 SSO 본인부담 산정 기준액(기본급만, 수당·OT·지각공제 등 제외).
+ * - 월급제: 인사 등록 월 기본급 `sal_amt`
+ * - 시급제: 해당 월 지급 기본급(근무시간×시급, OT 제외)
+ */
+/** DB/폼의 sso_exempt 값을 boolean으로 */
+export function isEmployeeSsoExemptFlag(raw: unknown): boolean {
+  return raw === true || raw === 'true' || raw === 1 || raw === '1'
+}
+
+export function ssoContributionBaseWage(isHourly: boolean, salAmt: number, hourlyMonthBaseSalary: number): number {
+  if (isHourly) return Math.max(0, Math.floor(Number(hourlyMonthBaseSalary) || 0))
+  return Math.max(0, Math.floor(Number(salAmt) || 0))
+}
+
+/** SSO 공제액: 산정기준액의 5%, ceiling·maxDed 한도 */
+export function calcSSO(contributionBase: number, year: number): number {
   const { ceiling, maxDed } = getSSOLimitsByYear(year)
-  const contributable = Math.min(grossForContribution, ceiling)
+  const contributable = Math.min(contributionBase, ceiling)
   return Math.min(Math.floor(contributable * 0.05), maxDed)
 }

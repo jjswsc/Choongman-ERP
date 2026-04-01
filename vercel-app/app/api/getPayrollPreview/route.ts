@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
-import { calcSSO, clockOutCountsForPayroll, grossWageBeforeSSO, otMinutesForPayroll } from '@/lib/payroll-utils'
+import {
+  calcSSO,
+  clockOutCountsForPayroll,
+  isEmployeeSsoExemptFlag,
+  otMinutesForPayroll,
+  ssoContributionBaseWage,
+} from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -249,13 +255,42 @@ export async function GET(request: NextRequest) {
       return x === '본사' || x === 'Office' || x === '오피스' || x.toLowerCase() === 'office'
     }
 
-    type EmpRow = { store?: string; name?: string; job?: string; sal_type?: string; sal_amt?: number; position_allowance?: number; haz_allow?: number; birth?: string; join_date?: string; role?: string }
-    const empSelect = 'store,name,job,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role'
+    type EmpRow = {
+      store?: string
+      name?: string
+      job?: string
+      sal_type?: string
+      sal_amt?: number
+      position_allowance?: number
+      haz_allow?: number
+      birth?: string
+      join_date?: string
+      role?: string
+      sso_exempt?: boolean | null
+    }
+    const empSel = 'store,name,job,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role,sso_exempt'
+    const empSelFallback = empSel.replace(',sso_exempt', '')
     let empRows: EmpRow[] = []
-    if (storeFilter) {
-      empRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(storeFilter)}`, { order: 'id.asc', select: empSelect })) as EmpRow[]
-    } else {
-      empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelect })) as EmpRow[]
+    try {
+      if (storeFilter) {
+        empRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(storeFilter)}`, {
+          order: 'id.asc',
+          select: empSel,
+        })) as EmpRow[]
+      } else {
+        empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSel })) as EmpRow[]
+      }
+    } catch (fetchErr) {
+      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+      if (!/sso_exempt|column/i.test(msg)) throw fetchErr
+      if (storeFilter) {
+        empRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(storeFilter)}`, {
+          order: 'id.asc',
+          select: empSelFallback,
+        })) as EmpRow[]
+      } else {
+        empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelFallback })) as EmpRow[]
+      }
     }
 
     if (!isDirector) {
@@ -343,17 +378,9 @@ export async function GET(request: NextRequest) {
           else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
         }
         const previewYear = targetDate.getFullYear()
-        const grossForSso = grossWageBeforeSSO({
-          salary,
-          posAllow,
-          hazAllow,
-          birthBonus,
-          holidayPay,
-          otAmt,
-          lateDed,
-          earlyDed,
-        })
-        sso = calcSSO(grossForSso, previewYear)
+        const ssoExempt = isEmployeeSsoExemptFlag(e.sso_exempt)
+        const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
+        sso = ssoExempt ? 0 : calcSSO(ssoBase, previewYear)
       }
 
       const effectivePosAllow = isDirectorRole ? 0 : posAllow

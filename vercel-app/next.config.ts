@@ -25,6 +25,8 @@ const withSerwist = withSerwistInit({
     { url: "/login", revision },
     { url: "/admin/login", revision },
     { url: "/pos", revision },
+    /** POS PWA start_url·오프라인 폴백 — 없으면 /pos/login 요청이 캐시에 없어 빈 화면 */
+    { url: "/pos/login", revision },
   ],
 });
 

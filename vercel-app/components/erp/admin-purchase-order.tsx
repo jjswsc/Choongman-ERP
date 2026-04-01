@@ -384,7 +384,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       getItemsByVendor(
         vendorSelect.code,
         vendorSelect.name,
-        locationSelect.location_code !== "본사" ? locationSelect.location_code : undefined
+        locationSelect.location_code !== "본사" ? locationSelect.location_code : undefined,
+        locationSelect.location_code !== "본사" ? locationSelect.name : undefined
       ),
       getHqStockByLocation(locationSelect.location_code),
     ])

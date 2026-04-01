@@ -9,7 +9,8 @@ import { requireAuth } from '@/lib/verify-auth'
 import {
   clockOutCountsForPayroll,
   calcSSO,
-  grossWageBeforeSSO,
+  isEmployeeSsoExemptFlag,
+  ssoContributionBaseWage,
   OT_PAYROLL_MIN_MINUTES,
   otMinutesForPayroll,
 } from '@/lib/payroll-utils'
@@ -87,6 +88,7 @@ export type PayrollCalcExplain = {
   salary: PayrollExplainEntry[]
   posAllow: PayrollExplainEntry[]
   hazAllow: PayrollExplainEntry[]
+  diligenceAllow: PayrollExplainEntry[]
   birthBonus: PayrollExplainEntry[]
   holidayPay: PayrollExplainEntry[]
   splBonus: PayrollExplainEntry[]
@@ -98,6 +100,28 @@ export type PayrollCalcExplain = {
 
 function normalizeNameForSchedule(name: string): string {
   return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+}
+
+/** store+name / store+정규화이름 양쪽 키에 걸린 승인 휴가를 한 직원 기준으로 합침(근면·결석 연동 누락 방지) */
+function mergeLeaveEventsForEmployee<T extends { date: string; type: string; days: number; kind: string }>(
+  byKey: Record<string, T[]>,
+  store: string,
+  name: string
+): T[] {
+  const keys = new Set<string>([`${store}_${name}`])
+  const nn = normalizeNameForSchedule(name)
+  if (nn && nn !== name) keys.add(`${store}_${nn}`)
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const k of keys) {
+    for (const ev of byKey[k] || []) {
+      const id = `${ev.date}|${ev.type}|${ev.days}|${ev.kind}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      out.push(ev)
+    }
+  }
+  return out
 }
 
 /** 인사 기준 퇴사일(YYYY-MM-DD) → 근태 로그 store|name 키로 조회 */
@@ -394,6 +418,7 @@ export interface PayrollCalcRow {
   salary: number
   posAllow: number
   hazAllow: number
+  diligenceAllow: number
   birthBonus: number
   holidayPay: number
   holidayWorkDays: number
@@ -458,22 +483,46 @@ export async function GET(request: NextRequest) {
     const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
     const logEndISOExclusive = `${addDayBangkok(endStr, 1)}T00:00:00.000Z`
 
-    const empSelect = 'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date'
-    const [empRows, attRows, phRows, leaveRows, scheduleRows] = await Promise.all([
-      supabaseSelect('employees', { order: 'id.asc', select: empSelect }) as Promise<{
-        id?: number
-        store?: string
-        name?: string
-        job?: string
-        role?: string
-        sal_type?: string
-        sal_amt?: number
-        position_allowance?: number
-        haz_allow?: number
-        birth?: string
-        join_date?: string
-        resign_date?: string
-      }[] | null>,
+    // attendance_allowance·sso_exempt 미적용 DB는 후보 순으로 내려가며 조회 (42703 등)
+    const empPayrollSelectCandidates = [
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date',
+    ]
+    type EmpRowPayroll = {
+      id?: number
+      store?: string
+      name?: string
+      job?: string
+      role?: string
+      sal_type?: string
+      sal_amt?: number
+      position_allowance?: number
+      haz_allow?: number
+      attendance_allowance?: number | null
+      birth?: string
+      join_date?: string
+      resign_date?: string
+      sso_exempt?: boolean | null
+    }
+    let empRows: EmpRowPayroll[] | null = null
+    let empLoadErr: unknown = null
+    for (const sel of empPayrollSelectCandidates) {
+      try {
+        empRows = (await supabaseSelect('employees', {
+          order: 'id.asc',
+          select: sel,
+        })) as EmpRowPayroll[] | null
+        empLoadErr = null
+        break
+      } catch (e) {
+        empLoadErr = e
+      }
+    }
+    if (empLoadErr) throw empLoadErr
+
+    const [attRows, phRows, leaveRows, scheduleRows] = await Promise.all([
       supabaseSelectFilterAllPages(
         'attendance_logs',
         `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
@@ -571,8 +620,14 @@ export async function GET(request: NextRequest) {
 
       const note = underOneYear ? '입사 1년 미만 연차·반차 → 무급 처리' : ''
       const isUnpaid = /무급|unpaid/i.test(type) || underOneYear
-      if (!leaveEventsByKey[key]) leaveEventsByKey[key] = []
-      leaveEventsByKey[key].push({ date: dateStr, type, days, note, kind: isUnpaid ? 'unpaid' : 'paid' })
+      const evt: LeaveEvt = { date: dateStr, type, days, note, kind: isUnpaid ? 'unpaid' : 'paid' }
+      const leaveKeys = new Set<string>([key])
+      const nameNorm = normalizeNameForSchedule(name)
+      if (nameNorm && nameNorm !== name) leaveKeys.add(`${store}_${nameNorm}`)
+      for (const lk of leaveKeys) {
+        if (!leaveEventsByKey[lk]) leaveEventsByKey[lk] = []
+        leaveEventsByKey[lk].push(evt)
+      }
 
       if (isUnpaid) {
         unpaidLeaveDaysMap[key] = (unpaidLeaveDaysMap[key] || 0) + days
@@ -635,6 +690,7 @@ export async function GET(request: NextRequest) {
 
       const dept = String(e.job || '').trim()
       const role = String(e.role || '').trim()
+      const isDirectorRole = role.toLowerCase().includes('director')
       const salType = String(e.sal_type || 'Monthly').trim().toLowerCase()
       const isHourly = /시급|hourly|hour|part-time|part time/.test(salType)
       const salAmt = Number(e.sal_amt) || 0
@@ -814,7 +870,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 무급 휴가 + 결석 공제 (월급제만, 시급제는 미근무일 이미 급여 없음)
-      const leaveEventsRaw = leaveEventsByKey[attKey] || []
+      const leaveEventsRaw = mergeLeaveEventsForEmployee(leaveEventsByKey, store, name)
       const leaveEvents =
         resignDateStr && resignDateStr >= startStr && resignDateStr <= endStr
           ? leaveEventsRaw.filter((x) => x.date <= resignDateStr)
@@ -870,19 +926,28 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const income = salary + posAllowAmount + hazAllow + birthBonus + holidayPay + otAmt
-      const grossForSso = grossWageBeforeSSO({
-        salary,
-        posAllow: posAllowAmount,
-        hazAllow,
-        birthBonus,
-        holidayPay,
-        otAmt,
-        lateDed,
-        earlyDed,
-        unpaidAbsenceDed,
-      })
-      const sso = calcSSO(grossForSso, year)
+      const rawDiligenceCfg = (e as { attendance_allowance?: unknown }).attendance_allowance
+      const diligenceCfg =
+        rawDiligenceCfg == null || rawDiligenceCfg === ''
+          ? 500
+          : Math.max(0, Math.floor(Number(rawDiligenceCfg)))
+      const diligentEligible =
+        !isDirectorRole &&
+        diligenceCfg > 0 &&
+        workDays > 0 &&
+        leaveEvents.length === 0 &&
+        absenceDays === 0 &&
+        unpaidLeaveDays === 0 &&
+        lateMin === 0 &&
+        earlyMin === 0 &&
+        lateDaysOver10 < LATE_HALF_DAY_COUNT
+      const diligenceAllow = diligentEligible ? diligenceCfg : 0
+
+      const income =
+        salary + posAllowAmount + hazAllow + diligenceAllow + birthBonus + holidayPay + otAmt
+      const ssoExempt = isEmployeeSsoExemptFlag((e as EmpRowPayroll).sso_exempt)
+      const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
+      const sso = ssoExempt ? 0 : calcSSO(ssoBase, year)
       const deduct = lateDed + earlyDed + sso + unpaidAbsenceDed
       const netPay = Math.max(0, income - deduct)
       const ot15 = Math.round((otMin / 60) * 10) / 10
@@ -890,6 +955,7 @@ export async function GET(request: NextRequest) {
         salary: [],
         posAllow: [],
         hazAllow: [],
+        diligenceAllow: [],
         birthBonus: [],
         holidayPay: [],
         splBonus: [],
@@ -937,6 +1003,28 @@ export async function GET(request: NextRequest) {
           amount: hazAllow,
         })
       }
+
+      if (diligenceAllow > 0) {
+        explain.diligenceAllow.push({
+          reason: '근면수당',
+          detail: '해당 월 휴가 미사용(유급·무급 승인 건 포함), 지각·조퇴·결석 없음',
+          amount: diligenceAllow,
+        })
+      } else if (diligenceCfg > 0 && !isDirectorRole && workDays > 0) {
+        const missReason = leaveEvents.length > 0
+          ? '승인 휴가 사용(유급·무급 포함)'
+          : unpaidLeaveDays > 0 || absenceDays > 0
+            ? '무급휴가 또는 결석'
+            : lateMin > 0 || earlyMin > 0 || lateDaysOver10 >= LATE_HALF_DAY_COUNT
+              ? '지각·조퇴 또는 반차 공제 대상'
+              : '조건 미충족'
+        explain.diligenceAllow.push({
+          reason: '근면수당 미지급',
+          detail: missReason,
+          amount: 0,
+        })
+      }
+
       if (birthBonus > 0 && birth) {
         const mm = String(birth.getMonth() + 1).padStart(2, '0')
         const dd = String(birth.getDate()).padStart(2, '0')
@@ -1067,7 +1155,9 @@ export async function GET(request: NextRequest) {
 
       explain.sso.push({
         reason: 'SSO(사회보험) 공제',
-        detail: `산정기준 ${fmtMoney(grossForSso)} × 5% (연도 상한 적용)`,
+        detail: ssoExempt
+          ? '인사 설정: SSO 공제 제외 (미가입 등)'
+          : `기본급 기준 ${fmtMoney(ssoBase)} × 5% (연도 상한 적용)`,
         amount: sso,
       })
 
@@ -1081,6 +1171,7 @@ export async function GET(request: NextRequest) {
         salary,
         posAllow: posAllowAmount,
         hazAllow,
+        diligenceAllow,
         birthBonus,
         holidayPay,
         holidayWorkDays,

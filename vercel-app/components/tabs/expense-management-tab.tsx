@@ -37,7 +37,6 @@ import {
   getBankAccounts,
   getExpensePaymentPlan,
   getUnlinkedBankWithdrawals,
-  getVendorsForPurchase,
   translateTexts,
   type AccountSubjectItem,
   type BankAccount,
@@ -104,13 +103,11 @@ export function ExpenseManagementTab() {
   const [rejectingAll, setRejectingAll] = React.useState(false)
   const [cleaningNoStore, setCleaningNoStore] = React.useState(false)
   const [attachmentPreview, setAttachmentPreview] = React.useState<{ urls: string[]; title: string } | null>(null)
-  const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
   React.useEffect(() => {
-    getVendorsForPurchase().catch(() => []).then(setVendors)
     getAccountSubjects({ excludeHeaders: true }).catch(() => []).then(setSubjects)
   }, [])
 
@@ -645,12 +642,12 @@ export function ExpenseManagementTab() {
                 <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
               ) : (
                 <div className="overflow-x-auto rounded-md border border-border/60">
-                  <table className="w-full min-w-[920px] text-sm">
+                  <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
                         <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="min-w-[80px] max-w-[112px] w-[112px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
+                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
                         <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
                         <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
@@ -678,7 +675,7 @@ export function ExpenseManagementTab() {
                                     <>
                                       <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                       <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                      <td className="py-2 px-2 align-top text-xs leading-snug min-w-[80px] max-w-[112px] w-[112px] break-words" title={`${r.payeeName}${codeLabel}`}>{r.payeeName}{codeLabel}</td>
+                                      <td className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={`${r.payeeName}${codeLabel}`}>{r.payeeName}{codeLabel}</td>
                                     </>
                                   )
                                 })()}
@@ -935,12 +932,12 @@ export function ExpenseManagementTab() {
                 <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 물류 지출 지급예정이 없습니다."}</p>
               ) : (
                 <div className="overflow-x-auto rounded-md border border-border/60">
-                  <table className="w-full min-w-[920px] text-sm">
+                  <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
                         <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="min-w-[80px] max-w-[112px] w-[112px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
+                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
                         <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
                         <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
@@ -965,7 +962,7 @@ export function ExpenseManagementTab() {
                                 <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                 <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
                                 <td
-                                  className="py-2 px-2 align-top text-xs leading-snug min-w-[80px] max-w-[112px] w-[112px] break-words"
+                                  className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words"
                                   title={r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}
                                 >
                                   {r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}

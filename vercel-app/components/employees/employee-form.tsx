@@ -51,11 +51,14 @@ export interface EmployeeFormData {
   idCardPhoto: string
   taxId: string
   ssoNumber: string
+  /** 급여 계산 시 SSO 공제 제외 (미가입 등) */
+  ssoExempt: boolean
   address: string
   bankName: string
   accountNumber: string
   positionAllowance: number
   riskAllowance: number
+  attendanceAllowance: number
   grade: string
   photo: string
   /** 가맹점주 추가 매장 (대표 store 제외) */
@@ -83,11 +86,13 @@ const emptyForm: EmployeeFormData = {
   idCardPhoto: "",
   taxId: "",
   ssoNumber: "",
+  ssoExempt: false,
   address: "",
   bankName: "",
   accountNumber: "",
   positionAllowance: 0,
   riskAllowance: 0,
+  attendanceAllowance: 500,
   grade: "",
   photo: "",
   extraStores: [],
@@ -134,7 +139,7 @@ export function EmployeeForm({
   const t = useT(lang)
   const idCardInputRef = React.useRef<HTMLInputElement>(null)
   const photoInputRef = React.useRef<HTMLInputElement>(null)
-  const update = (k: keyof EmployeeFormData, v: string | number) => {
+  const update = (k: keyof EmployeeFormData, v: string | number | boolean) => {
     onChange({ ...form, [k]: v })
   }
 
@@ -546,6 +551,18 @@ export function EmployeeForm({
                   placeholder={t("emp_sso_number")}
                 />
               </div>
+              <div className="flex items-start gap-2 pt-1">
+                <Checkbox
+                  id="emp-sso-exempt"
+                  checked={form.ssoExempt}
+                  onCheckedChange={(c) => update("ssoExempt", c === true)}
+                  className="mt-0.5"
+                />
+                <label htmlFor="emp-sso-exempt" className="text-xs leading-snug cursor-pointer">
+                  <span className="font-semibold block">{t("emp_sso_exempt_label")}</span>
+                  <span className="text-muted-foreground">{t("emp_sso_exempt_hint")}</span>
+                </label>
+              </div>
             </div>
           </div>
           </AccordionContent>
@@ -645,6 +662,19 @@ export function EmployeeForm({
             className="h-8 text-xs"
           />
           <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_risk_allowance_hint")}</p>
+        </div>
+        <div>
+          <label className="text-xs font-semibold block mb-1">{t("emp_attendance_allowance")}</label>
+          <Input
+            type="number"
+            min={0}
+            value={form.attendanceAllowance || ""}
+            onChange={(e) =>
+              update("attendanceAllowance", e.target.value ? Number(e.target.value) : 0)
+            }
+            className="h-8 text-xs"
+          />
+          <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_attendance_allowance_hint")}</p>
         </div>
           </div>
           </AccordionContent>

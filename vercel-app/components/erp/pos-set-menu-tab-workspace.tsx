@@ -61,6 +61,9 @@ function isChickenDefaultOption(name: string | undefined): boolean {
   return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
 }
 
+/** 세트·시뮬 드롭다운: 숨긴 S 기본과 구분하기 위한 Select value */
+const CHICKEN_BASE_SELECT_VALUE = "__pos_chicken_s_default__"
+
 /** 주문·프로모 공통 배달앱 코드 (POS 라벨 인식과 동일: grab / lineman / shopee) */
 const DEFAULT_PICKER_DELIVERY_APPS = [
   { code: "grab", nameKey: "posDeliveryAppGrab" as const },
@@ -172,6 +175,13 @@ export function PosSetMenuTabWorkspace({
   const [savingPromo, setSavingPromo] = React.useState(false)
   const [savingSet, setSavingSet] = React.useState(false)
   const [loadingEdit, setLoadingEdit] = React.useState(false)
+
+  /** editPromoId가 null로 유지되는 동안 promos/menus 갱신마다 줄을 비우지 않기 위함 */
+  const prevEditPromoIdForEffectRef = React.useRef<string | null | undefined>(undefined)
+  /** 같은 프로모를 이미 폼+줄에 반영했으면 promos 목록만 바뀐 경우 API 재조회·줄 덮어쓰기 생략 */
+  const lastHydratedPromoIdRef = React.useRef<string | null>(null)
+  /** 번들 마스터 저장 직후 DB items는 아직 비어 있으므로 빈 배열로 줄을 덮어쓰지 않음 */
+  const preserveLinesAfterMasterSaveRef = React.useRef<string | null>(null)
 
   const [pickMain, setPickMain] = React.useState("all")
   const [pickSub, setPickSub] = React.useState("all")
@@ -455,6 +465,7 @@ export function PosSetMenuTabWorkspace({
 
   const salesSetCount = Math.max(0, Number(salesSetCountStr.replace(/,/g, "")) || 0)
   const projectedProfitHall = salesSetCount > 0 ? economics.marginBaht * salesSetCount : null
+  const projectedProfitDelivery = salesSetCount > 0 ? economics.marginBahtDel * salesSetCount : null
 
   const activePriceAnalysis: "hall" | "delivery" =
     showPricingHall && showPricingDelivery
@@ -492,7 +503,9 @@ export function PosSetMenuTabWorkspace({
   )
 
   const parseNum = React.useCallback((v: string | undefined) => {
-    const n = Number(String(v ?? "").replace(/,/g, "").trim())
+    const s = String(v ?? "").replace(/,/g, "").trim()
+    if (s === "") return null
+    const n = Number(s)
     return Number.isFinite(n) ? n : null
   }, [])
 
@@ -608,37 +621,52 @@ export function PosSetMenuTabWorkspace({
   )
 
   React.useEffect(() => {
+    const prevId = prevEditPromoIdForEffectRef.current
+    const idChanged = prevId !== editPromoId
+    prevEditPromoIdForEffectRef.current = editPromoId
+
     if (!editPromoId) {
-      const base = emptyForm()
-      setForm(fixedCid ? { ...base, marketingCampaignId: fixedCid } : base)
-      setLines([])
-      setDiscountPctStr("")
-      setDiscountBahtStr("")
+      lastHydratedPromoIdRef.current = null
+      if (idChanged && prevId !== undefined && prevId !== null) {
+        const base = emptyForm()
+        setForm(fixedCid ? { ...base, marketingCampaignId: fixedCid } : base)
+        setLines([])
+        setDiscountPctStr("")
+        setDiscountBahtStr("")
+      }
       setLoadingEdit(false)
       return
     }
+
+    const promo = promos.find((p) => String(p.id) === String(editPromoId))
+    const alreadyHydrated = lastHydratedPromoIdRef.current === editPromoId && !!promo
+    if (alreadyHydrated) {
+      setLoadingEdit(false)
+      return
+    }
+
     let cancelled = false
     setLoadingEdit(true)
     void (async () => {
       try {
-        const promo = promos.find((p) => String(p.id) === String(editPromoId))
+        const promoRow = promos.find((p) => String(p.id) === String(editPromoId))
+        if (cancelled) return
+        if (!promoRow) return
         const items = await getPosPromoItems({ promoId: editPromoId }).catch(() => [])
         if (cancelled) return
-        // 저장 직후 부모 목록(getPosPromos)이 아직 갱신 전이면 promo가 없다. 폼/줄을 비우면 우측「저장된 세트」키가 사라진다.
-        if (!promo) return
         setForm({
-          marketingCampaignId: promo?.marketingCampaignId?.trim() ?? "",
-          code: promo?.code ?? "",
-          name: promo?.name ?? "",
-          category: promo?.category?.trim() || PROMOTION_DEFAULT_SUBCATEGORIES[0],
-          price: promo != null ? String(promo.price) : "",
-          priceDelivery: promo?.priceDelivery != null ? String(promo.priceDelivery) : "",
-          vatIncluded: promo?.vatIncluded !== false,
-          isActive: promo?.isActive !== false,
-          channelHall: promo?.channelHall !== false,
-          channelTakeout: promo?.channelTakeout !== false,
-          channelDelivery: promo?.channelDelivery !== false,
-          deliveryAppCodes: normalizeDeliveryAppCodesList(promo?.deliveryAppCodes ?? null),
+          marketingCampaignId: promoRow.marketingCampaignId?.trim() ?? "",
+          code: promoRow.code ?? "",
+          name: promoRow.name ?? "",
+          category: promoRow.category?.trim() || PROMOTION_DEFAULT_SUBCATEGORIES[0],
+          price: String(promoRow.price),
+          priceDelivery: promoRow.priceDelivery != null ? String(promoRow.priceDelivery) : "",
+          vatIncluded: promoRow.vatIncluded !== false,
+          isActive: promoRow.isActive !== false,
+          channelHall: promoRow.channelHall !== false,
+          channelTakeout: promoRow.channelTakeout !== false,
+          channelDelivery: promoRow.channelDelivery !== false,
+          deliveryAppCodes: normalizeDeliveryAppCodesList(promoRow.deliveryAppCodes ?? null),
         })
         const nextLines: ComposerLine[] = (items || []).map((it) => {
           const menu = menus.find((m) => String(m.id) === String(it.menuId))
@@ -654,9 +682,17 @@ export function PosSetMenuTabWorkspace({
             lineSalePrice: "",
           }
         })
-        setLines(nextLines)
+        const preserveLocalCompose =
+          preserveLinesAfterMasterSaveRef.current != null &&
+          preserveLinesAfterMasterSaveRef.current === String(editPromoId)
+        if (preserveLocalCompose) {
+          preserveLinesAfterMasterSaveRef.current = null
+        } else {
+          setLines(nextLines)
+        }
         setDiscountPctStr("")
         setDiscountBahtStr("")
+        lastHydratedPromoIdRef.current = editPromoId
       } finally {
         if (!cancelled) setLoadingEdit(false)
       }
@@ -713,6 +749,8 @@ export function PosSetMenuTabWorkspace({
   const groupSelectValue = form.name.trim() ? form.name.trim() : "__new__"
 
   const applyPromoGroupPick = React.useCallback((raw: string) => {
+    preserveLinesAfterMasterSaveRef.current = null
+    lastHydratedPromoIdRef.current = null
     if (raw === "__new__") {
       setForm((p) => ({ ...p, name: "", code: "" }))
       setEditPromoId(null)
@@ -867,11 +905,14 @@ export function PosSetMenuTabWorkspace({
   React.useEffect(() => {
     const id = focusPromoId?.trim()
     if (!id) return
+    preserveLinesAfterMasterSaveRef.current = null
     setEditPromoId(id)
     onFocusPromoConsumed?.()
   }, [focusPromoId, onFocusPromoConsumed])
 
   const startNew = () => {
+    preserveLinesAfterMasterSaveRef.current = null
+    lastHydratedPromoIdRef.current = null
     setEditPromoId(null)
     const base = emptyForm()
     setForm(fixedCid ? { ...base, marketingCampaignId: fixedCid } : base)
@@ -885,6 +926,8 @@ export function PosSetMenuTabWorkspace({
 
   /** 같은 프로모션명·채널·가격 등은 유지하고 새 세트(새 코드)만 구성 */
   const startNewSetKeepPromoMeta = () => {
+    preserveLinesAfterMasterSaveRef.current = null
+    lastHydratedPromoIdRef.current = null
     setEditPromoId(null)
     setLines([])
     setPickMenuId("")
@@ -965,7 +1008,8 @@ export function PosSetMenuTabWorkspace({
 
   const finishPickMultiOption = (optionId: string) => {
     if (!pickMenuId.trim()) return
-    appendPickLine(pickMenuId, optionId, pickQty)
+    const oid = optionId === CHICKEN_BASE_SELECT_VALUE ? null : optionId
+    appendPickLine(pickMenuId, oid, pickQty)
     setPickMenuId("")
     setPickQty("1")
   }
@@ -1115,7 +1159,12 @@ export function PosSetMenuTabWorkspace({
         await appAlert(t("msg_save_fail_detail"))
         return
       }
-      setEditPromoId(String(pid))
+      const pidStr = String(pid)
+      if (lines.length > 0) {
+        preserveLinesAfterMasterSaveRef.current = pidStr
+        lastHydratedPromoIdRef.current = null
+      }
+      setEditPromoId(pidStr)
       await appAlert(t("posSetTabPromoSaved"))
       onAfterSave()
     } catch (e) {
@@ -1140,6 +1189,7 @@ export function PosSetMenuTabWorkspace({
     try {
       const itemsOk = await replacePromoItems(editPromoId)
       if (!itemsOk) return
+      lastHydratedPromoIdRef.current = null
       void refreshSavedSetComposePreview(editPromoId)
       await appAlert(t("posSetTabSetCompositionSaved"))
       onAfterSave()
@@ -1349,6 +1399,11 @@ export function PosSetMenuTabWorkspace({
                     <SelectValue placeholder={t("posPromoSelectOption")} />
                   </SelectTrigger>
                   <SelectContent>
+                    {menuById[pickMenuId] && isChickenMenu(menuById[pickMenuId]?.code) ? (
+                      <SelectItem value={CHICKEN_BASE_SELECT_VALUE}>
+                        {t("posIngredientScopeBaseChicken") || t("posOptionDefault")}
+                      </SelectItem>
+                    ) : null}
                     {pickOptionsFiltered.map((o) => (
                       <SelectItem key={o.id} value={String(o.id)}>
                         {optionPartLabel(o.name)}
@@ -1913,10 +1968,16 @@ export function PosSetMenuTabWorkspace({
               {t("posMenuVatIncluded")}
             </label>
 
-            {projectedProfitHall != null && salesSetCount > 0 && showPricingHall ? (
+            {projectedProfitHall != null && salesSetCount > 0 && showPricingHall && activePriceAnalysis === "hall" ? (
               <div className="flex justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-semibold">
                 <span className="text-muted-foreground">{t("posSetTabProjectedProfit")}</span>
                 <span className="font-mono text-primary tabular-nums">฿{Math.round(projectedProfitHall).toLocaleString()}</span>
+              </div>
+            ) : null}
+            {projectedProfitDelivery != null && salesSetCount > 0 && showPricingDelivery && activePriceAnalysis === "delivery" ? (
+              <div className="flex justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-semibold">
+                <span className="text-muted-foreground">{t("posSetTabProjectedProfitDelivery")}</span>
+                <span className="font-mono text-primary tabular-nums">฿{Math.round(projectedProfitDelivery).toLocaleString()}</span>
               </div>
             ) : null}
 
@@ -2015,7 +2076,11 @@ export function PosSetMenuTabWorkspace({
                     <button
                       type="button"
                       disabled={!pid || promosLoading}
-                      onClick={() => pid && setEditPromoId(pid)}
+                      onClick={() => {
+                        if (!pid) return
+                        preserveLinesAfterMasterSaveRef.current = null
+                        setEditPromoId(pid)
+                      }}
                       className={cn(
                         "flex w-full flex-col gap-2.5 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
                         active

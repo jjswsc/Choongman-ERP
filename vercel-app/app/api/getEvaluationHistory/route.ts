@@ -105,7 +105,7 @@ export async function GET(req: Request) {
       type === 'All' ||
       type === ''
     ) {
-      const [kitchenList, serviceList] = await Promise.all([
+      const [kitchenList, serviceList, managerList] = await Promise.all([
         getOne(
           'kitchen',
           startStr,
@@ -122,8 +122,16 @@ export async function GET(req: Request) {
           filterEmployee,
           filterEvaluator
         ),
+        getOne(
+          'manager',
+          startStr,
+          endStr,
+          filterStore,
+          filterEmployee,
+          filterEvaluator
+        ),
       ])
-      list = [...kitchenList, ...serviceList]
+      list = [...kitchenList, ...serviceList, ...managerList]
       list.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       )

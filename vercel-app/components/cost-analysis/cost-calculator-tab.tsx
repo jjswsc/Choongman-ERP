@@ -1,7 +1,7 @@
 "use client"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo, useEffect, useReducer } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -117,7 +117,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   const [foodItems, setFoodItems] = useState<RecipeItem[]>(emptyFoodRecipe)
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(emptyPackagingRecipe)
   /** 재료·배합 API 로드 완료 시 재렌더 (배합 원가 반영) */
-  const [runtimeReady, setRuntimeReady] = useState(false)
+  const [, bumpAfterRuntimeLoad] = useReducer((n: number) => n + 1, 0)
   const [sauceRowsFull, setSauceRowsFull] = useState<SauceRow[]>([])
 
   const storeUseSauceRowsForDialog = useMemo(
@@ -128,11 +128,16 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     [sauceRowsFull]
   )
 
+  const refreshApiItemsForCostRuntime = useCallback(async () => {
+    const items = await getAdminItems()
+    setRuntimeApiItems(Array.isArray(items) ? items : [])
+  }, [])
+
   useEffect(() => {
     let done = 0
     const check = () => {
       done += 1
-      if (done >= 2) setRuntimeReady(true)
+      if (done >= 2) bumpAfterRuntimeLoad()
     }
     getAdminItems()
       .then((items) => {
@@ -492,6 +497,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
               costTextDark
               addSauceDialogStoreUseRows={storeUseSauceRowsForDialog}
               ingredientPickerHideSauceUsageKinds={["store_use"]}
+              refreshApiItemsBeforeAddDialog={refreshApiItemsForCostRuntime}
             />
             <IngredientTable
               title={t("posCostPackagingDelivery")}
@@ -500,6 +506,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
               onItemsChange={setPackagingItems}
               addDialogRequireStandardUnits={false}
               costTextDark
+              refreshApiItemsBeforeAddDialog={refreshApiItemsForCostRuntime}
             />
           </div>
         </div>

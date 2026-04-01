@@ -118,7 +118,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
         try {
           const data = typeof detailRow.jsonData === "string" ? JSON.parse(detailRow.jsonData) : detailRow.jsonData
           if (data?.sections) {
-            for (const key of ["menu", "cost", "hygiene", "attitude"]) {
+            for (const key of ["menu", "cost", "hygiene", "attitude", "manager"]) {
               const arr = data.sections[key]
               if (Array.isArray(arr)) {
                 for (const item of arr) {
@@ -170,6 +170,9 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
     위생: t("eval_main_hygiene"),
     태도: t("eval_main_attitude"),
     서비스: t("eval_section_service"),
+    매니저: t("eval_section_manager"),
+    Manager: t("eval_section_manager"),
+    리더십: t("eval_section_leadership"),
   }
   const getMainTitle = (main: string) => mainTitleMap[main] || getTrans(main) || main
 
@@ -182,7 +185,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
           : detailRow.jsonData
       if (!data?.sections) return null
 
-      const sectionKeys = ["menu", "cost", "hygiene", "attitude"]
+      const sectionKeys = ["menu", "cost", "hygiene", "attitude", "manager"]
       const rows: { main: string; name: string; score: string; notes: string }[] =
         []
       for (const key of sectionKeys) {
@@ -225,6 +228,9 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                 </SelectItem>
                 <SelectItem value="service">
                   {t("eval_list_type_service")}
+                </SelectItem>
+                <SelectItem value="manager">
+                  {t("eval_list_type_manager")}
                 </SelectItem>
               </SelectContent>
             </Select>

@@ -88,9 +88,6 @@ export async function POST(req: NextRequest) {
     )
   } catch (e) {
     console.error('markPosOrderItemServed:', e)
-    return NextResponse.json(
-      { success: false, message: String(e) },
-      { headers }
-    )
+    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
   }
 }

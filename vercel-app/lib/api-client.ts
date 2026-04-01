@@ -23,6 +23,7 @@ import {
   getMyOrderHistoryWithCache,
   getMyUsageHistoryWithCache,
   invalidateAppDataCache as invalidateAppDataCacheOffline,
+  invalidateAdminItemsCache,
 } from './offline/erp-offline'
 import { fetchPosCatalogCached } from './offline/pos-catalog-offline'
 import { readAutoTranslateEnabled } from './auto-translate'
@@ -32,7 +33,11 @@ export { apiFetchWithOffline }
 export { loginCheck, changePassword } from './api/auth'
 export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
-export { invalidateBankTransactionsListCache, invalidatePurchaseOrdersListCache } from './offline/erp-offline'
+export {
+  invalidateBankTransactionsListCache,
+  invalidatePurchaseOrdersListCache,
+  invalidateAdminItemsCache,
+} from './offline/erp-offline'
 export type { MarketingCampaignPhasePeriod } from './marketing-campaign-periods'
 
 /** 페이지네이션 목록 API 공통 응답 */
@@ -127,6 +132,7 @@ export interface MyPayrollData {
   salary: number
   pos_allow: number
   haz_allow: number
+  diligence_allow: number
   birth_bonus: number
   holiday_pay: number
   spl_bonus: number
@@ -3571,7 +3577,9 @@ export async function saveItem(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = (await res.json()) as { success: boolean; message?: string }
+  if (json?.success) await invalidateAdminItemsCache().catch(() => {})
+  return json
 }
 
 export async function deleteItem(params: { code: string }) {
@@ -3580,7 +3588,9 @@ export async function deleteItem(params: { code: string }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = (await res.json()) as { success: boolean; message?: string }
+  if (json?.success) await invalidateAdminItemsCache().catch(() => {})
+  return json
 }
 
 /** 가격 이력 조회 */
@@ -7046,11 +7056,15 @@ export interface AdminEmployeeItem {
   idCardPhoto: string
   taxId: string
   ssoNumber: string
+  /** true면 급여 SSO 공제 0 (미가입·서류 미비 등) */
+  ssoExempt?: boolean
   address: string
   bankName: string
   accountNumber: string
   positionAllowance: number
   riskAllowance: number
+  /** 근면수당(바트/월). 0=미적용. 비어 있으면 서버/폼 기본 500 */
+  attendanceAllowance: number
   grade: string
   photo: string
   /** 가맹점주 추가 매장 (대표 store 제외) */
@@ -7154,9 +7168,9 @@ export async function saveStoreJobHeadcount(params: { store: string; rows: { job
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-/** 평가 항목 조회 (kitchen | service) */
+/** 평가 항목 조회 (kitchen | service | manager) */
 export async function getEvaluationItems(params: {
-  type: 'kitchen' | 'service'
+  type: 'kitchen' | 'service' | 'manager'
   activeOnly?: boolean
 }) {
   const q = new URLSearchParams({
@@ -7283,7 +7297,7 @@ export async function summarizeEvaluationAnalytics(params: {
 
 /** 평가 항목 일괄 수정 */
 export async function updateEvaluationItems(params: {
-  type: 'kitchen' | 'service'
+  type: 'kitchen' | 'service' | 'manager'
   updates: { id: string | number; main?: string; sub?: string; name?: string; use?: boolean; sort_order?: number }[]
 }) {
   const res = await apiFetchWithOffline('/api/updateEvaluationItems', {
@@ -7303,7 +7317,7 @@ export async function updateEvaluationItems(params: {
 
 /** 평가 항목 추가 */
 export async function addEvaluationItem(params: {
-  type: 'kitchen' | 'service'
+  type: 'kitchen' | 'service' | 'manager'
   mainCat?: string
   subCat?: string
   itemName?: string
@@ -7322,7 +7336,7 @@ export async function addEvaluationItem(params: {
 
 /** 평가 항목 삭제 */
 export async function deleteEvaluationItem(params: {
-  type: 'kitchen' | 'service'
+  type: 'kitchen' | 'service' | 'manager'
   itemId: string | number
 }) {
   const res = await apiFetchWithOffline('/api/deleteEvaluationItem', {
@@ -7342,7 +7356,7 @@ export async function deleteEvaluationItem(params: {
 
 /** 평가 결과 저장 (오피스 직원 이상만 가능) */
 export async function saveEvaluationResult(params: {
-  type: 'kitchen' | 'service'
+  type: 'kitchen' | 'service' | 'manager'
   id?: string
   date: string
   store: string
@@ -7878,11 +7892,14 @@ export async function getVendorsForSales() {
 export async function getItemsByVendor(
   vendorCode: string,
   vendorName?: string,
-  outboundLocation?: string
+  outboundLocation?: string,
+  /** 출고지 표시명 — 품목에 code 대신 name이 저장된 경우 매칭용 */
+  outboundLocationName?: string
 ) {
   const q = new URLSearchParams({ vendorCode })
   if (vendorName?.trim()) q.set('vendorName', vendorName.trim())
   if (outboundLocation?.trim()) q.set('outboundLocation', outboundLocation.trim())
+  if (outboundLocationName?.trim()) q.set('outboundLocationName', outboundLocationName.trim())
   const res = await apiFetchWithOffline(`/api/getItemsByVendor?${q}`)
   return res.json() as Promise<ItemByVendor[]>
 }

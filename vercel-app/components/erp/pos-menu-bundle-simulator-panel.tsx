@@ -220,7 +220,7 @@ export function PosMenuBundleSimulatorPanel({
     const optsRaw = optionsByMenuId[menuId] || []
     const opts = isChickenMenu(menu.code) ? optsRaw.filter((o) => !isChickenDefaultOption(o.name)) : optsRaw
     const hasOptions = opts.length > 0
-    if (hasOptions && !optionId) {
+    if (hasOptions && !optionId && !isChickenMenu(menu.code)) {
       await appAlert(t("posPromoSelectOption"))
       return
     }
@@ -247,13 +247,13 @@ export function PosMenuBundleSimulatorPanel({
     setPickQty("1")
   }
 
-  const pickOptions = pickMenuId ? optionsByMenuId[pickMenuId] || [] : []
   const pickOptionsFiltered = React.useMemo(() => {
+    const pickOptions = pickMenuId ? optionsByMenuId[pickMenuId] || [] : []
     const menu = menuById[pickMenuId]
     if (!menu) return pickOptions
     if (isChickenMenu(menu.code)) return pickOptions.filter((o) => !isChickenDefaultOption(o.name))
     return pickOptions
-  }, [pickMenuId, pickOptions, menuById])
+  }, [pickMenuId, optionsByMenuId, menuById])
 
   return (
     <div className="mt-6 rounded-xl border border-primary/15 bg-card shadow-sm overflow-hidden">
@@ -359,7 +359,11 @@ export function PosMenuBundleSimulatorPanel({
                     <SelectValue placeholder={t("posPromoSelectOption")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_">-</SelectItem>
+                    <SelectItem value="_">
+                      {isChickenMenu(menuById[pickMenuId]?.code)
+                        ? t("posIngredientScopeBaseChicken") || t("posOptionDefault")
+                        : t("posPromoSelectOption")}
+                    </SelectItem>
                     {pickOptionsFiltered.map((o) => (
                       <SelectItem key={o.id} value={String(o.id)}>
                         {optionPartLabel(o.name)}

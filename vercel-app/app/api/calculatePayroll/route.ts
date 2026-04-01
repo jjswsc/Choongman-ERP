@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
-import { calcSSO, clockOutCountsForPayroll, grossWageBeforeSSO, otMinutesForPayroll } from '@/lib/payroll-utils'
+import {
+  calcSSO,
+  clockOutCountsForPayroll,
+  isEmployeeSsoExemptFlag,
+  otMinutesForPayroll,
+  ssoContributionBaseWage,
+} from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -34,7 +40,9 @@ async function getPublicHolidays(year: number): Promise<{ date: string; name: st
         name: String(r.name || '').trim() || '-',
       })).filter((h) => h.date)
     }
-  } catch (_) {}
+  } catch {
+    /* fallback below */
+  }
   const fixed: { date: string; name: string }[] = [
     { date: `${year}-01-01`, name: "New Year's Day" },
     { date: `${year}-04-06`, name: 'Chakri Day' },
@@ -57,7 +65,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   const firstDay = new Date(monthStr + '-01T12:00:00')
   const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
   const endStr = lastDay.toISOString().slice(0, 10)
-  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+  const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
   const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
   const attRows = (await supabaseSelectFilterAllPages(
@@ -219,17 +227,33 @@ export async function GET(request: NextRequest) {
       birth?: string
       join_date?: string
       role?: string
+      sso_exempt?: boolean | null
     }
-    const empSelect = 'store,name,job,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role'
+    const empSel = 'store,name,job,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role,sso_exempt'
+    const empSelFallback = empSel.replace(',sso_exempt', '')
     let empRows: EmpRow[] = []
-    if (storeFilter) {
-      empRows = (await supabaseSelectFilter(
-        'employees',
-        `store=ilike.${encodeURIComponent(storeFilter)}`,
-        { order: 'id.asc', select: empSelect }
-      )) as EmpRow[]
-    } else {
-      empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelect })) as EmpRow[]
+    try {
+      if (storeFilter) {
+        empRows = (await supabaseSelectFilter(
+          'employees',
+          `store=ilike.${encodeURIComponent(storeFilter)}`,
+          { order: 'id.asc', select: empSel }
+        )) as EmpRow[]
+      } else {
+        empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSel })) as EmpRow[]
+      }
+    } catch (fetchErr) {
+      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+      if (!/sso_exempt|column/i.test(msg)) throw fetchErr
+      if (storeFilter) {
+        empRows = (await supabaseSelectFilter(
+          'employees',
+          `store=ilike.${encodeURIComponent(storeFilter)}`,
+          { order: 'id.asc', select: empSelFallback }
+        )) as EmpRow[]
+      } else {
+        empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelFallback })) as EmpRow[]
+      }
     }
 
     const attSummary = await getAttendanceSummary(monthStr)
@@ -326,17 +350,9 @@ export async function GET(request: NextRequest) {
       }
 
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
-      const grossForSso = grossWageBeforeSSO({
-        salary,
-        posAllow,
-        hazAllow,
-        birthBonus,
-        holidayPay,
-        otAmt,
-        lateDed,
-        earlyDed,
-      })
-      const sso = calcSSO(grossForSso, payrollYear)
+      const ssoExempt = isEmployeeSsoExemptFlag(e.sso_exempt)
+      const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
+      const sso = ssoExempt ? 0 : calcSSO(ssoBase, payrollYear)
       const deduct = lateDed + earlyDed + sso
       const netPay = Math.max(0, income - deduct)
 

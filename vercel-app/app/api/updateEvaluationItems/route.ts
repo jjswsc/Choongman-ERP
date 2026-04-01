@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { normalizeEvalItemType } from '@/lib/eval-item-type'
 
 /** 평가 항목 일괄 수정 (name, use_flag) */
 export async function POST(req: Request) {
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const typeVal = type === 'service' ? 'service' : 'kitchen'
+    const typeVal = normalizeEvalItemType(type)
 
     for (const up of updates) {
       const id = up.id != null ? String(up.id) : ''
