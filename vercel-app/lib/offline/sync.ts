@@ -14,6 +14,7 @@ import {
   updateQueueItem,
   type PendingRequest,
 } from './queue'
+import { registerQueuedSavePosOrderSyncedServerId } from './pos-queued-sync-print-suppress'
 
 export type SyncResult = { synced: number; failed: number }
 export type SyncListener = (result: SyncResult) => void
@@ -116,6 +117,23 @@ export async function syncPending(): Promise<SyncResult> {
       }
 
       reportNetworkSuccess()
+      if (item.api === '/api/savePosOrder') {
+        try {
+          const data = (await res.json()) as { orderId?: unknown }
+          const oid = Number(data?.orderId)
+          if (Number.isFinite(oid) && oid > 0) {
+            registerQueuedSavePosOrderSyncedServerId(oid)
+          }
+        } catch {
+          /* 본문 없음·JSON 아님 무시 */
+        }
+      } else {
+        try {
+          await res.text()
+        } catch {
+          /* ignore */
+        }
+      }
       await removeFromQueue(item.id)
       synced++
     } catch (e) {

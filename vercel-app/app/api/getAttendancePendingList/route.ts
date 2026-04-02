@@ -36,7 +36,18 @@ export async function GET(request: NextRequest) {
   if (isManager && userStore) store = userStore
 
   try {
-    type Row = { id: number; log_at?: string; store_name?: string; name?: string; log_type?: string; status?: string; approved?: string; late_min?: number; ot_min?: number }
+    type Row = {
+      id: number
+      log_at?: string
+      store_name?: string
+      name?: string
+      employee_id?: number | null
+      log_type?: string
+      status?: string
+      approved?: string
+      late_min?: number
+      ot_min?: number
+    }
     let rows: Row[] = []
 
     if (store && store !== 'All' && store !== '전체') {
@@ -44,26 +55,46 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('attendance_logs', filter, {
         order: 'log_at.desc',
         limit: 500,
-        select: 'id,log_at,store_name,name,log_type,status,approved,late_min,ot_min',
+        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min',
       })) as Row[]
     } else {
       const filter = 'approved=eq.대기'
       rows = (await supabaseSelectFilter('attendance_logs', filter, {
         order: 'log_at.desc',
         limit: 500,
-        select: 'id,log_at,store_name,name,log_type,status,approved,late_min,ot_min',
+        select: 'id,log_at,store_name,name,employee_id,log_type,status,approved,late_min,ot_min',
       })) as Row[]
     }
 
     const nickMap: Record<string, string> = {}
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'store,name,nick' })) as { store?: string; name?: string; nick?: string }[] | null
+    const nickById: Record<number, string> = {}
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'id,store,name,nick' })) as {
+      id?: number
+      store?: string
+      name?: string
+      nick?: string
+    }[] | null
     for (const e of empList || []) {
       const s = String(e.store || '').trim()
       const n = String(e.name || '').trim()
       if (s && n) nickMap[s + '|' + n] = String(e.nick || '').trim()
+      const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      if (eid > 0) nickById[eid] = String(e.nick || '').trim()
     }
 
-    const list: { id: number; log_at: string; store_name: string; name: string; nick?: string; log_type: string; status?: string; approved?: string; late_min?: number; ot_min?: number }[] = []
+    const list: {
+      id: number
+      log_at: string
+      store_name: string
+      name: string
+      employee_id?: number
+      nick?: string
+      log_type: string
+      status?: string
+      approved?: string
+      late_min?: number
+      ot_min?: number
+    }[] = []
 
     for (const r of rows || []) {
       const rowDate = toDateStrBangkok(r.log_at)
@@ -72,12 +103,14 @@ export async function GET(request: NextRequest) {
 
       const rowStore = String(r.store_name || '').trim()
       const rowName = String(r.name || '').trim()
+      const eid = r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
       list.push({
         id: r.id,
         log_at: toDisplayStr(r.log_at),
         store_name: rowStore,
         name: rowName,
-        nick: nickMap[rowStore + '|' + rowName] || '',
+        ...(eid > 0 ? { employee_id: eid } : {}),
+        nick: (eid > 0 ? nickById[eid] : '') || nickMap[rowStore + '|' + rowName] || '',
         log_type: String(r.log_type || '').trim(),
         status: r.status,
         approved: r.approved,

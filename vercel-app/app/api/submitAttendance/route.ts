@@ -82,20 +82,41 @@ export async function POST(request: NextRequest) {
     const bodyForValidation = { ...raw, storeName: raw.storeName || raw.store || '' }
     const validated = parseOr400(submitAttendanceSchema, bodyForValidation, headers)
     if (validated.errorResponse) return validated.errorResponse
-    const { storeName, name: empName, type: logType } = validated.parsed
+    const { storeName, name: empNameRaw, type: logType, employeeId } = validated.parsed
     const dataLat = validated.parsed.lat ?? raw.lat
     const dataLng = validated.parsed.lng ?? raw.lng
+    let empName = String(empNameRaw || '').trim()
+    const empId = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+    if (empId > 0) {
+      const empRows = (await supabaseSelectFilter(
+        'employees',
+        `id=eq.${empId}&store=ilike.${encodeURIComponent(storeName)}`,
+        { limit: 1, select: 'id,name' }
+      )) as { id?: number; name?: string }[]
+      const er = empRows?.[0]
+      if (!er) {
+        return NextResponse.json(
+          { success: false, message: '직원 정보를 확인할 수 없습니다. 다시 로그인 후 시도해 주세요.' },
+          { headers }
+        )
+      }
+      if (String(er.name || '').trim()) empName = String(er.name || '').trim()
+    }
 
     const todayStrVal = todayStr()
     const nowTime = new Date()
 
     const oncePerDayTypes = ['출근', '퇴근', '휴식시작', '휴식종료']
     if (oncePerDayTypes.includes(logType)) {
-      const logs = (await supabaseSelectFilter(
-        'attendance_logs',
-        `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
-        { order: 'log_at.desc', limit: 100, select: 'log_at,log_type' }
-      )) as { log_at?: string; log_type?: string }[]
+      const logFilter =
+        empId > 0
+          ? `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}`
+          : `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+      const logs = (await supabaseSelectFilter('attendance_logs', logFilter, {
+        order: 'log_at.desc',
+        limit: 100,
+        select: 'log_at,log_type',
+      })) as { log_at?: string; log_type?: string }[]
       const todayLogs = (logs || []).filter((r) => {
         const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
         return rowDate === todayStrVal
@@ -253,7 +274,10 @@ export async function POST(request: NextRequest) {
       planOut = '',
       planBS = '',
       planBE = ''
-    const scheduleFilter = `schedule_date=eq.${todayStrVal}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+    const scheduleFilter =
+      empId > 0
+        ? `schedule_date=eq.${todayStrVal}&store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}`
+        : `schedule_date=eq.${todayStrVal}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
     let schRows = (await supabaseSelectFilter(
       'schedules',
       scheduleFilter,
@@ -265,7 +289,10 @@ export async function POST(request: NextRequest) {
         d.setDate(d.getDate() + 1)
         return d.toISOString().slice(0, 10)
       })()
-      const prevDayFilter = `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+      const prevDayFilter =
+        empId > 0
+          ? `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}`
+          : `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
       schRows = (await supabaseSelectFilter('schedules', prevDayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
     }
     let usedYesterdaySchedule = false
@@ -276,7 +303,10 @@ export async function POST(request: NextRequest) {
         d.setUTCDate(d.getUTCDate() - 1)
         return d.toISOString().slice(0, 10)
       })()
-      const yesterdayFilter = `schedule_date=eq.${yesterday}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+      const yesterdayFilter =
+        empId > 0
+          ? `schedule_date=eq.${yesterday}&store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}`
+          : `schedule_date=eq.${yesterday}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
       schRows = (await supabaseSelectFilter('schedules', yesterdayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
       usedYesterdaySchedule = !!(schRows && schRows.length > 0)
     }
@@ -326,11 +356,13 @@ export async function POST(request: NextRequest) {
         }
       }
     } else if (logType === '휴식종료') {
-      const allLogs = (await supabaseSelectFilter(
-        'attendance_logs',
-        `name=ilike.${encodeURIComponent(empName)}`,
-        { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' }
-      )) as { log_at?: string; log_type?: string }[]
+      const allLogsFilter =
+        empId > 0 ? `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}` : `name=ilike.${encodeURIComponent(empName)}`
+      const allLogs = (await supabaseSelectFilter('attendance_logs', allLogsFilter, {
+        order: 'log_at.desc',
+        limit: 50,
+        select: 'log_at,log_type',
+      })) as { log_at?: string; log_type?: string }[]
       for (const r of allLogs || []) {
         const rowDate = r.log_at
           ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ })
@@ -362,7 +394,7 @@ export async function POST(request: NextRequest) {
 
     if (needManagerApproval) status = '위치미확인(승인대기)'
 
-    await supabaseInsert('attendance_logs', {
+    const payload: Record<string, unknown> = {
       log_at: nowTime.toISOString(),
       store_name: storeName,
       name: empName,
@@ -377,7 +409,19 @@ export async function POST(request: NextRequest) {
       reason: '',
       status,
       approved: '대기',
-    })
+    }
+    if (empId > 0) payload.employee_id = empId
+    try {
+      await supabaseInsert('attendance_logs', payload)
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (/employee_id|42703|column/i.test(em) && 'employee_id' in payload) {
+        const { employee_id: _eid, ...fallbackPayload } = payload
+        await supabaseInsert('attendance_logs', fallbackPayload)
+      } else {
+        throw e
+      }
+    }
 
     if (needManagerApproval) {
       return NextResponse.json(

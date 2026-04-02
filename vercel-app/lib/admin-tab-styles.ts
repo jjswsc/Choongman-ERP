@@ -2,6 +2,10 @@
 export const adminTabsRootCn =
   'w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm'
 
+/** 긴 세로 콘텐츠(주간 스케줄 등)가 잘리지 않게 — 페이지 스크롤로 이어지도록 overflow 숨김 제거 */
+export const adminTabsRootScrollableCn =
+  'w-full min-h-0 rounded-xl border border-border bg-card shadow-sm'
+
 export const adminTabsBarCn = 'border-b border-border bg-muted/25'
 
 export const adminTabsScrollCn =

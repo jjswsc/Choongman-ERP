@@ -133,8 +133,12 @@ export function HrTab() {
 
   const loadButtonState = useCallback(() => {
     if (!auth?.store || !auth?.user) return
-    getTodayAttendanceTypes({ storeName: auth.store, name: auth.user }).then(setTodayTypes)
-  }, [auth?.store, auth?.user])
+    getTodayAttendanceTypes({
+      storeName: auth.store,
+      name: auth.user,
+      ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+    }).then(setTodayTypes)
+  }, [auth?.store, auth?.user, auth?.employeeId])
 
   const loadTodayLog = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -151,17 +155,26 @@ export function HrTab() {
 
   const loadLeaveInfo = useCallback(() => {
     if (!auth?.store || !auth?.user) return
-    getMyLeaveInfo({ store: auth.store, name: auth.user }).then((r) => {
+    getMyLeaveInfo({
+      store: auth.store,
+      name: auth.user,
+      ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+    }).then((r) => {
       setLeaveStats(r.stats)
       setLeaveHistory(r.history)
     })
-  }, [auth?.store, auth?.user])
+  }, [auth?.store, auth?.user, auth?.employeeId])
 
   const fetchPayroll = useCallback(() => {
     if (!auth?.store || !auth?.user) return
     setPayrollLoading(true)
     Promise.all([
-      getMyPayroll({ store: auth.store, name: auth.user, month: payrollMonth }),
+      getMyPayroll({
+        store: auth.store,
+        name: auth.user,
+        month: payrollMonth,
+        ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+      }),
       getHeadOfficeInfo(),
     ])
       .then(([payRes, companyRes]) => {
@@ -209,6 +222,7 @@ export function HrTab() {
         type,
         lat,
         lng,
+        ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
       })
         .then(async (res) => {
           const isGpsPending = res.code === "ATT_GPS_PENDING"
@@ -265,6 +279,7 @@ export function HrTab() {
         type: leaveType,
         date: leaveDate,
         reason: leaveReason,
+        ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("leaveRequestSuccess"))

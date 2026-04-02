@@ -126,6 +126,8 @@ export interface MyPayrollData {
   month: string
   store: string
   name: string
+  employee_id?: number
+  employee_code?: string
   dept: string
   role: string
   companyName?: string
@@ -148,12 +150,16 @@ export async function getMyPayroll(params: {
   store: string
   name: string
   month: string
+  employeeId?: number
 }) {
   const q = new URLSearchParams({
     userStore: params.store,
     userName: params.name,
     month: params.month.slice(0, 7),
   })
+  if (params.employeeId != null && params.employeeId > 0) {
+    q.set('employeeId', String(params.employeeId))
+  }
   const res = await apiFetchWithOffline(`/api/getMyPayroll?${q}`)
   const json = await res.json()
   return {
@@ -566,11 +572,12 @@ export async function updateOrderCart(params: {
 }
 
 // ─── 인사 (HR) ───
-export async function getTodayAttendanceTypes(params: { storeName: string; name: string }) {
+export async function getTodayAttendanceTypes(params: { storeName: string; name: string; employeeId?: number }) {
   const q = new URLSearchParams({
     storeName: params.storeName,
     name: params.name,
   })
+  if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
   const res = await apiFetchWithOffline(`/api/getTodayAttendanceTypes?${q}`)
   return res.json() as Promise<string[]>
 }
@@ -589,6 +596,7 @@ export async function getAttendanceList(params: {
   endDate: string
   storeFilter: string
   employeeFilter: string
+  employeeId?: number
 }) {
   const q = new URLSearchParams({
     startDate: params.startDate,
@@ -596,6 +604,7 @@ export async function getAttendanceList(params: {
     storeFilter: params.storeFilter,
     employeeFilter: params.employeeFilter,
   })
+  if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
   const res = await apiFetchWithOffline(`/api/getAttendanceList?${q}`)
   return res.json() as Promise<AttendanceLogItem[]>
 }
@@ -606,6 +615,7 @@ export async function submitAttendance(params: {
   type: string
   lat: string | number
   lng: string | number
+  employeeId?: number
 }) {
   const res = await apiFetchWithOffline('/api/submitAttendance', {
     method: 'POST',
@@ -621,6 +631,7 @@ export async function requestLeave(params: {
   type: string
   date: string
   reason: string
+  employeeId?: number
 }) {
   const res = await apiFetchWithOffline('/api/requestLeave', {
     method: 'POST',
@@ -641,8 +652,11 @@ export interface LeaveHistoryItem {
   rejectReason?: string
 }
 
-export async function getMyLeaveInfo(params: { store: string; name: string }) {
-  const q = new URLSearchParams(params)
+export async function getMyLeaveInfo(params: { store: string; name: string; employeeId?: number }) {
+  const q = new URLSearchParams()
+  q.set('store', params.store)
+  q.set('name', params.name)
+  if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
   const res = await apiFetchWithOffline(`/api/getMyLeaveInfo?${q}`)
   return res.json() as Promise<{
     history: LeaveHistoryItem[]
@@ -688,7 +702,7 @@ export async function sendNotice(params: {
   targetRole: string
   targetPermissionGroup?: string | null
   sender: string
-  targetRecipients?: Array<{ store: string; name: string }>
+  targetRecipients?: Array<{ store: string; name: string; employeeId?: number }>
   userStore?: string
   userRole?: string
   attachments?: Array<{ name: string; mime: string; url: string }>
@@ -805,7 +819,19 @@ export async function getLeavePendingList(params: {
   if (params.dateFilterType) clean.dateFilterType = params.dateFilterType
   const q = new URLSearchParams(clean)
   const res = await apiFetchWithOffline(`/api/getLeavePendingList?${q}`)
-  return res.json() as Promise<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>
+  return res.json() as Promise<{
+    id: number
+    store: string
+    name: string
+    employeeCode: string
+    nick: string
+    type: string
+    date: string
+    requestDate: string
+    reason: string
+    status: string
+    certificateUrl: string
+  }[]>
 }
 
 export async function getLeaveStats(params: {
@@ -827,6 +853,7 @@ export async function getLeaveStats(params: {
     {
       store: string
       name: string
+      employeeCode: string
       usedPeriodAnnual: number
       usedPeriodSick: number
       usedPeriodUnpaid: number
@@ -887,6 +914,8 @@ export interface AttendanceNoRecordRow {
   date: string
   store: string
   name: string
+  employeeId?: number
+  employeeCode?: string
   nick?: string
   inTimeStr: string
   outTimeStr: string
@@ -919,6 +948,7 @@ export async function createAttendanceFromSchedule(params: {
   date: string
   store: string
   name: string
+  employeeId?: number
   userStore?: string
   userRole?: string
 }) {
@@ -934,6 +964,7 @@ export async function approveNoClockOut(params: {
   date: string
   store: string
   name: string
+  employeeId?: number
   userStore?: string
   userRole?: string
 }) {
@@ -949,6 +980,8 @@ export interface AttendanceDailyRow {
   date: string
   store: string
   name: string
+  employeeId?: number
+  employeeCode?: string
   inTimeStr: string
   outTimeStr: string
   breakMin: number
@@ -4206,6 +4239,41 @@ export async function updateNotificationSettings(params: {
   return res.json() as Promise<{ success: boolean }>
 }
 
+/** 급여 — 위험수당·평가등급 규칙 (system_settings) */
+export async function getPayrollHazGradeRules() {
+  const res = await apiFetchWithOffline('/api/payrollHazGradeRules')
+  const data = (await res.json().catch(() => ({}))) as {
+    requireEvalGrade?: boolean
+    minEvalGrade?: string
+    gradeOptions?: string[]
+    canEdit?: boolean
+    message?: string
+  }
+  if (!res.ok) {
+    throw new Error(data?.message || `급여 규칙 조회 실패 (${res.status})`)
+  }
+  return {
+    requireEvalGrade: data.requireEvalGrade !== false,
+    minEvalGrade: String(data.minEvalGrade || 'B').toUpperCase(),
+    gradeOptions: Array.isArray(data.gradeOptions) ? data.gradeOptions : ['S', 'A', 'B', 'C', 'F'],
+    canEdit: !!data.canEdit,
+  }
+}
+
+export async function savePayrollHazGradeRules(params: { requireEvalGrade: boolean; minEvalGrade: string }) {
+  const res = await apiFetchWithOffline('/api/payrollHazGradeRules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    requireEvalGrade?: boolean
+    minEvalGrade?: string
+  }>
+}
+
 export async function getCostSettings() {
   const res = await apiFetchWithOffline('/api/costSettings')
   const data = await res.json().catch(() => ({})) as { defaultOverheadPercent?: number; globalOverheadPercent?: number; message?: string }
@@ -7391,6 +7459,8 @@ export interface AdminEmployeeItem {
   name: string
   /** Mr./Mrs./Ms./Miss — nick과 별도 저장 */
   nameTitle?: string
+  /** 직원 코드(휴가·표시용). 형식 AA999, 비우면 매장별 자동 부여 */
+  employeeCode?: string
   nick: string
   phone: string
   job: string

@@ -8,6 +8,7 @@ import {
 
 import { isAccountingRole } from '@/lib/permissions'
 import { normalizeEvalItemType } from '@/lib/eval-item-type'
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 const OFFICE_ROLES = ['director', 'ceo', 'hr', 'officer']
 
@@ -102,16 +103,26 @@ export async function POST(req: Request) {
 }
 
 async function updateEmployeeGrade(store: string, employeeName: string, finalGrade: string) {
-  try {
-    const rows = (await supabaseSelectFilter(
-      'employees',
-      `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(employeeName)}`,
-      { limit: 1 }
-    )) as { id?: number }[] | null
-    if (rows && rows.length > 0 && rows[0].id != null) {
-      await supabaseUpdate('employees', rows[0].id, { grade: finalGrade })
+  const raw = String(employeeName || '').trim()
+  if (!raw) return
+  const candidates = [...new Set([raw, normalizeEmployeeNameForGradeMatch(raw)].filter(Boolean))]
+  const encStore = encodeURIComponent(store)
+  for (const name of candidates) {
+    const encName = encodeURIComponent(name)
+    for (const field of ['name', 'nick'] as const) {
+      try {
+        const rows = (await supabaseSelectFilter(
+          'employees',
+          `store=eq.${encStore}&${field}=eq.${encName}`,
+          { limit: 1 }
+        )) as { id?: number }[] | null
+        if (rows && rows.length > 0 && rows[0].id != null) {
+          await supabaseUpdate('employees', rows[0].id, { grade: finalGrade })
+          return
+        }
+      } catch {
+        // try next
+      }
     }
-  } catch {
-    // ignore
   }
 }

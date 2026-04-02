@@ -28,7 +28,7 @@ export const ATTENDANCE_LOG_PAYROLL_COLS =
 
 /** 관리자 근태표(일별 집계) */
 export const ATTENDANCE_LOG_ADMIN_GRID_COLS =
-  'id,log_at,store_name,name,log_type,late_min,early_min,ot_min,break_min,status,approved'
+  'id,log_at,store_name,name,employee_id,log_type,late_min,early_min,ot_min,break_min,status,approved'
 
 /** 패티캐시 목록·월별 상세 */
 export const PETTY_CASH_LIST_COLS =

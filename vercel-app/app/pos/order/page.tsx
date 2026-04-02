@@ -109,11 +109,6 @@ export default function PosOrderPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  React.useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0d4853'},body:JSON.stringify({sessionId:'0d4853',runId:'pre-fix',hypothesisId:'H4',location:'app/pos/order/page.tsx:mount',message:'order page mounted',data:{href:typeof window!=='undefined'?window.location.href:'',path:'/pos/order'},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }, [])
   const { stores } = useStoreList()
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStores = React.useMemo(
@@ -207,15 +202,6 @@ export default function PosOrderPage() {
   const receiptRef = React.useRef<HTMLDivElement>(null)
   const autoPrintedKeyRef = React.useRef<string>("")
   const [isMainPosDevice] = usePosMainDevice(storeCode || null)
-
-  React.useEffect(() => {
-    if (!receiptData) return
-    // #region agent log
-    const ping = {sessionId:'960801',runId:'run-4',hypothesisId:'H11',location:'order/page.tsx:receiptData',message:'order page receiptData set',data:{orderNoLen:String(receiptData.orderNo||'').length,items:receiptData.items.length,total:receiptData.total},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
-    // #endregion
-  }, [receiptData])
 
   React.useEffect(() => {
     const def = auth?.store || effectiveStores[0] || "ST01"
@@ -886,11 +872,6 @@ export default function PosOrderPage() {
   const handlePrintReceipt = async () => {
     if (!receiptRef.current) return
     const printContent = receiptRef.current.innerHTML
-    // #region agent log
-    const logH5 = {sessionId:'960801',runId:'run-2',hypothesisId:'H5',location:'order/page.tsx:handlePrintReceipt:entry',message:'order page print entry metrics',data:{contentLen:printContent.length,clientWidth:receiptRef.current.clientWidth,scrollWidth:receiptRef.current.scrollWidth},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH5)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH5)}).catch(()=>{});
-    // #endregion
     const fullHtml = `
       <!DOCTYPE html>
       <html>

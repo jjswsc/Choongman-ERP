@@ -111,6 +111,9 @@ export function printHtmlInHiddenIframe(
         cw.focus()
       }
       cw.print()
+      /** 일부 Chromium은 iframe print 시 beforeprint/afterprint 가 안 떠 가드가 오탐 → print() 직후 인쇄 시작으로 간주 */
+      printStarted = true
+      clearTimeout(startGuardTimer)
     } catch {
       clearTimeout(startGuardTimer)
       removeIframe()

@@ -140,6 +140,19 @@ describe('api-validate', () => {
         date: '2025-03-15',
       })
       expect(r.errorResponse).toBeNull()
+      expect((r as { parsed: { employeeId?: number } }).parsed?.employeeId).toBeUndefined()
+    })
+
+    it('employeeId 숫자 허용', () => {
+      const r = parseOr400(requestLeaveSchema, {
+        store: 'S',
+        name: 'N',
+        type: '연차',
+        date: '2025-03-15',
+        employeeId: 42,
+      })
+      expect(r.errorResponse).toBeNull()
+      expect((r as { parsed: { employeeId?: number } }).parsed?.employeeId).toBe(42)
     })
 
     it('잘못된 날짜 형식 실패', () => {

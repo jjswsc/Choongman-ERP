@@ -26,6 +26,7 @@ import {
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
 import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { cn, displayLabelShort } from "@/lib/utils"
+import { findStaffForScheduleSlotName } from "@/lib/employee-display-name"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 
 function get30MinIntervals(start: string, end: string): string[] {
@@ -47,6 +48,7 @@ const AREAS = ["Service", "Kitchen", "Office"] as const
 const DAY_LABELS = ["att_mon", "att_tue", "att_wed", "att_thu", "att_fri", "att_sat", "att_sun"] as const
 interface StaffItem {
   name: string
+  nameTitle?: string
   nick: string
   dept: string
 }
@@ -60,7 +62,7 @@ export function AdminScheduleEdit({
   stores: string[]
   storeFilter: string
   onStoreChange: (v: string) => void
-  staffByStore?: Record<string, { name: string; nick: string }[]>
+  staffByStore?: Record<string, { name: string; nick: string; nameTitle?: string }[]>
 }) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -70,7 +72,11 @@ export function AdminScheduleEdit({
   const [startHour, setStartHour] = React.useState(6)
   const [endHour, setEndHour] = React.useState(29)
   const [staffList, setStaffList] = React.useState<StaffItem[]>([])
-  const [selectedStaff, setSelectedStaff] = React.useState<{ name: string; nick: string } | null>(null)
+  const [selectedStaff, setSelectedStaff] = React.useState<{
+    name: string
+    nameTitle?: string
+    nick: string
+  } | null>(null)
   const [slotData, setSlotData] = React.useState<Record<string, string[]>>({})
   const [leaveByDay, setLeaveByDay] = React.useState<Record<number, Set<string>>>({})
   const [leaveDetails, setLeaveDetails] = React.useState<{ name: string; dayIdx: number; dateStr: string; type: string }[]>([])
@@ -99,6 +105,7 @@ export function AdminScheduleEdit({
         setStaffList(
           list.map((e) => ({
             name: String(e.name || "").trim(),
+            nameTitle: String((e as { nameTitle?: string }).nameTitle || "").trim() || undefined,
             nick: String(e.nick || e.name || "").trim(),
             dept: String(e.job || "").trim(),
           }))
@@ -107,6 +114,7 @@ export function AdminScheduleEdit({
         setStaffList(
           staffByStore[store].map((e) => ({
             name: String(e.name || "").trim(),
+            nameTitle: String(e.nameTitle || "").trim() || undefined,
             nick: String(e.nick || e.name || "").trim(),
             dept: "",
           }))
@@ -625,6 +633,10 @@ export function AdminScheduleEdit({
     return `${parseInt(m, 10)}/${parseInt(d, 10)}`
   })
 
+  /** 시간표 UI·인쇄·엑셀: 저장 키는 본명(name)이나 표시는 닉 통일 (스케줄 name 과 직원 목록 name 불일치 시에도 매칭) */
+  const nickForSchedule = (bareName: string) =>
+    displayLabelShort(findStaffForScheduleSlotName(staffList, bareName)?.nick) || bareName
+
   const escapeXml = (s: string) =>
     String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
@@ -650,7 +662,7 @@ export function AdminScheduleEdit({
     const headers = ["", ...dayLabels.map((d, i) => `${d} ${daysFull[i]}`)]
     const dataRows: string[][] = []
     for (const p of scheduleForExport) {
-      const workRow = [p.name + ` (${p.area})`]
+      const workRow = [`${nickForSchedule(p.name)} (${p.area})`]
       const breakRow = [""]
       for (let i = 0; i < 7; i++) {
         workRow.push(p.workDays[i] || "-")
@@ -803,7 +815,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                       }
                       return Array.from(byName.entries()).map(([name, items]) => (
                         <div key={name} className="rounded border p-2">
-                          <span className="font-semibold">{displayLabelShort(staffList.find((x) => x.name === name)?.nick) || name}</span>
+                          <span className="font-semibold">{nickForSchedule(name)}</span>
                           <span className="text-muted-foreground ml-1">: </span>
                           <span>{items.map((i) => {
                             const typeLabel = translateLeaveTypeFromDb(i.type, t)
@@ -823,15 +835,16 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 key={s.name}
                 type="button"
                 onClick={() =>
-                  setSelectedStaff((prev) => (prev?.name === s.name ? null : { name: s.name, nick: s.nick }))
+                  setSelectedStaff((prev) =>
+                    prev?.name === s.name ? null : { name: s.name, nameTitle: s.nameTitle, nick: s.nick }
+                  )
                 }
                 className={cn(
                   "w-full text-left rounded px-2 py-1.5 text-xs",
                   selectedStaff?.name === s.name ? "bg-primary text-primary-foreground" : staffWithLeave.has(s.name) ? "bg-pink-100 dark:bg-pink-950/40 hover:bg-pink-200 dark:hover:bg-pink-950/60" : "hover:bg-muted"
                 )}
               >
-                <span className="font-medium">{s.name}</span>
-                <span className="text-muted-foreground ml-1">({displayLabelShort(s.nick)})</span>
+                <span className="font-medium">{displayLabelShort(s.nick)}</span>
               </button>
             ))}
           </div>
@@ -861,7 +874,9 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                   {scheduleForExport.map((p) => (
                     <React.Fragment key={p.name + p.area}>
                       <tr className="border-b">
-                        <td className="border px-2 py-1 font-medium">{p.name} ({p.area})</td>
+                        <td className="border px-2 py-1 font-medium">
+                          {nickForSchedule(p.name)} ({p.area})
+                        </td>
                         {p.workDays.map((w, i) => (
                           <td key={i} className="border px-2 py-1 text-center">{w || "-"}</td>
                         ))}
@@ -1066,8 +1081,8 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                                     const displayName = n.startsWith("BRK_")
                                       ? "R"
                                       : isLeave
-                                        ? (displayLabelShort(staffList.find((s) => s.name === leaveName)?.nick) || leaveName)
-                                        : displayLabelShort(staffList.find((s) => s.name === n)?.nick) || n
+                                        ? nickForSchedule(leaveName)
+                                        : nickForSchedule(n)
                                     return (
                                       <span
                                         key={n}

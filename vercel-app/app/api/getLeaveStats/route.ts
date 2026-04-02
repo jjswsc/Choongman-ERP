@@ -1,27 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { getAnnualLeaveDays, hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-
-function toDateStr(val: string | Date | null | undefined): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-/** 휴가 유형별 일수 (반차=0.5, 그 외=1) */
-function getLeaveDays(type: string): number {
-  const t = String(type || '').trim()
-  if (t.indexOf('반차') !== -1 || t.toLowerCase().indexOf('half') !== -1) return 0.5
-  return 1
-}
+import {
+  toLeaveDateStrBangkok,
+  isApprovedLeaveStatus,
+  getLeaveDayValueFromType,
+  isAnnualLeaveFamilyType,
+  leaveDateInYmdRange,
+  assignLeaveRowToEmployeeForStats,
+} from '@/lib/leave-request-utils'
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
 const LAKIJ_DAYS_PER_YEAR = 3
 
 /** 병가: 연 30일 고정 (방콕 달력년 기준 사용분 차감) */
 const SICK_DAYS_PER_YEAR = 30
+
+/** 통계용 휴가 신청 최대 로드 건수 (매장 필터·전체 공통 상한) */
+const LEAVE_STATS_MAX_ROWS = 500_000
+
+/** 통계에 올릴 직원 행 상한 */
+const EMP_STATS_MAX_ROWS = 100_000
 
 /** 휴가 통계 - 매장별 직원별 연차/병가 사용 현황 */
 export async function GET(request: NextRequest) {
@@ -39,41 +39,109 @@ export async function GET(request: NextRequest) {
   const isManager = userRole === 'manager'
   if (isManager && userStore) storeFilter = userStore
 
-  const start = startStr ? new Date(startStr + 'T00:00:00') : new Date('2000-01-01')
-  const end = endStr ? new Date(endStr + 'T23:59:59') : new Date('2100-12-31')
+  const periodStart = /^\d{4}-\d{2}-\d{2}$/.test(startStr) ? startStr : '1900-01-01'
+  const periodEnd = /^\d{4}-\d{2}-\d{2}$/.test(endStr) ? endStr : '2999-12-31'
 
   try {
-    type EmpRow = { store?: string; name?: string; annual_leave_days?: number | null; join_date?: string | null }
-    type LeaveRow = { store?: string; name?: string; type?: string; leave_date?: string; status?: string }
+    type EmpRow = {
+      id?: number
+      store?: string
+      name?: string
+      name_title?: string | null
+      annual_leave_days?: number | null
+      join_date?: string | null
+      employee_code?: string | null
+    }
+
+    function normEmployeeCode(c: string | null | undefined): string {
+      return String(c ?? '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 5)
+    }
+    type LeaveRow = {
+      store?: string
+      name?: string
+      type?: string
+      leave_date?: string
+      status?: string
+      employee_id?: number | null
+    }
 
     let empRows: EmpRow[] = []
-    const empSelect = 'id,store,name,annual_leave_days,join_date,sal_type'
-    if (storeFilter) {
-      empRows = (await supabaseSelectFilter(
-        'employees',
-        `store=ilike.${encodeURIComponent(storeFilter)}`,
-        { order: 'id.asc', select: empSelect }
-      )) as EmpRow[]
-    } else {
-      empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelect })) as EmpRow[]
+    const empSelectBase = 'id,store,name,name_title,annual_leave_days,join_date,sal_type'
+    const empSelectWithCode = `${empSelectBase},employee_code`
+    try {
+      if (storeFilter) {
+        empRows = (await supabaseSelectFilterAllPages(
+          'employees',
+          `store=ilike.${encodeURIComponent(storeFilter)}`,
+          { order: 'id.asc', select: empSelectWithCode, pageSize: 1000, maxRows: EMP_STATS_MAX_ROWS }
+        )) as EmpRow[]
+      } else {
+        empRows = (await supabaseSelectFilterAllPages('employees', 'id=not.is.null', {
+          order: 'id.asc',
+          select: empSelectWithCode,
+          pageSize: 1000,
+          maxRows: EMP_STATS_MAX_ROWS,
+        })) as EmpRow[]
+      }
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (!/employee_code|42703|column/i.test(em)) throw e
+      if (storeFilter) {
+        empRows = (await supabaseSelectFilterAllPages(
+          'employees',
+          `store=ilike.${encodeURIComponent(storeFilter)}`,
+          { order: 'id.asc', select: empSelectBase, pageSize: 1000, maxRows: EMP_STATS_MAX_ROWS }
+        )) as EmpRow[]
+      } else {
+        empRows = (await supabaseSelectFilterAllPages('employees', 'id=not.is.null', {
+          order: 'id.asc',
+          select: empSelectBase,
+          pageSize: 1000,
+          maxRows: EMP_STATS_MAX_ROWS,
+        })) as EmpRow[]
+      }
     }
 
     let leaveRows: LeaveRow[] = []
     if (storeFilter) {
-      leaveRows = (await supabaseSelectFilter(
+      leaveRows = (await supabaseSelectFilterAllPages(
         'leave_requests',
         `store=ilike.${encodeURIComponent(storeFilter)}`,
-        { order: 'leave_date.asc', limit: 2000 }
+        {
+          order: 'leave_date.asc',
+          select: 'store,name,type,leave_date,status,employee_id',
+          pageSize: 2000,
+          maxRows: LEAVE_STATS_MAX_ROWS,
+        }
       )) as LeaveRow[]
     } else {
-      leaveRows = (await supabaseSelect('leave_requests', { order: 'leave_date.asc', limit: 2000 })) as LeaveRow[]
+      leaveRows = (await supabaseSelectFilterAllPages('leave_requests', 'leave_date=not.is.null', {
+        order: 'leave_date.asc',
+        select: 'store,name,type,leave_date,status,employee_id',
+        pageSize: 2000,
+        maxRows: LEAVE_STATS_MAX_ROWS,
+      })) as LeaveRow[]
     }
 
     const bangkokYear = parseInt(getBangkokTodayDateString().slice(0, 4), 10)
 
+    const leaveAssignedEmp = (leaveRows || []).map((l) =>
+      assignLeaveRowToEmployeeForStats(
+        String(l.store || '').trim(),
+        String(l.name || '').trim(),
+        l.employee_id,
+        empRows || []
+      )
+    )
+
     const result: {
       store: string
       name: string
+      employeeCode: string
       usedPeriodAnnual: number
       usedPeriodSick: number
       usedPeriodUnpaid: number
@@ -103,41 +171,42 @@ export async function GET(request: NextRequest) {
       let usedTotalLakij = 0
       let usedSickThisBangkokYear = 0
 
-      for (const l of leaveRows || []) {
-        const lStore = String(l.store || '').trim()
-        const lName = String(l.name || '').trim()
-        if (lStore !== empStore || lName !== empName) continue
+      for (let li = 0; li < (leaveRows || []).length; li++) {
+        const l = leaveRows[li]
+        if (leaveAssignedEmp[li] !== emp) continue
 
         const lStatus = String(l.status || '').trim()
-        if (lStatus !== '승인' && lStatus !== 'Approved') continue
+        if (!isApprovedLeaveStatus(lStatus)) continue
 
         const lType = String(l.type || '').trim()
-        const dateStr = toDateStr(l.leave_date)
+        const dateStr = toLeaveDateStrBangkok(l.leave_date)
         if (!dateStr) continue
-        const lDate = new Date(dateStr + 'T12:00:00')
-        const days = getLeaveDays(lType)
-        const isAnnualType = lType.indexOf('연차') !== -1 || lType.indexOf('반차') !== -1 || lType.toLowerCase().indexOf('annual') !== -1 || lType.toLowerCase().indexOf('half') !== -1
+        const days = getLeaveDayValueFromType(lType)
+        const isAnnualType = isAnnualLeaveFamilyType(lType)
         const underOneYear = isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
+
+        const inPeriod = leaveDateInYmdRange(dateStr, periodStart, periodEnd)
 
         if (lType.indexOf('무급휴가') !== -1 || lType.toLowerCase().indexOf('unpaid') !== -1 || underOneYear) {
           usedTotalUnpaid += days
-          if (lDate >= start && lDate <= end) usedPeriodUnpaid += days
+          if (inPeriod) usedPeriodUnpaid += days
         } else if (lType.indexOf('ลากิจ') !== -1 || lType.toLowerCase().indexOf('lakij') !== -1) {
           usedTotalLakij += days
-          if (lDate >= start && lDate <= end) usedPeriodLakij += days
+          if (inPeriod) usedPeriodLakij += days
         } else if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
           usedTotalSick += days
           if (parseInt(dateStr.slice(0, 4), 10) === bangkokYear) usedSickThisBangkokYear += days
-          if (lDate >= start && lDate <= end) usedPeriodSick += days
+          if (inPeriod) usedPeriodSick += days
         } else {
           usedTotalAnnual += days
-          if (lDate >= start && lDate <= end) usedPeriodAnnual += days
+          if (inPeriod) usedPeriodAnnual += days
         }
       }
 
       result.push({
         store: empStore,
         name: empName,
+        employeeCode: normEmployeeCode(emp.employee_code),
         usedPeriodAnnual: Math.round(usedPeriodAnnual * 10) / 10,
         usedPeriodSick: Math.round(usedPeriodSick * 10) / 10,
         usedPeriodUnpaid: Math.round(usedPeriodUnpaid * 10) / 10,

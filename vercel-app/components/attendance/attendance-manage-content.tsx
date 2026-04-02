@@ -28,7 +28,7 @@ import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
   adminTabsListRowCn,
-  adminTabsRootCn,
+  adminTabsRootScrollableCn,
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
@@ -289,6 +289,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       date: row.date,
       store: row.store,
       name: row.name,
+      ...(row.employeeId != null && row.employeeId > 0 ? { employeeId: row.employeeId } : {}),
       userStore: auth?.store,
       userRole: auth?.role,
     })
@@ -335,6 +336,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       date: row.date,
       store: row.store,
       name: row.name,
+      ...(row.employeeId != null && row.employeeId > 0 ? { employeeId: row.employeeId } : {}),
       userStore: auth?.store,
       userRole: auth?.role,
     })
@@ -360,7 +362,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
           </div>
         </div>
 
-        <Tabs value={attTab} onValueChange={setAttTab} className={adminTabsRootCn}>
+        <Tabs value={attTab} onValueChange={setAttTab} className={adminTabsRootScrollableCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -511,6 +513,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-3 py-2.5 text-center font-semibold">{t("label_date")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold">{t("stockFilterStore")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("emp_label_name")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">{t("emp_label_employee_code")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
@@ -529,6 +532,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
                           <td className="px-2 py-2.5 text-center whitespace-nowrap text-[11px]">{row.store}</td>
                           <td className="px-3 py-2.5 text-center font-medium">{row.name}</td>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap tabular-nums">{row.employeeCode || '-'}</td>
                           <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
@@ -562,6 +566,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-3 py-2.5 text-center font-semibold">{t("label_date")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold min-w-[5rem]">{t("stockFilterStore")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("emp_label_name")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">{t("emp_label_employee_code")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
@@ -603,6 +608,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
                           <td className="px-2 py-2.5 text-center whitespace-nowrap text-[11px]">{row.store}</td>
                           <td className="px-3 py-2.5 text-center font-medium">{row.name}</td>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap tabular-nums">{row.employeeCode || '-'}</td>
                           <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>

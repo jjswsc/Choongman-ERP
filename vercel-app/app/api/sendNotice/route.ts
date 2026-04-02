@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { sendFcmToRecipients, getRecipientsByTargetStoreRole } from '@/lib/firebase-admin'
 import { getNotificationSettings } from '@/lib/notification-settings-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -57,16 +58,59 @@ export async function POST(request: NextRequest) {
     }
 
     const id = Date.now()
-    const recipientList = Array.isArray(targetRecipients)
+    const normalizedRecipients = Array.isArray(targetRecipients)
       ? targetRecipients
-          .map((r: { store?: string; name?: string } | string) => {
-            if (typeof r === 'string') return r.trim()
+          .map((r: { store?: string; name?: string; employeeId?: number } | string) => {
+            if (typeof r === 'string') {
+              const raw = r.trim()
+              const [s, n] = raw.split('|')
+              return { store: String(s || '').trim(), name: String(n || '').trim(), employeeId: 0 }
+            }
             const s = String(r?.store ?? '').trim()
             const n = String(r?.name ?? '').trim()
-            return s && n ? `${s}|${n}` : ''
+            const employeeId =
+              r?.employeeId != null && Number.isFinite(Number(r.employeeId))
+                ? Math.floor(Number(r.employeeId))
+                : 0
+            return { store: s, name: n, employeeId: employeeId > 0 ? employeeId : 0 }
           })
-          .filter(Boolean)
+          .filter((r) => !!r.store)
       : []
+    const missingNameIds = Array.from(
+      new Set(
+        normalizedRecipients
+          .filter((r) => r.employeeId > 0 && !r.name)
+          .map((r) => r.employeeId)
+      )
+    )
+    const nameById: Record<number, string> = {}
+    if (missingNameIds.length > 0) {
+      const chunks: number[][] = []
+      for (let i = 0; i < missingNameIds.length; i += 80) chunks.push(missingNameIds.slice(i, i + 80))
+      for (const chunk of chunks) {
+        const filter = `id=in.(${chunk.join(',')})`
+        const rows = (await supabaseSelectFilter('employees', filter, {
+          select: 'id,name',
+          limit: 1000,
+          order: 'id.asc',
+        })) as { id?: number; name?: string }[]
+        for (const row of rows || []) {
+          const id = row.id != null && Number.isFinite(Number(row.id)) ? Math.floor(Number(row.id)) : 0
+          if (id > 0) nameById[id] = String(row.name || '').trim()
+        }
+      }
+    }
+    const recipientListMap = new Map<string, string>()
+    for (const r of normalizedRecipients) {
+      const store = String(r.store || '').trim()
+      if (!store) continue
+      const id = r.employeeId > 0 ? r.employeeId : 0
+      const name = String(r.name || (id > 0 ? nameById[id] || '' : '')).trim()
+      if (!name) continue
+      const key = id > 0 ? `${store}|#${id}` : `${store}|${name}`
+      recipientListMap.set(key, `${store}|${name}`)
+    }
+    const recipientList = Array.from(recipientListMap.values())
     const targetRecipientsStr = recipientList.length > 0 ? JSON.stringify(recipientList) : null
 
     const noticeRow: Record<string, unknown> = {

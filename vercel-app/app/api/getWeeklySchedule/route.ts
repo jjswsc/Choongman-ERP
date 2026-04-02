@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import {
+  findStaffForScheduleSlotName,
+  formatEmployeeDisplayName,
+  normalizeEmployeeCodeForMatch,
+  normalizeEmployeeNameFields,
+  type StaffRowForScheduleMatch,
+} from '@/lib/employee-display-name'
+import { parseExtraStoresColumn } from '@/lib/franchisee-multi-store'
+import { storeMatches } from '@/lib/admin-employee-store-access'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -29,6 +38,34 @@ function formatTime(v: string | null | undefined): string {
     }
   }
   return s.length >= 5 && s.charAt(2) === ':' ? s.substring(0, 5) : s
+}
+
+type EmpRow = {
+  id?: number
+  name?: string
+  nick?: string
+  store?: string
+  job?: string
+  name_title?: string
+  extra_stores?: unknown
+  employee_code?: string | null
+}
+
+function toStaffLite(e: EmpRow): StaffRowForScheduleMatch {
+  const rawName = String(e.name || '').trim()
+  const rawTitle = String(e.name_title || '').trim()
+  const { name: normName } = normalizeEmployeeNameFields(rawName, rawTitle)
+  const nickVal = String(e.nick || normName || rawName).trim() || rawName
+  return { name: normName || rawName, nick: nickVal }
+}
+
+/** 휴가/스케줄 매장이 직원의 소속(또는 extra_stores)과 맞는지 */
+function empWorksAtStore(e: EmpRow, leaveOrScheduleStore: string): boolean {
+  const target = String(leaveOrScheduleStore || '').trim()
+  if (!target) return false
+  const primary = String(e.store || '').trim()
+  if (storeMatches(primary, target)) return true
+  return parseExtraStoresColumn(e.extra_stores).some((ex) => storeMatches(ex, target))
 }
 
 /** 월요일 날짜로 해당 주 일요일까지 구간 계산 (타임존 영향 없이 로컬 날짜만 사용) */
@@ -68,7 +105,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const isAll = !store || store.toLowerCase() === 'all' || store === '전체' || store === '전체 매장'
-    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; memo?: string; plan_in_prev_day?: boolean }
+    type SchRow = {
+      schedule_date?: string
+      store_name?: string
+      name?: string
+      employee_id?: number | null
+      plan_in?: string
+      plan_out?: string
+      break_start?: string
+      break_end?: string
+      memo?: string
+      plan_in_prev_day?: boolean
+    }
     let scheduleRows: SchRow[] = []
     const dateFilter = `schedule_date=gte.${start}&schedule_date=lte.${end}`
     if (isAll) {
@@ -78,15 +126,77 @@ export async function GET(request: NextRequest) {
       scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
     }
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store,job' })) as { name?: string; nick?: string; store?: string; job?: string }[]
+    let empList: EmpRow[] = []
+    const empSelectCandidates = [
+      'id,name,nick,store,job,name_title,extra_stores,employee_code',
+      'id,name,nick,store,job,name_title,extra_stores',
+      'id,name,nick,store,job,name_title',
+      'id,name,nick,store,job',
+      'name,nick,store,job,name_title,extra_stores',
+      'name,nick,store,job,name_title',
+      'name,nick,store,job',
+    ] as const
+    for (const sel of empSelectCandidates) {
+      try {
+        empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 5000, select: sel })) as EmpRow[]
+        break
+      } catch {
+        continue
+      }
+    }
     const nameToNick: Record<string, string> = {}
     const storeNameToJob: Record<string, string> = {}
+    const empIdToNick = new Map<number, string>()
+    const codeToNick = new Map<string, string>()
+    const staffAtStoreCache = new Map<string, StaffRowForScheduleMatch[]>()
+
+    const getStaffAtStore = (storeName: string): StaffRowForScheduleMatch[] => {
+      const key = String(storeName || '').trim()
+      let v = staffAtStoreCache.get(key)
+      if (v) return v
+      v = (empList || []).filter((e) => empWorksAtStore(e, key)).map(toStaffLite)
+      staffAtStoreCache.set(key, v)
+      return v
+    }
+
+    const resolveScheduleDisplayNick = (slotStore: string, slotName: string, slotEmployeeId: unknown): string => {
+      const nm = String(slotName || '').trim()
+      if (!nm) return ''
+      const eid = slotEmployeeId != null && Number.isFinite(Number(slotEmployeeId)) ? Math.floor(Number(slotEmployeeId)) : 0
+      if (eid > 0) {
+        const byId = empIdToNick.get(eid)
+        if (byId) return byId
+      }
+      const ck = normalizeEmployeeCodeForMatch(nm)
+      if (ck) {
+        const byCode = codeToNick.get(ck)
+        if (byCode) return byCode
+      }
+      const roster = getStaffAtStore(slotStore)
+      const hit = findStaffForScheduleSlotName(roster, nm)
+      if (hit) return hit.nick
+      return nameToNick[nm] || nm
+    }
+
     for (const e of empList || []) {
-      const nm = String(e.name || '').trim()
+      const rawName = String(e.name || '').trim()
+      const rawTitle = String(e.name_title || '').trim()
+      const { name: normName } = normalizeEmployeeNameFields(rawName, rawTitle)
       const st = String(e.store || '').trim()
-      if (nm) {
-        nameToNick[nm] = String(e.nick || e.name || nm).trim() || nm
-        if (st) storeNameToJob[st + '|' + nm] = String(e.job || '').trim()
+      const nickVal = String(e.nick || normName || rawName).trim() || rawName
+      const lite = toStaffLite(e)
+      const idNum = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      if (idNum > 0) empIdToNick.set(idNum, lite.nick)
+      const codeKey = normalizeEmployeeCodeForMatch(String(e.employee_code ?? ''))
+      if (codeKey) codeToNick.set(codeKey, lite.nick)
+      const keys = new Set<string>()
+      if (rawName) keys.add(rawName)
+      if (normName) keys.add(normName)
+      const displayFull = formatEmployeeDisplayName(normName, rawTitle).trim()
+      if (displayFull) keys.add(displayFull)
+      for (const k of keys) {
+        nameToNick[k] = nickVal
+        if (st) storeNameToJob[st + '|' + k] = String(e.job || '').trim()
       }
     }
 
@@ -111,18 +221,30 @@ export async function GET(request: NextRequest) {
     const leaveMerged: { date: string; store: string; name: string; nick: string; pIn: string; pOut: string; pBS: string; pBE: string; area: string; plan_in_prev_day: boolean; leaveType?: string }[] = []
     for (const lr of leaveRows || []) {
       const date = toDateStr(lr.leave_date)
-      const store = String(lr.store || '').trim()
+      const leaveStoreStr = String(lr.store || '').trim()
       const name = String(lr.name || '').trim()
       const type = String(lr.type || '').trim() || '휴가'
-      if (!date || !store || !name || date < start || date > end) continue
-      const key = `${date}|${store}|${name}`
+      if (!date || !leaveStoreStr || !name || date < start || date > end) continue
+      const key = `${date}|${leaveStoreStr}|${name}`
       if (scheduleKeySet.has(key)) continue // 이미 스케줄에 있으면 휴가 행 추가 안 함
-      const area = parseAreaFromMemo(storeNameToJob[store + '|' + name] || '')
+
+      // 휴가 신청 매장에 실제 소속(또는 extra_stores)인 직원만 병합 — 소속이 다른 매장으로 잘못 신청된 휴가는 단일 매장 조회에서 제외
+      const rosterAtLeaveStore = (empList || []).filter((e) => empWorksAtStore(e, leaveStoreStr))
+      const matchedEmp = rosterAtLeaveStore.find(
+        (e) => findStaffForScheduleSlotName([toStaffLite(e)], name) !== undefined
+      )
+      if (!isAll && !matchedEmp) continue
+
+      const area = matchedEmp
+        ? parseAreaFromMemo(matchedEmp.job || '')
+        : parseAreaFromMemo(storeNameToJob[leaveStoreStr + '|' + name] || '')
+      const nickOut = resolveScheduleDisplayNick(leaveStoreStr, name, matchedEmp?.id ?? null)
+
       leaveMerged.push({
         date,
-        store,
+        store: leaveStoreStr,
         name,
-        nick: nameToNick[name] || name,
+        nick: nickOut,
         pIn: '09:00',
         pOut: '18:00',
         pBS: '',
@@ -135,11 +257,13 @@ export async function GET(request: NextRequest) {
 
     let list = (scheduleRows || []).map((r) => {
       const area = parseAreaFromMemo(r.memo)
+      const st = String(r.store_name || '').trim()
+      const nm = String(r.name || '').trim()
       return {
         date: toDateStr(r.schedule_date),
-        store: String(r.store_name || '').trim(),
-        name: String(r.name || '').trim(),
-        nick: nameToNick[String(r.name || '').trim()] || String(r.name || '').trim(),
+        store: st,
+        name: nm,
+        nick: resolveScheduleDisplayNick(st, nm, r.employee_id),
         pIn: formatTime(r.plan_in) || '09:00',
         pOut: formatTime(r.plan_out) || '18:00',
         pBS: formatTime(r.break_start),

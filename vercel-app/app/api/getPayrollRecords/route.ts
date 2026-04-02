@@ -6,6 +6,8 @@ export interface PayrollRecordRow {
   month: string
   store: string
   name: string
+  employee_id?: number
+  employee_code?: string
   dept: string
   role: string
   salary: number
@@ -69,6 +71,15 @@ export async function GET(request: NextRequest) {
       month: String(r.month || ''),
       store: String(r.store || ''),
       name: String(r.name || ''),
+      employee_id:
+        r.employee_id != null && Number.isFinite(Number(r.employee_id)) && Number(r.employee_id) > 0
+          ? Math.floor(Number(r.employee_id))
+          : undefined,
+      employee_code: String(r.employee_code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 5),
       dept: String(r.dept || ''),
       role: String(r.role || ''),
       salary: Number(r.salary) || 0,

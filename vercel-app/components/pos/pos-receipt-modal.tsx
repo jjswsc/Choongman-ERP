@@ -162,15 +162,6 @@ export function PosReceiptModal({
       })
     })
 
-  useEffect(() => {
-    if (!receiptData) return
-    // #region agent log
-    const ping = {sessionId:'960801',runId:'run-3',hypothesisId:'H7',location:'pos-receipt-modal.tsx:headless',message:'receipt headless pipeline',data:{orderNoLen:String(receiptData.orderNo||'').length},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
-    // #endregion
-  }, [receiptData])
-
   const handlePrintReceipt = async () => {
     if (!receiptData) return
     const esc = (value: string) => escapeHtml(String(value || ''))
@@ -302,26 +293,6 @@ export function PosReceiptModal({
         ${(footerPrimaryText || footerSecondaryText) ? '</div>' : ''}
       </div>
     `
-    // #region agent log
-    const itemNames = (receiptData.items || []).map((it) => String(it.name || ''))
-    const maxItemNameLen = itemNames.reduce((m, n) => Math.max(m, n.length), 0)
-    const maxItemTokenLen = itemNames
-      .flatMap((n) => n.split(/\s+/))
-      .reduce((m, tok) => Math.max(m, tok.length), 0)
-    const logH1 = {sessionId:'960801',runId:'run-9',hypothesisId:'H1',location:'pos-receipt-modal.tsx:handlePrintReceipt:entry',message:'modal print entry metrics',data:{orderNoLen:String(receiptData.orderNo||'').length,contentLen:printContent.length,clientWidth:-1,scrollWidth:-1,maxItemNameLen,maxItemTokenLen,hasLongToken:maxItemTokenLen>=18,templateSource:'modal-template-v2'},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH1)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH1)}).catch(()=>{});
-    // #endregion
-    // #region agent log
-    const logH14 = {sessionId:'960801',runId:'run-13',hypothesisId:'H14',location:'pos-receipt-modal.tsx:handlePrintReceipt:layoutConfig',message:'modal print layout config',data:{bodyPaddingTopMm:0,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,bodyPaddingBottomMm:1,receiptWidthMm:73.2,contentPadLeftMm:0,contentPadRightMm:0.8,rowPadRightMm:1.2,metaPadRightMm:1.2,contentMarginTopMm:0,rowTemplate:'minmax(0,1fr)+auto',metaTemplate:'46pct+54pct',contentAlign:'left'},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH14)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH14)}).catch(()=>{});
-    // #endregion
-    // #region agent log
-    const logH20 = {sessionId:'960801',runId:'run-13',hypothesisId:'H20',location:'pos-receipt-modal.tsx:handlePrintReceipt:cssRiskBudget',message:'modal css risk budget',data:{paperWidthMm:80,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,receiptWidthMm:73.2,contentPadRightMm:0.8,rowPadRightMm:1.2,horizontalBudgetMm:75.4,contentMarginTopMm:0},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH20)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH20)}).catch(()=>{});
-    // #endregion
     const fullHtml = `
       <!DOCTYPE html>
       <html>

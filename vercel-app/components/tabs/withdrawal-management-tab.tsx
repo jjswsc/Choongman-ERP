@@ -42,6 +42,7 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { stripWithdrawalCategoryMetaFromNote } from "@/lib/bank-transaction-note-meta"
 import { compressImageForUpload } from "@/lib/utils"
+import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { useSearchParams, useRouter } from "next/navigation"
 import { isOfficeStore } from "@/lib/permissions"
 
@@ -161,7 +162,9 @@ export function WithdrawalManagementTab() {
   const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
-  const [employeeList, setEmployeeList] = React.useState<{ store: string; job: string; name: string; accountNumber: string; bankName: string }[]>([])
+  const [employeeList, setEmployeeList] = React.useState<
+    { store: string; job: string; name: string; nameTitle?: string; accountNumber: string; bankName: string }[]
+  >([])
 
   const pettyTransferFirstSelectLabel = React.useMemo(
     () => (isOfficeStore(storeName) ? t("wm_transferToJob") || "직무" : t("wm_transferToDept") || "부서"),
@@ -393,6 +396,7 @@ export function WithdrawalManagementTab() {
                   role: e.role || "",
                 }),
                 name: e.name || "",
+                nameTitle: e.nameTitle,
                 accountNumber: e.accountNumber || "",
                 bankName: e.bankName || "",
               }))
@@ -1452,7 +1456,9 @@ export function WithdrawalManagementTab() {
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
                       {employeeList.filter((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept).map((e) => (
-                        <SelectItem key={`${e.store}-${e.job}-${e.name}`} value={e.name}>{e.name}</SelectItem>
+                        <SelectItem key={`${e.store}-${e.job}-${e.name}`} value={e.name}>
+                          {formatEmployeeDisplayName(e.name, e.nameTitle)}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

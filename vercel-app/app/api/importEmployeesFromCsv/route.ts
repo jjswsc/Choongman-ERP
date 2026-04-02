@@ -2,7 +2,8 @@
  * employees_rows.csv → Supabase employees (기존 전체 삭제 후 새로 입력)
  * POST body: { csv: string } 또는 FormData (file)
  *
- * CSV 컬럼: id, store, name, nick, phone, job, birth, nation, join_date, resign_date, sal_type, sal_amt, password, role, email, photo, grade, created_at, annual_leave_days, bank_name, account_number, position_allowance
+ * CSV 컬럼: id, store, name, name_title(선택), nick, phone, job, birth, nation, join_date, resign_date, sal_type, sal_amt, password, role, email, photo, grade, created_at, annual_leave_days, bank_name, account_number, position_allowance
+ * — name에 Mr./Ms. 등이 붙어 있으면 name_title로 분리해 저장합니다.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import {
@@ -11,6 +12,7 @@ import {
   supabaseSelect,
 } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
+import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 
 /** RFC 4180: 따옴표 안의 줄바꿈, "" 처리 */
 function parseCsv(text: string): string[][] {
@@ -108,6 +110,7 @@ export async function POST(request: NextRequest) {
     const col = {
       store: idx('store'),
       name: idx('name'),
+      name_title: idx('name_title'),
       nick: idx('nick'),
       phone: idx('phone'),
       job: idx('job'),
@@ -135,7 +138,9 @@ export async function POST(request: NextRequest) {
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i]
       const store = String(r[col.store] ?? '').trim()
-      const name = String(r[col.name] ?? '').trim()
+      const rawName = String(r[col.name] ?? '').trim()
+      const rawTitle = col.name_title >= 0 ? String(r[col.name_title] ?? '').trim() : ''
+      const { name, nameTitle } = normalizeEmployeeNameFields(rawName, rawTitle)
       if (!store || !name) continue
 
       const nick = col.nick >= 0 ? String(r[col.nick] ?? '').trim() : ''
@@ -180,7 +185,7 @@ export async function POST(request: NextRequest) {
       employees.push({
         store,
         name,
-        name_title: '',
+        name_title: nameTitle,
         nick,
         phone,
         job,

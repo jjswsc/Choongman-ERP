@@ -9,6 +9,8 @@ import {
   otMinutesForPayroll,
   ssoContributionBaseWage,
 } from '@/lib/payroll-utils'
+import { hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
+import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -59,6 +61,12 @@ async function getPublicHolidays(year: number): Promise<{ date: string; name: st
 
 type AttSummaryRow = { lateMin: number; earlyMin: number; otMin: number; workMin: number; workDays: number; workDates: string[] }
 
+function payrollAttKey(store: string, name: string, employeeId?: number | null): string {
+  const sid = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+  if (sid > 0) return `${store}_#${sid}`
+  return `${store}_${name}`
+}
+
 /** 귀속월 근태 집계: lateMin, otMin, workMin, workDays, workDates. 방콕 기준 + 자정 넘김은 출근일로 합침 */
 async function getAttendanceSummary(monthStr: string): Promise<Record<string, AttSummaryRow>> {
   const startStr = monthStr + '-01'
@@ -68,19 +76,37 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
   const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
-  const attRows = (await supabaseSelectFilterAllPages(
-    'attendance_logs',
-    `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-    {
-      order: 'log_at.asc',
-      select: ATTENDANCE_LOG_PAYROLL_COLS,
-      pageSize: 2500,
-      maxRows: 120000,
+  const attRows = (await (async () => {
+    try {
+      return await supabaseSelectFilterAllPages(
+        'attendance_logs',
+        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
+        {
+          order: 'log_at.asc',
+          select: `${ATTENDANCE_LOG_PAYROLL_COLS},employee_id`,
+          pageSize: 2500,
+          maxRows: 120000,
+        }
+      )
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (!/employee_id|42703|column/i.test(em)) throw e
+      return await supabaseSelectFilterAllPages(
+        'attendance_logs',
+        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
+        {
+          order: 'log_at.asc',
+          select: ATTENDANCE_LOG_PAYROLL_COLS,
+          pageSize: 2500,
+          maxRows: 120000,
+        }
+      )
     }
-  )) as {
+  })()) as {
     log_at?: string
     store_name?: string
     name?: string
+    employee_id?: number | null
     log_type?: string
     late_min?: number
     early_min?: number
@@ -114,7 +140,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
     if (!store || !name) continue
-    const key = store + '_' + name
+    const key = payrollAttKey(store, name, r.employee_id)
     const dayKey = rowDate + '_' + key
     if (!map[key]) map[key] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
     if (!byDay[dayKey]) {
@@ -217,9 +243,12 @@ export async function GET(request: NextRequest) {
 
   try {
     type EmpRow = {
+      id?: number
+      employee_code?: string | null
       store?: string
       name?: string
       job?: string
+      grade?: string
       sal_type?: string
       sal_amt?: number
       position_allowance?: number
@@ -229,32 +258,47 @@ export async function GET(request: NextRequest) {
       role?: string
       sso_exempt?: boolean | null
     }
-    const empSel = 'store,name,job,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role,sso_exempt'
+    const empSel =
+      'id,employee_code,store,name,job,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role,sso_exempt'
     const empSelFallback = empSel.replace(',sso_exempt', '')
+    const empSelNoGrade = empSel.replace(',grade,', ',')
+    const empSelNoGradeFb = empSelFallback.replace(',grade,', ',')
+    const empSelNoCode = empSel.replace('employee_code,', '')
+    const empSelNoCodeFallback = empSelFallback.replace('employee_code,', '')
+    const empSelNoCodeNoGrade = empSelNoGrade.replace('employee_code,', '')
+    const empSelNoCodeNoGradeFb = empSelNoGradeFb.replace('employee_code,', '')
+    const empSelectCandidates = [
+      empSel,
+      empSelFallback,
+      empSelNoGrade,
+      empSelNoGradeFb,
+      empSelNoCode,
+      empSelNoCodeFallback,
+      empSelNoCodeNoGrade,
+      empSelNoCodeNoGradeFb,
+    ]
     let empRows: EmpRow[] = []
-    try {
-      if (storeFilter) {
-        empRows = (await supabaseSelectFilter(
-          'employees',
-          `store=ilike.${encodeURIComponent(storeFilter)}`,
-          { order: 'id.asc', select: empSel }
-        )) as EmpRow[]
-      } else {
-        empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSel })) as EmpRow[]
-      }
-    } catch (fetchErr) {
-      const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
-      if (!/sso_exempt|column/i.test(msg)) throw fetchErr
-      if (storeFilter) {
-        empRows = (await supabaseSelectFilter(
-          'employees',
-          `store=ilike.${encodeURIComponent(storeFilter)}`,
-          { order: 'id.asc', select: empSelFallback }
-        )) as EmpRow[]
-      } else {
-        empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelFallback })) as EmpRow[]
+    let empLoadErr: unknown = null
+    for (const sel of empSelectCandidates) {
+      try {
+        if (storeFilter) {
+          empRows = (await supabaseSelectFilter(
+            'employees',
+            `store=ilike.${encodeURIComponent(storeFilter)}`,
+            { order: 'id.asc', select: sel }
+          )) as EmpRow[]
+        } else {
+          empRows = (await supabaseSelect('employees', { order: 'id.asc', select: sel })) as EmpRow[]
+        }
+        empLoadErr = null
+        break
+      } catch (e) {
+        empLoadErr = e
       }
     }
+    if (empLoadErr) throw empLoadErr
+
+    const hazEvalRules = await loadPayrollHazEvalGradeRules()
 
     const attSummary = await getAttendanceSummary(monthStr)
     const targetDate = new Date(monthStr + '-01')
@@ -272,6 +316,8 @@ export async function GET(request: NextRequest) {
     const list: {
       store: string
       name: string
+      employeeId?: number
+      employeeCode?: string
       salary: number
       posAllow: number
       hazAllow: number
@@ -290,6 +336,12 @@ export async function GET(request: NextRequest) {
       const store = String(e.store || '').trim()
       const name = String(e.name || '').trim()
       if (!name) continue
+      const employeeId = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      const employeeCode = String(e.employee_code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 5)
 
       const salType = String(e.sal_type || '').trim().toLowerCase()
       const isHourly = ['시급', 'hourly', 'hour', 'part-time', 'part time'].includes(salType)
@@ -297,9 +349,10 @@ export async function GET(request: NextRequest) {
       const posAllow = Number(e.position_allowance) || 0
       const hazAllowDaily = Number(e.haz_allow) || 0
       const job = String(e.job || '').trim()
-      const isKitchen = job === 'Kitchen' || job === '주방'
+      const isKitchen = /주방|kitchen|chef|쿡|cook/i.test(job)
+      const empGrade = String(e.grade || '').trim()
 
-      const attKey = store + '_' + name
+      const attKey = payrollAttKey(store, name, e.id)
       const att = attSummary[attKey] || { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
       const lateMin = att.lateMin
       const earlyMin = att.earlyMin
@@ -329,7 +382,7 @@ export async function GET(request: NextRequest) {
       }
 
       let hazAllow = 0
-      if (isKitchen && hazAllowDaily > 0 && workDays > 0) {
+      if (hazAllowEligibleWithEvalGrade(isKitchen, hazAllowDaily, workDays, empGrade, hazEvalRules)) {
         hazAllow = Math.floor(hazAllowDaily * workDays)
       }
 
@@ -359,6 +412,8 @@ export async function GET(request: NextRequest) {
       list.push({
         store,
         name,
+        ...(employeeId > 0 ? { employeeId } : {}),
+        ...(employeeCode ? { employeeCode } : {}),
         salary,
         posAllow,
         hazAllow,

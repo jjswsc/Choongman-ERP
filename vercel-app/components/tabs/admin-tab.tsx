@@ -181,6 +181,7 @@ export function AdminTab() {
       date: row.date,
       store: row.store,
       name: row.name,
+      ...(row.employeeId != null && row.employeeId > 0 ? { employeeId: row.employeeId } : {}),
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
@@ -194,6 +195,7 @@ export function AdminTab() {
       date: row.date,
       store: row.store,
       name: row.name,
+      ...(row.employeeId != null && row.employeeId > 0 ? { employeeId: row.employeeId } : {}),
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
@@ -327,6 +329,7 @@ export function AdminTab() {
                   <tr className="border-b bg-muted/50">
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("label_date")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("emp_label_name")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap tabular-nums">{t("emp_label_employee_code")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_in")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_out")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_break_min")}</th>
@@ -369,6 +372,7 @@ export function AdminTab() {
                       <tr key={`r-${row.date}-${row.store}-${row.name}-${i}`} className="border-b last:border-b-0">
                         <td className="px-2 py-2 text-center">{row.date}</td>
                         <td className="px-2 py-2 text-center font-medium">{row.name}</td>
+                        <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">{row.employeeCode || "-"}</td>
                         <td className="px-2 py-2 text-center">{row.inTimeStr}</td>
                         <td className="px-2 py-2 text-center">{row.outTimeStr}</td>
                         <td className="px-2 py-2 text-center">{row.breakMin}</td>
@@ -523,6 +527,7 @@ export function AdminTab() {
                         {row.name}
                         {row.nick && <span className="text-muted-foreground ml-0.5">({displayLabelShort(row.nick)})</span>}
                       </td>
+                      <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">{row.employeeCode || "-"}</td>
                       <td className="px-2 py-2 text-center">-</td>
                       <td className="px-2 py-2 text-center">-</td>
                       <td className="px-2 py-2 text-center">-</td>

@@ -57,7 +57,13 @@ export async function POST(request: NextRequest) {
       if (isClockOut && optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
         patch.ot_min = Math.min(9999, Math.round(optOtMinutes))
       }
-      if (optEarlyMinutes !== undefined && !Number.isNaN(optEarlyMinutes) && optEarlyMinutes >= 0) {
+      // 조퇴 분은 퇴근 로그에만 저장(출근 id로 호출 시 무시)
+      if (
+        isClockOut &&
+        optEarlyMinutes !== undefined &&
+        !Number.isNaN(optEarlyMinutes) &&
+        optEarlyMinutes >= 0
+      ) {
         patch.early_min = Math.min(9999, Math.round(optEarlyMinutes))
       }
     } else if (decision === '반려') {

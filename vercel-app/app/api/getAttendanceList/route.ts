@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
   const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const employeeFilter = String(searchParams.get('employeeFilter') || searchParams.get('name') || '').trim()
+  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const employeeId =
+    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
 
   if (!startDate || !endDate || !storeFilter || !employeeFilter) {
     return NextResponse.json([], { headers })
@@ -18,12 +21,34 @@ export async function GET(request: NextRequest) {
   try {
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
 
-    const filter = `store_name=ilike.${encodeURIComponent(storeFilter)}&name=ilike.${encodeURIComponent(employeeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
-    const rows = (await supabaseSelectFilter(
-      'attendance_logs',
-      filter,
-      { order: 'log_at.asc', limit: 500, select: 'log_at,log_type,status,late_min,ot_min,approved' }
-    )) as { log_at?: string; log_type?: string; status?: string; late_min?: number; ot_min?: number; approved?: string | null }[]
+    const rows = (await (async () => {
+      if (employeeId > 0) {
+        try {
+          const byIdFilter = `store_name=ilike.${encodeURIComponent(storeFilter)}&employee_id=eq.${employeeId}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+          return await supabaseSelectFilter('attendance_logs', byIdFilter, {
+            order: 'log_at.asc',
+            limit: 500,
+            select: 'log_at,log_type,status,late_min,ot_min,approved',
+          })
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!/employee_id|42703|column/i.test(em)) throw e
+        }
+      }
+      const byNameFilter = `store_name=ilike.${encodeURIComponent(storeFilter)}&name=ilike.${encodeURIComponent(employeeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+      return await supabaseSelectFilter('attendance_logs', byNameFilter, {
+        order: 'log_at.asc',
+        limit: 500,
+        select: 'log_at,log_type,status,late_min,ot_min,approved',
+      })
+    })()) as {
+      log_at?: string
+      log_type?: string
+      status?: string
+      late_min?: number
+      ot_min?: number
+      approved?: string | null
+    }[]
 
     const list: { timestamp: string; type: string; status: string; late_min?: number; ot_min?: number; approved?: string }[] = []
     for (const r of rows || []) {

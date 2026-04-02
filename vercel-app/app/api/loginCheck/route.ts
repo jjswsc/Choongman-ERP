@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
     type EmpLoginRow = {
+      id?: number
+      employee_code?: string | null
       store?: string
       name?: string
       password?: string
@@ -36,13 +38,20 @@ export async function POST(req: NextRequest) {
     try {
       rows = (await supabaseSelectFilter('employees', filter, {
         limit: 1,
-        select: 'store,name,password,role,job,resign_date,extra_stores',
+        select: 'id,employee_code,store,name,password,role,job,resign_date,extra_stores',
       })) as EmpLoginRow[]
     } catch {
-      rows = (await supabaseSelectFilter('employees', filter, {
-        limit: 1,
-        select: 'store,name,password,role,job,resign_date',
-      })) as EmpLoginRow[]
+      try {
+        rows = (await supabaseSelectFilter('employees', filter, {
+          limit: 1,
+          select: 'store,name,password,role,job,resign_date,extra_stores',
+        })) as EmpLoginRow[]
+      } catch {
+        rows = (await supabaseSelectFilter('employees', filter, {
+          limit: 1,
+          select: 'store,name,password,role,job,resign_date',
+        })) as EmpLoginRow[]
+      }
     }
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
@@ -84,7 +93,11 @@ export async function POST(req: NextRequest) {
     const multiSettings = await getFranchiseeMultiStoreSettings()
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
+    const empIdRaw = row.id != null ? Math.floor(Number(row.id)) : 0
+    const empCodeRaw = row.employee_code != null ? String(row.employee_code).trim() : ''
     const tokenPayload: Parameters<typeof signToken>[0] = { store: storeName, name: userName, role: finalRole }
+    if (empIdRaw > 0) tokenPayload.employeeId = empIdRaw
+    if (empCodeRaw) tokenPayload.employeeCode = empCodeRaw
     if (finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0) {
       tokenPayload.allowedStores = allowedStores
     }
@@ -97,6 +110,8 @@ export async function POST(req: NextRequest) {
         userName,
         role: finalRole,
         token,
+        ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
+        ...(empCodeRaw ? { employeeCode: empCodeRaw } : {}),
         ...(finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0
           ? { allowedStores }
           : {}),

@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
     const dateStr = String(body?.date || body?.dateStr || '').trim().slice(0, 10)
     const storeName = String(body?.store || body?.storeName || '').trim()
     const empName = String(body?.name || body?.empName || '').trim()
+    const employeeIdRaw = body?.employeeId
+    const employeeId =
+      employeeIdRaw != null && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
 
@@ -58,7 +61,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 스케줄 조회
-    const schFilter = `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+    const schFilter =
+      employeeId > 0
+        ? `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}`
+        : `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
     const schRows = (await supabaseSelectFilter('schedules', schFilter, { limit: 1 })) as {
       schedule_date?: string
       store_name?: string
@@ -85,8 +91,22 @@ export async function POST(request: NextRequest) {
     const planInPrevDay = !!sch.plan_in_prev_day
 
     // 해당 날짜에 승인된 휴가가 있으면 긴급 인정 불가
-    const leaveFilter = `leave_date=eq.${dateStr}&store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`
-    const leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, { limit: 5 })) as { id?: number }[]
+    const leaveRows = (await (async () => {
+      if (employeeId > 0) {
+        try {
+          return await supabaseSelectFilter(
+            'leave_requests',
+            `leave_date=eq.${dateStr}&store=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&status=eq.승인`,
+            { limit: 5, select: 'id' }
+          )
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!/employee_id|42703|column/i.test(em)) throw e
+        }
+      }
+      const leaveFilter = `leave_date=eq.${dateStr}&store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`
+      return await supabaseSelectFilter('leave_requests', leaveFilter, { limit: 5, select: 'id' })
+    })()) as { id?: number }[]
     if (leaveRows && leaveRows.length > 0) {
       return NextResponse.json(
         { success: false, message: '해당 날짜는 휴가일입니다. 긴급 인정할 수 없습니다.' },
@@ -98,11 +118,25 @@ export async function POST(request: NextRequest) {
     const nextD = new Date(dateStr + 'T12:00:00')
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
-    const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, {
-      limit: 10,
-      select: 'log_type',
-    })) as { log_type?: string }[]
+    const attRows = (await (async () => {
+      if (employeeId > 0) {
+        try {
+          return await supabaseSelectFilter(
+            'attendance_logs',
+            `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+            { limit: 10, select: 'log_type' }
+          )
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!/employee_id|42703|column/i.test(em)) throw e
+        }
+      }
+      const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
+      return await supabaseSelectFilter('attendance_logs', attFilter, {
+        limit: 10,
+        select: 'log_type',
+      })
+    })()) as { log_type?: string }[]
     const hasIn = (attRows || []).some((r) => String(r.log_type || '').trim() === '출근')
     if (hasIn) {
       return NextResponse.json(
@@ -135,7 +169,7 @@ export async function POST(request: NextRequest) {
 
     const breakMin = calcBreakMin(planBS, planBE)
 
-    await supabaseInsert('attendance_logs', {
+    const inPayload: Record<string, unknown> = {
       log_at: inDate.toISOString(),
       store_name: storeName,
       name: empName,
@@ -150,9 +184,21 @@ export async function POST(request: NextRequest) {
       reason: '',
       status: '정상(승인)',
       approved: '승인완료',
-    })
+    }
+    if (employeeId > 0) inPayload.employee_id = employeeId
+    try {
+      await supabaseInsert('attendance_logs', inPayload)
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (/employee_id|42703|column/i.test(em) && 'employee_id' in inPayload) {
+        const { employee_id: _eid, ...fallback } = inPayload
+        await supabaseInsert('attendance_logs', fallback)
+      } else {
+        throw e
+      }
+    }
 
-    await supabaseInsert('attendance_logs', {
+    const outPayload: Record<string, unknown> = {
       log_at: outDate.toISOString(),
       store_name: storeName,
       name: empName,
@@ -167,7 +213,19 @@ export async function POST(request: NextRequest) {
       reason: '',
       status: '정상(승인)',
       approved: '승인완료',
-    })
+    }
+    if (employeeId > 0) outPayload.employee_id = employeeId
+    try {
+      await supabaseInsert('attendance_logs', outPayload)
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (/employee_id|42703|column/i.test(em) && 'employee_id' in outPayload) {
+        const { employee_id: _eid, ...fallback } = outPayload
+        await supabaseInsert('attendance_logs', fallback)
+      } else {
+        throw e
+      }
+    }
 
     return NextResponse.json(
       { success: true, message: '긴급 인정이 완료되었습니다.' },

@@ -9,6 +9,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
   const name = String(searchParams.get('name') || '').trim()
+  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const employeeId =
+    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
 
   if (!storeName || !name) {
     return NextResponse.json([], { headers })
@@ -18,11 +21,29 @@ export async function GET(request: NextRequest) {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
     // store_name: contains 패턴 사용 (예: "Union Mall" → "CM Union Mall" 매칭)
     const storePattern = '*' + String(storeName).replace(/\*/g, '') + '*'
-    const rows = (await supabaseSelectFilter(
-      'attendance_logs',
-      `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
-      { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' }
-    )) as { log_at?: string; log_type?: string }[]
+    const rows = (await (async () => {
+      const byIdFilter =
+        employeeId > 0
+          ? `store_name=ilike.${encodeURIComponent(storePattern)}&employee_id=eq.${employeeId}`
+          : ''
+      if (byIdFilter) {
+        try {
+          return await supabaseSelectFilter('attendance_logs', byIdFilter, {
+            order: 'log_at.desc',
+            limit: 50,
+            select: 'log_at,log_type',
+          })
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!/employee_id|42703|column/i.test(em)) throw e
+        }
+      }
+      return await supabaseSelectFilter(
+        'attendance_logs',
+        `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
+        { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' }
+      )
+    })()) as { log_at?: string; log_type?: string }[]
 
     const arr = rows || []
 

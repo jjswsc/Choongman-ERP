@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { assignLeaveRowToEmployeeForStats } from '@/lib/leave-request-utils'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+function normEmployeeCode(c: string | null | undefined): string {
+  return String(c ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 5)
 }
 
 /** dateFilterType: 'request' = 신청일 기준, 'leave' = 휴가일 기준 */
@@ -29,24 +38,149 @@ export async function GET(request: NextRequest) {
   if (isManager && userStore) store = userStore
 
   try {
-    let rows: { id: number; store?: string; name?: string; type?: string; leave_date?: string; request_at?: string; created_at?: string; reason?: string; status?: string; certificate_url?: string }[] = []
+    type LeaveReqDb = {
+      id: number
+      store?: string
+      name?: string
+      type?: string
+      leave_date?: string
+      request_at?: string
+      created_at?: string
+      reason?: string
+      status?: string
+      certificate_url?: string
+      employee_id?: number | null
+    }
+    const selectWithEid =
+      'id,store,name,type,leave_date,request_at,created_at,reason,status,certificate_url,employee_id'
+    const selectLegacy =
+      'id,store,name,type,leave_date,request_at,created_at,reason,status,certificate_url'
 
-    if (store) {
-      const filter = `store=ilike.${encodeURIComponent(store)}`
-      rows = (await supabaseSelectFilter('leave_requests', filter, { order: 'leave_date.desc', limit: 500 })) as typeof rows
-    } else {
-      rows = (await supabaseSelect('leave_requests', { order: 'leave_date.desc', limit: 500 })) as typeof rows
+    let rows: LeaveReqDb[] = []
+    try {
+      if (store) {
+        const filter = `store=ilike.${encodeURIComponent(store)}`
+        rows = (await supabaseSelectFilter('leave_requests', filter, {
+          order: 'leave_date.desc',
+          limit: 500,
+          select: selectWithEid,
+        })) as LeaveReqDb[]
+      } else {
+        rows = (await supabaseSelect('leave_requests', {
+          order: 'leave_date.desc',
+          limit: 500,
+          select: selectWithEid,
+        })) as LeaveReqDb[]
+      }
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (!/employee_id|42703|column/i.test(em)) throw e
+      if (store) {
+        const filter = `store=ilike.${encodeURIComponent(store)}`
+        rows = (await supabaseSelectFilter('leave_requests', filter, {
+          order: 'leave_date.desc',
+          limit: 500,
+          select: selectLegacy,
+        })) as LeaveReqDb[]
+      } else {
+        rows = (await supabaseSelect('leave_requests', {
+          order: 'leave_date.desc',
+          limit: 500,
+          select: selectLegacy,
+        })) as LeaveReqDb[]
+      }
     }
 
     const nickMap: Record<string, string> = {}
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,nick', limit: 2000 })) as { store?: string; name?: string; nick?: string }[] || []
+    const codeByStoreName: Record<string, string> = {}
+    const codeByEmployeeId: Record<number, string> = {}
+    const nickByEmployeeId: Record<number, string> = {}
+
+    type EmpDb = {
+      id?: number
+      store?: string
+      name?: string
+      name_title?: string | null
+      nick?: string
+      employee_code?: string | null
+    }
+
+    const empSelectFull = 'id,store,name,name_title,nick,employee_code'
+    const empSelectNoCode = 'id,store,name,name_title,nick'
+    const empSelectNoTitle = 'id,store,name,nick,employee_code'
+    const empSelectMinimal = 'id,store,name,nick'
+
+    let empList: EmpDb[] = []
+    const loadEmps = async (select: string): Promise<EmpDb[]> => {
+      if (store) {
+        const filter = `store=ilike.${encodeURIComponent(store)}`
+        return (await supabaseSelectFilter('employees', filter, {
+          order: 'id.asc',
+          select,
+          limit: 5000,
+        })) as EmpDb[]
+      }
+      return (await supabaseSelect('employees', { order: 'id.asc', select, limit: 5000 })) as EmpDb[]
+    }
+
+    try {
+      empList = await loadEmps(empSelectFull)
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (/name_title|42703|column/i.test(em)) {
+        try {
+          empList = await loadEmps(empSelectNoTitle)
+        } catch (e2) {
+          const em2 = e2 instanceof Error ? e2.message : String(e2)
+          if (!/employee_code|42703|column/i.test(em2)) throw e2
+          empList = await loadEmps(empSelectMinimal)
+        }
+      } else if (/employee_code|42703|column/i.test(em)) {
+        try {
+          empList = await loadEmps(empSelectNoCode)
+        } catch (e2) {
+          const em2 = e2 instanceof Error ? e2.message : String(e2)
+          if (!/name_title|42703|column/i.test(em2)) throw e2
+          empList = await loadEmps(empSelectMinimal)
+        }
+      } else {
+        throw e
+      }
+    }
+
     for (const e of empList) {
       const s = String(e.store || '').trim()
       const n = String(e.name || '').trim()
       if (s && n) nickMap[s + '|' + n] = String(e.nick || '').trim()
+      const code = normEmployeeCode(e.employee_code)
+      const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      if (eid > 0) {
+        nickByEmployeeId[eid] = String(e.nick || '').trim()
+        if (code) codeByEmployeeId[eid] = code
+      }
+      if (code && s && n) codeByStoreName[s + '|' + n] = code
     }
 
-    const list: { id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[] = []
+    const empRowsForAssign = empList.map((e) => ({
+      id: e.id,
+      store: e.store,
+      name: e.name,
+      name_title: e.name_title ?? null,
+    }))
+
+    const list: {
+      id: number
+      store: string
+      name: string
+      employeeCode: string
+      nick: string
+      type: string
+      date: string
+      requestDate: string
+      reason: string
+      status: string
+      certificateUrl: string
+    }[] = []
 
     for (const r of rows || []) {
       const rowStatus = String(r.status || '').trim()
@@ -62,11 +196,28 @@ export async function GET(request: NextRequest) {
       if (startStr && filterBy < startStr) continue
       if (endStr && filterBy > endStr) continue
 
+      const st = String(r.store || '').trim()
+      const nm = String(r.name || '').trim()
+      const eid = r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
+      const codeFromId = eid > 0 ? codeByEmployeeId[eid] || '' : ''
+      const codeFromName = st && nm ? codeByStoreName[st + '|' + nm] || '' : ''
+      const matched = assignLeaveRowToEmployeeForStats(st, nm, r.employee_id, empRowsForAssign)
+      const mid = matched?.id != null && Number.isFinite(Number(matched.id)) ? Math.floor(Number(matched.id)) : 0
+      const codeFromMatch = mid > 0 ? codeByEmployeeId[mid] || '' : ''
+      let employeeCode = (codeFromId || codeFromName || codeFromMatch).trim()
+      // 직원은 매칭됐으나 employee_code 미입력 DB — 통계·승인 목록에서 식별용 (나중에 코드만 채우면 자동 대체)
+      if (!employeeCode && mid > 0) employeeCode = `#${mid}`
+
+      const nickExact = st && nm ? nickMap[st + '|' + nm] || '' : ''
+      const nickFromMatch = mid > 0 ? nickByEmployeeId[mid] || '' : ''
+      const nick = (nickFromMatch || nickExact).trim()
+
       list.push({
         id: r.id,
-        store: String(r.store || '').trim(),
-        name: String(r.name || '').trim(),
-        nick: nickMap[String(r.store || '') + '|' + String(r.name || '')] || '',
+        store: st,
+        name: nm,
+        employeeCode,
+        nick,
         type: String(r.type || '').trim(),
         date: dateStr,
         requestDate: requestDateStr,

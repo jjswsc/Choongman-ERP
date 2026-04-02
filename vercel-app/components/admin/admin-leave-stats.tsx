@@ -45,6 +45,7 @@ export function AdminLeaveStats() {
     {
       store: string
       name: string
+      employeeCode: string
       usedPeriodAnnual: number
       usedPeriodSick: number
       usedPeriodUnpaid: number
@@ -116,19 +117,21 @@ export function AdminLeaveStats() {
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {loading ? t("loading") : t("search")}
         </Button>
+        <p className="text-[11px] leading-snug text-muted-foreground px-0.5">{t("leave_stats_approved_only")}</p>
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-xs text-center">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-3 py-2.5 font-semibold">{t("store")}</th>
-                <th className="px-3 py-2.5 font-semibold">{t("leave_col_name")}</th>
+                <th rowSpan={2} className="px-3 py-2.5 font-semibold align-middle">{t("store")}</th>
+                <th rowSpan={2} className="px-3 py-2.5 font-semibold align-middle">{t("leave_col_name")}</th>
+                <th rowSpan={2} className="px-3 py-2.5 font-semibold align-middle whitespace-nowrap tabular-nums">
+                  {t("emp_label_employee_code")}
+                </th>
                 <th colSpan={4} className="px-3 py-2 font-semibold">{t("leave_used_period")}</th>
                 <th colSpan={4} className="px-3 py-2 font-semibold">{t("leave_used_total")}</th>
-                <th colSpan={2} className="px-3 py-2 font-semibold">{t("leave_remain")}</th>
+                <th colSpan={3} className="px-3 py-2 font-semibold">{t("leave_remain")}</th>
               </tr>
               <tr className="border-b bg-muted/30">
-                <th className="px-3 py-1" />
-                <th className="px-3 py-1" />
                 <th className="px-2 py-1 font-medium">{t("annual")}</th>
                 <th className="px-2 py-1 font-medium">{t("lakij")}</th>
                 <th className="px-2 py-1 font-medium">{t("sick")}</th>
@@ -145,7 +148,7 @@ export function AdminLeaveStats() {
             <tbody>
               {statsList.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={14} className="py-8 text-center text-muted-foreground">
                     {t("leave_stats_hint")}
                   </td>
                 </tr>
@@ -154,6 +157,7 @@ export function AdminLeaveStats() {
                   <tr key={`${r.store}-${r.name}-${i}`} className="border-b last:border-b-0">
                     <td className="px-3 py-2.5 font-medium">{r.store}</td>
                     <td className="px-3 py-2.5 font-medium">{r.name}</td>
+                    <td className="px-3 py-2.5 font-medium tabular-nums whitespace-nowrap">{r.employeeCode || "-"}</td>
                     <td className="px-2 py-2.5">{r.usedPeriodAnnual}</td>
                     <td className="px-2 py-2.5">{r.usedPeriodLakij ?? 0}</td>
                     <td className="px-2 py-2.5">{r.usedPeriodSick}</td>

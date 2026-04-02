@@ -4,6 +4,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { displayLabelShort } from "@/lib/utils"
+import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
 function roleBadgeStyle(role: string): string {
@@ -44,7 +45,7 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
     t("emp_label_store"),
     t("emp_grade"),
     t("emp_label_name"),
-    t("emp_label_nick_title"),
+    t("emp_label_employee_code"),
     t("emp_label_nickname"),
     t("emp_label_nation"),
     t("emp_col_age"),
@@ -96,8 +97,12 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                       {grade}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-center font-bold text-card-foreground">{e.name}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground">{displayLabelShort(e.nameTitle ?? "") || "-"}</td>
+                  <td className="px-3 py-2.5 text-center font-bold text-card-foreground">
+                    {formatEmployeeDisplayName(e.name, e.nameTitle)}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground font-mono text-[11px]">
+                    {String(e.employeeCode || "").trim() || "—"}
+                  </td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{displayLabelShort(e.nick) || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.nation || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{age}{age !== "-" ? ageSuffix : ""}</td>

@@ -16,6 +16,7 @@ import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-conte
 import { isLangCode, useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { replacePosOfflineAware } from "@/lib/pos-offline-nav"
 
 function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
   // #region agent log
@@ -159,7 +160,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authRedirect", "auth exists, redirecting", {
         redirectTo,
       })
-      router.replace(redirectTo)
+      replacePosOfflineAware(redirectTo, (p) => router.replace(p))
       return
     }
     /** HMR/라우트 전환 직후 unmount 레이스를 피하려고 취소 가능한 매크로태스크로 지연 */
@@ -215,11 +216,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           user: res.userName,
           role: res.role || "",
           token: res.token,
+          ...(res.employeeId != null && res.employeeId > 0 ? { employeeId: res.employeeId } : {}),
+          ...(res.employeeCode ? { employeeCode: String(res.employeeCode).trim() } : {}),
           ...(Array.isArray(res.allowedStores) && res.allowedStores.length > 0
             ? { allowedStores: res.allowedStores }
             : {}),
         })
-        router.replace(redirectTo)
+        replacePosOfflineAware(redirectTo, (p) => router.replace(p))
       } else {
         const apiMsg = res.message || ""
         if (isLoginCheckBackendFailureMessage(apiMsg)) {
@@ -484,7 +487,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 onClick={() => {
                   if (offlineResume) {
                     setAuth(offlineResume)
-                    router.replace(redirectTo)
+                    replacePosOfflineAware(redirectTo, (p) => router.replace(p))
                   }
                 }}
                 className="w-full rounded-md bg-emerald-600 px-3 py-3 text-sm font-medium text-white hover:bg-emerald-500"
@@ -492,25 +495,34 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 {t.enterOfflineMode}
               </button>
             </div>
-          ) : (!browserOnline || serverListDegraded) && !offlineResume ? (
-            <div className="flex flex-wrap justify-center gap-2 py-8">
-              <button
-                type="button"
-                onClick={() => fetchLoginData()}
-                className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
-              >
-                {t.retry}
-              </button>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
-              >
-                {t.refresh}
-              </button>
-            </div>
           ) : (
           <form onSubmit={handleSubmit}>
+            {(!browserOnline || serverListDegraded) && !offlineResume ? (
+              <div className="mb-3 space-y-2">
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
+                  <p className="font-medium">{t.serverError}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-amber-100/90">
+                    {pickLoginStr(tMsg, "msg_login_offline_connect_detail")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fetchLoginData()}
+                    className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                  >
+                    {t.retry}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                  >
+                    {t.refresh}
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {showOfflineResumeBanner && offlineResume ? (
               <div className="mb-3 rounded-lg border border-emerald-500/45 bg-emerald-950/35 px-3 py-3 text-center">
                 <p className="text-xs leading-relaxed text-emerald-100/95">
@@ -528,7 +540,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   type="button"
                   onClick={() => {
                     setAuth(offlineResume)
-                    router.replace(redirectTo)
+                    replacePosOfflineAware(redirectTo, (p) => router.replace(p))
                   }}
                   className="mt-2 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
                 >
@@ -594,7 +606,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   type="button"
                   onClick={() => {
                     setAuth(offlineResume)
-                    router.replace(redirectTo)
+                    replacePosOfflineAware(redirectTo, (p) => router.replace(p))
                   }}
                   className="mb-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
                 >

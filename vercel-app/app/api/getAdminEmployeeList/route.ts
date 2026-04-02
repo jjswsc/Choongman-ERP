@@ -8,6 +8,7 @@ import {
   normalizedAllowedStoresFromJwt,
   parseExtraStoresColumn,
 } from '@/lib/franchisee-multi-store'
+import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 
 function toDateStr(val: unknown): string {
   if (!val) return ''
@@ -42,8 +43,11 @@ export async function GET(req: NextRequest) {
       jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
 
     const empSelectFull =
-      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores'
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code'
     const empSelectFallback =
+      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo,employee_code'
+    /** employee_code 컬럼 미배포 DB용 */
+    const empSelectFallbackNoEmpCode =
       'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
     let rows: Record<string, unknown>[] | null = null
     const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
@@ -55,6 +59,7 @@ export async function GET(req: NextRequest) {
       empSelectFullNoExtra,
       empSelectFullNoExtraNoSsoExempt,
       empSelectFallback,
+      empSelectFallbackNoEmpCode,
     ]
     let loadErr: unknown = null
     for (const sel of empSelectCandidates) {
@@ -84,11 +89,15 @@ export async function GET(req: NextRequest) {
         })
       )
         continue
+      const rawName = r.name != null ? String(r.name).trim() : ''
+      const rawTitle = r.name_title != null ? String(r.name_title).trim() : ''
+      const { name: normName, nameTitle: normTitle } = normalizeEmployeeNameFields(rawName, rawTitle)
       list.push({
         row: r.id,
         store: empStore,
-        name: r.name,
-        nameTitle: r.name_title != null ? String(r.name_title).trim() : '',
+        name: normName || rawName,
+        nameTitle: normTitle,
+        employeeCode: r.employee_code != null ? String(r.employee_code).trim() : '',
         nick: r.nick || '',
         phone: r.phone || '',
         job: r.job || '',

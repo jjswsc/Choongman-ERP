@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdate, supabaseSelect, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
 import { isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
@@ -10,6 +10,9 @@ import {
   normalizedAllowedStoresFromJwt,
   rowRoleLooksFranchisee,
 } from '@/lib/franchisee-multi-store'
+import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+
+const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 
 function toDateStr(val: unknown): string | null {
   if (!val) return null
@@ -19,6 +22,139 @@ function toDateStr(val: unknown): string | null {
   }
   const d = new Date(val as string)
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+}
+
+function storePrefixFromName(storeName: string): string {
+  const alpha = String(storeName || '')
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')
+  if (alpha.length >= 2) return alpha.slice(0, 2)
+  if (alpha.length === 1) return `${alpha}X`
+  return 'ST'
+}
+
+function prefixCandidatesForStore(storeName: string): string[] {
+  const raw = String(storeName || '').trim()
+  const letters = raw.toUpperCase().replace(/[^A-Z]/g, '')
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (p: string) => {
+    const v = String(p || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2)
+    if (v.length !== 2) return
+    if (seen.has(v)) return
+    seen.add(v)
+    out.push(v)
+  }
+
+  // 1) 매장명에서 추출한 연속 알파벳 2글자 (순서 유지, CM Tower → CM, MT, …)
+  if (letters.length >= 2) {
+    for (let i = 0; i < letters.length - 1; i++) {
+      push(`${letters[i]}${letters[i + 1]}`)
+    }
+  }
+
+  // 2) 맨 앞 2글자 (1)과 겹칠 수 있으나 우선순위 고정용
+  push(storePrefixFromName(raw))
+
+  // 3) 공백으로 나뉜 단어들에서 알파벳 첫 글자만 모아 앞 2글자 (SQL cm_erp_emp_prefix_candidates 와 동일)
+  const words = raw.split(/\s+/).filter(Boolean)
+  let ini = ''
+  for (let wi = 0; wi < Math.min(words.length, 4); wi++) {
+    const a = words[wi].toUpperCase().replace(/[^A-Z]/g, '')
+    if (a.length >= 1) ini += a[0]
+    if (ini.length >= 2) break
+  }
+  if (ini.length >= 2) push(`${ini[0]}${ini[1]}`)
+
+  // 4) 같은 매장 문자열에서 나올 수 있는 모든 알파벳 쌍 (이름 연관도↑, 충돌 시 뒤쪽 후보 사용)
+  if (letters.length >= 2) {
+    for (let i = 0; i < letters.length; i++) {
+      for (let j = i + 1; j < letters.length; j++) {
+        push(`${letters[i]}${letters[j]}`)
+      }
+    }
+  }
+
+  // 5) 첫 글자 + 마지막 글자
+  if (letters.length >= 2) {
+    push(`${letters[0]}${letters[letters.length - 1]}`)
+  }
+
+  if (letters.length === 1) {
+    push(`${letters}X`)
+    for (let j = 0; j < 26; j++) push(`${letters}${String.fromCharCode(65 + j)}`)
+  }
+
+  if (!letters.length) {
+    push('ST')
+  }
+
+  // 6) 최후 수단: AA–ZZ (매장명과 무관하지만 전역 충돌 시에만 뒤에서 선택됨)
+  for (let i = 0; i < 26; i++) {
+    for (let j = 0; j < 26; j++) {
+      push(`${String.fromCharCode(65 + i)}${String.fromCharCode(65 + j)}`)
+    }
+  }
+  return out
+}
+
+function normalizeEmployeeCodeInput(raw: unknown): string {
+  return String(raw ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 5)
+}
+
+async function buildNextEmployeeCodeForStore(storeName: string): Promise<string> {
+  let rows: { store?: string | null; employee_code?: string | null }[] = []
+  try {
+    rows = (await supabaseSelect('employees', {
+      select: 'store,employee_code',
+      limit: 5000,
+      order: 'id.asc',
+    })) as { store?: string | null; employee_code?: string | null }[]
+  } catch (e) {
+    const em = e instanceof Error ? e.message : String(e)
+    if (/employee_code|42703|column/i.test(em)) return `${storePrefixFromName(storeName)}001`
+    throw e
+  }
+  const targetStore = String(storeName || '').trim()
+  const usedPrefixesByOtherStore = new Set<string>()
+  const validPrefixCountInTarget = new Map<string, number>()
+  const targetRows: string[] = []
+  for (const r of rows || []) {
+    const rowStore = String(r.store || '').trim()
+    const c = normalizeEmployeeCodeInput(r.employee_code)
+    if (!EMPLOYEE_CODE_RE.test(c)) continue
+    const pfx = c.slice(0, 2)
+    if (rowStore && rowStore.toLowerCase() === targetStore.toLowerCase()) {
+      validPrefixCountInTarget.set(pfx, (validPrefixCountInTarget.get(pfx) || 0) + 1)
+      targetRows.push(c)
+    } else {
+      usedPrefixesByOtherStore.add(pfx)
+    }
+  }
+  let prefix = ''
+  if (validPrefixCountInTarget.size > 0) {
+    const sorted = Array.from(validPrefixCountInTarget.entries()).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1]
+      return a[0].localeCompare(b[0])
+    })
+    prefix = sorted[0][0]
+  } else {
+    const cands = prefixCandidatesForStore(storeName)
+    prefix = cands.find((p) => !usedPrefixesByOtherStore.has(p)) || cands[0] || 'ST'
+  }
+  const used = new Set<number>()
+  for (const c of targetRows) {
+    if (!c.startsWith(prefix)) continue
+    const n = Number(c.slice(2))
+    if (Number.isFinite(n) && n >= 1 && n <= 999) used.add(n)
+  }
+  for (let i = 1; i <= 999; i++) {
+    if (!used.has(i)) return `${prefix}${String(i).padStart(3, '0')}`
+  }
+  throw new Error(`매장(${storeName}) 직원코드가 999명을 초과했습니다.`)
 }
 
 /** 직원 저장 (신규/수정) */
@@ -67,10 +203,15 @@ export async function POST(req: NextRequest) {
       passwordValue = ''
     }
 
+    const nameNorm = normalizeEmployeeNameFields(
+      String(d.name || '').trim(),
+      String(d.nameTitle ?? d.name_title ?? '').trim()
+    )
+    const codeRaw = normalizeEmployeeCodeInput((d as { employeeCode?: unknown }).employeeCode ?? d.employee_code)
     const payload: Record<string, unknown> = {
       store: String(d.store || '').trim(),
-      name: String(d.name || '').trim(),
-      name_title: String(d.nameTitle ?? d.name_title ?? '').trim(),
+      name: nameNorm.name,
+      name_title: nameNorm.nameTitle,
       nick: String(d.nick || '').trim(),
       phone: String(d.phone || '').trim(),
       job: String(d.job || '').trim(),
@@ -99,6 +240,39 @@ export async function POST(req: NextRequest) {
       })(),
       grade: d.grade != null ? String(d.grade).trim() : '',
       photo: d.photo != null ? String(d.photo).trim() : '',
+    }
+    if (codeRaw) {
+      if (!EMPLOYEE_CODE_RE.test(codeRaw)) {
+        return NextResponse.json(
+          { success: false, message: '❌ 직원 코드는 영문 2글자 + 숫자 3자리 형식(예: AB001)이어야 합니다.' },
+          { headers }
+        )
+      }
+      const manualPrefix = codeRaw.slice(0, 2)
+      const targetStoreForCode = String(payload.store || '').trim()
+      try {
+        const allRows = (await supabaseSelect('employees', {
+          select: 'store,employee_code',
+          limit: 5000,
+          order: 'id.asc',
+        })) as { store?: string | null; employee_code?: string | null }[]
+        const usedByOtherStore = (allRows || []).some((r) => {
+          const p = normalizeEmployeeCodeInput(r.employee_code).slice(0, 2)
+          if (p !== manualPrefix) return false
+          const s = String(r.store || '').trim()
+          return !!s && s.toLowerCase() !== targetStoreForCode.toLowerCase()
+        })
+        if (usedByOtherStore) {
+          return NextResponse.json(
+            { success: false, message: `❌ 접두어 ${manualPrefix}는 다른 매장에서 이미 사용 중입니다. 매장별로 고유한 2글자 접두어를 사용해 주세요.` },
+            { headers }
+          )
+        }
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_code|42703|column/i.test(em)) throw e
+      }
+      payload.employee_code = codeRaw
     }
 
     const multiSettings = await getFranchiseeMultiStoreSettings()
@@ -137,14 +311,33 @@ export async function POST(req: NextRequest) {
 
     if (rowId === 0) {
       payload.password = passwordValue || ''
-      try {
-        await supabaseInsert('employees', payload)
-      } catch (insErr) {
-        const em = insErr instanceof Error ? insErr.message : String(insErr)
-        if (/attendance_allowance|42703|column/i.test(em)) {
-          const { attendance_allowance: _aa, ...withoutAa } = payload
-          await supabaseInsert('employees', withoutAa)
-        } else {
+      if (!codeRaw) {
+        payload.employee_code = await buildNextEmployeeCodeForStore(newStore)
+      }
+      let toInsert: Record<string, unknown> = { ...payload }
+      for (;;) {
+        try {
+          await supabaseInsert('employees', toInsert)
+          break
+        } catch (insErr) {
+          const em = insErr instanceof Error ? insErr.message : String(insErr)
+          if (/attendance_allowance|42703|column/i.test(em) && 'attendance_allowance' in toInsert) {
+            const { attendance_allowance: _aa, ...rest } = toInsert
+            toInsert = rest
+            continue
+          }
+          if (/employee_code|42703|column/i.test(em) && 'employee_code' in toInsert) {
+            const { employee_code: _ec, ...rest } = toInsert
+            toInsert = rest
+            continue
+          }
+          if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
+            if (codeRaw) {
+              return NextResponse.json({ success: false, message: '❌ 이미 사용 중인 직원 코드입니다.' }, { headers })
+            }
+            toInsert = { ...toInsert, employee_code: await buildNextEmployeeCodeForStore(newStore) }
+            continue
+          }
           throw insErr
         }
       }
@@ -190,6 +383,8 @@ export async function POST(req: NextRequest) {
       if (/attendance_allowance|42703|column/i.test(em)) {
         const { attendance_allowance: _aa, ...withoutAa } = payload
         await supabaseUpdate('employees', rowId, withoutAa)
+      } else if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
+        return NextResponse.json({ success: false, message: '❌ 이미 사용 중인 직원 코드입니다.' }, { headers })
       } else {
         throw updErr
       }

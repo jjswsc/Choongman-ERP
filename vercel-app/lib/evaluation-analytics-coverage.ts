@@ -5,6 +5,7 @@
 import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { userCanAccessEmployeeStore, storeMatches } from '@/lib/admin-employee-store-access'
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 export type EvalCoverageUnevaluatedRow = {
   store: string
@@ -21,15 +22,6 @@ export type EvalCoverageStats = {
   /** 평가 없음 */
   unevaluatedEmployees: number
   unevaluated: EvalCoverageUnevaluatedRow[]
-}
-
-function normalizeNameForEvalMatch(name: string): string {
-  const s = String(name || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/^(Mr\.?|Ms\.?|Mrs\.?)\s*/i, '')
-    .trim()
-  return s || String(name || '').trim()
 }
 
 function toYmd(val: unknown): string {
@@ -72,7 +64,7 @@ export function buildEvaluatedEmployeeKeys(
     const st = String(r.store_name || '').trim().replace(/\s+/g, ' ')
     const en = String(r.employee_name || '').trim().replace(/\s+/g, ' ')
     if (!st || !en) continue
-    const variants = new Set([en, normalizeNameForEvalMatch(en)])
+    const variants = new Set([en, normalizeEmployeeNameForGradeMatch(en)])
     for (const v of variants) {
       if (v) {
         set.add(`${st}\n${v}`)
@@ -95,11 +87,11 @@ function employeeCandidateKeys(store: string, name: string, nick: string): strin
   }
   if (n) {
     add(s, n)
-    add(s, normalizeNameForEvalMatch(n))
+    add(s, normalizeEmployeeNameForGradeMatch(n))
   }
   if (nk && nk !== n) {
     add(s, nk)
-    add(s, normalizeNameForEvalMatch(nk))
+    add(s, normalizeEmployeeNameForGradeMatch(nk))
   }
   return keys
 }

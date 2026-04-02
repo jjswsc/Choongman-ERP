@@ -29,6 +29,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessSettings } from "@/lib/permissions"
+import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import {
   useStoreList,
   getAdminEmployeeList,
@@ -44,6 +45,7 @@ import {
   type AdminTableUsageRow,
   getFranchiseeMultiStoreSettings,
   saveFranchiseeMultiStoreSettings,
+  type AdminEmployeeItem,
 } from "@/lib/api-client"
 
 function dataLimitKindLabel(kind: string, t: (key: string) => string): string {
@@ -110,7 +112,9 @@ export function AdminSettings() {
 
   const [permStores, setPermStores] = useState<string[]>([])
   const [permStore, setPermStore] = useState("")
-  const [permEmployees, setPermEmployees] = useState<{ store: string; name: string; nick: string }[]>([])
+  const [permEmployees, setPermEmployees] = useState<
+    { store: string; name: string; nick: string; legalName: string; nameTitle?: string }[]
+  >([])
   const [permEmployee, setPermEmployee] = useState("")
   const [permChecks, setPermChecks] = useState<Record<string, boolean>>({})
   const [permLoading, setPermLoading] = useState(false)
@@ -154,11 +158,20 @@ export function AdminSettings() {
     const empRes = await getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" })
     if (storeKeys.length && !permStore) setPermStore(storeKeys[0])
 
-    const list: { store: string; name: string; nick: string }[] = []
+    const list: { store: string; name: string; nick: string; legalName: string; nameTitle?: string }[] = []
     for (const e of empRes.list || []) {
-      const st = String(e.store || "").trim()
-      const name = String(e.nick || "").trim() || String(e.name || "").trim()
-      if (st && name) list.push({ store: st, name, nick: String(e.nick || "").trim() })
+      const row = e as AdminEmployeeItem
+      const st = String(row.store || "").trim()
+      const legalName = String(row.name || "").trim()
+      const name = String(row.nick || "").trim() || legalName
+      if (st && name)
+        list.push({
+          store: st,
+          name,
+          nick: String(row.nick || "").trim(),
+          legalName,
+          nameTitle: row.nameTitle,
+        })
     }
     setPermEmployees(list)
   }, [auth?.store, auth?.role, storeKeys])
@@ -457,7 +470,9 @@ export function AdminSettings() {
                       </SelectTrigger>
                       <SelectContent>
                         {filteredEmployees.map((e) => (
-                          <SelectItem key={`${e.store}-${e.name}`} value={e.name}>{e.name}</SelectItem>
+                          <SelectItem key={`${e.store}-${e.name}`} value={e.name}>
+                            {formatEmployeeDisplayName(e.legalName, e.nameTitle)}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

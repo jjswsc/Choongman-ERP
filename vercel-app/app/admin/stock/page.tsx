@@ -30,8 +30,9 @@ import {
   type StockStatusItem,
 } from "@/lib/api-client"
 import { OFFICE_STORES } from "@/lib/permissions"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
-/** 본사/오피스/본점 → Office 로 통일 (중복 제거) */
+/** 본사/오피스/본점/CM Office 등 → CM Office 로 통일 (중복 제거) */
 function normalizeStoreList(stores: string[]): string[] {
   const result: string[] = []
   let hasOffice = false
@@ -43,7 +44,7 @@ function normalizeStoreList(stores: string[]): string[] {
       result.push(s)
     }
   }
-  if (hasOffice) result.push("Office")
+  if (hasOffice) result.push("CM Office")
   return [...new Set(result)].sort()
 }
 
@@ -126,7 +127,7 @@ export default function StockPage() {
   }, [storeFilter, stockDateFilter])
 
   React.useEffect(() => {
-    setStockDateFilter(new Date().toISOString().slice(0, 10))
+    setStockDateFilter(getBangkokTodayDateString())
   }, [])
 
   React.useEffect(() => {

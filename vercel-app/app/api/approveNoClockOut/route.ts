@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 function normalizeNameForSchedule(name: string): string {
-  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+  return normalizeEmployeeNameForGradeMatch(name)
 }
 
 function parsePlanToMinutes(plan: string | null | undefined): number {
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
     const dateStr = String(body?.date || body?.dateStr || '').trim().slice(0, 10)
     const storeName = String(body?.store || body?.storeName || '').trim()
     const empName = String(body?.name || body?.empName || '').trim()
+    const employeeIdRaw = body?.employeeId
+    const employeeId =
+      employeeIdRaw != null && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
 
@@ -75,12 +79,26 @@ export async function POST(request: NextRequest) {
     const nextD = new Date(dateStr + 'T12:00:00')
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
-    const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, {
-      order: 'log_at.asc',
-      limit: 200,
-      select: 'id,log_type,log_at,status',
-    })) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
+    const attRows = (await (async () => {
+      if (employeeId > 0) {
+        try {
+          return await supabaseSelectFilter(
+            'attendance_logs',
+            `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+            { order: 'log_at.asc', limit: 200, select: 'id,log_type,log_at,status' }
+          )
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!/employee_id|42703|column/i.test(em)) throw e
+        }
+      }
+      const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
+      return await supabaseSelectFilter('attendance_logs', attFilter, {
+        order: 'log_at.asc',
+        limit: 200,
+        select: 'id,log_type,log_at,status',
+      })
+    })()) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
     const inLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '출근')
     const outLog = (attRows || []).find((r) => String(r.log_type || '').trim() === '퇴근')
     const hasOut = !!outLog
@@ -110,6 +128,7 @@ export async function POST(request: NextRequest) {
     const schFilter = `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}`
     const schRowsAll = (await supabaseSelectFilter('schedules', schFilter, { limit: 500 })) as {
       name?: string
+      employee_id?: number | null
       plan_in?: string
       plan_out?: string
       break_start?: string
@@ -118,6 +137,8 @@ export async function POST(request: NextRequest) {
     }[]
     const empNorm = normalizeNameForSchedule(empName)
     const schRow = (schRowsAll || []).find((s) => {
+      const sid = s.employee_id != null && Number.isFinite(Number(s.employee_id)) ? Math.floor(Number(s.employee_id)) : 0
+      if (employeeId > 0 && sid > 0) return sid === employeeId
       const sn = String(s?.name || '').trim()
       const snNorm = normalizeNameForSchedule(sn)
       return !sn ? false : sn === empName || empNorm === snNorm || empNorm.includes(snNorm) || snNorm.includes(empNorm)
@@ -148,7 +169,7 @@ export async function POST(request: NextRequest) {
         ot_min: 0,
       })
     } else {
-      await supabaseInsert('attendance_logs', {
+      const payload: Record<string, unknown> = {
         log_at: outDate.toISOString(),
         store_name: storeName,
         name: empName,
@@ -163,7 +184,19 @@ export async function POST(request: NextRequest) {
         reason: '',
         status: '강제퇴근(승인)',
         approved: '승인완료',
-      })
+      }
+      if (employeeId > 0) payload.employee_id = employeeId
+      try {
+        await supabaseInsert('attendance_logs', payload)
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (/employee_id|42703|column/i.test(em) && 'employee_id' in payload) {
+          const { employee_id: _eid, ...fallback } = payload
+          await supabaseInsert('attendance_logs', fallback)
+        } else {
+          throw e
+        }
+      }
     }
 
     return NextResponse.json(

@@ -8,6 +8,7 @@ import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
 import { AdminPayrollRecords } from "@/components/admin/admin-payroll-records"
 import { AdminPayrollSalaryHistory } from "@/components/admin/admin-payroll-salary-history"
 import { AdminPayrollHolidays } from "@/components/admin/admin-payroll-holidays"
+import { AdminPayrollRules } from "@/components/admin/admin-payroll-rules"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -22,7 +23,7 @@ import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { isOfficeRole, isManagerRole, isFranchiseeRole } from "@/lib/permissions"
 
-const PAYROLL_TABS = ["calc", "records", "salary_history", "holidays", "help"] as const
+const PAYROLL_TABS = ["calc", "records", "salary_history", "holidays", "rules", "help"] as const
 type PayrollTab = (typeof PAYROLL_TABS)[number]
 
 function isPayrollTab(v: string | null): v is PayrollTab {
@@ -90,6 +91,9 @@ function PayrollPageInner() {
                 <TabsTrigger value="holidays" className={adminTabsTriggerCn}>
                   {t("pay_tab_holidays")}
                 </TabsTrigger>
+                <TabsTrigger value="rules" className={adminTabsTriggerCn}>
+                  {t("pay_tab_rules")}
+                </TabsTrigger>
                 <TabsTrigger value="help" className={adminTabsTriggerCn}>
                   {t("pay_tab_help")}
                 </TabsTrigger>
@@ -108,6 +112,9 @@ function PayrollPageInner() {
           <TabsContent value="holidays" className={adminTabsContentCn}>
             <AdminPayrollHolidays readOnly={isManagerRole(auth?.role || "")} />
           </TabsContent>
+          <TabsContent value="rules" className={adminTabsContentCn}>
+            <AdminPayrollRules />
+          </TabsContent>
           <TabsContent value="help" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="rounded-lg border border-border bg-card p-5 space-y-4">
               <h2 className="text-base font-semibold">{t("pay_help_title")}</h2>
@@ -122,6 +129,7 @@ function PayrollPageInner() {
                   <li>{t("pay_help_waive")}</li>
                   <li>{t("pay_help_absence")}</li>
                   <li>{t("pay_help_holiday")}</li>
+                  <li>{t("pay_help_haz_grade")}</li>
                 </ul>
               </section>
               <section>

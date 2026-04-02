@@ -13,6 +13,7 @@ import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, L
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -101,11 +102,16 @@ export function POSHeader({
     >
       <div className="flex min-w-0 flex-nowrap items-center gap-x-1.5 overflow-x-auto sm:gap-x-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <Link href="/pos">
-            <Button variant="ghost" size="icon" className="h-8 w-8" title={t('posHome') || '포스 첫 화면'}>
-              <Home className="w-4 h-4" />
-            </Button>
-          </Link>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title={t('posHome') || '포스 첫 화면'}
+            onClick={() => navigatePosOfflineAware('/pos', (p) => router.push(p))}
+          >
+            <Home className="w-4 h-4" />
+          </Button>
           {showAdminNavButton && onAdminNav ? (
             <Button
               variant="outline"

@@ -42,7 +42,21 @@ export function AdminLeaveApproval() {
   const [leaveTypeFilter, setLeaveTypeFilter] = useState("All")
   const [leaveStatusFilter, setLeaveStatusFilter] = useState("대기")
   const [leaveStores, setLeaveStores] = useState<string[]>([])
-  const [leaveList, setLeaveList] = useState<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>([])
+  const [leaveList, setLeaveList] = useState<
+    {
+      id: number
+      store: string
+      name: string
+      employeeCode: string
+      nick: string
+      type: string
+      date: string
+      requestDate: string
+      reason: string
+      status: string
+      certificateUrl: string
+    }[]
+  >([])
   const [leaveLoading, setLeaveLoading] = useState(false)
   const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
   const [rejectDialog, setRejectDialog] = useState<{ id: number } | null>(null)
@@ -131,7 +145,9 @@ export function AdminLeaveApproval() {
   const visibleLeaveList = nameQ
     ? leaveList.filter(
         (item) =>
-          (item.name || "").toLowerCase().includes(nameQ) || (item.nick || "").toLowerCase().includes(nameQ)
+          (item.name || "").toLowerCase().includes(nameQ) ||
+          (item.nick || "").toLowerCase().includes(nameQ) ||
+          (item.employeeCode || "").toLowerCase().includes(nameQ)
       )
     : leaveList
 
@@ -268,6 +284,7 @@ export function AdminLeaveApproval() {
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-center font-medium">{t("store")}</th>
                   <th className="p-2 text-center font-medium min-w-[100px] whitespace-nowrap">{t("leave_col_name")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap tabular-nums">{t("emp_label_employee_code")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
                   <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
@@ -281,6 +298,7 @@ export function AdminLeaveApproval() {
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="p-2 text-center">{item.store}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${displayLabelShort(item.nick)})` : ""}</td>
+                    <td className="p-2 text-center whitespace-nowrap tabular-nums">{item.employeeCode || "-"}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.requestDate}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>

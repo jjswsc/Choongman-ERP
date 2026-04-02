@@ -46,6 +46,8 @@ type PayrollRow = {
   month?: string
   store: string
   name: string
+  employeeId?: number
+  employeeCode?: string
   dept?: string
   role?: string
   salary: number
@@ -186,6 +188,8 @@ export function AdminPayrollCalc() {
           month: String(r.month || ""),
           store: String(r.store || ""),
           name: String(r.name || ""),
+          employeeId: Number(r.employee_id || 0) || undefined,
+          employeeCode: String(r.employee_code || ""),
           dept: String(r.dept || ""),
           role: String(r.role || ""),
           salary: Number(r.salary) || 0,
@@ -246,6 +250,8 @@ export function AdminPayrollCalc() {
           month: String(r.month || ""),
           store: String(r.store || ""),
           name: String(r.name || ""),
+          employeeId: Number(r.employeeId || 0) || undefined,
+          employeeCode: String(r.employeeCode || ""),
           dept: String(r.dept || ""),
           role: String(r.role || ""),
           salary: Number(r.salary) || 0,
@@ -394,6 +400,8 @@ export function AdminPayrollCalc() {
         list: list.map((r) => ({
           store: r.store,
           name: r.name,
+          employeeId: r.employeeId,
+          employeeCode: r.employeeCode || "",
           dept: r.dept || "",
           role: r.role || "",
           salary: r.salary,
@@ -519,6 +527,7 @@ export function AdminPayrollCalc() {
                   <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
                   <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4rem] max-w-[5.5rem]">{t("pay_col_store")}</th>
                   <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4.5rem] max-w-[6.5rem]">{t("pay_col_name")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4.5rem]">{t("emp_label_employee_code")}</th>
                   <th rowSpan={2} className="p-1.5 text-right font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
                   <th colSpan={6} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
@@ -557,6 +566,7 @@ export function AdminPayrollCalc() {
                       <span className="font-medium block truncate" title={r.name}>{r.name}</span>
                       {r.role ? <small className="text-muted-foreground block truncate" title={r.role}>{r.role}</small> : null}
                     </td>
+                    <td className="p-1.5 text-center whitespace-nowrap tabular-nums">{r.employeeCode || "-"}</td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(r.salary)}</td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
                       <button

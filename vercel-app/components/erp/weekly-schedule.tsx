@@ -10,7 +10,13 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
 import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
+import { normalizeEmployeeNameFields } from "@/lib/employee-display-name"
 import { cn, displayLabelShort } from "@/lib/utils"
+
+function scheduleRowIsLeave(r: WeeklyScheduleItem): boolean {
+  const lt = r.leaveType
+  return lt != null && String(lt).trim() !== ""
+}
 
 function scheduleTimeOnly(v: string | null | undefined): string {
   if (v == null || (typeof v === "string" && !v.trim())) return ""
@@ -52,6 +58,93 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(new Set())
+
+  /**
+   * 가로 드래그 스크롤: (1) flex 자식은 min-w-0 없으면 부모가 내용만큼 커져 scrollWidth===clientWidth가 됨
+   * (2) capture/setPointerCapture는 환경에 따라 동작이 달라 버블 pointerdown + window move/up만 사용
+   */
+  const scheduleHScrollRef = React.useRef<HTMLDivElement>(null)
+  const suppressScheduleRowClickRef = React.useRef(false)
+  const [scheduleHScrollDragging, setScheduleHScrollDragging] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const node = scheduleHScrollRef.current
+    if (!node) return
+    /** ref.current 는 클로저에서 null 로 좁혀지지 않아 명시 타입으로 고정 */
+    const scrollEl: HTMLDivElement = node
+
+    let activeId: number | null = null
+    let startX = 0
+    let startScroll = 0
+    let dragMoved = false
+    let uiDragging = false
+
+    function detachWindowListeners() {
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", onPointerEnd)
+      window.removeEventListener("pointercancel", onPointerEnd)
+    }
+
+    function onPointerEnd(e: PointerEvent) {
+      if (activeId == null || e.pointerId !== activeId) return
+      activeId = null
+      detachWindowListeners()
+      if (uiDragging) {
+        uiDragging = false
+        setScheduleHScrollDragging(false)
+      }
+      if (dragMoved) suppressScheduleRowClickRef.current = true
+      dragMoved = false
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      if (activeId == null || e.pointerId !== activeId) return
+      const dx = e.clientX - startX
+      if (Math.abs(dx) <= 4) return
+      dragMoved = true
+      scrollEl.scrollLeft = startScroll - dx
+      e.preventDefault()
+      if (!uiDragging) {
+        uiDragging = true
+        setScheduleHScrollDragging(true)
+      }
+    }
+
+    function onPointerDownBubble(e: PointerEvent) {
+      if (e.target instanceof Node && !scrollEl.contains(e.target)) return
+      if (e.pointerType === "mouse" && e.button !== 0) return
+      activeId = e.pointerId
+      startX = e.clientX
+      startScroll = scrollEl.scrollLeft
+      dragMoved = false
+      window.addEventListener("pointermove", onPointerMove, { passive: false })
+      window.addEventListener("pointerup", onPointerEnd)
+      window.addEventListener("pointercancel", onPointerEnd)
+    }
+
+    function onWheel(e: WheelEvent) {
+      if (scrollEl.scrollWidth <= scrollEl.clientWidth + 2) return
+      if (e.shiftKey && e.deltaY !== 0) {
+        scrollEl.scrollLeft += e.deltaY
+        e.preventDefault()
+        return
+      }
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX !== 0) {
+        scrollEl.scrollLeft += e.deltaX
+        e.preventDefault()
+      }
+    }
+
+    scrollEl.addEventListener("pointerdown", onPointerDownBubble)
+    scrollEl.addEventListener("wheel", onWheel, { passive: false })
+
+    return () => {
+      detachWindowListeners()
+      activeId = null
+      scrollEl.removeEventListener("pointerdown", onPointerDownBubble)
+      scrollEl.removeEventListener("wheel", onWheel)
+    }
+  }, [hasSearched, schedule.length, loading])
 
   const displayStoreList = storeListProp.length > 0 ? storeListProp : storeList
   const isOffice = displayStoreList.length > 1 && ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
@@ -117,19 +210,55 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
 
   const byPerson: Record<string, { name: string; store: string; area: string; byDate: Record<string, WeeklyScheduleItem> }> = {}
   for (const r of schedule) {
-    const key = `${r.store || ""}|${r.name || ""}`
-    if (!byPerson[key]) {
-      byPerson[key] = { name: r.nick || r.name || "", store: r.store || "", area: r.area || "Service", byDate: {} }
+    const st = String(r.store || "").trim()
+    const rawName = String(r.name || "").trim()
+    const { name: normName } = normalizeEmployeeNameFields(rawName, "")
+    const canonical = (normName || rawName).trim() || rawName
+    const mergeKey = `${st}|${canonical}`
+    if (!byPerson[mergeKey]) {
+      byPerson[mergeKey] = {
+        name: String(r.nick || canonical || rawName).trim() || rawName,
+        store: st,
+        area: String(r.area || "Service"),
+        byDate: {},
+      }
+    } else {
+      const nk = String(r.nick || "").trim()
+      if (nk) byPerson[mergeKey].name = nk
+      if (!scheduleRowIsLeave(r)) {
+        byPerson[mergeKey].area = String(r.area || byPerson[mergeKey].area || "Service")
+      }
     }
     // schedule_date는 근무 시작일. plan_in_prev_day 시 퇴근만 다음날이므로 당일(r.date)에만 표시
-    byPerson[key].byDate[r.date] = r
+    const d = r.date
+    const prev = byPerson[mergeKey].byDate[d]
+    const incLeave = scheduleRowIsLeave(r)
+    const prevLeave = prev ? scheduleRowIsLeave(prev) : false
+    if (!prev) {
+      byPerson[mergeKey].byDate[d] = r
+    } else if (incLeave && !prevLeave) {
+      byPerson[mergeKey].byDate[d] = r
+    } else if (!incLeave && prevLeave) {
+      // 같은 날 휴가가 있으면 근무 행으로 덮어쓰지 않음
+    } else {
+      byPerson[mergeKey].byDate[d] = r
+    }
   }
   const personKeys = Object.keys(byPerson).sort()
   const dailyCount = [0, 0, 0, 0, 0, 0, 0]
   const multiArea = new Set(schedule.map((r) => r.area || "Service")).size > 1
   const showArea = multiArea
 
-  type PersonData = { name: string; store: string; area: string; workDays: string[]; breakDays: string[]; leaveDays: (string | undefined)[] }
+  type PersonData = {
+    /** 집계 키(store|API name) — 닉네임이 같아도 직원별로 유일 */
+    personKey: string
+    name: string
+    store: string
+    area: string
+    workDays: string[]
+    breakDays: string[]
+    leaveDays: (string | undefined)[]
+  }
   const persons: PersonData[] = []
   for (const key of personKeys) {
     const p = byPerson[key]
@@ -156,7 +285,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       breakDays.push(breakStr)
       if (workStr) dailyCount[i]++
     }
-    persons.push({ name: p.name, store: p.store, area: p.area, workDays, breakDays, leaveDays })
+    persons.push({ personKey: key, name: p.name, store: p.store, area: p.area, workDays, breakDays, leaveDays })
   }
 
   // 전체 매장 선택 시 매장별로 그룹화
@@ -272,7 +401,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
   if (!auth?.store) return null
 
   return (
-    <div className="rounded-2xl border bg-card shadow-sm">
+    <div className="rounded-2xl border bg-card shadow-sm w-full min-w-0 max-w-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(215,80%,50%)]/10">
@@ -362,9 +491,18 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               <p>{t("scheduleStorePlaceholder")}: {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal}</p>
               <p>{t("schedulePeriod")}: {weekRangeStr}</p>
             </div>
-            {/* 가로 스크롤 영역 - 드래그해서 옆으로 이동 */}
-            <div className="overflow-x-auto overscroll-x-contain px-4 pb-4 print:overflow-visible print:px-0">
-            <div className="min-w-max print-schedule-wrap">
+            {/* 가로 스크롤 영역 - 마우스로 끌어 스크롤 (행이 button이라 기본 제스처만으로는 불편함) */}
+            <div
+              ref={scheduleHScrollRef}
+              className={cn(
+                "min-w-0 w-full max-w-full max-h-[min(75vh,42rem)] overflow-x-auto overflow-y-auto overscroll-contain px-4 pb-4 [-webkit-overflow-scrolling:touch] print:max-h-none print:overflow-visible print:px-0",
+                scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
+              )}
+            >
+            <div
+              className="w-max print:!min-w-0 print:w-full print:max-w-none print-schedule-wrap"
+              style={{ minWidth: "max(720px, max-content, calc(100% + 1px))" }}
+            >
               {/* 요일 헤더 */}
               <div className="grid gap-1 mb-2 print-schedule-grid" style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}>
                 <div className="shrink-0" />
@@ -393,14 +531,34 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                       </div>
                     )}
                     {storePersons.map((p) => {
-                  const key = `${p.store}|${p.name}`
+                  const key = p.personKey
                   const isCollapsed = collapsedRows.has(key)
                   return (
                     <div key={key} className="rounded-xl border bg-card overflow-hidden print-schedule-card">
-                      <button
-                        type="button"
-                        onClick={() => toggleRow(key)}
-                        className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid print-schedule-person"
+                      {/* button 대신 div: 버튼은 포인터/드래그가 가로 스크롤과 충돌하는 경우가 많음 */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(ev) => {
+                          if (ev.key !== "Enter" && ev.key !== " ") return
+                          ev.preventDefault()
+                          if (suppressScheduleRowClickRef.current) {
+                            suppressScheduleRowClickRef.current = false
+                            return
+                          }
+                          toggleRow(key)
+                        }}
+                        onClick={() => {
+                          if (suppressScheduleRowClickRef.current) {
+                            suppressScheduleRowClickRef.current = false
+                            return
+                          }
+                          toggleRow(key)
+                        }}
+                        className={cn(
+                          "grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid print-schedule-person outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                          scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
+                        )}
                         style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}
                       >
                         {/* 이름 + 부서 + 접기 버튼 */}
@@ -411,7 +569,14 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                               <span className="inline-flex shrink-0" title={t("scheduleCollapseAll") || "접기"}>
                                 <ChevronUp
                                   className="h-4 w-4 text-muted-foreground hover:text-foreground"
-                                  onClick={(e) => { e.stopPropagation(); toggleRow(key); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (suppressScheduleRowClickRef.current) {
+                                      suppressScheduleRowClickRef.current = false
+                                      return
+                                    }
+                                    toggleRow(key)
+                                  }}
                                 />
                               </span>
                             )}
@@ -458,7 +623,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                           </div>
                           )
                         })}
-                      </button>
+                      </div>
                     </div>
                   )
                     })}

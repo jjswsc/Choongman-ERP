@@ -25,6 +25,9 @@ import {
   resolveScheduleForAttendanceDay,
   scheduleDateKey,
 } from '@/lib/attendance-utils'
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import { employeeMeetsMinEvalLetterGrade, hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
+import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
@@ -99,16 +102,27 @@ export type PayrollCalcExplain = {
 }
 
 function normalizeNameForSchedule(name: string): string {
-  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+  return normalizeEmployeeNameForGradeMatch(name)
+}
+
+function payrollEmployeeKey(store: string, name: string, employeeId?: number | null): string {
+  const sid =
+    employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+  if (sid > 0) return `${store}_#${sid}`
+  return `${store}_${name}`
 }
 
 /** store+name / store+정규화이름 양쪽 키에 걸린 승인 휴가를 한 직원 기준으로 합침(근면·결석 연동 누락 방지) */
 function mergeLeaveEventsForEmployee<T extends { date: string; type: string; days: number; kind: string }>(
   byKey: Record<string, T[]>,
   store: string,
-  name: string
+  name: string,
+  employeeId?: number | null
 ): T[] {
-  const keys = new Set<string>([`${store}_${name}`])
+  const keys = new Set<string>([payrollEmployeeKey(store, name, employeeId)])
+  const sid = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+  if (sid > 0) keys.add(`${store}_#${sid}`)
+  keys.add(`${store}_${name}`)
   const nn = normalizeNameForSchedule(name)
   if (nn && nn !== name) keys.add(`${store}_${nn}`)
   const seen = new Set<string>()
@@ -128,15 +142,22 @@ function mergeLeaveEventsForEmployee<T extends { date: string; type: string; day
 function resignCutoffForRow(
   store: string,
   name: string,
+  employeeId: number | null | undefined,
   resignByAttKey: Record<string, string>
 ): string | undefined {
+  const sid =
+    employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+  if (sid > 0) {
+    const k0 = `${store}_#${sid}`
+    if (resignByAttKey[k0]) return resignByAttKey[k0]
+  }
   const k1 = `${store}_${name}`
   const k2 = `${store}_${normalizeNameForSchedule(name)}`
   return resignByAttKey[k1] || resignByAttKey[k2]
 }
 
 function buildResignByAttKey(
-  empRows: { store?: string; name?: string; resign_date?: unknown }[] | null
+  empRows: { id?: number; store?: string; name?: string; resign_date?: unknown }[] | null
 ): Record<string, string> {
   const m: Record<string, string> = {}
   for (const e of empRows || []) {
@@ -144,6 +165,8 @@ function buildResignByAttKey(
     const name = String(e.name || '').trim()
     const rs = toDateStr(e.resign_date)
     if (!store || !name || !rs) continue
+    const sid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+    if (sid > 0) m[`${store}_#${sid}`] = rs
     m[`${store}_${name}`] = rs
     const nn = normalizeNameForSchedule(name)
     if (nn && nn !== name) m[`${store}_${nn}`] = rs
@@ -154,7 +177,19 @@ function buildResignByAttKey(
 /** getPayrollPreview 근태 집계와 동일: 방콕 날짜, 자정 넘김 병합, 완료 근무일만 지각·근무 반영 */
 function buildAttendanceSummary(
   monthStr: string,
-  attRows: { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; early_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }[],
+  attRows: {
+    log_at?: string
+    store_name?: string
+    name?: string
+    employee_id?: number | null
+    log_type?: string
+    late_min?: number
+    early_min?: number
+    ot_min?: number
+    break_min?: number
+    status?: string
+    approved?: string
+  }[],
   scheduleMap: Record<string, { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }>,
   resignByAttKey: Record<string, string> = {}
 ): { summary: Record<string, AttSummary>; dayLines: Record<string, AttendanceDayLines> } {
@@ -165,14 +200,22 @@ function buildAttendanceSummary(
   const map: Record<string, AttSummary> = {}
   const dayLines: Record<string, AttendanceDayLines> = {}
   type DayV = {
+    attKey: string
+    store: string
+    name: string
+    employeeId: number
     inMs: number | null
     outMs: number | null
     breakMin: number
     outApproved: boolean
+    /** 직전 반영 퇴근 로그 status (정상(승인) + early_min 조정 판별) */
+    outStatus: string
     lateMin: number
     otMin: number
     /** 퇴근 로그 ot_min null=미입력(스케줄 차이로 산정), 숫자=승인 조정값 */
     otMinExplicit: number | null
+    /** 퇴근 로그 early_min: 급여 집계 시 정상(승인)이면 조퇴 면제·감액에 사용 */
+    earlyMinExplicit: number | null
   }
   const byDay: Record<string, DayV> = {}
 
@@ -196,7 +239,9 @@ function buildAttendanceSummary(
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
     if (!store || !name) continue
-    const attKey = store + '_' + name
+    const employeeId =
+      r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
+    const attKey = payrollEmployeeKey(store, name, employeeId)
     if (!map[attKey]) {
       map[attKey] = {
         lateMin: 0,
@@ -214,13 +259,19 @@ function buildAttendanceSummary(
     const dayKey = `${rowDate}|${store}|${name}`
     if (!byDay[dayKey]) {
       byDay[dayKey] = {
+        attKey,
+        store,
+        name,
+        employeeId,
         inMs: null,
         outMs: null,
         breakMin: 0,
         outApproved: false,
+        outStatus: '',
         lateMin: 0,
         otMin: 0,
         otMinExplicit: null,
+        earlyMinExplicit: null,
       }
     }
     const v = byDay[dayKey]
@@ -252,6 +303,8 @@ function buildAttendanceSummary(
           target.outMs = dt
           // break_min은 휴식종료 누적만 반영(근태 getAttendanceRecordsAdmin과 동일). 퇴근 행 값으로 덮으면 휴식 합(예: 85분)이 사라져 조퇴·OT가 틀어짐.
           target.outApproved = clockOutCountsForPayroll(r.approved, r.status)
+          const stOut = String(r.status || '').trim()
+          target.outStatus = stOut
           const rawOt = (r as { ot_min?: unknown }).ot_min
           target.otMin = Number(rawOt) || 0
           const otParsed =
@@ -261,6 +314,18 @@ function buildAttendanceSummary(
               ? Number(rawOt)
               : null
           target.otMinExplicit = otParsed
+          const rawEarly = (r as { early_min?: unknown }).early_min
+          if (
+            target.outApproved &&
+            stOut.includes('정상(승인)') &&
+            rawEarly != null &&
+            rawEarly !== '' &&
+            Number.isFinite(Number(rawEarly))
+          ) {
+            target.earlyMinExplicit = Math.max(0, Math.min(9999, Math.round(Number(rawEarly))))
+          } else {
+            target.earlyMinExplicit = null
+          }
         }
       }
       if (isOvernightOut && prev?.inMs != null && prev.outMs == null) {
@@ -279,21 +344,23 @@ function buildAttendanceSummary(
     if (shouldCarryOutToPrev) {
       const parts = dayKey.split('|')
       const rowDate = parts[0]
-      const store = parts[1] || ''
-      const name = parts[2] || ''
-      const prevKey = `${addCalendarDay(rowDate, -1)}|${store}|${name}`
+      const prevKey = `${addCalendarDay(rowDate, -1)}|${v.store}|${v.name}`
       const prev = byDay[prevKey]
       if (prev && prev.inMs != null && prev.outMs == null) {
         prev.outMs = v.outMs
         prev.breakMin += v.breakMin
         prev.outApproved = v.outApproved
+        prev.outStatus = v.outStatus
         prev.otMin = v.otMin
         prev.otMinExplicit = v.otMinExplicit
+        prev.earlyMinExplicit = v.earlyMinExplicit
         v.outMs = null
         v.breakMin = 0
         v.outApproved = false
+        v.outStatus = ''
         v.otMin = 0
         v.otMinExplicit = null
+        v.earlyMinExplicit = null
       }
     }
   }
@@ -302,11 +369,9 @@ function buildAttendanceSummary(
   for (const [dayKey, v] of Object.entries(byDay)) {
     const parts = dayKey.split('|')
     const rowDate = parts[0]
-    const store = parts[1] || ''
-    const name = parts[2] || ''
-    const attKey = store + '_' + name
+    const attKey = v.attKey
     if (!rowDate || rowDate < startStr || rowDate > endStr) continue
-    const resignEnd = resignCutoffForRow(store, name, resignByAttKey)
+    const resignEnd = resignCutoffForRow(v.store, v.name, v.employeeId, resignByAttKey)
     if (resignEnd && rowDate > resignEnd) continue
     if (v.inMs == null) continue
     if (!map[attKey]) {
@@ -328,11 +393,9 @@ function buildAttendanceSummary(
   for (const [dayKey, v] of Object.entries(byDay)) {
     const parts = dayKey.split('|')
     const rowDate = parts[0]
-    const store = parts[1] || ''
-    const name = parts[2] || ''
-    const attKey = store + '_' + name
+    const attKey = v.attKey
     if (!rowDate || rowDate < startStr || rowDate > endStr) continue
-    const resignEnd = resignCutoffForRow(store, name, resignByAttKey)
+    const resignEnd = resignCutoffForRow(v.store, v.name, v.employeeId, resignByAttKey)
     if (resignEnd && rowDate > resignEnd) continue
 
     const complete = v.inMs != null && v.outMs != null && v.outApproved && v.outMs > v.inMs
@@ -360,7 +423,8 @@ function buildAttendanceSummary(
 
     const minWork = Math.max(0, Math.floor((v.outMs! - v.inMs!) / 60000) - v.breakMin)
     map[attKey].workMin += minWork
-    const sch = resolveScheduleForAttendanceDay(rowDate, store, name, scheduleMap, minWork, 'payroll')
+    const scheduleNameKey = v.employeeId > 0 ? `#${v.employeeId}` : v.name
+    const sch = resolveScheduleForAttendanceDay(rowDate, v.store, scheduleNameKey, scheduleMap, minWork, 'payroll')
     const plannedWorkMin = sch
       ? plannedWorkMinutesFromPlans(
           String(sch.plan_in || ''),
@@ -378,8 +442,20 @@ function buildAttendanceSummary(
     if (dayLateMin >= LATE_HALF_DAY_MIN) {
       map[attKey].lateDaysOver10 = (map[attKey].lateDaysOver10 || 0) + 1
     }
-    // 조퇴: 근태 화면 '차이'와 동일하게 (실근무−계획)만 사용. DB early_min은 앱 오류로 수백 분 쌓이는 경우가 있어 공제에 반영하지 않음.
-    const dayEarlyMin = plannedWorkMin > 0 ? Math.max(0, -diffMin) : 0
+    // 조퇴: 스케줄 대비 부족분. 퇴근이 정상(승인)이고 DB early_min이 있으면 근태 조정 반영(0이면 면제, 상한은 산정 부족분).
+    const computedEarly = plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0
+    const useDbEarly =
+      v.outApproved &&
+      String(v.outStatus || '').includes('정상(승인)') &&
+      plannedWorkMin > 0 &&
+      diffMin < 0 &&
+      v.earlyMinExplicit != null &&
+      Number.isFinite(v.earlyMinExplicit)
+    const dayEarlyMin = useDbEarly
+      ? Math.min(Math.max(0, Math.round(v.earlyMinExplicit!)), computedEarly)
+      : plannedWorkMin > 0
+        ? Math.max(0, -diffMin)
+        : 0
     const diffBasedOt = Math.max(0, diffMin)
     const otRaw =
       plannedWorkMin > 0
@@ -413,6 +489,8 @@ export interface PayrollCalcRow {
   month: string
   store: string
   name: string
+  employeeId?: number
+  employeeCode?: string
   dept: string
   role: string
   salary: number
@@ -484,18 +562,28 @@ export async function GET(request: NextRequest) {
     const logEndISOExclusive = `${addDayBangkok(endStr, 1)}T00:00:00.000Z`
 
     // attendance_allowance·sso_exempt 미적용 DB는 후보 순으로 내려가며 조회 (42703 등)
-    const empPayrollSelectCandidates = [
+    const empPayrollSelectCandidatesBase = [
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date',
       'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,sso_exempt',
       'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date',
       'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,sso_exempt',
       'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date',
     ]
+    const empPayrollSelectCandidates = [
+      ...empPayrollSelectCandidatesBase.map((s) => s.replace(/^id,/, 'id,employee_code,')),
+      ...empPayrollSelectCandidatesBase,
+    ]
     type EmpRowPayroll = {
       id?: number
+      employee_code?: string | null
       store?: string
       name?: string
       job?: string
       role?: string
+      grade?: string
       sal_type?: string
       sal_amt?: number
       position_allowance?: number
@@ -522,53 +610,142 @@ export async function GET(request: NextRequest) {
     }
     if (empLoadErr) throw empLoadErr
 
+    const hazEvalRules = await loadPayrollHazEvalGradeRules()
+
+    const loadAttRows = async () => {
+      try {
+        return (await supabaseSelectFilterAllPages(
+          'attendance_logs',
+          `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
+          {
+            order: 'log_at.asc',
+            select: `${ATTENDANCE_LOG_PAYROLL_COLS},employee_id`,
+            pageSize: 2500,
+            maxRows: 120000,
+          }
+        )) as {
+          log_at?: string
+          store_name?: string
+          name?: string
+          employee_id?: number | null
+          log_type?: string
+          late_min?: number
+          early_min?: number
+          ot_min?: number
+          break_min?: number
+          status?: string
+          approved?: string
+        }[]
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_id|42703|column/i.test(em)) throw e
+        return (await supabaseSelectFilterAllPages(
+          'attendance_logs',
+          `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
+          {
+            order: 'log_at.asc',
+            select: ATTENDANCE_LOG_PAYROLL_COLS,
+            pageSize: 2500,
+            maxRows: 120000,
+          }
+        )) as {
+          log_at?: string
+          store_name?: string
+          name?: string
+          log_type?: string
+          late_min?: number
+          early_min?: number
+          ot_min?: number
+          break_min?: number
+          status?: string
+          approved?: string
+        }[]
+      }
+    }
+    const loadScheduleRows = async () => {
+      try {
+        return (await supabaseSelectFilterAllPages(
+          'schedules',
+          `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`,
+          {
+            order: 'schedule_date.asc',
+            select: 'schedule_date,store_name,name,employee_id,plan_in,plan_out,break_start,break_end,plan_in_prev_day',
+            pageSize: 2500,
+            maxRows: 120000,
+          }
+        )) as {
+          schedule_date?: string
+          store_name?: string
+          name?: string
+          employee_id?: number | null
+          plan_in?: string
+          plan_out?: string
+          break_start?: string
+          break_end?: string
+          plan_in_prev_day?: boolean
+        }[]
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_id|42703|column/i.test(em)) throw e
+        return (await supabaseSelectFilterAllPages(
+          'schedules',
+          `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`,
+          {
+            order: 'schedule_date.asc',
+            select: 'schedule_date,store_name,name,plan_in,plan_out,break_start,break_end,plan_in_prev_day',
+            pageSize: 2500,
+            maxRows: 120000,
+          }
+        )) as {
+          schedule_date?: string
+          store_name?: string
+          name?: string
+          employee_id?: number | null
+          plan_in?: string
+          plan_out?: string
+          break_start?: string
+          break_end?: string
+          plan_in_prev_day?: boolean
+        }[]
+      }
+    }
+    const loadLeaveRows = async () => {
+      try {
+        return (await supabaseSelectFilter(
+          'leave_requests',
+          `leave_date=gte.${startStr}&leave_date=lte.${endStr}`,
+          { order: 'leave_date.asc', limit: 1000, select: 'store,name,leave_date,type,status,employee_id' }
+        )) as {
+          store?: string
+          name?: string
+          leave_date?: string
+          type?: string
+          status?: string
+          employee_id?: number | null
+        }[] | null
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_id|42703|column/i.test(em)) throw e
+        return (await supabaseSelectFilter(
+          'leave_requests',
+          `leave_date=gte.${startStr}&leave_date=lte.${endStr}`,
+          { order: 'leave_date.asc', limit: 1000, select: 'store,name,leave_date,type,status' }
+        )) as {
+          store?: string
+          name?: string
+          leave_date?: string
+          type?: string
+          status?: string
+          employee_id?: number | null
+        }[] | null
+      }
+    }
+
     const [attRows, phRows, leaveRows, scheduleRows] = await Promise.all([
-      supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        {
-          order: 'log_at.asc',
-          select: ATTENDANCE_LOG_PAYROLL_COLS,
-          pageSize: 2500,
-          maxRows: 120000,
-        }
-      ) as Promise<{
-        log_at?: string
-        store_name?: string
-        name?: string
-        log_type?: string
-        late_min?: number
-        early_min?: number
-        ot_min?: number
-        break_min?: number
-        status?: string
-        approved?: string
-      }[]>,
+      loadAttRows(),
       supabaseSelectFilter('public_holidays', `year=eq.${parseInt(normMonth.slice(0, 4), 10)}`, { order: 'date.asc' }) as Promise<{ date?: string }[] | null>,
-      supabaseSelectFilter(
-        'leave_requests',
-        `leave_date=gte.${startStr}&leave_date=lte.${endStr}`,
-        { order: 'leave_date.asc', limit: 1000 }
-      ) as Promise<{ store?: string; name?: string; leave_date?: string; type?: string; status?: string }[] | null>,
-      supabaseSelectFilterAllPages(
-        'schedules',
-        `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`,
-        {
-          order: 'schedule_date.asc',
-          select: 'schedule_date,store_name,name,plan_in,plan_out,break_start,break_end,plan_in_prev_day',
-          pageSize: 2500,
-          maxRows: 120000,
-        }
-      ) as Promise<{
-        schedule_date?: string
-        store_name?: string
-        name?: string
-        plan_in?: string
-        plan_out?: string
-        break_start?: string
-        break_end?: string
-        plan_in_prev_day?: boolean
-      }[]>,
+      loadLeaveRows(),
+      loadScheduleRows(),
     ])
     const scheduleMap: Record<string, { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }> = {}
     for (const s of scheduleRows || []) {
@@ -576,6 +753,10 @@ export async function GET(request: NextRequest) {
       const store = String(s.store_name || '').trim()
       const nm = String(s.name || '').trim()
       if (!d || !store || !nm) continue
+      const sid = s.employee_id != null && Number.isFinite(Number(s.employee_id)) ? Math.floor(Number(s.employee_id)) : 0
+      if (sid > 0) {
+        scheduleMap[`${d}|${store}|#${sid}`] = s
+      }
       scheduleMap[`${d}|${store}|${nm}`] = s
       const nmNorm = normalizeNameForSchedule(nm)
       if (nmNorm && nmNorm !== nm) {
@@ -596,10 +777,16 @@ export async function GET(request: NextRequest) {
 
     // 휴가 집계: 무급휴가 일수, 유급휴가(연차/병가) 일수 (store_name별)
     const empMap: Record<string, { join_date?: string }> = {}
+    const empById: Record<number, { store?: string; name?: string; join_date?: string }> = {}
     for (const e of empRows || []) {
       const s = String(e.store || '').trim()
       const n = String(e.name || '').trim()
       if (s && n) empMap[s + '_' + n] = e
+      const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      if (eid > 0) {
+        empById[eid] = e
+        empMap[`${s}_#${eid}`] = e
+      }
     }
     const unpaidLeaveDaysMap: Record<string, number> = {}
     const paidLeaveDaysMap: Record<string, number> = {}
@@ -607,21 +794,28 @@ export async function GET(request: NextRequest) {
     const leaveEventsByKey: Record<string, LeaveEvt[]> = {}
     for (const lr of leaveRows || []) {
       if (String(lr.status || '').trim() !== '승인') continue
-      const store = String(lr.store || '').trim()
-      const name = String(lr.name || '').trim()
+      let store = String(lr.store || '').trim()
+      let name = String(lr.name || '').trim()
+      const leaveEmpId =
+        lr.employee_id != null && Number.isFinite(Number(lr.employee_id)) ? Math.floor(Number(lr.employee_id)) : 0
+      if (leaveEmpId > 0 && empById[leaveEmpId]) {
+        store = String(empById[leaveEmpId].store || '').trim() || store
+        name = String(empById[leaveEmpId].name || '').trim() || name
+      }
       const type = String(lr.type || '').trim()
       const dateStr = toDateStr(lr.leave_date)
       if (!store || !name || !dateStr || dateStr < startStr || dateStr > endStr) continue
-      const key = store + '_' + name
+      const key = payrollEmployeeKey(store, name, leaveEmpId)
       const days = /반차|half/i.test(type) ? 0.5 : 1
-      const emp = empMap[key] ?? null
+      const emp = leaveEmpId > 0 ? empById[leaveEmpId] ?? empMap[key] ?? null : empMap[key] ?? null
       const isAnnualType = /연차|반차|annual|half/i.test(type)
       const underOneYear = isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
 
       const note = underOneYear ? '입사 1년 미만 연차·반차 → 무급 처리' : ''
       const isUnpaid = /무급|unpaid/i.test(type) || underOneYear
       const evt: LeaveEvt = { date: dateStr, type, days, note, kind: isUnpaid ? 'unpaid' : 'paid' }
-      const leaveKeys = new Set<string>([key])
+      const leaveKeys = new Set<string>([key, `${store}_${name}`])
+      if (leaveEmpId > 0) leaveKeys.add(`${store}_#${leaveEmpId}`)
       const nameNorm = normalizeNameForSchedule(name)
       if (nameNorm && nameNorm !== name) leaveKeys.add(`${store}_${nameNorm}`)
       for (const lk of leaveKeys) {
@@ -662,8 +856,10 @@ export async function GET(request: NextRequest) {
       const pOut = String(s.plan_out || '').trim()
       if (!d || !store || !name) continue
       if (!pIn || !pOut) continue
+      const sid = s.employee_id != null && Number.isFinite(Number(s.employee_id)) ? Math.floor(Number(s.employee_id)) : 0
       const nameNorm = normalizeNameForSchedule(name)
       const keys = new Set<string>([`${store}_${name}`])
+      if (sid > 0) keys.add(`${store}_#${sid}`)
       if (nameNorm && nameNorm !== name) keys.add(`${store}_${nameNorm}`)
       for (const key of keys) {
         if (!scheduleWorkDatesByKey[key]) scheduleWorkDatesByKey[key] = new Set<string>()
@@ -677,6 +873,9 @@ export async function GET(request: NextRequest) {
       const store = String(e.store || '').trim()
       const name = String(e.name || '').trim()
       if (!name) continue
+      const employeeId = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      const employeeCodeRaw = String(e.employee_code || '').trim().toUpperCase()
+      const employeeCode = employeeCodeRaw.replace(/[^A-Z0-9]/g, '').slice(0, 5)
 
       let include = false
       if (isAll) {
@@ -705,10 +904,12 @@ export async function GET(request: NextRequest) {
       const resignDateStr = toDateStr((e as { resign_date?: unknown }).resign_date)
       if (resignDateStr && resignDateStr < startStr) continue
 
-      const attKey = store + '_' + name
+      const empId = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+      const attKey = payrollEmployeeKey(store, name, empId)
       const scheduleExpectedDates = new Set<string>()
       const scheduleExpectedDatesFull = new Set<string>()
       const scheduleLookupKeys = new Set<string>([attKey, `${store}_${normalizeNameForSchedule(name)}`])
+      if (empId > 0) scheduleLookupKeys.add(`${store}_#${empId}`)
       for (const lk of scheduleLookupKeys) {
         const raw = scheduleWorkDatesByKey[lk]
         if (!raw || raw.size === 0) continue
@@ -860,7 +1061,16 @@ export async function GET(request: NextRequest) {
       }
 
       const isKitchen = /주방|kitchen|chef|쿡|cook/i.test(dept)
-      const hazAllow = isKitchen && hazAllowPerDay > 0 ? Math.floor(workDays * hazAllowPerDay) : 0
+      const empGrade = String((e as EmpRowPayroll).grade || '').trim()
+      const hazAllow = hazAllowEligibleWithEvalGrade(
+        isKitchen,
+        hazAllowPerDay,
+        workDays,
+        empGrade,
+        hazEvalRules
+      )
+        ? Math.floor(workDays * hazAllowPerDay)
+        : 0
 
       // 월 기본급·시급 근무시간에 해당 일의 통상 임금이 이미 포함되므로, 공휴일 가산은 일당(또는 8h분) 1회분만
       let holidayPay = 0
@@ -870,7 +1080,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 무급 휴가 + 결석 공제 (월급제만, 시급제는 미근무일 이미 급여 없음)
-      const leaveEventsRaw = mergeLeaveEventsForEmployee(leaveEventsByKey, store, name)
+      const leaveEventsRaw = mergeLeaveEventsForEmployee(leaveEventsByKey, store, name, empId)
       const leaveEvents =
         resignDateStr && resignDateStr >= startStr && resignDateStr <= endStr
           ? leaveEventsRaw.filter((x) => x.date <= resignDateStr)
@@ -1001,6 +1211,18 @@ export async function GET(request: NextRequest) {
           reason: '위험수당 합계',
           detail: `${workDays}일 × ${Math.floor(hazAllowPerDay)}`,
           amount: hazAllow,
+        })
+      } else if (
+        isKitchen &&
+        hazAllowPerDay > 0 &&
+        workDays > 0 &&
+        hazEvalRules.requireEvalGrade &&
+        !employeeMeetsMinEvalLetterGrade(empGrade, hazEvalRules.minEvalGrade)
+      ) {
+        explain.hazAllow.push({
+          reason: '위험수당 미지급',
+          detail: `평가등급 ${hazEvalRules.minEvalGrade} 이상 필요 (현재: ${empGrade || '미등록'})`,
+          amount: 0,
         })
       }
 
@@ -1162,10 +1384,12 @@ export async function GET(request: NextRequest) {
       })
 
       list.push({
-        id: normMonth + '_' + store + '_' + name,
+        id: employeeId > 0 ? `${normMonth}_${store}_${employeeId}` : normMonth + '_' + store + '_' + name,
         month: normMonth,
         store,
         name,
+        ...(employeeId > 0 ? { employeeId } : {}),
+        ...(employeeCode ? { employeeCode } : {}),
         dept,
         role,
         salary,

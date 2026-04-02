@@ -3,6 +3,7 @@
 import { appAlert } from '@/lib/app-message'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
 import { POSHeader } from '@/components/pos/pos-header'
 import { POSMainGrid } from '@/components/pos/pos-main-grid'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
@@ -124,10 +125,10 @@ export default function POSMainPage() {
     (subType: string) => {
       switch (subType) {
         case 'open':
-          router.push('/pos/settlement?mode=open')
+          navigatePosOfflineAware('/pos/settlement?mode=open', (p) => router.push(p))
           break
         case 'close':
-          router.push('/pos/settlement')
+          navigatePosOfflineAware('/pos/settlement', (p) => router.push(p))
           break
         case 'refresh':
           window.location.reload()
@@ -163,31 +164,31 @@ export default function POSMainPage() {
       }
       switch (tile.type) {
         case 'dine-in':
-          router.push('/pos/terminal?type=dine_in')
+          navigatePosOfflineAware('/pos/terminal?type=dine_in', (p) => router.push(p))
           break
         case 'takeout':
-          router.push('/pos/terminal?type=takeout')
+          navigatePosOfflineAware('/pos/terminal?type=takeout', (p) => router.push(p))
           break
         case 'delivery':
-          router.push('/pos/terminal?type=delivery')
+          navigatePosOfflineAware('/pos/terminal?type=delivery', (p) => router.push(p))
           break
         case 'cash':
-          router.push('/pos/local/cash')
+          navigatePosOfflineAware('/pos/local/cash', (p) => router.push(p))
           break
         case 'petty-cash':
-          router.push('/pos/local/petty-cash')
+          navigatePosOfflineAware('/pos/local/petty-cash', (p) => router.push(p))
           break
         case 'attendance':
-          router.push('/pos/attendance')
+          navigatePosOfflineAware('/pos/attendance', (p) => router.push(p))
           break
         case 'members':
           router.push('/admin/employees')
           break
         case 'sales':
-          router.push('/pos/sales')
+          navigatePosOfflineAware('/pos/sales', (p) => router.push(p))
           break
         case 'receipt':
-          router.push('/pos/receipts')
+          navigatePosOfflineAware('/pos/receipts', (p) => router.push(p))
           break
         default:
           break
@@ -242,6 +243,8 @@ export default function POSMainPage() {
             user: res.userName,
             role: res.role || '',
             token: res.token,
+            ...(res.employeeId != null && res.employeeId > 0 ? { employeeId: res.employeeId } : {}),
+            ...(res.employeeCode ? { employeeCode: String(res.employeeCode).trim() } : {}),
           })
           setSwitchUserOpen(false)
           setSwitchPw('')

@@ -37,6 +37,8 @@ type RecordRow = {
   month: string
   store: string
   name: string
+  employee_id?: number
+  employee_code?: string
   salary: number
   pos_allow: number
   haz_allow: number
@@ -275,6 +277,7 @@ export function AdminPayrollRecords() {
       t("pay_month"),
       t("pay_col_store"),
       t("pay_col_name"),
+      t("emp_label_employee_code"),
       t("pay_col_base"),
       t("pay_pos_allow"),
       t("pay_haz_allow"),
@@ -332,6 +335,7 @@ export function AdminPayrollRecords() {
         period,
         r.store,
         r.name,
+        String(r.employee_code || ""),
         String(r.salary ?? 0),
         String(r.pos_allow ?? 0),
         String(r.haz_allow ?? 0),
@@ -353,6 +357,7 @@ export function AdminPayrollRecords() {
       "",
       "",
       t("pay_total_amount"),
+      "",
       String(sums.salary),
       String(sums.pos),
       String(sums.haz),
@@ -419,7 +424,11 @@ ${rows.map((row, ri) => {
         content,
         targetStore,
         targetRole: "전체",
-        targetRecipients: toSend.map((r) => ({ store: r.store, name: r.name })),
+        targetRecipients: toSend.map((r) => ({
+          store: r.store,
+          name: r.name,
+          ...(r.employee_id != null && r.employee_id > 0 ? { employeeId: r.employee_id } : {}),
+        })),
         sender: auth?.user || "",
         userStore: auth?.store || "",
         userRole: auth?.role || "",
@@ -513,7 +522,7 @@ ${rows.map((row, ri) => {
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse min-w-[800px]">
+            <table className="w-full text-xs border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 w-11 text-center">
@@ -525,6 +534,7 @@ ${rows.map((row, ri) => {
                   </th>
                   <th className="p-2 text-left font-medium">{t("pay_col_store")}</th>
                   <th className="p-2 text-left font-medium">{t("pay_col_name")}</th>
+                  <th className="p-2 text-center font-medium">{t("emp_label_employee_code")}</th>
                   <th className="p-2 text-right font-medium">{t("pay_col_base")}</th>
                   <th className="p-2 text-right font-medium text-primary">{t("pay_allowance_sum")}</th>
                   <th className="p-2 text-right font-medium text-primary">{t("pay_ot_sum")}</th>
@@ -549,6 +559,7 @@ ${rows.map((row, ri) => {
                       </td>
                       <td className="p-2 font-medium">{r.store}</td>
                       <td className="p-2">{r.name}</td>
+                      <td className="p-2 text-center whitespace-nowrap tabular-nums">{r.employee_code || "-"}</td>
                       <td className="p-2 text-right text-muted-foreground">{fmt(r.salary)}</td>
                       <td className="p-2 text-right text-primary">+{fmt(allowSum)}</td>
                       <td className="p-2 text-right text-primary">+{fmt(r.ot_amt || 0)}</td>

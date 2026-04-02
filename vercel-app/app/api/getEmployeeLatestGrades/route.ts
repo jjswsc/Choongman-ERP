@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-
-function normalizeNameForGradeMatch(name: string) {
-  if (!name || typeof name !== 'string') return ''
-  const s = String(name).trim().replace(/\s+/g, ' ')
-  return s.replace(/^(Mr\.?|Ms\.?|Mrs\.?)\s*/i, '').trim() || s
-}
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 /** 직원별 최신 평가 등급 (evaluation_results에서 store+name 기준) */
 export async function GET() {
@@ -33,7 +28,7 @@ export async function GET() {
         if (!existing || (dateVal && (!existing.date || dateVal > existing.date))) {
           out[key] = { grade, date: dateVal || undefined }
         }
-        const nameNorm = normalizeNameForGradeMatch(name)
+        const nameNorm = normalizeEmployeeNameForGradeMatch(name)
         if (nameNorm && nameNorm !== name) {
           const keyNorm = store + '|' + nameNorm
           if (!out[keyNorm] || (dateVal && (!out[keyNorm].date || dateVal > (out[keyNorm].date || new Date(0))))) {
@@ -55,7 +50,7 @@ export async function GET() {
       if (!empStore || !empName) continue
       const keyName = empStore + '|' + empName
       const keyNick = empNick && empNick !== empName ? empStore + '|' + empNick : ''
-      const info = out[keyName] || out[empStore + '|' + normalizeNameForGradeMatch(empName)]
+      const info = out[keyName] || out[empStore + '|' + normalizeEmployeeNameForGradeMatch(empName)]
       if (info && keyNick && !out[keyNick]) out[keyNick] = { grade: info.grade }
       if (info && !out[keyName]) out[keyName] = { grade: info.grade }
     }

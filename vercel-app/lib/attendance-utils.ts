@@ -2,6 +2,8 @@
  * 근태 공통: 관리자 페이지 기준 방콕(Asia/Bangkok) 타임존
  */
 
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+
 export const ATTENDANCE_TZ = 'Asia/Bangkok'
 
 /** 현재 시각을 방콕 기준 날짜 YYYY-MM-DD */
@@ -241,7 +243,7 @@ export type ScheduleRowForPlan = {
 }
 
 function normSchedEmployeeName(name: string): string {
-  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+  return normalizeEmployeeNameForGradeMatch(name)
 }
 
 /** grid: 근태 그리드(부분 이름 매칭 허용). payroll: 급여 집계 — 모호한 퍼지는 제외해 잘못된 조퇴 방지 */

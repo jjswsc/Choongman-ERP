@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import Link from "next/link"
+import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useRouter, usePathname } from "next/navigation"
 import { ArrowLeft, Home } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
@@ -73,13 +73,14 @@ export function PosLayoutClient({
               <ArrowLeft className="h-4 w-4" />
               {t('posBack')}
             </button>
-            <Link
-              href="/pos"
+            <button
+              type="button"
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              onClick={() => navigatePosOfflineAware('/pos', (p) => router.push(p))}
             >
               <Home className="h-4 w-4" />
               {t('posHome')}
-            </Link>
+            </button>
           </div>
           <span className="text-sm font-bold text-slate-800">POS</span>
           <div className="w-16" />

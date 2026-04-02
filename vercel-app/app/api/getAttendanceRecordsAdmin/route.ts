@@ -8,6 +8,7 @@ import {
   scheduleDateKey,
 } from '@/lib/attendance-utils'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
+import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 const TZ = 'Asia/Bangkok'
 
@@ -47,15 +48,17 @@ function getBangkokHour(iso: string): number {
   return parseInt(str, 10) || 0
 }
 
-/** Mr./Ms./Mrs. 접두어 제거 - 스케줄(이름만)과 근태(호칭 포함) 매칭용 */
+/** Mr./Ms./Mrs./Miss 접두어 제거 - 스케줄·근태 이름 매칭용 */
 function normalizeNameForSchedule(name: string): string {
-  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+  return normalizeEmployeeNameForGradeMatch(name)
 }
 
 export interface AttendanceDailyRow {
   date: string
   store: string
   name: string
+  employeeId?: number
+  employeeCode?: string
   inTimeStr: string
   outTimeStr: string
   breakMin: number
@@ -118,6 +121,7 @@ export async function GET(request: NextRequest) {
       log_at?: string
       store_name?: string
       name?: string
+      employee_id?: number | null
       log_type?: string
       late_min?: number
       early_min?: number
@@ -147,16 +151,40 @@ export async function GET(request: NextRequest) {
       maxRows: 120_000,
     })) as AttRow[]
 
-    /** 파트타임/시급 직원 식별: store|name (정규화 포함) → 계획 0이어도 빨간 행 미적용 */
+    /** 파트타임/시급 식별 + 직원코드 맵 */
     const partTimeKeys = new Set<string>()
+    const codeByStoreName: Record<string, string> = {}
+    const codeByEmployeeId: Record<number, string> = {}
     try {
-      const empRows = (await supabaseSelect('employees', { select: 'store,name,job,sal_type', limit: 500 })) as { store?: string; name?: string; job?: string; sal_type?: string }[]
+      const empRows = (await supabaseSelect('employees', {
+        select: 'id,store,name,job,sal_type,employee_code',
+        limit: 5000,
+      })) as {
+        id?: number
+        store?: string
+        name?: string
+        job?: string
+        sal_type?: string
+        employee_code?: string | null
+      }[]
       const partTimeSal = /시급|hourly|hour|part-time|part\s*time/i
       const partTimeJob = /part|파트|part-time/i
       for (const e of empRows || []) {
         const store = String(e.store || '').trim()
         const nm = String(e.name || '').trim()
         if (!store || !nm) continue
+        const code = String(e.employee_code || '')
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '')
+          .slice(0, 5)
+        const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+        if (code) {
+          codeByStoreName[`${store}|${nm}`] = code
+          const nmNorm = normalizeNameForSchedule(nm)
+          if (nmNorm) codeByStoreName[`${store}|${nmNorm}`] = code
+          if (eid > 0) codeByEmployeeId[eid] = code
+        }
         const job = String(e.job || '').trim()
         const salType = String(e.sal_type || '').trim()
         const isPart = partTimeSal.test(salType) || partTimeJob.test(job)
@@ -167,7 +195,17 @@ export async function GET(request: NextRequest) {
       }
     } catch (_) { /* ignore */ }
 
-    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }
+    type SchRow = {
+      schedule_date?: string
+      store_name?: string
+      name?: string
+      employee_id?: number | null
+      plan_in?: string
+      plan_out?: string
+      break_start?: string
+      break_end?: string
+      plan_in_prev_day?: boolean
+    }
     const scheduleMap: Record<string, SchRow> = {}
     /** schedules: 고정 limit는 데이터 증가 시 항상 부족 → Range 페이지로 전부 수집. 매장 필터로 트래픽·메모리 절감 */
     const schParts = [`schedule_date=gte.${startStr}`, `schedule_date=lte.${endStr.slice(0, 10)}`]
@@ -185,6 +223,11 @@ export async function GET(request: NextRequest) {
       const store = String(s.store_name || '').trim()
       const nm = String(s.name || '').trim()
       if (d && store && nm) {
+        const sid =
+          s.employee_id != null && Number.isFinite(Number(s.employee_id))
+            ? Math.floor(Number(s.employee_id))
+            : 0
+        if (sid > 0) scheduleMap[`${d}|${store}|#${sid}`] = s
         scheduleMap[`${d}|${store}|${nm}`] = s
         const nmNorm = normalizeNameForSchedule(nm)
         if (nmNorm !== nm) scheduleMap[`${d}|${store}|${nmNorm}`] = s
@@ -197,11 +240,13 @@ export async function GET(request: NextRequest) {
         date: string
         store: string
         name: string
+        employeeId: number
         inTime: string | null
         outTime: string | null
         breakMin: number
         lateMin: number
-        earlyMin: number
+        /** 퇴근 로그 early_min (NULL=미설정·계산값 사용, 0=조정으로 면제) */
+        earlyMinFromDb: number | null
         otMin: number | null // null = DB에 미설정, 계산값 사용
         status: string
         approval: string
@@ -227,17 +272,20 @@ export async function GET(request: NextRequest) {
       const name = String(r.name || '').trim()
       if (!isAllEmployees && name !== employeeFilter) continue
 
-      const key = `${rowDate}|${rowStore}|${name}`
+      const eid =
+        r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
+      const key = eid > 0 ? `${rowDate}|${rowStore}|#${eid}` : `${rowDate}|${rowStore}|${name}`
       if (!byKey[key]) {
         byKey[key] = {
           date: rowDate,
           store: rowStore,
           name,
+          employeeId: eid,
           inTime: null,
           outTime: null,
           breakMin: 0,
           lateMin: 0,
-          earlyMin: 0,
+          earlyMinFromDb: null,
           otMin: null,
           status: '',
           approval: '대기',
@@ -267,12 +315,15 @@ export async function GET(request: NextRequest) {
       } else if (type === '퇴근') {
         const bangkokHour = getBangkokHour(logAt)
         const isOvernightOut = bangkokHour < 7
-        const prevDayKey = `${addDay(rowDate, -1)}|${rowStore}|${name}`
+        const prevDayKey = eid > 0 ? `${addDay(rowDate, -1)}|${rowStore}|#${eid}` : `${addDay(rowDate, -1)}|${rowStore}|${name}`
         const prevRec = byKey[prevDayKey]
 
         if (isOvernightOut && prevRec?.inTime && !prevRec.outTime) {
           prevRec.outTime = logAt
-          prevRec.earlyMin = Number(r.early_min) || 0
+          prevRec.earlyMinFromDb =
+            r.early_min != null && Number.isFinite(Number(r.early_min))
+              ? Math.round(Number(r.early_min))
+              : null
           prevRec.otMin = r.ot_min != null ? Number(r.ot_min) : null
           prevRec.status = st || prevRec.status
           prevRec.outApproved = approved || ''
@@ -280,7 +331,10 @@ export async function GET(request: NextRequest) {
           prevRec.outLogId = r.id ?? null
         } else if (!isOvernightOut && (!rec.outTime || logAt > (rec.outTime || ''))) {
           rec.outTime = logAt
-          rec.earlyMin = Number(r.early_min) || 0
+          rec.earlyMinFromDb =
+            r.early_min != null && Number.isFinite(Number(r.early_min))
+              ? Math.round(Number(r.early_min))
+              : null
           rec.otMin = r.ot_min != null ? Number(r.ot_min) : null
           rec.status = st || rec.status
           rec.outApproved = approved || ''
@@ -300,7 +354,7 @@ export async function GET(request: NextRequest) {
       let outTimeForRow = rec.outTime
       let breakMinForRow = rec.breakMin
       const lateMinForRow = rec.lateMin
-      let earlyMinForRow = rec.earlyMin
+      let earlyMinDb = rec.earlyMinFromDb
       let otMinForRow = rec.otMin
       let statusForRow = rec.status
       let outApprovedForRow = rec.outApproved
@@ -318,7 +372,7 @@ export async function GET(request: NextRequest) {
         const nextRec = byKey[`${nextDay}|${rec.store}|${rec.name}`]
         if (nextRec && nextRec.outTime && !nextRec.inTime) {
           outTimeForRow = nextRec.outTime
-          earlyMinForRow = nextRec.earlyMin
+          earlyMinDb = nextRec.earlyMinFromDb
           otMinForRow = nextRec.otMin
           statusForRow = nextRec.status || ''
           outApprovedForRow = nextRec.outApproved
@@ -339,7 +393,7 @@ export async function GET(request: NextRequest) {
       const sch = resolveScheduleForAttendanceDay(
         dateForRow,
         rec.store,
-        rec.name,
+        rec.employeeId > 0 ? `#${rec.employeeId}` : rec.name,
         scheduleMap,
         actualWorkMin,
         'payroll'
@@ -358,6 +412,21 @@ export async function GET(request: NextRequest) {
 
       const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
       const isPending = inIdForRow != null || outIdForRow != null
+      const outAppr = String(outApprovedForRow || '').trim()
+      const approvedOut = outAppr === '승인완료' || outAppr === '승인'
+      const statusStr = String(statusForRow || '').trim()
+      const computedEarlyMin = plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0
+      /** 퇴근 승인 후 DB early_min(NULL이면 자동 산정분). NOT NULL DEFAULT 0 스키마면 과거 데이터가 면제로 보일 수 있음 */
+      const useDbEarly =
+        approvedOut &&
+        statusStr.includes('정상(승인)') &&
+        plannedWorkMin > 0 &&
+        diffMin < 0 &&
+        earlyMinDb != null &&
+        Number.isFinite(earlyMinDb)
+      const displayEarlyMin = useDbEarly
+        ? Math.min(Math.max(0, Math.round(earlyMinDb as number)), computedEarlyMin)
+        : computedEarlyMin
 
       // 실제 근무시간이 0이면 지각 의미 없음. 스케줄 대비 순증 근무(diff>0)면 지각 분 숨김(급여 지각 공제와 동일)
       const rawLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
@@ -378,19 +447,21 @@ export async function GET(request: NextRequest) {
 
       if (pendingOnly && !isPending) continue
 
-      // 상태 표시: 퇴근 없음→퇴근미기록, 강제퇴근(승인)은 그대로(재계산 버튼 노출), 차이 음수→조퇴, 연장 30분 이상→연장, 그 외 DB값 또는 정상
+      // 상태 표시: 퇴근 승인·정상(승인)이면 DB 상태 유지(조정 반영 후에도 조퇴로 덮어쓰지 않음). 그 외 차이 음수→조퇴 등
       const displayStatus =
         !outTimeForRow
           ? '퇴근미기록'
           : (statusForRow && String(statusForRow).includes('강제퇴근(승인)'))
             ? statusForRow
-            : diffMin < 0
-              ? '조퇴'
-              : displayOtMin >= 30
-                ? '연장'
-                : statusForRow === '조퇴'
-                  ? '정상'
-                  : statusForRow
+            : approvedOut && statusStr.includes('정상(승인)')
+              ? statusForRow
+              : diffMin < 0
+                ? '조퇴'
+                : displayOtMin >= 30
+                  ? '연장'
+                  : statusForRow === '조퇴'
+                    ? '정상'
+                    : statusForRow
 
       const isPartTime =
         partTimeKeys.has(`${rec.store}|${rec.name}`) ||
@@ -403,6 +474,13 @@ export async function GET(request: NextRequest) {
         date: dateForRow,
         store: rec.store,
         name: rec.name,
+        ...(rec.employeeId > 0 ? { employeeId: rec.employeeId } : {}),
+        ...(() => {
+          const c0 = rec.employeeId > 0 ? codeByEmployeeId[rec.employeeId] || '' : ''
+          const c1 = codeByStoreName[`${rec.store}|${rec.name}`] || ''
+          const code = (c0 || c1).trim()
+          return code ? { employeeCode: code } : {}
+        })(),
         inTimeStr: sameMinute ? toTimeStrWithSec(inTimeForRow) : inStr,
         outTimeStr: outTimeForRow ? (sameMinute ? toTimeStrWithSec(outTimeForRow) : outStr) : '-',
         breakMin: breakMinForRow,
@@ -410,7 +488,7 @@ export async function GET(request: NextRequest) {
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,
         lateMin: effectiveLateMin,
-        earlyMin: plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0,
+        earlyMin: displayEarlyMin,
         otMin: displayOtMin,
         status: displayStatus,
         approval: approval || '대기',

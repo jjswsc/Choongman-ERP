@@ -37,6 +37,7 @@ import {
   type PosOrder,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
+import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
 import { warmAdminOfflineCache } from '@/lib/offline/pos-offline-warm'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -694,6 +695,11 @@ export default function PosTerminalPage() {
       const rowStore = String(row.store_code ?? '').trim()
       const variants = [currentStoreId, currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(), currentStoreId.replace(/^CM\s+/i, '')].filter(Boolean)
       if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
+        seenOrderIdsRef.current.add(orderId)
+        if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
+        return
+      }
       if (seenOrderIdsRef.current.has(orderId)) return
       let items: { id: string; name: string; price: number; qty: number; note?: string }[] = []
       try {
@@ -912,6 +918,11 @@ export default function PosTerminalPage() {
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
           if (seenOrderIdsRef.current.has(oid)) {
+            lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+            continue
+          }
+          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
+            seenOrderIdsRef.current.add(oid)
             lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
             continue
           }

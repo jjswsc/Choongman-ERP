@@ -8,6 +8,10 @@ export interface JwtPayload {
   store: string
   name: string
   role: string
+  /** 직원 PK (휴가·집계 식별, 구 토큰에는 없을 수 있음) */
+  employeeId?: number
+  /** 직원 코드(표시용) */
+  employeeCode?: string
   /** 가맹점주 복수 매장 시 JWT에 허용 매장(대표+추가), 없으면 store만 사용 */
   allowedStores?: string[]
   iat?: number
@@ -40,6 +44,12 @@ export async function signToken(payload: JwtPayload): Promise<string> {
     name: payload.name,
     role: payload.role,
   }
+  if (payload.employeeId != null && Number.isFinite(Number(payload.employeeId))) {
+    body.employeeId = Math.floor(Number(payload.employeeId))
+  }
+  if (payload.employeeCode != null && String(payload.employeeCode).trim() !== '') {
+    body.employeeCode = String(payload.employeeCode).trim()
+  }
   if (Array.isArray(payload.allowedStores) && payload.allowedStores.length > 0) {
     body.allowedStores = payload.allowedStores
   }
@@ -61,10 +71,15 @@ export async function verifyToken(token: string): Promise<JwtPayload | null> {
       allowedStores = allowedRaw.map((x) => String(x || '').trim()).filter(Boolean)
       if (allowedStores.length === 0) allowedStores = undefined
     }
+    const eid = payload.employeeId
+    const eidNum = eid != null && Number.isFinite(Number(eid)) ? Math.floor(Number(eid)) : undefined
+    const ecode = payload.employeeCode != null ? String(payload.employeeCode).trim() : ''
     return {
       store: String(payload.store || ''),
       name: String(payload.name || ''),
       role: String(payload.role || ''),
+      ...(eidNum != null && eidNum > 0 ? { employeeId: eidNum } : {}),
+      ...(ecode ? { employeeCode: ecode } : {}),
       ...(allowedStores ? { allowedStores } : {}),
     }
   } catch {

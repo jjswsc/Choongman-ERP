@@ -87,6 +87,14 @@ export const submitAttendanceSchema = z.object({
   type: z.string().trim().min(1, '유형(출근/퇴근/휴식시작/휴식종료)이 필요합니다.'),
   lat: z.union([z.string(), z.number()]).optional(),
   lng: z.union([z.string(), z.number()]).optional(),
+  employeeId: z
+    .any()
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return undefined
+      const n = Math.floor(Number(v))
+      return Number.isFinite(n) && n > 0 ? n : undefined
+    }),
 }).refine((d) => ['출근', '퇴근', '휴식시작', '휴식종료'].includes(d.type), {
   message: '유형은 출근, 퇴근, 휴식시작, 휴식종료 중 하나여야 합니다.',
   path: ['type'],
@@ -111,4 +119,13 @@ export const requestLeaveSchema = z.object({
   type: z.string().trim().min(1, '휴가 유형을 선택해 주세요.'),
   date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, '날짜(yyyy-MM-dd) 형식이어야 합니다.'),
   reason: z.string().optional(),
+  /** employees.id — 있으면 서버에서 매장·이름 검증 후 leave_requests에 저장 */
+  employeeId: z
+    .any()
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return undefined
+      const n = Math.floor(Number(v))
+      return Number.isFinite(n) && n > 0 ? n : undefined
+    }),
 })

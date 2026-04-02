@@ -324,6 +324,7 @@ export function MyAttendance() {
   const loadData = React.useCallback(() => {
     const store = auth?.store
     const name = auth?.user
+    const employeeId = auth?.employeeId
     if (!store || !name) return
     setLoading(true)
     const { start, end } = getMonthRange(myMonth)
@@ -338,8 +339,9 @@ export function MyAttendance() {
         endDate: end,
         storeFilter: store,
         employeeFilter: name,
+        ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
       }),
-      getMyLeaveInfo({ store, name }),
+      getMyLeaveInfo({ store, name, ...(employeeId != null && employeeId > 0 ? { employeeId } : {}) }),
     ])
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("timeout")), 18000)
@@ -362,7 +364,7 @@ export function MyAttendance() {
         setDailyRecords([])
       })
       .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, myMonth])
+  }, [auth?.store, auth?.user, auth?.employeeId, myMonth])
 
   React.useEffect(() => {
     if (auth?.store && auth?.user) loadData()

@@ -24,9 +24,34 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload } from "@/lib/utils"
+import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
+/** 직원 목록 필터: 평가 유형에 맞는 직무(Kitchen/Service/Officer·Director 등)만 */
+const EVAL_JOB_FILTER_MATCH = "__match_type__"
+const EVAL_JOB_FILTER_ALL = "__all__"
+
+function normJobKey(j: string) {
+  return String(j || "")
+    .trim()
+    .toLowerCase()
+}
+
+function jobsForEvalType(evalType: "kitchen" | "service" | "manager"): Set<string> {
+  if (evalType === "kitchen") return new Set(["kitchen"])
+  if (evalType === "service") return new Set(["service"])
+  return new Set(["officer", "director", "manager"])
+}
+
+function employeeJobMatchesEvalType(job: string, evalType: "kitchen" | "service" | "manager"): boolean {
+  const j = normJobKey(job)
+  if (!j) return false
+  for (const a of jobsForEvalType(evalType)) {
+    if (j === a) return true
+  }
+  return false
+}
 const EVAL_INCIDENT_KEYS = [
   "eval_incident_1",
   "eval_incident_2",
@@ -73,6 +98,7 @@ export function EmployeeEvalTab({
   const evaluatorName = auth?.user || auth?.store || ""
 
   const [evalStore, setEvalStore] = React.useState("")
+  const [evalJobFilter, setEvalJobFilter] = React.useState(EVAL_JOB_FILTER_MATCH)
   const [evalEmployee, setEvalEmployee] = React.useState("")
   const [evalType, setEvalType] = React.useState<"kitchen" | "service" | "manager">("kitchen")
   const [evalDate, setEvalDate] = React.useState(
@@ -122,7 +148,7 @@ export function EmployeeEvalTab({
     []
   )
 
-  const employeeList = React.useMemo(() => {
+  const employeesAtStore = React.useMemo(() => {
     if (!evalStore || evalStore === "All") return []
     const target = normStoreName(evalStore)
     return employees.filter((e) => {
@@ -131,6 +157,32 @@ export function EmployeeEvalTab({
       return extras.some((x) => normStoreName(x) === target)
     })
   }, [employees, evalStore, normStoreName])
+
+  const storeJobOptions = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const e of employeesAtStore) {
+      const j = String(e.job || "").trim()
+      if (j) set.add(j)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  }, [employeesAtStore])
+
+  const employeeList = React.useMemo(() => {
+    let list = employeesAtStore
+    if (evalJobFilter === EVAL_JOB_FILTER_MATCH) {
+      list = list.filter((e) => employeeJobMatchesEvalType(e.job || "", evalType))
+    } else if (evalJobFilter !== EVAL_JOB_FILTER_ALL) {
+      const want = normJobKey(evalJobFilter)
+      list = list.filter((e) => normJobKey(e.job || "") === want)
+    }
+    return list
+  }, [employeesAtStore, evalJobFilter, evalType])
+
+  React.useEffect(() => {
+    if (!evalEmployee) return
+    const ok = employeeList.some((e) => (e.name || "__unnamed__") === evalEmployee)
+    if (!ok) setEvalEmployee("")
+  }, [employeeList, evalEmployee])
 
   const selectedEmp = React.useMemo(
     () => employeeList.find((e) => (e.name || "__unnamed__") === evalEmployee),
@@ -401,7 +453,7 @@ export function EmployeeEvalTab({
         원가정확도: "cost", "Cooking Accuracy & Cost Control": "cost",
         위생: "hygiene", Hygiene: "hygiene",
         태도: "attitude", Attitude: "attitude",
-        서비스: "menu", Service: "menu",
+        서비스: "service", Service: "service",
         매니저: "manager", Manager: "manager", 리더십: "manager",
       }
       const payloadSections: Record<string, unknown[]> = {
@@ -409,6 +461,7 @@ export function EmployeeEvalTab({
         cost: [],
         hygiene: [],
         attitude: [],
+        service: [],
         manager: [],
       }
       for (const s of sections) {
@@ -618,6 +671,7 @@ export function EmployeeEvalTab({
               onValueChange={(v) => {
                 setEvalStore(v === "__none__" ? "" : v)
                 setEvalEmployee("")
+                setEvalJobFilter(EVAL_JOB_FILTER_MATCH)
               }}
             >
               <SelectTrigger className="h-8 w-[140px] text-xs">
@@ -628,6 +682,31 @@ export function EmployeeEvalTab({
                 {stores.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold">
+              {t("eval_job_filter")}
+            </label>
+            <Select
+              value={evalJobFilter}
+              onValueChange={(v) => {
+                setEvalJobFilter(v)
+                setEvalEmployee("")
+              }}
+            >
+              <SelectTrigger className="h-8 w-[min(200px,28vw)] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={EVAL_JOB_FILTER_MATCH}>{t("eval_job_filter_match_type")}</SelectItem>
+                <SelectItem value={EVAL_JOB_FILTER_ALL}>{t("eval_job_filter_all")}</SelectItem>
+                {storeJobOptions.map((j) => (
+                  <SelectItem key={j} value={j}>
+                    {j}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -652,7 +731,7 @@ export function EmployeeEvalTab({
                 </SelectItem>
                 {employeeList.map((e, idx) => (
                   <SelectItem key={e.name ? e.name : `emp-${idx}`} value={e.name || "__unnamed__"}>
-                    {e.name}
+                    {formatEmployeeDisplayName(e.name, e.nameTitle)}
                   </SelectItem>
                 ))}
               </SelectContent>

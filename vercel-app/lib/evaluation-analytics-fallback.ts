@@ -55,7 +55,7 @@ export type EvaluationAnalyticsPayload = {
   coverage?: EvalAnalyticsCoverage | null
 }
 
-const SECTION_KEYS = ['menu', 'cost', 'hygiene', 'attitude', 'manager'] as const
+const SECTION_KEYS = ['menu', 'cost', 'hygiene', 'attitude', 'service', 'manager'] as const
 
 function trimStr(s: unknown): string {
   return String(s ?? '').trim()

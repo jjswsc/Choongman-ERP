@@ -7,6 +7,10 @@ export interface AuthState {
   user: string
   role: string
   token?: string
+  /** employees.id — 휴가·내 휴가 조회 식별 */
+  employeeId?: number
+  /** employees.employee_code */
+  employeeCode?: string
   /** 가맹점주 복수 매장 허용 목록(로그인 응답·JWT와 동기) */
   allowedStores?: string[]
 }
@@ -57,7 +61,26 @@ function loadAuth(): AuthState | null {
           }
         }
       } catch {}
-      return { store, user, role, token: token || undefined, allowedStores }
+      let employeeId: number | undefined
+      let employeeCode: string | undefined
+      try {
+        const idStr = sessionStorage.getItem('cm_employee_id')
+        if (idStr) {
+          const n = Math.floor(Number(idStr))
+          if (n > 0) employeeId = n
+        }
+        const codeStr = sessionStorage.getItem('cm_employee_code')
+        if (codeStr) employeeCode = String(codeStr).trim() || undefined
+      } catch {}
+      return {
+        store,
+        user,
+        role,
+        token: token || undefined,
+        ...(employeeId != null ? { employeeId } : {}),
+        ...(employeeCode ? { employeeCode } : {}),
+        allowedStores,
+      }
     }
   } catch {}
   return null
@@ -74,7 +97,14 @@ export function loadOfflineResumeAuth(): AuthState | null {
   try {
     const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
     if (!raw) return null
-    const o = JSON.parse(raw) as { store?: string; user?: string; role?: string; allowedStores?: string[] }
+    const o = JSON.parse(raw) as {
+      store?: string
+      user?: string
+      role?: string
+      employeeId?: number
+      employeeCode?: string
+      allowedStores?: string[]
+    }
     const store = String(o.store ?? '').trim()
     const user = String(o.user ?? '').trim()
     if (!store || !user) return null
@@ -87,7 +117,17 @@ export function loadOfflineResumeAuth(): AuthState | null {
       allowedStores = o.allowedStores.map((x) => String(x || '').trim()).filter(Boolean)
       if (allowedStores.length === 0) allowedStores = undefined
     }
-    return { store, user, role: String(o.role || '').trim(), token, allowedStores }
+    const snapEid = o.employeeId != null && Number.isFinite(Number(o.employeeId)) ? Math.floor(Number(o.employeeId)) : 0
+    const snapCode = o.employeeCode != null ? String(o.employeeCode).trim() : ''
+    return {
+      store,
+      user,
+      role: String(o.role || '').trim(),
+      token,
+      ...(snapEid > 0 ? { employeeId: snapEid } : {}),
+      ...(snapCode ? { employeeCode: snapCode } : {}),
+      allowedStores,
+    }
   } catch {
     return null
   }
@@ -98,6 +138,16 @@ function saveAuth(auth: AuthState) {
     sessionStorage.setItem('cm_store', auth.store)
     sessionStorage.setItem('cm_user', auth.user)
     sessionStorage.setItem('cm_role', auth.role)
+    if (auth.employeeId != null && auth.employeeId > 0) {
+      sessionStorage.setItem('cm_employee_id', String(auth.employeeId))
+    } else {
+      sessionStorage.removeItem('cm_employee_id')
+    }
+    if (auth.employeeCode) {
+      sessionStorage.setItem('cm_employee_code', auth.employeeCode)
+    } else {
+      sessionStorage.removeItem('cm_employee_code')
+    }
     if (auth.token) sessionStorage.setItem('cm_token', auth.token)
     if (auth.allowedStores && auth.allowedStores.length > 0) {
       sessionStorage.setItem(CM_ALLOWED_STORES_KEY, JSON.stringify(auth.allowedStores))
@@ -110,6 +160,8 @@ function saveAuth(auth: AuthState) {
         store: auth.store,
         user: auth.user,
         role: auth.role,
+        ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+        ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
         ...(auth.allowedStores && auth.allowedStores.length > 0 ? { allowedStores: auth.allowedStores } : {}),
       })
     )
@@ -123,6 +175,8 @@ function clearAuth() {
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
     sessionStorage.removeItem('cm_token')
+    sessionStorage.removeItem('cm_employee_id')
+    sessionStorage.removeItem('cm_employee_code')
     sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
   } catch {}
 }

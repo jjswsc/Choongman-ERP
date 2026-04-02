@@ -156,6 +156,8 @@ export function AdminAccountingCompliance() {
   const [vatRows, setVatRows] = React.useState<VatDraft[]>([])
   const [whtRows, setWhtRows] = React.useState<WhtDraft[]>([])
   const [periodType, setPeriodType] = React.useState<"monthly" | "half_year" | "annual">("monthly")
+  /** 부가세(ภ.พ.30) 탭: FlowAccount Tax 메뉴와 유사 — 매출/매입/원천 3가지 조회 */
+  const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "wht">("output")
   const [taxSummary, setTaxSummary] = React.useState<ThaiTaxFilingSummary | null>(null)
   const [citData, setCitData] = React.useState<CorporateTaxComputationData | null>(null)
   const [workflowRows, setWorkflowRows] = React.useState<AccountingWorkflowStatusRow[]>([])
@@ -345,6 +347,12 @@ export function AdminAccountingCompliance() {
   }, [canUse, tab, loadTaxSummary])
 
   React.useEffect(() => {
+    if (!canUse || tab !== "summary") return
+    if (pp30SubView === "wht") void loadWht()
+    else void loadVat()
+  }, [canUse, tab, pp30SubView, taxMonth, loadVat, loadWht])
+
+  React.useEffect(() => {
     if (canUse && tab === "cit") void loadCit()
   }, [canUse, tab, loadCit])
 
@@ -493,6 +501,9 @@ export function AdminAccountingCompliance() {
     []
   )
 
+  const vatOutputRows = React.useMemo(() => vatRows.filter((r) => r.direction === "output"), [vatRows])
+  const vatInputRows = React.useMemo(() => vatRows.filter((r) => r.direction === "input"), [vatRows])
+
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []
     return [
@@ -539,7 +550,7 @@ export function AdminAccountingCompliance() {
                 {t("accCompTabWht")}
               </TabsTrigger>
               <TabsTrigger value="summary" className={adminTabsTriggerCn}>
-                Tax Summary
+                {t("accCompTabPp30")}
               </TabsTrigger>
               <TabsTrigger value="cit" className={adminTabsTriggerCn}>
                 CIT(PND50/51)
@@ -1038,51 +1049,265 @@ export function AdminAccountingCompliance() {
         </TabsContent>
 
         <TabsContent value="summary" className={cn(adminTabsContentCn, "space-y-3")}>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">year_month</div>
-              <Input
-                className="w-[140px]"
-                value={taxMonth}
-                onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
-              />
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">period_type</div>
-              <Select value={periodType} onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">monthly</SelectItem>
-                  <SelectItem value="half_year">half_year</SelectItem>
-                  <SelectItem value="annual">annual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="button" variant="secondary" onClick={() => void loadTaxSummary()} disabled={loading}>
-              {t("search")}
-            </Button>
-          </div>
           <Card>
-            <CardContent className="pt-6 text-sm space-y-3">
-              <div className="font-medium">VAT (PP30)</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div>Output VAT: {(taxSummary?.vat.outputVat || 0).toLocaleString()}</div>
-                <div>Input VAT: {(taxSummary?.vat.inputVat || 0).toLocaleString()}</div>
-                <div>Payable VAT: {(taxSummary?.vat.payableVat || 0).toLocaleString()}</div>
-                <div>Missing TIN: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}</div>
-                <div>Missing Invoice: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}</div>
-                <div>Rows: {(taxSummary?.vat.rowCount || 0).toLocaleString()}</div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{t("accCompTabPp30")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2 items-end">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">year_month</div>
+                  <Input
+                    className="w-[140px]"
+                    value={taxMonth}
+                    onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
+                  />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">period_type</div>
+                  <Select
+                    value={periodType}
+                    onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}
+                  >
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">monthly</SelectItem>
+                      <SelectItem value="half_year">half_year</SelectItem>
+                      <SelectItem value="annual">annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    void loadTaxSummary()
+                    if (pp30SubView === "wht") void loadWht()
+                    else void loadVat()
+                  }}
+                  disabled={loading}
+                >
+                  {t("search")}
+                </Button>
               </div>
-              <div className="font-medium pt-2">WHT (PND3/53)</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <div>Gross: {(taxSummary?.wht.totalGross || 0).toLocaleString()}</div>
-                <div>Withheld: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}</div>
-                <div>Rows: {(taxSummary?.wht.rowCount || 0).toLocaleString()}</div>
-                <div>Missing TIN: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}</div>
-                <div>Missing Cert#: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}</div>
+
+              <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pp30SubView === "output" ? "default" : "outline"}
+                  onClick={() => setPp30SubView("output")}
+                >
+                  {t("accCompTaxOutputDocs")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pp30SubView === "input" ? "default" : "outline"}
+                  onClick={() => setPp30SubView("input")}
+                >
+                  {t("accCompTaxInputDocs")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pp30SubView === "wht" ? "default" : "outline"}
+                  onClick={() => setPp30SubView("wht")}
+                >
+                  {t("accCompTaxWhtDocs")}
+                </Button>
               </div>
+
+              {pp30SubView === "output" && (
+                <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div>
+                      Output net: {(taxSummary?.vat.outputNet || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      Output VAT: {(taxSummary?.vat.outputVat || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      Payable VAT: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      Rows (매출): {vatOutputRows.length.toLocaleString()} / VAT total rows:{" "}
+                      {(taxSummary?.vat.rowCount || 0).toLocaleString()}
+                    </div>
+                    <div>Missing TIN: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}</div>
+                    <div>Missing Invoice: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("vat")}>
+                      {t("accCompPp30GoVatLedger")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <a
+                        href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t("accCompVatExport")}
+                      </a>
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto border rounded-md">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/40">
+                          <th className="text-left p-2">Doc date</th>
+                          <th className="text-left p-2">Invoice</th>
+                          <th className="text-left p-2">Counterparty</th>
+                          <th className="text-left p-2">TIN</th>
+                          <th className="text-right p-2">Net</th>
+                          <th className="text-right p-2">VAT</th>
+                          <th className="text-right p-2">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vatOutputRows.map((row, idx) => (
+                          <tr key={row.id ?? `out-${idx}-${row.doc_date}`} className="border-b border-border/50">
+                            <td className="p-2 whitespace-nowrap">{row.doc_date}</td>
+                            <td className="p-2 max-w-[120px] truncate">{row.invoice_number}</td>
+                            <td className="p-2 max-w-[140px] truncate">{row.counterparty_name}</td>
+                            <td className="p-2 font-mono text-[10px]">{row.counterparty_tax_id}</td>
+                            <td className="p-2 text-right">{Number(row.net_amount || 0).toLocaleString()}</td>
+                            <td className="p-2 text-right">{Number(row.vat_amount || 0).toLocaleString()}</td>
+                            <td className="p-2 text-right">{Number(row.total_amount || 0).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!vatOutputRows.length ? (
+                      <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {pp30SubView === "input" && (
+                <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div>
+                      Input net: {(taxSummary?.vat.inputNet || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      Input VAT: {(taxSummary?.vat.inputVat || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      Payable VAT: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      Rows (매입): {vatInputRows.length.toLocaleString()} / VAT total rows:{" "}
+                      {(taxSummary?.vat.rowCount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("vat")}>
+                      {t("accCompPp30GoVatLedger")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <a
+                        href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t("accCompVatExport")}
+                      </a>
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto border rounded-md">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/40">
+                          <th className="text-left p-2">Doc date</th>
+                          <th className="text-left p-2">Invoice</th>
+                          <th className="text-left p-2">Counterparty</th>
+                          <th className="text-left p-2">TIN</th>
+                          <th className="text-right p-2">Net</th>
+                          <th className="text-right p-2">VAT</th>
+                          <th className="text-right p-2">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vatInputRows.map((row, idx) => (
+                          <tr key={row.id ?? `in-${idx}-${row.doc_date}`} className="border-b border-border/50">
+                            <td className="p-2 whitespace-nowrap">{row.doc_date}</td>
+                            <td className="p-2 max-w-[120px] truncate">{row.invoice_number}</td>
+                            <td className="p-2 max-w-[140px] truncate">{row.counterparty_name}</td>
+                            <td className="p-2 font-mono text-[10px]">{row.counterparty_tax_id}</td>
+                            <td className="p-2 text-right">{Number(row.net_amount || 0).toLocaleString()}</td>
+                            <td className="p-2 text-right">{Number(row.vat_amount || 0).toLocaleString()}</td>
+                            <td className="p-2 text-right">{Number(row.total_amount || 0).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!vatInputRows.length ? (
+                      <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {pp30SubView === "wht" && (
+                <div className="space-y-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div>Gross: {(taxSummary?.wht.totalGross || 0).toLocaleString()}</div>
+                    <div>Withheld: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}</div>
+                    <div>Rows: {(taxSummary?.wht.rowCount || 0).toLocaleString()}</div>
+                    <div>Missing TIN: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}</div>
+                    <div>Missing Cert#: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("wht")}>
+                      {t("accCompPp30GoWhtLedger")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <a
+                        href={getExportWithholdingTaxLedgerCsvUrl({ userRole: role, taxMonth })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        WHT CSV
+                      </a>
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto border rounded-md">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/40">
+                          <th className="text-left p-2">Payment date</th>
+                          <th className="text-left p-2">Payee</th>
+                          <th className="text-left p-2">TIN</th>
+                          <th className="text-left p-2">Form</th>
+                          <th className="text-right p-2">Gross</th>
+                          <th className="text-right p-2">WHT</th>
+                          <th className="text-left p-2">Cert#</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {whtRows.map((row, idx) => (
+                          <tr key={row.id ?? `wht-${idx}-${row.payment_date}`} className="border-b border-border/50">
+                            <td className="p-2 whitespace-nowrap">{row.payment_date}</td>
+                            <td className="p-2 max-w-[140px] truncate">{row.payee_name}</td>
+                            <td className="p-2 font-mono text-[10px]">{row.payee_tax_id}</td>
+                            <td className="p-2">{row.form_hint}</td>
+                            <td className="p-2 text-right">{Number(row.gross_amount || 0).toLocaleString()}</td>
+                            <td className="p-2 text-right">{Number(row.wht_amount || 0).toLocaleString()}</td>
+                            <td className="p-2 max-w-[100px] truncate">{row.certificate_no}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!whtRows.length ? (
+                      <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { getAnnualLeaveDays, hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-
-function toDateStr(val: string | Date | null | undefined): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
+import {
+  toLeaveDateStrBangkok,
+  isApprovedLeaveStatus,
+  getLeaveDayValueFromType,
+  isAnnualLeaveFamilyType,
+  bareNameFuzzySameForLeaveStats,
+  leavePersonKeyForLeaveStats,
+  normalizeLeaveMatchKey,
+} from '@/lib/leave-request-utils'
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
 const LAKIJ_DAYS_PER_YEAR = 3
@@ -16,12 +18,18 @@ const LAKIJ_DAYS_PER_YEAR = 3
 /** 병가: 연 30일 고정 */
 const SICK_DAYS_PER_YEAR = 30
 
+/** 직원 1인당 휴가 신청 상한 (페이지 반복 조회 시) */
+const LEAVE_ROWS_MAX_PER_EMPLOYEE = 15_000
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const store = String(searchParams.get('store') || '').trim()
   const name = String(searchParams.get('name') || '').trim()
+  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const employeeIdNum =
+    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
 
   if (!store || !name) {
     return NextResponse.json(
@@ -45,39 +53,108 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const empRows = (await supabaseSelectFilter(
-      'employees',
-      `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`,
-      { limit: 1, select: 'annual_leave_days,join_date,sal_type' }
-    )) as { annual_leave_days?: number | null; join_date?: string | null }[]
-    const annualTotal = getAnnualLeaveDays(empRows?.[0] ?? null)
+    type EmpInfo = {
+      id?: number
+      store?: string
+      name?: string
+      name_title?: string | null
+      annual_leave_days?: number | null
+      join_date?: string | null
+    }
+    const empSelect = 'id,store,name,name_title,annual_leave_days,join_date,sal_type'
+    let emp: EmpInfo | null = null
+    if (employeeIdNum > 0) {
+      const byId = (await supabaseSelectFilter(
+        'employees',
+        `id=eq.${employeeIdNum}&store=ilike.${encodeURIComponent(store)}`,
+        { order: 'id.asc', limit: 1, select: empSelect }
+      )) as EmpInfo[]
+      const e0 = byId?.[0] ?? null
+      if (!e0) {
+        emp = null
+      } else {
+        const reqKey = leavePersonKeyForLeaveStats(name, '')
+        const empKey = leavePersonKeyForLeaveStats(String(e0.name || ''), e0.name_title)
+        if (reqKey !== empKey && !bareNameFuzzySameForLeaveStats(reqKey, empKey)) {
+          emp = null
+        } else {
+          emp = e0
+        }
+      }
+    } else {
+      const empRows = (await supabaseSelectFilter(
+        'employees',
+        `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`,
+        { order: 'id.asc', limit: 1, select: empSelect }
+      )) as EmpInfo[]
+      emp = empRows?.[0] ?? null
+    }
+    if (!emp) {
+      return NextResponse.json(
+        {
+          history: [],
+          stats: {
+            usedAnn: 0,
+            usedSick: 0,
+            usedUnpaid: 0,
+            usedLakij: 0,
+            remain: 0,
+            remainLakij: 0,
+            remainSick: SICK_DAYS_PER_YEAR,
+            annualTotal: 0,
+            lakijTotal: LAKIJ_DAYS_PER_YEAR,
+            sickTotal: SICK_DAYS_PER_YEAR,
+          },
+        },
+        { headers }
+      )
+    }
 
-    const filter = `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`
-    const rows = (await supabaseSelectFilter(
-      'leave_requests',
-      filter,
-      { order: 'leave_date.desc', limit: 100, select: 'id,leave_date,status,type,reason,certificate_url,reject_reason' }
-    )) as { id?: number; leave_date?: string; status?: string; type?: string; reason?: string; certificate_url?: string; reject_reason?: string }[]
+    const annualTotal = getAnnualLeaveDays(emp)
+    const empStoreQ = encodeURIComponent(String(emp.store || '').trim())
+    const leaveFilter = `store=ilike.${empStoreQ}`
+    const rawRows = (await supabaseSelectFilterAllPages('leave_requests', leaveFilter, {
+      order: 'leave_date.desc',
+      select: 'id,store,name,leave_date,status,type,reason,certificate_url,reject_reason,employee_id',
+      pageSize: 800,
+      maxRows: LEAVE_ROWS_MAX_PER_EMPLOYEE,
+    })) as {
+      id?: number
+      store?: string
+      name?: string
+      leave_date?: string
+      status?: string
+      type?: string
+      reason?: string
+      certificate_url?: string
+      reject_reason?: string
+      employee_id?: number | null
+    }[]
+    const ek = leavePersonKeyForLeaveStats(String(emp.name || ''), emp.name_title)
+    const empPk = emp.id != null ? Math.floor(Number(emp.id)) : 0
+    const rows = (rawRows || []).filter((r) => {
+      if (normalizeLeaveMatchKey(String(r.store || '')) !== normalizeLeaveMatchKey(String(emp.store || '')))
+        return false
+      const rid = r.employee_id != null ? Math.floor(Number(r.employee_id)) : 0
+      if (empPk > 0 && rid > 0) return rid === empPk
+      const lk = leavePersonKeyForLeaveStats(String(r.name || ''), '')
+      return lk === ek || bareNameFuzzySameForLeaveStats(lk, ek)
+    })
 
     const thisYear = parseInt(getBangkokTodayDateString().slice(0, 4), 10)
     let usedAnn = 0,
       usedSick = 0,
       usedUnpaid = 0,
       usedLakij = 0
-    const emp = empRows?.[0] ?? null
     const history = (rows || []).map((r) => {
-      const dateStr = toDateStr(r.leave_date)
+      const dateStr = toLeaveDateStrBangkok(r.leave_date)
       const status = String(r.status || '').trim()
       const type = String(r.type || '').trim()
-      const isAnnualType = type.indexOf('연차') !== -1 || type.indexOf('반차') !== -1 || type.toLowerCase().indexOf('annual') !== -1 || type.toLowerCase().indexOf('half') !== -1
-      const underOneYear = dateStr && isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
+      const isAnnualType = isAnnualLeaveFamilyType(type)
+      const underOneYear = !!(dateStr && isAnnualType && !hasOneYearTenureAsOf(emp, dateStr))
 
-      if (
-        (status === '승인' || status === 'Approved') &&
-        dateStr &&
-        parseInt(dateStr.slice(0, 4), 10) === thisYear
-      ) {
-        const val = type.indexOf('반차') !== -1 ? 0.5 : 1.0
+      if (isApprovedLeaveStatus(status) && dateStr && parseInt(dateStr.slice(0, 4), 10) === thisYear) {
+        const val = getLeaveDayValueFromType(type)
         if (type.indexOf('무급휴가') !== -1 || type.toLowerCase().indexOf('unpaid') !== -1 || underOneYear) {
           usedUnpaid += val
         } else if (type.indexOf('ลากิจ') !== -1 || type.toLowerCase().indexOf('lakij') !== -1) {
@@ -88,8 +165,16 @@ export async function GET(request: NextRequest) {
           usedAnn += val
         }
       }
-      const displayType = underOneYear && isAnnualType ? (type.indexOf('반차') !== -1 ? '무급휴가(반차)' : '무급휴가') : type
-      return { id: r.id, date: dateStr, type: displayType, reason: r.reason || '', status, certificateUrl: r.certificate_url || '', rejectReason: (r.reject_reason ?? '').trim() || undefined }
+      const displayType = underOneYear && isAnnualType ? (getLeaveDayValueFromType(type) < 1 ? '무급휴가(반차)' : '무급휴가') : type
+      return {
+        id: r.id,
+        date: dateStr,
+        type: displayType,
+        reason: r.reason || '',
+        status,
+        certificateUrl: r.certificate_url || '',
+        rejectReason: (r.reject_reason ?? '').trim() || undefined,
+      }
     })
 
     const remain = Math.max(0, annualTotal - usedAnn)

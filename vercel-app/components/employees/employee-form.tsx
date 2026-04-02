@@ -23,18 +23,21 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
+import { EMPLOYEE_NAME_TITLE_CANONICAL } from "@/lib/employee-display-name"
 
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
-export const EMP_NAME_TITLE_OPTIONS = ["Mr.", "Mrs.", "Ms.", "Miss"] as const
+export const EMP_NAME_TITLE_OPTIONS = EMPLOYEE_NAME_TITLE_CANONICAL
 
 export interface EmployeeFormData {
   row: number
   store: string
   name: string
   nameTitle: string
+  /** 직원 코드(AA999) */
+  employeeCode: string
   nick: string
   phone: string
   job: string
@@ -70,6 +73,7 @@ const emptyForm: EmployeeFormData = {
   store: "",
   name: "",
   nameTitle: "",
+  employeeCode: "",
   nick: "",
   phone: "",
   job: "Service",
@@ -292,6 +296,26 @@ export function EmployeeForm({
                 </Button>
               )}
             </div>
+          </div>
+        </div>
+        <div className="col-span-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold whitespace-nowrap">{t("emp_label_employee_code")} :</label>
+            <Input
+              value={form.employeeCode}
+              onChange={(e) =>
+                update(
+                  "employeeCode",
+                  e.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9]/g, "")
+                    .slice(0, 5)
+                )
+              }
+              className="h-8 text-xs font-mono max-w-[160px]"
+              placeholder={t("emp_employee_code_placeholder_new")}
+            />
+            <span className="text-[10px] text-muted-foreground">{t("emp_employee_code_hint")}</span>
           </div>
         </div>
         <div>

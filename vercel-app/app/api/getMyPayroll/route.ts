@@ -40,6 +40,9 @@ export async function GET(request: NextRequest) {
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim().slice(0, 7)
   const userStore = String(searchParams.get('userStore') || searchParams.get('store') || '').trim()
   const userName = String(searchParams.get('userName') || searchParams.get('name') || '').trim()
+  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const employeeId =
+    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
 
   if (!monthStr || monthStr.length < 7) {
     return NextResponse.json(
@@ -55,13 +58,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const filter = `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(userStore)}&name=eq.${encodeURIComponent(userName)}`
-    const rows = await supabaseSelectFilter('payroll_records', filter, {
-      order: 'month.desc',
-      limit: 1,
-    })
-
-    const r = Array.isArray(rows) && rows.length > 0 ? rows[0] : null
+    let r: Record<string, unknown> | null = null
+    if (employeeId > 0) {
+      try {
+        const byId = await supabaseSelectFilter(
+          'payroll_records',
+          `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(userStore)}&employee_id=eq.${employeeId}`,
+          { order: 'month.desc', limit: 1 }
+        )
+        r = Array.isArray(byId) && byId.length > 0 ? (byId[0] as Record<string, unknown>) : null
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_id|42703|column/i.test(em)) throw e
+      }
+    }
+    if (!r) {
+      const filter = `month=eq.${encodeURIComponent(monthStr)}&store=eq.${encodeURIComponent(userStore)}&name=eq.${encodeURIComponent(userName)}`
+      const rows = await supabaseSelectFilter('payroll_records', filter, {
+        order: 'month.desc',
+        limit: 1,
+      })
+      r = Array.isArray(rows) && rows.length > 0 ? (rows[0] as Record<string, unknown>) : null
+    }
     if (!r) {
       return NextResponse.json({ success: true, data: null, msg: '' }, { headers })
     }
@@ -73,6 +91,15 @@ export async function GET(request: NextRequest) {
       month: String(r.month || ''),
       store: storeName,
       name: String(r.name || ''),
+      employee_id:
+        r.employee_id != null && Number.isFinite(Number(r.employee_id)) && Number(r.employee_id) > 0
+          ? Math.floor(Number(r.employee_id))
+          : undefined,
+      employee_code: String(r.employee_code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 5),
       dept: String(r.dept || ''),
       role: String(r.role || ''),
       companyName: companyName || undefined,

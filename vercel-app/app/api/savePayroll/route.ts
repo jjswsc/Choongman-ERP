@@ -21,6 +21,8 @@ type AccountSubjectRow = {
 }
 
 export interface PayrollSaveRow {
+  employeeId?: number
+  employeeCode?: string
   store: string
   name: string
   dept?: string
@@ -64,8 +66,10 @@ function normalizeToken(src: string): string {
     .slice(0, 40) || 'na'
 }
 
-function buildPayrollPayeeCode(monthStr: string, store: string, name: string): string {
-  const base = `payroll-${monthStr}-${normalizeToken(store)}-${normalizeToken(name)}`
+function buildPayrollPayeeCode(monthStr: string, store: string, name: string, employeeToken?: string): string {
+  const emp = normalizeToken(employeeToken || '')
+  const suffix = emp && emp !== 'na' ? `-${emp}` : ''
+  const base = `payroll-${monthStr}-${normalizeToken(store)}-${normalizeToken(name)}${suffix}`
   return `${base}::wm::expense`
 }
 
@@ -128,6 +132,14 @@ export async function POST(request: NextRequest) {
       month: monthStr,
       store: String(r.store || '').trim(),
       name: String(r.name || '').trim(),
+      employee_id:
+        r.employeeId != null && Number.isFinite(Number(r.employeeId)) && Number(r.employeeId) > 0
+          ? Math.floor(Number(r.employeeId))
+          : null,
+      employee_code: String(r.employeeCode || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 5),
       dept: String(r.dept || '').trim(),
       role: String(r.role || '').trim(),
       salary: Number(r.salary) || 0,
@@ -154,7 +166,30 @@ export async function POST(request: NextRequest) {
 
     for (let j = 0; j < rows.length; j += CHUNK) {
       const chunk = rows.slice(j, j + CHUNK)
-      await supabaseUpsert('payroll_records', chunk, 'month,store,name')
+      const canUseEmployeeKey = chunk.every(
+        (r) => r.employee_id != null && Number.isFinite(Number(r.employee_id)) && Number(r.employee_id) > 0
+      )
+      try {
+        if (canUseEmployeeKey) {
+          await supabaseUpsert('payroll_records', chunk, 'month,store,employee_id')
+        } else {
+          await supabaseUpsert('payroll_records', chunk, 'month,store,name')
+        }
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (/employee_id|employee_code|42703|column/i.test(em)) {
+          const fallbackChunk = chunk.map((r) => {
+            const { employee_id: _eid, employee_code: _ecode, ...rest } = r
+            return rest
+          })
+          await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+        } else if (canUseEmployeeKey) {
+          // employee_id on_conflict 인덱스가 없으면 기존 키로 재시도
+          await supabaseUpsert('payroll_records', chunk, 'month,store,name')
+        } else {
+          throw e
+        }
+      }
     }
 
     const expenseSubject = await resolvePayrollAccountSubject()
@@ -184,9 +219,13 @@ export async function POST(request: NextRequest) {
       const netPay = Math.max(0, Number(r.netPay) || 0)
       const store = String(r.store || '').trim()
       const name = String(r.name || '').trim()
+      const employeeCode = String(r.employeeCode || '').trim()
+      const employeeId =
+        r.employeeId != null && Number.isFinite(Number(r.employeeId)) ? Math.floor(Number(r.employeeId)) : 0
+      const employeeToken = employeeCode || (employeeId > 0 ? `id${employeeId}` : '')
       if (!store || !name || netPay <= 0) continue
 
-      const payeeCode = buildPayrollPayeeCode(monthStr, store, name)
+      const payeeCode = buildPayrollPayeeCode(monthStr, store, name, employeeToken)
       const memo = `[PAYROLL] ${monthStr} ${store} ${name} 급여`
       const existing = existingByPayeeCode.get(payeeCode)
       const existingId = Number(existing?.id || 0)

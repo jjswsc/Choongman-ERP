@@ -2,6 +2,8 @@
  * stock_logs.location 집계 시 매장/본사명 변형을 동일하게 맞추기 위한 패턴 목록.
  * getAppData(get_store_stock)와 사용량 집계 API에서 공통 사용.
  */
+import { OFFICE_STORES } from '@/lib/permissions'
+
 export const OFFICE_LOCATIONS = ['office', '본사', '오피스', '본점']
 /** 입고 시 "입고등록"(HQ Warehouse) 선택 시 location */
 export const INBOUND_HQ_LOCATION = '입고등록'
@@ -59,6 +61,8 @@ export function getStockLocationPatterns(store: string): string[] {
   if (isOffice) {
     add(INBOUND_HQ_LOCATION)
     OFFICE_LOCATIONS.forEach(add)
+    // 화면에서는 본사 매장을 "CM Office"로 묶지만, stock_logs에는 본사/오피스/입고등록 등 여러 location 문자열이 섞임.
+    OFFICE_STORES.forEach(add)
   } else if (isInboundHq) {
     add(INBOUND_HQ_LOCATION)
   } else {

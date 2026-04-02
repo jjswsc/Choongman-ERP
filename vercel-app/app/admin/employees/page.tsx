@@ -51,6 +51,7 @@ import {
   type EmployeeTableRow,
   type EmployeeFormData,
 } from "@/components/employees"
+import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
@@ -110,6 +111,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     store: e.store || "",
     name: e.name || "",
     nameTitle: e.nameTitle || "",
+    employeeCode: e.employeeCode || "",
     nick: e.nick || "",
     phone: e.phone || "",
     job: e.job || "Service",
@@ -156,7 +158,7 @@ export default function EmployeesPage() {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [jobFilter, setJobFilter] = React.useState("")
   const [gradeFilter, setGradeFilter] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState("")
+  const [statusFilter, setStatusFilter] = React.useState("active")
   const [searchText, setSearchText] = React.useState("")
   const [hasSearched, setHasSearched] = React.useState(false)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
@@ -204,13 +206,6 @@ export default function EmployeesPage() {
           )
         }
 
-        const normName = (n: string) =>
-          String(n || "")
-            .trim()
-            .replace(/\s+/g, " ")
-            .replace(/^(Mr\.?|Ms\.?|Mrs\.?)\s*/i, "")
-            .trim() || String(n || "").trim()
-
         const merged: EmployeeTableRow[] = list.map((e) => {
           const fromSheet = e.grade != null && String(e.grade).trim() !== "" ? String(e.grade).trim() : null
           if (fromSheet) {
@@ -220,7 +215,7 @@ export default function EmployeesPage() {
           const name = String(e.name || "").trim().replace(/\s+/g, " ")
           const nick = String(e.nick || "").trim().replace(/\s+/g, " ")
           const key = store + "|" + name
-          const keyNorm = store + "|" + (normName(name) || name)
+          const keyNorm = store + "|" + (normalizeEmployeeNameForGradeMatch(name) || name)
           const keyNick = nick && nick !== name ? store + "|" + nick : ""
           const g =
             (gradesRes && gradesRes[key]?.grade) ||
