@@ -15,6 +15,16 @@ export type PosSettlementResponse = {
   systemTotal: number
   systemSubtotal?: number
   systemVat?: number
+  linkpos?: {
+    approvedCount: number
+    failedCount: number
+    requestedTotal: number
+    approvedTotal: number
+    cardReportedTotal: number
+    diffVsApproved: number
+    autoCardBreakdown?: Record<string, number>
+    autoQrBreakdown?: Record<string, number>
+  } | null
   settlement: PosSettlement | PosSettlement[] | null
 }
 
@@ -37,6 +47,7 @@ export async function getPosSettlementWithCache(params: {
           systemTotal: 0,
           systemSubtotal: 0,
           systemVat: 0,
+          linkpos: null,
           settlement: null,
         }
       )
@@ -49,6 +60,7 @@ export async function getPosSettlementWithCache(params: {
       systemTotal: 0,
       systemSubtotal: 0,
       systemVat: 0,
+      linkpos: null,
       settlement: null,
     }
   )

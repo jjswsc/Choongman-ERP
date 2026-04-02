@@ -1905,6 +1905,75 @@ export type ThaiTaxFilingSummary = {
   }
 }
 
+export type TaxReadinessChecklist = {
+  period: {
+    yearMonth: string
+    startDate: string
+    endDate: string
+    storeFilter: string
+  }
+  limits: {
+    sourceLimit: number
+    hit: {
+      bank: boolean
+      petty: boolean
+      card: boolean
+      purchase: boolean
+      sales: boolean
+      journal: boolean
+    }
+  }
+  domains: {
+    bank: {
+      sourceCount: number
+      journalLinkedCount: number
+      missingJournalCount: number
+      multiJournalSourceCount: number
+      sampleMissingSourceIds: number[]
+      sampleMultiSourceIds: number[]
+    }
+    pettyCash: {
+      sourceCount: number
+      journalLinkedCount: number
+      missingJournalCount: number
+      multiJournalSourceCount: number
+      sampleMissingSourceIds: number[]
+      sampleMultiSourceIds: number[]
+    }
+    cardExpense: {
+      sourceCount: number
+      journalLinkedCount: number
+      missingJournalCount: number
+      multiJournalSourceCount: number
+      sampleMissingSourceIds: number[]
+      sampleMultiSourceIds: number[]
+    }
+    purchase: {
+      sourceCount: number
+      journalLinkedCount: number
+      missingJournalCount: number
+      multiJournalSourceCount: number
+      sampleMissingSourceIds: number[]
+      sampleMultiSourceIds: number[]
+    }
+    sales: {
+      sourceCount: number
+      journalLinkedCount: number
+      missingJournalCount: number
+      multiJournalSourceCount: number
+      sampleMissingSourceIds: number[]
+      sampleMultiSourceIds: number[]
+      monthMismatchCount: number
+      sampleMonthMismatchSourceIds: number[]
+    }
+  }
+  score: {
+    criticalIssues: number
+    warningIssues: number
+  }
+  recommendations: string[]
+}
+
 export async function getThaiTaxFilingSummary(params: {
   userRole: string
   yearMonth: string
@@ -1917,6 +1986,20 @@ export async function getThaiTaxFilingSummary(params: {
   })
   const res = await apiFetchWithOffline(`/api/getThaiTaxFilingSummary?${q}`)
   return res.json() as Promise<ThaiTaxFilingSummary>
+}
+
+export async function getTaxReadinessChecklist(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getTaxReadinessChecklist?${q}`)
+  return res.json() as Promise<TaxReadinessChecklist>
 }
 
 export type CorporateTaxComputationData = {
@@ -6050,6 +6133,21 @@ export interface PosOrder {
   total: number
   status: string
   createdAt: string
+  linkposProvider?: string
+  linkposMode?: string
+  linkposTxCode?: string
+  linkposBankId?: string
+  linkposResponseCode?: string
+  linkposApprovalCode?: string
+  linkposTraceNo?: string
+  linkposRefNo?: string
+  linkposTerminalId?: string
+  linkposMerchantId?: string
+  linkposReference1?: string
+  linkposRequestedAmount?: number
+  linkposApprovedAmount?: number
+  linkposRequestedAt?: string
+  linkposRespondedAt?: string
 }
 
 export async function getPosTodaySales(params?: {
@@ -6121,6 +6219,42 @@ export interface PosSettlement {
   closed: boolean
 }
 
+export interface PosPaymentAttempt {
+  id: number
+  orderId: number | null
+  orderNo: string
+  storeCode: string
+  localTxId: string
+  provider: string
+  mode: string
+  txCode: string
+  retryOfAttemptId?: number | null
+  retryOfLocalTxId?: string
+  bankId: string
+  requestAmount: number
+  approvedAmount: number
+  responseCode: string
+  approvalCode: string
+  traceNo: string
+  terminalId: string
+  merchantId: string
+  responseText: string
+  status: string
+  errorReason: string
+  createdAt: string
+}
+
+export interface PosLinkposTenderRule {
+  id: number
+  storeCode: string
+  matchKeyword: string
+  tenderGroup: 'card' | 'qr'
+  tenderKey: string
+  priority: number
+  isActive: boolean
+  createdAt: string
+}
+
 export async function getPosSettlement(params: {
   settleDate: string
   storeCode?: string
@@ -6133,8 +6267,76 @@ export async function getPosSettlement(params: {
     systemTotal: number
     systemSubtotal?: number
     systemVat?: number
+    linkpos?: {
+      approvedCount: number
+      failedCount: number
+      requestedTotal: number
+      approvedTotal: number
+      cardReportedTotal: number
+      diffVsApproved: number
+      autoCardBreakdown?: Record<string, number>
+      autoQrBreakdown?: Record<string, number>
+    }
     settlement: PosSettlement | PosSettlement[] | null
   }>
+}
+
+export async function getPosPaymentAttempts(params?: {
+  startStr?: string
+  endStr?: string
+  storeCode?: string
+  status?: 'all' | 'approved' | 'declined' | 'failed'
+  limit?: number
+}) {
+  const q = new URLSearchParams()
+  if (params?.startStr) q.set('startStr', params.startStr)
+  if (params?.endStr) q.set('endStr', params.endStr)
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.status) q.set('status', params.status)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline('/api/getPosPaymentAttempts?' + q.toString())
+  const data = await res.json().catch(() => null)
+  if (!Array.isArray(data)) return []
+  return data as PosPaymentAttempt[]
+}
+
+export async function getPosLinkposTenderRules(params?: {
+  storeCode?: string
+  includeShared?: boolean
+}) {
+  const q = new URLSearchParams()
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.includeShared != null) q.set('includeShared', params.includeShared ? 'true' : 'false')
+  const res = await apiFetchWithOffline('/api/getPosLinkposTenderRules?' + q.toString())
+  const data = await res.json().catch(() => null)
+  if (!Array.isArray(data)) return []
+  return data as PosLinkposTenderRule[]
+}
+
+export async function savePosLinkposTenderRule(params: {
+  id?: number
+  storeCode: string
+  matchKeyword: string
+  tenderGroup: 'card' | 'qr'
+  tenderKey: string
+  priority?: number
+  isActive?: boolean
+}) {
+  const res = await apiFetchWithOffline('/api/savePosLinkposTenderRule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deletePosLinkposTenderRule(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deletePosLinkposTenderRule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function savePosSettlement(params: {
@@ -6183,6 +6385,7 @@ export async function updatePosOrder(params: {
   pointUsed?: number
   pointEarned?: number
   guestCount?: number
+  linkposPayment?: LinkposPaymentSummary | null
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'
@@ -6257,6 +6460,152 @@ export async function markPosOrderItemServed(params: {
   return res.json() as Promise<{ success: boolean; message?: string; servedCount?: number; totalCount?: number }>
 }
 
+export type LinkposPaymentSummary = {
+  provider: 'kbtg_linkpos'
+  mode: 'hypercom'
+  txCode: '20' | '26' | '50'
+  bankId: string
+  responseCode: string
+  approvalCode?: string
+  traceNo?: string
+  refNo?: string
+  terminalId?: string
+  merchantId?: string
+  reference1: string
+  requestedAmount: number
+  approvedAmount: number
+  requestedAt: string
+  respondedAt: string
+}
+
+const LOCAL_LINKPOS_TX_ENDPOINTS = [
+  'http://127.0.0.1:18181/linkpos/transaction',
+  'http://localhost:18181/linkpos/transaction',
+  'http://127.0.0.1:17888/linkpos/transaction',
+  'http://localhost:17888/linkpos/transaction',
+]
+
+async function postJsonWithTimeout(
+  url: string,
+  body: Record<string, unknown>,
+  timeoutMs: number
+): Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), Math.max(800, timeoutMs))
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    })
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (!res.ok) return { ok: false, error: String(data?.message || `HTTP ${res.status}`) }
+    return { ok: true, data }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function executeLinkposPayment(params: {
+  amount: number
+  bankId: string
+  reference1: string
+  reference2?: string
+  storeCode: string
+  timeoutMs?: number
+}) {
+  const timeoutMs = Math.max(2000, Number(params.timeoutMs ?? 12000))
+  const payload = {
+    action: 'sale',
+    amount: Number(params.amount),
+    bankId: String(params.bankId || ''),
+    reference1: String(params.reference1 || '').slice(0, 20),
+    reference2: String(params.reference2 || '').slice(0, 20),
+    storeCode: String(params.storeCode || ''),
+    protocol: 'hypercom_v2',
+  }
+
+  // Hybrid #1: POS 로컬 브리지 우선
+  for (const endpoint of LOCAL_LINKPOS_TX_ENDPOINTS) {
+    const r = await postJsonWithTimeout(endpoint, payload, timeoutMs)
+    if (!r.ok) continue
+    if (r.data?.success) {
+      return {
+        success: true,
+        payment: (r.data.payment || null) as LinkposPaymentSummary | null,
+        source: 'local' as const,
+      }
+    }
+  }
+
+  // Hybrid #2: 서버 중계 fallback
+  const res = await apiFetchWithOffline('/api/linkpos/pay', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data?.success) {
+    return {
+      success: false,
+      message: String(data?.message || data?.code || `HTTP ${res.status}`),
+      source: 'server' as const,
+    }
+  }
+  return {
+    success: true,
+    payment: (data.payment || null) as LinkposPaymentSummary | null,
+    source: 'server' as const,
+  }
+}
+
+export async function executeLinkposPaymentServer(params: {
+  amount: number
+  bankId: string
+  reference1: string
+  reference2?: string
+  storeCode: string
+  orderId?: number
+  retryOfAttemptId?: number
+  retryOfLocalTxId?: string
+  timeoutMs?: number
+}) {
+  const payload = {
+    action: 'sale',
+    amount: Number(params.amount),
+    bankId: String(params.bankId || ''),
+    reference1: String(params.reference1 || '').slice(0, 20),
+    reference2: String(params.reference2 || '').slice(0, 20),
+    storeCode: String(params.storeCode || ''),
+    orderId: params.orderId != null ? Number(params.orderId) : undefined,
+    retryOfAttemptId: params.retryOfAttemptId != null ? Number(params.retryOfAttemptId) : undefined,
+    retryOfLocalTxId: params.retryOfLocalTxId ? String(params.retryOfLocalTxId).slice(0, 20) : undefined,
+    protocol: 'hypercom_v2',
+    timeoutMs: params.timeoutMs != null ? Number(params.timeoutMs) : undefined,
+  }
+  const res = await apiFetchWithOffline('/api/linkpos/pay', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || !data?.success) {
+    return {
+      success: false,
+      message: String(data?.message || data?.code || `HTTP ${res.status}`),
+      source: 'server' as const,
+    }
+  }
+  return {
+    success: true,
+    payment: (data.payment || null) as LinkposPaymentSummary | null,
+    source: 'server' as const,
+  }
+}
+
 export async function savePosOrder(params: {
   storeCode?: string
   /** 주문 접수·결제한 담당자(담당자별 조회용) */
@@ -6289,6 +6638,8 @@ export async function savePosOrder(params: {
    * 서버에서 payment 합계·total 로 검증 후 적용.
    */
   closeStatus?: 'paid' | 'completed'
+  /** 카드 승인 완료 메타 (KBTG LINKPOS) */
+  linkposPayment?: LinkposPaymentSummary | null
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'

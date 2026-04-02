@@ -284,6 +284,68 @@ export async function postPettyCashJournal(params: {
   })
 }
 
+export async function postCardTransactionJournal(params: {
+  cardTransactionId?: number
+  transDate: string
+  transType: 'charge' | 'expense'
+  amountAbs: number
+  memo?: string
+  postedBy?: string
+  accountSubjectId?: number | null
+}) {
+  const amount = Math.abs(Number(params.amountAbs) || 0)
+  if (amount <= 0) return null
+
+  const cardAsset = accountLine('1160')
+  if (params.transType === 'charge') {
+    return postJournalEntry({
+      accountingDate: params.transDate,
+      sourceType: 'card_transaction',
+      sourceId: params.cardTransactionId || null,
+      memo: params.memo || '카드 충전 자동분개',
+      postedBy: params.postedBy || null,
+      lines: [
+        { ...cardAsset, side: 'debit', amount },
+        { ...GL.cash(), side: 'credit', amount },
+      ],
+    })
+  }
+
+  let expenseLine: JournalLineInput = { ...GL.miscExpense(), side: 'debit', amount }
+  const sid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
+  if (Number.isFinite(sid) && sid > 0) {
+    try {
+      const rows = (await supabaseSelectFilter('account_subjects', `id=eq.${sid}`, {
+        limit: 1,
+        select: 'id,code,name',
+      })) as { id?: number; code?: string; name?: string }[] | null
+      const r = rows?.[0]
+      if (r?.code) {
+        expenseLine = {
+          ...accountLine(String(r.code).trim(), { nameKo: String(r.name || r.code).trim() }),
+          side: 'debit',
+          amount,
+          accountSubjectId: sid,
+        }
+      }
+    } catch (e) {
+      console.error('postCardTransactionJournal account_subjects lookup:', e)
+    }
+  }
+
+  return postJournalEntry({
+    accountingDate: params.transDate,
+    sourceType: 'card_transaction',
+    sourceId: params.cardTransactionId || null,
+    memo: params.memo || '카드 지출 자동분개',
+    postedBy: params.postedBy || null,
+    lines: [
+      expenseLine,
+      { ...cardAsset, side: 'credit', amount },
+    ],
+  })
+}
+
 export async function postExpenseAccrualJournal(params: {
   expenseAccrualId?: number
   accountingDate: string

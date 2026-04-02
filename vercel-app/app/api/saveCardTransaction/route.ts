@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { deleteJournalEntriesBySource, postCardTransactionJournal } from '@/lib/accounting-posting'
 
 /** 카드 거래 생성/수정 */
 export async function POST(request: NextRequest) {
@@ -56,10 +57,45 @@ export async function POST(request: NextRequest) {
 
     if (id && !isNaN(id)) {
       await supabaseUpdate('card_transactions', id, row)
+      try {
+        await deleteJournalEntriesBySource('card_transaction', id)
+        await postCardTransactionJournal({
+          cardTransactionId: id,
+          transDate,
+          transType: transType === 'charge' ? 'charge' : 'expense',
+          amountAbs: Math.abs(amount),
+          memo: memo || undefined,
+          postedBy: null,
+          accountSubjectId:
+            transType === 'expense' && accountSubjectId != null && !isNaN(Number(accountSubjectId))
+              ? Number(accountSubjectId)
+              : null,
+        })
+      } catch (postingErr) {
+        console.error('saveCardTransaction update posting:', postingErr)
+      }
       return NextResponse.json({ success: true, id, message: '수정되었습니다.' }, { headers })
     }
     const inserted = (await supabaseInsert('card_transactions', { ...row, created_at: new Date().toISOString() })) as { id?: number }[]
     const newId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
+    if (newId) {
+      try {
+        await postCardTransactionJournal({
+          cardTransactionId: newId,
+          transDate,
+          transType: transType === 'charge' ? 'charge' : 'expense',
+          amountAbs: Math.abs(amount),
+          memo: memo || undefined,
+          postedBy: null,
+          accountSubjectId:
+            transType === 'expense' && accountSubjectId != null && !isNaN(Number(accountSubjectId))
+              ? Number(accountSubjectId)
+              : null,
+        })
+      } catch (postingErr) {
+        console.error('saveCardTransaction create posting:', postingErr)
+      }
+    }
     return NextResponse.json({ success: true, id: newId, message: '추가되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveCardTransaction:', e)

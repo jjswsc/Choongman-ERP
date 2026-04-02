@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { hasJournalForSource, postBankTransactionJournal, postPettyCashJournal, postPosOrderJournal, postStorePurchaseJournal } from '@/lib/accounting-posting'
+import {
+  hasJournalForSource,
+  postBankTransactionJournal,
+  postCardTransactionJournal,
+  postPettyCashJournal,
+  postPosOrderJournal,
+  postStorePurchaseJournal,
+} from '@/lib/accounting-posting'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 function isPeriodClosedError(e: unknown): boolean {
@@ -28,6 +35,7 @@ export async function POST(request: NextRequest) {
 
     let bankCreated = 0
     let pettyCreated = 0
+    let cardCreated = 0
     let posCreated = 0
     let purchaseCreated = 0
     let skipped = 0
@@ -128,6 +136,49 @@ export async function POST(request: NextRequest) {
       pettyCreated += 1
     }
 
+    const cardRows = (await supabaseSelectFilter(
+      'card_transactions',
+      `trans_date=gte.${startStr}&trans_date=lte.${endStr}`,
+      { select: 'id,trans_date,trans_type,amount,memo,account_subject_id', limit: 50000 }
+    )) as {
+      id?: number
+      trans_date?: string
+      trans_type?: string
+      amount?: number
+      memo?: string
+      account_subject_id?: number | null
+    }[] | null
+    for (const row of cardRows || []) {
+      const id = Number(row.id || 0)
+      if (!id) continue
+      if (await hasJournalForSource('card_transaction', id)) {
+        skipped += 1
+        continue
+      }
+      if (!dryRun) {
+        try {
+          await postCardTransactionJournal({
+            cardTransactionId: id,
+            transDate: String(row.trans_date || '').slice(0, 10),
+            transType: String(row.trans_type || '').toLowerCase() === 'charge' ? 'charge' : 'expense',
+            amountAbs: Math.abs(Number(row.amount) || 0),
+            memo: String(row.memo || ''),
+            accountSubjectId:
+              row.account_subject_id != null && !isNaN(Number(row.account_subject_id))
+                ? Number(row.account_subject_id)
+                : null,
+          })
+        } catch (e) {
+          if (isPeriodClosedError(e)) {
+            skipped += 1
+            continue
+          }
+          throw e
+        }
+      }
+      cardCreated += 1
+    }
+
     const posRows = (await supabaseSelectFilter(
       'pos_orders',
       `created_at=gte.${startStr}T00:00:00.000Z&created_at=lte.${endStr}T23:59:59.999Z&status=in.(completed,paid,ready)`,
@@ -194,11 +245,12 @@ export async function POST(request: NextRequest) {
       created: {
         bank: bankCreated,
         pettyCash: pettyCreated,
+        cardExpense: cardCreated,
         posSales: posCreated,
         storePurchase: purchaseCreated,
       },
       skipped,
-      totalCreated: bankCreated + pettyCreated + posCreated + purchaseCreated,
+      totalCreated: bankCreated + pettyCreated + cardCreated + posCreated + purchaseCreated,
     }, { headers })
   } catch (e) {
     console.error('accounting/backfill:', e)

@@ -16,7 +16,7 @@
    - [Grab Developer](https://developer.grab.com/) 접속
    - 파트너/비즈니스 계정으로 가입
 2. **Food Partner API 신청**
-   - 문서: [Food Partner API](https://developer.grab.com/docs/food-partner-api/)
+   - 문서: [GrabFood Partner API (POS) v1.1.3](https://developer.grab.com/docs/grabfood/api/v1-1-3)
    - OAuth 2.0 인증, 메뉴/주문/웹훅 설정 필요
 3. **선택: 공인 연동 파트너 사용**
    - 직접 API 개발 대신, Grab 공인 연동을 제공하는 POS/오더 통합 업체를 쓰는 방법:
@@ -94,3 +94,6 @@
 
 우리 포스는 이미 **배달 + 그랩/라인맨/쇼피 선택** UI와 주문 타입·정산 구분은 되어 있으므로,  
 각 플랫폼에서 **주문 수신(웹훅/API)** 방식을 제공해 주면, 그에 맞춰 **주문 수신 API·웹훅 핸들러**만 추가하면 됩니다.
+
+추가로 Grab 사전 준비 실행 문서는 아래를 참고:
+- `vercel-app/docs/GRABFOOD_PREP_CHECKLIST.md`

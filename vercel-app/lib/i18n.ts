@@ -2,6 +2,8 @@
  * 공통 번역 - ko, en, th, mm, la, kh, vi, ms
  * 새 업데이트 시 관련 문자열을 반드시 모든 언어에 추가하세요.
  */
+import { useMemo } from "react"
+
 export const i18n = {
   ko: {
     // 공통
@@ -1286,6 +1288,7 @@ export const i18n = {
     wl_status: '상태',
     pay_tab_calc: '급여 계산',
     pay_tab_records: '명세서 조회',
+    pay_records_excel_download: '엑셀 다운로드',
     pay_tab_salary_history: '급여 변경 내역',
     pay_tab_holidays: '공휴일 관리',
     pay_tab_help: '설명',
@@ -6287,6 +6290,7 @@ export const i18n = {
     wl_status: 'Status',
     pay_tab_calc: 'Calculate',
     pay_tab_records: 'Payroll Records',
+    pay_records_excel_download: 'Download Excel',
     pay_tab_salary_history: 'Salary Changes',
     pay_tab_holidays: 'Holidays',
     pay_tab_help: 'Help',
@@ -11192,6 +11196,7 @@ orderItemQty: 'จำนวน',
     wl_status: 'สถานะ',
     pay_tab_calc: 'คำนวณ',
     pay_tab_records: 'รายการเงินเดือน',
+    pay_records_excel_download: 'ดาวน์โหลด Excel',
     pay_tab_salary_history: 'ประวัติการเปลี่ยนเงินเดือน',
     pay_tab_holidays: 'วันหยุด',
     pay_tab_help: 'คำอธิบาย',
@@ -15583,6 +15588,7 @@ orderItemQty: 'အရေအတွက်',
     wl_status: 'အခြေအနေ',
     pay_tab_calc: 'တွက်ချက်',
     pay_tab_records: 'လစာစာရင်း',
+    pay_records_excel_download: 'Excel ဒေါင်းလုဒ်',
     pay_tab_salary_history: 'လစာပြောင်းလဲမှု မှတ်တမ်း',
     pay_tab_holidays: 'အားလပ်ရက်များ',
     pay_tab_help: 'အကူအညီ',
@@ -19866,6 +19872,7 @@ orderItemQty: 'ຈຳນວນ',
     wl_status: 'ສະຖານະ',
     pay_tab_calc: 'ຄິດໄລ່',
     pay_tab_records: 'ລາຍການເງິນເດືອນ',
+    pay_records_excel_download: 'ດາວໂຫຼດ Excel',
     pay_tab_salary_history: 'ປະຫວັດການປ່ຽນແປງເງິນເດືອນ',
     pay_tab_holidays: 'ວັນພັກ',
     pay_tab_help: 'ຄູ່ມື',
@@ -28439,5 +28446,8 @@ const i18nWithPosBackfill: Record<string, Record<string, string>> = Object.fromE
 export function useT(lang: string): (k: string) => string {
   const key = (lang in i18nWithPosBackfill ? lang : 'ko') as keyof typeof i18nWithPosBackfill
   const dict = i18nWithPosBackfill[key] || (i18nWithPosBackfill.ko as Record<string, string>)
-  return (k: string) => (dict as Record<string, string>)[k] ?? (i18n.en as Record<string, string>)[k] ?? k
+  return useMemo(
+    () => (k: string) => (dict as Record<string, string>)[k] ?? (i18n.en as Record<string, string>)[k] ?? k,
+    [dict]
+  )
 }

@@ -28,10 +28,12 @@ import {
   getPosPrinterSettings,
   getPosTodaySales,
   getPosDeliveryApps,
+  executeLinkposPayment,
   updatePosOrder,
   updatePosOrderStatus,
   type PosMenu,
   type PosDeliveryApp,
+  type LinkposPaymentSummary,
   type PosOrder,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
@@ -1085,6 +1087,38 @@ export default function PosTerminalPage() {
     [currentStoreId, auth?.user, cardAutoOpen, checkAutoOpen, drawerOpenOption, t]
   )
 
+  const runLinkposPaymentIfNeeded = useCallback(
+    async (payment: CartPanelPaymentPayload | null | undefined) => {
+      const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
+      if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
+      if (!currentStoreId) {
+        return { ok: false as const, message: 'store_required' }
+      }
+      const rawBank = String(payment?.deliveryPaymentChannel ?? '').trim()
+      const bankIdMatch = rawBank.match(/bank[:=]\s*([0-9]{2,3})/i)
+      const bankId = bankIdMatch?.[1] || '04'
+      const ref1 = `POS${Date.now().toString().slice(-14)}`.slice(0, 20)
+      const ref2 = String(auth?.user || '').trim().slice(0, 20)
+
+      const result = await executeLinkposPayment({
+        amount: cardAmount,
+        bankId,
+        reference1: ref1,
+        reference2: ref2,
+        storeCode: currentStoreId,
+      })
+      if (!result.success) {
+        const msg =
+          (t('posCardApprovalFailed') || '카드 승인에 실패했습니다.') +
+          ` (${String(result.message || 'LINKPOS_ERROR')})`
+        await appAlert(msg)
+        return { ok: false as const, message: msg }
+      }
+      return { ok: true as const, linkposPayment: result.payment as LinkposPaymentSummary | null }
+    },
+    [currentStoreId, auth?.user, t]
+  )
+
   const deliveryApps = deliveryAppsFromApi
     .filter((a) => a.enabled)
     .map((a) => ({ id: a.code, name: a.name }))
@@ -1417,6 +1451,8 @@ export default function PosTerminalPage() {
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               try {
                 if (existingOrderId != null && payload.payment != null) {
+                  const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
+                  if (!linkpos.ok) return
                   await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payload.items),
@@ -1435,6 +1471,7 @@ export default function PosTerminalPage() {
                     paymentOther: payload.payment.paymentOther,
                     paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                     deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                    linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
                   await updatePosOrderStatus({ id: existingOrderId, status: 'completed' })
@@ -1482,6 +1519,8 @@ export default function PosTerminalPage() {
             onTakeoutOrderComplete={async (payload, existingOrderId) => {
               try {
                 if (existingOrderId != null && payload.payment != null) {
+                  const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
+                  if (!linkpos.ok) return
                   await updatePosOrder({
                     id: existingOrderId,
                     items: cartLinesToPosOrderItems(payload.items),
@@ -1500,6 +1539,7 @@ export default function PosTerminalPage() {
                     paymentOther: payload.payment.paymentOther,
                     paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                     deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                    linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
                   await updatePosOrderStatus({ id: existingOrderId, status: 'completed' })
@@ -1803,6 +1843,8 @@ export default function PosTerminalPage() {
                 let orderIdToComplete: number | null = null
                 let orderNo: string = ''
                 const pay = payload.payment
+                const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
+                if (!linkpos.ok) return
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
@@ -1825,6 +1867,7 @@ export default function PosTerminalPage() {
                     paymentOther: pay.paymentOther,
                     paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                     deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                    linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
                   orderIdToComplete = existingOrderId
@@ -1859,6 +1902,7 @@ export default function PosTerminalPage() {
                       paymentOther: pay.paymentOther,
                       paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                       deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      linkposPayment: linkpos.linkposPayment,
                       pricingAdjustments,
                       closeStatus: targetClose,
                     }))
@@ -1888,6 +1932,7 @@ export default function PosTerminalPage() {
                       paymentOther: pay.paymentOther,
                       paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                       deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      linkposPayment: linkpos.linkposPayment,
                       pricingAdjustments,
                       closeStatus: targetClose,
                     })
@@ -1945,6 +1990,8 @@ export default function PosTerminalPage() {
             }}
             onNonDineOrderComplete={async (payload) => {
               try {
+                const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
+                if (!linkpos.ok) return
                 const res = await savePosOrderWithOffline({
                   storeCode: currentStoreId,
                   createdBy: auth?.user ?? '',
@@ -1968,6 +2015,7 @@ export default function PosTerminalPage() {
                   paymentOther: payload.payment?.paymentOther ?? 0,
                   paymentDeliveryApp: payload.payment?.paymentDeliveryApp ?? 0,
                   deliveryPaymentChannel: payload.payment?.deliveryPaymentChannel ?? null,
+                  linkposPayment: linkpos.linkposPayment,
                   pricingAdjustments,
                   closeStatus: 'completed',
                 })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 
 /** 카드 거래 삭제 */
 export async function POST(request: NextRequest) {
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
     if (!id || isNaN(id)) {
       return NextResponse.json({ success: false, message: '거래 ID가 필요합니다.' }, { status: 400, headers })
     }
+    await deleteJournalEntriesBySource('card_transaction', id)
     await supabaseDeleteByFilter('card_transactions', `id=eq.${id}`)
     return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
   } catch (e) {

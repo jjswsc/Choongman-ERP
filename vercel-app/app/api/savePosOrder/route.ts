@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
@@ -79,6 +79,10 @@ export async function POST(req: NextRequest) {
     const items = Array.isArray(body.items) ? body.items : []
     const pricingAdjustments = body.pricingAdjustments || {}
     const createdBy = String(body.createdBy ?? body.created_by ?? '').trim()
+    const linkposPayment =
+      body.linkposPayment && typeof body.linkposPayment === 'object'
+        ? (body.linkposPayment as Record<string, unknown>)
+        : null
 
     if (items.length === 0) {
       return NextResponse.json({ success: false, message: '주문 항목이 없습니다.' }, { headers })
@@ -168,6 +172,21 @@ export async function POST(req: NextRequest) {
       guest_count,
       delivery_app_code,
       created_by: createdBy,
+      linkpos_provider: linkposPayment ? String(linkposPayment.provider ?? 'kbtg_linkpos') : null,
+      linkpos_mode: linkposPayment ? String(linkposPayment.mode ?? 'hypercom') : null,
+      linkpos_tx_code: linkposPayment ? String(linkposPayment.txCode ?? '20') : null,
+      linkpos_bank_id: linkposPayment ? String(linkposPayment.bankId ?? '') : null,
+      linkpos_response_code: linkposPayment ? String(linkposPayment.responseCode ?? '') : null,
+      linkpos_approval_code: linkposPayment ? String(linkposPayment.approvalCode ?? '') : null,
+      linkpos_trace_no: linkposPayment ? String(linkposPayment.traceNo ?? '') : null,
+      linkpos_ref_no: linkposPayment ? String(linkposPayment.refNo ?? '') : null,
+      linkpos_terminal_id: linkposPayment ? String(linkposPayment.terminalId ?? '') : null,
+      linkpos_merchant_id: linkposPayment ? String(linkposPayment.merchantId ?? '') : null,
+      linkpos_reference1: linkposPayment ? String(linkposPayment.reference1 ?? '') : null,
+      linkpos_requested_amount: linkposPayment ? Number(linkposPayment.requestedAmount ?? 0) : null,
+      linkpos_approved_amount: linkposPayment ? Number(linkposPayment.approvedAmount ?? 0) : null,
+      linkpos_requested_at: linkposPayment ? String(linkposPayment.requestedAt ?? '') : null,
+      linkpos_responded_at: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
     }
     const inserted = (await supabaseInsertWithPgrst204Fallback(
       'pos_orders',
@@ -177,6 +196,31 @@ export async function POST(req: NextRequest) {
     const created = Array.isArray(inserted) ? inserted[0] : inserted
     if (idempotencyKey && Number(created?.id) > 0) {
       writeIdempotencyHit(idempotencyKey, Number(created.id), orderNo)
+    }
+
+    if (linkposPayment && Number(created?.id) > 0) {
+      try {
+        await supabaseInsert('pos_payment_attempts', {
+          order_id: Number(created.id),
+          local_tx_id: String(linkposPayment.reference1 ?? '').slice(0, 20),
+          provider: String(linkposPayment.provider ?? 'kbtg_linkpos'),
+          mode: String(linkposPayment.mode ?? 'hypercom'),
+          tx_code: String(linkposPayment.txCode ?? '20'),
+          bank_id: String(linkposPayment.bankId ?? ''),
+          request_amount: Number(linkposPayment.requestedAmount ?? 0),
+          approved_amount: Number(linkposPayment.approvedAmount ?? 0),
+          response_code: String(linkposPayment.responseCode ?? ''),
+          approval_code: String(linkposPayment.approvalCode ?? ''),
+          trace_no: String(linkposPayment.traceNo ?? ''),
+          terminal_id: String(linkposPayment.terminalId ?? ''),
+          merchant_id: String(linkposPayment.merchantId ?? ''),
+          status: String(linkposPayment.responseCode ?? '') === '00' ? 'approved' : 'declined',
+          created_at: String(linkposPayment.requestedAt ?? new Date().toISOString()),
+        })
+      } catch (e) {
+        // local_tx_id unique 충돌(중복 재전송) 시 무시
+        console.error('savePosOrder linkpos attempt insert:', e)
+      }
     }
 
     const paymentSum = paymentSumForStatus

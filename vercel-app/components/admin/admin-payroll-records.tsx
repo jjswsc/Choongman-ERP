@@ -100,6 +100,19 @@ function escapeXml(s: string): string {
     .replace(/"/g, "&quot;")
 }
 
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.rel = "noopener"
+  a.style.display = "none"
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export function AdminPayrollRecords() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -253,37 +266,111 @@ export function AdminPayrollRecords() {
     return `${m.slice(0, 4)}년 ${months[parseInt(mm, 10) || 0] || mm}월`
   }
 
-  const handleExcelDownload = () => {
+  const handleExcelDownload = async () => {
+    if (filteredList.length === 0) {
+      await appAlert(t("pay_no_data"))
+      return
+    }
     const cols = [
-      t("pay_month") || "월",
-      t("pay_col_store") || "매장",
-      t("pay_col_name") || "이름",
-      t("pay_col_base") || "기본급",
-      t("pay_allowance_sum") || "수당계",
-      t("pay_ot_sum") || "OT계",
-      t("pay_deduct_sum") || "공제계",
-      t("pay_net") || "실수령액",
-      t("wl_status") || "상태",
+      t("pay_month"),
+      t("pay_col_store"),
+      t("pay_col_name"),
+      t("pay_col_base"),
+      t("pay_pos_allow"),
+      t("pay_haz_allow"),
+      t("pay_diligence_allow"),
+      t("pay_birth"),
+      t("pay_holiday"),
+      t("pay_spl_bonus"),
+      t("pay_ot"),
+      t("pay_col_late"),
+      t("pay_late_ded"),
+      t("pay_sso"),
+      t("pay_tax"),
+      t("pay_other_ded"),
+      t("pay_net"),
+      t("wl_status"),
     ]
     const rows: string[][] = [cols]
+    const sums = {
+      salary: 0,
+      pos: 0,
+      haz: 0,
+      dil: 0,
+      birth: 0,
+      hol: 0,
+      spl: 0,
+      ot: 0,
+      lateDed: 0,
+      sso: 0,
+      tax: 0,
+      other: 0,
+      net: 0,
+    }
     for (const r of filteredList) {
-      const allowSum = sumAllowance(r)
-      const deductSum = sumDeduct(r)
-      const statusLabel = r.status === "확정" ? t("pay_status_confirmed") : r.status === "지급대기" ? t("pay_status_pending") : (r.status ?? t("pay_status_pending"))
+      const period = (r.month && /^\d{4}-\d{2}/.test(r.month) ? r.month.slice(0, 7) : monthStr) || monthStr
+      const statusLabel =
+        r.status === "확정"
+          ? t("pay_status_confirmed")
+          : r.status === "지급대기"
+            ? t("pay_status_pending")
+            : (r.status ?? t("pay_status_pending"))
+      sums.salary += r.salary || 0
+      sums.pos += r.pos_allow || 0
+      sums.haz += r.haz_allow || 0
+      sums.dil += r.diligence_allow || 0
+      sums.birth += r.birth_bonus || 0
+      sums.hol += r.holiday_pay || 0
+      sums.spl += r.spl_bonus || 0
+      sums.ot += r.ot_amt || 0
+      sums.lateDed += r.late_ded || 0
+      sums.sso += r.sso || 0
+      sums.tax += r.tax || 0
+      sums.other += r.other_ded || 0
+      sums.net += r.net_pay || 0
       rows.push([
-        monthStr,
+        period,
         r.store,
         r.name,
-        String(r.salary),
-        String(allowSum),
-        String(r.ot_amt || 0),
-        String(deductSum),
-        String(r.net_pay || 0),
+        String(r.salary ?? 0),
+        String(r.pos_allow ?? 0),
+        String(r.haz_allow ?? 0),
+        String(r.diligence_allow ?? 0),
+        String(r.birth_bonus ?? 0),
+        String(r.holiday_pay ?? 0),
+        String(r.spl_bonus ?? 0),
+        String(r.ot_amt ?? 0),
+        String(r.late_min ?? 0),
+        String(r.late_ded ?? 0),
+        String(r.sso ?? 0),
+        String(r.tax ?? 0),
+        String(r.other_ded ?? 0),
+        String(r.net_pay ?? 0),
         statusLabel,
       ])
     }
+    rows.push([
+      "",
+      "",
+      t("pay_total_amount"),
+      String(sums.salary),
+      String(sums.pos),
+      String(sums.haz),
+      String(sums.dil),
+      String(sums.birth),
+      String(sums.hol),
+      String(sums.spl),
+      String(sums.ot),
+      "",
+      String(sums.lateDed),
+      String(sums.sso),
+      String(sums.tax),
+      String(sums.other),
+      String(sums.net),
+      "",
+    ])
     const pxPerChar = 8
-    const minW = 60
+    const minW = 56
     const colWidths = cols.map((_, c) => {
       let maxLen = (cols[c] || "").length
       for (const row of rows) {
@@ -291,27 +378,24 @@ export function AdminPayrollRecords() {
         const len = String(cell ?? "").length
         if (len > maxLen) maxLen = len
       }
-      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 200))
+      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 220))
     })
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}.total{font-weight:bold;background:#e8f4ff}table{border-collapse:collapse}</style></head>
 <body>
 <table>
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 ${rows.map((row, ri) => {
   const isHead = ri === 0
-  return `<tr${isHead ? ' class="head"' : ""}>${row.map((c) => `<td>${escapeXml(String(c ?? ""))}</td>`).join("")}</tr>`
+  const isTotal = ri === rows.length - 1
+  const cls = isHead ? "head" : isTotal ? "total" : ""
+  return `<tr${cls ? ` class="${cls}"` : ""}>${row.map((c) => `<td>${escapeXml(String(c ?? ""))}</td>`).join("")}</tr>`
 }).join("")}
 </table>
 </body>
 </html>`
     const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `payroll_${monthStr}_${storeFilter === "All" ? "all" : storeFilter}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+    triggerBlobDownload(blob, `payroll_${monthStr}_${storeFilter === "All" ? "all" : storeFilter}.xls`)
   }
 
   const handleSendNotice = async () => {
@@ -398,10 +482,10 @@ ${rows.map((row, ri) => {
                 size="sm"
                 variant="outline"
                 className="h-9"
-                onClick={handleExcelDownload}
+                onClick={() => void handleExcelDownload()}
               >
                 <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                {t("excelBtn")}
+                {t("pay_records_excel_download")}
               </Button>
               <Button
                 size="sm"

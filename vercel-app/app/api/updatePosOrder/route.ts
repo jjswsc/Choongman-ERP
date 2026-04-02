@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
     const guestCountBody = body?.guestCount ?? body?.guest_count
     const pricingAdjustments = body?.pricingAdjustments || {}
+    const linkposPayment =
+      body?.linkposPayment && typeof body.linkposPayment === 'object'
+        ? (body.linkposPayment as Record<string, unknown>)
+        : null
 
     if (!id || items.length === 0) {
       return NextResponse.json(
@@ -112,6 +116,24 @@ export async function POST(req: NextRequest) {
       total,
     }
 
+    if (linkposPayment) {
+      patch.linkpos_provider = String(linkposPayment.provider ?? 'kbtg_linkpos')
+      patch.linkpos_mode = String(linkposPayment.mode ?? 'hypercom')
+      patch.linkpos_tx_code = String(linkposPayment.txCode ?? '20')
+      patch.linkpos_bank_id = String(linkposPayment.bankId ?? '')
+      patch.linkpos_response_code = String(linkposPayment.responseCode ?? '')
+      patch.linkpos_approval_code = String(linkposPayment.approvalCode ?? '')
+      patch.linkpos_trace_no = String(linkposPayment.traceNo ?? '')
+      patch.linkpos_ref_no = String(linkposPayment.refNo ?? '')
+      patch.linkpos_terminal_id = String(linkposPayment.terminalId ?? '')
+      patch.linkpos_merchant_id = String(linkposPayment.merchantId ?? '')
+      patch.linkpos_reference1 = String(linkposPayment.reference1 ?? '')
+      patch.linkpos_requested_amount = Number(linkposPayment.requestedAmount ?? 0)
+      patch.linkpos_approved_amount = Number(linkposPayment.approvedAmount ?? 0)
+      patch.linkpos_requested_at = String(linkposPayment.requestedAt ?? '')
+      patch.linkpos_responded_at = String(linkposPayment.respondedAt ?? '')
+    }
+
     if (guestCountBody !== undefined && guestCountBody !== null) {
       const g = Math.trunc(Number(guestCountBody))
       if (!Number.isNaN(g) && isDineInOrderTypeForGuestCount(existing[0]?.order_type)) {
@@ -120,6 +142,30 @@ export async function POST(req: NextRequest) {
     }
 
     await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'updatePosOrder')
+
+    if (linkposPayment) {
+      try {
+        await supabaseInsert('pos_payment_attempts', {
+          order_id: id,
+          local_tx_id: String(linkposPayment.reference1 ?? '').slice(0, 20),
+          provider: String(linkposPayment.provider ?? 'kbtg_linkpos'),
+          mode: String(linkposPayment.mode ?? 'hypercom'),
+          tx_code: String(linkposPayment.txCode ?? '20'),
+          bank_id: String(linkposPayment.bankId ?? ''),
+          request_amount: Number(linkposPayment.requestedAmount ?? 0),
+          approved_amount: Number(linkposPayment.approvedAmount ?? 0),
+          response_code: String(linkposPayment.responseCode ?? ''),
+          approval_code: String(linkposPayment.approvalCode ?? ''),
+          trace_no: String(linkposPayment.traceNo ?? ''),
+          terminal_id: String(linkposPayment.terminalId ?? ''),
+          merchant_id: String(linkposPayment.merchantId ?? ''),
+          status: String(linkposPayment.responseCode ?? '') === '00' ? 'approved' : 'declined',
+          created_at: String(linkposPayment.requestedAt ?? new Date().toISOString()),
+        })
+      } catch (e) {
+        console.error('updatePosOrder linkpos attempt insert:', e)
+      }
+    }
 
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
     let pointEarned = pointEarnedReq

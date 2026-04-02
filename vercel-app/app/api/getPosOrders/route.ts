@@ -3,6 +3,9 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 
+const POS_ORDER_SELECT =
+  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
+
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -46,6 +49,21 @@ export async function GET(request: NextRequest) {
       total?: number
       status?: string
       created_at?: string
+      linkpos_provider?: string
+      linkpos_mode?: string
+      linkpos_tx_code?: string
+      linkpos_bank_id?: string
+      linkpos_response_code?: string
+      linkpos_approval_code?: string
+      linkpos_trace_no?: string
+      linkpos_ref_no?: string
+      linkpos_terminal_id?: string
+      linkpos_merchant_id?: string
+      linkpos_reference1?: string
+      linkpos_requested_amount?: number
+      linkpos_approved_amount?: number
+      linkpos_requested_at?: string
+      linkpos_responded_at?: string
     }[] = []
 
     const startDate = startStr ? startStr.slice(0, 10) : ''
@@ -60,8 +78,7 @@ export async function GET(request: NextRequest) {
       let idRows = (await supabaseSelectFilter('pos_orders', idFilters.join('&'), {
         order: 'created_at.desc',
         limit: 1,
-        select:
-          'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+        select: POS_ORDER_SELECT,
       })) as typeof rows
 
       if (!idRows?.length && storeCode) {
@@ -74,8 +91,7 @@ export async function GET(request: NextRequest) {
           idRows = (await supabaseSelectFilter('pos_orders', altFilter, {
             order: 'created_at.desc',
             limit: 1,
-            select:
-              'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+            select: POS_ORDER_SELECT,
           })) as typeof rows
           if (idRows?.length) break
         }
@@ -104,8 +120,7 @@ export async function GET(request: NextRequest) {
         rows = (await supabaseSelectFilter('pos_orders', filterStr, {
           order: 'created_at.desc',
           limit: 10000,
-          select:
-            'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+          select: POS_ORDER_SELECT,
         })) as typeof rows
 
         if (!rows?.length && storeCode) {
@@ -124,8 +139,7 @@ export async function GET(request: NextRequest) {
             rows = (await supabaseSelectFilter('pos_orders', altFilter, {
               order: 'created_at.desc',
               limit: 10000,
-              select:
-                'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+              select: POS_ORDER_SELECT,
             })) as typeof rows
             if (rows?.length) break
           }
@@ -134,8 +148,7 @@ export async function GET(request: NextRequest) {
         rows = (await supabaseSelect('pos_orders', {
           order: 'created_at.desc',
           limit: 10000,
-          select:
-            'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+          select: POS_ORDER_SELECT,
         })) as typeof rows
       }
     }
@@ -193,6 +206,21 @@ export async function GET(request: NextRequest) {
         total: Number(r.total) ?? 0,
         status: String(r.status ?? 'pending'),
         createdAt: String(r.created_at ?? ''),
+        linkposProvider: String(r.linkpos_provider ?? ''),
+        linkposMode: String(r.linkpos_mode ?? ''),
+        linkposTxCode: String(r.linkpos_tx_code ?? ''),
+        linkposBankId: String(r.linkpos_bank_id ?? ''),
+        linkposResponseCode: String(r.linkpos_response_code ?? ''),
+        linkposApprovalCode: String(r.linkpos_approval_code ?? ''),
+        linkposTraceNo: String(r.linkpos_trace_no ?? ''),
+        linkposRefNo: String(r.linkpos_ref_no ?? ''),
+        linkposTerminalId: String(r.linkpos_terminal_id ?? ''),
+        linkposMerchantId: String(r.linkpos_merchant_id ?? ''),
+        linkposReference1: String(r.linkpos_reference1 ?? ''),
+        linkposRequestedAmount: Number(r.linkpos_requested_amount ?? 0),
+        linkposApprovedAmount: Number(r.linkpos_approved_amount ?? 0),
+        linkposRequestedAt: String(r.linkpos_requested_at ?? ''),
+        linkposRespondedAt: String(r.linkpos_responded_at ?? ''),
       }))
 
     if (process.env.NODE_ENV === 'development') {

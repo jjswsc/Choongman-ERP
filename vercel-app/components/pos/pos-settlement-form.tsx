@@ -70,6 +70,64 @@ function shiftYmd(dateYmd: string, deltaDays: number) {
   return d.toISOString().slice(0, 10)
 }
 
+function normalizePayKey(key: string): string {
+  return String(key || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+}
+
+function isBreakdownEmpty(breakdown: Record<string, string | number>): boolean {
+  return Object.values(breakdown || {}).every((v) => !(Number(v) > 0))
+}
+
+function pickBreakdownKey(keys: string[], rawKey: string): string | null {
+  const target = normalizePayKey(rawKey)
+  if (!target) return null
+  const normalized = keys.map((k) => ({ raw: k, n: normalizePayKey(k) }))
+  const exact = normalized.find((k) => k.n === target)
+  if (exact) return exact.raw
+  const aliases: Record<string, string[]> = {
+    master: ['master', 'mastercard'],
+    amex: ['amex', 'americanexpress'],
+    unionpay: ['unionpay', 'cup'],
+    promptpay: ['promptpay', 'thaiqr'],
+    wechat: ['wechat', 'wechatpay'],
+    truemoney: ['truemoney', 'truewallet', 'truemoneywallet'],
+    linepay: ['linepay'],
+    shopeepay: ['shopeepay'],
+  }
+  const aliasHit = Object.entries(aliases).find(([, arr]) => arr.includes(target))?.[0]
+  if (aliasHit) {
+    const aliasKey = normalized.find((k) => k.n.includes(aliasHit))
+    if (aliasKey) return aliasKey.raw
+  }
+  const other = normalized.find((k) => k.n.includes('other'))
+  return other?.raw ?? null
+}
+
+function buildAutoBreakdown(
+  autoMap: Record<string, number> | undefined,
+  keys: string[],
+  opts?: { allowExtra?: boolean }
+): Record<string, string> {
+  const outNum: Record<string, number> = {}
+  for (const k of keys) outNum[k] = 0
+  for (const [rawKey, rawAmount] of Object.entries(autoMap || {})) {
+    const amount = Number(rawAmount) || 0
+    if (!(amount > 0)) continue
+    const matched = pickBreakdownKey(keys, rawKey)
+    if (matched) {
+      outNum[matched] = (outNum[matched] || 0) + amount
+      continue
+    }
+    if (opts?.allowExtra) {
+      outNum[rawKey] = (outNum[rawKey] || 0) + amount
+      continue
+    }
+    const other = keys.find((k) => normalizePayKey(k).includes('other')) || keys[0]
+    if (other) outNum[other] = (outNum[other] || 0) + amount
+  }
+  return Object.fromEntries(Object.entries(outNum).map(([k, v]) => [k, v > 0 ? String(v) : '']))
+}
+
 /** 태국 바트 지폐·동전 단위 (฿) */
 const CASH_DENOMINATIONS = [
   { value: 1000, label: '1,000' },
@@ -108,6 +166,16 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [saving, setSaving] = React.useState(false)
   const [systemSubtotal, setSystemSubtotal] = React.useState(0)
   const [systemVat, setSystemVat] = React.useState(0)
+  const [linkposSummary, setLinkposSummary] = React.useState<{
+    approvedCount: number
+    failedCount: number
+    requestedTotal: number
+    approvedTotal: number
+    cardReportedTotal: number
+    diffVsApproved: number
+    autoCardBreakdown?: Record<string, number>
+    autoQrBreakdown?: Record<string, number>
+  } | null>(null)
   const [activeTab, setActiveTab] = React.useState<'entry' | 'history'>('entry')
   const [historyRange, setHistoryRange] = React.useState<'7' | '30'>('7')
   const [historyLoading, setHistoryLoading] = React.useState(false)
@@ -224,10 +292,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     Promise.all([mainPromise, prevDayPromise])
       .then(([main, prev]) => {
         const { platformKeys, dineInKeys } = computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps)
-        const { systemTotal: st, systemSubtotal: sub, systemVat: vat, settlement: s } = main
+        const { systemTotal: st, systemSubtotal: sub, systemVat: vat, linkpos, settlement: s } = main
+        const autoCardMap = (linkpos?.autoCardBreakdown || {}) as Record<string, number>
+        const autoQrMap = (linkpos?.autoQrBreakdown || {}) as Record<string, number>
+        const autoCardTotal = Object.values(autoCardMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
+        const autoQrTotal = Object.values(autoQrMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
         setSystemTotal(st)
         setSystemSubtotal(sub ?? st)
         setSystemVat(vat ?? 0)
+        setLinkposSummary(linkpos ?? null)
         const single = Array.isArray(s) ? s[0] : s
         if (single) {
           setSettlement(single)
@@ -241,11 +314,21 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           CARD_KEYS.forEach((k) => {
             cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
           })
-          setCardBreakdown(cb)
+          const autoCb = buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
+          const cardBreakdownEmpty = isBreakdownEmpty(cb)
+          setCardBreakdown(cardBreakdownEmpty && autoCardTotal > 0 ? autoCb : cb)
+          if ((Number(single.cardAmt ?? 0) || 0) <= 0 && autoCardTotal > 0) {
+            setCardAmt(String(autoCardTotal))
+          }
           const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
           const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
           const hydrated = hydrateSettlementQrOtherBreakdowns(single, qk, ok)
-          setQrBreakdown(hydrated.qrBreakdown)
+          const autoQb = buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
+          const qrBreakdownEmpty = isBreakdownEmpty(hydrated.qrBreakdown)
+          setQrBreakdown(qrBreakdownEmpty && autoQrTotal > 0 ? autoQb : hydrated.qrBreakdown)
+          if ((Number(single.qrAmt ?? 0) || 0) <= 0 && autoQrTotal > 0) {
+            setQrAmt(String(autoQrTotal))
+          }
           setOtherBreakdown(hydrated.otherBreakdown)
           const oldDel = (single.deliveryAppBreakdown ?? {}) as Record<string, number>
           const newDine = (single.dineInDeliveryBreakdown ?? {}) as Record<string, number>
@@ -284,15 +367,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setSystemVat(0)
           setCashActual('')
           setCashAmt('')
-          setCardAmt('0')
-          setQrAmt('0')
+          setCardAmt(String(autoCardTotal || 0))
+          setQrAmt(String(autoQrTotal || 0))
           setDeliveryAppAmt('0')
           setOtherAmt('0')
-          setCardBreakdown(Object.fromEntries(CARD_KEYS.map((k) => [k, ''])))
+          setCardBreakdown(buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false }))
           {
             const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
             const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
-            setQrBreakdown(Object.fromEntries(qk.map((k) => [k, ''])))
+            setQrBreakdown(buildAutoBreakdown(autoQrMap, qk, { allowExtra: true }))
             setOtherBreakdown(Object.fromEntries(ok.map((k) => [k, ''])))
           }
           setDeliveryAppBreakdown(Object.fromEntries(platformKeys.map((k) => [k, ''])))
@@ -311,6 +394,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSystemTotal(0)
         setSystemSubtotal(0)
         setSystemVat(0)
+        setLinkposSummary(null)
         setSettlement(null)
         setPrevDayCashActual(null)
         setDineInDeliveryBreakdown({})
@@ -669,6 +753,40 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   <span className="text-lg font-bold tabular-nums">{systemTotal.toLocaleString()} ฿</span>
                 </div>
               </div>
+              {linkposSummary && (
+                <div className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-primary">LINKPOS 리컨실</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      승인 {linkposSummary.approvedCount}건 / 실패 {linkposSummary.failedCount}건
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">카드입력 합계</span>
+                    <span className="tabular-nums">{linkposSummary.cardReportedTotal.toLocaleString()} ฿</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">LINKPOS 승인합계</span>
+                    <span className="tabular-nums">{linkposSummary.approvedTotal.toLocaleString()} ฿</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">LINKPOS 요청합계</span>
+                    <span className="tabular-nums">{linkposSummary.requestedTotal.toLocaleString()} ฿</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-primary/20">
+                    <span className="font-medium">카드입력 - 승인합계 차이</span>
+                    <span
+                      className={cn(
+                        'font-semibold tabular-nums',
+                        Math.abs(linkposSummary.diffVsApproved) > 0.005 ? 'text-amber-700' : 'text-emerald-700'
+                      )}
+                    >
+                      {linkposSummary.diffVsApproved >= 0 ? '+' : ''}
+                      {linkposSummary.diffVsApproved.toLocaleString()} ฿
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3">
                 {/* 돈통 시제: 화폐 단위 입력 (영업시작과 동일) */}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
+import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,23 @@ export async function POST(req: NextRequest) {
   const orderID = String(body.orderID ?? '')
   const shortOrderNumber = String(body.shortOrderNumber ?? '')
   const merchantID = String(body.merchantID ?? '')
+  if (!orderID) {
+    logGrabWebhook('submit_order', req, { error: 'missing_orderID' })
+    return new NextResponse(null, { status: 400 })
+  }
+  const duplicate = await reserveGrabWebhookEvent({
+    eventKind: 'submit_order',
+    uniqueKey: orderID,
+    requestId: String(body.requestID ?? ''),
+    orderId: orderID,
+    merchantId: merchantID,
+    partnerMerchantId: String(body.partnerMerchantID ?? ''),
+    payload: body,
+  })
+  if (duplicate) {
+    logGrabWebhook('submit_order', req, { orderID, duplicate: true })
+    return new NextResponse(null, { status: 204 })
+  }
   logGrabWebhook('submit_order', req, {
     orderID,
     shortOrderNumber,

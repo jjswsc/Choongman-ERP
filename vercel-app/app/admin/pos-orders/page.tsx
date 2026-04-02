@@ -23,6 +23,11 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getPosOrders,
+  getPosPaymentAttempts,
+  getPosLinkposTenderRules,
+  executeLinkposPaymentServer,
+  savePosLinkposTenderRule,
+  deletePosLinkposTenderRule,
   getPosMenus,
   getPosPrinterSettings,
   getPosDeliveryApps,
@@ -30,6 +35,8 @@ import {
   updatePosOrderStatus,
   useStoreList,
   type PosOrder,
+  type PosPaymentAttempt,
+  type PosLinkposTenderRule,
   type PosMenu,
   type PosDeliveryApp,
 } from "@/lib/api-client"
@@ -98,6 +105,14 @@ function formatBangkokDateTime(value: string | null | undefined, locale = "en-GB
     second: "2-digit",
     hour12: false,
   }).format(dt)
+}
+
+function buildRetryReference1(original: string): string {
+  const normalized = String(original || "").trim().replace(/\s+/g, "")
+  const baseRaw = normalized || `R${Date.now().toString(36).toUpperCase()}`
+  const base = baseRaw.replace(/-R[A-Z0-9]{4,}$/i, "").slice(0, 12) || "RTRY"
+  const suffix = `R${Date.now().toString(36).toUpperCase().slice(-6)}`
+  return `${base}-${suffix}`.slice(0, 20)
 }
 
 function getTargetCookingTimeMin(
@@ -175,7 +190,24 @@ export default function PosOrdersPage() {
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
-  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime">("orders")
+  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed">("orders")
+  const [attempts, setAttempts] = React.useState<PosPaymentAttempt[]>([])
+  const [attemptsLoading, setAttemptsLoading] = React.useState(false)
+  const [attemptStatusFilter, setAttemptStatusFilter] = React.useState<"failed" | "all" | "approved" | "declined">("failed")
+  const [attemptSearchTerm, setAttemptSearchTerm] = React.useState("")
+  const [retryingAttemptId, setRetryingAttemptId] = React.useState<number | null>(null)
+  const [chainDialogAttemptId, setChainDialogAttemptId] = React.useState<number | null>(null)
+  const [tenderRules, setTenderRules] = React.useState<PosLinkposTenderRule[]>([])
+  const [rulesLoading, setRulesLoading] = React.useState(false)
+  const [ruleScope, setRuleScope] = React.useState<"shared" | "store">("shared")
+  const [ruleKeyword, setRuleKeyword] = React.useState("")
+  const [ruleGroup, setRuleGroup] = React.useState<"card" | "qr">("card")
+  const [ruleKey, setRuleKey] = React.useState("")
+  const [rulePriority, setRulePriority] = React.useState("100")
+  const [ruleSaving, setRuleSaving] = React.useState(false)
+  const [dragRuleId, setDragRuleId] = React.useState<number | null>(null)
+  const [dropRuleId, setDropRuleId] = React.useState<number | null>(null)
+  const [reorderingRules, setReorderingRules] = React.useState(false)
   const [updatingId, setUpdatingId] = React.useState<number | null>(null)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [editOrder, setEditOrder] = React.useState<PosOrder | null>(null)
@@ -191,6 +223,9 @@ export default function PosOrdersPage() {
   >({})
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const currentStoreCode = canSearchAll
+    ? (storeFilter && storeFilter !== "All" ? storeFilter : "")
+    : (auth?.store || "")
 
   const orderTypeLabels = React.useMemo(
     () => ({
@@ -209,6 +244,16 @@ export default function PosOrdersPage() {
       ready: t("posOrderStatusReady"),
       completed: t("posOrderStatusCompleted"),
       cancelled: t("posCancel"),
+    }),
+    [t]
+  )
+
+  const attemptStatusLabels = React.useMemo(
+    () => ({
+      failed: t("posStatusFailed") || "실패",
+      declined: t("posStatusDeclined") || "거절",
+      approved: t("posStatusApproved") || "승인",
+      all: t("posStatusAll") || "전체",
     }),
     [t]
   )
@@ -247,6 +292,104 @@ export default function PosOrdersPage() {
         )
     )
   }, [orders, searchTerm])
+
+  const filteredAttempts = React.useMemo(() => {
+    if (!attemptSearchTerm.trim()) return attempts
+    const term = attemptSearchTerm.trim().toLowerCase()
+    return attempts.filter((a) =>
+      [
+        a.orderNo,
+        a.localTxId,
+        a.approvalCode,
+        a.traceNo,
+        a.retryOfLocalTxId,
+        a.responseCode,
+        a.errorReason,
+        a.responseText,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    )
+  }, [attempts, attemptSearchTerm])
+
+  const retryStatsByAttemptId = React.useMemo(() => {
+    const byId = new Map<number, PosPaymentAttempt>()
+    const children = new Map<number, number[]>()
+    for (const a of attempts) {
+      byId.set(a.id, a)
+    }
+    for (const a of attempts) {
+      const parentId = Number(a.retryOfAttemptId || 0)
+      if (parentId > 0 && byId.has(parentId)) {
+        const arr = children.get(parentId) || []
+        arr.push(a.id)
+        children.set(parentId, arr)
+      }
+    }
+    const memo = new Map<number, number>()
+    const visiting = new Set<number>()
+    const countDescendants = (id: number): number => {
+      if (memo.has(id)) return memo.get(id) || 0
+      if (visiting.has(id)) return 0
+      visiting.add(id)
+      const direct = children.get(id) || []
+      let total = direct.length
+      for (const childId of direct) total += countDescendants(childId)
+      visiting.delete(id)
+      memo.set(id, total)
+      return total
+    }
+    const result = new Map<number, { direct: number; total: number }>()
+    for (const a of attempts) {
+      const direct = (children.get(a.id) || []).length
+      const total = countDescendants(a.id)
+      result.set(a.id, { direct, total })
+    }
+    return result
+  }, [attempts])
+
+  const chainRows = React.useMemo(() => {
+    if (!chainDialogAttemptId) return [] as Array<PosPaymentAttempt & { depth: number }>
+    const byId = new Map<number, PosPaymentAttempt>()
+    const children = new Map<number, PosPaymentAttempt[]>()
+    for (const a of attempts) byId.set(a.id, a)
+    for (const a of attempts) {
+      const parentId = Number(a.retryOfAttemptId || 0)
+      if (parentId > 0 && byId.has(parentId)) {
+        const arr = children.get(parentId) || []
+        arr.push(a)
+        children.set(parentId, arr)
+      }
+    }
+    // 현재 선택 건에서 루트(원시도)까지 역추적
+    let rootId = chainDialogAttemptId
+    const seen = new Set<number>()
+    while (true) {
+      if (seen.has(rootId)) break
+      seen.add(rootId)
+      const cur = byId.get(rootId)
+      const parentId = Number(cur?.retryOfAttemptId || 0)
+      if (!(parentId > 0 && byId.has(parentId))) break
+      rootId = parentId
+    }
+    const root = byId.get(rootId)
+    if (!root) return [] as Array<PosPaymentAttempt & { depth: number }>
+    const rows: Array<PosPaymentAttempt & { depth: number }> = []
+    const walk = (node: PosPaymentAttempt, depth: number) => {
+      rows.push({ ...node, depth })
+      const next = [...(children.get(node.id) || [])].sort((a, b) => {
+        const ta = new Date(a.createdAt || "").getTime()
+        const tb = new Date(b.createdAt || "").getTime()
+        return ta - tb
+      })
+      for (const child of next) {
+        walk(child, depth + 1)
+      }
+    }
+    walk(root, 0)
+    return rows
+  }, [attempts, chainDialogAttemptId])
 
   const copyOrderNo = (orderNo: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -463,9 +606,236 @@ export default function PosOrdersPage() {
       .finally(() => setLoading(false))
   }, [startStr, endStr, storeFilter, statusFilter, canSearchAll])
 
+  const loadAttempts = React.useCallback(() => {
+    setAttemptsLoading(true)
+    getPosPaymentAttempts({
+      startStr,
+      endStr,
+      storeCode: canSearchAll && storeFilter && storeFilter !== "All" ? storeFilter : undefined,
+      status: attemptStatusFilter,
+      limit: 2000,
+    })
+      .then(setAttempts)
+      .catch(() => setAttempts([]))
+      .finally(() => setAttemptsLoading(false))
+  }, [startStr, endStr, storeFilter, canSearchAll, attemptStatusFilter])
+
+  const loadTenderRules = React.useCallback(() => {
+    setRulesLoading(true)
+    getPosLinkposTenderRules({
+      storeCode: currentStoreCode || undefined,
+      includeShared: true,
+    })
+      .then(setTenderRules)
+      .catch(() => setTenderRules([]))
+      .finally(() => setRulesLoading(false))
+  }, [currentStoreCode])
+
+  const handleSaveTenderRule = React.useCallback(async () => {
+    const keyword = ruleKeyword.trim().toLowerCase().replace(/\s+/g, "")
+    const tenderKey = ruleKey.trim()
+    if (!keyword) {
+      await appAlert("매칭 키워드를 입력해 주세요.")
+      return
+    }
+    if (!tenderKey) {
+      await appAlert("매핑 키를 입력해 주세요.")
+      return
+    }
+    const targetStoreCode =
+      ruleScope === "shared"
+        ? "__shared__"
+        : (currentStoreCode || "").trim()
+    if (ruleScope === "store" && !targetStoreCode) {
+      await appAlert("매장 규칙은 매장을 먼저 선택해야 저장할 수 있습니다.")
+      return
+    }
+    setRuleSaving(true)
+    try {
+      const res = await savePosLinkposTenderRule({
+        storeCode: targetStoreCode,
+        matchKeyword: keyword,
+        tenderGroup: ruleGroup,
+        tenderKey,
+        priority: Number(rulePriority) || 100,
+        isActive: true,
+      })
+      if (!res.success) {
+        await appAlert(res.message || "규칙 저장에 실패했습니다.")
+        return
+      }
+      setRuleKeyword("")
+      setRuleKey("")
+      setRulePriority("100")
+      loadTenderRules()
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setRuleSaving(false)
+    }
+  }, [ruleKeyword, ruleKey, ruleScope, currentStoreCode, ruleGroup, rulePriority, loadTenderRules])
+
+  const handleToggleTenderRule = React.useCallback(async (rule: PosLinkposTenderRule) => {
+    try {
+      const res = await savePosLinkposTenderRule({
+        id: rule.id,
+        storeCode: rule.storeCode,
+        matchKeyword: rule.matchKeyword,
+        tenderGroup: rule.tenderGroup,
+        tenderKey: rule.tenderKey,
+        priority: rule.priority,
+        isActive: !rule.isActive,
+      })
+      if (!res.success) {
+        await appAlert(res.message || "규칙 상태 변경에 실패했습니다.")
+        return
+      }
+      loadTenderRules()
+    } catch (e) {
+      await appAlert(String(e))
+    }
+  }, [loadTenderRules, setTenderRules, appAlert])
+
+  const handleDeleteTenderRule = React.useCallback(async (rule: PosLinkposTenderRule) => {
+    const ok = await appConfirm(`규칙을 삭제하시겠습니까?\n[${rule.storeCode}] ${rule.matchKeyword} → ${rule.tenderKey}`)
+    if (!ok) return
+    try {
+      const res = await deletePosLinkposTenderRule({ id: rule.id })
+      if (!res.success) {
+        await appAlert(res.message || "규칙 삭제에 실패했습니다.")
+        return
+      }
+      loadTenderRules()
+    } catch (e) {
+      await appAlert(String(e))
+    }
+  }, [loadTenderRules, appAlert, appConfirm])
+
+  const handleRuleDrop = React.useCallback(async (target: PosLinkposTenderRule) => {
+    const sourceId = dragRuleId
+    if (!sourceId || sourceId === target.id) {
+      setDragRuleId(null)
+      setDropRuleId(null)
+      return
+    }
+    const source = tenderRules.find((r) => r.id === sourceId)
+    if (!source) {
+      setDragRuleId(null)
+      setDropRuleId(null)
+      return
+    }
+    if (source.storeCode !== target.storeCode) {
+      await appAlert("드래그 정렬은 같은 범위(공통 또는 동일 매장) 안에서만 가능합니다.")
+      setDragRuleId(null)
+      setDropRuleId(null)
+      return
+    }
+    const scoped = tenderRules
+      .filter((r) => r.storeCode === source.storeCode)
+      .sort((a, b) => a.priority - b.priority || a.id - b.id)
+    const from = scoped.findIndex((r) => r.id === source.id)
+    const to = scoped.findIndex((r) => r.id === target.id)
+    if (from < 0 || to < 0 || from === to) {
+      setDragRuleId(null)
+      setDropRuleId(null)
+      return
+    }
+    const reordered = [...scoped]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    const changed = reordered.map((r, idx) => ({ ...r, priority: (idx + 1) * 10 }))
+
+    setTenderRules((prev) => {
+      const map = new Map(changed.map((r) => [r.id, r.priority]))
+      return prev.map((r) => (map.has(r.id) ? { ...r, priority: Number(map.get(r.id)) } : r))
+    })
+    setReorderingRules(true)
+    try {
+      for (const r of changed) {
+        const res = await savePosLinkposTenderRule({
+          id: r.id,
+          storeCode: r.storeCode,
+          matchKeyword: r.matchKeyword,
+          tenderGroup: r.tenderGroup,
+          tenderKey: r.tenderKey,
+          priority: r.priority,
+          isActive: r.isActive,
+        })
+        if (!res.success) throw new Error(res.message || "priority_update_failed")
+      }
+    } catch (e) {
+      await appAlert(`우선순위 저장 실패: ${String(e)}`)
+      loadTenderRules()
+    } finally {
+      setReorderingRules(false)
+      setDragRuleId(null)
+      setDropRuleId(null)
+    }
+  }, [dragRuleId, tenderRules, loadTenderRules])
+
+  const handleRetryAttempt = React.useCallback(
+    async (attempt: PosPaymentAttempt) => {
+      const amount = Number(attempt.requestAmount || 0)
+      if (amount <= 0) {
+        await appAlert("요청금액이 0이라 재시도할 수 없습니다.")
+        return
+      }
+      const newReference1 = buildRetryReference1(attempt.localTxId)
+      if (!newReference1 || newReference1 === String(attempt.localTxId || "").trim()) {
+        await appAlert("신규 R1 생성에 실패했습니다. 다시 시도해 주세요.")
+        return
+      }
+      const ok = await appConfirm(
+        `동일 R1 재사용은 차단됩니다.\n` +
+          `기존 R1: ${attempt.localTxId || "-"}\n` +
+          `신규 R1: ${newReference1}\n\n` +
+          `재시도하시겠습니까?`
+      )
+      if (!ok) return
+
+      setRetryingAttemptId(attempt.id)
+      try {
+        const res = await executeLinkposPaymentServer({
+          amount,
+          bankId: String(attempt.bankId || ""),
+          reference1: newReference1,
+          reference2: String(attempt.orderNo || ""),
+          storeCode: String(attempt.storeCode || ""),
+          orderId: attempt.orderId ?? undefined,
+          retryOfAttemptId: attempt.id,
+          retryOfLocalTxId: String(attempt.localTxId || ""),
+          timeoutMs: 15000,
+        })
+        if (res.success) {
+          await appAlert(
+            `재시도 승인 완료\n` +
+              `R1: ${newReference1}\n` +
+              `응답코드: ${res.payment?.responseCode || "00"}\n` +
+              `승인번호: ${res.payment?.approvalCode || "-"}`
+          )
+        } else {
+          await appAlert(`재시도 실패: ${res.message || "unknown_error"}`)
+        }
+        loadAttempts()
+        if (attempt.orderId) loadOrders()
+      } catch (e) {
+        await appAlert(String(e))
+      } finally {
+        setRetryingAttemptId(null)
+      }
+    },
+    [loadAttempts, loadOrders]
+  )
+
   React.useEffect(() => {
     loadOrders()
   }, [loadOrders])
+
+  React.useEffect(() => {
+    if (activeTab !== "linkposFailed") return
+    loadAttempts()
+    loadTenderRules()
+  }, [activeTab, loadAttempts, loadTenderRules])
 
   React.useEffect(() => {
     getPosMenus().then(setMenus).catch(() => setMenus([]))
@@ -660,38 +1030,71 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-32 text-sm">
-              <SelectValue placeholder={t("posStatus") || "상태"} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
-              {Object.entries(statusLabels).map(([k, v]) => (
-                <SelectItem key={k} value={k}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" className="h-9 gap-1.5 px-4" onClick={loadOrders}>
+          {activeTab !== "linkposFailed" && (
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-32 text-sm">
+                <SelectValue placeholder={t("posStatus") || "상태"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                {Object.entries(statusLabels).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {activeTab === "linkposFailed" && (
+            <Select
+              value={attemptStatusFilter}
+              onValueChange={(v) =>
+                setAttemptStatusFilter(v as "failed" | "all" | "approved" | "declined")
+              }
+            >
+              <SelectTrigger className="h-9 w-32 text-sm">
+                <SelectValue placeholder={t("posStatus") || "상태"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="failed">{attemptStatusLabels.failed}</SelectItem>
+                <SelectItem value="declined">{attemptStatusLabels.declined}</SelectItem>
+                <SelectItem value="approved">{attemptStatusLabels.approved}</SelectItem>
+                <SelectItem value="all">{attemptStatusLabels.all}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            size="sm"
+            className="h-9 gap-1.5 px-4"
+            onClick={activeTab === "linkposFailed" ? loadAttempts : loadOrders}
+          >
             <Search className="h-4 w-4" />
             {t("itemsBtnSearch") || "조회"}
           </Button>
-          <Input
-            placeholder={t("posSearchPh") || "주문번호, 테이블, 메뉴 검색"}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="h-9 flex-1 min-w-[160px] text-sm"
-          />
+          {activeTab === "linkposFailed" ? (
+            <Input
+              placeholder={"R1, 주문번호, 승인번호, 추적번호, 응답코드 검색"}
+              value={attemptSearchTerm}
+              onChange={(e) => setAttemptSearchTerm(e.target.value)}
+              className="h-9 flex-1 min-w-[200px] text-sm"
+            />
+          ) : (
+            <Input
+              placeholder={t("posSearchPh") || "주문번호, 테이블, 메뉴 검색"}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-9 flex-1 min-w-[160px] text-sm"
+            />
+          )}
         </div>
 
-        {loading && (
+        {(loading || attemptsLoading) && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
           </div>
         )}
 
-        {todaySummary && (
+        {activeTab !== "linkposFailed" && todaySummary && (
           <div className="mb-4 flex gap-4 rounded-lg border bg-card p-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
@@ -719,7 +1122,11 @@ export default function PosOrdersPage() {
           </div>
         )}
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "orders" | "cookTime")} className={adminTabsRootCn}>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed")}
+          className={adminTabsRootCn}
+        >
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -728,6 +1135,9 @@ export default function PosOrdersPage() {
                 </TabsTrigger>
                 <TabsTrigger value="cookTime" className={adminTabsTriggerCn}>
                   {t("posCookTimeAnalysisTab")}
+                </TabsTrigger>
+                <TabsTrigger value="linkposFailed" className={adminTabsTriggerCn}>
+                  LINKPOS 실패 관리
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -934,6 +1344,42 @@ export default function PosOrdersPage() {
                                           )}
                                         </div>
                                       )}
+                                      {(o.linkposResponseCode ||
+                                        o.linkposApprovalCode ||
+                                        o.linkposTraceNo ||
+                                        o.linkposRefNo ||
+                                        o.linkposBankId ||
+                                        o.linkposReference1 ||
+                                        (o.linkposApprovedAmount ?? 0) > 0 ||
+                                        (o.linkposRequestedAmount ?? 0) > 0) && (
+                                        <div className="mt-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2">
+                                          <div className="mb-1 text-[11px] font-medium text-primary">
+                                            LINKPOS
+                                          </div>
+                                          <div className="grid grid-cols-1 gap-y-0.5 text-[11px] text-muted-foreground sm:grid-cols-2 sm:gap-x-4">
+                                            <span>응답코드: {o.linkposResponseCode || '-'}</span>
+                                            <span>승인번호: {o.linkposApprovalCode || '-'}</span>
+                                            <span>추적번호: {o.linkposTraceNo || '-'}</span>
+                                            <span>참조번호: {o.linkposRefNo || '-'}</span>
+                                            <span>Bank ID: {o.linkposBankId || '-'}</span>
+                                            <span>R1: {o.linkposReference1 || '-'}</span>
+                                            <span>요청금액: {(o.linkposRequestedAmount ?? 0).toLocaleString()} ฿</span>
+                                            <span>승인금액: {(o.linkposApprovedAmount ?? 0).toLocaleString()} ฿</span>
+                                            <span>
+                                              요청시각:{' '}
+                                              {o.linkposRequestedAt
+                                                ? formatBangkokDateTime(o.linkposRequestedAt, bangkokDisplayLocale(lang))
+                                                : '-'}
+                                            </span>
+                                            <span>
+                                              응답시각:{' '}
+                                              {o.linkposRespondedAt
+                                                ? formatBangkokDateTime(o.linkposRespondedAt, bangkokDisplayLocale(lang))
+                                                : '-'}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                   {o.items?.length ? (
@@ -1117,8 +1563,340 @@ export default function PosOrdersPage() {
               </div>
             </div>
           </TabsContent>
+          <TabsContent value="linkposFailed" className={adminTabsContentFlushCn}>
+            <div className="mb-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded bg-muted px-2 py-1">
+                조회: {filteredAttempts.length}
+                {t("posCount") || "건"}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                실패/거절: {filteredAttempts.filter((a) => a.status === "failed" || a.status === "declined").length}
+                {t("posCount") || "건"}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                승인: {filteredAttempts.filter((a) => a.status === "approved").length}
+                {t("posCount") || "건"}
+              </span>
+            </div>
+            <div className="mb-4 rounded-xl border bg-card p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-sm font-semibold">LINKPOS 자동분류 규칙</div>
+                <div className="text-xs text-muted-foreground">
+                  {rulesLoading ? "불러오는 중..." : `규칙 ${tenderRules.length}${t("posCount") || "건"}`}
+                </div>
+              </div>
+              <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-6">
+                <Select value={ruleScope} onValueChange={(v) => setRuleScope(v as "shared" | "store")}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="shared">공통(__shared__)</SelectItem>
+                    <SelectItem value="store">현재 매장</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={ruleKeyword}
+                  onChange={(e) => setRuleKeyword(e.target.value)}
+                  placeholder="keyword (예: promptpay)"
+                  className="h-8 text-xs md:col-span-2"
+                />
+                <Select value={ruleGroup} onValueChange={(v) => setRuleGroup(v as "card" | "qr")}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="card">card</SelectItem>
+                    <SelectItem value="qr">qr</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={ruleKey}
+                  onChange={(e) => setRuleKey(e.target.value)}
+                  placeholder="매핑 키 (예: Visa)"
+                  className="h-8 text-xs"
+                />
+                <Input
+                  value={rulePriority}
+                  onChange={(e) => setRulePriority(e.target.value)}
+                  placeholder="priority"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="mb-3 flex items-center gap-2">
+                <Button size="sm" className="h-8 text-xs" onClick={() => void handleSaveTenderRule()} disabled={ruleSaving}>
+                  {ruleSaving ? "..." : "규칙 추가"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs" onClick={loadTenderRules}>
+                  새로고침
+                </Button>
+                {reorderingRules && <span className="text-xs text-muted-foreground">우선순위 저장 중...</span>}
+                {ruleScope === "store" && !currentStoreCode && (
+                  <span className="text-xs text-amber-600">현재 매장을 선택하면 매장 규칙 저장이 가능합니다.</span>
+                )}
+              </div>
+              <div className="mb-2 text-[11px] text-muted-foreground">행을 드래그해서 우선순위를 변경할 수 있습니다.</div>
+              <div className="max-h-44 overflow-y-auto rounded border">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-2 py-1.5 text-left">범위</th>
+                      <th className="px-2 py-1.5 text-left">키워드</th>
+                      <th className="px-2 py-1.5 text-center">그룹</th>
+                      <th className="px-2 py-1.5 text-left">키</th>
+                      <th className="px-2 py-1.5 text-center">우선순위</th>
+                      <th className="px-2 py-1.5 text-center">상태</th>
+                      <th className="px-2 py-1.5 text-center">액션</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tenderRules.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-2 py-5 text-center text-muted-foreground">
+                          규칙이 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      tenderRules.map((r) => (
+                        <tr
+                          key={r.id}
+                          className={cn(
+                            "border-b last:border-b-0 cursor-grab active:cursor-grabbing",
+                            dragRuleId === r.id && "opacity-60",
+                            dropRuleId === r.id && "bg-primary/5"
+                          )}
+                          draggable
+                          onDragStart={() => setDragRuleId(r.id)}
+                          onDragEnter={() => setDropRuleId(r.id)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDragEnd={() => {
+                            setDragRuleId(null)
+                            setDropRuleId(null)
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            void handleRuleDrop(r)
+                          }}
+                        >
+                          <td className="px-2 py-1.5">{r.storeCode === "__shared__" ? "공통" : r.storeCode}</td>
+                          <td className="px-2 py-1.5 font-mono">{r.matchKeyword}</td>
+                          <td className="px-2 py-1.5 text-center">{r.tenderGroup}</td>
+                          <td className="px-2 py-1.5">{r.tenderKey}</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums">{r.priority}</td>
+                          <td className="px-2 py-1.5 text-center">
+                            <span className={cn("rounded px-1.5 py-0.5", r.isActive ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground")}>
+                              {r.isActive ? "active" : "off"}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <div className="inline-flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[11px]"
+                                onClick={() => void handleToggleTenderRule(r)}
+                                disabled={reorderingRules}
+                              >
+                                {r.isActive ? "off" : "on"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 text-destructive"
+                                onClick={() => void handleDeleteTenderRule(r)}
+                                disabled={reorderingRules}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-40">요청시각</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">매장</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">주문번호</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">R1 (local_tx_id)</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">상태</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-14">응답</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">요청/승인</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">원시도 R1</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">재시도 횟수</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">승인번호</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">추적번호</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">오류사유</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">액션</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAttempts.length === 0 ? (
+                      <tr>
+                        <td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">
+                          조회된 LINKPOS 결제 시도가 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAttempts.map((a) => (
+                        <tr key={a.id} className="border-b">
+                          <td className="px-4 py-3 text-center text-muted-foreground">
+                            {formatBangkokDateTime(a.createdAt, bangkokDisplayLocale(lang))}
+                          </td>
+                          <td className="px-4 py-3 text-center">{a.storeCode || "-"}</td>
+                          <td className="px-4 py-3 text-center">{a.orderNo || "-"}</td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-[11px]">{a.localTxId || "-"}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={cn(
+                                "rounded px-2 py-0.5 text-xs",
+                                a.status === "approved" && "bg-emerald-50 text-emerald-700",
+                                (a.status === "declined" || a.status === "failed") && "bg-rose-50 text-rose-700",
+                                a.status !== "approved" && a.status !== "declined" && a.status !== "failed" && "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {a.status || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono text-xs">{a.responseCode || "-"}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {a.requestAmount.toLocaleString()} / {a.approvedAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-[11px]">
+                              {a.retryOfLocalTxId || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center tabular-nums">
+                            {(() => {
+                              const total = retryStatsByAttemptId.get(a.id)?.total ?? 0
+                              if (total <= 0) return <span>{total}</span>
+                              return (
+                                <button
+                                  type="button"
+                                  className="rounded px-1.5 py-0.5 text-primary hover:bg-primary/10"
+                                  onClick={() => setChainDialogAttemptId(a.id)}
+                                  title="재시도 체인 보기"
+                                >
+                                  {total}
+                                </button>
+                              )
+                            })()}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono text-xs">{a.approvalCode || "-"}</td>
+                          <td className="px-4 py-3 text-center font-mono text-xs">{a.traceNo || "-"}</td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs">
+                            {a.errorReason || a.responseText || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {(a.status === "failed" || a.status === "declined") && (a.requestAmount ?? 0) > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  void handleRetryAttempt(a)
+                                }}
+                                disabled={retryingAttemptId === a.id}
+                              >
+                                {retryingAttemptId === a.id ? "..." : "재시도"}
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* LINKPOS 재시도 체인 모달 */}
+      <Dialog open={!!chainDialogAttemptId} onOpenChange={(open) => !open && setChainDialogAttemptId(null)}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>LINKPOS 재시도 체인</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {chainRows.length === 0 ? (
+              <div className="rounded border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                표시할 체인 데이터가 없습니다.
+              </div>
+            ) : (
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/30">
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-20">단계</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-left min-w-[180px]">R1</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-16">상태</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-14">응답</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-24">요청/승인</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-24">승인번호</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-20">요청시각</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {chainRows.map((r) => (
+                        <tr key={r.id} className="border-b last:border-b-0">
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={cn("rounded px-2 py-0.5 text-xs", r.depth === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                              {r.depth === 0 ? "원시도" : `${r.depth}차`}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="font-mono text-[11px]">{r.localTxId || "-"}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span
+                              className={cn(
+                                "rounded px-2 py-0.5 text-xs",
+                                r.status === "approved" && "bg-emerald-50 text-emerald-700",
+                                (r.status === "declined" || r.status === "failed") && "bg-rose-50 text-rose-700",
+                                r.status !== "approved" && r.status !== "declined" && r.status !== "failed" && "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {r.status || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-mono text-xs">{r.responseCode || "-"}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums">
+                            {r.requestAmount.toLocaleString()} / {r.approvedAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-mono text-xs">{r.approvalCode || "-"}</td>
+                          <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
+                            {formatBangkokDateTime(r.createdAt, bangkokDisplayLocale(lang))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChainDialogAttemptId(null)}>
+              {t("close") || "닫기"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 주문 수정 모달 */}
       <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
