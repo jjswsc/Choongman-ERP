@@ -65,7 +65,6 @@ export async function POST(request: NextRequest) {
           transType: transType === 'charge' ? 'charge' : 'expense',
           amountAbs: Math.abs(amount),
           memo: memo || undefined,
-          postedBy: null,
           accountSubjectId:
             transType === 'expense' && accountSubjectId != null && !isNaN(Number(accountSubjectId))
               ? Number(accountSubjectId)
@@ -86,7 +85,6 @@ export async function POST(request: NextRequest) {
           transType: transType === 'charge' ? 'charge' : 'expense',
           amountAbs: Math.abs(amount),
           memo: memo || undefined,
-          postedBy: null,
           accountSubjectId:
             transType === 'expense' && accountSubjectId != null && !isNaN(Number(accountSubjectId))
               ? Number(accountSubjectId)

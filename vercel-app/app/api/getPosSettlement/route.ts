@@ -91,8 +91,8 @@ export async function GET(request: NextRequest) {
         tender_key?: string
         priority?: number
       }[] | null
-      const rules = (rows || [])
-        .map((r) => ({
+      const rules: TenderRule[] = (rows || [])
+        .map((r): TenderRule => ({
           storeCode: String(r.store_code ?? '__shared__').trim() || '__shared__',
           keyword: normalizeToken(String(r.match_keyword ?? '')),
           group: String(r.tender_group ?? '').trim() === 'qr' ? 'qr' : 'card',

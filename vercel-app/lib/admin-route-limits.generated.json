@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-01T10:50:28.607Z",
-  "entryCount": 618,
+  "generatedAt": "2026-04-02T04:12:53.339Z",
+  "entryCount": 627,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -52,6 +52,13 @@
       "apiLabel": "admin/members/visits"
     },
     {
+      "path": "app/admin/pos-orders/page.tsx",
+      "line": 616,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "admin/pos-orders"
+    },
+    {
       "path": "app/admin/pos-tax-invoice-recipients/page.tsx",
       "line": 60,
       "kind": "limit",
@@ -60,28 +67,35 @@
     },
     {
       "path": "app/api/accounting/backfill/route.ts",
-      "line": 38,
+      "line": 46,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "accounting/backfill"
     },
     {
       "path": "app/api/accounting/backfill/route.ts",
-      "line": 87,
+      "line": 95,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "accounting/backfill"
     },
     {
       "path": "app/api/accounting/backfill/route.ts",
-      "line": 134,
+      "line": 142,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "accounting/backfill"
     },
     {
       "path": "app/api/accounting/backfill/route.ts",
-      "line": 161,
+      "line": 185,
+      "kind": "limit",
+      "value": 50000,
+      "apiLabel": "accounting/backfill"
+    },
+    {
+      "path": "app/api/accounting/backfill/route.ts",
+      "line": 212,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "accounting/backfill"
@@ -179,14 +193,14 @@
     },
     {
       "path": "app/api/calculatePayroll/route.ts",
-      "line": 75,
+      "line": 77,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "calculatePayroll"
     },
     {
       "path": "app/api/calculatePayroll/route.ts",
-      "line": 76,
+      "line": 78,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "calculatePayroll"
@@ -379,6 +393,13 @@
       "kind": "limit",
       "value": 50,
       "apiLabel": "deletePettyCashTransaction"
+    },
+    {
+      "path": "app/api/deletePosLinkposTenderRule/route.ts",
+      "line": 15,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deletePosLinkposTenderRule"
     },
     {
       "path": "app/api/deletePosMenu/route.ts",
@@ -1774,6 +1795,13 @@
       "apiLabel": "getPosDevices"
     },
     {
+      "path": "app/api/getPosLinkposTenderRules/route.ts",
+      "line": 24,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getPosLinkposTenderRules"
+    },
+    {
       "path": "app/api/getPosMenuBoards/route.ts",
       "line": 18,
       "kind": "limit",
@@ -1845,35 +1873,35 @@
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 62,
+      "line": 80,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 76,
+      "line": 93,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 106,
+      "line": 122,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 126,
+      "line": 141,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 136,
+      "line": 150,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
@@ -1964,14 +1992,28 @@
     },
     {
       "path": "app/api/getPosSettlement/route.ts",
-      "line": 27,
+      "line": 85,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getPosSettlement"
+    },
+    {
+      "path": "app/api/getPosSettlement/route.ts",
+      "line": 121,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "getPosSettlement"
     },
     {
       "path": "app/api/getPosSettlement/route.ts",
-      "line": 48,
+      "line": 169,
+      "kind": "limit",
+      "value": 20000,
+      "apiLabel": "getPosSettlement"
+    },
+    {
+      "path": "app/api/getPosSettlement/route.ts",
+      "line": 208,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getPosSettlement"
@@ -2472,6 +2514,13 @@
       "kind": "limit",
       "value": 1000,
       "apiLabel": "importMarketingExcel"
+    },
+    {
+      "path": "app/api/linkpos/pay/route.ts",
+      "line": 44,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "linkpos/pay"
     },
     {
       "path": "app/api/loginCheck/route.ts",
@@ -3265,6 +3314,13 @@
       "apiLabel": "savePosDeliveryApps"
     },
     {
+      "path": "app/api/savePosLinkposTenderRule/route.ts",
+      "line": 37,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "savePosLinkposTenderRule"
+    },
+    {
       "path": "app/api/savePosMenu/route.ts",
       "line": 102,
       "kind": "limit",
@@ -3623,7 +3679,7 @@
     },
     {
       "path": "app/api/updatePosOrder/route.ts",
-      "line": 60,
+      "line": 64,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrder"
@@ -3693,7 +3749,7 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 264,
+      "line": 266,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
@@ -3735,7 +3791,14 @@
     },
     {
       "path": "lib/accounting-posting.ts",
-      "line": 424,
+      "line": 319,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:accounting-posting"
+    },
+    {
+      "path": "lib/accounting-posting.ts",
+      "line": 486,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:accounting-posting"
