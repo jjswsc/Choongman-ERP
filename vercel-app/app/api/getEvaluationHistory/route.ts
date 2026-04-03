@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectPageCap } from '@/lib/supabase-server'
+import {
+  EVAL_RESULTS_ORDER,
+  normalizeHistoryEvalType,
+  postgrestEvalTypeInFilter,
+  postgrestStoreNameIlikeOrFilter,
+} from '@/lib/evaluation-postgrest-filters'
 
 export interface EvaluationHistoryItem {
   id: string
@@ -35,15 +41,13 @@ export async function GET(req: Request) {
       employee: string,
       evaluator: string
     ): Promise<EvaluationHistoryItem[]> {
-      const filters: string[] = [
-        `eval_type=eq.${encodeURIComponent(typeVal)}`,
-      ]
+      const filters: string[] = [postgrestEvalTypeInFilter(normalizeHistoryEvalType(typeVal))]
       if (start) filters.push(`eval_date=gte.${start}`)
       if (end) filters.push(`eval_date=lte.${end}`)
-      if (store && store !== 'All')
-        filters.push(
-          `store_name=eq.${encodeURIComponent(store)}`
-        )
+      if (store && store !== 'All') {
+        const sf = postgrestStoreNameIlikeOrFilter(store)
+        if (sf) filters.push(sf)
+      }
       if (employee && employee !== 'All' && employee !== '')
         filters.push(
           `employee_name=eq.${encodeURIComponent(employee)}`
@@ -51,10 +55,18 @@ export async function GET(req: Request) {
       if (evaluator && evaluator !== 'All' && evaluator !== '')
         filters.push(`evaluator=eq.${encodeURIComponent(evaluator)}`)
 
+      /**
+       * 전 페이지(수백 회 요청)는 Vercel 타임아웃 → 빈 목록으로 보이는 회귀를 유발함.
+       * 한 번에 pageCap 행까지(환경변수로 상향 가능) — 어제까지와 동일한 부담 수준.
+       */
       const rows = (await supabaseSelectFilter(
         'evaluation_results',
         filters.join('&'),
-        { order: 'eval_date.desc', limit: 2000 }
+        {
+          order: EVAL_RESULTS_ORDER,
+          select: 'id,eval_date,store_name,employee_name,evaluator,final_grade,json_data,memo',
+          limit: supabaseSelectPageCap(),
+        }
       )) as {
         id?: string
         eval_date?: string
@@ -105,7 +117,7 @@ export async function GET(req: Request) {
       type === 'All' ||
       type === ''
     ) {
-      const [kitchenList, serviceList, managerList] = await Promise.all([
+      const settled = await Promise.allSettled([
         getOne(
           'kitchen',
           startStr,
@@ -131,13 +143,17 @@ export async function GET(req: Request) {
           filterEvaluator
         ),
       ])
-      list = [...kitchenList, ...serviceList, ...managerList]
+      list = []
+      for (const r of settled) {
+        if (r.status === 'fulfilled') list.push(...r.value)
+        else console.error('getEvaluationHistory branch failed:', r.reason)
+      }
       list.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       )
     } else {
       list = await getOne(
-        type,
+        normalizeHistoryEvalType(type),
         startStr,
         endStr,
         filterStore,

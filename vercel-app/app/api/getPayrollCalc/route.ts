@@ -35,15 +35,46 @@ const OT_MULTIPLIER = 1.5
 const LATE_HALF_DAY_MIN = 10
 const LATE_HALF_DAY_COUNT = 3
 
+/** 인사·휴가·공휴일 날짜: 순수 YYYY-MM-DD는 그대로, 그 외는 방콕 달력 기준(UTC slice 오차 방지) */
 function toDateStr(val: unknown): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val as string)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+  if (val == null || val === '') return ''
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    return toDateStrBangkok(s)
+  }
+  return toDateStrBangkok(val as Date)
 }
 
 function fmtMoney(n: number): string {
   return Math.floor(Number(n) || 0).toLocaleString('en-US')
+}
+
+/** 급여월 달력 기준 예정 근무일수(공휴일·매장/오피스 주말, 입사 이후만). resignCapInclusive 있으면 해당일까지(포함). */
+function countCalendarExpectedWorkDays(
+  year: number,
+  targetMonthJs: number,
+  daysInMonth: number,
+  holidaySet: Set<string>,
+  store: string,
+  joinDateStr: string,
+  resignCapInclusive: string | null
+): number {
+  let n = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, targetMonthJs, d)
+    const dayOfWeek = date.getDay()
+    const dateStr = date.toISOString().slice(0, 10)
+    if (joinDateStr && dateStr < joinDateStr) continue
+    if (resignCapInclusive && dateStr > resignCapInclusive) continue
+    if (holidaySet.has(dateStr)) continue
+    if (isOfficeStore(store)) {
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) n++
+    } else {
+      if (dayOfWeek !== 0) n++
+    }
+  }
+  return n
 }
 
 const DEFAULT_HOLIDAYS: { date: string; name: string }[] = [
@@ -138,16 +169,33 @@ function mergeLeaveEventsForEmployee<T extends { date: string; type: string; day
   return out
 }
 
+/** 직원 ID → 퇴사일(인사). 근태 store_name ≠ employees.store 여도 퇴직일 이후 집계 제외 */
+function buildResignByEmpId(
+  empRows: { id?: number; resign_date?: unknown }[] | null
+): Record<number, string> {
+  const m: Record<number, string> = {}
+  for (const e of empRows || []) {
+    const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+    if (eid <= 0) continue
+    const rs = toDateStr(e.resign_date)
+    if (!rs) continue
+    m[eid] = rs
+  }
+  return m
+}
+
 /** 인사 기준 퇴사일(YYYY-MM-DD) → 근태 로그 store|name 키로 조회 */
 function resignCutoffForRow(
   store: string,
   name: string,
   employeeId: number | null | undefined,
-  resignByAttKey: Record<string, string>
+  resignByAttKey: Record<string, string>,
+  resignByEmpId: Record<number, string>
 ): string | undefined {
   const sid =
     employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
   if (sid > 0) {
+    if (resignByEmpId[sid]) return resignByEmpId[sid]
     const k0 = `${store}_#${sid}`
     if (resignByAttKey[k0]) return resignByAttKey[k0]
   }
@@ -191,7 +239,8 @@ function buildAttendanceSummary(
     approved?: string
   }[],
   scheduleMap: Record<string, { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }>,
-  resignByAttKey: Record<string, string> = {}
+  resignByAttKey: Record<string, string> = {},
+  resignByEmpId: Record<number, string> = {}
 ): { summary: Record<string, AttSummary>; dayLines: Record<string, AttendanceDayLines> } {
   const startStr = monthStr + '-01'
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
@@ -371,7 +420,7 @@ function buildAttendanceSummary(
     const rowDate = parts[0]
     const attKey = v.attKey
     if (!rowDate || rowDate < startStr || rowDate > endStr) continue
-    const resignEnd = resignCutoffForRow(v.store, v.name, v.employeeId, resignByAttKey)
+    const resignEnd = resignCutoffForRow(v.store, v.name, v.employeeId, resignByAttKey, resignByEmpId)
     if (resignEnd && rowDate > resignEnd) continue
     if (v.inMs == null) continue
     if (!map[attKey]) {
@@ -395,7 +444,7 @@ function buildAttendanceSummary(
     const rowDate = parts[0]
     const attKey = v.attKey
     if (!rowDate || rowDate < startStr || rowDate > endStr) continue
-    const resignEnd = resignCutoffForRow(v.store, v.name, v.employeeId, resignByAttKey)
+    const resignEnd = resignCutoffForRow(v.store, v.name, v.employeeId, resignByAttKey, resignByEmpId)
     if (resignEnd && rowDate > resignEnd) continue
 
     const complete = v.inMs != null && v.outMs != null && v.outApproved && v.outMs > v.inMs
@@ -765,11 +814,13 @@ export async function GET(request: NextRequest) {
     }
 
     const resignByAttKey = buildResignByAttKey(empRows)
+    const resignByEmpId = buildResignByEmpId(empRows)
     const { summary: attSummary, dayLines: attDayLines } = buildAttendanceSummary(
       normMonth,
       attRows || [],
       scheduleMap,
-      resignByAttKey
+      resignByAttKey,
+      resignByEmpId
     )
     const firstDay = new Date(normMonth + '-01')
     const targetMonth = firstDay.getMonth()
@@ -907,7 +958,6 @@ export async function GET(request: NextRequest) {
       const empId = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
       const attKey = payrollEmployeeKey(store, name, empId)
       const scheduleExpectedDates = new Set<string>()
-      const scheduleExpectedDatesFull = new Set<string>()
       const scheduleLookupKeys = new Set<string>([attKey, `${store}_${normalizeNameForSchedule(name)}`])
       if (empId > 0) scheduleLookupKeys.add(`${store}_#${empId}`)
       for (const lk of scheduleLookupKeys) {
@@ -915,7 +965,6 @@ export async function GET(request: NextRequest) {
         if (!raw || raw.size === 0) continue
         for (const ds of raw) {
           if (joinDateStr && ds < joinDateStr) continue
-          scheduleExpectedDatesFull.add(ds)
           if (resignDateStr && ds > resignDateStr) continue
           scheduleExpectedDates.add(ds)
         }
@@ -939,23 +988,35 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-      let expectedWorkDaysDenominatorFull = 0
-      if (hasScheduleBasis) {
-        expectedWorkDaysDenominatorFull = scheduleExpectedDatesFull.size
-      } else {
-        for (let d = 1; d <= lastDay.getDate(); d++) {
-          const date = new Date(year, targetMonth, d)
-          const dayOfWeek = date.getDay()
-          const dateStr = date.toISOString().slice(0, 10)
-          if (joinDateStr && dateStr < joinDateStr) continue
-          if (holidaySet.has(dateStr)) continue
-          if (isOfficeStore(store)) {
-            if (dayOfWeek !== 0 && dayOfWeek !== 6) expectedWorkDaysDenominatorFull++
-          } else {
-            if (dayOfWeek !== 0) expectedWorkDaysDenominatorFull++
-          }
-        }
-      }
+      const daysInMonth = lastDay.getDate()
+      const calendarWorkDaysFullMonth = countCalendarExpectedWorkDays(
+        year,
+        targetMonth,
+        daysInMonth,
+        holidaySet,
+        store,
+        joinDateStr,
+        null
+      )
+      const calendarWorkDaysThroughResign =
+        resignDateStr && resignDateStr >= startStr && resignDateStr <= endStr
+          ? countCalendarExpectedWorkDays(
+              year,
+              targetMonth,
+              daysInMonth,
+              holidaySet,
+              store,
+              joinDateStr,
+              resignDateStr
+            )
+          : calendarWorkDaysFullMonth
+      const inMonthResign =
+        !!resignDateStr && resignDateStr >= startStr && resignDateStr <= endStr
+      /** 월급제: 퇴사일 이후는 달력상 예정근무에서 제외한 일수로만 기본급·일당 분모 통일(스케줄 유무와 무관) */
+      const effectiveExpectedWorkDays =
+        !isHourly && inMonthResign && calendarWorkDaysFullMonth > 0
+          ? calendarWorkDaysThroughResign
+          : expectedWorkDaysForEmp
 
       const att = attSummary[attKey] || {
         lateMin: 0,
@@ -1007,18 +1068,12 @@ export async function GET(request: NextRequest) {
           }
         }
       } else {
-        // 월급제: 급여월 내 퇴사 시 예정 근무일 비율로 기본급·직책수당 일할(퇴사일 이후 근태·스케줄 제외)
+        // 월급제: 급여월 내 퇴사 시 항상 달력 예정근무 비율로 기본급·직책수당 일할(퇴사일 당일까지 포함, 이후 제외)
         let salaryMonthly = salAmt
         posAllowAmount = posAllow
-        if (
-          salAmt > 0 &&
-          resignDateStr &&
-          resignDateStr >= startStr &&
-          resignDateStr <= endStr &&
-          expectedWorkDaysDenominatorFull > 0
-        ) {
-          if (expectedWorkDaysForEmp > 0) {
-            const ratio = expectedWorkDaysForEmp / expectedWorkDaysDenominatorFull
+        if (salAmt > 0 && inMonthResign && calendarWorkDaysFullMonth > 0) {
+          if (calendarWorkDaysThroughResign > 0) {
+            const ratio = calendarWorkDaysThroughResign / calendarWorkDaysFullMonth
             salaryMonthly = Math.floor(salAmt * ratio)
             posAllowAmount = Math.floor(posAllow * ratio)
           } else {
@@ -1049,7 +1104,7 @@ export async function GET(request: NextRequest) {
         }
       }
       // 매장 직원: 10분 이상 지각 3번 이상 → 반차(0.5일) 급여 삭감
-      const expectedWorkDaysForDed = expectedWorkDaysForEmp
+      const expectedWorkDaysForDed = effectiveExpectedWorkDays
       if (!isOfficeStore(store) && lateDaysOver10 >= LATE_HALF_DAY_COUNT && salary > 0 && expectedWorkDaysForDed > 0) {
         const dailyRate = salary / expectedWorkDaysForDed
         lateDed += Math.floor(dailyRate * 0.5)
@@ -1089,7 +1144,7 @@ export async function GET(request: NextRequest) {
       const paidLeaveDaysFromEvents = leaveEvents.filter((x) => x.kind === 'paid').reduce((s, x) => s + x.days, 0)
       const paidLeaveDateSet = new Set(leaveEvents.filter((x) => x.kind === 'paid').map((x) => x.date))
       const unpaidLeaveDateSet = new Set(leaveEvents.filter((x) => x.kind === 'unpaid').map((x) => x.date))
-      const expectedWorkDays = expectedWorkDaysForEmp
+      const expectedWorkDays = effectiveExpectedWorkDays
       const absenceDateList: string[] = []
       if (hasScheduleBasis) {
         for (const ds of Array.from(scheduleExpectedDates).sort()) {
@@ -1179,14 +1234,22 @@ export async function GET(request: NextRequest) {
         reason: isHourly ? '시급제 기본급' : '월급제 기본급',
         detail: isHourly
           ? `근무 ${Math.round((workMin / 60) * 10) / 10}시간 × 시급 ${Math.floor(salAmt)}`
-          : resignDateStr &&
-              resignDateStr >= startStr &&
-              resignDateStr <= endStr &&
-              salAmt > 0 &&
-              expectedWorkDaysDenominatorFull > 0 &&
-              expectedWorkDaysForEmp < expectedWorkDaysDenominatorFull
-            ? `퇴사 ${resignDateStr} 반영 일할 (예정근무 ${expectedWorkDaysForEmp}/${expectedWorkDaysDenominatorFull}일, 등록 월급 ${Math.floor(salAmt)})`
-            : `인사 등록 월급 ${Math.floor(salAmt)}`,
+          : (() => {
+              const inR =
+                resignDateStr &&
+                resignDateStr >= startStr &&
+                resignDateStr <= endStr &&
+                salAmt > 0 &&
+                calendarWorkDaysFullMonth > 0
+              if (!inR) return `인사 등록 월급 ${Math.floor(salAmt)}`
+              const pN = calendarWorkDaysThroughResign
+              const pD = calendarWorkDaysFullMonth
+              if (pN < pD)
+                return `퇴사 ${resignDateStr} 반영 일할 (달력 예정근무 ${pN}/${pD}일, 등록 월급 ${Math.floor(salAmt)})`
+              if (pN === 0)
+                return `퇴사 ${resignDateStr} — 해당 월 달력 예정근무 0일 (등록 월급 ${Math.floor(salAmt)})`
+              return `퇴사 ${resignDateStr} 해당월 만근에 해당 (달력 예정 ${pD}일, 등록 월급 ${Math.floor(salAmt)})`
+            })(),
         amount: salary,
       })
       if (posAllowAmount > 0) {

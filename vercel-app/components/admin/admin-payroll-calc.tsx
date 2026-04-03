@@ -1,7 +1,7 @@
 "use client"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -310,6 +310,42 @@ export function AdminPayrollCalc() {
   }
 
   const hasResult = list.length > 0
+
+  const payrollColumnTotals = useMemo(() => {
+    return list.reduce(
+      (acc, r) => ({
+        salary: acc.salary + r.salary,
+        posAllow: acc.posAllow + r.posAllow,
+        hazAllow: acc.hazAllow + r.hazAllow,
+        diligenceAllow: acc.diligenceAllow + (r.diligenceAllow ?? 0),
+        birthBonus: acc.birthBonus + r.birthBonus,
+        holidayPay: acc.holidayPay + r.holidayPay,
+        splBonus: acc.splBonus + r.splBonus,
+        ot15: acc.ot15 + (r.ot15 ?? 0),
+        otAmt: acc.otAmt + r.otAmt,
+        lateEarly: acc.lateEarly + (r.lateDed || 0) + (r.earlyDed ?? 0),
+        sso: acc.sso + r.sso,
+        otherDed: acc.otherDed + r.otherDed,
+        netPay: acc.netPay + r.netPay,
+      }),
+      {
+        salary: 0,
+        posAllow: 0,
+        hazAllow: 0,
+        diligenceAllow: 0,
+        birthBonus: 0,
+        holidayPay: 0,
+        splBonus: 0,
+        ot15: 0,
+        otAmt: 0,
+        lateEarly: 0,
+        sso: 0,
+        otherDed: 0,
+        netPay: 0,
+      }
+    )
+  }, [list])
+
   const explainDetailSum = explainItems.reduce((sum, item) => {
     if (item.amount == null) return sum
     if (isPayrollExplainSumRow(item.reason)) return sum
@@ -680,6 +716,33 @@ export function AdminPayrollCalc() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border bg-muted/80 font-semibold">
+                  <td className="p-1.5 text-center text-muted-foreground">—</td>
+                  <td colSpan={2} className="p-1.5 text-left">
+                    {i18nVar(t("pay_calc_table_total"), { n: String(list.length) })}
+                  </td>
+                  <td className="p-1.5 text-center">—</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.salary)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.posAllow)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.hazAllow)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.diligenceAllow)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.birthBonus)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.holidayPay)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.splBonus)}</td>
+                  <td className="p-1.5 text-center text-muted-foreground whitespace-nowrap">
+                    {i18nVar(t("pay_explain_ot_line"), {
+                      h: Math.round(payrollColumnTotals.ot15 * 10) / 10,
+                    })}
+                  </td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.otAmt)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.lateEarly)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.sso)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.otherDed)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums text-primary">{fmt(payrollColumnTotals.netPay)}</td>
+                  <td className="p-1.5 text-center sticky right-0 z-10 bg-muted/95 border-l border-border">—</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

@@ -6,6 +6,7 @@ import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-ser
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { userCanAccessEmployeeStore, storeMatches } from '@/lib/admin-employee-store-access'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter, postgrestStoreNameIlikeOrFilter } from '@/lib/evaluation-postgrest-filters'
 
 export type EvalCoverageUnevaluatedRow = {
   store: string
@@ -117,16 +118,17 @@ async function fetchEvalKeyRows(
   end: string,
   storeName: string | null
 ): Promise<EvalKeyRow[]> {
-  async function one(typeVal: string) {
-    const filters: string[] = [`eval_type=eq.${encodeURIComponent(typeVal)}`]
+  async function one(typeVal: 'kitchen' | 'service' | 'manager') {
+    const filters: string[] = [postgrestEvalTypeInFilter(typeVal)]
     if (start) filters.push(`eval_date=gte.${start}`)
     if (end) filters.push(`eval_date=lte.${end}`)
     if (storeName && storeName.trim()) {
-      filters.push(`store_name=eq.${encodeURIComponent(storeName.trim())}`)
+      const sf = postgrestStoreNameIlikeOrFilter(storeName.trim())
+      if (sf) filters.push(sf)
     }
     const part = (await supabaseSelectFilterAllPages('evaluation_results', filters.join('&'), {
       select: 'store_name,employee_name,eval_type',
-      order: 'eval_date.desc',
+      order: EVAL_RESULTS_ORDER,
       pageSize: 8000,
       maxRows: 120_000,
     })) as EvalKeyRow[]

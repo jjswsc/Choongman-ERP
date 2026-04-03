@@ -52,6 +52,7 @@ import {
   type EmployeeFormData,
 } from "@/components/employees"
 import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
+import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
@@ -214,14 +215,27 @@ export default function EmployeesPage() {
           const store = String(e.store || "").trim().replace(/\s+/g, " ")
           const name = String(e.name || "").trim().replace(/\s+/g, " ")
           const nick = String(e.nick || "").trim().replace(/\s+/g, " ")
-          const key = store + "|" + name
-          const keyNorm = store + "|" + (normalizeEmployeeNameForGradeMatch(name) || name)
-          const keyNick = nick && nick !== name ? store + "|" + nick : ""
-          const g =
-            (gradesRes && gradesRes[key]?.grade) ||
-            (gradesRes && gradesRes[keyNorm]?.grade) ||
-            (gradesRes && keyNick && gradesRes[keyNick]?.grade) ||
-            null
+          const normName = normalizeEmployeeNameForGradeMatch(name) || name
+          const gradeKeys: string[] = []
+          for (const st of expandStoreVariantsForGrade(store)) {
+            gradeKeys.push(
+              `${st}|${name}`,
+              `${st}|${normName}`,
+              `${st.toLowerCase()}|${name.toLowerCase()}`,
+              `${st.toLowerCase()}|${normName.toLowerCase()}`
+            )
+            if (nick && nick !== name) {
+              gradeKeys.push(`${st}|${nick}`, `${st.toLowerCase()}|${nick.toLowerCase()}`)
+            }
+          }
+          let g: string | null = null
+          for (const k of gradeKeys) {
+            const hit = gradesRes && gradesRes[k]?.grade
+            if (hit && String(hit).trim()) {
+              g = String(hit).trim()
+              break
+            }
+          }
           return { ...e, finalGrade: g && String(g).trim() ? g : "-" }
         })
         fullListRef.current = merged
@@ -362,7 +376,15 @@ export default function EmployeesPage() {
     setForm(base)
   }
   const storesForFilter = React.useMemo(() => {
-    let list: string[] = stores.length > 0 ? stores : (storeListFromApi || [])
+    const seen = new Set<string>()
+    const merged: string[] = []
+    for (const s of [...(stores || []), ...(storeListFromApi || [])]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      merged.push(t)
+    }
+    let list: string[] = merged
     if (isManager && userStore && list.length === 0) list = [userStore]
     const frList = auth?.allowedStores
     if (isFranchiseeRole(userRole) && frList && frList.length > 0 && list.length === 0) {

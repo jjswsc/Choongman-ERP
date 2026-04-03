@@ -590,7 +590,13 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
         <CardContent className="space-y-3">
           <select
             value={leaveType}
-            onChange={(e) => setLeaveType(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value
+              setLeaveType(v)
+              if (v.indexOf("ลากิจ") !== -1 || v.toLowerCase().indexOf("lakij") !== -1) {
+                void appAlert(t("leaveLakijGovAlert"))
+              }
+            }}
             className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
           >
             <option value="연차">{t("annual")}</option>

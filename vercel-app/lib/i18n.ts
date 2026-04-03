@@ -245,7 +245,36 @@ export const i18n = {
     sick: '병가',
     unpaid: '무급휴가',
     leaveSickHint: '병가는 먼저 신청 후, 병원 진단서를 촬영해 아래 "신청 내역"에서 업로드해 주세요.',
-    leaveLakijHint: 'ลากิจ는 먼저 신청 후, 증빙 서류를 촬영해 아래 "신청 내역"에서 업로드해 주세요.',
+    leaveLakijHint:
+      '휴가는 회사 ERP에 기록·승인된 경우만 유효합니다(구두·Line·카카오 등 무효). 최소 3영업일 전 신청, 매회 증빙, 업무 인수인계·대행자 지정 후 매니저 확인 필수. 신청 후 아래 "신청 내역"에서 증빙을 업로드하세요.',
+    leaveLakijGovAlert: `[필수 업무 휴가(ลากิจ) 규정 — 강화본]
+
+인력 운영의 질서와 효율을 위해 유급 "ลากิจธุระอันจำเป็น"(연 3일)을 아래와 같이 엄격히 적용합니다.
+
+1. "필수 업무"의 정의
+근무일에 본인이 직접 처리해야 하는 사유만 해당합니다.
+
+• 공무: 평일만 운영하는 국가기관 방문(여권·면허, 법원 소환 등)
+• 직계 가족: 부모·배우자·자녀의 장례 또는 혼인 예식
+• 졸업식: 대학 공식 공지의 "실제 본식일"만 허용. 리허설·촬영일·기타 준비일은 불가
+• 긴급: 주거·가족에 대한 화재·침수·중대 사고
+
+2. ERP를 통한 휴가(엄격 적용)
+• 모든 휴가는 회사 ERP에 기록되고 ERP에서 승인된 경우에만 효력이 있습니다.
+• 구두 통보 또는 Line·KakaoTalk 등 개인 메신저로 한 휴가 통지는 어떤 경우에도 무효이며 인정되지 않습니다.
+
+3. 권리 제한·업무 인수인계
+• 금·토 또는 공휴일 전후 휴가는 매장 상황에 따라 제한될 수 있습니다.
+• 동일 사유로 ลากิจ가 반복되면 회사는 추가 증빙을 요구하고 사실관계를 상세히 조사할 수 있습니다.
+• 휴가 전 업무 요약·대행자 지정 및 매니저 확인이 있어야 합니다. 절차 미이행 시 해당 휴가를 불승인할 수 있습니다.
+
+4. 부정·징계
+• 허위·위조 증빙은 중대 징계 사유이며, 최고 징계 또는 "즉시 해고"(위로금 없음)로 이어질 수 있습니다.
+• 승인된 기간을 초과해 복귀하지 않고 사전 추가 승인이 없으면 초과분은 "무단결근"으로 보고 노동법에 따라 즉시 조치할 수 있습니다.
+
+5. 절차·증빙
+• 최소 3영업일 전 사전 통지(긴급은 즉시 통보, 복귀 후 24시간 내 증빙).
+• 매회 실질 증빙 필수(본식 일정서, 관공서 서한, 사망진단서 등). 증빙이 없으면 무급휴가(Leave without pay)로 처리할 수 있습니다.`,
     reasonPh: '사유',
     submitReq: '신청하기',
     reqHist: '📑 신청 내역',
@@ -874,8 +903,7 @@ export const i18n = {
     emp_label_nickname: '닉네임',
     emp_label_nick_title: '호칭',
     emp_label_employee_code: '직원 코드',
-    emp_employee_code_placeholder_new: '비우면 매장별 자동(예: AB001)',
-    emp_employee_code_hint: '형식: 영문 2글자 + 숫자 3자리 (AA999). 신규는 매장 기준으로 자동 부여됩니다.',
+    emp_employee_code_auto_note: '신규 등록 시 선택한 매장 기준으로 자동 부여됩니다.',
     emp_nick_title_none: '—',
     emp_label_job: '직무',
     empJobService: '서비스',
@@ -1167,6 +1195,7 @@ export const i18n = {
     pay_col_sso: 'SSO',
     pay_col_etc: '기타',
     pay_calc_done: '계산 완료! 내용을 확인하고 저장하세요.',
+    pay_calc_table_total: '합계 ({{n}}명)',
     pay_month_suffix: '월',
     pay_save_confirm_msg: '급여를 확정 저장하시겠습니까?\n(기존에 저장된 이 달의 데이터는 덮어씌워집니다)',
     pay_status_confirmed: '확정',
@@ -1258,7 +1287,7 @@ export const i18n = {
     pay_explain_d_absence_unpaid_day: '무급 결석 1일',
     pay_explain_d_hourly_base: '근무 {{hours}}시간 × 시급 {{rate}}',
     pay_explain_d_resign_prorate:
-      '퇴사 {{date}} 반영 일할 (예정근무 {{num}}/{{den}}일, 등록 월급 {{sal}})',
+      '퇴사 {{date}} 반영 일할 (달력 예정근무 {{num}}/{{den}}일, 등록 월급 {{sal}})',
     pay_explain_d_monthly_registered_sal: '인사 등록 월급 {{sal}}',
     pay_explain_d_days_times: '{{days}}일 × {{amt}}',
     pay_explain_d_n_days: '{{n}}일',
@@ -1586,6 +1615,10 @@ export const i18n = {
     accCompTrialDiff: '차이',
     accCompVatAdd: '행 추가',
     accCompVatExport: 'CSV보내기',
+    accCompPp30WhtSamePeriod: '동일 기간 원천징수 요약',
+    accCompWhtLabelGross: '원천 과세금액(합계)',
+    accCompWhtLabelWithheld: '원천징수세(합계)',
+    accCompWhtLabelRows: '원천 행 수',
     accCompDelete: '삭제',
     accCompChartTitle: '계정과목(TFRS NPAEs 참고)',
     accCompBankReconcileHint: '은행 대사: 통장 거래 상세에서 reconciled 표시는 API reconcileBankTransaction으로 설정합니다.',
@@ -1704,6 +1737,13 @@ export const i18n = {
     expenseLinkBankEmpty: '일치하는 미연결 통장 거래가 없습니다.',
     expenseReportTab: '일일보고',
     expenseRegisterTitle: '지출 발생 등록',
+    expenseAccrualGrossTotal: '총액(세금포함)',
+    expenseAccrualVat: '부가세(VAT)',
+    expenseAccrualWithholding: '원천징수세',
+    expenseAccrualNetPayableLabel: '실제 지급액',
+    expenseAccrualNetPositiveRequired: '실제 지급액이 0보다 커야 합니다. 총액·원천징수를 확인해 주세요.',
+    expensePlanPayAmount: '지급액',
+    expensePlanPayAmountHint: '원천징수 차감 후 실제 지급액',
     expenseStoreSelect: '매장',
     expensePayeeRequired: '지급처를 선택하거나 입력해 주세요.',
     expensePayeeName: '지급처명',
@@ -2724,6 +2764,8 @@ export const i18n = {
     poHistorySearchPlaceholder: 'PO번호·거래처·출고지·작성자 검색',
     poHistoryNoMatch: '조건에 맞는 발주가 없습니다.',
     poHistoryColOrigin: '구분',
+    poTaxSummaryHint: '부가세·원천징수',
+    poPrintInvoiceTotal: '세금포함 합계',
     orderTabPoHistory: '발주 내역',
     orderTabStoreOrderHist: '매장 발주 내역',
     orderTransferToPo: '본사 발주로 보내기',
@@ -5305,7 +5347,36 @@ export const i18n = {
     sick: 'Sick',
     unpaid: 'Unpaid Leave',
     leaveSickHint: 'Apply first, then take a photo of the medical certificate and upload it in "Request History" below.',
-    leaveLakijHint: 'Apply first, then take a photo of the proof document and upload it in "Request History" below.',
+    leaveLakijHint:
+      'Leave is valid only if recorded and approved in company ERP (verbal notice or Line/Kakao etc. is void). At least 3 business days ahead, proof every time, handover and acting person with manager confirmation. Upload proof in "Request History" below.',
+    leaveLakijGovAlert: `Policy: ลากิจ — necessary business leave (paid, 3 days/year) — strict version
+
+For orderly and efficient HR management, the following applies.
+
+1. Definition of "necessary business"
+Only matters the employee must handle personally on a working day:
+
+• Government business: agencies open on working days only (e.g. passport, driving licence, court as summoned)
+• Immediate family: funeral or wedding of parent, spouse, or child
+• Graduation: only the official "ceremony day" per the university announcement. Not approved: rehearsal (any case), photo day, or other preparation
+• Emergency: fire, flood, or serious sudden accident affecting home and family
+
+2. Mandatory use of ERP
+• Approval through ERP only: all leave types must be logged and approved in the company ERP to be valid.
+• Other channels are void: verbal notice or personal messengers (Line, KakaoTalk, etc.) are void and not accepted in any case.
+
+3. Restrictions and handover
+• Timing: leave on Friday, Saturday, or days before/after public holidays may be restricted depending on store circumstances.
+• Repeated same reason: the company may request further evidence and conduct a detailed fact check.
+• Handover: before leave, summarize work, name a substitute, and obtain manager confirmation; failure to follow steps may result in denial of that leave.
+
+4. Fraud and penalties
+• Falsified evidence: false or forged documents are gross misconduct and may lead to maximum discipline or immediate dismissal without severance.
+• Absence: if you do not return as scheduled without prior additional approval, excess time is treated as unauthorized absence and handled under labor law immediately.
+
+5. Procedure and proof
+• Notify at least 3 business days in advance (except emergencies: notify immediately and submit proof within 24 h).
+• Tangible proof every time (e.g. ceremony schedule, government letter, death certificate). Without proof, the day may be treated as unpaid leave (Leave without pay).`,
     reasonPh: 'Reason',
     submitReq: 'Submit',
     reqHist: '📑 History',
@@ -5923,8 +5994,7 @@ export const i18n = {
     emp_label_nickname: 'Nickname',
     emp_label_nick_title: 'Title',
     emp_label_employee_code: 'Employee code',
-    emp_employee_code_placeholder_new: 'Auto by store (e.g. AB001)',
-    emp_employee_code_hint: 'Format: 2 letters + 3 digits (AA999). New rows auto-generate per store.',
+    emp_employee_code_auto_note: 'New employees get a code automatically based on the selected store.',
     emp_nick_title_none: '—',
     emp_label_job: 'Job',
     empJobService: 'Service',
@@ -6217,6 +6287,7 @@ export const i18n = {
     pay_col_sso: 'SSO',
     pay_col_etc: 'Other',
     pay_calc_done: 'Calculation done! Review and save.',
+    pay_calc_table_total: 'Total ({{n}} employees)',
     pay_month_suffix: '',
     pay_save_confirm_msg: 'Save payroll for this month?\n(Existing data for this month will be overwritten)',
     pay_status_confirmed: 'Confirmed',
@@ -6307,7 +6378,7 @@ export const i18n = {
     pay_explain_d_absence_unpaid_day: 'Unpaid absence (1 day)',
     pay_explain_d_hourly_base: '{{hours}} h × hourly rate {{rate}}',
     pay_explain_d_resign_prorate:
-      'Resignation {{date}} prorated (scheduled work {{num}}/{{den}} days, registered salary {{sal}})',
+      'Resignation {{date}} prorated (calendar workdays {{num}}/{{den}}, registered salary {{sal}})',
     pay_explain_d_monthly_registered_sal: 'Registered monthly salary {{sal}}',
     pay_explain_d_days_times: '{{days}} days × {{amt}}',
     pay_explain_d_n_days: '{{n}} days',
@@ -6631,6 +6702,10 @@ export const i18n = {
     accCompTrialDiff: 'Difference',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
+    accCompPp30WhtSamePeriod: 'Withholding tax (same period)',
+    accCompWhtLabelGross: 'WHT gross base (total)',
+    accCompWhtLabelWithheld: 'WHT withheld (total)',
+    accCompWhtLabelRows: 'WHT rows',
     accCompDelete: 'Delete',
     accCompChartTitle: 'Chart of accounts (TFRS for NPAEs reference)',
     accCompBankReconcileHint: 'Bank reconciliation: mark transactions via reconcileBankTransaction API.',
@@ -6749,6 +6824,13 @@ export const i18n = {
     expenseLinkBankEmpty: 'No matching unlinked bank transactions.',
     expenseReportTab: 'Daily Report',
     expenseRegisterTitle: 'Register Expense Accrual',
+    expenseAccrualGrossTotal: 'Total (incl. tax)',
+    expenseAccrualVat: 'VAT',
+    expenseAccrualWithholding: 'Withholding tax',
+    expenseAccrualNetPayableLabel: 'Net payment',
+    expenseAccrualNetPositiveRequired: 'Net payment must be greater than zero. Check total and withholding.',
+    expensePlanPayAmount: 'Payment',
+    expensePlanPayAmountHint: 'Amount to pay after withholding',
     expenseStoreSelect: 'Store',
     expensePayeeRequired: 'Please select or enter payee.',
     expensePayeeName: 'Payee Name',
@@ -7768,6 +7850,8 @@ export const i18n = {
     poHistorySearchPlaceholder: 'Search PO #, vendor, location, user',
     poHistoryNoMatch: 'No purchase orders match your filters.',
     poHistoryColOrigin: 'Source',
+    poTaxSummaryHint: 'VAT & withholding tax',
+    poPrintInvoiceTotal: 'Total (incl. tax)',
     orderTabPoHistory: 'PO History',
     orderTabStoreOrderHist: 'Store Order History',
     orderTransferToPo: 'Send to HQ Order',
@@ -10283,7 +10367,49 @@ orderItemQty: 'Qty',
     sick: 'ป่วย',
     unpaid: 'ลางานไม่รับเงิน',
     leaveSickHint: 'ส่งคำขอก่อน แล้วถ่ายรูปใบรับรองแพทย์แล้วอัปโหลดใน "ประวัติ" ด้านล่าง',
-    leaveLakijHint: 'ส่งคำขอก่อน แล้วถ่ายรูปเอกสารหลักฐานแล้วอัปโหลดใน "ประวัติ" ด้านล่าง',
+    leaveLakijHint:
+      'การลาทุกประเภทต้องบันทึกและอนุมัติผ่าน ERP เท่านั้น (แจ้งปาก/Line/Kakao ไม่มีผล) — ล่วงหน้า 3 วันทำการ, หลักฐานทุกครั้ง, ส่งมอบงานและยืนยันจากผู้จัดการ — อัปโหลดหลักฐานใน "ประวัติ"',
+    leaveLakijGovAlert: `ประกาศระเบียบการ "ลากิจธุระอันจำเป็น" (Business Leave) ฉบับเข้มงวด
+เพื่อให้การบริหารจัดการทรัพยากรบุคคลเป็นไปด้วยความเรียบร้อยและมีประสิทธิภาพ บริษัทขอประกาศระเบียบการใช้สิทธิ์ "ลากิจธุระอันจำเป็น" (ลากิจได้รับค่าจ้าง 3 วันต่อปี) โดยมีรายละเอียดดังนี้:
+
+1. นิยามของ "ธุระอันจำเป็น"
+การลากิจต้องเป็นธุระที่พนักงานต้องดำเนินการด้วยตนเองในวันทำการเท่านั้น ได้แก่:
+
+งานราชการ: การติดต่อหน่วยงานรัฐที่เปิดเฉพาะวันทำการ เช่น ทำพาสปอร์ต, ทำใบขับขี่ หรือไปศาลตามหมายเรียก
+
+ธุระครอบครัวสายตรง: งานศพหรืองานมงคลสมรสของพ่อแม่ คู่สมรส หรือบุตร
+
+กรณีงานรับปริญญา: อนุญาตเฉพาะ "วันพิธีจริง" เท่านั้น ตามประกาศอย่างเป็นทางการของมหาวิทยาลัย
+
+ไม่อนุมัติสำหรับ: วันซ้อมรับปริญญา (ทุกกรณี), วันถ่ายรูป หรือการเตรียมตัวอื่นๆ
+
+เหตุฉุกเฉิน: ไฟไหม้, น้ำท่วม หรืออุบัติเหตุร้ายแรงต่อที่อยู่อาศัยและครอบครัวกะทันหัน
+
+2. การบังคับใช้ระบบ ERP ในการลาอย่างเคร่งครัด
+
+การอนุมัติผ่าน ERP เท่านั้น: การลาทุกประเภทต้องบันทึกและอนุมัติผ่านระบบ ERP ของบริษัทเท่านั้นจึงจะถือว่ามีผลสมบูรณ์
+
+การลาทางอื่นถือเป็นโมฆะ: การแจ้งลาด้วยวาจา หรือผ่านแอปพลิเคชันเมสเซนเจอร์ส่วนตัว (Line, KakaoTalk และอื่นๆ) ถือเป็นโมฆะและไม่ได้รับการยอมรับในทุกกรณี
+
+3. เงื่อนไขการจำกัดสิทธิ์และการส่งมอบงาน
+
+การจำกัดช่วงเวลา: การลาในวันศุกร์, เสาร์ หรือวันก่อนและหลังวันหยุดนักขัตฤกษ์ อาจถูกจำกัดตามความเหมาะสมของสถานการณ์หน้าร้าน
+
+การตรวจสอบการลาซ้ำ: หากมีการลากิจด้วยสาเหตุเดิมซ้ำๆ บริษัทมีสิทธิ์ขอหลักฐานเพิ่มเติมและดำเนินการตรวจสอบข้อเท็จจริงอย่างละเอียด
+
+การส่งมอบงาน: ก่อนใช้สิทธิ์ลา พนักงานต้องสรุปงานและระบุผู้ปฏิบัติงานแทน พร้อมรับการยืนยันจากผู้จัดการ หากไม่ดำเนินการตามขั้นตอน บริษัทมีสิทธิ์ไม่อนุมัติการลาในครั้งนั้น
+
+4. การห้ามทุจริตและบทลงโทษ
+
+การปลอมแปลงหลักฐาน: การยื่นหลักฐานเท็จหรือปลอมแปลงเอกสารประกอบการลา ถือเป็นการผิดวินัยร้ายแรง ซึ่งเป็นเหตุให้ดำเนินการทางวินัยขั้นสูงสุดหรือ "ไล่ออกทันที" โดยไม่จ่ายค่าชดเชย
+
+การขาดงาน: หากไม่กลับมาปฏิบัติงานตามกำหนดโดยไม่มีการอนุมัติเพิ่มเติมล่วงหน้า ระยะเวลาที่เกินมาจะถือเป็นการ "ขาดงานโดยไม่มีเหตุอันควร" และดำเนินการตามกฎหมายแรงงานทันที
+
+5. ขั้นตอนและหลักฐานประกอบการลา
+
+ต้องแจ้งล่วงหน้าอย่างน้อย 3 วันทำการ (ยกเว้นเหตุฉุกเฉินที่ต้องแจ้งทันทีและส่งหลักฐานภายใน 24 ชม.)
+
+ต้องแนบหลักฐานที่เป็นรูปธรรมทุกครั้ง (เช่น กำหนดการวันพิธีจริง, จดหมายจากราชการ, มรณบัตร) หากไม่มีหลักฐาน บริษัทจะถือเป็นวันลาโดยไม่รับค่าจ้าง (Leave without pay)`,
     reasonPh: 'เหตุผล',
     submitReq: 'ส่ง',
     reqHist: '📑 ประวัติ',
@@ -10500,6 +10626,8 @@ orderItemQty: 'Qty',
     poHistorySearchPlaceholder: 'ค้นหาเลขที่·ผู้ขาย·ที่จัดส่ง·ผู้จัดทำ',
     poHistoryNoMatch: 'ไม่มีรายการที่ตรงเงื่อนไข',
     poHistoryColOrigin: 'ประเภท',
+    poTaxSummaryHint: 'VAT และ ภาษีหัก ณ ที่จ่าย',
+    poPrintInvoiceTotal: 'รวมภาษี',
     orderTabPoHistory: 'ประวัติใบสั่งซื้อ',
     orderTabStoreOrderHist: 'ประวัติสั่งสาขา',
     orderTransferToPo: 'ส่งไป HQ',
@@ -10885,8 +11013,7 @@ orderItemQty: 'จำนวน',
     emp_label_nickname: 'ชื่อเล่น',
     emp_label_nick_title: 'คำนำหน้า',
     emp_label_employee_code: 'รหัสพนักงาน',
-    emp_employee_code_placeholder_new: 'ว่าง = อัตโนมัติตามสาขา (เช่น AB001)',
-    emp_employee_code_hint: 'รูปแบบ: ตัวอักษร 2 ตัว + ตัวเลข 3 ตัว (AA999) และระบบจะรันอัตโนมัติตามสาขา',
+    emp_employee_code_auto_note: 'พนักงานใหม่จะได้รับรหัสอัตโนมัติตามสาขาที่เลือก',
     emp_nick_title_none: '—',
     emp_label_job: 'หน้าที่',
     empJobService: 'บริการ',
@@ -11175,6 +11302,7 @@ orderItemQty: 'จำนวน',
     pay_col_sso: 'SSO',
     pay_col_etc: 'อื่นๆ',
     pay_calc_done: 'คำนวณเสร็จ! ตรวจสอบและบันทึก',
+    pay_calc_table_total: 'รวม ({{n}} คน)',
     pay_month_suffix: ' เดือน',
     pay_save_confirm_msg: 'บันทึกเงินเดือนเดือนนี้?\n(ข้อมูลเดือนนี้ที่มีอยู่จะถูกเขียนทับ)',
     pay_status_confirmed: 'ยืนยัน',
@@ -11261,7 +11389,7 @@ orderItemQty: 'จำนวน',
     pay_explain_d_absence_unpaid_day: 'ขาดงานไม่รับค่าจ้าง 1 วัน',
     pay_explain_d_hourly_base: 'ทำงาน {{hours}} ชม. × ค่าจ้างชั่วโมง {{rate}}',
     pay_explain_d_resign_prorate:
-      'ลาออก {{date}} คิดแบบรายวัน (วันทำงานตามแผน {{num}}/{{den}} วัน, เงินเดือนลงทะเบียน {{sal}})',
+      'ลาออก {{date}} คิดแบบรายวัน (วันทำงานตามปฏิทิน {{num}}/{{den}} วัน, เงินเดือนลงทะเบียน {{sal}})',
     pay_explain_d_monthly_registered_sal: 'เงินเดือนรายเดือนที่ลงทะเบียน {{sal}}',
     pay_explain_d_days_times: '{{days}} วัน × {{amt}}',
     pay_explain_d_n_days: '{{n}} วัน',
@@ -11556,6 +11684,10 @@ orderItemQty: 'จำนวน',
     accCompTrialDiff: 'ส่วนต่าง',
     accCompVatAdd: 'เพิ่มแถว',
     accCompVatExport: 'ส่งออก CSV',
+    accCompPp30WhtSamePeriod: 'ภาษีหัก ณ ที่จ่าย (ช่วงเดียวกัน)',
+    accCompWhtLabelGross: 'ฐานภาษีหัก ณ ที่จ่าย (รวม)',
+    accCompWhtLabelWithheld: 'ภาษีหัก ณ ที่จ่าย (รวม)',
+    accCompWhtLabelRows: 'จำนวนแถว WHT',
     accCompDelete: 'ลบ',
     accCompChartTitle: 'ผังบัญชี (อ้างอิง TFRS for NPAEs)',
     accCompBankReconcileHint: 'กระทบยอดธนาคาร: ใช้ API reconcileBankTransaction',
@@ -14797,7 +14929,21 @@ orderItemQty: 'จำนวน',
     sick: 'နေမကောင်းခွင့်',
     unpaid: 'လစာမယူသောခွင့်',
     leaveSickHint: 'ပထမတောင်းဆိုပြီး ဆေးရုံလက်မှတ်ဓာတ်ပုံယူကာ အောက်ရှိ "မှတ်တမ်း" တွင် တင်ပါ။',
-    leaveLakijHint: 'ပထမတောင်းဆိုပြီး သက်သေခံစာတင်ဓာတ်ပုံယူကာ အောက်ရှိ "မှတ်တမ်း" တွင် တင်ပါ။',
+    leaveLakijHint:
+      'ခွင့်အားလုံး ကုမ္ပဏီ ERP တွင် မှတ်ပြီး အတည်ပြုမှသာ အကျုံးဝင်သည် (ပြောကြားချက်/Line/Kakao စသည် မရပါ)။ လုပ်ငန်းရက် ၃ ရက် အကြို၊ အကြိမ်တိုင်း သက်သေခံ၊ လုပ်ငန်းလွှဲပြောင်း နှင့် မန်နေဂျာ အတည်ပြု လိုအပ်သည်။ "မှတ်တမ်း" တွင် သက်သေတင်ပါ။',
+    leaveLakijGovAlert: `သတိပေးချက် — ลากิจ (လစာပါ၊ တစ်နှစ်လျှင် ၃ ရက်) — တင်းကျပ်သော ဗားရှင်း
+
+လူအင်အား စီမံခန့်ခွဲမှု စနစ်တကျ၊ ထိရောက်စေရန် အောက်ပါအတိုင်း လိုက်နာရမည်။
+
+၁) "လိုအပ်သော အရေးကိစ္စ" — လုပ်သားက လုပ်ငန်းရက်တွင် ကိုယ်တိုင် ဆောင်ရွက်ရမည့်အရာသာ။ အစိုးရရုံး (လုပ်ငန်းရက်သာ ဖွင့်)၊ မိဘ/ဇနီး/သား သင်္ကန်းချွေ သို့မဟုတ် မင်္ဂလာဆောင်၊ တက္ကသိုလ် တရားဝင်ကြေညာချက်အရ "ပွဲနေ့တကယ်" သာ (လေ့ကျင့်ခန်း/ဓာတ်ပုံ မပါ)၊ အိမ်/မိသားစု မီးလောင်ရေလွှမ်းမိုးမှု အရေးပေါ်။
+
+၂) ERP မှတစ်ပါး မရ — ခွင့်အားလုံး ကုမ္ပဏီ ERP တွင် မှတ်ပြီး ERP မှ အတည်ပြုမှသာ ပြည့်စုံသည်။ ပြောကြားချက် သို့ Line/KakaoTalk စသော ကိုယ်ပိုင် မက်ဆေ့ချ်ဖြင့် အကြောင်းကြားခြင်းသည် မည်သည့်အခြေအနေတွင်မျှ အကျုံးမဝင်ပါ။
+
+၃) ကန့်သတ်ချက် နှင့် လုပ်ငန်းလွှဲပြောင်း — သောကြာ/စနေ သို့မဟုတ် ရုံးပိတ်ရက်အနီး ခွင့်ကို ဆိုင်ခွဲအခြေအနေအရ ကန့်သတ်နိုင်သည်။ တူညီသော အကြောင်းဖြင့် ลากิจ ထပ်ခါတလဲလဲ ဆိုပါက ထပ်ဆောင်း သက်သေတောင်းခံ၊ အချက်အလက် စိစစ်နိုင်သည်။ ခွင့်မယူမီ လုပ်ငန်းအကျဉ်းချုပ်၊ အစားထိုး တာဝန်ခံ နှင့် မန်နေဂျာ အတည်ပြု လိုအပ်သည်။ မလိုက်နာပါက ခွင့်ငြင်းနိုင်သည်။
+
+၄) အတုအပ နှင့် အပြစ်ပေး — အတုအပ/လိမ်ညာ သက်သေသည် ပြင်းထန်သော စည်းကမ်းချိုးဖောက်မှု၊ အမြင့်ဆုံး စည်းကမ်းချိန်ဆ သို့မဟုတ် "ချက်ချင်း အလုပ်ထုတ်" (လျော်ကြေးမပေး) ဖြစ်နိုင်သည်။ အချိန်မီ ပြန်မလာပါက အပိုအချိန်ကို "အကြောင်းမဲ့ အလုပ်ပျက်" ဟု သတ်မှတ်၍ လုပ်သားဥပဒေအရ ချက်ချင်း ဆောင်ရွက်နိုင်သည်။
+
+၅) လုပ်ထုံးလုပ်နည်း — လုပ်ငန်းရက် အနည်းဆုံး ၃ ရက် အကြို (အရေးပေါ်မှလွဲ၍ ချက်ချင်း အကြောင်းကြား၊ ၂၄ နာရီအတွင်း သက်သေ)။ အကြိမ်တိုင်း သက်သေခံ (ပွဲနေ့စာရင်း၊ အစိုးရစာ၊ သေခြင်းမှတ်တမ်း စသည်)။ သက်သေမရှိလျှင် လစာမဲ့ခွင့် (Leave without pay) ဟု သတ်မှတ်နိုင်သည်။`,
     reasonPh: 'အကြောင်းပြချက်',
     submitReq: 'တင်ပြမည်',
     reqHist: '📑 မှတ်တမ်း',
@@ -15011,6 +15157,8 @@ orderItemQty: 'จำนวน',
     poHistorySearchPlaceholder: 'နံပါတ်·ရောင်းချသူ·နေရာ·ပြုစုသူ ရှာရန်',
     poHistoryNoMatch: 'ကိုက်ညီသော အမှာစာမရှိပါ',
     poHistoryColOrigin: 'အမျိုးအစား',
+    poTaxSummaryHint: 'VAT နှင့် အခွန်ဖြတ်တောက်မှု',
+    poPrintInvoiceTotal: 'အခွန်ပါ စုစုပေါင်း',
     orderTabPoHistory: 'အမှာစာအစဉ်',
     orderTabStoreOrderHist: 'ဆိုင်အမိန့်မှတ်တမ်း',
     orderTransferToPo: 'HQ သို့ပို့မည်',
@@ -15393,8 +15541,7 @@ orderItemQty: 'အရေအတွက်',
     emp_label_nickname: 'အမည်ပြောင်',
     emp_label_nick_title: 'ခေါင်းစဉ်',
     emp_label_employee_code: 'ဝန်ထမ်းကုဒ်',
-    emp_employee_code_placeholder_new: 'ဗလာ = ဆိုင်အလိုက် အလိုအလျောက် (ဥပမာ AB001)',
-    emp_employee_code_hint: 'ပုံစံ: အက္ခရာ ၂ လုံး + ဂဏန်း ၃ လုံး (AA999)၊ အသစ်တွင် ဆိုင်အလိုက် အလိုအလျောက်ပေးမည်။',
+    emp_employee_code_auto_note: 'အသစ်ထည့်သွင်းသူများအတွက် ရွေးချယ်ထားသော ဆိုင်အလိုက် ကုဒ် အလိုအလျောက် ပေးပါသည်။',
     emp_nick_title_none: '—',
     emp_label_job: 'လုပ်ငန်း',
     empJobService: 'ဝန်ဆောင်မှု',
@@ -15683,6 +15830,7 @@ orderItemQty: 'အရေအတွက်',
     pay_col_sso: 'SSO',
     pay_col_etc: 'အခြား',
     pay_calc_done: 'တွက်ချက်ပြီး! ကြည့်ပြီး သိမ်းပါ။',
+    pay_calc_table_total: 'စုစုပေါင်း ({{n}} ဦး)',
     pay_month_suffix: ' လ',
     pay_save_confirm_msg: 'ဤလ၏ လစာသိမ်းမလား?\n(ဤလ၏ ရှိပြီးသား ဒေတာကို အစားထိုးမည်)',
     pay_status_confirmed: 'အတည်ပြု',
@@ -15974,6 +16122,10 @@ orderItemQty: 'အရေအတွက်',
     accCompTrialDiff: 'Difference',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
+    accCompPp30WhtSamePeriod: 'Withholding tax (same period)',
+    accCompWhtLabelGross: 'WHT gross base (total)',
+    accCompWhtLabelWithheld: 'WHT withheld (total)',
+    accCompWhtLabelRows: 'WHT rows',
     accCompDelete: 'Delete',
     accCompChartTitle: 'Chart of accounts (TFRS for NPAEs reference)',
     accCompBankReconcileHint: 'Bank reconciliation: mark transactions via reconcileBankTransaction API.',
@@ -19135,7 +19287,21 @@ orderItemQty: 'အရေအတွက်',
     sick: 'ປ່ວຍ',
     unpaid: 'ລາພັກບໍ່ໄດ້ເງິນ',
     leaveSickHint: 'ສົ່ງຄຳຂໍກ່ອນ ຖ່າຍຮູບໃບຢັ້ງຢືນແພດ ແລ້ວອັບໂຫຼດໃນ "ປະຫວັດ" ດ້ານລຸ່ມ',
-    leaveLakijHint: 'ສົ່ງຄຳຂໍກ່ອນ ຖ່າຍຮູບເອກະສານຢັ້ງຢືນ ແລ້ວອັບໂຫຼດໃນ "ປະຫວັດ" ດ້ານລຸ່ມ',
+    leaveLakijHint:
+      'ລາທຸກປະເພດຕ້ອງບັນທຶກ ແລະ ອະນຸມັດຜ່ານ ERP ຂອງບໍລິສັດເທົ່ານັ້ນ (ປາກ/Line/Kakao ບໍ່ມີຜົນ). ລ່ວງໜ້າ 3 ມື້ເຮັດວຽກ, ຢັ້ງຢືນທຸກຄັ້ງ, ມອບວຽກ ແລະ ຜູ້ຈັດການຢືນຢັນ — ອັບໂຫຼດໃນ "ປະຫວັດ".',
+    leaveLakijGovAlert: `ແຈ້ງການ — ลากิจ (ລາກິດຈຳເປັນ, ມີເງິນ 3 ມື້/ປີ) ສະບັບເຂັ້ມງວດ
+
+ເພື່ອການບໍລິຫານຊັບພະຍາກອນມະນຸດໃຫ້ເປັນລະບຽບ ແລະ ມີປະສິດທິພາບ.
+
+1) ນິຍາມ "ທຸລະກິດຈຳເປັນ" — ພະນັກງານຕ້ອງດຳເນີນການດ້ວຍຕົນເອງໃນມື້ເຮັດວຽກເທົ່ານັ້ນ: ຕິດຕໍ່ລັດ (ເປີດມື້ເຮັດວຽກ) ເຊັ່ນ ຫນັງສືເດີນທາງ/ໃບຂັບຂີ່/ສານ; ງານສົບ ຫຼື ງານແຕ່ງຂອງພໍ່ແມ່ ຄູ່ ລູກ; ຮັບປະລິນຍາ — ອະນຸຍາດແຕ່ "ມື້ພິທີຈິງ" ຕາມປະກາດມະຫາວິທະຍາໄລ; ບໍ່ອະນຸມັດຊຸມແຊບ/ຖ່າຍຮູບ/ກຽມອື່ນໆ; ສຸກເສີນໄຟ/ນ້ຳຖ້ວມ/ອຸບັດຕິເຫດຮ້າຍແຮງຕໍ່ບ້ານ ແລະ ຄອບຄົວ.
+
+2) ERP ບັງຄັບ — ອະນຸມັດຜ່ານ ERP ເທົ່ານັ້ນ; ລາທຸກປະເພດຕ້ອງບັນທຶກ ແລະ ອະນຸມັດໃນ ERP ຈຶ່ງມີຜົນສົມບູນ. ແຈ້ງປາກ ຫຼື Line/KakaoTalk ເປັນໂມຄະ ແລະ ບໍ່ຍອມຮັບ.
+
+3) ຈຳກັດ ແລະ ມອບວຽກ — ລາວັນສຸກ ສຸກ ຫຼື ກ່ອນ/ຫຼັງວັນພັກລັດອາດຖືກຈຳກັດຕາມສະຖານະການຮ້ານ; ລາກິດເຫດຜົນຊ້ຳໆ ບໍລິສັດຂໍຢັ້ງຢືນເພີ່ມ ແລະ ກວດສອບ; ກ່ອນລາຕ້ອງສະຫຼຸບວຽກ ລະບຸຜູ້ແທນ ແລະ ໄດ້ຮັບຢືນຢັນຈາກຜູ້ຈັດການ — ບໍ່ຕາມຂັ້ນຕອນອາດບໍ່ອະນຸມັດ.
+
+4) ຫ້າມທຸຈລິດ — ຫຼັກຖານເທັດ/ປອມເປັນການລະເມີດວິນໄຍຮ້າຍແຮງ, ອາດລົງໂທດສູງສຸດ ຫຼື "ໄລ່ອອກທັນທີ" ບໍ່ຈ່າຍຊົດເຊີຍ; ບໍ່ກັບຕາມກຳນົດໂດຍບໍ່ມີອະນຸມັດເພີ່ມ — ເວລາເກີນຖືເປັນ "ຂາດງານບໍ່ມີເຫດ" ແລະ ດຳເນີນການຕາມກົດໝາຍແຮງງານທັນທີ.
+
+5) ຂັ້ນຕອນ ແລະ ຫຼັກຖານ — ແຈ້ງລ່ວງໜ້າຢ່າງໜ້ອຍ 3 ມື້ເຮັດວຽກ (ຍົກເວັ້ນສຸກເສີນ: ແຈ້ງທັນທີ, ສົ່ງຫຼັກຖານພາຍໃນ 24 ຊມ.); ຫຼັກຖານຮູບທຸກຄັ້ງ; ບໍ່ມີຫຼັກຖານ ອາດນັບເປັນລາບໍ່ມີເງິນ (Leave without pay).`,
     reasonPh: 'ເຫດຜົນ',
     submitReq: 'ສົ່ງ',
     reqHist: '📑 ປະຫວັດ',
@@ -19349,6 +19515,8 @@ orderItemQty: 'အရေအတွက်',
     poHistorySearchPlaceholder: 'ຄົ້ນຫາເລກທີ·ຜູ້ຂາຍ·ທີ່ສົ່ງ·ຜູ້ຈັດທຳ',
     poHistoryNoMatch: 'ບໍ່ມີລາຍການທີ່ກົງກັບເງື່ອນໄຂ',
     poHistoryColOrigin: 'ປະເພດ',
+    poTaxSummaryHint: 'VAT ແລະ ພາສີຫັກ ຢູ່ທີ່ຈ່າຍ',
+    poPrintInvoiceTotal: 'ລວມລວມພາສີ',
     orderTabPoHistory: 'ປະຫວັດການສັ່ງຊື້',
     orderTabStoreOrderHist: 'ປະຫວັດການສັ່ງສາຂາ',
     orderTransferToPo: 'ສົ່ງໄປ HQ',
@@ -19731,8 +19899,7 @@ orderItemQty: 'ຈຳນວນ',
     emp_label_nickname: 'ຊື່ຫຼິ້ນ',
     emp_label_nick_title: 'ຄຳນຳໜ້າ',
     emp_label_employee_code: 'ລະຫັດພະນັກງານ',
-    emp_employee_code_placeholder_new: 'ປ່ອຍວ່າງ = ອັດຕະໂນມັດຕາມສາຂາ (ເຊັ່ນ AB001)',
-    emp_employee_code_hint: 'ຮູບແບບ: ຕົວອັກສອນ 2 ຕົວ + ຕົວເລກ 3 ຕົວ (AA999), ລາຍການໃໝ່ຈະຖືກສ້າງອັດຕະໂນມັດຕາມສາຂາ.',
+    emp_employee_code_auto_note: 'ພະນັກງານໃໝ່ຈະໄດ້ລະຫັດອັດຕະໂນມັດຕາມສາຂາທີ່ເລືອກ.',
     emp_nick_title_none: '—',
     emp_label_job: 'ວຽກງານ',
     empJobService: 'ບໍລິການ',
@@ -20021,6 +20188,7 @@ orderItemQty: 'ຈຳນວນ',
     pay_col_sso: 'SSO',
     pay_col_etc: 'ອື່ນ',
     pay_calc_done: 'ຄິດໄລ່ແລ້ວ! ກວດເບິ່ງແລະບັນທຶກ',
+    pay_calc_table_total: 'ລວມ ({{n}} ຄົນ)',
     pay_month_suffix: ' ເດືອນ',
     pay_save_confirm_msg: 'ບັນທຶກເງິນເດືອນເດືອນນີ້?\n(ຂໍ້ມູນເດືອນນີ້ທີ່ມີຢູ່ຈະຖືກທົບເທົ່າ)',
     pay_status_confirmed: 'ຢືນຢັນ',
@@ -20312,6 +20480,10 @@ orderItemQty: 'ຈຳນວນ',
     accCompTrialDiff: 'Difference',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
+    accCompPp30WhtSamePeriod: 'Withholding tax (same period)',
+    accCompWhtLabelGross: 'WHT gross base (total)',
+    accCompWhtLabelWithheld: 'WHT withheld (total)',
+    accCompWhtLabelRows: 'WHT rows',
     accCompDelete: 'Delete',
     accCompChartTitle: 'Chart of accounts (TFRS for NPAEs reference)',
     accCompBankReconcileHint: 'Bank reconciliation: mark transactions via reconcileBankTransaction API.',
@@ -23281,6 +23453,10 @@ orderItemQty: 'ຈຳນວນ',
     accCompTrialDiff: 'Difference',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
+    accCompPp30WhtSamePeriod: 'Withholding tax (same period)',
+    accCompWhtLabelGross: 'WHT gross base (total)',
+    accCompWhtLabelWithheld: 'WHT withheld (total)',
+    accCompWhtLabelRows: 'WHT rows',
     accCompDelete: 'Delete',
     accCompChartTitle: 'Chart of accounts (TFRS for NPAEs reference)',
     accCompBankReconcileHint: 'Bank reconciliation: mark transactions via reconcileBankTransaction API.',
@@ -25137,6 +25313,10 @@ orderItemQty: 'ຈຳນວນ',
     accCompTrialDiff: 'Difference',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
+    accCompPp30WhtSamePeriod: 'Withholding tax (same period)',
+    accCompWhtLabelGross: 'WHT gross base (total)',
+    accCompWhtLabelWithheld: 'WHT withheld (total)',
+    accCompWhtLabelRows: 'WHT rows',
     accCompDelete: 'Delete',
     accCompChartTitle: 'Chart of accounts (TFRS for NPAEs reference)',
     accCompBankReconcileHint: 'Bank reconciliation: mark transactions via reconcileBankTransaction API.',
@@ -26988,6 +27168,10 @@ orderItemQty: 'ຈຳນວນ',
     accCompTrialDiff: 'Difference',
     accCompVatAdd: 'Add row',
     accCompVatExport: 'Export CSV',
+    accCompPp30WhtSamePeriod: 'Withholding tax (same period)',
+    accCompWhtLabelGross: 'WHT gross base (total)',
+    accCompWhtLabelWithheld: 'WHT withheld (total)',
+    accCompWhtLabelRows: 'WHT rows',
     accCompDelete: 'Delete',
     accCompChartTitle: 'Chart of accounts (TFRS for NPAEs reference)',
     accCompBankReconcileHint: 'Bank reconciliation: mark transactions via reconcileBankTransaction API.',

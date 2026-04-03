@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 
 type BankTxRow = {
   id?: number
@@ -13,6 +14,7 @@ type ExpenseAccrualRow = {
   payee_code?: string
   payee_name?: string
   amount?: number
+  withholding_tax_amount?: number | null
   expense_date?: string
   due_date?: string
   memo?: string
@@ -78,7 +80,7 @@ export async function GET(request: NextRequest) {
     const bankDate = String(bankRow.trans_date || '').slice(0, 10)
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'status=eq.approved', {
-        select: 'id,payee_code,payee_name,amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by',
+        select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by',
         order: 'approved_at.asc,id.asc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
@@ -99,7 +101,8 @@ export async function GET(request: NextRequest) {
     const list = (accrualRows || [])
       .map((r) => {
         const id = Number(r.id || 0)
-        const plannedAmount = Math.abs(Number(r.amount || 0))
+        const wht = Math.max(0, Math.abs(Number(r.withholding_tax_amount ?? 0) || 0))
+        const plannedAmount = expenseAccrualNetPayable(Number(r.amount || 0), wht)
         const paidAmount = paidByAccrual.get(id) || 0
         const remainingAmount = Math.max(0, plannedAmount - paidAmount)
         const decoded = decodePayeeCode(r.payee_code)

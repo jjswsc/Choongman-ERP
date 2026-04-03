@@ -3,6 +3,7 @@ import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 
@@ -101,6 +102,9 @@ export async function POST(request: NextRequest) {
     const payeeCode = inputPayeeCode || `auto_${withdrawalCategory}`
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)
     const amount = Math.abs(Number(body.amount) || 0)
+    const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
+    const withholdingTaxAmount = Math.max(0, Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0))
+    const netPayable = expenseAccrualNetPayable(amount, withholdingTaxAmount)
     const expenseDate = String(body.expenseDate || body.expense_date || getBangkokTodayDateString()).slice(0, 10)
     const dueDateRaw = String(body.dueDate || body.due_date || '').trim()
     const dueDate = dueDateRaw ? dueDateRaw.slice(0, 10) : null
@@ -116,6 +120,15 @@ export async function POST(request: NextRequest) {
     }
     if (amount <= 0) {
       return NextResponse.json({ success: false, message: '금액을 입력해 주세요.' }, { status: 400, headers })
+    }
+    if (netPayable <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '실제 지급액이 0 이하입니다. 총액(세금포함)이 원천징수 이상인지 확인해 주세요.',
+        },
+        { status: 400, headers }
+      )
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) {
       return NextResponse.json({ success: false, message: '비용 발생일 형식이 올바르지 않습니다.' }, { status: 400, headers })
@@ -137,6 +150,8 @@ export async function POST(request: NextRequest) {
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode,
       amount,
+      vat_amount: vatAmount > 0 ? vatAmount : null,
+      withholding_tax_amount: withholdingTaxAmount > 0 ? withholdingTaxAmount : null,
       expense_date: expenseDate,
       due_date: dueDate,
       memo: memo || null,
@@ -168,7 +183,7 @@ export async function POST(request: NextRequest) {
 
     await supabaseInsert('payable_transactions', {
       vendor_code: payeeCode.startsWith('auto_') ? null : payeeCode,
-      amount: Math.abs(amount),
+      amount: Math.abs(netPayable),
       ref_type: 'Expense',
       ref_id: null,
       trans_date: expenseDate,

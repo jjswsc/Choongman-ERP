@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectPageCap } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
@@ -62,9 +62,10 @@ export async function GET(req: NextRequest) {
       empSelectFallbackNoEmpCode,
     ]
     let loadErr: unknown = null
+    const empFetchLimit = supabaseSelectPageCap()
     for (const sel of empSelectCandidates) {
       try {
-        rows = (await supabaseSelect('employees', { order: 'id.asc', select: sel, limit: 5000 })) as Record<
+        rows = (await supabaseSelect('employees', { order: 'id.asc', select: sel, limit: empFetchLimit })) as Record<
           string,
           unknown
         >[] | null

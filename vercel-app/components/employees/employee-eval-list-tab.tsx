@@ -3,7 +3,8 @@
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getEvaluationHistory, translateTexts } from "@/lib/api-client"
+import { getEvaluationDistinctStores, getEvaluationHistory, translateTexts } from "@/lib/api-client"
+import { bangkokDateYmd, bangkokFirstOfMonthMonthsAgo } from "@/lib/bangkok-date"
 import {
   Dialog,
   DialogContent,
@@ -40,11 +41,9 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
-  const today = new Date()
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10)
-  const todayStr = today.toISOString().slice(0, 10)
+  /** 기본: 방콕 기준 최근 24개월(이번 달만이면 오래된 평가 매장이 목록에서 안 보이는 문제 방지) */
+  const firstDay = bangkokFirstOfMonthMonthsAgo(24)
+  const todayStr = bangkokDateYmd()
 
   const [type, setType] = React.useState("all")
   const [start, setStart] = React.useState(firstDay)
@@ -59,6 +58,33 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
   const [employeeOptions, setEmployeeOptions] = React.useState<string[]>([])
   const [evaluatorOptions, setEvaluatorOptions] = React.useState<string[]>([])
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
+  const [storesFromEvalDb, setStoresFromEvalDb] = React.useState<string[]>([])
+
+  React.useEffect(() => {
+    let cancelled = false
+    void getEvaluationDistinctStores()
+      .then((r) => {
+        if (!cancelled && Array.isArray(r?.stores)) setStoresFromEvalDb(r.stores)
+      })
+      .catch(() => {
+        if (!cancelled) setStoresFromEvalDb([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const storeOptionsForList = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const s of [...stores, ...storesFromEvalDb]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      out.push(t)
+    }
+    return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  }, [stores, storesFromEvalDb])
 
   const loadHistory = React.useCallback(async () => {
     setLoading(true)
@@ -270,7 +296,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">{t("all")}</SelectItem>
-                {stores.map((s) => (
+                {storeOptionsForList.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
                   </SelectItem>

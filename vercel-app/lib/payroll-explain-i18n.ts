@@ -75,7 +75,7 @@ export function translatePayrollExplainDetail(detail: string, t: (k: string) => 
   m = d.match(/^근무 ([\d.]+)시간 × 시급 (\d+)$/)
   if (m) return i18nVar(t("pay_explain_d_hourly_base"), { hours: m[1], rate: m[2] })
 
-  m = d.match(/^퇴사 (.+) 반영 일할 \(예정근무 (\d+)\/(\d+)일, 등록 월급 (\d+)\)$/)
+  m = d.match(/^퇴사 (.+) 반영 일할 \(달력 예정근무 (\d+)\/(\d+)일, 등록 월급 (\d+)\)$/)
   if (m) return i18nVar(t("pay_explain_d_resign_prorate"), { date: m[1], num: m[2], den: m[3], sal: m[4] })
 
   m = d.match(/^인사 등록 월급 (\d+)$/)

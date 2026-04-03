@@ -7,7 +7,8 @@
 import { useEffect, useState } from 'react'
 
 const HEALTH_WINDOW_MS = 30_000
-const DEGRADE_FAIL_THRESHOLD = 2
+/** 한 번의 실패만으로도 짧은 구간 내 캐시·하드 네비 우선 (라이파이·서버 무응답 대응) */
+const DEGRADE_FAIL_THRESHOLD = 1
 
 let consecutiveFailures = 0
 let lastFailureAt = 0

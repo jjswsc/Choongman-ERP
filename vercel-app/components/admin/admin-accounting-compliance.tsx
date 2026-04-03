@@ -335,14 +335,6 @@ export function AdminAccountingCompliance() {
   }, [canUse, tab, loadTrial])
 
   React.useEffect(() => {
-    if (canUse && tab === "vat") void loadVat()
-  }, [canUse, tab, loadVat])
-
-  React.useEffect(() => {
-    if (canUse && tab === "wht") void loadWht()
-  }, [canUse, tab, loadWht])
-
-  React.useEffect(() => {
     if (canUse && tab === "summary") void loadTaxSummary()
   }, [canUse, tab, loadTaxSummary])
 
@@ -542,12 +534,6 @@ export function AdminAccountingCompliance() {
               </TabsTrigger>
               <TabsTrigger value="trial" className={adminTabsTriggerCn}>
                 {t("accCompTabTrial")}
-              </TabsTrigger>
-              <TabsTrigger value="vat" className={adminTabsTriggerCn}>
-                {t("accCompTabVat")}
-              </TabsTrigger>
-              <TabsTrigger value="wht" className={adminTabsTriggerCn}>
-                {t("accCompTabWht")}
               </TabsTrigger>
               <TabsTrigger value="summary" className={adminTabsTriggerCn}>
                 {t("accCompTabPp30")}
@@ -806,248 +792,6 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="vat" className={cn(adminTabsContentCn, "space-y-3")}>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">tax_month</div>
-              <Input
-                className="w-[140px]"
-                value={taxMonth}
-                onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
-              />
-            </div>
-            <Button type="button" variant="secondary" onClick={() => void loadVat()} disabled={loading}>
-              {t("search")}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setVatRows((prev) => [...prev, emptyVat(taxMonth)])}>
-              <Plus className="h-4 w-4 mr-1" />
-              {t("accCompVatAdd")}
-            </Button>
-            <Button type="button" variant="outline" asChild>
-              <a href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth })} target="_blank" rel="noopener noreferrer">
-                {t("accCompVatExport")}
-              </a>
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="p-2 overflow-x-auto space-y-3">
-              {vatRows.map((row, idx) => (
-                <div
-                  key={row.id ?? `new-${idx}`}
-                  className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
-                >
-                  <Input type="date" value={row.doc_date} onChange={(e) => {
-                    const v = e.target.value
-                    setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, doc_date: v } : x)))
-                  }} />
-                  <Select
-                    value={row.direction}
-                    onValueChange={(v) =>
-                      setVatRows((prev) =>
-                        prev.map((x, i) => (i === idx ? { ...x, direction: v as "output" | "input" } : x))
-                      )
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="output">output</SelectItem>
-                      <SelectItem value="input">input</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="counterparty"
-                    value={row.counterparty_name}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, counterparty_name: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="TIN"
-                    value={row.counterparty_tax_id}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, counterparty_tax_id: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="invoice #"
-                    value={row.invoice_number}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, invoice_number: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="net"
-                    value={row.net_amount}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, net_amount: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="VAT"
-                    value={row.vat_amount}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, vat_amount: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="total"
-                    value={row.total_amount}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, total_amount: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    className="md:col-span-2"
-                    placeholder="vat_status"
-                    value={row.vat_status}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, vat_status: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    className="md:col-span-2"
-                    placeholder="memo"
-                    value={row.memo}
-                    onChange={(e) =>
-                      setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
-                    }
-                  />
-                  <div className="flex gap-2 md:col-span-4">
-                    <Button type="button" size="sm" onClick={() => void saveVatRow(row)}>
-                      <Save className="h-3 w-3 mr-1" />
-                      {t("accCompSave")}
-                    </Button>
-                    <Button type="button" size="sm" variant="destructive" onClick={() => void removeVat(row)}>
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      {t("accCompDelete")}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="wht" className={cn(adminTabsContentCn, "space-y-3")}>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">tax_month</div>
-              <Input
-                className="w-[140px]"
-                value={taxMonth}
-                onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
-              />
-            </div>
-            <Button type="button" variant="secondary" onClick={() => void loadWht()} disabled={loading}>
-              {t("search")}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setWhtRows((prev) => [...prev, emptyWht(taxMonth)])}>
-              <Plus className="h-4 w-4 mr-1" />
-              {t("accCompVatAdd")}
-            </Button>
-            <Button type="button" variant="outline" asChild>
-              <a href={getExportWithholdingTaxLedgerCsvUrl({ userRole: role, taxMonth })} target="_blank" rel="noopener noreferrer">
-                WHT CSV
-              </a>
-            </Button>
-          </div>
-          <Card>
-            <CardContent className="p-2 overflow-x-auto space-y-3">
-              {whtRows.map((row, idx) => (
-                <div
-                  key={row.id ?? `w-new-${idx}`}
-                  className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
-                >
-                  <Input
-                    type="date"
-                    value={row.payment_date}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, payment_date: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="payee"
-                    value={row.payee_name}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, payee_name: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="payee TIN"
-                    value={row.payee_tax_id}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, payee_tax_id: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="income type"
-                    value={row.income_type}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, income_type: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="gross"
-                    value={row.gross_amount}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, gross_amount: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="rate %"
-                    value={row.wht_rate}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, wht_rate: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="WHT amt"
-                    value={row.wht_amount}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, wht_amount: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder="form (PND3/53...)"
-                    value={row.form_hint}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, form_hint: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    className="md:col-span-2"
-                    placeholder="certificate #"
-                    value={row.certificate_no}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, certificate_no: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    className="md:col-span-2"
-                    placeholder="memo"
-                    value={row.memo}
-                    onChange={(e) =>
-                      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
-                    }
-                  />
-                  <div className="flex gap-2 md:col-span-4">
-                    <Button type="button" size="sm" onClick={() => void saveWhtRow(row)}>
-                      <Save className="h-3 w-3 mr-1" />
-                      {t("accCompSave")}
-                    </Button>
-                    <Button type="button" size="sm" variant="destructive" onClick={() => void removeWht(row)}>
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      {t("accCompDelete")}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="summary" className={cn(adminTabsContentCn, "space-y-3")}>
           <Card>
             <CardHeader className="pb-2">
@@ -1139,9 +883,39 @@ export function AdminAccountingCompliance() {
                     <div>Missing TIN: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}</div>
                     <div>Missing Invoice: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}</div>
                   </div>
+                  {taxSummary ? (
+                    <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
+                      <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                        <div>
+                          {t("accCompWhtLabelGross")}: {(taxSummary.wht.totalGross || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompWhtLabelWithheld")}: {(taxSummary.wht.totalWithheld || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompWhtLabelRows")}: {(taxSummary.wht.rowCount || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          Missing TIN (WHT): {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {t("accCompTaxWhtDocs")} · {t("accCompPp30GoWhtLedger")}
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("vat")}>
-                      {t("accCompPp30GoVatLedger")}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setVatRows((prev) => [...prev, { ...emptyVat(taxMonth), direction: "output" }])
+                      }
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {t("accCompVatAdd")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
@@ -1153,37 +927,131 @@ export function AdminAccountingCompliance() {
                       </a>
                     </Button>
                   </div>
-                  <div className="overflow-x-auto border rounded-md">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="text-left p-2">Doc date</th>
-                          <th className="text-left p-2">Invoice</th>
-                          <th className="text-left p-2">Counterparty</th>
-                          <th className="text-left p-2">TIN</th>
-                          <th className="text-right p-2">Net</th>
-                          <th className="text-right p-2">VAT</th>
-                          <th className="text-right p-2">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vatOutputRows.map((row, idx) => (
-                          <tr key={row.id ?? `out-${idx}-${row.doc_date}`} className="border-b border-border/50">
-                            <td className="p-2 whitespace-nowrap">{row.doc_date}</td>
-                            <td className="p-2 max-w-[120px] truncate">{row.invoice_number}</td>
-                            <td className="p-2 max-w-[140px] truncate">{row.counterparty_name}</td>
-                            <td className="p-2 font-mono text-[10px]">{row.counterparty_tax_id}</td>
-                            <td className="p-2 text-right">{Number(row.net_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{Number(row.vat_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{Number(row.total_amount || 0).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {!vatOutputRows.length ? (
-                      <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
-                    ) : null}
-                  </div>
+                  <Card>
+                    <CardContent className="p-2 overflow-x-auto space-y-3">
+                      {vatRows.map((row, idx) => {
+                        if (row.direction !== "output") return null
+                        return (
+                          <div
+                            key={row.id ?? `vat-out-${idx}`}
+                            className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
+                          >
+                            <Input
+                              type="date"
+                              value={row.doc_date}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, doc_date: v } : x)))
+                              }}
+                            />
+                            <Select
+                              value={row.direction}
+                              onValueChange={(v) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, direction: v as "output" | "input" } : x))
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="output">output</SelectItem>
+                                <SelectItem value="input">input</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              placeholder="counterparty"
+                              value={row.counterparty_name}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_name: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="TIN"
+                              value={row.counterparty_tax_id}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_tax_id: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="invoice #"
+                              value={row.invoice_number}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, invoice_number: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="net"
+                              value={row.net_amount}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, net_amount: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="VAT"
+                              value={row.vat_amount}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, vat_amount: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="total"
+                              value={row.total_amount}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, total_amount: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              className="md:col-span-2"
+                              placeholder="vat_status"
+                              value={row.vat_status}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, vat_status: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              className="md:col-span-2"
+                              placeholder="memo"
+                              value={row.memo}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <div className="flex gap-2 md:col-span-4">
+                              <Button type="button" size="sm" onClick={() => void saveVatRow(row)}>
+                                <Save className="h-3 w-3 mr-1" />
+                                {t("accCompSave")}
+                              </Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => void removeVat(row)}>
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                {t("accCompDelete")}
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {!vatOutputRows.length ? (
+                        <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
 
@@ -1204,9 +1072,39 @@ export function AdminAccountingCompliance() {
                       {(taxSummary?.vat.rowCount || 0).toLocaleString()}
                     </div>
                   </div>
+                  {taxSummary ? (
+                    <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
+                      <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                        <div>
+                          {t("accCompWhtLabelGross")}: {(taxSummary.wht.totalGross || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompWhtLabelWithheld")}: {(taxSummary.wht.totalWithheld || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          {t("accCompWhtLabelRows")}: {(taxSummary.wht.rowCount || 0).toLocaleString()}
+                        </div>
+                        <div>
+                          Missing TIN (WHT): {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {t("accCompTaxWhtDocs")} · {t("accCompPp30GoWhtLedger")}
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("vat")}>
-                      {t("accCompPp30GoVatLedger")}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setVatRows((prev) => [...prev, { ...emptyVat(taxMonth), direction: "input" }])
+                      }
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {t("accCompVatAdd")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
@@ -1218,37 +1116,131 @@ export function AdminAccountingCompliance() {
                       </a>
                     </Button>
                   </div>
-                  <div className="overflow-x-auto border rounded-md">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="text-left p-2">Doc date</th>
-                          <th className="text-left p-2">Invoice</th>
-                          <th className="text-left p-2">Counterparty</th>
-                          <th className="text-left p-2">TIN</th>
-                          <th className="text-right p-2">Net</th>
-                          <th className="text-right p-2">VAT</th>
-                          <th className="text-right p-2">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vatInputRows.map((row, idx) => (
-                          <tr key={row.id ?? `in-${idx}-${row.doc_date}`} className="border-b border-border/50">
-                            <td className="p-2 whitespace-nowrap">{row.doc_date}</td>
-                            <td className="p-2 max-w-[120px] truncate">{row.invoice_number}</td>
-                            <td className="p-2 max-w-[140px] truncate">{row.counterparty_name}</td>
-                            <td className="p-2 font-mono text-[10px]">{row.counterparty_tax_id}</td>
-                            <td className="p-2 text-right">{Number(row.net_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{Number(row.vat_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{Number(row.total_amount || 0).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {!vatInputRows.length ? (
-                      <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
-                    ) : null}
-                  </div>
+                  <Card>
+                    <CardContent className="p-2 overflow-x-auto space-y-3">
+                      {vatRows.map((row, idx) => {
+                        if (row.direction !== "input") return null
+                        return (
+                          <div
+                            key={row.id ?? `vat-in-${idx}`}
+                            className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
+                          >
+                            <Input
+                              type="date"
+                              value={row.doc_date}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                setVatRows((prev) => prev.map((x, i) => (i === idx ? { ...x, doc_date: v } : x)))
+                              }}
+                            />
+                            <Select
+                              value={row.direction}
+                              onValueChange={(v) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, direction: v as "output" | "input" } : x))
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="output">output</SelectItem>
+                                <SelectItem value="input">input</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              placeholder="counterparty"
+                              value={row.counterparty_name}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_name: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="TIN"
+                              value={row.counterparty_tax_id}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, counterparty_tax_id: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="invoice #"
+                              value={row.invoice_number}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, invoice_number: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="net"
+                              value={row.net_amount}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, net_amount: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="VAT"
+                              value={row.vat_amount}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, vat_amount: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              placeholder="total"
+                              value={row.total_amount}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, total_amount: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              className="md:col-span-2"
+                              placeholder="vat_status"
+                              value={row.vat_status}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, vat_status: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <Input
+                              className="md:col-span-2"
+                              placeholder="memo"
+                              value={row.memo}
+                              onChange={(e) =>
+                                setVatRows((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
+                                )
+                              }
+                            />
+                            <div className="flex gap-2 md:col-span-4">
+                              <Button type="button" size="sm" onClick={() => void saveVatRow(row)}>
+                                <Save className="h-3 w-3 mr-1" />
+                                {t("accCompSave")}
+                              </Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => void removeVat(row)}>
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                {t("accCompDelete")}
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {!vatInputRows.length ? (
+                        <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
 
@@ -1262,8 +1254,14 @@ export function AdminAccountingCompliance() {
                     <div>Missing Cert#: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("wht")}>
-                      {t("accCompPp30GoWhtLedger")}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWhtRows((prev) => [...prev, emptyWht(taxMonth)])}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      {t("accCompVatAdd")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
@@ -1275,37 +1273,122 @@ export function AdminAccountingCompliance() {
                       </a>
                     </Button>
                   </div>
-                  <div className="overflow-x-auto border rounded-md">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="text-left p-2">Payment date</th>
-                          <th className="text-left p-2">Payee</th>
-                          <th className="text-left p-2">TIN</th>
-                          <th className="text-left p-2">Form</th>
-                          <th className="text-right p-2">Gross</th>
-                          <th className="text-right p-2">WHT</th>
-                          <th className="text-left p-2">Cert#</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {whtRows.map((row, idx) => (
-                          <tr key={row.id ?? `wht-${idx}-${row.payment_date}`} className="border-b border-border/50">
-                            <td className="p-2 whitespace-nowrap">{row.payment_date}</td>
-                            <td className="p-2 max-w-[140px] truncate">{row.payee_name}</td>
-                            <td className="p-2 font-mono text-[10px]">{row.payee_tax_id}</td>
-                            <td className="p-2">{row.form_hint}</td>
-                            <td className="p-2 text-right">{Number(row.gross_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right">{Number(row.wht_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 max-w-[100px] truncate">{row.certificate_no}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {!whtRows.length ? (
-                      <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
-                    ) : null}
-                  </div>
+                  <Card>
+                    <CardContent className="p-2 overflow-x-auto space-y-3">
+                      {whtRows.map((row, idx) => (
+                        <div
+                          key={row.id ?? `wht-${idx}`}
+                          className="border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs"
+                        >
+                          <Input
+                            type="date"
+                            value={row.payment_date}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, payment_date: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="payee"
+                            value={row.payee_name}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, payee_name: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="payee TIN"
+                            value={row.payee_tax_id}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, payee_tax_id: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="income type"
+                            value={row.income_type}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, income_type: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="gross"
+                            value={row.gross_amount}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, gross_amount: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="rate %"
+                            value={row.wht_rate}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, wht_rate: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="WHT amt"
+                            value={row.wht_amount}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, wht_amount: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder="form (PND3/53...)"
+                            value={row.form_hint}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, form_hint: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            className="md:col-span-2"
+                            placeholder="certificate #"
+                            value={row.certificate_no}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, certificate_no: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            className="md:col-span-2"
+                            placeholder="memo"
+                            value={row.memo}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <div className="flex gap-2 md:col-span-4">
+                            <Button type="button" size="sm" onClick={() => void saveWhtRow(row)}>
+                              <Save className="h-3 w-3 mr-1" />
+                              {t("accCompSave")}
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => void removeWht(row)}>
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              {t("accCompDelete")}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      {!whtRows.length ? (
+                        <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
             </CardContent>

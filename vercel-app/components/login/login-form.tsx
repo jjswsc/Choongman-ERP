@@ -16,7 +16,7 @@ import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-conte
 import { isLangCode, useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { replacePosOfflineAware } from "@/lib/pos-offline-nav"
+import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
 
 function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
   // #region agent log
@@ -486,6 +486,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 type="button"
                 onClick={() => {
                   if (offlineResume) {
+                    setPosSessionPreferHardNavigation()
                     setAuth(offlineResume)
                     replacePosOfflineAware(redirectTo, (p) => router.replace(p))
                   }
@@ -539,6 +540,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <button
                   type="button"
                   onClick={() => {
+                    setPosSessionPreferHardNavigation()
                     setAuth(offlineResume)
                     replacePosOfflineAware(redirectTo, (p) => router.replace(p))
                   }}
@@ -605,6 +607,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <button
                   type="button"
                   onClick={() => {
+                    setPosSessionPreferHardNavigation()
                     setAuth(offlineResume)
                     replacePosOfflineAware(redirectTo, (p) => router.replace(p))
                   }}

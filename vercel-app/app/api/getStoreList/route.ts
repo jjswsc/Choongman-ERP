@@ -16,6 +16,11 @@ export async function GET() {
 
     const userMap: Record<string, string[]> = {}
     const staffByStore: Record<string, { name: string; nick: string; job?: string; role?: string }[]> = {}
+    const allStoreNames = new Set<string>()
+    for (const r of empList || []) {
+      const store = String(r.store || '').trim()
+      if (store) allStoreNames.add(store)
+    }
     for (const r of empList || []) {
       const resignDate = String(r.resign_date ?? '').trim()
       if (resignDate) continue
@@ -31,7 +36,10 @@ export async function GET() {
         staffByStore[store].push({ name, nick, job, role })
       }
     }
-    const stores = Object.keys(userMap).filter(Boolean).sort()
+    /** 퇴사자만 있는 매장도 드롭다운에 나오게 (평가 이력·매장 필터용) */
+    const stores = Array.from(allStoreNames)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
     return NextResponse.json({ stores, users: userMap, staffByStore }, { headers })
   } catch (e) {
     console.error('getStoreList:', e)

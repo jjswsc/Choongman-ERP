@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postPayableSettlementJournal } from '@/lib/accounting-posting'
+import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 
@@ -10,6 +11,7 @@ type ExpenseAccrualRow = {
   payee_code?: string
   payee_name?: string
   amount?: number
+  withholding_tax_amount?: number | null
   expense_date?: string
   due_date?: string
   memo?: string
@@ -86,11 +88,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지급일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
 
-    const accrual = (await supabaseSelectFilter(
-      'expense_accruals',
-      `id=eq.${expenseAccrualId}`,
-      { limit: 1 }
-    )) as ExpenseAccrualRow[] | null
+    const accrual = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
+      select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,store_name,account_subject_id,status',
+      limit: 1,
+    })) as ExpenseAccrualRow[] | null
     const source = accrual?.[0]
     if (!source?.id) {
       return NextResponse.json({ success: false, message: '지출 발생 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -118,7 +119,8 @@ export async function POST(request: NextRequest) {
       const a = Number(r.amount || 0)
       return sum + (a < 0 ? Math.abs(a) : 0)
     }, 0)
-    const plannedAmount = Math.abs(Number(source.amount || 0))
+    const wht = Math.max(0, Math.abs(Number(source.withholding_tax_amount ?? 0) || 0))
+    const plannedAmount = expenseAccrualNetPayable(Number(source.amount || 0), wht)
     const remaining = Math.max(0, plannedAmount - paidAmount)
     if (Math.abs(amount - remaining) > 0.01) {
       return NextResponse.json(

@@ -145,6 +145,8 @@ export function WithdrawalManagementTab() {
   const [invoicePhotoFile, setInvoicePhotoFile] = React.useState<File | null>(null)
   /** 지출 등록(지급 예정만) 시 첨부 — 인보이스·영수증 이미지/PDF */
   const [accrualAttachmentFiles, setAccrualAttachmentFiles] = React.useState<File[]>([])
+  const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
+  const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [expensePayMode, setExpensePayMode] = React.useState<"immediate" | "later">("later")
   const [payeeCode, setPayeeCode] = React.useState("")
@@ -219,6 +221,8 @@ export function WithdrawalManagementTab() {
     const categoryParam = searchParams.get("category")
     const storeNameParam = searchParams.get("storeName")
     const editAccrualId = searchParams.get("editAccrualId")
+    const accrualVatParam = searchParams.get("accrualVat")
+    const accrualWhtParam = searchParams.get("accrualWht")
     const hasAnyParam =
       amountParam ||
       bankMemoParam ||
@@ -233,7 +237,9 @@ export function WithdrawalManagementTab() {
       memoParam ||
       categoryParam ||
       storeNameParam ||
-      editAccrualId
+      editAccrualId ||
+      accrualVatParam ||
+      accrualWhtParam
     if (hasAnyParam) {
       hasAppliedParams.current = true
       if (amountParam && Number(amountParam) > 0) setAmount(String(Number(amountParam)))
@@ -268,6 +274,14 @@ export function WithdrawalManagementTab() {
         if (mapped.sub) setCategorySub(mapped.sub)
       }
       if (storeNameParam) setStoreName(storeNameParam)
+      if (accrualVatParam != null && accrualVatParam !== "") {
+        const v = Math.max(0, Number(accrualVatParam) || 0)
+        setAccrualVatAmount(v > 0 ? String(v) : "")
+      }
+      if (accrualWhtParam != null && accrualWhtParam !== "") {
+        const w = Math.max(0, Number(accrualWhtParam) || 0)
+        setAccrualWithholdingTax(w > 0 ? String(w) : "")
+      }
     }
   }, [searchParams, mapCategoryToMainSub])
 
@@ -433,6 +447,13 @@ export function WithdrawalManagementTab() {
 
   const isLaterPayment = !!categoryMain && expensePayMode === "later"
 
+  const accrualNetPreview = React.useMemo(() => {
+    if (!isLaterPayment || (categoryMain !== "purchase" && categoryMain !== "expense")) return null
+    const g = Math.abs(Number(String(amount).replace(/,/g, "")) || 0)
+    const w = Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0))
+    return Math.max(0, g - w)
+  }, [isLaterPayment, categoryMain, amount, accrualWithholdingTax])
+
   const resolveWithdrawalCategory = React.useCallback((main: string, sub: string): string => {
     if (main === "purchase") return sub === "advance" ? "purchase_advance" : "purchase_payment"
     if (main === "expense") return sub === "advance" ? "expense_advance" : "expense"
@@ -502,6 +523,18 @@ export function WithdrawalManagementTab() {
       await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
       return
     }
+    const vatV =
+      categoryMain === "purchase" || categoryMain === "expense"
+        ? Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
+        : 0
+    const whtV =
+      categoryMain === "purchase" || categoryMain === "expense"
+        ? Math.max(0, Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0)
+        : 0
+    if ((categoryMain === "purchase" || categoryMain === "expense") && amt - whtV <= 0) {
+      await appAlert(t("expenseAccrualNetPositiveRequired") || "실제 지급액이 0보다 커야 합니다. 총액·원천징수를 확인해 주세요.")
+      return
+    }
     let attachmentUrls: string[] | undefined
     if (
       (categoryMain === "purchase" || categoryMain === "expense") &&
@@ -529,6 +562,8 @@ export function WithdrawalManagementTab() {
         const res = await updateExpenseAccrual({
           expenseAccrualId: Number(editAccrualIdParam),
           amount: amt,
+          vatAmount: vatV,
+          withholdingTaxAmount: whtV,
           expenseDate: transDate,
           dueDate: transDate,
           memo: memo.trim() || undefined,
@@ -554,6 +589,8 @@ export function WithdrawalManagementTab() {
         setPayeeCode("")
         setPayeeName("")
         setAccrualAttachmentFiles([])
+        setAccrualVatAmount("")
+        setAccrualWithholdingTax("")
         hasAppliedParams.current = false
         router.replace("/admin/expense-management?tab=plan")
         await appAlert(t("wm_accrualUpdateSuccess") || "수정되었습니다. 지급예정 탭에서 확인하세요.")
@@ -565,6 +602,8 @@ export function WithdrawalManagementTab() {
           categoryMain,
           categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           amount: amt,
+          vatAmount: vatV,
+          withholdingTaxAmount: whtV,
           expenseDate: transDate,
           dueDate: transDate,
           memo: memo.trim() || undefined,
@@ -583,6 +622,8 @@ export function WithdrawalManagementTab() {
         setPayeeCode("")
         setPayeeName("")
         setAccrualAttachmentFiles([])
+        setAccrualVatAmount("")
+        setAccrualWithholdingTax("")
         await appAlert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
       }
     } finally {
@@ -1528,7 +1569,11 @@ export function WithdrawalManagementTab() {
                 </div>
               )}
               <div className="w-[120px]">
-                <Label>{t("amount") || "금액"}</Label>
+                <Label>
+                  {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense")
+                    ? tt("expenseAccrualGrossTotal", "총액(세금포함)")
+                    : t("amount") || "금액"}
+                </Label>
                 <Input
                   value={amount}
                   onChange={(e) => {
@@ -1567,6 +1612,46 @@ export function WithdrawalManagementTab() {
                 />
               </div>
             </div>
+            {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
+              <div className="flex flex-wrap items-end gap-3 max-w-6xl rounded-lg border border-border/50 bg-muted/10 p-3">
+                <div className="w-[110px]">
+                  <Label className="text-xs text-muted-foreground">{tt("expenseAccrualVat", "부가세(VAT)")}</Label>
+                  <Input
+                    value={accrualVatAmount}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "")
+                      const parts = v.split(".")
+                      setAccrualVatAmount(parts.length > 2 ? parts[0] + "." + parts[1] : v)
+                    }}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    className="h-9 mt-1"
+                  />
+                </div>
+                <div className="w-[110px]">
+                  <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "원천징수세")}</Label>
+                  <Input
+                    value={accrualWithholdingTax}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "")
+                      const parts = v.split(".")
+                      setAccrualWithholdingTax(parts.length > 2 ? parts[0] + "." + parts[1] : v)
+                    }}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    className="h-9 mt-1"
+                  />
+                </div>
+                <div className="min-w-[160px] pb-0.5">
+                  <span className="text-xs text-muted-foreground block">{tt("expenseAccrualNetPayableLabel", "실제 지급액")}</span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    ฿{(accrualNetPreview ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
             {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
               <div className="max-w-xl space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
                 <Label className="text-sm font-medium">

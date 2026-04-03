@@ -6,6 +6,7 @@ import {
   deleteJournalEntriesBySource,
   postExpenseAccrualJournal,
 } from '@/lib/accounting-posting'
+import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 
 type ExpenseAccrualRow = {
   id?: number
@@ -13,6 +14,8 @@ type ExpenseAccrualRow = {
   payee_code?: string
   store_name?: string | null
   amount?: number
+  vat_amount?: number | null
+  withholding_tax_amount?: number | null
   expense_date?: string
   memo?: string | null
   account_subject_id?: number | null
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,status,payee_code,store_name,amount,expense_date,memo,account_subject_id,created_by,payee_name',
+      select: 'id,status,payee_code,store_name,amount,expense_date,memo,account_subject_id,created_by,payee_name,vat_amount,withholding_tax_amount',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const row = rows?.[0]
@@ -135,6 +138,9 @@ export async function POST(request: NextRequest) {
     }
 
     const amount = Math.abs(Number(body.amount || 0))
+    const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
+    const withholdingTaxAmount = Math.max(0, Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0))
+    const netPayable = expenseAccrualNetPayable(amount, withholdingTaxAmount)
     const expenseDate = String(body.expenseDate || body.expense_date || '').slice(0, 10)
     const dueDateRaw = String(body.dueDate || body.due_date || '').trim()
     const dueDate = dueDateRaw ? dueDateRaw.slice(0, 10) : null
@@ -156,6 +162,15 @@ export async function POST(request: NextRequest) {
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ success: false, message: '금액을 입력해 주세요.' }, { status: 400, headers })
+    }
+    if (netPayable <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '실제 지급액이 0 이하입니다. 총액(세금포함)이 원천징수 이상인지 확인해 주세요.',
+        },
+        { status: 400, headers }
+      )
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) {
       return NextResponse.json({ success: false, message: '비용 발생일 형식이 올바르지 않습니다.' }, { status: 400, headers })
@@ -185,6 +200,8 @@ export async function POST(request: NextRequest) {
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode || null,
       amount,
+      vat_amount: vatAmount > 0 ? vatAmount : null,
+      withholding_tax_amount: withholdingTaxAmount > 0 ? withholdingTaxAmount : null,
       expense_date: expenseDate,
       due_date: dueDate,
       memo: memo || null,
@@ -207,7 +224,7 @@ export async function POST(request: NextRequest) {
       if (a <= 0) continue
       await supabaseUpdate('payable_transactions', p.id, {
         vendor_code: payeeCode || null,
-        amount,
+        amount: netPayable,
         trans_date: expenseDate,
         memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
         account_subject_id: accountSubjectId,

@@ -1279,7 +1279,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   </tbody>
                 </table>
               </div>
-              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+              <div className="mt-2 rounded-md border border-border/70 bg-muted/20 p-2 space-y-1.5 text-xs text-muted-foreground">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/90">
+                  {t("poTaxSummaryHint") || "부가세·원천징수"}
+                </div>
                 <div className="flex justify-between">
                   <span>{t("subtotal")}</span>
                   <span className="tabular-nums">{formatMoneyComma(subtotal)}</span>
@@ -1288,12 +1291,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   <span>{t("vat")}</span>
                   <span className="tabular-nums">{formatMoneyComma(vat)}</span>
                 </div>
-                <div className="flex justify-between border-t pt-2 font-semibold text-foreground">
-                  <span>{t("total")}</span>
-                  <span className="tabular-nums">{formatMoneyComma(total)}</span>
-                </div>
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{t("poWithholdingTax") || "원천징수세"}</span>
+                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-1.5">
+                  <span className="whitespace-nowrap">{t("poWithholdingTax") || "원천징수세"}</span>
                   <Input
                     type="number"
                     min={0}
@@ -1301,19 +1300,21 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                     placeholder="0"
                     value={withholdingTaxAmount}
                     onChange={(e) => setWithholdingTaxAmount(e.target.value)}
-                    className="h-8 w-24 text-right text-sm"
+                    className="h-8 w-28 text-right text-sm bg-background"
                   />
                 </div>
-                {Number(withholdingTaxAmount || 0) > 0 && (
-                  <div className="flex justify-between text-xs font-medium text-muted-foreground">
-                    <span>{t("poNetAmount") || "실지급액"}</span>
-                    <span className="tabular-nums">
-                      {formatMoneyComma(
-                        total - (Number(withholdingTaxAmount?.replace(/,/g, "")) || 0)
-                      )}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between border-t border-border/50 pt-1.5 font-semibold text-foreground">
+                  <span>{t("total")}</span>
+                  <span className="tabular-nums">{formatMoneyComma(total)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-medium text-foreground/90">
+                  <span>{t("poNetAmount") || "실지급액"}</span>
+                  <span className="tabular-nums">
+                    {formatMoneyComma(
+                      total - (Number(String(withholdingTaxAmount).replace(/,/g, "")) || 0)
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
           )}

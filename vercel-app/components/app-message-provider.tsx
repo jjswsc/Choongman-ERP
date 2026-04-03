@@ -126,14 +126,14 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
         }}
       >
         <DialogContent
-          className="max-w-md"
+          className="max-w-lg"
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             {current && current.kind !== "prompt" ? (
-              <DialogDescription className="whitespace-pre-wrap text-left">
+              <DialogDescription className="max-h-[min(70vh,32rem)] overflow-y-auto whitespace-pre-wrap pr-1 text-left text-sm">
                 {current.message}
               </DialogDescription>
             ) : null}

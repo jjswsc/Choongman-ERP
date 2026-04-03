@@ -176,6 +176,17 @@ export function EmployeeForm({
         </Button>
       </div>
 
+      <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex flex-wrap items-center gap-2 mb-1">
+        <span className="text-xs font-semibold whitespace-nowrap">{t("emp_label_employee_code")}</span>
+        {form.row > 0 && String(form.employeeCode || "").trim() ? (
+          <span className="text-xs font-mono font-semibold tabular-nums tracking-wide">{String(form.employeeCode).trim()}</span>
+        ) : form.row > 0 ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">{t("emp_employee_code_auto_note")}</span>
+        )}
+      </div>
+
       <Accordion type="multiple" defaultValue={["basic", "id", "accounting"]} className="space-y-1">
         {/* 기본 정보 */}
         <AccordionItem value="basic" className="border rounded-lg px-3 data-[state=open]:border-primary/30">
@@ -184,13 +195,13 @@ export function EmployeeForm({
           </AccordionTrigger>
           <AccordionContent className="pb-3">
       <div className="grid grid-cols-2 gap-3">
-        {/* 매장, 호칭, 이름, 닉네임 + 오른쪽 사진 */}
-        <div className="col-span-2 flex gap-4">
-          <div className="flex-1 space-y-3">
+        {/* 왼쪽: 라벨 위·칸 아래 / 매장 → 호칙|닉네임 2열 → 이름 / 오른쪽: 사진 */}
+        <div className="col-span-2 flex gap-3 items-stretch">
+          <div className="flex-1 min-w-0 space-y-3">
             <div>
               <label className="text-xs font-semibold block mb-1">{t("emp_label_store")}</label>
               <Select value={form.store || "__none__"} onValueChange={(v) => update("store", v === "__none__" ? "" : v)}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-8 text-xs w-full">
                   <SelectValue placeholder={t("emp_label_store")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -201,60 +212,61 @@ export function EmployeeForm({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-xs font-semibold block mb-1">{t("emp_label_nick_title")}</label>
-              <Select
-                value={form.nameTitle || "__none__"}
-                onValueChange={(v) => update("nameTitle", v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder={t("emp_label_nick_title")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">{t("emp_nick_title_none")}</SelectItem>
-                  {EMP_NAME_TITLE_OPTIONS.map((x) => (
-                    <SelectItem key={x} value={x}>
-                      {x}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="min-w-0">
+                <label className="text-xs font-semibold block mb-1">{t("emp_label_nick_title")}</label>
+                <Select
+                  value={form.nameTitle || "__none__"}
+                  onValueChange={(v) => update("nameTitle", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectValue placeholder={t("emp_label_nick_title")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t("emp_nick_title_none")}</SelectItem>
+                    {EMP_NAME_TITLE_OPTIONS.map((x) => (
+                      <SelectItem key={x} value={x}>
+                        {x}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-0">
+                <label className="text-xs font-semibold block mb-1">{t("emp_label_nickname")}</label>
+                <Input
+                  value={form.nick}
+                  onChange={(e) => update("nick", e.target.value)}
+                  className="h-8 text-xs w-full"
+                  placeholder={t("emp_label_nickname")}
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold block mb-1">{t("emp_label_name")}</label>
               <Input
                 value={form.name}
                 onChange={(e) => update("name", e.target.value)}
-                className="h-8 text-xs"
+                className="h-8 text-xs w-full"
                 placeholder={t("emp_label_name")}
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold block mb-1">{t("emp_label_nickname")}</label>
-              <Input
-                value={form.nick}
-                onChange={(e) => update("nick", e.target.value)}
-                className="h-8 text-xs"
-                placeholder={t("emp_label_nickname")}
-              />
-            </div>
           </div>
-          <div className="flex-shrink-0 w-24 flex flex-col">
-            <label className="text-xs font-semibold block mb-1">{t("emp_photo")}</label>
-            <div
-              className="flex-1 min-h-[calc(3*2rem+2*0.75rem)] rounded border border-input bg-muted overflow-hidden flex items-center justify-center"
-              style={{ minHeight: "7.5rem" }}
-            >
-              {form.photo ? (
-                <img
-                  src={form.photo}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  onError={(e) => (e.currentTarget.style.display = "none")}
-                />
-              ) : (
-                <span className="text-[10px] text-muted-foreground">—</span>
-              )}
+          <div className="flex w-[7.25rem] shrink-0 flex-col self-stretch min-h-0">
+            <label className="text-xs font-semibold text-left block mb-1 shrink-0">{t("emp_photo")}</label>
+            <div className="min-h-0 flex-1 flex flex-col">
+              <div className="min-h-[5rem] flex-1 w-full overflow-hidden rounded-md border border-input bg-muted flex items-center justify-center">
+                {form.photo ? (
+                  <img
+                    src={form.photo}
+                    alt=""
+                    className="h-full w-full min-h-0 object-cover"
+                    onError={(e) => (e.currentTarget.style.display = "none")}
+                  />
+                ) : (
+                  <span className="text-[10px] text-muted-foreground">—</span>
+                )}
+              </div>
             </div>
             <input
               ref={photoInputRef}
@@ -273,49 +285,29 @@ export function EmployeeForm({
                 }
               }}
             />
-            <div className="flex gap-1 mt-1.5">
+            <div className="mt-2 flex shrink-0 flex-col gap-1">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 flex-1 text-[10px] px-1.5"
+                className="h-7 text-[10px] px-1.5 w-full"
                 onClick={() => photoInputRef.current?.click()}
               >
-                <Upload className="h-3 w-3 mr-1" />
+                <Upload className="h-3 w-3 mr-0.5 shrink-0" />
                 {t("emp_id_card_upload")}
               </Button>
-              {form.photo && (
+              {form.photo ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-1.5 text-[10px] text-destructive"
+                  className="h-7 text-[10px] px-1.5 text-destructive w-full"
                   onClick={() => update("photo", "")}
                 >
                   {t("delete")}
                 </Button>
-              )}
+              ) : null}
             </div>
-          </div>
-        </div>
-        <div className="col-span-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold whitespace-nowrap">{t("emp_label_employee_code")} :</label>
-            <Input
-              value={form.employeeCode}
-              onChange={(e) =>
-                update(
-                  "employeeCode",
-                  e.target.value
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9]/g, "")
-                    .slice(0, 5)
-                )
-              }
-              className="h-8 text-xs font-mono max-w-[160px]"
-              placeholder={t("emp_employee_code_placeholder_new")}
-            />
-            <span className="text-[10px] text-muted-foreground">{t("emp_employee_code_hint")}</span>
           </div>
         </div>
         <div>

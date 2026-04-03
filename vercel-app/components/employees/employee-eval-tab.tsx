@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
+import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
+import { getEvaluationDistinctStores } from "@/lib/api-client"
 
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
@@ -127,14 +129,41 @@ export function EmployeeEvalTab({
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [evalTransMap, setEvalTransMap] = React.useState<Record<string, string>>({})
+  const [storesFromEvalDb, setStoresFromEvalDb] = React.useState<string[]>([])
+
+  React.useEffect(() => {
+    let cancelled = false
+    void getEvaluationDistinctStores()
+      .then((r) => {
+        if (!cancelled && Array.isArray(r?.stores)) setStoresFromEvalDb(r.stores)
+      })
+      .catch(() => {
+        if (!cancelled) setStoresFromEvalDb([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const storeOptionsForEval = React.useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const s of [...stores, ...storesFromEvalDb]) {
+      const t = String(s || "").trim()
+      if (!t || seen.has(t)) continue
+      seen.add(t)
+      out.push(t)
+    }
+    return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  }, [stores, storesFromEvalDb])
 
   React.useEffect(() => {
     const isManager = isManagerRole(auth?.role || "")
     const userStore = (auth?.store || "").trim()
-    if (isManager && userStore && stores.includes(userStore)) {
+    if (isManager && userStore && storeOptionsForEval.some((s) => storesMatchForGradeLookup(s, userStore))) {
       setEvalStore(userStore)
     }
-  }, [auth?.role, auth?.store, stores])
+  }, [auth?.role, auth?.store, storeOptionsForEval])
   const [userTextTrans, setUserTextTrans] = React.useState<{
     totalMemo: string
     incidents: { details: string; typeOther: string }[]
@@ -143,20 +172,14 @@ export function EmployeeEvalTab({
     coach: string
   }>({ totalMemo: "", incidents: [], remarks: {}, trainingNeeded: "", coach: "" })
 
-  const normStoreName = React.useCallback(
-    (s: string) => String(s || "").trim().replace(/\s+/g, " "),
-    []
-  )
-
   const employeesAtStore = React.useMemo(() => {
     if (!evalStore || evalStore === "All") return []
-    const target = normStoreName(evalStore)
     return employees.filter((e) => {
-      if (normStoreName(e.store || "") === target) return true
+      if (storesMatchForGradeLookup(e.store || "", evalStore)) return true
       const extras = Array.isArray(e.extraStores) ? e.extraStores : []
-      return extras.some((x) => normStoreName(x) === target)
+      return extras.some((x) => storesMatchForGradeLookup(x, evalStore))
     })
-  }, [employees, evalStore, normStoreName])
+  }, [employees, evalStore])
 
   const storeJobOptions = React.useMemo(() => {
     const set = new Set<string>()
@@ -679,7 +702,7 @@ export function EmployeeEvalTab({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">-</SelectItem>
-                {stores.map((s) => (
+                {storeOptionsForEval.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
                   </SelectItem>

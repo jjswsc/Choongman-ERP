@@ -1,4 +1,5 @@
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter, postgrestStoreNameIlikeOrFilter } from '@/lib/evaluation-postgrest-filters'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import {
   isAccountingRole,
@@ -146,15 +147,16 @@ async function fetchRowsForFallback(
   end: string,
   storeName: string | null
 ): Promise<Parameters<typeof aggregateEvaluationAnalyticsFromRows>[0]> {
-  async function one(typeVal: string) {
-    const filters: string[] = [`eval_type=eq.${encodeURIComponent(typeVal)}`]
+  async function one(typeVal: 'kitchen' | 'service' | 'manager') {
+    const filters: string[] = [postgrestEvalTypeInFilter(typeVal)]
     if (start) filters.push(`eval_date=gte.${start}`)
     if (end) filters.push(`eval_date=lte.${end}`)
     if (storeName && storeName.trim()) {
-      filters.push(`store_name=eq.${encodeURIComponent(storeName.trim())}`)
+      const sf = postgrestStoreNameIlikeOrFilter(storeName.trim())
+      if (sf) filters.push(sf)
     }
     const rows = (await supabaseSelectFilter('evaluation_results', filters.join('&'), {
-      order: 'eval_date.desc',
+      order: EVAL_RESULTS_ORDER,
       limit: 25000,
     })) as Parameters<typeof aggregateEvaluationAnalyticsFromRows>[0]
     return rows || []

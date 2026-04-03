@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { verifyToken } from '@/lib/jwt-auth'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
 
@@ -43,6 +44,8 @@ type ExpenseAccrualRow = {
   payee_code?: string
   payee_name?: string
   amount?: number
+  vat_amount?: number | null
+  withholding_tax_amount?: number | null
   expense_date?: string
   due_date?: string
   memo?: string
@@ -143,7 +146,7 @@ export async function GET(request: NextRequest) {
 
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'id=gt.0', {
-        select: 'id,payee_code,payee_name,amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note',
+        select: 'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls',
         order: 'due_date.asc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
@@ -180,7 +183,10 @@ export async function GET(request: NextRequest) {
       .map((r) => {
         const decoded = decodePayeeCode(r.payee_code)
         const id = Number(r.id || 0)
-        const planned = Math.abs(Number(r.amount || 0))
+        const gross = Math.abs(Number(r.amount || 0))
+        const vatAmt = Math.max(0, Math.abs(Number(r.vat_amount ?? 0) || 0))
+        const whtAmt = Math.max(0, Math.abs(Number(r.withholding_tax_amount ?? 0) || 0))
+        const planned = expenseAccrualNetPayable(gross, whtAmt)
         const paid = paymentByAccrual.get(id) || 0
         const remaining = Math.max(0, planned - paid)
         const attachmentUrls = parseAttachmentUrls(r.attachment_urls)
@@ -189,6 +195,9 @@ export async function GET(request: NextRequest) {
           payeeCode: decoded.payeeCode || '',
           payeeName: r.payee_name || r.payee_code || '',
           withdrawalCategory: decoded.withdrawalCategory,
+          grossAmount: gross,
+          vatAmount: vatAmt,
+          withholdingTaxAmount: whtAmt,
           plannedAmount: planned,
           paidAmount: paid,
           remainingAmount: remaining,

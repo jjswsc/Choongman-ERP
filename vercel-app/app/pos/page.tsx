@@ -137,7 +137,7 @@ export default function POSMainPage() {
           logout?.()
           break
         case 'settings':
-          router.push('/admin')
+          navigatePosOfflineAware('/admin', (p) => router.push(p))
           break
         default:
           break
@@ -182,7 +182,7 @@ export default function POSMainPage() {
           navigatePosOfflineAware('/pos/attendance', (p) => router.push(p))
           break
         case 'members':
-          router.push('/admin/employees')
+          navigatePosOfflineAware('/admin/employees', (p) => router.push(p))
           break
         case 'sales':
           navigatePosOfflineAware('/pos/sales', (p) => router.push(p))
@@ -284,7 +284,7 @@ export default function POSMainPage() {
         title={t('posTerminalTitle')}
         showBackButton={false}
         showAdminNavButton={canNavigateFromPosToAdmin(auth?.role || '')}
-        onAdminNav={() => router.push('/admin')}
+        onAdminNav={() => navigatePosOfflineAware('/admin', (p) => router.push(p))}
         canAccessAdmin={canAccessAdmin(auth?.role || '')}
         todayOrders={todayOrders}
         totalAmount={totalAmount}

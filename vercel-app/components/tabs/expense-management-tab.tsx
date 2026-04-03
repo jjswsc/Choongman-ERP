@@ -426,7 +426,9 @@ export function ExpenseManagementTab() {
       const q = new URLSearchParams()
       q.set("tab", "expenseRegister")
       q.set("editAccrualId", String(row.id))
-      q.set("amount", String(row.plannedAmount || 0))
+      q.set("amount", String(row.grossAmount ?? row.plannedAmount ?? 0))
+      if (Number(row.vatAmount || 0) > 0) q.set("accrualVat", String(row.vatAmount))
+      if (Number(row.withholdingTaxAmount || 0) > 0) q.set("accrualWht", String(row.withholdingTaxAmount))
       q.set("transDate", String(row.expenseDate || "").slice(0, 10))
       q.set("payeeCode", row.payeeCode || "")
       q.set("payeeName", row.payeeName || "")
@@ -649,7 +651,9 @@ export function ExpenseManagementTab() {
                         <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
                         <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
-                        <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
+                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "원천징수 차감 후 실제 지급액")}>
+                          {tt("expensePlanPayAmount", "지급액")}
+                        </th>
                         <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
                         <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
                         <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
@@ -939,7 +943,9 @@ export function ExpenseManagementTab() {
                         <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
                         <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
                         <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
-                        <th className="w-[100px] text-center py-2 px-2">{t("amount") || "금액"}</th>
+                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "원천징수 차감 후 실제 지급액")}>
+                          {tt("expensePlanPayAmount", "지급액")}
+                        </th>
                         <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
                         <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
                         <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>

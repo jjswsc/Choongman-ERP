@@ -2220,6 +2220,11 @@ export interface ExpenseAccrualPlanItem {
   payeeCode: string
   payeeName: string
   withdrawalCategory?: string
+  /** 인보이스·비용 총액(세금포함) */
+  grossAmount?: number
+  vatAmount?: number
+  withholdingTaxAmount?: number
+  /** 실제 지급 대상(총액 − 원천징수) */
   plannedAmount: number
   paidAmount: number
   remainingAmount: number
@@ -2300,6 +2305,10 @@ export async function addExpenseAccrual(params: {
   categoryMain?: string
   categorySub?: string
   amount: number
+  /** 부가세 금액(참고) */
+  vatAmount?: number
+  /** 원천징수세 — 실지급액 = amount − 이 값 */
+  withholdingTaxAmount?: number
   expenseDate: string
   dueDate?: string
   memo?: string
@@ -2372,6 +2381,8 @@ export async function approveExpenseAccrual(params: {
 export async function updateExpenseAccrual(params: {
   expenseAccrualId: number
   amount: number
+  vatAmount?: number
+  withholdingTaxAmount?: number
   expenseDate: string
   dueDate?: string | null
   memo?: string
@@ -7600,6 +7611,13 @@ export async function getEvaluationItems(params: {
   })
   const res = await apiFetchWithOffline(`/api/getEvaluationItems?${q}`)
   return res.json() as Promise<{ id: string | number; main: string; sub: string; name: string; use?: boolean }[]>
+}
+
+/** evaluation_results 에 저장된 매장명 목록 (RPC 미배포 시 빈 배열) */
+export async function getEvaluationDistinctStores(): Promise<{ stores: string[] }> {
+  const res = await apiFetchWithOffline('/api/getEvaluationDistinctStores')
+  if (!res.ok) return { stores: [] }
+  return res.json() as Promise<{ stores: string[] }>
 }
 
 /** 평가 이력 조회 */
