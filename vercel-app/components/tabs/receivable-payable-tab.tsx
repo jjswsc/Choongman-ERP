@@ -29,7 +29,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -51,11 +51,17 @@ import {
   addBalanceTransaction,
   updateReceivableReceiveCheck,
   syncOrderReceivable,
+  syncOrderReceivableFromOutbound,
   syncAllOrderReceivablesBatch,
+  syncAllOrderReceivablesFromOutboundBatch,
   translateTexts,
   type ReceivablePayableItem,
   type PayableTransactionItem,
+  type OrderInvoiceTotals,
 } from "@/lib/api-client"
+
+type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
+import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
 
 /** 방콕 달력 날짜 (YYYY-MM-DD). 로컬 PC 타임존/UTC와 어긋나면 종료일 필터로 행이 잘릴 수 있음. */
 function bangkokTodayStr() {
@@ -109,12 +115,14 @@ export function ReceivablePayableTab() {
   const [addIsOpening, setAddIsOpening] = React.useState(false)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const [expandedPayableRowId, setExpandedPayableRowId] = React.useState<string | null>(null)
-  const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, PayableTransactionItem[]>>({})
+  const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, LineItemsCacheEntry>>({})
   const [loadingItemsFor, setLoadingItemsFor] = React.useState<string | null>(null)
-  const [syncingOrderId, setSyncingOrderId] = React.useState<number | null>(null)
+  const [syncPair, setSyncPair] = React.useState<{ orderId: number; kind: "cart" | "outbound" } | null>(null)
   const [updatingReceiveCheckId, setUpdatingReceiveCheckId] = React.useState<number | null>(null)
   const [bulkRecSyncing, setBulkRecSyncing] = React.useState(false)
   const [bulkRecProgress, setBulkRecProgress] = React.useState("")
+  const [bulkOutboundRecSyncing, setBulkOutboundRecSyncing] = React.useState(false)
+  const [bulkOutboundRecProgress, setBulkOutboundRecProgress] = React.useState("")
 
   React.useEffect(() => {
     const rows = listData.flatMap((item) => item.items || [])
@@ -260,7 +268,7 @@ export function ReceivablePayableTab() {
   const handleSyncOrderReceivable = React.useCallback(
     async (orderId: number | undefined) => {
       if (orderId == null || Number.isNaN(orderId)) return
-      setSyncingOrderId(orderId)
+      setSyncPair({ orderId, kind: "cart" })
       try {
         const res = await syncOrderReceivable({ orderId, userRole: auth?.role })
         if (res.success) {
@@ -272,7 +280,33 @@ export function ReceivablePayableTab() {
       } catch (e) {
         await appAlert((t("processFail") || "실패") + ": " + (e instanceof Error ? e.message : String(e)))
       } finally {
-        setSyncingOrderId(null)
+        setSyncPair(null)
+      }
+    },
+    [auth?.role, loadList, t]
+  )
+
+  const handleSyncOrderReceivableFromOutbound = React.useCallback(
+    async (orderId: number | undefined) => {
+      if (orderId == null || Number.isNaN(orderId)) return
+      setSyncPair({ orderId, kind: "outbound" })
+      try {
+        const res = await syncOrderReceivableFromOutbound({ orderId, userRole: auth?.role })
+        if (res.success) {
+          const msg =
+            translateApiMessage(res.message, t) ||
+            res.message ||
+            t("processSuccess") ||
+            "처리되었습니다."
+          await appAlert(msg)
+          loadList()
+        } else {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "실패")
+        }
+      } catch (e) {
+        await appAlert((t("processFail") || "실패") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setSyncPair(null)
       }
     },
     [auth?.role, loadList, t]
@@ -355,6 +389,92 @@ export function ReceivablePayableTab() {
     }
   }, [auth?.role, loadList, salesOutletFilter, t, tt])
 
+  const handleBulkOutboundSyncOrderReceivables = React.useCallback(async () => {
+    const msg =
+      salesOutletFilter !== "All"
+        ? tt("recBulkOutboundSyncConfirmOutlet", '선택한 매출처({outlet})의 Order 미수금만 출고 기준으로 다시 맞춥니다. 계속할까요?').replace(
+            /\{outlet\}/g,
+            salesOutletFilter
+          )
+        : tt(
+            "recBulkOutboundSyncConfirmAll",
+            "전체 매출처의 Order 미수금을 출고(본사 출고 로그) 기준으로 다시 맞춥니다. 계속할까요?"
+          )
+    const ok = await appConfirm(msg)
+    if (!ok) return
+    setBulkOutboundRecSyncing(true)
+    let lastReceivableId = 0
+    const acc = {
+      processed: 0,
+      updated: 0,
+      removed: 0,
+      skipped: 0,
+      errors: 0,
+      cartFallback: 0,
+    }
+    try {
+      for (;;) {
+        const r = await syncAllOrderReceivablesFromOutboundBatch({
+          lastReceivableId,
+          batchSize: 120,
+          userRole: auth?.role,
+          storeFilter: salesOutletFilter !== "All" ? salesOutletFilter : undefined,
+        })
+        if (!r.success) {
+          await appAlert(translateApiMessage(r.message, t) || r.message || t("processFail") || "실패")
+          break
+        }
+        const s = r.stats
+        if (s) {
+          acc.processed += s.processed
+          acc.updated += s.updated
+          acc.removed += s.removed
+          acc.skipped += s.skipped
+          acc.errors += s.errors
+          acc.cartFallback += s.cartFallback
+        }
+        lastReceivableId = Number(r.nextReceivableId ?? lastReceivableId)
+        setBulkOutboundRecProgress(
+          tt(
+            "recBulkOutboundSyncProgress",
+            `출고 맞춤 처리 중… 누적 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped} / 카트대체 ${acc.cartFallback} / 오류 ${acc.errors})`
+          )
+            .replace(/\{processed\}/g, String(acc.processed))
+            .replace(/\{updated\}/g, String(acc.updated))
+            .replace(/\{removed\}/g, String(acc.removed))
+            .replace(/\{skipped\}/g, String(acc.skipped))
+            .replace(/\{fallback\}/g, String(acc.cartFallback))
+            .replace(/\{errors\}/g, String(acc.errors))
+        )
+        if (!r.hasMore) {
+          const detail =
+            r.errorSamples?.length
+              ? `\n${r.errorSamples.map((e) => `#${e.orderId}: ${translateApiMessage(e.message, t) || e.message}`).join("\n")}`
+              : ""
+          await appAlert(
+            tt(
+              "recBulkOutboundSyncDone",
+              `출고 기준 일괄 맞춤 완료: 처리 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped} / 오류 ${acc.errors} / 카트대체 ${acc.cartFallback})`
+            )
+              .replace(/\{processed\}/g, String(acc.processed))
+              .replace(/\{updated\}/g, String(acc.updated))
+              .replace(/\{removed\}/g, String(acc.removed))
+              .replace(/\{skipped\}/g, String(acc.skipped))
+              .replace(/\{errors\}/g, String(acc.errors))
+              .replace(/\{fallback\}/g, String(acc.cartFallback)) + detail
+          )
+          loadList()
+          break
+        }
+      }
+    } catch (e) {
+      await appAlert((t("processFail") || "실패") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBulkOutboundRecSyncing(false)
+      setBulkOutboundRecProgress("")
+    }
+  }, [auth?.role, loadList, salesOutletFilter, t, tt])
+
   React.useEffect(() => {
     setHasSearchedList(false)
   }, [tab])
@@ -420,25 +540,47 @@ export function ReceivablePayableTab() {
     return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
   }
 
-  const togglePayableRowExpand = React.useCallback(async (row: { id?: number; ref_type?: string; ref_id?: number }) => {
-    const key = row.id ? `pay-${row.id}` : `${row.ref_type}-${row.ref_id}`
-    if (expandedPayableRowId === key) {
-      setExpandedPayableRowId(null)
-      return
-    }
-    setExpandedPayableRowId(key)
-    if (payableItemsCache[key]) return
-    if (row.ref_type !== "Inbound" && row.ref_type !== "PO" || !row.ref_id) return
-    setLoadingItemsFor(key)
-    try {
-      const { items } = await getPayableTransactionItems({ refType: row.ref_type, refId: Number(row.ref_id) })
-      setPayableItemsCache((c) => ({ ...c, [key]: items }))
-    } catch {
-      setPayableItemsCache((c) => ({ ...c, [key]: [] }))
-    } finally {
-      setLoadingItemsFor(null)
-    }
-  }, [expandedPayableRowId, payableItemsCache])
+  const transactionLineRowKey = (
+    mode: "pay" | "rec",
+    row: { id?: number; ref_type?: string; ref_id?: number }
+  ) => (row.id != null ? `${mode}-${row.id}` : `${mode}-${row.ref_type ?? "x"}-${row.ref_id ?? "0"}`)
+
+  const toggleLineItemsExpand = React.useCallback(
+    async (mode: "pay" | "rec", row: { id?: number; ref_type?: string; ref_id?: number; invoice_no?: string; memo?: string }) => {
+      const key = transactionLineRowKey(mode, row)
+      if (expandedPayableRowId === key) {
+        setExpandedPayableRowId(null)
+        return
+      }
+      setExpandedPayableRowId(key)
+      if (payableItemsCache[key]) return
+
+      const refType = row.ref_type
+      let refId: number | undefined
+      if (refType === "Order") {
+        refId = orderIdFromReceivableOrderRow(row)
+      } else if (refType === "Inbound" || refType === "PO") {
+        const rid = Number(row.ref_id)
+        if (rid > 0 && !Number.isNaN(rid)) refId = rid
+      }
+
+      if (!refType || refId == null) {
+        setPayableItemsCache((c) => ({ ...c, [key]: { items: [] } }))
+        return
+      }
+
+      setLoadingItemsFor(key)
+      try {
+        const { items, orderInvoiceTotals } = await getPayableTransactionItems({ refType, refId })
+        setPayableItemsCache((c) => ({ ...c, [key]: { items, orderInvoiceTotals } }))
+      } catch {
+        setPayableItemsCache((c) => ({ ...c, [key]: { items: [] } }))
+      } finally {
+        setLoadingItemsFor(null)
+      }
+    },
+    [expandedPayableRowId, payableItemsCache]
+  )
 
   const escapeXml = (s: string) =>
     String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -552,7 +694,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <tr className="border-b">
                         <th className="text-center py-1 px-2 w-[115px]">{t("date") || "날짜"}</th>
                         <th className="text-center py-1 px-2 w-[95px]">{t("type") || "구분"}</th>
-                        {isRec && <th className="text-center py-1 px-2 w-[110px]">{t("recColOrderNo") || "주문번호"}</th>}
+                        {isRec && (
+                          <th className="text-center py-1 px-2 w-[160px] whitespace-nowrap">
+                            {t("recColOrderNo") || "주문번호"}
+                          </th>
+                        )}
                         {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "인보이스"}</th>}
                         <th className="text-center py-1 px-2 w-[95px]">{isRec ? (t("recColReceiveStatus") || "수령여부") : (t("payColPaymentStatus") || "지급여부")}</th>
                         {isRec && <th className="text-center py-1 px-2 w-[88px] whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>}
@@ -573,7 +719,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <tr key={i} className="border-b border-border/50">
                           <td className="py-1 px-2">{row.trans_date || "-"}</td>
                           <td className="py-1 px-2">{typeLabel(row.ref_type || "")}</td>
-                          {isRec && <td className="py-1 px-2">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>}
+                          {isRec && (
+                            <td className="py-1 px-2 w-[160px] whitespace-nowrap">
+                              {row.ref_type === "Order"
+                                ? row.invoice_no ||
+                                  (row.ref_id && row.trans_date
+                                    ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}`
+                                    : row.ref_id
+                                      ? `#${row.ref_id}`
+                                      : "") ||
+                                  "-"
+                                : "-"}
+                            </td>
+                          )}
                           {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급"))}</td>
                           {isRec && (
@@ -645,16 +803,37 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
                       {t("recFilterUnpaidOnly") || "미수만"}
                     </label>
-                    <Button size="sm" onClick={handleLoadList} disabled={loading || bulkRecSyncing} className="h-9">
+                    <Button
+                      size="sm"
+                      onClick={handleLoadList}
+                      disabled={loading || bulkRecSyncing || bulkOutboundRecSyncing}
+                      className="h-9"
+                    >
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
                     {showBulkRecSyncBtn && (
                       <Button
                         size="sm"
+                        variant="default"
+                        onClick={() => void handleBulkOutboundSyncOrderReceivables()}
+                        disabled={loading || bulkRecSyncing || bulkOutboundRecSyncing}
+                        className="h-9"
+                        title={tt(
+                          "recBulkOutboundSyncBtnTitle",
+                          "Order 미수금을 출고 로그·출고 화면과 같은 합계로 전건 재설정합니다. 시간이 걸릴 수 있습니다."
+                        )}
+                      >
+                        <ArrowRightLeft className={cn("h-4 w-4 mr-1", bulkOutboundRecSyncing && "animate-spin")} />
+                        {tt("recBulkOutboundSyncBtn", "출고 기준 일괄 맞춤")}
+                      </Button>
+                    )}
+                    {showBulkRecSyncBtn && (
+                      <Button
+                        size="sm"
                         variant="secondary"
                         onClick={() => void handleBulkSyncOrderReceivables()}
-                        disabled={loading || bulkRecSyncing}
+                        disabled={loading || bulkRecSyncing || bulkOutboundRecSyncing}
                         className="h-9"
                         title={tt(
                           "recBulkSyncBtnTitle",
@@ -674,6 +853,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       {t("excelBtn")}
                     </Button>
                   </div>
+                  {bulkOutboundRecProgress ? (
+                    <p className="text-xs text-muted-foreground mb-1">{bulkOutboundRecProgress}</p>
+                  ) : null}
                   {bulkRecProgress ? (
                     <p className="text-xs text-muted-foreground mb-2">{bulkRecProgress}</p>
                   ) : null}
@@ -726,25 +908,39 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               <table className="w-full text-sm border-collapse table-fixed">
                                 <thead>
                                   <tr className="border-b bg-muted/50">
+                                    <th className="text-center py-2 px-2 w-[35px] font-semibold" aria-hidden />
                                     <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
-                                    <th className="text-center py-2 px-4 w-[110px] font-semibold">{t("recColOrderNo") || "주문번호"}</th>
+                                    <th className="text-center py-2 px-3 w-[160px] min-w-[160px] font-semibold whitespace-nowrap">
+                                      {t("recColOrderNo") || "주문번호"}
+                                    </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
                                     <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                     {showRecSyncBtn && (
                                       <th
-                                        className="text-center py-2 px-1 w-[52px] text-xs font-semibold text-muted-foreground"
-                                        title={tt("recSyncOrderColHint", "출고·직접정산 규칙에 맞게 본사 미수 재계산")}
+                                        className="text-center py-2 px-1 w-[88px] text-xs font-semibold text-muted-foreground"
+                                        title={`${tt("recSyncOrderColHint", "카트·직접정산")} / ${tt("recSyncOutboundColHint", "출고 관리 합계")}`}
                                       >
-                                        ↻
+                                        {tt("recSyncAlignColShort", "맞춤")}
                                       </th>
                                     )}
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {tableItems.map((row) => {
+                                    const rowOrderId =
+                                      row.ref_type === "Order" ? orderIdFromReceivableOrderRow(row) : undefined
+                                    const recRowKey = transactionLineRowKey("rec", row)
+                                    const canExpandRecLines =
+                                      row.ref_type === "Order" && rowOrderId != null && row.id != null
+                                    const isRecExpanded = expandedPayableRowId === recRowKey
+                                    const recLineEntry = payableItemsCache[recRowKey]
+                                    const recLineItems = recLineEntry?.items ?? []
+                                    const recOrderTotals = recLineEntry?.orderInvoiceTotals
+                                    const recLinesLoading = loadingItemsFor === recRowKey
+                                    const recLineColSpan = 8 + (showRecSyncBtn ? 1 : 0)
                                     const canEditReceiveCheck =
                                       row.ref_type === "Order" &&
                                       row.id != null &&
@@ -753,11 +949,63 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         auth?.store || "",
                                         item.storeName || ""
                                       )
+                                    const orderNoDisplay =
+                                      row.ref_type === "Order"
+                                        ? row.invoice_no ||
+                                          (rowOrderId != null ? `#${rowOrderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
+                                          "-"
+                                        : "-"
                                     return (
-                                    <tr key={row.id} className="border-b border-border/50">
+                                    <React.Fragment key={row.id ?? recRowKey}>
+                                    <tr className="border-b border-border/50">
+                                      <td
+                                        className={cn(
+                                          "py-1.5 px-2 w-[35px] text-center align-middle",
+                                          canExpandRecLines && "cursor-pointer"
+                                        )}
+                                        onClick={() => {
+                                          if (canExpandRecLines) void toggleLineItemsExpand("rec", row)
+                                        }}
+                                      >
+                                        {canExpandRecLines ? (
+                                          recLinesLoading ? (
+                                            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                          ) : isRecExpanded ? (
+                                            <ChevronDown className="h-4 w-4 mx-auto" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4 mx-auto" />
+                                          )
+                                        ) : null}
+                                      </td>
                                       <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
                                       <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "Order" ? (t("recTypeOrder") || "주문") : (t("recTypeReceive") || "수령")}</td>
-                                      <td className="py-1.5 px-4 w-[110px] text-muted-foreground">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>
+                                      <td
+                                        className={cn(
+                                          "py-1.5 px-3 w-[160px] min-w-[160px] whitespace-nowrap",
+                                          canExpandRecLines
+                                            ? "text-primary cursor-pointer hover:underline font-medium"
+                                            : "text-muted-foreground"
+                                        )}
+                                        title={
+                                          canExpandRecLines
+                                            ? tt("recClickOrderForLines", "클릭하면 주문 품목 목록을 펼칩니다.")
+                                            : undefined
+                                        }
+                                        onClick={() => {
+                                          if (canExpandRecLines) void toggleLineItemsExpand("rec", row)
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (!canExpandRecLines) return
+                                          if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault()
+                                            void toggleLineItemsExpand("rec", row)
+                                          }
+                                        }}
+                                        role={canExpandRecLines ? "button" : undefined}
+                                        tabIndex={canExpandRecLines ? 0 : undefined}
+                                      >
+                                        {orderNoDisplay}
+                                      </td>
                                       <td className="py-1.5 px-4 w-[95px] text-center">
                                         <span className={cn(
                                           "text-xs font-medium px-2 py-0.5 rounded",
@@ -800,23 +1048,152 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                                       <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                       {showRecSyncBtn && (
-                                        <td className="py-1.5 px-1 w-[52px] text-center align-middle">
-                                          {row.ref_type === "Order" && row.ref_id != null ? (
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-8 w-8 p-0 shrink-0"
-                                              disabled={syncingOrderId === row.ref_id}
-                                              title={tt("recSyncOrderBtnTitle", "본사 미수 재동기화 (지두방·직접정산 반영)")}
-                                              onClick={() => void handleSyncOrderReceivable(row.ref_id)}
-                                            >
-                                              <RefreshCw className={cn("h-4 w-4", syncingOrderId === row.ref_id && "animate-spin")} />
-                                            </Button>
+                                        <td className="py-1.5 px-1 w-[88px] text-center align-middle">
+                                          {row.ref_type === "Order" && rowOrderId != null ? (
+                                            <div className="flex justify-center items-center gap-0.5">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 shrink-0"
+                                                disabled={syncPair != null}
+                                                title={tt("recSyncOrderBtnTitle", "본사 미수 재동기화 (지두방·직접정산 반영)")}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  void handleSyncOrderReceivable(rowOrderId)
+                                                }}
+                                              >
+                                                <RefreshCw
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    syncPair?.orderId === rowOrderId && syncPair?.kind === "cart" && "animate-spin"
+                                                  )}
+                                                />
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 shrink-0"
+                                                disabled={syncPair != null}
+                                                title={tt("recSyncOutboundBtnTitle", "출고 관리 합계에 맞춤 (출고 로그·수량 반영)")}
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  void handleSyncOrderReceivableFromOutbound(rowOrderId)
+                                                }}
+                                              >
+                                                <ArrowRightLeft
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    syncPair?.orderId === rowOrderId && syncPair?.kind === "outbound" && "animate-spin"
+                                                  )}
+                                                />
+                                              </Button>
+                                            </div>
                                           ) : null}
                                         </td>
                                       )}
                                     </tr>
+                                    {isRecExpanded && (
+                                      <tr className="border-b border-border/50 bg-muted/10">
+                                        <td colSpan={recLineColSpan} className="py-2 px-4">
+                                          {recLinesLoading ? (
+                                            <p className="text-xs text-muted-foreground py-2">{t("loadingItems")}</p>
+                                          ) : recLineItems.length > 0 ? (
+                                            <div className="ml-4 rounded border border-border/50 bg-background p-3 text-xs">
+                                              <div className="mb-2 font-semibold text-muted-foreground">
+                                                {t("outColItem") || "품목"}
+                                              </div>
+                                              <p className="mb-2 text-[11px] text-muted-foreground">
+                                                {tt(
+                                                  "recLineItemsVatHint",
+                                                  "행 금액은 VAT 포함 합계입니다. 아래 품목 금액은 공급가(단가×수량)이며, 맨 아래 소계·VAT·합계로 맞춥니다."
+                                                )}
+                                              </p>
+                                              <table className="w-full text-xs">
+                                                <thead>
+                                                  <tr className="border-b">
+                                                    <th className="py-1 px-2 text-left font-medium">
+                                                      {tt("balLineItemName", "품목명")}
+                                                    </th>
+                                                    <th className="py-1 px-2 text-center font-medium">
+                                                      {tt("balLineItemQty", "수량")}
+                                                    </th>
+                                                    <th className="py-1 px-2 text-right font-medium">
+                                                      {tt("balLineItemUnit", "단가")}
+                                                    </th>
+                                                    <th className="py-1 px-2 text-right font-medium">
+                                                      {tt("balLineItemAmountExclVat", "공급가액")}
+                                                    </th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {recLineItems.map((it, i) => (
+                                                    <tr key={i} className="border-b border-border/30">
+                                                      <td className="py-1 px-2">
+                                                        {it.name || it.code || "-"}
+                                                        {it.spec ? (
+                                                          <span className="block text-muted-foreground">({it.spec})</span>
+                                                        ) : null}
+                                                      </td>
+                                                      <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
+                                                      <td className="py-1 px-2 text-right tabular-nums">
+                                                        {it.unitCost != null ? `฿${it.unitCost.toLocaleString()}` : "-"}
+                                                      </td>
+                                                      <td className="py-1 px-2 text-right tabular-nums font-medium">
+                                                        ฿{(it.amount ?? 0).toLocaleString()}
+                                                      </td>
+                                                    </tr>
+                                                  ))}
+                                                  {recOrderTotals ? (
+                                                    <>
+                                                      <tr className="border-t-2 border-border/50 bg-muted/20">
+                                                        <td
+                                                          colSpan={3}
+                                                          className="py-1.5 px-2 text-right text-muted-foreground"
+                                                        >
+                                                          {tt("recLineSubtotal", "소계 (공급가)")}
+                                                        </td>
+                                                        <td className="py-1.5 px-2 text-right tabular-nums font-medium">
+                                                          ฿{recOrderTotals.subtotalRounded.toLocaleString()}
+                                                        </td>
+                                                      </tr>
+                                                      <tr className="bg-muted/20">
+                                                        <td
+                                                          colSpan={3}
+                                                          className="py-1.5 px-2 text-right text-muted-foreground"
+                                                        >
+                                                          {tt("recLineVat7", "VAT 7%")}
+                                                        </td>
+                                                        <td className="py-1.5 px-2 text-right tabular-nums">
+                                                          ฿{recOrderTotals.vatRounded.toLocaleString()}
+                                                        </td>
+                                                      </tr>
+                                                      <tr className="bg-muted/20">
+                                                        <td
+                                                          colSpan={3}
+                                                          className="py-1.5 px-2 text-right font-semibold"
+                                                        >
+                                                          {tt("recLineGrandTotal", "합계 (VAT 포함 · 미수 금액과 동일 규칙)")}
+                                                        </td>
+                                                        <td className="py-1.5 px-2 text-right tabular-nums font-bold">
+                                                          ฿{recOrderTotals.grandTotal.toLocaleString()}
+                                                        </td>
+                                                      </tr>
+                                                    </>
+                                                  ) : null}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-muted-foreground py-2">
+                                              {tt("balLineItemsEmpty", "조회된 품목이 없습니다.")}
+                                            </p>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    </React.Fragment>
                                     )
                                   })}
                                 </tbody>
@@ -953,21 +1330,24 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                 </thead>
                                 <tbody>
                                   {tableItems.map((row) => {
-                                    const rowKey = row.id ? `pay-${row.id}` : `${row.ref_type}-${row.ref_id}`
+                                    const rowKey = transactionLineRowKey("pay", row)
                                     const canExpand = (row.ref_type === "Inbound" || row.ref_type === "PO") && row.ref_id
                                     const isExpanded = expandedPayableRowId === rowKey
-                                    const items = payableItemsCache[rowKey]
+                                    const payLineEntry = payableItemsCache[rowKey]
+                                    const items = payLineEntry?.items ?? []
                                     const isLoading = loadingItemsFor === rowKey
                                     return (
                                       <React.Fragment key={row.id ?? rowKey}>
-                                        <tr
-                                          className={cn(
-                                            "border-b border-border/50",
-                                            canExpand && "cursor-pointer hover:bg-muted/20"
-                                          )}
-                                          onClick={() => canExpand && togglePayableRowExpand(row)}
-                                        >
-                                          <td className="py-1.5 px-4 w-[35px] text-center">
+                                        <tr className="border-b border-border/50">
+                                          <td
+                                            className={cn(
+                                              "py-1.5 px-4 w-[35px] text-center",
+                                              canExpand && "cursor-pointer hover:bg-muted/20"
+                                            )}
+                                            onClick={() => {
+                                              if (canExpand) void toggleLineItemsExpand("pay", row)
+                                            }}
+                                          >
                                             {canExpand ? (
                                               isLoading ? (
                                                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -978,7 +1358,29 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           </td>
                                           <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
                                           <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "PO" ? (t("payTypePO") || "발주") : (t("payTypePayment") || "지급")}</td>
-                                          <td className="py-1.5 px-4 w-[100px] text-center">
+                                          <td
+                                            className={cn(
+                                              "py-1.5 px-4 w-[100px] text-center",
+                                              canExpand && "cursor-pointer hover:bg-muted/20 text-primary font-medium hover:underline"
+                                            )}
+                                            title={
+                                              canExpand
+                                                ? tt("payClickInvoiceForLines", "클릭하면 입고·발주 품목 목록을 펼칩니다.")
+                                                : row.invoice_no || undefined
+                                            }
+                                            onClick={() => {
+                                              if (canExpand) void toggleLineItemsExpand("pay", row)
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (!canExpand) return
+                                              if (e.key === "Enter" || e.key === " ") {
+                                                e.preventDefault()
+                                                void toggleLineItemsExpand("pay", row)
+                                              }
+                                            }}
+                                            role={canExpand ? "button" : undefined}
+                                            tabIndex={canExpand ? 0 : undefined}
+                                          >
                                             {(row.ref_type === "Inbound" || row.ref_type === "PO") ? (
                                               row.invoice_received ? (
                                                 <span className="text-xs text-green-700 dark:text-green-400" title={row.invoice_no || ""}>
@@ -1000,32 +1402,55 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                                           <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                         </tr>
-                                        {isExpanded && items && items.length > 0 && (
+                                        {isExpanded && (
                                           <tr className="border-b border-border/50 bg-muted/10">
                                             <td colSpan={7} className="py-2 px-4">
-                                              <div className="ml-4 rounded border border-border/50 bg-background p-3 text-xs">
-                                                <div className="mb-2 font-semibold text-muted-foreground">{t("outColItem") || "품목"}</div>
-                                                <table className="w-full text-xs">
-                                                  <thead>
-                                                    <tr className="border-b">
-                                                      <th className="py-1 px-2 text-left font-medium">품목명</th>
-                                                      <th className="py-1 px-2 text-center font-medium">수량</th>
-                                                      <th className="py-1 px-2 text-right font-medium">단가</th>
-                                                      <th className="py-1 px-2 text-right font-medium">금액</th>
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody>
-                                                    {items.map((it, i) => (
-                                                      <tr key={i} className="border-b border-border/30">
-                                                        <td className="py-1 px-2">{it.name || it.code || "-"}</td>
-                                                        <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
-                                                        <td className="py-1 px-2 text-right tabular-nums">{it.unitCost != null ? `฿${it.unitCost.toLocaleString()}` : "-"}</td>
-                                                        <td className="py-1 px-2 text-right tabular-nums font-medium">฿{(it.amount ?? 0).toLocaleString()}</td>
+                                              {isLoading ? (
+                                                <p className="text-xs text-muted-foreground py-2">{t("loadingItems")}</p>
+                                              ) : items.length > 0 ? (
+                                                <div className="ml-4 rounded border border-border/50 bg-background p-3 text-xs">
+                                                  <div className="mb-2 font-semibold text-muted-foreground">{t("outColItem") || "품목"}</div>
+                                                  <table className="w-full text-xs">
+                                                    <thead>
+                                                      <tr className="border-b">
+                                                        <th className="py-1 px-2 text-left font-medium">
+                                                          {tt("balLineItemName", "품목명")}
+                                                        </th>
+                                                        <th className="py-1 px-2 text-center font-medium">
+                                                          {tt("balLineItemQty", "수량")}
+                                                        </th>
+                                                        <th className="py-1 px-2 text-right font-medium">
+                                                          {tt("balLineItemUnit", "단가")}
+                                                        </th>
+                                                        <th className="py-1 px-2 text-right font-medium">{t("amount") || "금액"}</th>
                                                       </tr>
-                                                    ))}
-                                                  </tbody>
-                                                </table>
-                                              </div>
+                                                    </thead>
+                                                    <tbody>
+                                                      {items.map((it, i) => (
+                                                        <tr key={i} className="border-b border-border/30">
+                                                          <td className="py-1 px-2">
+                                                            {it.name || it.code || "-"}
+                                                            {it.spec ? (
+                                                              <span className="block text-muted-foreground">({it.spec})</span>
+                                                            ) : null}
+                                                          </td>
+                                                          <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
+                                                          <td className="py-1 px-2 text-right tabular-nums">
+                                                            {it.unitCost != null ? `฿${it.unitCost.toLocaleString()}` : "-"}
+                                                          </td>
+                                                          <td className="py-1 px-2 text-right tabular-nums font-medium">
+                                                            ฿{(it.amount ?? 0).toLocaleString()}
+                                                          </td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              ) : (
+                                                <p className="text-xs text-muted-foreground py-2">
+                                                  {tt("balLineItemsEmpty", "조회된 품목이 없습니다.")}
+                                                </p>
+                                              )}
                                             </td>
                                           </tr>
                                         )}

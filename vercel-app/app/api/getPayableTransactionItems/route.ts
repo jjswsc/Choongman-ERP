@@ -1,5 +1,6 @@
 /**
- * 미지급금 거래별 품목 조회
+ * 미수·미지급 거래별 품목 조회
+ * - ref_type=Order, ref_id=order_id → orders.cart_json (주문 품목)
  * - ref_type=Inbound, ref_id=batch_id → stock_logs (입고 품목)
  * - ref_type=PO, ref_id=po_id → purchase_orders.cart_json (발주 품목)
  * - 그 외(Payment, Opening 등) → 빈 배열
@@ -7,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 
 export interface PayableItemRow {
   code?: string
@@ -17,6 +19,9 @@ export interface PayableItemRow {
   amount: number
 }
 
+/** 주문 품목 공급가 합계 기준 — 미수금·출고 인보이스와 동일 (소계 round → VAT 7% round → 합계) */
+export type OrderInvoiceTotals = ReturnType<typeof thaiInvoiceTotalsFromRawSubtotal>
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -25,12 +30,45 @@ export async function GET(request: NextRequest) {
     const refType = String(searchParams.get('refType') || '').trim()
     const refId = Number(searchParams.get('refId') || 0)
     if (!refType || !refId || isNaN(refId)) {
-      return NextResponse.json({ items: [] }, { headers })
+      return NextResponse.json({ items: [], orderInvoiceTotals: undefined }, { headers })
     }
 
     const items: PayableItemRow[] = []
+    let orderInvoiceTotals: OrderInvoiceTotals | undefined
 
-    if (refType === 'Inbound') {
+    if (refType === 'Order') {
+      const orderRows = (await supabaseSelectFilter('orders', `id=eq.${refId}`, {
+        select: 'cart_json',
+        limit: 1,
+      })) as { cart_json?: string | null }[] | null
+      const cartJson = orderRows?.[0]?.cart_json
+      if (cartJson) {
+        try {
+          const cart = JSON.parse(cartJson) as unknown
+          if (Array.isArray(cart)) {
+            for (const raw of cart) {
+              const c = raw as { code?: string; name?: string; spec?: string; qty?: number; price?: number }
+              const qty = Number(c.qty) || 0
+              const price = Number(c.price) || 0
+              items.push({
+                code: c.code ? String(c.code).trim() : undefined,
+                name: c.name ? String(c.name) : '-',
+                spec: c.spec != null ? String(c.spec) : undefined,
+                qty,
+                unitCost: price,
+                amount: qty * price,
+              })
+            }
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+      const rawSum = items.reduce((s, it) => s + Number(it.amount || 0), 0)
+      if (items.length > 0) {
+        orderInvoiceTotals = thaiInvoiceTotalsFromRawSubtotal(rawSum)
+      }
+    } else if (refType === 'Inbound') {
       const logRows = (await supabaseSelectFilter('stock_logs', `inbound_batch_id=eq.${refId}`, {
         select: 'item_code,item_name,spec,qty,unit_cost',
         limit: 500,
@@ -87,9 +125,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ items }, { headers })
+    return NextResponse.json({ items, orderInvoiceTotals }, { headers })
   } catch (e) {
     console.error('getPayableTransactionItems:', e)
-    return NextResponse.json({ items: [] }, { headers })
+    return NextResponse.json({ items: [], orderInvoiceTotals: undefined }, { headers })
   }
 }

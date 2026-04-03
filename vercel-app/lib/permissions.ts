@@ -41,6 +41,26 @@ export function isOfficeRole(role: string): boolean {
   return OFFICE_ROLES.some((x) => r.includes(x))
 }
 
+/** 직원 등록 폼의 role 값이 Officer / Director(로그인 권한 등급)인지 */
+export function isEmployeeAuthRoleOfficerOrDirector(formRole: string): boolean {
+  const r = String(formRole || "").trim().toLowerCase()
+  return r === "officer" || r === "director"
+}
+
+/** Officer·Director 역할을 새로 지정하거나 바꿀 수 있는지 — Director급(director/ceo/hr)만 */
+export function canAssignEmployeeOfficerDirectorRoles(actorRole: string): boolean {
+  return isDirectorRole(actorRole)
+}
+
+const EMPLOYEE_FORM_ROLES = ["Staff", "Manager", "Franchisee", "Officer", "Director"] as const
+
+/** 직원 폼·DB role 문자열을 폼 옵션 표기(Staff, …)로 통일 */
+export function canonicalEmployeeFormRole(r: string): string {
+  const lo = String(r || "").trim().toLowerCase()
+  const hit = EMPLOYEE_FORM_ROLES.find((x) => x.toLowerCase() === lo)
+  return hit || (String(r || "").trim() || "Staff")
+}
+
 /** 매장 매니저인지 */
 export function isManagerRole(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()

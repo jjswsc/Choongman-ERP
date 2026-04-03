@@ -129,6 +129,23 @@ function calcNetPay(r: PayrollRow): number {
   return Math.max(0, income - deduct)
 }
 
+/** 직원 관리(/admin/employees)에서 해당 직원 수정 폼을 열 링크 */
+function employeeAdminEditHref(r: PayrollRow): string {
+  const id = Number(r.employeeId)
+  if (Number.isFinite(id) && id > 0) {
+    return `/admin/employees?employeeId=${encodeURIComponent(String(id))}`
+  }
+  const code = String(r.employeeCode || "").trim()
+  if (!code || code === "-") return ""
+  const q = new URLSearchParams()
+  q.set("employeeCode", code)
+  const st = String(r.store || "").trim()
+  if (st) q.set("store", st)
+  const nm = String(r.name || "").trim()
+  if (nm) q.set("name", nm)
+  return `/admin/employees?${q.toString()}`
+}
+
 export function AdminPayrollCalc() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -147,6 +164,11 @@ export function AdminPayrollCalc() {
 
   const [editOpen, setEditOpen] = useState(false)
   const [editIdx, setEditIdx] = useState(-1)
+  const [editPosAllow, setEditPosAllow] = useState("0")
+  const [editHazAllow, setEditHazAllow] = useState("0")
+  const [editDiligenceAllow, setEditDiligenceAllow] = useState("0")
+  const [editBirthBonus, setEditBirthBonus] = useState("0")
+  const [editHolidayPay, setEditHolidayPay] = useState("0")
   const [editSplBonus, setEditSplBonus] = useState("0")
   const [editOtAmt, setEditOtAmt] = useState("0")
   const [editLateDed, setEditLateDed] = useState("0")
@@ -366,6 +388,11 @@ export function AdminPayrollCalc() {
   const openEdit = (idx: number) => {
     const r = list[idx]
     setEditIdx(idx)
+    setEditPosAllow(String(r.posAllow ?? 0))
+    setEditHazAllow(String(r.hazAllow ?? 0))
+    setEditDiligenceAllow(String(r.diligenceAllow ?? 0))
+    setEditBirthBonus(String(r.birthBonus ?? 0))
+    setEditHolidayPay(String(r.holidayPay ?? 0))
     setEditSplBonus(String(r.splBonus || 0))
     setEditOtAmt(String(r.otAmt || 0))
     setEditLateDed(String(r.lateDed || 0))
@@ -377,6 +404,11 @@ export function AdminPayrollCalc() {
   const applyEdit = () => {
     if (editIdx < 0) return
     const r = list[editIdx]
+    const posAllow = Number(editPosAllow) || 0
+    const hazAllow = Number(editHazAllow) || 0
+    const diligenceAllow = Number(editDiligenceAllow) || 0
+    const birthBonus = Number(editBirthBonus) || 0
+    const holidayPay = Number(editHolidayPay) || 0
     const splBonus = Number(editSplBonus) || 0
     const otAmt = Number(editOtAmt) || 0
     const lateDed = Number(editLateDed) || 0
@@ -384,12 +416,29 @@ export function AdminPayrollCalc() {
     const otherDed = Number(editOtherDed) || 0
     const updated: PayrollRow = {
       ...r,
+      posAllow,
+      hazAllow,
+      diligenceAllow,
+      birthBonus,
+      holidayPay,
       splBonus,
       otAmt,
       lateDed,
       sso,
       otherDed,
-      netPay: calcNetPay({ ...r, splBonus, otAmt, lateDed, sso, otherDed }),
+      netPay: calcNetPay({
+        ...r,
+        posAllow,
+        hazAllow,
+        diligenceAllow,
+        birthBonus,
+        holidayPay,
+        splBonus,
+        otAmt,
+        lateDed,
+        sso,
+        otherDed,
+      }),
     }
     setList((prev) => prev.map((row, i) => (i === editIdx ? updated : row)))
     setEditOpen(false)
@@ -561,14 +610,14 @@ export function AdminPayrollCalc() {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
-                  <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4rem] max-w-[5.5rem]">{t("pay_col_store")}</th>
-                  <th rowSpan={2} className="p-1.5 text-left font-medium min-w-[4.5rem] max-w-[6.5rem]">{t("pay_col_name")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4rem] max-w-[5.5rem]">{t("pay_col_store")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4.5rem] max-w-[6.5rem]">{t("pay_col_name")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4.5rem]">{t("emp_label_employee_code")}</th>
-                  <th rowSpan={2} className="p-1.5 text-right font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
                   <th colSpan={6} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
                   <th colSpan={3} className="p-2 text-center font-medium text-destructive">{t("pay_deduct")}</th>
-                  <th rowSpan={2} className="p-1.5 text-right font-medium font-semibold bg-muted/70 whitespace-nowrap tabular-nums">{t("pay_net")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium font-semibold bg-muted/70 whitespace-nowrap tabular-nums">{t("pay_net")}</th>
                   <th
                     rowSpan={2}
                     className="p-1.5 text-center font-medium w-[4.5rem] min-w-[4.5rem] sticky right-0 z-20 bg-muted/95 backdrop-blur-sm border-l border-border shadow-[-6px_0_12px_-8px_rgba(0,0,0,0.25)] dark:bg-muted/95 dark:shadow-[-6px_0_12px_-8px_rgba(0,0,0,0.5)]"
@@ -591,18 +640,33 @@ export function AdminPayrollCalc() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((r, i) => (
+                {list.map((r, i) => {
+                  const empEditHref = employeeAdminEditHref(r)
+                  const empCode = String(r.employeeCode || "").trim()
+                  return (
                   <tr
                     key={`${r.store}_${r.name}_${i}`}
                     className="group border-b border-border/60 hover:bg-muted/30"
                   >
                     <td className="p-1.5 text-center">{i + 1}</td>
-                    <td className="p-1.5 font-medium truncate max-w-[5.5rem]" title={r.store}>{r.store}</td>
-                    <td className="p-1.5 min-w-0 max-w-[6.5rem]">
+                    <td className="p-1.5 font-medium truncate max-w-[5.5rem] text-center" title={r.store}>{r.store}</td>
+                    <td className="p-1.5 min-w-0 max-w-[6.5rem] text-center">
                       <span className="font-medium block truncate" title={r.name}>{r.name}</span>
                       {r.role ? <small className="text-muted-foreground block truncate" title={r.role}>{r.role}</small> : null}
                     </td>
-                    <td className="p-1.5 text-center whitespace-nowrap tabular-nums">{r.employeeCode || "-"}</td>
+                    <td className="p-1.5 text-center whitespace-nowrap tabular-nums">
+                      {empEditHref && empCode ? (
+                        <Link
+                          href={empEditHref}
+                          className="text-primary font-mono font-medium underline-offset-2 hover:underline"
+                          title={t("adminEmployees")}
+                        >
+                          {empCode}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(r.salary)}</td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
                       <button
@@ -714,7 +778,8 @@ export function AdminPayrollCalc() {
                       </Button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border bg-muted/80 font-semibold">
@@ -761,7 +826,7 @@ export function AdminPayrollCalc() {
       </CardContent>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("pay_modal_title")}</DialogTitle>
           </DialogHeader>
@@ -771,14 +836,62 @@ export function AdminPayrollCalc() {
                 <p className="font-semibold text-base">{list[editIdx].name}</p>
                 <p className="text-sm text-muted-foreground">{list[editIdx].store}</p>
               </div>
-              <div className="grid grid-cols-2 gap-4 py-2">
+              <p className="text-xs font-semibold text-primary mb-2">{t("pay_allowance")}</p>
+              <div className="grid grid-cols-2 gap-3 pb-3 border-b border-border">
+                <div>
+                  <label className="text-xs font-medium block mb-1">{t("pay_col_role")}</label>
+                  <Input
+                    type="number"
+                    value={editPosAllow}
+                    onChange={(e) => setEditPosAllow(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium block mb-1">{t("pay_col_risk")}</label>
+                  <Input
+                    type="number"
+                    value={editHazAllow}
+                    onChange={(e) => setEditHazAllow(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium block mb-1">{t("pay_col_diligence")}</label>
+                  <Input
+                    type="number"
+                    value={editDiligenceAllow}
+                    onChange={(e) => setEditDiligenceAllow(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium block mb-1">{t("pay_col_birth")}</label>
+                  <Input
+                    type="number"
+                    value={editBirthBonus}
+                    onChange={(e) => setEditBirthBonus(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="text-xs font-medium block mb-1">{t("pay_col_holiday")}</label>
+                  <Input
+                    type="number"
+                    value={editHolidayPay}
+                    onChange={(e) => setEditHolidayPay(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-3">
                 <div>
                   <label className="text-xs font-semibold text-primary block mb-1">➕ {t("pay_modal_ot")}</label>
                   <Input
                     type="number"
                     value={editOtAmt}
                     onChange={(e) => setEditOtAmt(e.target.value)}
-                    className="text-end"
+                    className="text-end h-9"
                   />
                 </div>
                 <div>
@@ -787,7 +900,7 @@ export function AdminPayrollCalc() {
                     type="number"
                     value={editSplBonus}
                     onChange={(e) => setEditSplBonus(e.target.value)}
-                    className="text-end"
+                    className="text-end h-9"
                   />
                 </div>
                 <div>
@@ -796,7 +909,7 @@ export function AdminPayrollCalc() {
                     type="number"
                     value={editLateDed}
                     onChange={(e) => setEditLateDed(e.target.value)}
-                    className="text-end"
+                    className="text-end h-9"
                   />
                 </div>
                 <div>
@@ -806,16 +919,16 @@ export function AdminPayrollCalc() {
                     min={0}
                     value={editSso}
                     onChange={(e) => setEditSso(e.target.value)}
-                    className="text-end"
+                    className="text-end h-9"
                   />
                 </div>
-                <div>
+                <div className="col-span-2">
                   <label className="text-xs font-semibold text-destructive block mb-1">➖ {t("pay_modal_other_ded")}</label>
                   <Input
                     type="number"
                     value={editOtherDed}
                     onChange={(e) => setEditOtherDed(e.target.value)}
-                    className="text-end"
+                    className="text-end h-9"
                   />
                 </div>
               </div>

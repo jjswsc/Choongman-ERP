@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { ORDERS_COMBINED_PENDING_COLS, STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
+import {
+  type OrderCartLine,
+  formatDateBangkok,
+  formatDateHourMinBangkok,
+  findReceivedCartLineIndex,
+  unitPriceFromOrderCart,
+} from '@/lib/outbound-order-line-match'
 
 export interface OutboundHistoryItem {
   date: string
@@ -83,6 +90,34 @@ export async function GET(request: NextRequest) {
       ...((outboundLogs || []) as { log_type?: string; log_date?: string; vendor_target?: string; item_code?: string; item_name?: string; qty?: number; order_id?: number; delivery_status?: string }[]),
       ...((forceLogs || []) as { log_type?: string; log_date?: string; vendor_target?: string; item_code?: string; item_name?: string; qty?: number; order_id?: number; delivery_status?: string }[]),
     ].sort((a, b) => new Date(b.log_date || 0).getTime() - new Date(a.log_date || 0).getTime())
+
+    /** 주문 출고(stock_logs) 줄 금액 = cart 단가×수량 (회계 미수금과 일치) */
+    const orderCartByOrderId: Record<string, OrderCartLine[]> = {}
+    const logOrderIds = new Set<number>()
+    for (const row of allLogs || []) {
+      if (String(row.log_type || '') === 'Outbound' && row.order_id != null) {
+        const oid = Number(row.order_id)
+        if (oid > 0) logOrderIds.add(oid)
+      }
+    }
+    if (logOrderIds.size > 0) {
+      const idsFilter = `id=in.(${[...logOrderIds].join(',')})`
+      const cartRows = (await supabaseSelectFilter('orders', idsFilter, {
+        select: 'id,cart_json',
+        limit: logOrderIds.size + 50,
+      })) as { id?: number; cart_json?: string }[]
+      for (const cr of cartRows || []) {
+        const oid = cr.id
+        if (oid == null) continue
+        let cart: OrderCartLine[] = []
+        try {
+          if (cr.cart_json) cart = JSON.parse(cr.cart_json) || []
+        } catch {
+          cart = []
+        }
+        orderCartByOrderId[String(oid)] = cart
+      }
+    }
 
     const startDate = new Date(startStr)
     startDate.setHours(0, 0, 0, 0)
@@ -200,11 +235,8 @@ export async function GET(request: NextRequest) {
           : typeCode === 'Outbound'
             ? '배송중'
             : ''
-      const dateStr = rowDate.toISOString().slice(0, 10)
-      const deliveryDateStr =
-        typeCode === 'Force'
-          ? rowDate.toISOString().slice(0, 16).replace('T', ' ')
-          : ''
+      const dateStr = formatDateBangkok(rowDate)
+      const deliveryDateStr = typeCode === 'Force' ? formatDateHourMinBangkok(rowDate) : ''
 
       const deliveryDateForItem =
         typeCode === 'Force' && row.delivery_status && String(row.delivery_status).match(/^\d{4}-\d{2}-\d{2}/)
@@ -212,6 +244,16 @@ export async function GET(request: NextRequest) {
           : typeCode === 'Force'
             ? deliveryDateStr || undefined
             : undefined
+      const qtyAbs = Math.abs(Number(row.qty) || 0)
+      let unitPrice = info.price
+      if (orderRowId && orderCartByOrderId[orderRowId]?.length) {
+        unitPrice = unitPriceFromOrderCart(
+          orderCartByOrderId[orderRowId],
+          code,
+          String(row.item_name || '').trim(),
+          info.price
+        )
+      }
       list.push({
         date: dateStr,
         target,
@@ -219,8 +261,8 @@ export async function GET(request: NextRequest) {
         name: String(row.item_name || '').trim(),
         code,
         spec: info.spec,
-        qty: Math.abs(Number(row.qty) || 0),
-        amount: info.price * Math.abs(Number(row.qty) || 0),
+        qty: qtyAbs,
+        amount: unitPrice * qtyAbs,
         orderRowId: orderRowId || undefined,
         deliveryStatus: deliveryStatus || undefined,
         deliveryDate: deliveryDateForItem || undefined,
@@ -262,7 +304,7 @@ export async function GET(request: NextRequest) {
         received_qty_json?: Record<string, number>
         original_order_qty_json?: Record<string, number>
         approved_original_qty_json?: Record<string, number>
-        cart?: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[]
+        cart?: OrderCartLine[]
       }> = {}
 
       // image_url 제외하여 대용량 수령 사진 전송 방지, 일괄 조회로 N+1 해소
@@ -307,7 +349,7 @@ export async function GET(request: NextRequest) {
         try {
           if (o.approved_original_qty_json) approvedOrigQtyMap = JSON.parse(String(o.approved_original_qty_json)) || {}
         } catch {}
-        let cart: { code?: string; name?: string; qty?: number }[] = []
+        let cart: OrderCartLine[] = []
         try {
           if (o.cart_json) cart = JSON.parse(o.cart_json) || []
         } catch {}
@@ -368,43 +410,42 @@ export async function GET(request: NextRequest) {
         const cart = o.cart || []
         const code = String(r.code || '').trim()
         const name = String(r.name || '').trim()
-        let matchIdx = -1
-        for (let ci = 0; ci < cart.length; ci++) {
-          const c = cart[ci]
-          if (String(c.code || '').trim() === code && String(c.name || '').trim() === name) {
-            if (o.received_indices!.indexOf(ci) !== -1) {
-              matchIdx = ci
-              break
-            }
-          }
+        const matchIdx = findReceivedCartLineIndex(cart, o.received_indices!, code, name)
+        let cartItem: OrderCartLine | undefined
+        if (matchIdx >= 0) {
+          const uk = key + '_' + matchIdx
+          if (usedByOrder[uk]) continue
+          usedByOrder[uk] = true
+          cartItem = cart[matchIdx]
         }
-        if (matchIdx === -1) continue
-        const uk = key + '_' + matchIdx
-        if (usedByOrder[uk]) continue
-        usedByOrder[uk] = true
-        const cartItem = cart[matchIdx]
         const finalQty = r.qty
-        const recQty = o.received_qty_json?.[String(matchIdx)] ?? finalQty
-        const origAtReceive = o.original_order_qty_json?.[String(matchIdx)]
-        const approvedOrig = o.approved_original_qty_json?.[String(matchIdx)]
-        const cartQty = Number(cartItem?.qty ?? 0)
-        const qtyStages: number[] = []
-        if (approvedOrig != null && approvedOrig !== cartQty) {
-          qtyStages.push(approvedOrig)
+        if (cartItem) {
+          const origAtReceive = o.original_order_qty_json?.[String(matchIdx)]
+          const approvedOrig = o.approved_original_qty_json?.[String(matchIdx)]
+          const cartQty = Number(cartItem?.qty ?? 0)
+          const qtyStages: number[] = []
+          if (approvedOrig != null && approvedOrig !== cartQty) {
+            qtyStages.push(approvedOrig)
+          }
+          const midQty = origAtReceive ?? cartQty
+          if (qtyStages.length > 0) {
+            if (midQty !== approvedOrig && midQty !== finalQty) qtyStages.push(midQty)
+          } else if (origAtReceive != null && origAtReceive !== finalQty) {
+            qtyStages.push(origAtReceive)
+          }
+          if (qtyStages.length > 0 && finalQty !== (qtyStages[qtyStages.length - 1] ?? 0)) {
+            qtyStages.push(finalQty)
+          }
+          if (qtyStages.length >= 2) {
+            r.qtyStages = qtyStages
+            if (qtyStages.length === 2) r.originalOrderQty = qtyStages[0]
+          }
+          const infoRow = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
+          const cartP = Number(cartItem.price)
+          const lineUnit = Number.isFinite(cartP) ? cartP : infoRow.price
+          r.amount = lineUnit * finalQty
         }
-        const midQty = origAtReceive ?? cartQty
-        if (qtyStages.length > 0) {
-          if (midQty !== approvedOrig && midQty !== finalQty) qtyStages.push(midQty)
-        } else if (origAtReceive != null && origAtReceive !== finalQty) {
-          qtyStages.push(origAtReceive)
-        }
-        if (qtyStages.length > 0 && finalQty !== (qtyStages[qtyStages.length - 1] ?? 0)) {
-          qtyStages.push(finalQty)
-        }
-        if (qtyStages.length >= 2) {
-          r.qtyStages = qtyStages
-          if (qtyStages.length === 2) r.originalOrderQty = qtyStages[0]
-        }
+        // cart 매칭 실패 시에도 출고 줄 유지(이전에는 continue 로 빠져 인보이스 합이 크게 어긋날 수 있었음)
         filteredList.push(r)
       }
 
@@ -429,7 +470,9 @@ export async function GET(request: NextRequest) {
           const code = String(c.code || '').trim()
           const info = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
           const qty = Number(c.qty || 0)
-          const amount = info.price * qty
+          const cartUnit = Number(c.price)
+          const unitPrice = Number.isFinite(cartUnit) ? cartUnit : info.price
+          const amount = unitPrice * qty
           filteredList.push({
             date: baseDate,
             target,

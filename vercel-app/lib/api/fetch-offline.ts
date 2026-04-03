@@ -177,6 +177,10 @@ const QUEUE_WHITELIST = new Set([
   '/api/updatePurchaseOrderInvoice',
   '/api/addBankTransaction',
   '/api/addExpenseAccrual',
+  '/api/syncOrderReceivable',
+  '/api/syncOrderReceivableFromOutbound',
+  '/api/syncAllOrderReceivables',
+  '/api/syncAllOrderReceivablesFromOutbound',
 ])
 
 /** 큐 적재 시 반환할 fallback - API별 특수 케이스 */

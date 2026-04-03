@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelect, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
-import { isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
+import {
+  isAccountingRole,
+  isFranchiseeRole,
+  isDirectorRole,
+  isEmployeeAuthRoleOfficerOrDirector,
+} from '@/lib/permissions'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import {
@@ -192,6 +197,41 @@ export async function POST(req: NextRequest) {
           { success: false, message: '❌ 해당 매장 직원만 수정할 수 있습니다.' },
           { headers }
         )
+      }
+    }
+
+    const rowIdForRole = Number(d.row)
+    const requestedRole = String(d.role || 'Staff').trim()
+    const normRole = (s: string) => String(s || '').trim().toLowerCase()
+    if (!isDirectorRole(effectiveRole)) {
+      if (rowIdForRole === 0) {
+        if (isEmployeeAuthRoleOfficerOrDirector(requestedRole)) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: '❌ Officer·Director 역할은 Director급만 지정할 수 있습니다.',
+            },
+            { status: 403, headers }
+          )
+        }
+      } else {
+        const prevRows = (await supabaseSelectFilter('employees', `id=eq.${rowIdForRole}`, {
+          limit: 1,
+          select: 'role',
+        })) as { role?: string | null }[]
+        const prevRole = prevRows?.[0]?.role != null ? String(prevRows[0].role) : ''
+        if (
+          isEmployeeAuthRoleOfficerOrDirector(requestedRole) &&
+          normRole(requestedRole) !== normRole(prevRole)
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: '❌ Officer·Director 역할은 Director급만 변경·지정할 수 있습니다.',
+            },
+            { status: 403, headers }
+          )
+        }
       }
     }
 

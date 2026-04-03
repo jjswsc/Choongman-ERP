@@ -1632,6 +1632,58 @@ export async function syncOrderReceivable(params: { orderId: number; userRole?: 
   }>
 }
 
+/** 수령 완료 주문 미수금을 출고 관리(통합 출고 이력) 합계·직접정산·VAT 반올림에 맞춤 */
+export async function syncOrderReceivableFromOutbound(params: { orderId: number; userRole?: string }) {
+  const res = await apiFetchWithOffline('/api/syncOrderReceivableFromOutbound', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId: params.orderId, userRole: params.userRole }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    orderId?: number
+    subtotalHQ?: number
+    totalHQ?: number
+    removed?: boolean
+    usedCartFallback?: boolean
+  }>
+}
+
+/** Order 미수금 일괄 — 출고 로그·출고 관리 합계 기준 (배치 1회) */
+export async function syncAllOrderReceivablesFromOutboundBatch(params: {
+  lastReceivableId?: number
+  batchSize?: number
+  storeFilter?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/syncAllOrderReceivablesFromOutbound', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lastReceivableId: params.lastReceivableId ?? 0,
+      batchSize: params.batchSize ?? 120,
+      storeFilter: params.storeFilter,
+      userRole: params.userRole,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    nextReceivableId?: number
+    hasMore?: boolean
+    stats?: {
+      processed: number
+      updated: number
+      removed: number
+      skipped: number
+      errors: number
+      cartFallback: number
+    }
+    errorSamples?: { orderId: number; message: string }[]
+  }>
+}
+
 /** Order 미수금 일괄 재동기화 (배치 1회 — 클라이언트에서 hasMore까지 반복) */
 export async function syncAllOrderReceivablesBatch(params: {
   lastReceivableId?: number
@@ -1675,7 +1727,22 @@ export interface PayableTransactionItem {
   amount: number
 }
 
-export async function getPayableTransactionItems(params: { refType: string; refId: number }) {
+/** 주문 장바구니 공급가 합계 → 미수·인보이스와 동일 VAT 규칙 */
+export interface OrderInvoiceTotals {
+  subtotalRounded: number
+  vatRounded: number
+  grandTotal: number
+}
+
+export type PayableTransactionItemsResponse = {
+  items: PayableTransactionItem[]
+  orderInvoiceTotals?: OrderInvoiceTotals
+}
+
+export async function getPayableTransactionItems(params: {
+  refType: string
+  refId: number
+}): Promise<PayableTransactionItemsResponse> {
   return getPayableTransactionItemsWithCache(params)
 }
 

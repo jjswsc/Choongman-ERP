@@ -113,6 +113,8 @@ interface EmployeeFormProps {
   saving?: boolean
   /** 매장 매니저일 때 true — 권한(role) 수정 불가 */
   roleDisabled?: boolean
+  /** false면 Officer·Director는 선택 불가(단, 이미 해당 역할인 직원은 유지·하향만 가능) */
+  canAssignOfficerDirectorRoles?: boolean
   /** 시스템 설정: 가맹점주 복수 매장 사용 */
   franchiseeMultiEnabled?: boolean
   /** 본사 등 추가 매장 편집 가능 */
@@ -134,6 +136,7 @@ export function EmployeeForm({
   onNew,
   saving = false,
   roleDisabled = false,
+  canAssignOfficerDirectorRoles = false,
   franchiseeMultiEnabled = false,
   canEditFranchiseeExtraStores = false,
   allStoresForFranchiseePick = [],
@@ -148,6 +151,25 @@ export function EmployeeForm({
   }
 
   const roleLower = String(form.role || "").toLowerCase()
+  const roleSelectValue = React.useMemo(() => {
+    const cur = String(form.role || "Staff").trim()
+    return ROLE_OPTIONS.find((r) => r.toLowerCase() === cur.toLowerCase()) || cur
+  }, [form.role])
+
+  const roleOptionsForSelect = React.useMemo(() => {
+    if (canAssignOfficerDirectorRoles) return [...ROLE_OPTIONS]
+    const cur = String(form.role || "Staff").trim()
+    const curLo = cur.toLowerCase()
+    const elevated = curLo === "officer" || curLo === "director"
+    const base = ROLE_OPTIONS.filter((r) => {
+      const lo = r.toLowerCase()
+      return lo !== "officer" && lo !== "director"
+    })
+    if (!elevated) return base
+    const canonical = ROLE_OPTIONS.find((r) => r.toLowerCase() === curLo) || cur
+    if (base.some((r) => r.toLowerCase() === curLo)) return base
+    return [...base, canonical]
+  }, [canAssignOfficerDirectorRoles, form.role])
   const showFranchiseeExtras =
     canEditFranchiseeExtraStores &&
     franchiseeMultiEnabled &&
@@ -387,12 +409,16 @@ export function EmployeeForm({
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_label_role")}</label>
-          <Select value={form.role} onValueChange={(v) => update("role", v)} disabled={roleDisabled}>
+          <Select
+            value={roleSelectValue}
+            onValueChange={(v) => update("role", v)}
+            disabled={roleDisabled}
+          >
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ROLE_OPTIONS.map((r) => (
+              {roleOptionsForSelect.map((r) => (
                 <SelectItem key={r} value={r}>{r}</SelectItem>
               ))}
             </SelectContent>

@@ -2,6 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import {
   BarChart2,
   ClipboardList,
@@ -16,7 +17,15 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole, isFranchiseeRole, isOfficeRole, isOfficeStore, isAccountingRole } from "@/lib/permissions"
+import {
+  isManagerRole,
+  isFranchiseeRole,
+  isOfficeRole,
+  isOfficeStore,
+  isAccountingRole,
+  isDirectorRole,
+  canonicalEmployeeFormRole,
+} from "@/lib/permissions"
 import {
   adminTabsBarCn,
   adminTabsIconCn,
@@ -124,7 +133,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     salType: e.salType || "Monthly",
     salAmt: e.salAmt ?? 0,
     pw: e.pw || "",
-    role: e.role || "Staff",
+    role: canonicalEmployeeFormRole(e.role || "Staff"),
     idNumber: e.idNumber || "",
     idCardPhoto: e.idCardPhoto || "",
     taxId: e.taxId || "",
@@ -146,6 +155,8 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
 
 export default function EmployeesPage() {
   const t = useT(useLang().lang)
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const { auth } = useAuth()
   const { stores: storeListFromApi } = useStoreList()
   const userStore = (auth?.store || "").trim()
@@ -259,6 +270,52 @@ export default function EmployeesPage() {
     },
     [userStore, userRole]
   )
+
+  /** 급여 관리 등에서 ?employeeId= 또는 ?employeeCode=&store=&name= 로 진입 시 목록 조회 후 수정 폼 오픈 */
+  const payrollOpenQueryKey = searchParams.toString()
+  React.useEffect(() => {
+    const employeeId = searchParams.get("employeeId")?.trim()
+    const employeeCode = searchParams.get("employeeCode")?.trim()
+    const storeQ = searchParams.get("store")?.trim() || ""
+    const nameQ = searchParams.get("name")?.trim() || ""
+    if (!employeeId && !employeeCode) return
+
+    void loadEmployeeList({ updateDisplay: true }, () => {
+      const merged = fullListRef.current
+      let e: EmployeeTableRow | undefined
+      if (employeeId) {
+        const n = Number(employeeId)
+        if (Number.isFinite(n) && n > 0) {
+          e = merged.find((x) => x.row === n)
+        }
+      }
+      if (!e && employeeCode) {
+        const c = employeeCode.toUpperCase().replace(/[^A-Z0-9]/g, "")
+        let cand = merged.filter((x) =>
+          String(x.employeeCode || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "") === c
+        )
+        if (storeQ) {
+          cand = cand.filter((x) => String(x.store || "").trim() === storeQ)
+        }
+        if (cand.length > 1 && nameQ) {
+          e = cand.find((x) => {
+            const nm = String(x.name || "").trim()
+            const nick = String(x.nick || "").trim()
+            return nm === nameQ || nick === nameQ
+          })
+        }
+        e = e || cand[0]
+      }
+      if (e) {
+        setForm(toFormData(e))
+        setHasSearched(true)
+        setStoreFilter(String(e.store || "").trim() ? String(e.store) : "All")
+        router.replace("/admin/employees", { scroll: false })
+      }
+    })
+  }, [payrollOpenQueryKey, loadEmployeeList, router])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions
@@ -482,6 +539,7 @@ export default function EmployeesPage() {
                   onNew={handleNew}
                   saving={saving}
                   roleDisabled={isManager || isFranchiseeRole(userRole)}
+                  canAssignOfficerDirectorRoles={isDirectorRole(userRole)}
                   franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
                   canEditFranchiseeExtraStores={isOffice}
                   allStoresForFranchiseePick={storesForFilter}

@@ -21,6 +21,7 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
+import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -980,10 +981,10 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   ): InvoiceData => {
     const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
     const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
-    const subtotal = Math.round(Math.abs(group.totalAmt || 0))
+    const { subtotalRounded: subtotal, vatRounded: vatAmount, grandTotal } = thaiInvoiceTotalsFromRawSubtotal(
+      group.totalAmt || 0
+    )
     const vatRate = 7
-    const vatAmount = Math.round(subtotal * 0.07)
-    const grandTotal = subtotal + vatAmount
     const rawCompanyName = company?.companyName || "S&J Global Co., Ltd"
     const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
     const termsRaw = invSettings.terms_and_conditions ?? "[]"

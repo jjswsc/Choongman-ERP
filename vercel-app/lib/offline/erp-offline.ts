@@ -221,16 +221,27 @@ export interface PayableTransactionItem {
   amount: number
 }
 
+export interface OrderInvoiceTotals {
+  subtotalRounded: number
+  vatRounded: number
+  grandTotal: number
+}
+
+export type PayableTransactionItemsResponse = {
+  items: PayableTransactionItem[]
+  orderInvoiceTotals?: OrderInvoiceTotals
+}
+
 export async function getPayableTransactionItemsWithCache(params: {
   refType: string
   refId: number
-}): Promise<{ items: PayableTransactionItem[] }> {
+}): Promise<PayableTransactionItemsResponse> {
   const key = cacheKey('erp:payItems', { refType: params.refType, refId: params.refId })
-  const fallback = { items: [] as PayableTransactionItem[] }
+  const fallback: PayableTransactionItemsResponse = { items: [], orderInvoiceTotals: undefined }
   return fetchWithCache(key, async () => {
     const q = new URLSearchParams({ refType: params.refType, refId: String(params.refId) })
     const res = await apiFetch(`/api/getPayableTransactionItems?${q}`)
-    return res.json() as Promise<{ items: PayableTransactionItem[] }>
+    return res.json() as Promise<PayableTransactionItemsResponse>
   }, fallback)
 }
 
