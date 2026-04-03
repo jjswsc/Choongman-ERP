@@ -33,6 +33,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import {
   getAdminItems,
   getAdminVendors,
@@ -201,6 +202,12 @@ export default function OutboundPage() {
     const store = (auth?.store || "").trim()
     return OFFICE_STORES.some((s) => store.toLowerCase().includes(s.toLowerCase()))
   }, [auth?.store])
+
+  /** 출고 로그 단가 API·UI — JWT office 권한과 동일(역할 기준). 매장명이 본사가 아니어도 Officer/Director면 표시 */
+  const canEditOutboundLogUnitPrice = React.useMemo(
+    () => isOfficeRole(auth?.role || ""),
+    [auth?.role]
+  )
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice">("hist")
 
@@ -805,6 +812,7 @@ export default function OutboundPage() {
           outboundLocation: it.outboundLocation || "(미지정)",
           deliveryDate: it.deliveryDate ? it.deliveryDate.slice(0, 10) : undefined,
           isUnreceived: it.isUnreceived,
+          stockLogId: it.stockLogId,
         })),
         itemsSummary,
         totalQty: g.totalQty,
@@ -1630,6 +1638,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             <div className="overflow-x-auto max-h-[500px]">
               <ShipmentTable
                 isOffice={isOffice}
+                canEditLogUnitPrice={canEditOutboundLogUnitPrice}
                 rows={shipmentTableRows}
                 loading={historyLoading}
                 selectedIndices={selectedForPrint}
@@ -1663,6 +1672,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     await appAlert(String(e))
                   }
                 }}
+                onReloadHistory={canEditOutboundLogUnitPrice ? fetchHistory : undefined}
                 usageRows={usageTableRows}
               />
             </div>

@@ -1175,7 +1175,6 @@ export async function GET(request: NextRequest) {
       }
       // 출퇴근 0건이면 집계 미연동·키 불일치와 무근무를 구분할 수 없어 자동 '결석' 공제는 하지 않음(무급휴가는 leave만)
       const absenceDays = workDays === 0 ? 0 : absenceDateList.length
-      const unpaidAbsenceDays = unpaidLeaveDays + absenceDays
       // 태국 관행: 일급 = 월급 ÷ 당월 근무일수. 금액은 상세(일별·휴가 건별 floor) 합과 표시 일치
       const dailyRate = expectedWorkDays > 0 ? salary / expectedWorkDays : 0
       let unpaidAbsenceDed = 0
@@ -1184,10 +1183,8 @@ export async function GET(request: NextRequest) {
         for (const lv of unpaidEvts) {
           unpaidAbsenceDed += Math.floor(dailyRate * lv.days)
         }
-        if (workDays > 0) {
-          for (const _ of absenceDateList) {
-            unpaidAbsenceDed += Math.floor(dailyRate)
-          }
+        if (workDays > 0 && absenceDateList.length > 0) {
+          unpaidAbsenceDed += Math.floor(dailyRate) * absenceDateList.length
         }
       }
 

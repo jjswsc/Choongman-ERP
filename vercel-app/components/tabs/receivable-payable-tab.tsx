@@ -1116,6 +1116,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                     <th className="py-1 px-2 text-left font-medium">
                                                       {tt("balLineItemName", "품목명")}
                                                     </th>
+                                                    <th className="py-1 px-2 text-left font-medium min-w-[72px]">
+                                                      {tt("balLineItemSpec", "규격")}
+                                                    </th>
                                                     <th className="py-1 px-2 text-center font-medium">
                                                       {tt("balLineItemQty", "수량")}
                                                     </th>
@@ -1130,11 +1133,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                 <tbody>
                                                   {recLineItems.map((it, i) => (
                                                     <tr key={i} className="border-b border-border/30">
-                                                      <td className="py-1 px-2">
-                                                        {it.name || it.code || "-"}
-                                                        {it.spec ? (
-                                                          <span className="block text-muted-foreground">({it.spec})</span>
-                                                        ) : null}
+                                                      <td className="py-1 px-2">{it.name || it.code || "-"}</td>
+                                                      <td className="py-1 px-2 text-left text-muted-foreground break-words max-w-[200px]">
+                                                        {it.spec || "-"}
                                                       </td>
                                                       <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
                                                       <td className="py-1 px-2 text-right tabular-nums">
@@ -1149,7 +1150,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                     <>
                                                       <tr className="border-t-2 border-border/50 bg-muted/20">
                                                         <td
-                                                          colSpan={3}
+                                                          colSpan={4}
                                                           className="py-1.5 px-2 text-right text-muted-foreground"
                                                         >
                                                           {tt("recLineSubtotal", "소계 (공급가)")}
@@ -1160,7 +1161,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                       </tr>
                                                       <tr className="bg-muted/20">
                                                         <td
-                                                          colSpan={3}
+                                                          colSpan={4}
                                                           className="py-1.5 px-2 text-right text-muted-foreground"
                                                         >
                                                           {tt("recLineVat7", "VAT 7%")}
@@ -1171,7 +1172,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                       </tr>
                                                       <tr className="bg-muted/20">
                                                         <td
-                                                          colSpan={3}
+                                                          colSpan={4}
                                                           className="py-1.5 px-2 text-right font-semibold"
                                                         >
                                                           {tt("recLineGrandTotal", "합계 (VAT 포함 · 미수 금액과 동일 규칙)")}
@@ -1416,6 +1417,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                         <th className="py-1 px-2 text-left font-medium">
                                                           {tt("balLineItemName", "품목명")}
                                                         </th>
+                                                        <th className="py-1 px-2 text-left font-medium min-w-[72px]">
+                                                          {tt("balLineItemSpec", "규격")}
+                                                        </th>
                                                         <th className="py-1 px-2 text-center font-medium">
                                                           {tt("balLineItemQty", "수량")}
                                                         </th>
@@ -1428,11 +1432,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                     <tbody>
                                                       {items.map((it, i) => (
                                                         <tr key={i} className="border-b border-border/30">
-                                                          <td className="py-1 px-2">
-                                                            {it.name || it.code || "-"}
-                                                            {it.spec ? (
-                                                              <span className="block text-muted-foreground">({it.spec})</span>
-                                                            ) : null}
+                                                          <td className="py-1 px-2">{it.name || it.code || "-"}</td>
+                                                          <td className="py-1 px-2 text-left text-muted-foreground break-words max-w-[200px]">
+                                                            {it.spec || "-"}
                                                           </td>
                                                           <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
                                                           <td className="py-1 px-2 text-right tabular-nums">

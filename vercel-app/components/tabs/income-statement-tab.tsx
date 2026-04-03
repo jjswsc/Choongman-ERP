@@ -22,6 +22,10 @@ import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
+  readIncomeStatementBeginningInvOverride,
+  writeIncomeStatementBeginningInvOverride,
+} from "@/lib/income-statement-beginning-inv-override"
+import {
   readIncomeStatementSalesOverride,
   writeIncomeStatementSalesOverride,
   parseSalesOverrideInput,
@@ -53,6 +57,8 @@ export function IncomeStatementTab() {
   const [expandExpenseAccounts, setExpandExpenseAccounts] = React.useState(false)
   const [manualEnabled, setManualEnabled] = React.useState(false)
   const [manualAmountStr, setManualAmountStr] = React.useState("")
+  const [begInvManualEnabled, setBegInvManualEnabled] = React.useState(false)
+  const [begInvAmountStr, setBegInvAmountStr] = React.useState("")
   const [exportingPdf, setExportingPdf] = React.useState(false)
 
   const printRef = React.useRef<HTMLDivElement | null>(null)
@@ -80,6 +86,17 @@ export function IncomeStatementTab() {
   }, [yearMonth, storeFilter])
 
   React.useEffect(() => {
+    const o = readIncomeStatementBeginningInvOverride(yearMonth, storeFilter)
+    if (o?.enabled) {
+      setBegInvManualEnabled(true)
+      setBegInvAmountStr(String(o.amount))
+    } else {
+      setBegInvManualEnabled(false)
+      setBegInvAmountStr("")
+    }
+  }, [yearMonth, storeFilter])
+
+  React.useEffect(() => {
     if (!manualEnabled) {
       writeIncomeStatementSalesOverride(yearMonth, storeFilter, false, 0)
       return
@@ -88,6 +105,16 @@ export function IncomeStatementTab() {
     if (p == null) return
     writeIncomeStatementSalesOverride(yearMonth, storeFilter, true, p)
   }, [yearMonth, storeFilter, manualEnabled, manualAmountStr])
+
+  React.useEffect(() => {
+    if (!begInvManualEnabled) {
+      writeIncomeStatementBeginningInvOverride(yearMonth, storeFilter, false, 0)
+      return
+    }
+    const p = parseSalesOverrideInput(begInvAmountStr)
+    if (p == null) return
+    writeIncomeStatementBeginningInvOverride(yearMonth, storeFilter, true, p)
+  }, [yearMonth, storeFilter, begInvManualEnabled, begInvAmountStr])
 
   const loadData = React.useCallback(() => {
     setLoading(true)
@@ -118,11 +145,20 @@ export function IncomeStatementTab() {
 
   const view = React.useMemo(() => {
     if (!data) return null
-    const cogs = data.cogs ?? 0
     const expenses = data.expenses
-    const parsed = parseSalesOverrideInput(manualAmountStr)
-    const useManual = manualEnabled && parsed != null
-    const sales = useManual ? parsed : data.sales
+    const purchases = data.purchases
+    const endingInv = data.endingInventory ?? 0
+    const sysBeg = data.beginningInventory ?? 0
+
+    const parsedSales = parseSalesOverrideInput(manualAmountStr)
+    const useManualSales = manualEnabled && parsedSales != null
+    const sales = useManualSales ? parsedSales : data.sales
+
+    const parsedBeg = parseSalesOverrideInput(begInvAmountStr)
+    const useManualBegInv = begInvManualEnabled && parsedBeg != null
+    const beginningInventory = useManualBegInv ? parsedBeg : sysBeg
+
+    const cogs = beginningInventory + purchases - endingInv
     const grossProfit = sales - cogs
     const netProfit = grossProfit - expenses
     const pctBase = sales > 0 ? sales : 0
@@ -133,11 +169,14 @@ export function IncomeStatementTab() {
       netProfit,
       pct,
       cogs,
-      useManual,
+      beginningInventory,
+      useManualSales,
       systemSales: data.sales,
+      useManualBegInv,
+      systemBeginningInventory: sysBeg,
       expenses,
     }
-  }, [data, manualEnabled, manualAmountStr])
+  }, [data, manualEnabled, manualAmountStr, begInvManualEnabled, begInvAmountStr])
 
   const storeLabel =
     storeFilter === "All"
@@ -163,8 +202,8 @@ export function IncomeStatementTab() {
     rows.push({ label: t("pL_sales"), amount: view.sales, pct: "100.0%" })
     rows.push({
       label: `  + ${t("pL_beginningInv")}`,
-      amount: data.beginningInventory ?? 0,
-      pct: view.pct(data.beginningInventory ?? 0),
+      amount: view.beginningInventory,
+      pct: view.pct(view.beginningInventory),
     })
     rows.push({
       label: `  + ${t("pL_purchases")}`,
@@ -246,8 +285,11 @@ export function IncomeStatementTab() {
     const headerLines = [
       t("incomeStatementTitle"),
       `${data.yearMonth} · ${storeLabel}`,
-      ...(view.useManual
+      ...(view.useManualSales
         ? [`${t("pL_systemSalesLabel")}: ${formatBath(view.systemSales)}`]
+        : []),
+      ...(view.useManualBegInv
+        ? [`${t("pL_systemBegInvLabel")}: ${formatBath(view.systemBeginningInventory)}`]
         : []),
     ]
     const fname = `income-statement-${sanitizeFilenamePart(data.yearMonth)}-${sanitizeFilenamePart(storeFilter)}.xlsx`
@@ -399,7 +441,40 @@ export function IncomeStatementTab() {
                     aria-label={t("pL_manualSalesPlaceholder")}
                   />
                 )}
-                <p className="text-xs text-muted-foreground max-w-md">{t("pL_manualSalesNote")}</p>
+                <p className="text-xs text-muted-foreground max-w-md shrink-0">{t("pL_manualSalesNote")}</p>
+              </div>
+              <div className="flex flex-wrap items-end gap-4 mb-3 pb-3 border-b">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="pl-manual-beg-inv"
+                    checked={begInvManualEnabled}
+                    onCheckedChange={(v) => {
+                      const checked = v === true
+                      setBegInvManualEnabled(checked)
+                      if (checked && data) {
+                        const saved = readIncomeStatementBeginningInvOverride(yearMonth, storeFilter)
+                        setBegInvAmountStr(
+                          saved?.enabled ? String(saved.amount) : String(data.beginningInventory ?? 0)
+                        )
+                      }
+                      if (!checked) setBegInvAmountStr("")
+                    }}
+                  />
+                  <Label htmlFor="pl-manual-beg-inv" className="text-sm font-normal cursor-pointer">
+                    {t("pL_manualBegInvUse")}
+                  </Label>
+                </div>
+                {begInvManualEnabled && (
+                  <Input
+                    className="w-40 h-9 font-mono"
+                    inputMode="decimal"
+                    placeholder={t("pL_manualBegInvPlaceholder")}
+                    value={begInvAmountStr}
+                    onChange={(e) => setBegInvAmountStr(e.target.value)}
+                    aria-label={t("pL_manualBegInvPlaceholder")}
+                  />
+                )}
+                <p className="text-xs text-muted-foreground max-w-xl">{t("pL_manualBegInvNote")}</p>
               </div>
 
               <div ref={printRef} className="rounded-md bg-white p-3 text-foreground">
@@ -407,9 +482,14 @@ export function IncomeStatementTab() {
                 <div className="text-sm text-muted-foreground mb-2">
                   {data.yearMonth} · {storeLabel}
                 </div>
-                {view.useManual && (
+                {view.useManualSales && (
                   <div className="text-xs text-muted-foreground mb-2">
                     {t("pL_systemSalesLabel")}: {formatBath(view.systemSales)}
+                  </div>
+                )}
+                {view.useManualBegInv && (
+                  <div className="text-xs text-muted-foreground mb-2">
+                    {t("pL_systemBegInvLabel")}: {formatBath(view.systemBeginningInventory)}
                   </div>
                 )}
                 {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
@@ -434,10 +514,10 @@ export function IncomeStatementTab() {
                     <tr className="border-b">
                       <td className="py-2 text-muted-foreground pl-4">+ {t("pL_beginningInv")}</td>
                       <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                        {formatBath(data.beginningInventory ?? 0)}
+                        {formatBath(view.beginningInventory)}
                       </td>
                       <td className="py-2 text-right text-muted-foreground">
-                        {view.pct(data.beginningInventory ?? 0)}
+                        {view.pct(view.beginningInventory)}
                       </td>
                     </tr>
                     <tr

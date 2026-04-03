@@ -29,7 +29,12 @@ function resolveLoginPathByCurrentRoute(): string {
 function loadAuth(): AuthState | null {
   if (typeof window === 'undefined') return null
   try {
-    const token = sessionStorage.getItem('cm_token')
+    let token: string | null = null
+    try {
+      token = sessionStorage.getItem('cm_token') || localStorage.getItem('cm_token')
+    } catch {
+      token = sessionStorage.getItem('cm_token')
+    }
     const store = sessionStorage.getItem('cm_store')
     const user = sessionStorage.getItem('cm_user')
     let role = sessionStorage.getItem('cm_role') || ''
@@ -110,7 +115,7 @@ export function loadOfflineResumeAuth(): AuthState | null {
     if (!store || !user) return null
     let token: string | undefined
     try {
-      token = sessionStorage.getItem('cm_token') || undefined
+      token = sessionStorage.getItem('cm_token') || localStorage.getItem('cm_token') || undefined
     } catch {}
     let allowedStores: string[] | undefined
     if (Array.isArray(o.allowedStores)) {
@@ -148,7 +153,12 @@ function saveAuth(auth: AuthState) {
     } else {
       sessionStorage.removeItem('cm_employee_code')
     }
-    if (auth.token) sessionStorage.setItem('cm_token', auth.token)
+    if (auth.token) {
+      sessionStorage.setItem('cm_token', auth.token)
+      try {
+        localStorage.setItem('cm_token', auth.token)
+      } catch {}
+    }
     if (auth.allowedStores && auth.allowedStores.length > 0) {
       sessionStorage.setItem(CM_ALLOWED_STORES_KEY, JSON.stringify(auth.allowedStores))
     } else {
@@ -175,6 +185,9 @@ function clearAuth() {
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
     sessionStorage.removeItem('cm_token')
+    try {
+      localStorage.removeItem('cm_token')
+    } catch {}
     sessionStorage.removeItem('cm_employee_id')
     sessionStorage.removeItem('cm_employee_code')
     sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
@@ -212,7 +225,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setAuthState(null)
     clearAuth()
-    if (typeof window !== 'undefined') window.location.href = resolveLoginPathByCurrentRoute()
+    if (typeof window === 'undefined') return
+    const goLogin = () => {
+      window.location.href = resolveLoginPathByCurrentRoute()
+    }
+    fetch(`${window.location.origin}/api/logout`, { method: 'POST', credentials: 'same-origin' })
+      .catch(() => {})
+      .finally(goLogin)
   }, [])
 
   const value = useMemo(

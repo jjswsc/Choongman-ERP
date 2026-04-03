@@ -1,10 +1,16 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { ChevronDown, ChevronRight, Image as ImageIcon, MessageSquare } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import { ChevronDown, ChevronRight, Image as ImageIcon, MessageSquare, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { patchStockLogInvoiceUnitPrice } from "@/lib/api-client"
+import { appAlert } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 
 type StatusBadgeKey = "outTypeOrder" | "statusPartialDelivered" | "statusInTransit" | "statusDelivered" | "outTypeForce"
 
@@ -21,6 +27,14 @@ const statusStyles: Record<StatusBadgeKey, string> = {
 /** 미수령 품목 배지 스타일 */
 const unrecvBadgeStyle = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
 
+function parseDecimalInput(s: string): number {
+  const raw = String(s ?? "")
+    .trim()
+    .replace(/,/g, "")
+  if (raw === "") return NaN
+  return Number(raw)
+}
+
 export interface ShipmentTableRow {
   id: string
   orderDate: string
@@ -31,7 +45,19 @@ export interface ShipmentTableRow {
   deliveryStatus?: string
   /** 주문 출고 행일 때 수령 사진 온디맨드 로드용 */
   orderRowId?: string
-  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; qtyStages?: number[]; outboundLocation?: string; deliveryDate?: string; isUnreceived?: boolean }[]
+  items: {
+    name: string
+    code?: string
+    spec: string
+    qty: number
+    amount: number
+    originalOrderQty?: number
+    qtyStages?: number[]
+    outboundLocation?: string
+    deliveryDate?: string
+    isUnreceived?: boolean
+    stockLogId?: number
+  }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -42,6 +68,11 @@ export interface ShipmentTableRow {
 interface ShipmentTableProps {
   /** 본사: 출고 그룹 테이블 / 비본사: 사용 내역 테이블 */
   isOffice: boolean
+  /**
+   * 출고 로그 단가 수정 허용 — 미지정 시 기존처럼 isOffice(매장명)·onReloadHistory 조합으로 판단.
+   * API는 역할(Officer/Director) 기준이므로, 본사 권한은 이 값으로 넘기는 것을 권장.
+   */
+  canEditLogUnitPrice?: boolean
   rows: ShipmentTableRow[]
   loading?: boolean
   selectedIndices: Set<number>
@@ -55,10 +86,13 @@ interface ShipmentTableProps {
   storeTargets?: string[]
   /** 강제출고 수령 완료 콜백 */
   onForceReceived?: (date: string, target: string) => void | Promise<void>
+  /** 본사: 출고 로그 단가 저장 후 목록 새로고침 */
+  onReloadHistory?: () => void
 }
 
 export function ShipmentTable({
   isOffice,
+  canEditLogUnitPrice: canEditLogUnitPriceProp,
   rows,
   loading = false,
   selectedIndices,
@@ -68,10 +102,35 @@ export function ShipmentTable({
   usageRows = [],
   storeTargets = [],
   onForceReceived,
+  onReloadHistory,
 }: ShipmentTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [lineEdit, setLineEdit] = useState<{
+    stockLogId: number
+    qty: number
+    amount: number
+  } | null>(null)
+  const [qtyStr, setQtyStr] = useState("")
+  const [unitStr, setUnitStr] = useState("")
+  const [amtStr, setAmtStr] = useState("")
+  const [lineEditSaving, setLineEditSaving] = useState(false)
+
+  useEffect(() => {
+    if (!lineEdit) return
+    const q = Math.abs(Number(lineEdit.qty) || 0)
+    const a = Number(lineEdit.amount) || 0
+    const u = q > 0 ? a / q : 0
+    setQtyStr(q > 0 ? String(q) : "0")
+    setUnitStr(Number.isFinite(u) ? String(u) : "0")
+    setAmtStr(Number.isFinite(a) ? String(a) : "0")
+  }, [lineEdit])
+
+  const allowPriceEdit =
+    canEditLogUnitPriceProp !== undefined
+      ? canEditLogUnitPriceProp
+      : Boolean(isOffice && onReloadHistory)
 
   const toggleExpand = (idx: number) => {
     setExpandedRows((prev) => {
@@ -135,12 +194,95 @@ export function ShipmentTable({
 
   const colCount = 11
 
+  const handleQtyStrChange = (s: string) => {
+    setQtyStr(s)
+    const q = Math.abs(parseDecimalInput(s))
+    const u = parseDecimalInput(unitStr)
+    if (q > 0 && Number.isFinite(u) && u >= 0) {
+      setAmtStr(String(q * u))
+    }
+  }
+
+  const handleUnitStrChange = (s: string) => {
+    setUnitStr(s)
+    const q = Math.abs(parseDecimalInput(qtyStr))
+    const u = parseDecimalInput(s)
+    if (q > 0 && Number.isFinite(u) && u >= 0) {
+      setAmtStr(String(q * u))
+    }
+  }
+
+  const handleAmtStrChange = (s: string) => {
+    setAmtStr(s)
+    const q = Math.abs(parseDecimalInput(qtyStr))
+    const a = parseDecimalInput(s)
+    if (q > 0 && Number.isFinite(a) && a >= 0) {
+      setUnitStr(String(a / q))
+    }
+  }
+
+  const handleSaveLineEdit = async () => {
+    if (!lineEdit || !onReloadHistory) return
+    const q = Math.abs(parseDecimalInput(qtyStr))
+    const a = parseDecimalInput(amtStr)
+    if (!Number.isFinite(q) || q <= 0) {
+      await appAlert(t("outLineEditInvalid"))
+      return
+    }
+    if (!Number.isFinite(a) || a < 0) {
+      await appAlert(t("outLineEditInvalid"))
+      return
+    }
+    const u = a / q
+    if (!Number.isFinite(u) || u > 1e12) {
+      await appAlert(t("outLineEditInvalid"))
+      return
+    }
+    setLineEditSaving(true)
+    try {
+      const res = await patchStockLogInvoiceUnitPrice({
+        stockLogId: lineEdit.stockLogId,
+        invoiceUnitPrice: u,
+        qtyAbs: q,
+      })
+      if (res.success) {
+        let msg = translateApiMessage(res.message, t) || res.message || "OK"
+        const rs = res.receivableSync
+        if (rs?.ran && rs.ok === false && rs.message) {
+          msg += "\n\n" + (translateApiMessage(rs.message, t) || rs.message)
+        }
+        await appAlert(msg)
+        setLineEdit(null)
+        onReloadHistory()
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("outLineEditInvalid"))
+      }
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLineEditSaving(false)
+    }
+  }
+
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full text-xs">
+      <table className="w-full table-fixed border-collapse text-xs">
+        <colgroup>
+          <col style={{ width: "3%" }} />
+          <col style={{ width: "8%" }} />
+          <col style={{ width: "8%" }} />
+          <col style={{ width: "8%" }} />
+          <col style={{ width: "7%" }} />
+          <col style={{ width: "7%" }} />
+          <col style={{ width: "5%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "25%" }} />
+          <col style={{ width: "7%" }} />
+          <col style={{ width: "10%" }} />
+        </colgroup>
         <thead>
           <tr className="bg-[#1E293B] text-white">
-            <th className="w-10 px-3 py-2.5 text-center">
+            <th className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
               <input
                 type="checkbox"
                 checked={rows.length > 0 && selectedIndices.size === rows.length}
@@ -148,16 +290,34 @@ export function ShipmentTable({
                 className="h-3.5 w-3.5 rounded border-[#1E293B] accent-[#3B82F6] cursor-pointer"
               />
             </th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("orderColDate")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("orderColDeliveryDate")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColInvNo")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColOrderType")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColOutboundType")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColPhoto")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColStore")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("orderColDate")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("orderColDeliveryDate")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("outColInvNo")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("outColOrderType")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("outColOutboundType")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("outColPhoto")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("outColStore")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight sm:px-2 sm:py-2.5 sm:text-xs">{t("outColItem")}</th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("outColQty")}
+            </th>
+            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+              {t("inColAmount")}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -184,11 +344,65 @@ export function ShipmentTable({
                 getOrderTypeBadge={getOrderTypeBadge}
                 getOutboundTypeBadge={getOutboundTypeBadge}
                 t={t}
+                allowPriceEdit={allowPriceEdit}
+                onOpenLineEdit={(p) => setLineEdit(p)}
               />
             ))
           )}
         </tbody>
       </table>
+
+      <Dialog open={lineEdit != null} onOpenChange={(o) => !o && setLineEdit(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("outEditOutboundLineTitle")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">{t("outInvoiceLineEditNote")}</p>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("outColQty")}</label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={qtyStr}
+                onChange={(e) => handleQtyStrChange(e.target.value)}
+                className="h-9"
+                disabled={lineEditSaving}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("outInvoiceUnitPriceLabel")}</label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={unitStr}
+                onChange={(e) => handleUnitStrChange(e.target.value)}
+                className="h-9"
+                disabled={lineEditSaving}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{t("inColAmount")}</label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={amtStr}
+                onChange={(e) => handleAmtStrChange(e.target.value)}
+                className="h-9"
+                disabled={lineEditSaving}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setLineEdit(null)} disabled={lineEditSaving}>
+              {t("cancel") || "Cancel"}
+            </Button>
+            <Button type="button" onClick={() => void handleSaveLineEdit()} disabled={lineEditSaving}>
+              {lineEditSaving ? t("loading") : t("save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -205,6 +419,8 @@ function TableRow({
   getOrderTypeBadge,
   getOutboundTypeBadge,
   t,
+  allowPriceEdit,
+  onOpenLineEdit,
 }: {
   row: ShipmentTableRow
   isExpanded: boolean
@@ -217,6 +433,8 @@ function TableRow({
   getOrderTypeBadge: (type: string) => StatusBadgeKey | null
   getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
   t: (k: string) => string
+  allowPriceEdit: boolean
+  onOpenLineEdit: (p: { stockLogId: number; qty: number; amount: number }) => void
 }) {
   const hasDetails = row.items.length >= 1
   const orderBadge = getOrderTypeBadge(row.type)
@@ -243,7 +461,7 @@ function TableRow({
           isSelected && "bg-primary/5"
         )}
       >
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
           <input
             type="checkbox"
             checked={isSelected}
@@ -251,46 +469,64 @@ function TableRow({
             className="h-3.5 w-3.5 rounded border-gray-300 accent-[#3B82F6] cursor-pointer"
           />
         </td>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{row.orderDate}</td>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{row.deliveryDate || "-"}</td>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-mono text-[11px]">{row.invoiceNo}</td>
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-1.5 py-2 text-center text-[10px] text-card-foreground whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+          {row.orderDate}
+        </td>
+        <td className="px-1.5 py-2 text-center text-[10px] text-card-foreground whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+          {row.deliveryDate || "-"}
+        </td>
+        <td className="px-1.5 py-2 text-center font-mono text-[10px] text-card-foreground whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-[11px]">
+          {row.invoiceNo}
+        </td>
+        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
           {orderBadge ? (
-            <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap", statusStyles[orderBadge])}>
+            <span
+              className={cn(
+                "inline-flex max-w-full items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold leading-tight whitespace-nowrap sm:px-1.5 sm:text-[10px]",
+                statusStyles[orderBadge]
+              )}
+            >
               {t(orderBadge)}
             </span>
           ) : (
             <span className="text-muted-foreground">-</span>
           )}
         </td>
-        <td className="px-3 py-2.5 text-center">
+        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
           {outboundBadge ? (
-            <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap", statusStyles[outboundBadge])}>
+            <span
+              className={cn(
+                "inline-flex max-w-full items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold leading-tight whitespace-nowrap sm:px-1.5 sm:text-[10px]",
+                statusStyles[outboundBadge]
+              )}
+            >
               {t(outboundBadge)}
             </span>
           ) : (
             <span className="text-muted-foreground">-</span>
           )}
         </td>
-        <td className="px-3 py-2.5 text-center">
-          <div className="flex items-center justify-center gap-1.5">
+        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
+          <div className="flex items-center justify-center gap-1">
             {row.orderRowId && row.type === "Outbound" ? (
               <button
                 type="button"
                 onClick={() => onPhotoClick?.(row.orderRowId!)}
-                className="inline-flex items-center justify-center w-9 h-9 rounded border border-border hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded border border-border hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary sm:size-9"
                 title={t("outPhotoView")}
               >
-                <ImageIcon className="h-4 w-4 text-primary" aria-hidden />
+                <ImageIcon className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" aria-hidden />
               </button>
             ) : (
-              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
           </div>
         </td>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">
+        <td className="max-w-0 px-1.5 py-2 text-center text-[10px] font-medium text-card-foreground sm:px-2 sm:py-2.5 sm:text-xs">
           <div className="flex flex-col items-center gap-1">
-            <span>{row.target}</span>
+            <span className="truncate" title={row.target}>
+              {row.target}
+            </span>
             {storeTargetsSet.size > 0 && (
               <span
                 className={cn(
@@ -318,13 +554,13 @@ function TableRow({
               )}
           </div>
         </td>
-        <td className="px-3 py-2.5 text-white">
-          <div className="flex items-center gap-1.5">
+        <td className="max-w-0 px-1.5 py-2 text-white sm:px-2 sm:py-2.5">
+          <div className="flex min-w-0 items-center gap-1">
             {hasDetails && (
               <button
                 type="button"
                 onClick={onToggleExpand}
-                className="flex-shrink-0 rounded p-0.5 hover:bg-accent transition-colors text-primary"
+                className="shrink-0 rounded p-0.5 text-primary transition-colors hover:bg-accent"
               >
                 {isExpanded ? (
                   <ChevronDown className="h-3.5 w-3.5" />
@@ -333,66 +569,139 @@ function TableRow({
                 )}
               </button>
             )}
-            {!hasDetails && <span className="inline-block w-[18px]" />}
-            <span className="truncate max-w-[400px] text-card-foreground" title={row.itemsSummary}>
+            {!hasDetails && <span className="inline-block w-[18px] shrink-0" />}
+            <span className="min-w-0 truncate text-left text-[10px] text-card-foreground sm:text-xs" title={row.itemsSummary}>
               {row.itemsSummary}
             </span>
           </div>
         </td>
-        <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{row.totalQty.toLocaleString()}</td>
-        <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">
+        <td className="px-1.5 py-2 text-center text-[10px] font-medium tabular-nums text-card-foreground sm:px-2 sm:py-2.5 sm:text-xs">
+          {row.totalQty.toLocaleString()}
+        </td>
+        <td className="px-1.5 py-2 text-right text-[10px] font-bold tabular-nums text-primary sm:px-2 sm:py-2.5 sm:text-xs">
           {row.totalAmt.toLocaleString()}
         </td>
       </tr>
       {isExpanded && hasDetails && (
         <tr>
           <td colSpan={11} className="px-0 py-0">
-            <div className="mx-6 my-2 overflow-hidden rounded border border-border bg-muted/30">
-              <table className="w-full text-xs">
+            <div className="mx-2 my-1.5 overflow-x-auto rounded border border-border bg-muted/30">
+              <table
+                className={cn(
+                  "max-w-full table-fixed border-collapse text-[10px] leading-tight sm:text-[11px] sm:leading-snug",
+                  allowPriceEdit ? "w-[96%]" : "w-[97%]"
+                )}
+              >
+                <colgroup>
+                  {allowPriceEdit ? (
+                    <>
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "26%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "8%" }} />
+                    </>
+                  ) : (
+                    <>
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "32%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "7%" }} />
+                    </>
+                  )}
+                </colgroup>
                 <thead>
                   <tr className="bg-muted/50">
                     <th
-                      className="px-4 py-2 text-center font-semibold text-card-foreground cursor-pointer hover:bg-muted/70 select-none"
+                      className="px-1 py-1 text-center font-semibold text-card-foreground cursor-pointer hover:bg-muted/70 select-none"
                       onClick={toggleCodeSort}
                       title={t("outColCode") || "코드 (클릭 시 정렬)"}
                     >
                       {t("outColCode") || "코드"}
-                      {codeSort === "asc" && " ↑"}
-                      {codeSort === "desc" && " ↓"}
+                      {codeSort === "asc" && "↑"}
+                      {codeSort === "desc" && "↓"}
                     </th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground w-20">{t("outColStatus") || "상태"}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("spec")}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outWhWarehouseCol") || "출고지"}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("orderColDeliveryDate") || "배송일자"}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("inColAmount")}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outColStatus") || "상태"}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("spec")}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outWhWarehouseCol") || "출고지"}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("orderColDeliveryDate") || "배송일자"}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
+                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("inColAmount")}</th>
+                    {allowPriceEdit ? (
+                      <th
+                        className={cn(
+                          "sticky right-0 z-[2] min-w-[36px] border-l border-border/60 bg-muted/95 px-0.5 py-1 text-center font-semibold text-card-foreground shadow-[-5px_0_6px_-3px_rgba(0,0,0,0.12)] backdrop-blur-[1px]"
+                        )}
+                      >
+                        {t("outColEdit")}
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {sortedItems.map((d, i) => (
-                    <tr key={i} className={cn("hover:bg-primary/5 transition-colors", d.isUnreceived && "bg-red-50 dark:bg-red-950/20")}>
-                      <td className="px-4 py-2 text-center text-muted-foreground font-mono text-[11px]">{d.code || "-"}</td>
-                      <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
-                      <td className="px-4 py-2 text-center">
+                    <tr
+                      key={i}
+                      className={cn(
+                        "group transition-colors hover:bg-primary/5",
+                        d.isUnreceived && "bg-red-50 dark:bg-red-950/20"
+                      )}
+                    >
+                      <td className="max-w-0 px-1 py-1 text-center font-mono text-muted-foreground">
+                        <span className="block truncate" title={d.code || ""}>
+                          {d.code || "-"}
+                        </span>
+                      </td>
+                      <td className="max-w-0 px-1 py-1 text-center text-card-foreground">
+                        <span className="block truncate" title={d.name}>
+                          {d.name}
+                        </span>
+                      </td>
+                      <td className="px-0.5 py-1 text-center">
                         {d.isUnreceived ? (
-                          <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold", unrecvBadgeStyle)}>
-                            {t("outItemUnreceived") || "미수령"}
+                          <span
+                            className={cn(
+                              "inline-flex max-w-full items-center justify-center rounded px-0.5 py-0.5 text-[9px] font-semibold leading-none sm:text-[10px]",
+                              unrecvBadgeStyle
+                            )}
+                          >
+                            <span className="truncate" title={t("outItemUnreceived") || ""}>
+                              {t("outItemUnreceived") || "미수령"}
+                            </span>
                           </span>
                         ) : (
-                          <span className="text-muted-foreground text-[11px]">-</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
-                      <td className="px-4 py-2 text-center text-muted-foreground">{d.outboundLocation || "-"}</td>
-                      <td className="px-4 py-2 text-center text-muted-foreground whitespace-nowrap">{d.deliveryDate || "-"}</td>
-                      <td className="px-4 py-2 text-center font-medium tabular-nums">
+                      <td className="max-w-0 px-1 py-1 text-center text-muted-foreground">
+                        <span className="block truncate" title={d.spec}>
+                          {d.spec}
+                        </span>
+                      </td>
+                      <td className="max-w-0 px-1 py-1 text-center text-muted-foreground">
+                        <span className="block truncate" title={d.outboundLocation}>
+                          {d.outboundLocation || "-"}
+                        </span>
+                      </td>
+                      <td className="px-0.5 py-1 text-center text-muted-foreground whitespace-nowrap tabular-nums">
+                        {(d.deliveryDate || "-").slice(0, 10)}
+                      </td>
+                      <td className="px-0.5 py-1 text-center font-medium tabular-nums">
                         {d.qtyStages && d.qtyStages.length >= 2 ? (
                           <span className="text-card-foreground">
-                            {d.qtyStages.map((stage, i) => (
-                              <span key={i}>
-                                {i > 0 && <span className="mx-1 text-muted-foreground">→</span>}
-                                <span className={i < d.qtyStages!.length - 1 ? "text-destructive line-through" : ""}>
+                            {d.qtyStages.map((stage, j) => (
+                              <span key={j}>
+                                {j > 0 && <span className="text-muted-foreground">→</span>}
+                                <span className={j < d.qtyStages!.length - 1 ? "text-destructive line-through" : ""}>
                                   {stage.toLocaleString()}
                                 </span>
                               </span>
@@ -401,14 +710,43 @@ function TableRow({
                         ) : d.originalOrderQty != null && d.originalOrderQty !== d.qty ? (
                           <>
                             <span className="text-destructive line-through">{d.originalOrderQty.toLocaleString()}</span>
-                            <span className="mx-1 text-muted-foreground">→</span>
+                            <span className="text-muted-foreground">→</span>
                             <span className="text-card-foreground">{d.qty.toLocaleString()}</span>
                           </>
                         ) : (
                           <span className="text-card-foreground">{d.qty.toLocaleString()}</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{d.amount.toLocaleString()}</td>
+                      <td className="px-0.5 py-1 text-right text-card-foreground tabular-nums">{d.amount.toLocaleString()}</td>
+                      {allowPriceEdit ? (
+                        <td
+                          className={cn(
+                            "sticky right-0 z-[1] min-w-[36px] border-l border-border/60 bg-muted px-0.5 py-1 text-center align-middle shadow-[-5px_0_6px_-3px_rgba(0,0,0,0.1)] group-hover:bg-muted"
+                          )}
+                        >
+                          {d.stockLogId != null && d.stockLogId > 0 ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-xs"
+                              className="mx-auto shrink-0"
+                              title={t("edit")}
+                              aria-label={t("edit")}
+                              onClick={() =>
+                                onOpenLineEdit({
+                                  stockLogId: d.stockLogId!,
+                                  qty: d.qty,
+                                  amount: d.amount,
+                                })
+                              }
+                            >
+                              <Pencil className="h-3 w-3" aria-hidden />
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>

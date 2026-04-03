@@ -7375,6 +7375,8 @@ export interface OutboundHistoryItem {
   totalOrderItems?: number
   /** 미수령 품목 여부 (부분 배송 시 누락 품목) */
   isUnreceived?: boolean
+  /** stock_logs.id — 출고 로그 단가 수정용 */
+  stockLogId?: number
 }
 
 export async function forceOutboundBatch(
@@ -7422,6 +7424,29 @@ export async function getCombinedOutboundHistory(params: {
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   const res = await apiFetchWithOffline(`/api/getCombinedOutboundHistory?${q}`)
   return res.json() as Promise<OutboundHistoryItem[]>
+}
+
+/** 출고 로그(stock_logs) 확정 단가·수량 수정 — 본사 권한, orders 미변경 */
+export async function patchStockLogInvoiceUnitPrice(params: {
+  stockLogId: number
+  invoiceUnitPrice: number
+  /** 절대수량(양수). 지정 시 stock_logs.qty 갱신(부호는 기존 행 유지) */
+  qtyAbs?: number
+}) {
+  const res = await apiFetchWithOffline('/api/patchStockLogInvoiceUnitPrice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      stockLogId: params.stockLogId,
+      invoiceUnitPrice: params.invoiceUnitPrice,
+      ...(params.qtyAbs != null ? { qtyAbs: params.qtyAbs } : {}),
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    receivableSync?: { ran: boolean; ok?: boolean; message?: string }
+  }>
 }
 
 /** 주문 수령 사진 온디맨드 조회 (출고 내역에서 사진 클릭 시) */

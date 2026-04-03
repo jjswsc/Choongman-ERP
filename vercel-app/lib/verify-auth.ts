@@ -53,7 +53,11 @@ export async function requireAuth(
     return {
       auth: null,
       errorResponse: NextResponse.json(
-        { success: false, message: '인증이 필요합니다. 다시 로그인해 주세요.' },
+        {
+          success: false,
+          message: '인증이 필요합니다. 다시 로그인해 주세요.',
+          msg: '인증이 필요합니다. 다시 로그인해 주세요.',
+        },
         { status: 401 }
       ),
     }
@@ -72,7 +76,11 @@ export async function requireAuth(
     return {
       auth: null,
       errorResponse: NextResponse.json(
-        { success: false, message: '본 기능은 Director 권한이 필요합니다.' },
+        {
+          success: false,
+          message: '본 기능은 Director 권한이 필요합니다.',
+          msg: '본 기능은 Director 권한이 필요합니다.',
+        },
         { status: 403 }
       ),
     }
@@ -81,7 +89,11 @@ export async function requireAuth(
     return {
       auth: null,
       errorResponse: NextResponse.json(
-        { success: false, message: '본사 권한이 필요합니다.' },
+        {
+          success: false,
+          message: '본사 권한이 필요합니다.',
+          msg: '본사 권한이 필요합니다.',
+        },
         { status: 403 }
       ),
     }
@@ -90,7 +102,11 @@ export async function requireAuth(
     return {
       auth: null,
       errorResponse: NextResponse.json(
-        { success: false, message: '매니저 이상 권한이 필요합니다.' },
+        {
+          success: false,
+          message: '매니저 이상 권한이 필요합니다.',
+          msg: '매니저 이상 권한이 필요합니다.',
+        },
         { status: 403 }
       ),
     }

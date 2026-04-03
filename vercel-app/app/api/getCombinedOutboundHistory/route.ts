@@ -39,6 +39,8 @@ export interface OutboundHistoryItem {
   outboundLocation?: string
   /** 미수령 품목 여부 (부분 배송 시 누락 품목 표시용) */
   isUnreceived?: boolean
+  /** stock_logs 행 id — 출고 로그 단가 수정 API용 (실제 출고 로그에서 온 행만) */
+  stockLogId?: number
   /** 출고 로그 스냅샷 단가 — 응답 전 제거 */
   frozenUnitPrice?: number
 }
@@ -91,6 +93,7 @@ export async function GET(request: NextRequest) {
 
     const allLogs = [
       ...((outboundLogs || []) as {
+        id?: number
         log_type?: string
         log_date?: string
         vendor_target?: string
@@ -102,6 +105,7 @@ export async function GET(request: NextRequest) {
         invoice_unit_price?: number | string | null
       }[]),
       ...((forceLogs || []) as {
+        id?: number
         log_type?: string
         log_date?: string
         vendor_target?: string
@@ -278,6 +282,7 @@ export async function GET(request: NextRequest) {
         info.price
       )
       const frozen = frozenInvoiceUnitPriceFromLog(row)
+      const sid = row.id != null ? Number(row.id) : NaN
       list.push({
         date: dateStr,
         target,
@@ -291,6 +296,7 @@ export async function GET(request: NextRequest) {
         deliveryStatus: deliveryStatus || undefined,
         deliveryDate: deliveryDateForItem || undefined,
         outboundLocation: info.outboundLocation,
+        stockLogId: Number.isFinite(sid) && sid > 0 ? sid : undefined,
         frozenUnitPrice: frozen,
       })
       if (list.length >= 500) break

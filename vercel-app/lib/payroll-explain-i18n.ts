@@ -18,6 +18,7 @@ const REASON_KEY: Record<string, string> = {
   "월급제 기본급": "pay_explain_reason_salary_monthly",
   직책수당: "pay_pos_allow",
   "주방 위험수당": "pay_explain_reason_haz_kitchen",
+  "위험수당 미지급": "pay_explain_reason_haz_not_paid",
   "위험수당 합계": "pay_explain_reason_haz_sum",
   근면수당: "pay_explain_reason_diligence",
   "근면수당 미지급": "pay_explain_reason_diligence_miss",
@@ -77,6 +78,20 @@ export function translatePayrollExplainDetail(detail: string, t: (k: string) => 
 
   m = d.match(/^퇴사 (.+) 반영 일할 \(달력 예정근무 (\d+)\/(\d+)일, 등록 월급 (\d+)\)$/)
   if (m) return i18nVar(t("pay_explain_d_resign_prorate"), { date: m[1], num: m[2], den: m[3], sal: m[4] })
+
+  m = d.match(/^퇴사 (.+) — 해당 월 달력 예정근무 0일 \(등록 월급 (\d+)\)$/)
+  if (m) return i18nVar(t("pay_explain_d_resign_zero_workdays"), { date: m[1], sal: m[2] })
+
+  m = d.match(/^퇴사 (.+) 해당월 만근에 해당 \(달력 예정 (\d+)일, 등록 월급 (\d+)\)$/)
+  if (m) return i18nVar(t("pay_explain_d_resign_full_month"), { date: m[1], days: m[2], sal: m[3] })
+
+  m = d.match(/^평가등급 (.+) 이상 필요 \(현재: (.+)\)$/)
+  if (m) {
+    const currentRaw = m[2].trim()
+    const current =
+      currentRaw === "미등록" ? t("pay_explain_d_grade_not_registered") : currentRaw
+    return i18nVar(t("pay_explain_d_haz_eval_required"), { min: m[1].trim(), current })
+  }
 
   m = d.match(/^인사 등록 월급 (\d+)$/)
   if (m) return i18nVar(t("pay_explain_d_monthly_registered_sal"), { sal: m[1] })

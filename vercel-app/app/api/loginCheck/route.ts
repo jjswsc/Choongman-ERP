@@ -9,6 +9,7 @@ import {
   getFranchiseeMultiStoreSettings,
   parseExtraStoresColumn,
 } from '@/lib/franchisee-multi-store'
+import { buildSetAuthCookieHeader } from '@/lib/auth-cookie'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -102,6 +103,8 @@ export async function POST(req: NextRequest) {
       tokenPayload.allowedStores = allowedStores
     }
     const token = await signToken(tokenPayload)
+
+    headers.append('Set-Cookie', buildSetAuthCookieHeader(token))
 
     return NextResponse.json(
       {

@@ -4,7 +4,12 @@
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {}
   try {
-    const token = sessionStorage.getItem('cm_token')
+    let token: string | null = null
+    try {
+      token = sessionStorage.getItem('cm_token') || localStorage.getItem('cm_token')
+    } catch {
+      token = sessionStorage.getItem('cm_token')
+    }
     if (token) return { Authorization: `Bearer ${token}` }
   } catch {}
   return {}
@@ -47,6 +52,9 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     const isPos = path.startsWith('/pos')
     try {
       sessionStorage.removeItem('cm_token')
+      try {
+        localStorage.removeItem('cm_token')
+      } catch {}
       // POS: 토큰만 무효화하고 매장·사용자는 유지 → 불안정 망에서 401 한 번에 전체 세션 삭제·로그인 강제 이동 방지
       if (!isPos) {
         sessionStorage.removeItem('cm_store')

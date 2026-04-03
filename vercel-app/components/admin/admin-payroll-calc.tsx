@@ -33,6 +33,13 @@ import {
   translatePayrollExplainReason,
 } from "@/lib/payroll-explain-i18n"
 
+/** 급여 API·인증 오류: `msg` 또는 `message` 중 하나만 오는 경우 대비 */
+function pickApiMsg(data: { msg?: unknown; message?: unknown }): string {
+  const raw = data.msg ?? data.message
+  if (raw == null || raw === "") return ""
+  return String(raw).trim()
+}
+
 /** 급여 산출 상세에서 날짜 클릭 시 휴가 관리로 보낼 사유(API reason 원문) */
 const PAYROLL_EXPLAIN_DATE_TO_LEAVE_REASONS = new Set(["결석 공제", "무급휴가"])
 
@@ -241,7 +248,7 @@ export function AdminPayrollCalc() {
         await appAlert("✅ " + t("pay_load_done"))
       } else {
         setList([])
-        setError(data.msg || t("pay_no_data"))
+        setError(pickApiMsg(data) || t("pay_no_data"))
       }
     } catch (e) {
       setList([])
@@ -318,7 +325,8 @@ export function AdminPayrollCalc() {
         await appAlert("✅ " + t("pay_calc_done"))
       } else {
         setList([])
-        const errMsg = data.detail ? `${data.msg}\n(${data.detail})` : (data.msg || t("pay_error"))
+        const baseMsg = pickApiMsg(data) || t("pay_error")
+        const errMsg = data.detail ? `${baseMsg}\n(${data.detail})` : baseMsg
         setError(errMsg)
       }
     } catch (e) {
@@ -526,7 +534,7 @@ export function AdminPayrollCalc() {
           `${t("pay_save_success")}\n${i18nVar(t("pay_save_expense_sync"), { c: created, u: updated })}`
         )
       } else {
-        setError(translateApiMessage(data.msg) || t("pay_save_fail"))
+        setError(translateApiMessage(pickApiMsg(data)) || t("pay_save_fail"))
       }
     } catch {
       setError(t("pay_save_fail"))
