@@ -37,6 +37,14 @@ interface EvalHistoryRow {
   jsonData?: string
 }
 
+function formatEvalHistoryScore(raw: string): string {
+  const s = String(raw || "").trim()
+  if (!s) return ""
+  const n = Number(s)
+  if (!Number.isFinite(n)) return s
+  return n.toFixed(2)
+}
+
 export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -144,7 +152,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
         try {
           const data = typeof detailRow.jsonData === "string" ? JSON.parse(detailRow.jsonData) : detailRow.jsonData
           if (data?.sections) {
-            for (const key of ["menu", "cost", "hygiene", "attitude", "manager"]) {
+            for (const key of ["menu", "cost", "hygiene", "attitude", "service", "manager"]) {
               const arr = data.sections[key]
               if (Array.isArray(arr)) {
                 for (const item of arr) {
@@ -211,7 +219,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
           : detailRow.jsonData
       if (!data?.sections) return null
 
-      const sectionKeys = ["menu", "cost", "hygiene", "attitude", "manager"]
+      const sectionKeys = ["menu", "cost", "hygiene", "attitude", "service", "manager"]
       const rows: { main: string; name: string; score: string; notes: string }[] =
         []
       for (const key of sectionKeys) {
@@ -226,7 +234,10 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
           })
         }
       }
-      return { totalScore: data.totalScore, rows }
+      const ts = data.totalScore
+      const tsStr =
+        ts != null && ts !== "" ? formatEvalHistoryScore(String(ts)) : ""
+      return { totalScore: tsStr, rows }
     } catch {
       return null
     }
@@ -427,7 +438,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                         {r.evaluator}
                       </td>
                       <td className="px-3 py-2.5 text-center text-card-foreground">
-                        {r.totalScore || "-"}
+                        {formatEvalHistoryScore(r.totalScore) || "-"}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold bg-primary/20 text-primary">
@@ -478,7 +489,8 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                 <span className="rounded bg-primary/20 px-1 font-semibold text-primary">
                   {detailRow.finalGrade || "-"}
                 </span>{" "}
-                | {t("eval_list_th_score")}: {detailRow.totalScore || "-"}
+                | {t("eval_list_th_score")}:{" "}
+                {formatEvalHistoryScore(detailRow.totalScore) || "-"}
               </div>
               <div className="mb-3 rounded bg-muted/50 p-2 text-xs whitespace-pre-wrap">
                 {getTrans(detailRow.memo || "") || detailRow.memo || t("eval_none")}

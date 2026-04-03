@@ -193,9 +193,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    const a = loadAuth()
+    let a = loadAuth()
+    if (!a) {
+      a = loadOfflineResumeAuth()
+    }
     setAuthState(a)
-    // 예전 빌드: session만 있고 스냅샷 없음 → 오프라인 복구용 localStorage 보강
+    // 세션 복구·스냅샷 복구 후 sessionStorage·스냅샷 동기화 (새 탭/401 직후에도 POS 레이아웃이 로그인으로 튕기지 않게)
     if (a) saveAuth(a)
     setInitialized(true)
   }, [])

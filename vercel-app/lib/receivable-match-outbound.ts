@@ -7,7 +7,13 @@ import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 import { computeOrderHqReceivableTotal } from '@/lib/order-receivable-hq'
-import { type OrderCartLine, formatDateBangkok, findReceivedCartLineIndex, unitPriceFromOrderCart } from '@/lib/outbound-order-line-match'
+import {
+  type OrderCartLine,
+  formatDateBangkok,
+  findReceivedCartLineIndex,
+  frozenInvoiceUnitPriceFromLog,
+  unitPriceFromOutboundLogSnapshot,
+} from '@/lib/outbound-order-line-match'
 
 const TZ = 'Asia/Bangkok'
 
@@ -33,6 +39,8 @@ type OutboundRow = {
   qtyStages?: number[]
   outboundLocation?: string
   isUnreceived?: boolean
+  /** stock_logs invoice_unit_price 스냅샷(있으면 cart/마스터로 덮어쓰지 않음) */
+  frozenUnitPrice?: number
 }
 
 type OrderEnrich = {
@@ -146,6 +154,7 @@ async function buildFilteredOutboundRowsForOrder(
     item_name?: string
     qty?: number
     delivery_status?: string
+    invoice_unit_price?: number | string | null
   }[]
 
   const list: OutboundRow[] = []
@@ -156,7 +165,14 @@ async function buildFilteredOutboundRowsForOrder(
     const info = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
     const qtyAbs = Math.abs(Number(row.qty) || 0)
     if (qtyAbs <= 0) continue
-    const unitPrice = unitPriceFromOrderCart(cart, code, String(row.item_name || '').trim(), info.price)
+    const unitPrice = unitPriceFromOutboundLogSnapshot(
+      row,
+      cart,
+      code,
+      String(row.item_name || '').trim(),
+      info.price
+    )
+    const frozen = frozenInvoiceUnitPriceFromLog(row)
     const dateStr = formatDateBangkok(rowDate)
     list.push({
       date: dateStr,
@@ -173,6 +189,7 @@ async function buildFilteredOutboundRowsForOrder(
           ? String(row.delivery_status).trim()
           : '배송중',
       outboundLocation: info.outboundLocation,
+      frozenUnitPrice: frozen,
     })
   }
 
@@ -245,10 +262,14 @@ async function buildFilteredOutboundRowsForOrder(
         r.qtyStages = qtyStages
         if (qtyStages.length === 2) r.originalOrderQty = qtyStages[0]
       }
-      const infoRow = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
-      const cartP = Number(cartItem.price)
-      const lineUnit = Number.isFinite(cartP) ? cartP : infoRow.price
-      r.amount = lineUnit * finalQty
+      if (r.frozenUnitPrice != null && Number.isFinite(r.frozenUnitPrice)) {
+        r.amount = r.frozenUnitPrice * finalQty
+      } else {
+        const infoRow = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
+        const cartP = Number(cartItem.price)
+        const lineUnit = Number.isFinite(cartP) ? cartP : infoRow.price
+        r.amount = lineUnit * finalQty
+      }
     }
     filteredList.push(r)
   }

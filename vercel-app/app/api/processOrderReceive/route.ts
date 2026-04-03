@@ -132,17 +132,22 @@ export async function POST(request: NextRequest) {
     // 본사: 체크된 품목만 Outbound (본사 재고 차감) - 직접정산 품목 제외
     const hqOutboundRows = itemsToInbound
       .filter((item) => !directMap[String(item.code || '').trim()])
-      .map((item) => ({
-        location: '본사',
-        item_code: item.code,
-        item_name: item.name || '',
-        spec: item.spec || '-',
-        qty: -(Number(item.qty) || 0),
-        log_date: today,
-        vendor_target: store,
-        log_type: 'Outbound',
-        order_id: orderId,
-      }))
+      .map((item) => {
+        const p = Number((item as { price?: number }).price)
+        return {
+          location: '본사',
+          item_code: item.code,
+          item_name: item.name || '',
+          spec: item.spec || '-',
+          qty: -(Number(item.qty) || 0),
+          log_date: today,
+          vendor_target: store,
+          log_type: 'Outbound',
+          order_id: orderId,
+          /** 수령·출고 확정 시점 주문 단가 — 이후 품목 마스터 변경과 무관 */
+          invoice_unit_price: Number.isFinite(p) && p >= 0 ? p : null,
+        }
+      })
 
     if (inboundRows.length) {
       await supabaseInsertMany('stock_logs', inboundRows)

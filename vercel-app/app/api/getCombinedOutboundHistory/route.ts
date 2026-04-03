@@ -7,7 +7,8 @@ import {
   formatDateBangkok,
   formatDateHourMinBangkok,
   findReceivedCartLineIndex,
-  unitPriceFromOrderCart,
+  frozenInvoiceUnitPriceFromLog,
+  unitPriceFromOutboundLogSnapshot,
 } from '@/lib/outbound-order-line-match'
 
 export interface OutboundHistoryItem {
@@ -38,6 +39,8 @@ export interface OutboundHistoryItem {
   outboundLocation?: string
   /** 미수령 품목 여부 (부분 배송 시 누락 품목 표시용) */
   isUnreceived?: boolean
+  /** 출고 로그 스냅샷 단가 — 응답 전 제거 */
+  frozenUnitPrice?: number
 }
 
 export async function GET(request: NextRequest) {
@@ -87,8 +90,28 @@ export async function GET(request: NextRequest) {
     ])
 
     const allLogs = [
-      ...((outboundLogs || []) as { log_type?: string; log_date?: string; vendor_target?: string; item_code?: string; item_name?: string; qty?: number; order_id?: number; delivery_status?: string }[]),
-      ...((forceLogs || []) as { log_type?: string; log_date?: string; vendor_target?: string; item_code?: string; item_name?: string; qty?: number; order_id?: number; delivery_status?: string }[]),
+      ...((outboundLogs || []) as {
+        log_type?: string
+        log_date?: string
+        vendor_target?: string
+        item_code?: string
+        item_name?: string
+        qty?: number
+        order_id?: number
+        delivery_status?: string
+        invoice_unit_price?: number | string | null
+      }[]),
+      ...((forceLogs || []) as {
+        log_type?: string
+        log_date?: string
+        vendor_target?: string
+        item_code?: string
+        item_name?: string
+        qty?: number
+        order_id?: number
+        delivery_status?: string
+        invoice_unit_price?: number | string | null
+      }[]),
     ].sort((a, b) => new Date(b.log_date || 0).getTime() - new Date(a.log_date || 0).getTime())
 
     /** 주문 출고(stock_logs) 줄 금액 = cart 단가×수량 (회계 미수금과 일치) */
@@ -245,15 +268,16 @@ export async function GET(request: NextRequest) {
             ? deliveryDateStr || undefined
             : undefined
       const qtyAbs = Math.abs(Number(row.qty) || 0)
-      let unitPrice = info.price
-      if (orderRowId && orderCartByOrderId[orderRowId]?.length) {
-        unitPrice = unitPriceFromOrderCart(
-          orderCartByOrderId[orderRowId],
-          code,
-          String(row.item_name || '').trim(),
-          info.price
-        )
-      }
+      const cartForPrice =
+        orderRowId && orderCartByOrderId[orderRowId]?.length ? orderCartByOrderId[orderRowId] : undefined
+      const unitPrice = unitPriceFromOutboundLogSnapshot(
+        row,
+        cartForPrice,
+        code,
+        String(row.item_name || '').trim(),
+        info.price
+      )
+      const frozen = frozenInvoiceUnitPriceFromLog(row)
       list.push({
         date: dateStr,
         target,
@@ -267,6 +291,7 @@ export async function GET(request: NextRequest) {
         deliveryStatus: deliveryStatus || undefined,
         deliveryDate: deliveryDateForItem || undefined,
         outboundLocation: info.outboundLocation,
+        frozenUnitPrice: frozen,
       })
       if (list.length >= 500) break
     }
@@ -440,10 +465,14 @@ export async function GET(request: NextRequest) {
             r.qtyStages = qtyStages
             if (qtyStages.length === 2) r.originalOrderQty = qtyStages[0]
           }
-          const infoRow = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
-          const cartP = Number(cartItem.price)
-          const lineUnit = Number.isFinite(cartP) ? cartP : infoRow.price
-          r.amount = lineUnit * finalQty
+          if (r.frozenUnitPrice != null && Number.isFinite(r.frozenUnitPrice)) {
+            r.amount = r.frozenUnitPrice * finalQty
+          } else {
+            const infoRow = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
+            const cartP = Number(cartItem.price)
+            const lineUnit = Number.isFinite(cartP) ? cartP : infoRow.price
+            r.amount = lineUnit * finalQty
+          }
         }
         // cart 매칭 실패 시에도 출고 줄 유지(이전에는 continue 로 빠져 인보이스 합이 크게 어긋날 수 있었음)
         filteredList.push(r)
@@ -501,6 +530,7 @@ export async function GET(request: NextRequest) {
         if (r.code && directMap[r.code]) r.amount = 0
       }
 
+      for (const r of filteredList) delete r.frozenUnitPrice
       return NextResponse.json(filteredList, { headers })
     }
 
@@ -511,6 +541,7 @@ export async function GET(request: NextRequest) {
       if (r.code && directMap[r.code]) r.amount = 0
     }
 
+    for (const r of list) delete r.frozenUnitPrice
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getCombinedOutboundHistory:', e)

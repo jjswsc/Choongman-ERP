@@ -87,8 +87,10 @@ export async function GET(req: Request) {
               typeof row.json_data === 'string'
                 ? JSON.parse(row.json_data)
                 : row.json_data
-            if (parsed?.totalScore != null)
-              totalScore = String(parsed.totalScore)
+            if (parsed?.totalScore != null) {
+              const n = Number(parsed.totalScore)
+              totalScore = Number.isFinite(n) ? n.toFixed(2) : String(parsed.totalScore)
+            }
           } catch {
             //
           }

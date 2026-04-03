@@ -55,6 +55,30 @@ export function findReceivedCartLineIndex(
   return -1
 }
 
+/** stock_logs.invoice_unit_price 가 있으면 그 값(출고 확정 시 스냅샷) */
+export function frozenInvoiceUnitPriceFromLog(row: {
+  invoice_unit_price?: number | string | null
+}): number | undefined {
+  const raw = row.invoice_unit_price
+  if (raw == null || raw === '') return undefined
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
+}
+
+/** 출고 로그 줄 단가: 스냅샷 우선, 없으면 cart → 마스터 */
+export function unitPriceFromOutboundLogSnapshot(
+  row: { invoice_unit_price?: number | string | null },
+  cart: OrderCartLine[] | undefined,
+  code: string,
+  itemName: string,
+  masterPrice: number
+): number {
+  const f = frozenInvoiceUnitPriceFromLog(row)
+  if (f != null) return f
+  return unitPriceFromOrderCart(cart, code, itemName, masterPrice)
+}
+
 export function unitPriceFromOrderCart(
   cart: OrderCartLine[] | undefined,
   code: string,

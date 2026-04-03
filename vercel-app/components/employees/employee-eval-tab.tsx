@@ -399,52 +399,17 @@ export function EmployeeEvalTab({
     (text && evalTransMap[text]) || text || ""
 
   const updateTotals = React.useCallback(() => {
-    let menuAvg = 0,
-      costAvg = 0,
-      hygieneAvg = 0,
-      attitudeAvg = 0,
-      serviceAvg = 0
-    let menuN = 0,
-      costN = 0,
-      hygieneN = 0,
-      attitudeN = 0,
-      serviceN = 0
-    let managerAvg = 0
-    let managerN = 0
-    const toCategory = (m: string) =>
-      m === "메뉴숙련" || m === "Menu skill" ? "menu" :
-      m === "원가정확도" || m === "Cooking Accuracy & Cost Control" ? "cost" :
-      m === "위생" || m === "Hygiene" ? "hygiene" :
-      m === "태도" || m === "Attitude" ? "attitude" :
-      m === "서비스" || m === "Service" ? "service" :
-      m === "매니저" || m === "Manager" || m === "리더십" ? "manager" : null
+    /** 섹션 main이 한/영 외(태국어 DB 등)여도 항목별 점수는 모두 반영 — 구버전은 toCategory 미스로 총점 0·등급만 수동 선택되는 버그가 있었음 */
+    let sumAll = 0
+    let totalItems = 0
     for (const s of sections) {
-      const cat = toCategory(s.main)
       for (const it of s.items) {
         const v = Number(scores[String(it.id)] || 5)
-        if (cat === "menu") { menuAvg += v; menuN++ }
-        else if (cat === "cost") { costAvg += v; costN++ }
-        else if (cat === "hygiene") { hygieneAvg += v; hygieneN++ }
-        else if (cat === "attitude") { attitudeAvg += v; attitudeN++ }
-        else if (cat === "service") { serviceAvg += v; serviceN++ }
-        else if (cat === "manager") { managerAvg += v; managerN++ }
+        if (!Number.isFinite(v)) continue
+        sumAll += v
+        totalItems++
       }
     }
-    if (menuN) menuAvg /= menuN
-    if (costN) costAvg /= costN
-    if (hygieneN) hygieneAvg /= hygieneN
-    if (attitudeN) attitudeAvg /= attitudeN
-    if (serviceN) serviceAvg /= serviceN
-    if (managerN) managerAvg /= managerN
-
-    const totalItems = menuN + costN + hygieneN + attitudeN + serviceN + managerN
-    const sumAll =
-      menuAvg * menuN +
-      costAvg * costN +
-      hygieneAvg * hygieneN +
-      attitudeAvg * attitudeN +
-      serviceAvg * serviceN +
-      managerAvg * managerN
     const total = totalItems > 0 ? sumAll / totalItems : 0
 
     let grade = "-"
@@ -487,9 +452,15 @@ export function EmployeeEvalTab({
         service: [],
         manager: [],
       }
+      const fallbackPayloadKey =
+        evalType === "service"
+          ? "service"
+          : evalType === "manager"
+            ? "manager"
+            : "attitude"
       for (const s of sections) {
-        const key = sectionKey[s.main]
-        if (!key || !payloadSections[key]) continue
+        const key = sectionKey[s.main] || fallbackPayloadKey
+        if (!payloadSections[key]) continue
         for (const it of s.items) {
           const k = String(it.id)
           const rec: Record<string, unknown> = {

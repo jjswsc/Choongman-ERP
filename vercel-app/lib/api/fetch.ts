@@ -43,13 +43,20 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     if (!auth.Authorization) {
       return res
     }
+    const path = window.location.pathname || ''
+    const isPos = path.startsWith('/pos')
     try {
       sessionStorage.removeItem('cm_token')
-      sessionStorage.removeItem('cm_store')
-      sessionStorage.removeItem('cm_user')
-      sessionStorage.removeItem('cm_role')
+      // POS: 토큰만 무효화하고 매장·사용자는 유지 → 불안정 망에서 401 한 번에 전체 세션 삭제·로그인 강제 이동 방지
+      if (!isPos) {
+        sessionStorage.removeItem('cm_store')
+        sessionStorage.removeItem('cm_user')
+        sessionStorage.removeItem('cm_role')
+      }
     } catch {}
-    window.location.href = resolveLoginPathFromLocation()
+    if (!isPos) {
+      window.location.href = resolveLoginPathFromLocation()
+    }
   }
   return res
 }
