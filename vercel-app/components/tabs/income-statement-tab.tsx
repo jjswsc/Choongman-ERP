@@ -418,65 +418,71 @@ export function IncomeStatementTab() {
             <p className="py-8 text-center text-sm text-muted-foreground">
               {t("loadingItems") || "불러오는 중..."}
             </p>
-          ) : data && view ? (
-            <div className="overflow-x-auto">
-              <div className="flex flex-wrap items-end gap-4 mb-3 pb-3 border-b">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="pl-manual-sales"
-                    checked={manualEnabled}
-                    onCheckedChange={(v) => onManualCheckedChange(v === true)}
-                  />
-                  <Label htmlFor="pl-manual-sales" className="text-sm font-normal cursor-pointer">
-                    {t("pL_manualSalesUse")}
-                  </Label>
+          ) : (
+            <>
+              <div className="space-y-3 mb-4 pb-4 border-b">
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="pl-manual-sales"
+                      checked={manualEnabled}
+                      onCheckedChange={(v) => onManualCheckedChange(v === true)}
+                    />
+                    <Label htmlFor="pl-manual-sales" className="text-sm font-normal cursor-pointer">
+                      {t("pL_manualSalesUse")}
+                    </Label>
+                  </div>
+                  {manualEnabled && (
+                    <Input
+                      className="w-40 h-9 font-mono"
+                      inputMode="decimal"
+                      placeholder={t("pL_manualSalesPlaceholder")}
+                      value={manualAmountStr}
+                      onChange={(e) => setManualAmountStr(e.target.value)}
+                      aria-label={t("pL_manualSalesPlaceholder")}
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground max-w-md shrink-0">{t("pL_manualSalesNote")}</p>
                 </div>
-                {manualEnabled && (
-                  <Input
-                    className="w-40 h-9 font-mono"
-                    inputMode="decimal"
-                    placeholder={t("pL_manualSalesPlaceholder")}
-                    value={manualAmountStr}
-                    onChange={(e) => setManualAmountStr(e.target.value)}
-                    aria-label={t("pL_manualSalesPlaceholder")}
-                  />
-                )}
-                <p className="text-xs text-muted-foreground max-w-md shrink-0">{t("pL_manualSalesNote")}</p>
-              </div>
-              <div className="flex flex-wrap items-end gap-4 mb-3 pb-3 border-b">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="pl-manual-beg-inv"
-                    checked={begInvManualEnabled}
-                    onCheckedChange={(v) => {
-                      const checked = v === true
-                      setBegInvManualEnabled(checked)
-                      if (checked && data) {
-                        const saved = readIncomeStatementBeginningInvOverride(yearMonth, storeFilter)
-                        setBegInvAmountStr(
-                          saved?.enabled ? String(saved.amount) : String(data.beginningInventory ?? 0)
-                        )
-                      }
-                      if (!checked) setBegInvAmountStr("")
-                    }}
-                  />
-                  <Label htmlFor="pl-manual-beg-inv" className="text-sm font-normal cursor-pointer">
-                    {t("pL_manualBegInvUse")}
-                  </Label>
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="pl-manual-beg-inv"
+                      checked={begInvManualEnabled}
+                      onCheckedChange={(v) => {
+                        const checked = v === true
+                        setBegInvManualEnabled(checked)
+                        if (checked) {
+                          const saved = readIncomeStatementBeginningInvOverride(yearMonth, storeFilter)
+                          if (saved?.enabled) setBegInvAmountStr(String(saved.amount))
+                          else if (data) setBegInvAmountStr(String(data.beginningInventory ?? 0))
+                          else setBegInvAmountStr("")
+                        } else setBegInvAmountStr("")
+                      }}
+                    />
+                    <Label htmlFor="pl-manual-beg-inv" className="text-sm font-normal cursor-pointer">
+                      {t("pL_manualBegInvUse")}
+                    </Label>
+                  </div>
+                  {begInvManualEnabled && (
+                    <Input
+                      className="w-40 h-9 font-mono"
+                      inputMode="decimal"
+                      placeholder={t("pL_manualBegInvPlaceholder")}
+                      value={begInvAmountStr}
+                      onChange={(e) => setBegInvAmountStr(e.target.value)}
+                      aria-label={t("pL_manualBegInvPlaceholder")}
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground max-w-xl">{t("pL_manualBegInvNote")}</p>
                 </div>
-                {begInvManualEnabled && (
-                  <Input
-                    className="w-40 h-9 font-mono"
-                    inputMode="decimal"
-                    placeholder={t("pL_manualBegInvPlaceholder")}
-                    value={begInvAmountStr}
-                    onChange={(e) => setBegInvAmountStr(e.target.value)}
-                    aria-label={t("pL_manualBegInvPlaceholder")}
-                  />
+                {!data && (
+                  <p className="text-xs text-muted-foreground">{t("pL_manualOverridesAfterQuery")}</p>
                 )}
-                <p className="text-xs text-muted-foreground max-w-xl">{t("pL_manualBegInvNote")}</p>
               </div>
 
+              {data && view ? (
+            <div className="overflow-x-auto">
               <div ref={printRef} className="rounded-md bg-white p-3 text-foreground">
                 <div className="text-lg font-semibold mb-1">{t("incomeStatementTitle")}</div>
                 <div className="text-sm text-muted-foreground mb-2">
@@ -698,10 +704,12 @@ export function IncomeStatementTab() {
                 </table>
               </div>
             </div>
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
-            </p>
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

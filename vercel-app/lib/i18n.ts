@@ -2214,6 +2214,7 @@ export const i18n = {
     pL_manualBegInvNote:
       'ERP 시작월 등 stock_logs가 월 1일 이전에 없을 때, 실제 월초 재고금액을 넣으면 매출원가가 맞춰집니다. 이 기기·브라우저에만 저장됩니다.',
     pL_systemBegInvLabel: '시스템 산출 기초재고',
+    pL_manualOverridesAfterQuery: '아래 손익 표는 조회 후에 갱신됩니다. 월·매장을 고른 뒤 조회해 주세요.',
     pL_systemSalesLabel: '시스템 집계 매출',
     pL_exportPdf: 'PDF',
     pL_exportXlsx: 'Excel',
@@ -7346,6 +7347,7 @@ Only matters the employee must handle personally on a working day:
     pL_manualBegInvNote:
       'When there are no stock_logs before the 1st (e.g. ERP start month), enter the actual opening stock value so COGS is correct. Saved only in this browser.',
     pL_systemBegInvLabel: 'System-calculated beg. inventory',
+    pL_manualOverridesAfterQuery: 'The statement below updates after you run a query. Choose month/store, then click Query.',
     pL_systemSalesLabel: 'System-reported sales',
     pL_exportPdf: 'PDF',
     pL_exportXlsx: 'Excel',

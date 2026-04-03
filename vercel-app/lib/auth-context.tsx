@@ -26,6 +26,12 @@ function resolveLoginPathByCurrentRoute(): string {
   return '/login'
 }
 
+/** 로그인 화면에서는 스냅샷을 전역 auth로 올리지 않음 — 올리면 폼이 즉시 리다이렉트되어 로그아웃이 무효화됨. 오프라인 진입은 LoginForm의 offlineResume·CTA로 처리 */
+function isAuthLoginPathname(pathname: string): boolean {
+  const p = (pathname || '/').replace(/\/+$/, '') || '/'
+  return p === '/login' || p === '/admin/login' || p === '/pos/login'
+}
+
 function loadAuth(): AuthState | null {
   if (typeof window === 'undefined') return null
   try {
@@ -178,7 +184,7 @@ function saveAuth(auth: AuthState) {
   } catch {}
 }
 
-/** 세션·토큰만 제거. `cm_last_login_snapshot`은 유지 → 로그아웃 후에도 오프라인 모드로 재진입 가능(전용 기기 POS). 완전 삭제는 브라우저 사이트 데이터 삭제. */
+/** 세션·토큰·마지막 로그인 스냅샷 제거. 스냅샷을 남기면 로그인 URL에서 전역 auth가 복구되어 곧바로 앱으로 튕김(로그아웃 무력화). 오프라인 재진입은 로그인 화면에서 스냅샷을 읽는 CTA로만 사용. */
 function clearAuth() {
   try {
     sessionStorage.removeItem('cm_store')
@@ -191,6 +197,9 @@ function clearAuth() {
     sessionStorage.removeItem('cm_employee_id')
     sessionStorage.removeItem('cm_employee_code')
     sessionStorage.removeItem(CM_ALLOWED_STORES_KEY)
+    try {
+      localStorage.removeItem(LAST_LOGIN_SNAPSHOT_KEY)
+    } catch {}
   } catch {}
 }
 
@@ -208,7 +217,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let a = loadAuth()
     if (!a) {
-      a = loadOfflineResumeAuth()
+      const path = typeof window !== 'undefined' ? window.location.pathname || '' : ''
+      if (!isAuthLoginPathname(path)) {
+        a = loadOfflineResumeAuth()
+      }
     }
     setAuthState(a)
     // 세션 복구·스냅샷 복구 후 sessionStorage·스냅샷 동기화 (새 탭/401 직후에도 POS 레이아웃이 로그인으로 튕기지 않게)
