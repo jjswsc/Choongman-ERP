@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+# ESLint JSON 리포트(로컬/CI 산출, 수 MB)
+eslint-report.json
 
 # next.js
 /.next/
