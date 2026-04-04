@@ -5,6 +5,8 @@ import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/p
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to'
 
+const SELECT_EXTENDED_WITH_COMPOSE = SELECT_EXTENDED + ',compose_pricing_basis'
+
 const SELECT_BASE =
   'id,code,name,category,price,price_delivery,vat_included,is_active,sort_order'
 
@@ -24,6 +26,14 @@ type RawPromo = {
   discount_percent?: number | null
   valid_from?: string | null
   valid_to?: string | null
+  compose_pricing_basis?: string | null
+}
+
+function normalizeComposePricingBasis(v: unknown): 'hall' | 'delivery' {
+  const s = String(v ?? '')
+    .toLowerCase()
+    .trim()
+  return s === 'delivery' ? 'delivery' : 'hall'
 }
 
 function parseDeliveryCodes(dac: unknown): string[] | null {
@@ -50,7 +60,7 @@ export async function GET(req: NextRequest) {
     const includeInactive = searchParams.get('includeInactive') === 'true'
 
     let promos: RawPromo[] | null = null
-    for (const sel of [SELECT_EXTENDED, SELECT_BASE]) {
+    for (const sel of [SELECT_EXTENDED_WITH_COMPOSE, SELECT_EXTENDED, SELECT_BASE]) {
       try {
         const filterParts: string[] = []
         if (campaignId) filterParts.push(`marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`)
@@ -93,6 +103,7 @@ export async function GET(req: NextRequest) {
           : null,
       validFrom: p.valid_from ? String(p.valid_from).slice(0, 10) : null,
       validTo: p.valid_to ? String(p.valid_to).slice(0, 10) : null,
+      composePricingBasis: normalizeComposePricingBasis(p.compose_pricing_basis),
     }))
 
     const itemsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number }[]> = {}

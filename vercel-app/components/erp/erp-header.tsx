@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User, Smartphone, ArrowLeft, HardDriveDownload, Languages } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft, HardDriveDownload, Languages, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -31,6 +31,7 @@ import { useStoreList } from "@/lib/api-client"
 import { isFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import { warmAdminOfflineCache } from "@/lib/offline/pos-offline-warm"
 import { useAutoTranslate } from "@/lib/auto-translate"
+import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
 
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ko", label: "한국어" },
@@ -84,6 +85,12 @@ export function ErpHeader() {
   const showBackButton = !isLoginPage && !isDashboard
   const offlinePrefetchTitle =
     t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
+  const erpWindowsDownloadLabel = t("erpWindowsDownload") || "윈도우 ERP 받기"
+  const handleErpInstallerCopy = useCallback(async () => {
+    const r = await copyWindowsInstallerUrl(WINDOWS_ERP_SETUP_PATH)
+    if (r.ok) await appAlert(t("windowsInstallerCopyHint") || "")
+    else await appAlert((t("windowsInstallerCopyFail") || "") + r.url)
+  }, [t])
   const autoTranslateLabel = lang === "ko" ? "자동번역" : "Auto translate"
 
   // ERP 내 이동 시 이전/현재 경로 저장 (뒤로가기용)
@@ -146,6 +153,18 @@ export function ErpHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
+          title={erpWindowsDownloadLabel}
+          onClick={() => void handleErpInstallerCopy()}
+        >
+          <Download className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">{erpWindowsDownloadLabel}</span>
+        </Button>
+        <Separator orientation="vertical" className="mx-1 h-5" />
         <Button
           type="button"
           variant="outline"

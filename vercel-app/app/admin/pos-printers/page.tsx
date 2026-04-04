@@ -63,7 +63,10 @@ import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/l
 
 type PreviewKind = "receipt" | "kitchen"
 
-const POS_PAPER_SIDE_PADDING_MM = 1
+const POS_PAPER_SIDE_PADDING_MM = 0
+const RECEIPT_INNER_INSET_LEFT_MM = 5
+const RECEIPT_INNER_INSET_RIGHT_MM = 7
+const RECEIPT_CONTENT_NUDGE_LEFT_MM = 3
 const RECEIPT_ASSET_MAX_BYTES = 1024 * 700
 
 const buildCode128BarcodeUrl = (raw: string) => {
@@ -78,14 +81,18 @@ const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
   html { height: auto; }
   body {
     width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
+    max-width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
     min-height: auto;
     height: auto;
     box-sizing: border-box;
     font-family: ${fontFamily};
     font-size: ${fontSizePx}px;
-    padding: ${POS_PAPER_SIDE_PADDING_MM}mm;
+    padding: ${POS_PAPER_SIDE_PADDING_MM}mm ${RECEIPT_INNER_INSET_RIGHT_MM}mm ${POS_PAPER_SIDE_PADDING_MM}mm ${RECEIPT_INNER_INSET_LEFT_MM}mm;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  @media print {
+    body { zoom: 1; }
   }
 `
 
@@ -829,7 +836,7 @@ export default function PosPrintersPage() {
             it.qty * it.price
           ).toLocaleString()}</span></div>${
             itemBarcodeUrl
-              ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${escapeHtml(itemBarcodeUrl)}" alt="Item barcode" style="width:66mm;max-width:100%;height:auto;object-fit:contain;" /></div>`
+              ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${escapeHtml(itemBarcodeUrl)}" alt="Item barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>`
               : ""
           }`
         }
@@ -842,8 +849,8 @@ export default function PosPrintersPage() {
           <title>${escapeHtml(t("posReceipt") || "영수증")}</title>
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; }
-            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: 1mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
+            .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; }
             .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
             .receipt-brand-logo.sm { width: 84px; }
@@ -854,13 +861,13 @@ export default function PosPrintersPage() {
             .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
             .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
             .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-meta-row { display: grid; grid-template-columns: minmax(0, 46%) minmax(0, 54%); column-gap: 6px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
+            .receipt-meta-row { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; }
             .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #111; }
+            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #111; box-sizing: border-box; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
             .receipt-muted { color: #000; }
             .paid-stamp-wrap { text-align: center; margin: 10px 0; }
@@ -911,7 +918,7 @@ export default function PosPrintersPage() {
             <div class="receipt-row"><span>${escapeHtml(t("posTotal") || "합계")}</span><span>${previewData.total.toLocaleString()} ฿</span></div>
           </div>
           <div class="receipt-divider"></div>
-          ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptBarcodeUrl)}" alt="Receipt barcode" style="width:68mm;max-width:100%;height:auto;object-fit:contain;" /></div>` : ""}
+          ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptBarcodeUrl)}" alt="Receipt barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>` : ""}
           ${signatureLine && previewIsTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;">${escapeHtml(tr("posSignature", "서명"))}: ____________________</div>` : ""}
           ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${escapeHtml(tr("posReceiptPaid", "결제완료"))}</span></div>` : ""}
           ${receiptShowMembershipQr && qrSrc ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(qrSrc)}" alt="Membership QR" style="width:84px;height:84px;object-fit:contain;" />${qrCaption ? `<div class="text-xs receipt-muted" style="margin-top:2px;">${escapeHtml(qrCaption)}</div>` : ""}</div>` : ""}

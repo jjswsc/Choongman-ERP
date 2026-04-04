@@ -44,7 +44,7 @@ import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { OfflineBanner } from '@/components/offline-banner'
-import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
+import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import {
   Collapsible,
   CollapsibleContent,
@@ -590,10 +590,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}
       <p class="t" style="font-size:12px;color:#666">${formatPosDateTimeMedium(new Date(), lang)}</p>
       </body></html>`
-    printHtmlInHiddenIframe(fullHtml, {
+    printPosHtmlDocument(fullHtml, {
       title: t('posSettlementReport') || 'POS 결산 리포트',
-      printDelayMs: 220,
-      fallbackCleanupMs: 30_000,
+      printDelayMs: 0,
+      fallbackCleanupMs: 120_000,
       onPrintUnavailable: () => {
         void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
       },

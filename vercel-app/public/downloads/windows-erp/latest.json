@@ -1,0 +1,29 @@
+﻿{
+    "version":  "0.1.0",
+    "files":  [
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-erp/cm-erp-windows-latest-setup.exe",
+                      "name":  "cm-erp-windows-latest-setup.exe",
+                      "sha256":  "50f9fc44632df0f6aa519f4cddd26cd44f5cecd878a9c22130288a8f0d5adbab"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-erp/cm-erp-windows-0.1.0-setup.exe",
+                      "name":  "cm-erp-windows-0.1.0-setup.exe",
+                      "sha256":  "50f9fc44632df0f6aa519f4cddd26cd44f5cecd878a9c22130288a8f0d5adbab"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-erp/cm-erp-windows-latest-portable.exe",
+                      "name":  "cm-erp-windows-latest-portable.exe",
+                      "sha256":  "6beca45bafa8a39505dd254ae3026e8935566e1c7ea7c93c3695bfa8c35fa6af"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-erp/cm-erp-windows-0.1.0-portable.exe",
+                      "name":  "cm-erp-windows-0.1.0-portable.exe",
+                      "sha256":  "6beca45bafa8a39505dd254ae3026e8935566e1c7ea7c93c3695bfa8c35fa6af"
+                  }
+              ],
+    "installerSha256":  "50f9fc44632df0f6aa519f4cddd26cd44f5cecd878a9c22130288a8f0d5adbab",
+    "publishedAtUtc":  "2026-04-04T05:38:00.5203426Z",
+    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-erp/cm-erp-windows-latest-setup.exe",
+    "notes":  "Stability improvements and latest features."
+}

@@ -22,6 +22,7 @@ import { fetchMarketingCampaignHubLinkSets } from "@/lib/marketing-campaign-hub-
 import { CAMPAIGN_TYPE_OPTIONS, KPI_UNIT_OPTIONS } from "@/lib/marketing-campaign-type-utils"
 import type { CampaignHubLinkFilterValue } from "@/lib/marketing-campaign-filters"
 import { getCampaignTypeLabel } from "@/lib/marketing-campaign-type-utils"
+import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 
 export type MarketingCampaignFinderPanelProps = {
   value: string
@@ -109,8 +110,8 @@ export function MarketingCampaignFinderPanel({
   const [listSearchQuery, setListSearchQuery] = React.useState("")
   const [listSearchScope, setListSearchScope] = React.useState<CampaignListSearchScope>("all")
   const [listFiltersOpen, setListFiltersOpen] = React.useState(false)
-  const [listPeriodFrom, setListPeriodFrom] = React.useState("")
-  const [listPeriodTo, setListPeriodTo] = React.useState("")
+  const [listPeriodFrom, setListPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
+  const [listPeriodTo, setListPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
   const [listDesignFrom, setListDesignFrom] = React.useState("")
   const [listDesignTo, setListDesignTo] = React.useState("")
   const [listCampaignTypeFilter, setListCampaignTypeFilter] = React.useState("")

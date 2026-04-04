@@ -67,6 +67,7 @@ export function AdminNoticeHistory() {
   const [readDetailOpen, setReadDetailOpen] = React.useState(false)
   const [readDetailTitle, setReadDetailTitle] = React.useState("")
   const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
+  const [readDetailStoreFilter, setReadDetailStoreFilter] = React.useState("")
   const [readDetailLoading, setReadDetailLoading] = React.useState(false)
   const [searchType, setSearchType] = React.useState<"all" | "notice" | "order">("all")
   const [searchKeyword, setSearchKeyword] = React.useState("")
@@ -179,10 +180,25 @@ export function AdminNoticeHistory() {
     }
   }
 
+  const readDetailStoreOptions = React.useMemo(() => {
+    const s = new Set<string>()
+    for (const it of readDetailItems) {
+      const st = String(it.store || "").trim()
+      if (st) s.add(st)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b))
+  }, [readDetailItems])
+
+  const readDetailFilteredItems = React.useMemo(() => {
+    if (!readDetailStoreFilter) return readDetailItems
+    return readDetailItems.filter((x) => String(x.store || "").trim() === readDetailStoreFilter)
+  }, [readDetailItems, readDetailStoreFilter])
+
   const handleOpenReadDetail = React.useCallback(
     async (e: React.MouseEvent, notice: SentNoticeItem) => {
       e.stopPropagation()
       setReadDetailTitle(transMap[notice.title] || notice.title)
+      setReadDetailStoreFilter("")
       setReadDetailOpen(true)
       setReadDetailItems([])
       setReadDetailLoading(true)
@@ -485,7 +501,13 @@ export function AdminNoticeHistory() {
         )}
       </div>
 
-      <Dialog open={readDetailOpen} onOpenChange={setReadDetailOpen}>
+      <Dialog
+        open={readDetailOpen}
+        onOpenChange={(open) => {
+          setReadDetailOpen(open)
+          if (!open) setReadDetailStoreFilter("")
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-base">
@@ -497,6 +519,32 @@ export function AdminNoticeHistory() {
               )}
             </DialogTitle>
           </DialogHeader>
+          {!readDetailLoading && readDetailItems.length > 0 && readDetailStoreOptions.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-2 shrink-0 pb-1">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                {t("noticeReadDetailFilterStore")}
+              </span>
+              <Select
+                value={readDetailStoreFilter || "__all__"}
+                onValueChange={(v) => setReadDetailStoreFilter(v === "__all__" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 min-w-[160px] max-w-full flex-1 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">{t("noticeFilterAll")}</SelectItem>
+                  {readDetailStoreOptions.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-[11px] tabular-nums text-muted-foreground ml-auto">
+                {readDetailFilteredItems.length}/{readDetailItems.length}
+              </span>
+            </div>
+          ) : null}
           <div className="overflow-auto min-h-0 flex-1 -mx-1">
             {readDetailLoading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
@@ -515,7 +563,7 @@ export function AdminNoticeHistory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {readDetailItems.map((item, i) => (
+                  {readDetailFilteredItems.map((item, i) => (
                     <tr key={`${item.store}-${item.name}-${i}`} className="border-b border-border/60">
                       <td className="p-2">{item.store}</td>
                       <td className="p-2">{item.name}</td>

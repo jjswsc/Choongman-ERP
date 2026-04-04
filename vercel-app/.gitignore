@@ -46,3 +46,21 @@ next-env.d.ts
 # Serwist (빌드 산출)
 public/sw.js
 public/swe-worker*
+
+# Android signing secrets
+android/keystore.properties
+*.jks
+*.keystore
+
+# Windows POS local outputs/secrets
+windows-pos/node_modules/
+windows-pos/dist/
+windows-pos/*.blockmap
+windows-erp/node_modules/
+windows-erp/dist/
+windows-erp/*.blockmap
+
+# Windows 설치 파일(~78MB×N). Git에는 latest.json 등만 두고, exe는 publish 스크립트로 배포 전 public에 복사
+public/downloads/**/*.exe
+# Android APK(100MB+ GitHub 제한). publish-android-apk.ps1 로 배포 시에만 public에 복사
+public/downloads/**/*.apk

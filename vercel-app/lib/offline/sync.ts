@@ -8,25 +8,77 @@ import {
   reportNetworkFailure,
   reportNetworkSuccess,
 } from './network'
-import {
-  getAllPending,
-  removeFromQueue,
-  updateQueueItem,
-  type PendingRequest,
-} from './queue'
+import { getAllPending, removeFromQueue, updateQueueItem } from './queue'
 import { registerQueuedSavePosOrderSyncedServerId } from './pos-queued-sync-print-suppress'
 
 export type SyncResult = { synced: number; failed: number }
 export type SyncListener = (result: SyncResult) => void
+export type SyncSnapshot = {
+  lastAttemptAt?: number
+  lastSuccessAt?: number
+  lastSynced: number
+  lastFailed: number
+}
 
 const listeners = new Set<SyncListener>()
+const snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>()
 const MAX_RETRY_COUNT = 8
 const RETRY_BASE_MS = 2_000
 const RETRY_MAX_MS = 5 * 60_000
+const SNAPSHOT_KEY = 'cm_offline_sync_snapshot_v1'
+let syncSnapshot: SyncSnapshot = { lastSynced: 0, lastFailed: 0 }
+
+function readStoredSnapshot(): SyncSnapshot | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(SNAPSHOT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<SyncSnapshot>
+    return {
+      lastAttemptAt:
+        parsed.lastAttemptAt != null ? Number(parsed.lastAttemptAt) : undefined,
+      lastSuccessAt:
+        parsed.lastSuccessAt != null ? Number(parsed.lastSuccessAt) : undefined,
+      lastSynced: Math.max(0, Number(parsed.lastSynced ?? 0)),
+      lastFailed: Math.max(0, Number(parsed.lastFailed ?? 0)),
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveSnapshot(snapshot: SyncSnapshot) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot))
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function updateSnapshot(next: SyncSnapshot) {
+  syncSnapshot = next
+  saveSnapshot(next)
+  snapshotListeners.forEach((cb) => cb(next))
+}
+
+const initialSnapshot = readStoredSnapshot()
+if (initialSnapshot) {
+  syncSnapshot = initialSnapshot
+}
 
 export function onSyncComplete(cb: SyncListener): () => void {
   listeners.add(cb)
   return () => listeners.delete(cb)
+}
+
+export function getSyncSnapshot(): SyncSnapshot {
+  return syncSnapshot
+}
+
+export function onSyncSnapshot(cb: (snapshot: SyncSnapshot) => void): () => void {
+  snapshotListeners.add(cb)
+  return () => snapshotListeners.delete(cb)
 }
 
 function notifySyncComplete(result: SyncResult) {
@@ -43,13 +95,35 @@ function isNetworkError(e: unknown): boolean {
 }
 
 /**
- * 동기화 순서: 신규 주문(0) → 본문 수정·기타(1, createdAt) → 주문 상태(2) → 결산(3)
- * updatePosOrder는 1번 티어에 두어 다른 요청과 시간순으로 섞이고, status는 항상 그 뒤.
+ * 동기화 순서
+ * - POS 주문 파이프라인: 신규 주문(0) → 본문 수정·기타(1, createdAt) → 주문 상태(2) → 재고 차감(3) → 결산(4)
+ * - ERP 저위험 저장: 일반 저장(5)
+ * - ERP 발주 승인/취소·인보이스 반영: 저장 이후(6)
+ * - ERP 정산·전표 반영 성격(은행/출납/현금): 가장 뒤(7)
  */
 function syncOrder(item: { api: string; createdAt: number }): number {
   if (item.api === '/api/savePosOrder') return 0
   if (item.api === '/api/updatePosOrderStatus') return 2
-  if (item.api === '/api/savePosSettlement') return 3
+  if (item.api === '/api/processPosStockDeduction') return 3
+  if (item.api === '/api/savePosSettlement') return 4
+  if (
+    item.api === '/api/processPurchaseOrderApproval' ||
+    item.api === '/api/processPurchaseOrderCancel' ||
+    item.api === '/api/updatePurchaseOrderInvoice'
+  ) {
+    return 6
+  }
+  if (
+    item.api === '/api/addBankTransaction' ||
+    item.api === '/api/addBankTransactionsBulk' ||
+    item.api === '/api/updateBankTransaction' ||
+    item.api === '/api/addPettyCashTransaction' ||
+    item.api === '/api/addTillTransaction' ||
+    item.api === '/api/saveCardTransaction'
+  ) {
+    return 7
+  }
+  if (item.api.startsWith('/api/save') || item.api.startsWith('/api/update')) return 5
   return 1 // updatePosOrder 및 그 외
 }
 
@@ -62,6 +136,7 @@ export async function syncPending(): Promise<SyncResult> {
   if (!isOnline()) return { synced: 0, failed: 0 }
   let pending = await getAllPending()
   if (pending.length === 0) return { synced: 0, failed: 0 }
+  const startedAt = Date.now()
 
   pending = [...pending].sort(
     (a, b) => syncOrder(a) - syncOrder(b) || a.createdAt - b.createdAt
@@ -151,6 +226,12 @@ export async function syncPending(): Promise<SyncResult> {
   }
 
   if (synced > 0 || failed > 0) {
+    updateSnapshot({
+      lastAttemptAt: startedAt,
+      lastSuccessAt: synced > 0 ? Date.now() : syncSnapshot.lastSuccessAt,
+      lastSynced: synced,
+      lastFailed: failed,
+    })
     notifySyncComplete({ synced, failed })
   }
   return { synced, failed }

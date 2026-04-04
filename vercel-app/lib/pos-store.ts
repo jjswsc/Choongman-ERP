@@ -172,7 +172,7 @@ export function usePosStore() {
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
+            !['cancelled', 'refunded', 'completed', 'paid'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
         return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
@@ -307,7 +307,7 @@ export function usePosStore() {
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
+            !['cancelled', 'refunded', 'completed', 'paid'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
         return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }

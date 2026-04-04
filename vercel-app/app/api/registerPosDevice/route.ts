@@ -19,6 +19,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const hintRaw = String(body?.clientHint ?? '').trim()
+    const clientHint = hintRaw.length > 0 ? hintRaw.slice(0, 240) : undefined
+
     const now = new Date().toISOString()
     await supabaseUpsert(
       'pos_connected_devices',
@@ -28,6 +31,7 @@ export async function POST(req: NextRequest) {
           device_token: deviceToken,
           role,
           last_seen_at: now,
+          ...(clientHint != null ? { client_hint: clientHint } : {}),
         },
       ],
       'store_code,device_token'

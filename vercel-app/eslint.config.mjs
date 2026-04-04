@@ -22,6 +22,16 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // CommonJS 유틸; no-require-imports 예외 대신 디렉터리 제외
     "scripts/**",
+    // Capacitor/Electron 로컬 빌드·의존성 — 린트 대상 아님(느리고 BABEL 경고 유발)
+    "android/**",
+    "windows-pos/node_modules/**",
+    "windows-erp/node_modules/**",
+    // Electron 진입점(CommonJS require) — Next/TS 린트 규칙과 맞지 않음
+    "windows-pos/**",
+    "windows-erp/**",
+    // 빌드 산출·병합 스크립트 결과
+    "public/sw.js",
+    "public/swe-worker*.js",
   ]),
   {
     files: ["tailwind.config.ts"],

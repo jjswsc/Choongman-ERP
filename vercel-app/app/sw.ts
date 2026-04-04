@@ -3,7 +3,7 @@
 
 import { defaultCache } from "@serwist/next/worker"
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist"
-import { ExpirationPlugin, NetworkFirst, Serwist } from "serwist"
+import { ExpirationPlugin, NetworkFirst, NetworkOnly, Serwist } from "serwist"
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -35,6 +35,51 @@ function isPosWarmGetApi(pathname: string): boolean {
   )
 }
 
+/** ERP 오프라인 읽기 캐시 대상 API */
+function isErpWarmGetApi(pathname: string): boolean {
+  const exact = new Set([
+    "/api/getStoreList",
+    "/api/getVendorsForPurchase",
+    "/api/getVendorsForSales",
+    "/api/getBankAccounts",
+    "/api/getAppData",
+    "/api/getPosSalesFilterOptions",
+  ])
+  if (exact.has(pathname)) return true
+  return (
+    pathname.startsWith("/api/getChecklistItems") ||
+    pathname.startsWith("/api/getReceivablePayableList") ||
+    pathname.startsWith("/api/getReceivablePayableSummary") ||
+    pathname.startsWith("/api/getPurchaseOrders") ||
+    pathname.startsWith("/api/getPurchaseOrderItems") ||
+    pathname.startsWith("/api/getPurchaseOrderSummaries") ||
+    pathname.startsWith("/api/getPosSalesByPeriod") ||
+    pathname.startsWith("/api/getPosSalesByDeliveryApp") ||
+    pathname.startsWith("/api/getPosSalesByPayment") ||
+    pathname.startsWith("/api/getPosSalesByStore")
+  )
+}
+
+/**
+ * APK/설치파일: SW defaultCache·오프라인 폴백이 끼면 HTML이 저장되어 휴대폰에서 "파일을 열 수 없음"이 난다.
+ * 항상 네트워크로만 받도록 한다.
+ */
+const downloadsBinaryNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && /^\/downloads\/.+\.(apk|exe)$/i.test(pathname)
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
+}
+
 const posWarmGetApis = {
   matcher({
     sameOrigin,
@@ -59,6 +104,59 @@ const posWarmGetApis = {
       }),
     ],
   }),
+}
+
+const erpWarmGetApis = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && isErpWarmGetApi(pathname)
+  },
+  method: "GET" as const,
+  handler: new NetworkFirst({
+    cacheName: "erp-warm-get-apis",
+    networkTimeoutSeconds: 15,
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 192,
+        maxAgeSeconds: 30 * 24 * 60 * 60,
+        maxAgeFrom: "last-used",
+      }),
+    ],
+  }),
+}
+
+/**
+ * Supabase Storage 공개 URL은 경로에 `.jpg` 등이 포함되어 defaultCache의 이미지 규칙에 걸린다.
+ * SW가 교차 출처 이미지를 StaleWhileRevalidate로 다룰 때 Electron(Windows 하이브리드 POS)에서만
+ * 썸네일이 비는 사례가 있어, 이 경로는 캐시하지 않고 네트워크만 사용한다.
+ */
+const supabaseStoragePublicImagesNetworkOnly = {
+  matcher({
+    url,
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (request.method !== "GET") return false
+    if (!url.pathname.includes("/storage/v1/object/public/")) return false
+    const dest = request.destination
+    const leaf = url.pathname.split("/").pop() || ""
+    const looksLikeImage =
+      dest === "image" || /\.(?:jpe?g|png|gif|webp|svg|ico)$/i.test(leaf.split("?")[0] || "")
+    return looksLikeImage
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
 }
 
 /**
@@ -98,8 +196,15 @@ const serwist = new Serwist({
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  /** `/_next/static` → POS warm API → 나머지 defaultCache */
-  runtimeCaching: [nextStaticBuildAssets, posWarmGetApis, ...defaultCache],
+  /** 설치 패키지 → `/_next/static` → POS warm API → ERP warm API → 나머지 defaultCache */
+  runtimeCaching: [
+    downloadsBinaryNetworkOnly,
+    nextStaticBuildAssets,
+    posWarmGetApis,
+    erpWarmGetApis,
+    supabaseStoragePublicImagesNetworkOnly,
+    ...defaultCache,
+  ],
   fallbacks: {
     entries: [
       {
@@ -109,11 +214,27 @@ const serwist = new Serwist({
           return request.destination === "document" && pathname.startsWith("/admin")
         },
       },
+      /**
+       * `/pos/login`만 로그인 문서로 폴백.
+       * 예전: `/pos/*` 전부 → `/pos/login` 이라 오프라인에서 `/pos/terminal` 등이 로그인 HTML로 열리고,
+       * 세션 있으면 로그인 폼이 곧바로 `/pos`로 되돌려 매장·배달·포장 버튼이 "안 넘어가는" 것처럼 보였음.
+       */
       {
         url: "/pos/login",
         matcher({ request }) {
           const pathname = new URL(request.url).pathname
-          return request.destination === "document" && pathname.startsWith("/pos")
+          return request.destination === "document" && pathname === "/pos/login"
+        },
+      },
+      {
+        url: "/pos",
+        matcher({ request }) {
+          const pathname = new URL(request.url).pathname
+          return (
+            request.destination === "document" &&
+            pathname.startsWith("/pos") &&
+            pathname !== "/pos/login"
+          )
         },
       },
       {

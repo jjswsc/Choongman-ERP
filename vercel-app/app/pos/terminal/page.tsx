@@ -58,7 +58,7 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { formatPosReceiptOrderNoDisplay } from '@/lib/pos-delivery-platform'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
-import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
+import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
@@ -146,6 +146,19 @@ export default function PosTerminalPage() {
           (r.errors.length ? ` (${r.errors.slice(0, 4).join(', ')})` : '')
       )
   }, [warmStoreCodes, t])
+
+  const notifyQueuedSave = useCallback(
+    async (orderNo: string | undefined, queued: boolean | undefined) => {
+      const localQueued = Boolean(queued) || String(orderNo ?? '').startsWith('LOCAL-')
+      if (!localQueued) return
+      await appAlert(
+        t('offlineBannerPendingLine')
+          .replace('{label}', t('offlineBannerPendingOrders'))
+          .replace('{count}', '1')
+      )
+    },
+    [t]
+  )
 
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [servingTableId, setServingTableId] = useState<string | null>(null)
@@ -673,10 +686,10 @@ export default function PosTerminalPage() {
     }
 
     /** 주문/결제 인쇄는 항상 숨김 iframe 사용 (새 창/탭 열지 않음) */
-    printHtmlInHiddenIframe(receiptHtml, {
+    printPosHtmlDocument(receiptHtml, {
       title: tPrint('posReceipt') || '영수증',
-      printDelayMs: directPrint ? 220 : 320,
-      fallbackCleanupMs: 30_000,
+      printDelayMs: 0,
+      fallbackCleanupMs: 120_000,
       /** 자동(주문 직후) 인쇄: iframe 포커스 생략 → 인쇄창 닫힌 뒤 POS 화면 전환이 덜 튐 */
       focusIframeBeforePrint: !directPrint,
       onPrintUnavailable: () => {
@@ -795,9 +808,9 @@ export default function PosTerminalPage() {
                 design: slipDesign,
                 printColorAdjust: 'exact',
               })
-              printHtmlInHiddenIframe(html, {
+              printPosHtmlDocument(html, {
                 title: slip.label,
-                printDelayMs: 250,
+                printDelayMs: 0,
                 focusIframeBeforePrint: false,
                 onPrintUnavailable: () => {
                   void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
@@ -1006,9 +1019,9 @@ export default function PosTerminalPage() {
                   design: slipDesign,
                   printColorAdjust: 'exact',
                 })
-                printHtmlInHiddenIframe(html, {
+                printPosHtmlDocument(html, {
                   title: slip.label,
-                  printDelayMs: 250,
+                  printDelayMs: 0,
                   focusIframeBeforePrint: false,
                   onPrintUnavailable: () => {
                     void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
@@ -1674,6 +1687,7 @@ export default function PosTerminalPage() {
                   }
                   savedOrderId = res.orderId ?? null
                   savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
+                  await notifyQueuedSave(savedOrderNo, (res as { queued?: boolean }).queued)
                 }
                 let skipLocalAutoPrint = false
                 if (savedOrderId != null) {
@@ -1824,9 +1838,9 @@ export default function PosTerminalPage() {
                           printColorAdjust: 'exact',
                           prependItemsHtml: isAddOrder && idx === 0 ? addonKitchenHead : '',
                         })
-                        printHtmlInHiddenIframe(html, {
+                        printPosHtmlDocument(html, {
                           title: slip.label,
-                          printDelayMs: 250,
+                          printDelayMs: 0,
                           focusIframeBeforePrint: false,
                           onPrintUnavailable: () => {
                             void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
@@ -1921,6 +1935,7 @@ export default function PosTerminalPage() {
                   if (mergedLocal) {
                     orderNo = localNoCandidate ?? ''
                     orderIdToComplete = null
+                    await notifyQueuedSave(orderNo, true)
                   } else {
                     const res = await savePosOrderWithOffline({
                       storeCode: currentStoreId,
@@ -1949,15 +1964,15 @@ export default function PosTerminalPage() {
                     })
                     orderIdToComplete = (res as { orderId?: number }).orderId ?? null
                     orderNo = (res as { orderNo?: string }).orderNo ?? ''
+                    await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
                   }
                 }
                 if (orderIdToComplete != null) {
                   const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
                   await updatePosOrderStatus({ id: orderIdToComplete, status: targetStatus })
-                  if (!payload.isPrepaid && payload.tableName) {
-                    clearTableOrder(currentStoreId, payload.tableName)
-                  }
-                } else if (pay != null && !payload.isPrepaid && payload.tableName) {
+                  /** 선불·후불 모두 결제 완료 시 테이블 비움 (paid 상태는 테이블 점유에서 제외되지만 UI는 즉시 반영) */
+                  if (payload.tableName) clearTableOrder(currentStoreId, payload.tableName)
+                } else if (pay != null && payload.tableName) {
                   /** 오프라인 단일 save(closeStatus)만 한 경우에도 테이블 비우기 */
                   clearTableOrder(currentStoreId, payload.tableName)
                 }
@@ -2037,6 +2052,7 @@ export default function PosTerminalPage() {
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const newOrderId = (res as { orderId?: number }).orderId ?? null
+                await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
                 let suppressReceiptModalAutoPrint = !isMainPosDevice
                 if (newOrderId != null && newOrderId > 0) {
                   if (seenOrderIdsRef.current.has(newOrderId)) suppressReceiptModalAutoPrint = true

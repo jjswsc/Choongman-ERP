@@ -42,6 +42,7 @@ import {
 } from "@/lib/api-client"
 import { computedGiftRemaining, giftRowQtyMismatch } from "@/lib/marketing-material-gift-inventory"
 import { cn } from "@/lib/utils"
+import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
@@ -393,8 +394,8 @@ export default function MarketingCampaignsPage() {
   const [listSearch, setListSearch] = React.useState("")
   const [listSearchScope, setListSearchScope] = React.useState<CampaignListSearchScope>("all")
   const [listFiltersOpen, setListFiltersOpen] = React.useState(false)
-  const [listPeriodFrom, setListPeriodFrom] = React.useState("")
-  const [listPeriodTo, setListPeriodTo] = React.useState("")
+  const [listPeriodFrom, setListPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
+  const [listPeriodTo, setListPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
   const [listDesignFrom, setListDesignFrom] = React.useState("")
   const [listDesignTo, setListDesignTo] = React.useState("")
   const [listCampaignTypeFilter, setListCampaignTypeFilter] = React.useState("")

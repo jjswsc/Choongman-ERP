@@ -13,7 +13,7 @@ import {
 } from '@/lib/offline/network'
 
 /** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦어지므로 상한 둠 */
-const POS_CATALOG_FETCH_MS = 12_000
+const POS_CATALOG_FETCH_MS = 4_000
 
 function catalogFetchSignal(): AbortSignal | undefined {
   try {
@@ -96,8 +96,9 @@ export async function fetchPosCatalogCached<T>(
   relativeUrl: string,
   fallback: T
 ): Promise<T> {
+  const fromIdb = await readCacheOrNull<T>(cacheKey)
+
   if (shouldPreferOfflineCache()) {
-    const fromIdb = await readCacheOrNull<T>(cacheKey)
     if (fromIdb !== null) return fromIdb
     try {
       return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback)
@@ -105,6 +106,12 @@ export async function fetchPosCatalogCached<T>(
       reportNetworkFailure()
       return fallback
     }
+  }
+
+  /** 온라인 표시여도 IDB에 캐시가 있으면 즉시 표시하고 백그라운드 갱신 (서버 지연 시 메뉴 로딩 체감 개선) */
+  if (fromIdb !== null) {
+    void fetchCatalogAndPersist(relativeUrl, cacheKey, fallback).catch(() => {})
+    return fromIdb
   }
 
   try {

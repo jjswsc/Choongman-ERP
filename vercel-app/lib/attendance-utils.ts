@@ -368,3 +368,32 @@ export function resolveScheduleForAttendanceDay(
   }
   return scheduleMap[exactFull] || scheduleMap[exactNorm] || candidates[0]?.sch || null
 }
+
+/**
+ * 근태 로그에는 employee_id가 있는데 `schedules` 행에는 employee_id가 비어 이름 키만 있는 경우가 많음.
+ * `#id`만 조회하면 맵에 키가 없어 계획 근무가 전부 0이 됨 → id 우선, 실패 시 표시 이름으로 재조회.
+ */
+export function resolveScheduleForEmployeeDay(
+  rowDate: string,
+  store: string,
+  employeeId: number,
+  employeeName: string,
+  scheduleMap: Record<string, ScheduleRowForPlan>,
+  actualWorkMin: number,
+  mode: ScheduleResolveMode = 'payroll'
+): ScheduleRowForPlan | null {
+  if (employeeId > 0) {
+    const byId = resolveScheduleForAttendanceDay(
+      rowDate,
+      store,
+      `#${employeeId}`,
+      scheduleMap,
+      actualWorkMin,
+      mode
+    )
+    if (byId) return byId
+  }
+  const nm = String(employeeName || '').trim()
+  if (!nm) return null
+  return resolveScheduleForAttendanceDay(rowDate, store, nm, scheduleMap, actualWorkMin, mode)
+}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 
 /** 통장 거래 등록 (매입 대금/매출 수령 시 미지급금/미수금 자동 연동) */
 export async function POST(request: NextRequest) {
@@ -11,6 +12,31 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const idempotencyKey = String(
+      request.headers.get('x-idempotency-key') ??
+        body.idempotencyKey ??
+        body.idempotency_key ??
+        ''
+    ).trim()
+    if (idempotencyKey) {
+      const duplicate = await reserveRequestIdempotencyKey({
+        scope: 'addBankTransaction',
+        key: idempotencyKey,
+        payload: {
+          accountId: body.accountId ?? body.account_id ?? null,
+          transDate: body.transDate ?? body.trans_date ?? null,
+          amount: body.amount ?? null,
+          transType: body.transType ?? body.trans_type ?? null,
+        },
+      })
+      if (duplicate) {
+        return NextResponse.json(
+          { success: true, duplicate: true, message: '이미 처리된 요청입니다.' },
+          { headers }
+        )
+      }
+    }
+
     const accountId = Number(body.accountId || body.account_id)
     const transDate = String(body.transDate || body.trans_date || '').slice(0, 10)
     const transType = String(body.transType || body.trans_type || 'withdraw').toLowerCase()

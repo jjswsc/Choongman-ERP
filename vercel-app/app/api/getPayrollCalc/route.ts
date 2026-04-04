@@ -22,7 +22,7 @@ import {
   getBangkokHour,
   addDayBangkok,
   plannedWorkMinutesFromPlans,
-  resolveScheduleForAttendanceDay,
+  resolveScheduleForEmployeeDay,
   scheduleDateKey,
 } from '@/lib/attendance-utils'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
@@ -472,8 +472,7 @@ function buildAttendanceSummary(
 
     const minWork = Math.max(0, Math.floor((v.outMs! - v.inMs!) / 60000) - v.breakMin)
     map[attKey].workMin += minWork
-    const scheduleNameKey = v.employeeId > 0 ? `#${v.employeeId}` : v.name
-    const sch = resolveScheduleForAttendanceDay(rowDate, v.store, scheduleNameKey, scheduleMap, minWork, 'payroll')
+    const sch = resolveScheduleForEmployeeDay(rowDate, v.store, v.employeeId, v.name, scheduleMap, minWork, 'payroll')
     const plannedWorkMin = sch
       ? plannedWorkMinutesFromPlans(
           String(sch.plan_in || ''),

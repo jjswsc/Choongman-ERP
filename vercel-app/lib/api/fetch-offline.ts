@@ -53,6 +53,14 @@ const QUEUE_WHITELIST = new Set([
   '/api/saveCheckResult',
   '/api/savePurchaseOrder',
   '/api/savePoBillingSettings',
+  '/api/savePayroll',
+  '/api/saveEvaluationResult',
+  '/api/saveAccountingWorkflowStatus',
+  '/api/saveAccountingFilingPreferences',
+  '/api/saveStoreRepairTicket',
+  '/api/saveHeadOfficeInfo',
+  '/api/saveComplaintLog',
+  '/api/savePublicHoliday',
   '/api/saveSafetyStock',
   '/api/saveStoreJobHeadcount',
   '/api/adjustStock',
@@ -151,6 +159,10 @@ const QUEUE_WHITELIST = new Set([
   '/api/deletePosCoupon',
   '/api/savePosPromo',
   '/api/savePosPromoItem',
+  '/api/savePosPaymentMethodItem',
+  '/api/savePosLinkposTenderRule',
+  '/api/savePosMenuBoard',
+  '/api/savePosMenuScreenConfig',
   '/api/deletePosPromo',
   '/api/deletePosPromoItem',
   '/api/savePosDeliveryApps',
@@ -163,6 +175,8 @@ const QUEUE_WHITELIST = new Set([
   '/api/updatePosOrder',
   /** 주문 상태(pending→completed 등) — 결제·완료 처리 후 동기화 순서는 sync.ts 참고 */
   '/api/updatePosOrderStatus',
+  /** 재고 차감 강제 실행(운영/복구용) — 오프라인 시 큐 적재 */
+  '/api/processPosStockDeduction',
   /** 라인별 서빙/포장 완료 표시 — 오프라인 시 큐 적재 */
   '/api/markPosOrderItemServed',
   '/api/saveItemVendors',
@@ -189,7 +203,7 @@ const OFFLINE_FALLBACK: Record<string, unknown> = {
 }
 
 /** 기본 fallback */
-const DEFAULT_FALLBACK = { success: true }
+const DEFAULT_FALLBACK = { success: true, queued: true }
 
 function canQueue(url: string, init?: RequestInit): boolean {
   const path = normalPath(url)
@@ -239,7 +253,7 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
     })
     const fallback =
       path === '/api/savePosOrder' && localOrderNo
-        ? { success: true, orderNo: localOrderNo }
+        ? { success: true, orderNo: localOrderNo, queued: true }
         : (OFFLINE_FALLBACK[path] ?? DEFAULT_FALLBACK)
     return new Response(JSON.stringify(fallback), {
       status: 200,

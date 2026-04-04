@@ -4,10 +4,11 @@
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 
-/** 용지 폭(80mm)과 실제 인쇄 가능 폭(드라이버·프린터 비인쇄 여백) 차이로 오른쪽이 잘리는 것을 줄이기 위해 본문은 약간 좁게 둡니다. */
+/** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
 const KITCHEN_SLIP_BODY_WIDTH_MM = 76
-const POS_PAPER_SIDE_PADDING_MM = 1
+/** top, right, bottom, left — 오른쪽은 비인쇄 여백 대비 넓게 */
+const KITCHEN_SLIP_PADDING_MM = { t: 1, r: 4, b: 1, l: 2 } as const
 /** @page 높이: 짧으면 긴 주방전표가 2페이지로 잘림. 600mm까지 한 페이지로 묶음. */
 const POS_PAPER_HEIGHT_MM = 600
 
@@ -41,7 +42,8 @@ function typographyForScale(scale: KitchenSlipFontScale) {
     case 'lg':
       return { header: 26, row: 22, lineNote: 16, memo: 18, body: 22 }
     default:
-      return { header: 22, row: 18, lineNote: 14, memo: 16, body: 18 }
+      /** md: 80mm·Electron 인쇄에서 한 줄이 과하게 잘리지 않도록 약간 축소 */
+      return { header: 20, row: 16, lineNote: 13, memo: 15, body: 16 }
   }
 }
 
@@ -56,6 +58,9 @@ export function getKitchenSlipPaperCss(
   @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
   html, body { margin: 0; padding: 0; }
   html { height: auto; }
+  @media print {
+    html, body { height: auto !important; min-height: 0 !important; }
+  }
   body {
     width: ${KITCHEN_SLIP_BODY_WIDTH_MM}mm;
     max-width: 100%;
@@ -65,7 +70,7 @@ export function getKitchenSlipPaperCss(
     box-sizing: border-box;
     font-family: sans-serif;
     font-size: ${tp.body}px;
-    padding: ${POS_PAPER_SIDE_PADDING_MM}mm;
+    padding: ${KITCHEN_SLIP_PADDING_MM.t}mm ${KITCHEN_SLIP_PADDING_MM.r}mm ${KITCHEN_SLIP_PADDING_MM.b}mm ${KITCHEN_SLIP_PADDING_MM.l}mm;
     -webkit-print-color-adjust: ${color};
     print-color-adjust: ${color};
   }
@@ -76,7 +81,7 @@ function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
   const tp = typographyForScale(design.fontScale)
   return `
 .k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: break-word; overflow-wrap: anywhere; }
-.k-row { margin: 6px 0; font-size: ${tp.row}px; word-break: break-word; overflow-wrap: anywhere; white-space: normal; }
+.k-row { margin: 6px 0; font-size: ${tp.row}px; max-width: 100%; word-break: break-word; overflow-wrap: anywhere; white-space: normal; line-height: 1.35; }
 .k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
 .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: ${tp.memo}px; }
 `
@@ -168,7 +173,9 @@ export function buildKitchenSlipHtml(params: {
   const orderNoPrint = formatPosOrderNoForPrint(orderNo)
   const c = (tag: string) => '\u003c/' + tag + '>'
   return (
-    '<!DOCTYPE html><html><head><title>' +
+    '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"/>' +
+    '<title>' +
     escapeHtml(label) +
     '</title><style>' +
     paperCss +

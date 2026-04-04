@@ -8,7 +8,10 @@ import { cn } from "@/lib/utils"
 import type { MarketingCampaign } from "@/lib/api-client"
 import { normalizeMarketingCollabDetail, type MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { campaignMatchesPeriodFilter } from "@/lib/marketing-campaign-filters"
-import { getBangkokCurrentMonthRangeYmd } from "@/lib/collab-overview-period"
+import {
+  getBangkokCurrentMonthRangeYmd,
+  getBangkokRolling30DayRangeYmd,
+} from "@/lib/collab-overview-period"
 
 type TFn = (key: string) => string
 
@@ -117,8 +120,8 @@ export function CollabManagementOverviewTab(props: {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [search, setSearch] = React.useState("")
   const [partnerKeyFilter, setPartnerKeyFilter] = React.useState("")
-  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokCurrentMonthRangeYmd().from)
-  const [periodTo, setPeriodTo] = React.useState(() => getBangkokCurrentMonthRangeYmd().to)
+  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
+  const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
 
   const resetPeriodToThisMonth = React.useCallback(() => {
     const r = getBangkokCurrentMonthRangeYmd()

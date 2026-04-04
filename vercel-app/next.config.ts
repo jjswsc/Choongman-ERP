@@ -24,13 +24,22 @@ const withSerwist = withSerwistInit({
   additionalPrecacheEntries: [
     { url: "/login", revision },
     { url: "/admin/login", revision },
+    { url: "/admin", revision },
+    { url: "/admin/sales-management", revision },
     { url: "/pos", revision },
+    /** 터미널(매장·포장·배달) 직접 URL 오프라인 1회 진입 시 네트워크 실패 완화 */
+    { url: "/pos/terminal", revision },
     /** POS PWA start_url·오프라인 폴백 — 없으면 /pos/login 요청이 캐시에 없어 빈 화면 */
     { url: "/pos/login", revision },
   ],
 });
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "*.supabase.co", pathname: "/**" },
+    ],
+  },
   // API 요청 body 크기 제한 증가 (휴가 진단서/증빙 등 base64 이미지 업로드)
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },

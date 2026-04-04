@@ -3,7 +3,6 @@ import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import Image from "next/image"
 import {
   getPosMenus,
   getPosMenuCategories,
@@ -68,9 +67,10 @@ import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/po
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
-import { printHtmlInHiddenIframe } from "@/lib/print-html-iframe"
+import { printPosHtmlDocument } from "@/lib/pos-print-html"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
+import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -838,30 +838,37 @@ export default function PosOrderPage() {
     }
   }
 
-  const POS_PAPER_SIDE_PADDING_MM = 1
+  const POS_PAPER_SIDE_PADDING_MM = 0
+  const RECEIPT_INNER_INSET_LEFT_MM = 5
+  const RECEIPT_INNER_INSET_RIGHT_MM = 7
+  const RECEIPT_CONTENT_NUDGE_LEFT_MM = 3
   const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
     ${posThermalReceiptPageSizeRule()}
     html, body { margin: 0; padding: 0; }
     html { height: auto; }
     body {
       width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
+      max-width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
       min-height: auto;
       height: auto;
       box-sizing: border-box;
       font-family: ${fontFamily};
       font-size: ${fontSizePx}px;
-      padding: ${POS_PAPER_SIDE_PADDING_MM}mm;
+      padding: ${POS_PAPER_SIDE_PADDING_MM}mm ${RECEIPT_INNER_INSET_RIGHT_MM}mm ${POS_PAPER_SIDE_PADDING_MM}mm ${RECEIPT_INNER_INSET_LEFT_MM}mm;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+    @media print {
+      body { zoom: 1; }
     }
   `
   const printInIframe = React.useCallback(
     (fullHtml: string, title: string) =>
       new Promise<void>((resolve, reject) => {
-        printHtmlInHiddenIframe(fullHtml, {
+        printPosHtmlDocument(fullHtml, {
           title,
-          printDelayMs: 220,
-          fallbackCleanupMs: 30_000,
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
           onPrintUnavailable: () => reject(new Error(t("posPrintBlocked") || "인쇄를 시작할 수 없습니다.")),
           onAfterCleanup: () => resolve(),
         })
@@ -879,10 +886,10 @@ export default function PosOrderPage() {
           <title>${t("posReceipt") || "영수증"}</title>
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; }
-            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; break-inside: avoid; page-break-inside: avoid; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: 1mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
+            .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; break-inside: avoid; page-break-inside: avoid; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
@@ -1117,17 +1124,7 @@ export default function PosOrderPage() {
               >
                 <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {m.imageUrl ? (
-                    <Image
-                      src={m.imageUrl}
-                      alt={m.name}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                      onError={(e) => {
-                        const t = e.target as HTMLImageElement
-                        if (t) t.style.display = "none"
-                      }}
-                    />
+                    <PosMenuFillImage src={m.imageUrl} alt={m.name} />
                   ) : (
                     <div className="flex h-full items-center justify-center text-3xl text-slate-400">
                       🍗

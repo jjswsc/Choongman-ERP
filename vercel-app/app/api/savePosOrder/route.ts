@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { createHash } from 'node:crypto'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
@@ -7,10 +8,17 @@ import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
+import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
+import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
+
+function sha256Hex(s: string): string {
+  return createHash('sha256').update(s).digest('hex')
+}
 
 function readIdempotencyHit(key: string): { id: number; orderNo: string } | null {
   const hit = idempotencyCache.get(key)
@@ -24,6 +32,59 @@ function readIdempotencyHit(key: string): { id: number; orderNo: string } | null
 
 function writeIdempotencyHit(key: string, id: number, orderNo: string) {
   idempotencyCache.set(key, { id, orderNo, at: Date.now() })
+}
+
+async function readIdempotencyHitFromDb(keyHash: string): Promise<{ id: number; orderNo: string } | null> {
+  try {
+    const rows = (await supabaseSelectFilter('pos_orders', `idempotency_key_hash=eq.${encodeURIComponent(keyHash)}`, {
+      limit: 1,
+      select: 'id,order_no',
+    })) as { id?: number; order_no?: string }[] | null
+    const hit = rows?.[0]
+    if (!hit?.id) return null
+    return { id: Number(hit.id), orderNo: String(hit.order_no ?? '') }
+  } catch {
+    return null
+  }
+}
+
+function isIdempotencyUniqueViolation(e: unknown): boolean {
+  const msg = String(e ?? '').toLowerCase()
+  return (
+    msg.includes('duplicate key value violates unique constraint') &&
+    msg.includes('idempotency_key_hash')
+  )
+}
+
+async function runCompletionSideEffects(orderId: number, storeCode: string, total: number): Promise<void> {
+  if (!storeCode) return
+  try {
+    const settings = (await supabaseSelectFilter(
+      'pos_printer_settings',
+      `store_code=eq.${encodeURIComponent(storeCode)}`,
+      { limit: 1, select: 'auto_stock_deduction' }
+    )) as { auto_stock_deduction?: boolean }[] | null
+    if (settings?.[0]?.auto_stock_deduction) {
+      await processPosStockDeduction(orderId)
+    }
+  } catch (e) {
+    console.error('savePosOrder processPosStockDeduction:', e)
+  }
+
+  try {
+    const alreadyPosted = await hasJournalForSource('pos_order', orderId)
+    if (!alreadyPosted) {
+      await postPosOrderJournal({
+        posOrderId: orderId,
+        salesDate: getBangkokTodayDateString(),
+        total: Number(total || 0),
+        storeName: storeCode || undefined,
+        memo: 'POS 주문 완료 자동분개',
+      })
+    }
+  } catch (postingErr) {
+    console.error('savePosOrder posting:', postingErr)
+  }
 }
 
 function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
@@ -43,7 +104,17 @@ export async function POST(req: NextRequest) {
     const idempotencyHeader = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const idempotencyBody = String(body.localOrderNo ?? body.local_order_no ?? '').trim()
     const idempotencyKey = idempotencyHeader || idempotencyBody
+    const idempotencyKeyHash = idempotencyKey ? sha256Hex(idempotencyKey) : null
     if (idempotencyKey) {
+      if (idempotencyKeyHash) {
+        const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash)
+        if (dbHit) {
+          return NextResponse.json(
+            { success: true, orderId: dbHit.id, orderNo: dbHit.orderNo, duplicate: true },
+            { headers }
+          )
+        }
+      }
       const hit = readIdempotencyHit(idempotencyKey)
       if (hit) {
         return NextResponse.json(
@@ -187,12 +258,27 @@ export async function POST(req: NextRequest) {
       linkpos_approved_amount: linkposPayment ? Number(linkposPayment.approvedAmount ?? 0) : null,
       linkpos_requested_at: linkposPayment ? String(linkposPayment.requestedAt ?? '') : null,
       linkpos_responded_at: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
+      idempotency_key_hash: idempotencyKeyHash,
     }
-    const inserted = (await supabaseInsertWithPgrst204Fallback(
-      'pos_orders',
-      row,
-      'savePosOrder'
-    )) as { id?: number }[]
+    let inserted: { id?: number }[]
+    try {
+      inserted = (await supabaseInsertWithPgrst204Fallback(
+        'pos_orders',
+        row,
+        'savePosOrder'
+      )) as { id?: number }[]
+    } catch (insertErr) {
+      if (idempotencyKeyHash && isIdempotencyUniqueViolation(insertErr)) {
+        const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash)
+        if (dbHit) {
+          return NextResponse.json(
+            { success: true, orderId: dbHit.id, orderNo: dbHit.orderNo, duplicate: true },
+            { headers }
+          )
+        }
+      }
+      throw insertErr
+    }
     const created = Array.isArray(inserted) ? inserted[0] : inserted
     if (idempotencyKey && Number(created?.id) > 0) {
       writeIdempotencyHit(idempotencyKey, Number(created.id), orderNo)
@@ -245,6 +331,10 @@ export async function POST(req: NextRequest) {
       await upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo')
     } catch (taxErr) {
       console.error('savePosOrder tax recipient upsert:', taxErr)
+    }
+
+    if (orderStatus === 'completed' && Number(created?.id) > 0) {
+      await runCompletionSideEffects(Number(created.id), storeCode, total)
     }
 
     return NextResponse.json({

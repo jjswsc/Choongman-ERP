@@ -1,0 +1,10 @@
+{
+  "erpUrl": "https://choongman-erp.vercel.app/admin/login",
+  "allowedOrigin": "https://choongman-erp.vercel.app",
+  "kiosk": "0",
+  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-erp/latest.json",
+  "print": {
+    "silent": true,
+    "deviceName": "EPSON TM-T88V Receipt"
+  }
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { serializePurchaseOrderCart, type PoCartMeta } from '@/lib/purchase-order-cart'
+import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   findDraftPurchaseOrderForBillingUpsert,
   normalizeBillingMonthYm,
@@ -14,6 +15,32 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const idempotencyKey = String(
+      request.headers.get('x-idempotency-key') ??
+        body.idempotencyKey ??
+        body.idempotency_key ??
+        body.localOrderNo ??
+        ''
+    ).trim()
+    if (idempotencyKey) {
+      const duplicate = await reserveRequestIdempotencyKey({
+        scope: 'savePurchaseOrder',
+        key: idempotencyKey,
+        payload: {
+          vendorCode: body.vendorCode ?? null,
+          locationCode: body.locationCode ?? null,
+          relatedStore: body.relatedStore ?? body.related_store ?? null,
+          billingMonthYm: body.billingMonthYm ?? body.billing_month_ym ?? null,
+        },
+      })
+      if (duplicate) {
+        return NextResponse.json(
+          { success: true, duplicate: true, message: '이미 처리된 요청입니다.' },
+          { headers }
+        )
+      }
+    }
+
     const vendorCode = String(body.vendorCode || '').trim()
     const vendorName = String(body.vendorName || '').trim()
     const locationName = String(body.locationName || '').trim()

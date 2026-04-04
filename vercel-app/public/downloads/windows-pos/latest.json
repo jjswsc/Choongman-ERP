@@ -1,0 +1,29 @@
+﻿{
+    "version":  "0.1.0",
+    "files":  [
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+                      "name":  "cm-pos-windows-latest-setup.exe",
+                      "sha256":  "e1cbf325fd108bb95e848af8f644bd55c137446eb2c0d8e03b5a42db43860f65"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.0-setup.exe",
+                      "name":  "cm-pos-windows-0.1.0-setup.exe",
+                      "sha256":  "e1cbf325fd108bb95e848af8f644bd55c137446eb2c0d8e03b5a42db43860f65"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-portable.exe",
+                      "name":  "cm-pos-windows-latest-portable.exe",
+                      "sha256":  "20f3dda5de827f242bc29dcc0fbb197b3dac963c9cee2721fc5f34db81a981ed"
+                  },
+                  {
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.0-portable.exe",
+                      "name":  "cm-pos-windows-0.1.0-portable.exe",
+                      "sha256":  "20f3dda5de827f242bc29dcc0fbb197b3dac963c9cee2721fc5f34db81a981ed"
+                  }
+              ],
+    "installerSha256":  "e1cbf325fd108bb95e848af8f644bd55c137446eb2c0d8e03b5a42db43860f65",
+    "publishedAtUtc":  "2026-04-04T07:27:32.5918686Z",
+    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+    "notes":  "Stability improvements and latest features."
+}

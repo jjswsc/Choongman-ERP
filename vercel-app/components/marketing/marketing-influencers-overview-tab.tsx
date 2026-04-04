@@ -7,7 +7,10 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { MarketingInfluencer, MarketingCampaign } from "@/lib/api-client"
-import { getBangkokCurrentMonthRangeYmd } from "@/lib/collab-overview-period"
+import {
+  getBangkokCurrentMonthRangeYmd,
+  getBangkokRolling30DayRangeYmd,
+} from "@/lib/collab-overview-period"
 
 type TFn = (key: string) => string
 
@@ -82,8 +85,8 @@ export function MarketingInfluencersOverviewTab(props: {
     applySearchRequest,
   } = props
 
-  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokCurrentMonthRangeYmd().from)
-  const [periodTo, setPeriodTo] = React.useState(() => getBangkokCurrentMonthRangeYmd().to)
+  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
+  const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
   const [searchDraft, setSearchDraft] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [inquiryStatusFilter, setInquiryStatusFilter] = React.useState<InquiryStatusFilter>("all")

@@ -37,7 +37,7 @@ export default function SalesManagementPage() {
           </h1>
         </div>
         <Suspense fallback={<SalesTabFallback />}>
-          <SalesTab />
+          <SalesTab offlineAware />
         </Suspense>
       </div>
     </div>

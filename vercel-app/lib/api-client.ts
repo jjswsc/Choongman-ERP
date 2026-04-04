@@ -4532,6 +4532,8 @@ export interface PosPromo {
   validTo?: string | null
   marketingActualCost?: number
   expenseAccrualId?: string | null
+  /** 세트 구성 Step 1 가격 기준 (DB 컬럼 compose_pricing_basis, 없으면 hall) */
+  composePricingBasis?: 'hall' | 'delivery'
 }
 
 export interface PosPromoItem {
@@ -4624,6 +4626,7 @@ export async function savePosPromo(params: {
   standaloneSetMenu?: boolean
   userRole?: string
   userName?: string
+  composePricingBasis?: 'hall' | 'delivery'
 }) {
   const res = await apiFetchWithOffline('/api/savePosPromo', {
     method: 'POST',
@@ -5948,6 +5951,8 @@ export interface PosDeviceItem {
   lastSeenAt: string
   createdAt: string
   isMain: boolean
+  displayLabel: string | null
+  clientHint: string | null
 }
 
 export async function getPosDevices(params: { storeCode: string }) {
@@ -5962,6 +5967,8 @@ export async function registerPosDevice(params: {
   storeCode: string
   deviceToken: string
   role: 'main' | 'order'
+  /** 브라우저 UA·OS 등 (선택). 접속 시마다 갱신되면 목록에서 단말 구분에 도움 */
+  clientHint?: string
 }) {
   const res = await apiFetchWithOffline('/api/registerPosDevice', {
     method: 'POST',
@@ -5970,6 +5977,26 @@ export async function registerPosDevice(params: {
       storeCode: params.storeCode,
       deviceToken: params.deviceToken,
       role: params.role,
+      ...(params.clientHint != null && String(params.clientHint).trim()
+        ? { clientHint: String(params.clientHint).trim().slice(0, 240) }
+        : {}),
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updatePosDeviceDisplayLabel(params: {
+  storeCode: string
+  deviceToken: string
+  displayLabel: string
+}) {
+  const res = await apiFetchWithOffline('/api/updatePosDeviceDisplayLabel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      deviceToken: params.deviceToken,
+      displayLabel: params.displayLabel,
     }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>

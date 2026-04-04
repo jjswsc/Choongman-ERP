@@ -2,7 +2,6 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
-import Image from 'next/image'
 import {
   getPosMenus,
   getPosMenuCategories,
@@ -48,6 +47,7 @@ import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
+import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
@@ -850,17 +850,7 @@ export function PosTerminalMenuScreen({
                     </span>
                   )}
                   {m.imageUrl ? (
-                    <Image
-                      src={m.imageUrl}
-                      alt={m.name}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                      onError={(e) => {
-                        const tgt = e.target as HTMLImageElement
-                        if (tgt) tgt.style.display = 'none'
-                      }}
-                    />
+                    <PosMenuFillImage src={m.imageUrl} alt={m.name} />
                   ) : (
                     <div className="flex h-full items-center justify-center text-2xl text-slate-400">🍗</div>
                   )}
@@ -1312,7 +1302,7 @@ export function PosTerminalMenuScreen({
                       <div className="flex items-center gap-2">
                         <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded border bg-slate-100">
                           {menuEditForm.imageUrl ? (
-                            <Image src={menuEditForm.imageUrl} alt="menu-preview" fill className="object-cover" unoptimized />
+                            <PosMenuFillImage src={menuEditForm.imageUrl} alt="menu-preview" />
                           ) : (
                             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{t('posMenuImagePreview') || '미리보기'}</div>
                           )}

@@ -1,0 +1,10 @@
+{
+  "posUrl": "https://choongman-erp.vercel.app/pos/login",
+  "allowedOrigin": "https://choongman-erp.vercel.app",
+  "kiosk": "1",
+  "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
+  "print": {
+    "silent": true,
+    "deviceName": ""
+  }
+}

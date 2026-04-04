@@ -1,0 +1,48 @@
+---
+description: POS 80mm 영수증·주방전·Windows 하이브리드 인쇄 레이아웃 기준값(2026-04 튜닝 확정본). 임의 변경 시 웹+하이브리드+프린터 물리 여백이 동시에 어긋날 수 있음.
+alwaysApply: true
+---
+
+# POS 인쇄 레이아웃 기준 (변경 시 동기화 필수)
+
+## 영수증·주문·결제 (80mm, 웹·모달·관리자 미리보기 공통)
+
+동일한 상수·CSS를 **세 군데**에 맞출 것: `components/pos/pos-receipt-modal.tsx`, `app/pos/order/page.tsx`, `app/admin/pos-printers/page.tsx`.
+
+| 항목 | 값 |
+|------|-----|
+| 안쪽 여백 | 왼쪽 **5mm**, 오른쪽 **7mm** (금액·통화 잘림 방지) |
+| `.receipt-content` | `width/max-width: 100%`, `position: relative`, `left: **-3mm**` (프린터 물리 보정) |
+| `.receipt-row` / `.receipt-item-head` | `grid-template-columns: minmax(0, 1fr) **19mm**`, `column-gap: **5px**` |
+| 금액 열 | `white-space: normal` + `overflow-wrap` / `word-break` (줄바꿈 허용) |
+| 인쇄 zoom | `@media print` 에서 `body { zoom: **1** }` (과확대 금지) |
+| 바코드 img | 고정 mm 대신 `width: 100%; max-width: 100%` |
+
+**터미널용 문서 래퍼** `lib/pos-receipt-html.ts`: `padding-left: 5mm`, `padding-right: 7mm`, `printOverscale = 1`, `.receipt-content { left: -3mm }`. 모달 쪽과 숫자가 어긋나면 같이 수정.
+
+용지 `@page` 등은 `lib/pos-receipt-paper.ts` 를 따름.
+
+## 주방 주문서 (80mm)
+
+단일 소스: `lib/pos-kitchen-slip-html.ts`.
+
+| 항목 | 값 |
+|------|-----|
+| 본문 폭 | `KITCHEN_SLIP_BODY_WIDTH_MM = **76**` |
+| body 패딩 (상·우·하·좌) | **1, 4, 1, 2** mm — 오른쪽 잘림은 **폭을 과도하게 줄이지 말고** 우측 패딩으로 처리 (폭만 줄이면 드라이버에 따라 오히려 악화될 수 있음) |
+
+## Windows 하이브리드 POS 인쇄
+
+`vercel-app/windows-pos/main.js`:
+
+- `getThermalHtmlPrintOptions()`: `scaleFactor: **100**`, 80mm×600mm(마이크론), `margins: none`.
+- HTML 인쇄 파이프라인: **① 커스텀 용지 무인쇄** (`pagesPerSheet: 1`) → (실패이고 `print.silent` 가 true일 때) **② 드라이버 기본 용지 무인쇄** → **③ 대화상자**. `loadFile` 후 **약 550ms** 대기 후 print.
+- 숨김 `BrowserWindow` 폭은 **80mm ≈ 302 CSS px** 로 두어, 넓은 뷰포트 때문에 인쇄 시 전체가 축소되어 **상단 미니어처**처럼 보이는 현상을 줄인다.
+- 자동 인쇄: `runtime-config.json` 에 `print.silent: true` + 올바른 `print.deviceName`. 브라우저 POS와 인쇄 엔진이 달라 규격이 살짝 다를 수 있음.
+
+## 변경 시 체크리스트
+
+1. 영수증: 모달 / `order` / `pos-printers` / `pos-receipt-html.ts` 네 경로 상수·CSS 동일 여부.
+2. 주방: `pos-kitchen-slip-html.ts` 만 수정해도 전 경로 반영.
+3. 하이브리드: `scaleFactor`·영수증 CSS를 한쪽만 바꾸지 말 것.
+4. 배포: 웹(Vercel) + Windows POS **재빌드·재설치** 후 실제 출력 확인.

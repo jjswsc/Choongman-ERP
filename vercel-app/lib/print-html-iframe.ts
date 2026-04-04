@@ -33,8 +33,10 @@ export function printHtmlInHiddenIframe(
   fullDocumentHtml: string,
   opts?: PrintHtmlInHiddenIframeOptions
 ): void {
-  const printDelayMs = opts?.printDelayMs ?? 450
-  const fallbackCleanupMs = opts?.fallbackCleanupMs ?? 30000
+  /** 너무 길면 브라우저 사용자 제스처가 만료되어 print()가 무시되는 경우가 있음 */
+  const printDelayMs = opts?.printDelayMs ?? 0
+  /** 인쇄 미리보기·대화상자를 오래 두는 매장 대비 */
+  const fallbackCleanupMs = opts?.fallbackCleanupMs ?? 120000
   const printStartTimeoutMs = opts?.printStartTimeoutMs ?? 1800
   const focusIframeBeforePrint = opts?.focusIframeBeforePrint !== false
   const restoreDocumentFocus = opts?.restoreDocumentFocus !== false
@@ -105,7 +107,7 @@ export function printHtmlInHiddenIframe(
     }
   }, printDelayMs + printStartTimeoutMs)
 
-  setTimeout(() => {
+  const invokePrint = () => {
     try {
       if (focusIframeBeforePrint) {
         cw.focus()
@@ -119,7 +121,15 @@ export function printHtmlInHiddenIframe(
       removeIframe()
       opts?.onPrintUnavailable?.()
     }
-  }, printDelayMs)
+  }
+
+  if (printDelayMs > 0) {
+    setTimeout(invokePrint, printDelayMs)
+  } else {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(invokePrint)
+    })
+  }
   setTimeout(() => {
     clearTimeout(startGuardTimer)
     removeIframe()

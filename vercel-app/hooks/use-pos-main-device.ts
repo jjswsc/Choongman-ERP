@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { getPosPrinterSettings, registerPosMainDevice, clearPosMainDevice, registerPosDevice } from '@/lib/api-client'
+import { buildPosClientHint } from '@/lib/pos-device-client-hint'
 
 const STORAGE_KEY = 'pos_main_device'
 const DEVICE_TOKEN_KEY = 'pos_device_token'
@@ -86,7 +87,12 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
       }
       settingsFetchSeqRef.current += 1
       const role = value ? 'main' : 'order'
-      registerPosDevice({ storeCode, deviceToken, role }).catch(() => {})
+      registerPosDevice({
+        storeCode,
+        deviceToken,
+        role,
+        clientHint: buildPosClientHint(),
+      }).catch(() => {})
       if (value) {
         applyLocal(true)
         setServerMainTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
@@ -149,11 +155,15 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
   // 접속 기기 목록에 등록·하트비트 (last_seen_at 갱신)
   React.useEffect(() => {
     if (!storeCode || !deviceToken) return
-    registerPosDevice({ storeCode, deviceToken, role: isMain ? 'main' : 'order' }).catch(() => {})
-    const interval = setInterval(
-      () => registerPosDevice({ storeCode, deviceToken, role: isMain ? 'main' : 'order' }).catch(() => {}),
-      120_000
-    )
+    const ping = () =>
+      registerPosDevice({
+        storeCode,
+        deviceToken,
+        role: isMain ? 'main' : 'order',
+        clientHint: buildPosClientHint(),
+      }).catch(() => {})
+    ping()
+    const interval = setInterval(ping, 120_000)
     return () => clearInterval(interval)
   }, [storeCode, deviceToken, isMain])
 

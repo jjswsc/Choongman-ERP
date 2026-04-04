@@ -11,6 +11,7 @@ export type SavePosOrderResult = {
   orderId?: number
   orderNo?: string
   message?: string
+  queued?: boolean
 }
 
 function isNetworkError(e: unknown): boolean {
@@ -51,7 +52,7 @@ function looksLikeInfraFailureMessage(message: string | undefined): boolean {
 export async function savePosOrderWithOffline(params: Parameters<typeof savePosOrder>[0]): Promise<SavePosOrderResult> {
   try {
     const res = await savePosOrder(params)
-    if (res.success) return res
+    if (res.success) return { ...res, queued: false }
     if (looksLikeInfraFailureMessage(res.message)) {
       const localOrderNo = `LOCAL-${Date.now()}`
       await addToQueue({
@@ -60,9 +61,9 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
         body: JSON.stringify(params),
         metadata: { localOrderNo },
       })
-      return { success: true, orderNo: localOrderNo }
+      return { success: true, orderNo: localOrderNo, queued: true }
     }
-    return res
+    return { ...res, queued: false }
   } catch (e) {
     if (!isNetworkError(e)) {
       throw e
@@ -78,6 +79,7 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
     return {
       success: true,
       orderNo: localOrderNo,
+      queued: true,
     }
   }
 }

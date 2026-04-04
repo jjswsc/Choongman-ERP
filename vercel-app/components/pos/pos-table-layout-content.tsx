@@ -44,14 +44,17 @@ import { cn } from "@/lib/utils"
 const FLOOR_W = 720
 const FLOOR_H = 480
 const GRID_SIZE = 24
+/** POS 플로어 화면에서 테이블명·상태·시각 등을 담기 위한 최소 크기(픽셀, 그리드 스냅) */
+const MIN_TABLE_W = GRID_SIZE * 4
+const MIN_TABLE_H = GRID_SIZE * 3
 const FLOOR_PREF_KEY = "pos-table-layout-floor:"
 
 type TableShape = "rect" | "rect-wide" | "square"
 
 const SHAPE_PRESETS: { shape: TableShape; w: number; h: number; labelKey: string; defaultSeats: number }[] = [
   { shape: "rect", w: 96, h: 72, labelKey: "posTableShapeNormal", defaultSeats: 4 },
-  { shape: "rect-wide", w: 120, h: 64, labelKey: "posTableShapeLong", defaultSeats: 6 },
-  { shape: "square", w: 76, h: 76, labelKey: "posTableShapeSquare", defaultSeats: 2 },
+  { shape: "rect-wide", w: 120, h: 72, labelKey: "posTableShapeLong", defaultSeats: 6 },
+  { shape: "square", w: 96, h: 96, labelKey: "posTableShapeSquare", defaultSeats: 2 },
 ]
 
 const SEAT_OPTIONS = [2, 3, 4, 5, 6, 8, 10]
@@ -416,13 +419,12 @@ export function PosTableLayoutContent() {
 
       const r = resizeStartRef.current
       if (!r) return
-      const minSize = GRID_SIZE * 2
       const dx = (e.clientX - r.mouseX) * r.scaleX
       const dy = (e.clientY - r.mouseY) * r.scaleY
       const maxW = FLOOR_W - r.x
       const maxH = FLOOR_H - r.y
-      const nextW = Math.max(minSize, Math.min(maxW, snapToGrid(r.startW + dx)))
-      const nextH = Math.max(minSize, Math.min(maxH, snapToGrid(r.startH + dy)))
+      const nextW = Math.max(MIN_TABLE_W, Math.min(maxW, snapToGrid(r.startW + dx)))
+      const nextH = Math.max(MIN_TABLE_H, Math.min(maxH, snapToGrid(r.startH + dy)))
       setLayout((prev) => prev.map((t) => (t.id === r.id ? { ...t, w: nextW, h: nextH } : t)))
     }
     const onUp = () => {

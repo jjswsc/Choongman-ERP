@@ -7,6 +7,8 @@ export type PosDeviceItem = {
   lastSeenAt: string
   createdAt: string
   isMain: boolean
+  displayLabel: string | null
+  clientHint: string | null
 }
 
 /** 관리자: 해당 매장 POS 접속 기기 목록 (메인/주문 단말) */
@@ -24,7 +26,14 @@ export async function GET(req: NextRequest) {
       'pos_connected_devices',
       `store_code=eq.${encodeURIComponent(storeCode)}`,
       { order: 'last_seen_at.desc', limit: 100 }
-    )) as { device_token: string; role: string; last_seen_at: string; created_at: string }[] | null
+    )) as {
+      device_token: string
+      role: string
+      last_seen_at: string
+      created_at: string
+      display_label?: string | null
+      client_hint?: string | null
+    }[] | null
 
     const list = Array.isArray(devices) ? devices : []
 
@@ -34,6 +43,14 @@ export async function GET(req: NextRequest) {
       lastSeenAt: row.last_seen_at,
       createdAt: row.created_at,
       isMain: row.role === 'main',
+      displayLabel:
+        row.display_label != null && String(row.display_label).trim()
+          ? String(row.display_label).trim()
+          : null,
+      clientHint:
+        row.client_hint != null && String(row.client_hint).trim()
+          ? String(row.client_hint).trim()
+          : null,
     }))
 
     return NextResponse.json({ success: true, devices: items }, { headers })

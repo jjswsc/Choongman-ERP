@@ -4,7 +4,7 @@ import { ATTENDANCE_LOG_ADMIN_GRID_COLS } from '@/lib/postgrest-narrow-select'
 import {
   bangkokDateRangeToUtc,
   plannedWorkMinutesFromPlans,
-  resolveScheduleForAttendanceDay,
+  resolveScheduleForEmployeeDay,
   scheduleDateKey,
 } from '@/lib/attendance-utils'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
@@ -390,10 +390,11 @@ export async function GET(request: NextRequest) {
         actualWorkMin = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMinForRow)
       }
 
-      const sch = resolveScheduleForAttendanceDay(
+      const sch = resolveScheduleForEmployeeDay(
         dateForRow,
         rec.store,
-        rec.employeeId > 0 ? `#${rec.employeeId}` : rec.name,
+        rec.employeeId,
+        rec.name,
         scheduleMap,
         actualWorkMin,
         'payroll'

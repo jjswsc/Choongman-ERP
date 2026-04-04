@@ -192,6 +192,8 @@ export function PosSetMenuTabWorkspace({
   const [pickMenuListShown, setPickMenuListShown] = React.useState(false)
   const [pickMenuId, setPickMenuId] = React.useState("")
   const [pickQty, setPickQty] = React.useState("1")
+  /** Step 1 메뉴 고를 때 참고할 가격 기준(매장/배달) */
+  const [pickPricingBasis, setPickPricingBasis] = React.useState<"hall" | "delivery">("hall")
 
   const [discountMode, setDiscountMode] = React.useState<"pct" | "baht">("pct")
   const [discountPctStr, setDiscountPctStr] = React.useState("")
@@ -633,6 +635,8 @@ export function PosSetMenuTabWorkspace({
         setLines([])
         setDiscountPctStr("")
         setDiscountBahtStr("")
+        setPickPricingBasis("hall")
+        setPriceAnalysisChannel("hall")
       }
       setLoadingEdit(false)
       return
@@ -668,6 +672,9 @@ export function PosSetMenuTabWorkspace({
           channelDelivery: promoRow.channelDelivery !== false,
           deliveryAppCodes: normalizeDeliveryAppCodesList(promoRow.deliveryAppCodes ?? null),
         })
+        const basis = promoRow.composePricingBasis === "delivery" ? "delivery" : "hall"
+        setPickPricingBasis(basis)
+        setPriceAnalysisChannel(basis)
         const nextLines: ComposerLine[] = (items || []).map((it) => {
           const menu = menus.find((m) => String(m.id) === String(it.menuId))
           const opt = it.optionId ? allOptions.find((o) => String(o.id) === String(it.optionId)) : null
@@ -755,11 +762,15 @@ export function PosSetMenuTabWorkspace({
       setForm((p) => ({ ...p, name: "", code: "" }))
       setEditPromoId(null)
       setLines([])
+      setPickPricingBasis("hall")
+      setPriceAnalysisChannel("hall")
       return
     }
     setForm((p) => ({ ...p, name: raw, code: "" }))
     setEditPromoId(null)
     setLines([])
+    setPickPricingBasis("hall")
+    setPriceAnalysisChannel("hall")
   }, [])
 
   /** 오른쪽 목록: 프로모션명(마스터 name) 기준 그룹 */
@@ -921,6 +932,8 @@ export function PosSetMenuTabWorkspace({
     setDiscountPctStr("")
     setDiscountBahtStr("")
     setSalesSetCountStr("")
+    setPickPricingBasis("hall")
+    setPriceAnalysisChannel("hall")
     setPromoDraftGen((n) => n + 1)
   }
 
@@ -1127,6 +1140,7 @@ export function PosSetMenuTabWorkspace({
         standaloneSetMenu: !editPromoId && !effCid,
         userRole: auth?.role,
         userName: auth?.user,
+        composePricingBasis: pickPricingBasis,
       },
     }
   }
@@ -1258,6 +1272,35 @@ export function PosSetMenuTabWorkspace({
             <p className="text-xs font-bold text-foreground">{t("posMenuBundleSimPickTitle")}</p>
             <span className="text-[10px] text-muted-foreground">{t("posSetTabCostFromAnalysis")}</span>
           </div>
+          <div className="rounded-md border border-border/60 bg-background/40 p-2">
+            <p className="mb-1 text-[10px] text-muted-foreground">{t("posSetTabPriceAnalysis")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={pickPricingBasis === "hall" ? "default" : "outline"}
+                className="h-8 text-[11px]"
+                onClick={() => {
+                  setPickPricingBasis("hall")
+                  setPriceAnalysisChannel("hall")
+                }}
+              >
+                {t("posMenuPriceHall")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={pickPricingBasis === "delivery" ? "default" : "outline"}
+                className="h-8 text-[11px]"
+                onClick={() => {
+                  setPickPricingBasis("delivery")
+                  setPriceAnalysisChannel("delivery")
+                }}
+              >
+                {t("posOrderTypeDelivery")}
+              </Button>
+            </div>
+          </div>
           <p className="text-[10px] text-muted-foreground leading-relaxed border-l-2 border-border pl-2.5">
             {t("posSetTabPickMenusCategoryHint")}
           </p>
@@ -1344,8 +1387,14 @@ export function PosSetMenuTabWorkspace({
                     String(m.id),
                     null
                   )
-                  const hallCost = ac?.hall
-                  const listHall = m.price ?? 0
+                  const listCost = pickPricingBasis === "delivery" ? ac?.del : ac?.hall
+                  const listPriceRaw =
+                    pickPricingBasis === "delivery" &&
+                    m.priceDelivery != null &&
+                    Number.isFinite(Number(m.priceDelivery))
+                      ? Number(m.priceDelivery)
+                      : Number(m.price ?? 0)
+                  const listPrice = Number.isFinite(listPriceRaw) ? listPriceRaw : 0
                   const inBundle = isMenuAlreadyInBundle(String(m.id))
                   return (
                     <li
@@ -1359,10 +1408,10 @@ export function PosSetMenuTabWorkspace({
                           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold tabular-nums leading-snug">
                             <span className="text-foreground">
                               {t("itemsCost")} ฿
-                              {hallCost != null ? hallCost.toFixed(1) : costAnalysisLoaded ? "—" : "…"}
+                              {listCost != null ? listCost.toFixed(1) : costAnalysisLoaded ? "—" : "…"}
                             </span>
                             <span className="text-emerald-700 dark:text-emerald-300">
-                              {t("itemsPrice")} ฿{Math.round(listHall).toLocaleString()}
+                              {t("itemsPrice")} ฿{Math.round(listPrice).toLocaleString()}
                             </span>
                           </div>
                         </div>
@@ -2082,16 +2131,19 @@ export function PosSetMenuTabWorkspace({
                         setEditPromoId(pid)
                       }}
                       className={cn(
-                        "flex w-full flex-col gap-2.5 rounded-lg border px-4 py-3 text-left text-sm transition-colors",
+                        "w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                         active
                           ? "border-emerald-500/50 bg-emerald-500/10"
                           : "border-border/60 bg-card/80 hover:bg-muted/60"
                       )}
                     >
-                      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                        <div className="min-w-0 flex-1 space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="min-w-0 truncate text-sm font-semibold leading-tight">{pr?.code || m.code}</p>
+                      <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-12 md:items-start md:gap-x-3 md:gap-y-1">
+                        {/* 메타: 코드·상태·채널·이름 */}
+                        <div className="min-w-0 md:col-span-4">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="min-w-0 truncate font-mono text-xs font-semibold tabular-nums">
+                              {pr?.code || m.code}
+                            </span>
                             <Badge
                               variant={saleActive ? "default" : "secondary"}
                               className={cn(
@@ -2101,29 +2153,29 @@ export function PosSetMenuTabWorkspace({
                             >
                               {saleActive ? t("posSetInquiryActive") : t("posSetInquiryInactive")}
                             </Badge>
+                            <span className="flex flex-wrap gap-1">
+                              {hallOn ? (
+                                <span className="rounded border border-border/50 bg-muted/40 px-1 py-0 text-[10px] text-muted-foreground leading-none">
+                                  {t("posOrderTypeDineIn")}
+                                </span>
+                              ) : null}
+                              {takeOn ? (
+                                <span className="rounded border border-border/50 bg-muted/40 px-1 py-0 text-[10px] text-muted-foreground leading-none">
+                                  {t("posOrderTypeTakeout")}
+                                </span>
+                              ) : null}
+                              {delOn ? (
+                                <span className="rounded border border-border/50 bg-muted/40 px-1 py-0 text-[10px] text-muted-foreground leading-none">
+                                  {t("posOrderTypeDelivery")}
+                                </span>
+                              ) : null}
+                            </span>
                           </div>
-                          <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
+                          <p className="mt-0.5 line-clamp-1 text-xs font-medium leading-snug text-foreground">
                             {pr?.name || m.name || "—"}
                           </p>
-                          <div className="flex flex-wrap gap-1">
-                            {hallOn ? (
-                              <span className="rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                {t("posOrderTypeDineIn")}
-                              </span>
-                            ) : null}
-                            {takeOn ? (
-                              <span className="rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                {t("posOrderTypeTakeout")}
-                              </span>
-                            ) : null}
-                            {delOn ? (
-                              <span className="rounded-md border border-border/50 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                {t("posOrderTypeDelivery")}
-                              </span>
-                            ) : null}
-                          </div>
                           {delOn && delCodes.length > 0 ? (
-                            <p className="line-clamp-2 text-[10px] leading-snug text-muted-foreground/90">
+                            <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
                               {delCodes
                                 .map((c) => {
                                   const row = DEFAULT_PICKER_DELIVERY_APPS.find((d) => d.code === c)
@@ -2133,29 +2185,10 @@ export function PosSetMenuTabWorkspace({
                             </p>
                           ) : null}
                         </div>
-                        <div className="flex w-full min-w-0 flex-col gap-1 sm:max-w-[min(100%,22rem)] sm:flex-none sm:items-end sm:text-right">
-                          {showDisc ? (
-                            <p className="text-xs font-medium text-amber-800 dark:text-amber-200 sm:text-right">
-                              {t("posPromoSimulatorDiscountPct")}{" "}
-                              <span className="font-mono tabular-nums">{disc!.toFixed(1)}%</span>
-                            </p>
-                          ) : null}
-                          <p className="font-mono text-xs tabular-nums text-muted-foreground sm:text-right">
-                            {t("posMenuPriceHall")} ฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}
-                          </p>
-                          {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0 ? (
-                            <p className="font-mono text-xs tabular-nums text-muted-foreground sm:text-right">
-                              {t("posMenuPriceDelivery")} ฿{Math.round(Number(pr.priceDelivery)).toLocaleString()}
-                            </p>
-                          ) : null}
-                          {pr?.vatIncluded === false ? (
-                            <p className="text-[10px] text-muted-foreground sm:text-right">{t("posCostExclVat")}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="w-full border-t border-border/50 pt-2">
-                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                          <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:pt-0.5">
+
+                        {/* 구성 미리보기 — 가로 공간 활용 */}
+                        <div className="min-w-0 border-t border-border/40 pt-2 md:col-span-5 md:border-l md:border-t-0 md:pl-3 md:pt-0">
+                          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             {t("posSetTabSavedSetBundleLines")}
                             {preview?.status === "ok" && preview.total > 0 ? (
                               <span className="ml-1 font-normal normal-case text-muted-foreground/80">
@@ -2163,37 +2196,62 @@ export function PosSetMenuTabWorkspace({
                               </span>
                             ) : null}
                           </p>
-                          <div className="min-w-0 flex-1">
-                            {preview?.status === "loading" ? (
-                              <p className="animate-pulse text-xs text-muted-foreground">…</p>
-                            ) : null}
-                            {preview?.status === "err" ? (
-                              <p className="text-xs text-destructive">{t("posSetTabSavedSetComposeLoadErr")}</p>
-                            ) : null}
-                            {preview?.status === "ok" && preview.total === 0 ? (
-                              <p className="text-xs text-muted-foreground">—</p>
-                            ) : null}
-                            {preview?.status === "ok" && preview.previewLines.length > 0 ? (
-                              <ul className="grid w-full grid-cols-1 gap-x-8 gap-y-0.5 sm:grid-cols-2">
-                                {preview.previewLines.map((line, i) => (
-                                  <li
-                                    key={`${pid}-${i}`}
-                                    className="line-clamp-2 min-w-0 text-left text-xs leading-snug text-foreground/90"
-                                  >
-                                    · {line}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                            {preview?.status === "ok" && preview.total > preview.previewLines.length ? (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {t("posSetTabSavedSetMoreLines").replace(
-                                  "{{n}}",
-                                  String(preview.total - preview.previewLines.length)
-                                )}
+                          {preview?.status === "loading" ? (
+                            <p className="animate-pulse text-xs text-muted-foreground">…</p>
+                          ) : null}
+                          {preview?.status === "err" ? (
+                            <p className="text-xs text-destructive">{t("posSetTabSavedSetComposeLoadErr")}</p>
+                          ) : null}
+                          {preview?.status === "ok" && preview.total === 0 ? (
+                            <p className="text-xs text-muted-foreground">—</p>
+                          ) : null}
+                          {preview?.status === "ok" && preview.previewLines.length > 0 ? (
+                            <ul className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
+                              {preview.previewLines.map((line, i) => (
+                                <li
+                                  key={`${pid}-${i}`}
+                                  className="line-clamp-1 min-w-0 text-left text-[11px] leading-snug text-foreground/90"
+                                >
+                                  · {line}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {preview?.status === "ok" && preview.total > preview.previewLines.length ? (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">
+                              {t("posSetTabSavedSetMoreLines").replace(
+                                "{{n}}",
+                                String(preview.total - preview.previewLines.length)
+                              )}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        {/* 가격·할인 */}
+                        <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-border/40 pt-2 text-xs md:col-span-3 md:flex-col md:items-end md:border-l md:border-t-0 md:pl-3 md:pt-0 md:text-right">
+                          {showDisc ? (
+                            <p className="font-medium text-amber-800 dark:text-amber-200">
+                              {t("posPromoSimulatorDiscountPct")}{" "}
+                              <span className="font-mono tabular-nums">{disc!.toFixed(1)}%</span>
+                            </p>
+                          ) : null}
+                          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 md:flex-col md:items-end md:gap-0">
+                            <p className="font-mono tabular-nums text-muted-foreground">
+                              {t("posMenuPriceHall")}{" "}
+                              <span className="text-foreground">฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}</span>
+                            </p>
+                            {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0 ? (
+                              <p className="font-mono tabular-nums text-muted-foreground">
+                                {t("posMenuPriceDelivery")}{" "}
+                                <span className="text-foreground">
+                                  ฿{Math.round(Number(pr.priceDelivery)).toLocaleString()}
+                                </span>
                               </p>
                             ) : null}
                           </div>
+                          {pr?.vatIncluded === false ? (
+                            <p className="w-full text-[10px] text-muted-foreground md:text-right">{t("posCostExclVat")}</p>
+                          ) : null}
                         </div>
                       </div>
                     </button>

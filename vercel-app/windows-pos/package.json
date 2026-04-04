@@ -1,0 +1,52 @@
+{
+  "name": "choongman-pos-windows",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows installed hybrid POS shell (Electron)",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "icon:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/generate-windows-pos-icon.ps1",
+    "pack": "electron-builder --dir",
+    "build:win": "npm run icon:win && electron-builder --win nsis portable"
+  },
+  "build": {
+    "forceCodeSigning": false,
+    "appId": "com.choongman.erp.pos.windows",
+    "productName": "Choongman POS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "runtime-config.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false,
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "createDesktopShortcut": true
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}-${arch}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^2.1.8"
+  }
+}

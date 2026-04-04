@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-03T07:12:36.578Z",
-  "entryCount": 669,
+  "generatedAt": "2026-04-04T12:28:33.935Z",
+  "entryCount": 671,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -1782,70 +1782,70 @@
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 672,
+      "line": 671,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 673,
+      "line": 672,
       "kind": "maxRows",
       "value": 120000,
+      "apiLabel": "getPayrollCalc"
+    },
+    {
+      "path": "app/api/getPayrollCalc/route.ts",
+      "line": 696,
+      "kind": "pageSize",
+      "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
       "line": 697,
-      "kind": "pageSize",
-      "value": 2500,
+      "kind": "maxRows",
+      "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 698,
-      "kind": "maxRows",
-      "value": 120000,
+      "line": 721,
+      "kind": "pageSize",
+      "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
       "line": 722,
-      "kind": "pageSize",
-      "value": 2500,
+      "kind": "maxRows",
+      "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 723,
-      "kind": "maxRows",
-      "value": 120000,
+      "line": 744,
+      "kind": "pageSize",
+      "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
       "line": 745,
-      "kind": "pageSize",
-      "value": 2500,
-      "apiLabel": "getPayrollCalc"
-    },
-    {
-      "path": "app/api/getPayrollCalc/route.ts",
-      "line": 746,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 766,
+      "line": 765,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 781,
+      "line": 780,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getPayrollCalc"
@@ -1971,7 +1971,7 @@
     },
     {
       "path": "app/api/getPosDevices/route.ts",
-      "line": 26,
+      "line": 28,
       "kind": "limit",
       "value": 100,
       "apiLabel": "getPosDevices"
@@ -2139,35 +2139,35 @@
     },
     {
       "path": "app/api/getPosPromos/route.ts",
-      "line": 106,
+      "line": 117,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosPromos"
     },
     {
       "path": "app/api/getPosPromos/route.ts",
-      "line": 111,
+      "line": 122,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosPromos"
     },
     {
       "path": "app/api/getPosPromosWithItems/route.ts",
-      "line": 61,
+      "line": 71,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosPromosWithItems"
     },
     {
       "path": "app/api/getPosPromosWithItems/route.ts",
-      "line": 67,
+      "line": 77,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosPromosWithItems"
     },
     {
       "path": "app/api/getPosPromosWithItems/route.ts",
-      "line": 109,
+      "line": 120,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosPromosWithItems"
@@ -2958,7 +2958,7 @@
     },
     {
       "path": "app/api/patchStockLogInvoiceUnitPrice/route.ts",
-      "line": 38,
+      "line": 46,
       "kind": "limit",
       "value": 1,
       "apiLabel": "patchStockLogInvoiceUnitPrice"
@@ -3608,6 +3608,20 @@
       "apiLabel": "savePosMenuScreenConfig"
     },
     {
+      "path": "app/api/savePosOrder/route.ts",
+      "line": 40,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "savePosOrder"
+    },
+    {
+      "path": "app/api/savePosOrder/route.ts",
+      "line": 65,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "savePosOrder"
+    },
+    {
       "path": "app/api/savePosPaymentMethodItem/route.ts",
       "line": 42,
       "kind": "limit",
@@ -3623,14 +3637,7 @@
     },
     {
       "path": "app/api/savePosPromo/route.ts",
-      "line": 218,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "savePosPromo"
-    },
-    {
-      "path": "app/api/savePosPromo/route.ts",
-      "line": 231,
+      "line": 232,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosPromo"
@@ -3644,7 +3651,14 @@
     },
     {
       "path": "app/api/savePosPromo/route.ts",
-      "line": 258,
+      "line": 259,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "savePosPromo"
+    },
+    {
+      "path": "app/api/savePosPromo/route.ts",
+      "line": 272,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosPromo"
@@ -4008,7 +4022,7 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 267,
+      "line": 280,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"

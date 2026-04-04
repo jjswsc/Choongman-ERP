@@ -9,6 +9,8 @@ const SELECT_EXTENDED =
 const SELECT_WITH_MARKETING_COST =
   SELECT_EXTENDED + ',marketing_actual_cost,expense_accrual_id'
 
+const SELECT_WITH_COMPOSE_BASIS = SELECT_WITH_MARKETING_COST + ',compose_pricing_basis'
+
 const SELECT_BASE =
   'id,code,name,category,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id'
 
@@ -33,6 +35,14 @@ type RawRow = {
   valid_to?: string | null
   marketing_actual_cost?: number | null
   expense_accrual_id?: number | null
+  compose_pricing_basis?: string | null
+}
+
+function normalizeComposePricingBasis(v: unknown): 'hall' | 'delivery' {
+  const s = String(v ?? '')
+    .toLowerCase()
+    .trim()
+  return s === 'delivery' ? 'delivery' : 'hall'
 }
 
 function mapRow(row: RawRow) {
@@ -79,6 +89,7 @@ function mapRow(row: RawRow) {
       row.expense_accrual_id != null && Number.isFinite(Number(row.expense_accrual_id))
         ? String(row.expense_accrual_id)
         : null,
+    composePricingBasis: normalizeComposePricingBasis(row.compose_pricing_basis),
   }
 }
 
@@ -93,7 +104,7 @@ export async function GET(req: NextRequest) {
     const standaloneOnly =
       searchParams.get('standaloneOnly') === '1' || searchParams.get('standaloneOnly') === 'true'
     let rows: RawRow[] | null = null
-    for (const sel of [SELECT_WITH_MARKETING_COST, SELECT_EXTENDED, SELECT_BASE]) {
+    for (const sel of [SELECT_WITH_COMPOSE_BASIS, SELECT_WITH_MARKETING_COST, SELECT_EXTENDED, SELECT_BASE]) {
       try {
         const filter = standaloneOnly
           ? 'marketing_campaign_id=is.null'

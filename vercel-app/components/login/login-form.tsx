@@ -1,9 +1,17 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Select,
   SelectContent,
@@ -17,6 +25,11 @@ import { isLangCode, useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
+import {
+  copyWindowsInstallerUrl,
+  WINDOWS_ERP_SETUP_PATH,
+  WINDOWS_POS_SETUP_PATH,
+} from "@/lib/windows-installer-copy"
 
 function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
   // #region agent log
@@ -50,6 +63,33 @@ function isLoginCheckBackendFailureMessage(msg: string): boolean {
   )
 }
 
+type LoginApp = "erp" | "pos" | "mobile"
+
+function normalizeLoginPathname(pathname: string): string {
+  const p = (pathname || "/").replace(/\/+$/, "") || "/"
+  return p
+}
+
+function deriveLoginAppFromRoute(pathname: string, isAdminPage: boolean, redirectTo: string): LoginApp {
+  const p = normalizeLoginPathname(pathname)
+  if (p === "/pos/login") return "pos"
+  if (p === "/admin/login") {
+    if (!isAdminPage && redirectTo === "/pos") return "pos"
+    return "erp"
+  }
+  return "erp"
+}
+
+function computeErpLandingPath(pathname: string, isAdminPage: boolean, redirectTo: string): string {
+  const p = normalizeLoginPathname(pathname)
+  if (p === "/admin/login") {
+    if (!isAdminPage && redirectTo === "/pos") return "/admin"
+    if (redirectTo.startsWith("/admin")) return redirectTo
+    return "/admin"
+  }
+  return "/admin"
+}
+
 interface LoginFormProps {
   redirectTo: string
   isAdminPage: boolean
@@ -58,6 +98,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFormProps) {
+  const pathname = usePathname() || ""
   const router = useRouter()
   const { auth, setAuth } = useAuth()
   const [loginData, setLoginData] = useState<Record<string, string[]>>({})
@@ -81,6 +122,61 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [loadError, setLoadError] = useState<string | null>(null)
   const [browserOnline, setBrowserOnline] = useState(true)
   const initialNoticeShownRef = useRef(false)
+  const loginAppPrefHydratedRef = useRef(false)
+
+  const [loginApp, setLoginApp] = useState<LoginApp>(() =>
+    deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo)
+  )
+
+  useLayoutEffect(() => {
+    if (loginAppPrefHydratedRef.current) return
+    if (normalizeLoginPathname(pathname) !== "/login") return
+    loginAppPrefHydratedRef.current = true
+    try {
+      const w = localStorage.getItem("cm_login_app_pref")
+      if (w === "erp" || w === "pos" || w === "mobile") setLoginApp(w)
+    } catch {
+      /* ignore */
+    }
+  }, [pathname])
+
+  useEffect(() => {
+    const p = normalizeLoginPathname(pathname)
+    if (p === "/login") return
+    setLoginApp(deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo))
+  }, [pathname, isAdminPage, redirectTo])
+
+  const setLoginAppPersist = useCallback((app: LoginApp) => {
+    setLoginApp(app)
+    try {
+      localStorage.setItem("cm_login_app_pref", app)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const erpLandingPath = useMemo(
+    () => computeErpLandingPath(pathname, isAdminPage, redirectTo),
+    [pathname, isAdminPage, redirectTo]
+  )
+
+  const effectiveRedirectTo = useMemo(() => {
+    if (loginApp === "mobile") return "/"
+    if (loginApp === "pos") return "/pos"
+    return erpLandingPath
+  }, [loginApp, erpLandingPath])
+
+  const effectiveIsAdminPage = loginApp === "erp"
+
+  const windowsInstallerPath = effectiveIsAdminPage ? WINDOWS_ERP_SETUP_PATH : WINDOWS_POS_SETUP_PATH
+  const windowsInstallerLabel =
+    (effectiveIsAdminPage ? tMsg("erpWindowsDownload") : tMsg("posWindowsDownload")) ||
+    (effectiveIsAdminPage ? "윈도우 ERP 설치파일 받기" : "윈도우 POS 설치파일 받기")
+  const handleWindowsInstallerCopy = useCallback(async () => {
+    const r = await copyWindowsInstallerUrl(windowsInstallerPath)
+    if (r.ok) await appAlert(tMsg("windowsInstallerCopyHint") || "")
+    else await appAlert((tMsg("windowsInstallerCopyFail") || "") + r.url)
+  }, [tMsg, windowsInstallerPath])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -115,6 +211,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:start", "fetchLoginData started", {
       browserOnlineNow: typeof navigator !== "undefined" ? navigator.onLine : null,
     })
+    /** 브라우저 오프라인이면 네트워크 대기 없이 즉시 종료 — 6초 타임아웃으로 로그인 화면이 느려지는 것 방지 */
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setLoginData({})
+      setLoadError(null)
+      setLoading(false)
+      return
+    }
     const timeoutMs = 6000
     const withTimeout = Promise.race([
       getLoginData(),
@@ -154,13 +257,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   useEffect(() => {
     sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authGate", "login effect entered", {
       hasAuth: Boolean(auth),
-      redirectTo,
+      redirectTo: effectiveRedirectTo,
     })
     if (auth) {
       sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authRedirect", "auth exists, redirecting", {
-        redirectTo,
+        redirectTo: effectiveRedirectTo,
       })
-      replacePosOfflineAware(redirectTo, (p) => router.replace(p))
+      replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       return
     }
     /** HMR/라우트 전환 직후 unmount 레이스를 피하려고 취소 가능한 매크로태스크로 지연 */
@@ -173,7 +276,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return () => {
       window.clearTimeout(timer)
     }
-  }, [auth, redirectTo, router, fetchLoginData])
+  }, [auth, effectiveRedirectTo, router, fetchLoginData])
 
   useEffect(() => {
     if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
@@ -209,7 +312,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       return
     }
     try {
-      const res = await loginCheck({ store: effectiveStore, name: effectiveUser, pw, isAdminPage })
+      const res = await loginCheck({ store: effectiveStore, name: effectiveUser, pw, isAdminPage: effectiveIsAdminPage })
       if (res.success && res.storeName && res.userName) {
         setAuth({
           store: res.storeName,
@@ -222,7 +325,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             ? { allowedStores: res.allowedStores }
             : {}),
         })
-        replacePosOfflineAware(redirectTo, (p) => router.replace(p))
+        replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       } else {
         const apiMsg = res.message || ""
         if (isLoginCheckBackendFailureMessage(apiMsg)) {
@@ -337,6 +440,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "다시 시도",
       refresh: "새로고침",
       connectingToServer: "서버에 연결 중...",
+      loginAppHint: "로그인 후 이동",
+      loginAppErp: "ERP",
+      loginAppPos: "POS",
+      loginAppMobile: "모바일",
       offlineResumeStore: "매장",
       offlineResumeStaff: "담당자",
       offlineResumeSyncNote:
@@ -359,6 +466,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "Retry",
       refresh: "Refresh",
       connectingToServer: "Connecting to server...",
+      loginAppHint: "After login, open",
+      loginAppErp: "ERP (Admin)",
+      loginAppPos: "POS",
+      loginAppMobile: "Mobile",
       offlineResumeStore: "Store",
       offlineResumeStaff: "Staff",
       offlineResumeSyncNote:
@@ -381,6 +492,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ลองอีกครั้ง",
       refresh: "รีเฟรช",
       connectingToServer: "กำลังเชื่อมต่อเซิร์ฟเวอร์...",
+      loginAppHint: "หลังล็อกอินไปที่",
+      loginAppErp: "ERP",
+      loginAppPos: "POS",
+      loginAppMobile: "มือถือ",
       offlineResumeStore: "สาขา",
       offlineResumeStaff: "พนักงาน",
       offlineResumeSyncNote:
@@ -403,6 +518,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ပြန်ကြိုးစားမည်",
       refresh: "ပြန်စမည်",
       connectingToServer: "ဆာဗာနှင့် ချိတ်ဆက်နေသည်...",
+      loginAppHint: "ဝင်ပြီးနောက် ဖွင့်မည်",
+      loginAppErp: "ERP",
+      loginAppPos: "POS",
+      loginAppMobile: "မိုဘိုင်း",
       offlineResumeStore: "ဆိုင်",
       offlineResumeStaff: "တာဝန်ခံ",
       offlineResumeSyncNote:
@@ -425,6 +544,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ລອງໃໝ່",
       refresh: "ໂຫຼດໃໝ່",
       connectingToServer: "ກຳລັງເຊື່ອມຕໍ່ເຊີບເວີ...",
+      loginAppHint: "ຫຼັງເຂົ້າໄປທີ່",
+      loginAppErp: "ERP",
+      loginAppPos: "POS",
+      loginAppMobile: "ມືຖື",
       offlineResumeStore: "ສາຂາ",
       offlineResumeStaff: "ຜູ້ຮັບຜິດຊອບ",
       offlineResumeSyncNote:
@@ -462,6 +585,40 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             <p className="erp-text">CM ERP SYSTEM</p>
           </div>
 
+          {normalizeLoginPathname(pathname) === "/login" ? (
+            <div className="mb-4 w-full max-w-sm px-0.5">
+              <p className="mb-2 text-center text-[11px] font-medium tracking-wide text-white/65">
+                {t.loginAppHint}
+              </p>
+              <div
+                className="flex gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-white/10"
+                role="group"
+                aria-label={t.loginAppHint}
+              >
+                {(
+                  [
+                    { key: "erp" as const, label: t.loginAppErp },
+                    { key: "pos" as const, label: t.loginAppPos },
+                    { key: "mobile" as const, label: t.loginAppMobile },
+                  ] as const
+                ).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setLoginAppPersist(key)}
+                    className={
+                      loginApp === key
+                        ? "flex-1 rounded-lg bg-gradient-to-b from-orange-500 to-orange-600 px-2 py-2.5 text-center text-xs font-semibold text-white shadow-md shadow-orange-900/40"
+                        : "flex-1 rounded-lg px-2 py-2.5 text-center text-xs font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {loading ? (
             <div className="login-inline-loading">
               <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
@@ -488,12 +645,19 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   if (offlineResume) {
                     setPosSessionPreferHardNavigation()
                     setAuth(offlineResume)
-                    replacePosOfflineAware(redirectTo, (p) => router.replace(p))
+                    replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
                   }
                 }}
                 className="w-full rounded-md bg-emerald-600 px-3 py-3 text-sm font-medium text-white hover:bg-emerald-500"
               >
                 {t.enterOfflineMode}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleWindowsInstallerCopy()}
+                className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+              >
+                {windowsInstallerLabel}
               </button>
             </div>
           ) : (
@@ -542,7 +706,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   onClick={() => {
                     setPosSessionPreferHardNavigation()
                     setAuth(offlineResume)
-                    replacePosOfflineAware(redirectTo, (p) => router.replace(p))
+                    replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
                   }}
                   className="mt-2 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
                 >
@@ -609,7 +773,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   onClick={() => {
                     setPosSessionPreferHardNavigation()
                     setAuth(offlineResume)
-                    replacePosOfflineAware(redirectTo, (p) => router.replace(p))
+                    replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
                   }}
                   className="mb-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
                 >
@@ -630,6 +794,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
             <button type="submit" className="login-btn" disabled={submitting}>
               {submitting ? t.loggingIn : t.login}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleWindowsInstallerCopy()}
+              className="mt-2 block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+            >
+              {windowsInstallerLabel}
             </button>
 
             <button

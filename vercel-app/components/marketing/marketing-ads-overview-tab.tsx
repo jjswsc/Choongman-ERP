@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { MarketingAd, MarketingCampaign } from "@/lib/api-client"
-import { getBangkokCurrentMonthRangeYmd } from "@/lib/collab-overview-period"
+import {
+  getBangkokCurrentMonthRangeYmd,
+  getBangkokRolling30DayRangeYmd,
+} from "@/lib/collab-overview-period"
 
 type TFn = (key: string) => string
 
@@ -65,8 +68,8 @@ export function MarketingAdsOverviewTab(props: {
     onDelete,
   } = props
 
-  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokCurrentMonthRangeYmd().from)
-  const [periodTo, setPeriodTo] = React.useState(() => getBangkokCurrentMonthRangeYmd().to)
+  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
+  const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
   const [searchDraft, setSearchDraft] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [inquiryPlatformFilter, setInquiryPlatformFilter] = React.useState("")

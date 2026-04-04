@@ -6,19 +6,35 @@
 import { isOnline } from './network'
 import { getFromCache, setCache, cacheKeyOrders } from './cache'
 import { getPosOrders, type PosOrder } from '@/lib/api-client'
-import { getPendingSavePosOrdersMerged } from './pending-pos-orders-from-queue'
+import { getPendingSavePosOrdersMerged, getQueuedPosOrderStatusById } from './pending-pos-orders-from-queue'
+
+async function applyQueuedOrderStatusOverrides(rows: PosOrder[]): Promise<PosOrder[]> {
+  const map = await getQueuedPosOrderStatusById()
+  if (map.size === 0) return rows
+  return rows.map((r) => {
+    const id = Number(r.id)
+    if (!Number.isFinite(id)) return r
+    const st = map.get(id)
+    return st ? { ...r, status: st } : r
+  })
+}
 
 async function mergePendingIntoRows(
   rows: PosOrder[],
   range: { startStr: string; endStr: string; storeCode?: string; status?: string }
 ): Promise<PosOrder[]> {
   const pending = await getPendingSavePosOrdersMerged(range)
-  if (pending.length === 0) return rows
-  const pendingNos = new Set(
-    pending.map((p) => String(p.orderNo ?? '').trim()).filter(Boolean)
-  )
-  const rest = rows.filter((r) => !pendingNos.has(String(r.orderNo ?? '').trim()))
-  return [...pending, ...rest]
+  let merged: PosOrder[]
+  if (pending.length === 0) {
+    merged = rows
+  } else {
+    const pendingNos = new Set(
+      pending.map((p) => String(p.orderNo ?? '').trim()).filter(Boolean)
+    )
+    const rest = rows.filter((r) => !pendingNos.has(String(r.orderNo ?? '').trim()))
+    merged = [...pending, ...rest]
+  }
+  return applyQueuedOrderStatusOverrides(merged)
 }
 
 export async function getPosOrdersWithCache(params: {

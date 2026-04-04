@@ -9,7 +9,7 @@ import { POSMainGrid } from '@/components/pos/pos-main-grid'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { DEFAULT_TILES, POS_SUBMENUS, type POSTile, type POSSubMenuItem } from '@/lib/pos-display'
 import { cn } from '@/lib/utils'
-import { Circle } from 'lucide-react'
+import { Circle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
@@ -68,6 +68,22 @@ export default function POSMainPage() {
     return stores.length ? [stores[0]] : []
   }, [auth?.role, auth?.store, stores])
   const [prefetchOfflineBusy, setPrefetchOfflineBusy] = useState(false)
+  const [hybridPosShell, setHybridPosShell] = useState(false)
+  useEffect(() => {
+    setHybridPosShell(
+      typeof window !== 'undefined' &&
+        typeof (window as Window & { cmPosShell?: { resetCacheAndReload?: unknown } }).cmPosShell
+          ?.resetCacheAndReload === 'function'
+    )
+  }, [])
+
+  const handleResetCacheReload = useCallback(async () => {
+    const shell = (window as Window & { cmPosShell?: { resetCacheAndReload?: () => Promise<unknown> } })
+      .cmPosShell
+    if (typeof shell?.resetCacheAndReload !== 'function') return
+    await shell.resetCacheAndReload()
+  }, [])
+
   const handlePrefetchOffline = useCallback(async () => {
     if (!warmStoreCodes.length) return
     setPrefetchOfflineBusy(true)
@@ -405,6 +421,19 @@ export default function POSMainPage() {
           >
             {t('posSwitchUser')}
           </Button>
+          {hybridPosShell ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleResetCacheReload()}
+              title={t('posResetCacheReloadTitle') || ''}
+              className="h-8 gap-1.5 px-3 text-xs font-medium border-amber-300/80 text-amber-900 hover:bg-amber-50 hover:border-amber-400"
+            >
+              <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {t('posResetCacheReload')}
+            </Button>
+          ) : null}
         </div>
         {currentTime && (
           <div className="flex items-center gap-4">

@@ -8,6 +8,9 @@ import {
   getPendingCount,
   syncPending,
   onSyncComplete,
+  getSyncSnapshot,
+  onSyncSnapshot,
+  type SyncSnapshot,
 } from '@/lib/offline'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
@@ -44,6 +47,7 @@ export function OfflineBanner({
   const online = useOnlineStatus()
   const [pendingCount, setPendingCount] = React.useState(0)
   const [syncing, setSyncing] = React.useState(false)
+  const [syncSnapshot, setSyncSnapshot] = React.useState<SyncSnapshot>(() => getSyncSnapshot())
 
   const pendingLineText = React.useMemo(
     () => t('offlineBannerPendingLine').replace('{label}', pendingLabel).replace('{count}', String(pendingCount)),
@@ -76,12 +80,42 @@ export function OfflineBanner({
     })
   }, [onSync, refreshPending])
 
+  React.useEffect(() => {
+    return onSyncSnapshot((snapshot) => {
+      setSyncSnapshot(snapshot)
+    })
+  }, [])
+
+  const lastSyncAtText = React.useMemo(() => {
+    const ts = syncSnapshot.lastSuccessAt
+    if (!ts) return '-'
+    const d = new Date(ts)
+    if (Number.isNaN(d.getTime())) return '-'
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(d)
+  }, [syncSnapshot.lastSuccessAt])
+
+  const syncMetaText = React.useMemo(() => {
+    const synced = Math.max(0, Number(syncSnapshot.lastSynced ?? 0))
+    const failed = Math.max(0, Number(syncSnapshot.lastFailed ?? 0))
+    return `Sync ${lastSyncAtText} | +${synced} / !${failed}`
+  }, [lastSyncAtText, syncSnapshot.lastFailed, syncSnapshot.lastSynced])
+
   if (offlineOnly && online) return null
   if (!offlineOnly && online && pendingCount === 0) return null
 
   return (
     <div className="mx-4 my-2 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-2">
         {syncing ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
@@ -103,6 +137,10 @@ export function OfflineBanner({
             )}
           </>
         )}
+        </div>
+        <div className="truncate text-xs text-amber-700/90">
+          {syncMetaText}
+        </div>
       </div>
       {online && pendingCount > 0 && !syncing && (
         <Button

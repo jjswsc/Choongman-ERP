@@ -64,6 +64,9 @@ export async function POST(req: NextRequest) {
       userName?: string
       user_role?: string
       user_name?: string
+      /** 세트 구성 Step 1 가격 기준: hall | delivery */
+      composePricingBasis?: string
+      compose_pricing_basis?: string
     }
 
     let code = String(body.code ?? '').trim()
@@ -134,6 +137,13 @@ export async function POST(req: NextRequest) {
         ? body.deliveryAppCodes.map((c) => String(c).trim()).filter(Boolean)
         : null
 
+    const hasComposeBasis =
+      body.composePricingBasis !== undefined || body.compose_pricing_basis !== undefined
+    const composeBasisRaw = String(body.composePricingBasis ?? body.compose_pricing_basis ?? '')
+      .toLowerCase()
+      .trim()
+    const compose_pricing_basis = composeBasisRaw === 'delivery' ? 'delivery' : 'hall'
+
     const ext: Record<string, unknown> = {
       category: categorySub,
       price: Number(body.price) ?? 0,
@@ -156,6 +166,10 @@ export async function POST(req: NextRequest) {
           : null,
       valid_from: body.validFrom?.trim() || null,
       valid_to: body.validTo?.trim() || null,
+    }
+
+    if (hasComposeBasis) {
+      ext.compose_pricing_basis = compose_pricing_basis
     }
 
     /** 스키마에 없을 수 있는 컬럼 제외 — 레거시 DB 폴백용 */

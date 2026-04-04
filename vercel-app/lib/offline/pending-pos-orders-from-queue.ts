@@ -86,7 +86,13 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
   const vat = pricing.vatFeeAmt
 
   const paySum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
-  const status = paySum >= total - 0.02 ? 'paid' : 'pending'
+  const closeRaw = String(body.closeStatus ?? '').toLowerCase()
+  const status =
+    closeRaw === 'completed' || closeRaw === 'paid'
+      ? closeRaw
+      : paySum >= total - 0.02
+        ? 'paid'
+        : 'pending'
 
   const orderNo = String(item.metadata?.localOrderNo ?? '').trim() || `LOCAL-${item.createdAt}`
   const guestCountRaw = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
@@ -121,6 +127,26 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
 
 function inDateRange(businessYmd: string, startStr: string, endStr: string): boolean {
   return businessYmd >= startStr && businessYmd <= endStr
+}
+
+/**
+ * 오프라인 큐의 updatePosOrderStatus — 주문 id별 최종 status (같은 id는 전송 순서상 나중 항목이 우선).
+ * 취소·퇴장·완료가 캐시/합성 행에 반영되도록 getPosOrdersWithCache에서 사용한다.
+ */
+export async function getQueuedPosOrderStatusById(): Promise<Map<number, string>> {
+  const pending = await getAllPending()
+  const updates = pending.filter((p) => p.api === '/api/updatePosOrderStatus')
+  updates.sort((a, b) => a.createdAt - b.createdAt)
+  const map = new Map<number, string>()
+  for (const item of updates) {
+    const body = parseSavePosBody(item.body)
+    if (!body) continue
+    const id = Number(body.id)
+    const st = String(body.status ?? '').trim().toLowerCase()
+    if (!Number.isFinite(id) || !st) continue
+    map.set(id, st)
+  }
+  return map
 }
 
 /**

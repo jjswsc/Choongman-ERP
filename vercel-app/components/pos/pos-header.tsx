@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,6 +17,8 @@ import { cn } from "@/lib/utils"
 import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { appAlert } from "@/lib/app-message"
+import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
 
 interface PosHeaderProps {
   /** V0: 매장 목록 (있으면 매장 선택기 표시) */
@@ -81,6 +84,15 @@ export function POSHeader({
   const sales = totalSales ?? totalAmount
   const showStoreSelect = canChangeStore && stores.length > 0 && currentStoreId && onStoreChange
   const offlinePrefetchTitle = t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
+  const windowsPosDownloadLabel = t("posWindowsDownload") || "윈도우 POS 받기"
+  const handlePosInstallerCopy = useCallback(async () => {
+    const r = await copyWindowsInstallerUrl(WINDOWS_POS_SETUP_PATH)
+    if (r.ok) await appAlert(t("windowsInstallerCopyHint") || "")
+    else await appAlert((t("windowsInstallerCopyFail") || "") + r.url)
+  }, [t])
+  const windowsPosButtonTitle = onPrefetchOfflineData
+    ? `${windowsPosDownloadLabel} (Shift+Click: ${offlinePrefetchTitle})`
+    : windowsPosDownloadLabel
 
   const langOptions: { value: typeof lang; labelKey: string }[] = [
     { value: 'ko', labelKey: 'posLangKo' },
@@ -163,22 +175,24 @@ export function POSHeader({
               <RefreshCw className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">{t('posRefresh')}</span>
             </Button>
-            {onPrefetchOfflineData && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 gap-1 border-emerald-600/40 px-2 text-emerald-800 hover:bg-emerald-50 sm:px-3"
-                disabled={prefetchOfflineDataBusy}
-                title={offlinePrefetchTitle}
-                onClick={() => onPrefetchOfflineData()}
-              >
-                <HardDriveDownload className="h-4 w-4 shrink-0" />
-                <span className="hidden max-[380px]:hidden sm:inline">
-                  {prefetchOfflineDataBusy ? t("posOfflinePrefetching") : t("posOfflinePrefetch")}
-                </span>
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
+              disabled={prefetchOfflineDataBusy}
+              title={windowsPosButtonTitle}
+              onClick={(e) => {
+                if (e.shiftKey && onPrefetchOfflineData) {
+                  onPrefetchOfflineData()
+                  return
+                }
+                void handlePosInstallerCopy()
+              }}
+            >
+              <HardDriveDownload className="h-4 w-4 shrink-0" />
+              <span className="hidden max-[380px]:hidden sm:inline">{windowsPosDownloadLabel}</span>
+            </Button>
           </div>
         )}
 
@@ -203,20 +217,24 @@ export function POSHeader({
       </h1>
 
       <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 lg:gap-4">
-        {onPrefetchOfflineData && !showStoreSelect && (
+        {!showStoreSelect && (
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 shrink-0 gap-1 border-emerald-600/40 px-2 text-emerald-800 hover:bg-emerald-50 sm:px-3"
+            className="h-8 shrink-0 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
             disabled={prefetchOfflineDataBusy}
-            title={offlinePrefetchTitle}
-            onClick={() => onPrefetchOfflineData()}
+            title={windowsPosButtonTitle}
+            onClick={(e) => {
+              if (e.shiftKey && onPrefetchOfflineData) {
+                onPrefetchOfflineData()
+                return
+              }
+              void handlePosInstallerCopy()
+            }}
           >
             <HardDriveDownload className="h-4 w-4 shrink-0" />
-            <span className="hidden sm:inline">
-              {prefetchOfflineDataBusy ? t("posOfflinePrefetching") : t("posOfflinePrefetch")}
-            </span>
+            <span className="hidden sm:inline">{windowsPosDownloadLabel}</span>
           </Button>
         )}
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
