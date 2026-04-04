@@ -52,7 +52,7 @@ npm run build:win
 
 `npm run build:win` 실행 시 `../scripts/generate-windows-pos-icon.ps1`가 자동 실행되어
 `windows-pos/assets/icon.ico`를 생성/갱신합니다. 소스는 `../assets/brand/choongman-logo.png`이며,
-바탕화면·작업 표시줄에서 깨지지 않도록 **다중 해상도 ICO**(`png-to-ico`)로 묶습니다.
+바탕화면·작업 표시줄에서 깨지지 않도록 **64·48·32·16px ICO**(`png-to-ico`, 256 BMP 제외로 용량 축소)로 묶습니다.
 
 ## 업데이트/인쇄 단축키
 
