@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'cm_offline'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORES = {
   PENDING_REQUESTS: 'pending_requests',
   POS_ORDER_LOCAL: 'pos_order_local',
@@ -15,6 +15,8 @@ const STORES = {
   POS_CASH_CACHE: 'pos_cash_cache',
   /** ERP 핵심 데이터 캐시 (매장/직원/거래처/점검항목 - 오프라인 시 사용) */
   ERP_CACHE: 'erp_cache',
+  /** 하이브리드 POS 메뉴 썸네일 바이너리 (SW/HTTP 캐시 초기화 후에도 표시용) */
+  POS_MENU_IMAGES: 'pos_menu_images',
 } as const
 
 let dbInstance: IDBDatabase | null = null
@@ -57,6 +59,9 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) {
         const store = db.createObjectStore(STORES.ERP_CACHE, { keyPath: 'cacheKey' })
         store.createIndex('cachedAt', 'cachedAt', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(STORES.POS_MENU_IMAGES)) {
+        db.createObjectStore(STORES.POS_MENU_IMAGES, { keyPath: 'key' })
       }
     }
   })

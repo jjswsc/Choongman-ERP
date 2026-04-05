@@ -38,8 +38,7 @@ npm run build:win
 ```
 
 `npm run build:win` 실행 시 `../scripts/generate-windows-erp-icon.ps1`이 자동 실행되어
-`windows-erp/assets/icon.ico`를 생성/갱신합니다. 소스는 `../assets/brand/choongman-logo.png`이며,
-ICO는 **64·48·32·16px**만 포함합니다(256 BMP 제외로 저장소·설치 패키지 용량 절감).
+`windows-erp/assets/icon.ico`를 생성/갱신합니다.
 
 ## 단축키
 

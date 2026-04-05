@@ -3,6 +3,11 @@ const path = require("path");
 const os = require("os");
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut } = require("electron");
 
+/** package.json build.appId 와 동일 — 작업 표시줄·점프 목록이 Electron 기본 아이콘으로 남는 현상 완화 */
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.choongman.erp.pos.windows");
+}
+
 const DEFAULT_POS_URL = "https://choongman-erp.vercel.app/pos/login";
 const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6 hours
 const AUTO_UPDATE_ENABLED = String(process.env.WINDOWS_POS_AUTO_UPDATE || "1") !== "0";

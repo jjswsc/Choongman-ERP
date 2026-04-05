@@ -19,6 +19,14 @@ export async function GET(request: NextRequest) {
   const sinceId = sinceIdRaw && /^\d+$/.test(sinceIdRaw) ? parseInt(sinceIdRaw, 10) : null
   const orderIdRaw = searchParams.get('orderId')?.trim()
   const orderId = orderIdRaw && /^\d+$/.test(orderIdRaw) ? parseInt(orderIdRaw, 10) : null
+  const statusPaidLike =
+    searchParams.get('statusPaidLike') === '1' || searchParams.get('statusPaidLike') === 'true'
+  const limitRaw = searchParams.get('limit')?.trim()
+  const parsedListLimit = limitRaw && /^\d+$/.test(limitRaw) ? parseInt(limitRaw, 10) : null
+  const listLimit =
+    parsedListLimit != null ? Math.min(Math.max(parsedListLimit, 1), 2000) : 10000
+  const orderByRaw = String(searchParams.get('orderBy') || '').trim().toLowerCase()
+  const listOrder: 'created_at.desc' | 'id.desc' = orderByRaw === 'id.desc' ? 'id.desc' : 'created_at.desc'
 
   try {
     let rows: {
@@ -99,27 +107,33 @@ export async function GET(request: NextRequest) {
 
       rows = idRows || []
     } else {
-      const filters: string[] = []
-      if (startDate && endDate) {
-        const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
-        filters.push(`created_at=gte.${encodeURIComponent(startISO)}`)
-        filters.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+      const buildListFilter = (storeForFilter: string) => {
+        const parts: string[] = []
+        if (startDate && endDate) {
+          const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+          parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+          parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+        }
+        if (storeForFilter && storeForFilter !== 'All') {
+          parts.push(`store_code=ilike.${encodeURIComponent(storeForFilter)}`)
+        }
+        if (statusPaidLike) {
+          parts.push('or=(status.eq.paid,status.eq.completed)')
+        } else if (status && status !== 'all') {
+          parts.push(`status=eq.${encodeURIComponent(status)}`)
+        }
+        if (sinceId != null && sinceId > 0) {
+          parts.push(`id=gt.${sinceId}`)
+        }
+        return parts.join('&')
       }
-      if (storeCode && storeCode !== 'All') {
-        filters.push(`store_code=ilike.${encodeURIComponent(storeCode)}`)
-      }
-      if (status && status !== 'all') {
-        filters.push(`status=eq.${encodeURIComponent(status)}`)
-      }
-      if (sinceId != null && sinceId > 0) {
-        filters.push(`id=gt.${sinceId}`)
-      }
-      const filterStr = filters.length ? filters.join('&') : ''
+
+      const filterStr = buildListFilter(storeCode)
 
       if (filterStr) {
         rows = (await supabaseSelectFilter('pos_orders', filterStr, {
-          order: 'created_at.desc',
-          limit: 10000,
+          order: listOrder,
+          limit: listLimit,
           select: POS_ORDER_SELECT,
         })) as typeof rows
 
@@ -129,16 +143,10 @@ export async function GET(request: NextRequest) {
             storeCode.replace(/^CM\s+/i, '').trim(),
           ].filter((v) => v && v !== storeCode)
           for (const alt of variants) {
-            const altParts = [`store_code=ilike.${encodeURIComponent(alt)}`]
-            if (startDate && endDate) {
-              const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
-              altParts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
-              altParts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
-            }
-            const altFilter = altParts.join('&')
+            const altFilter = buildListFilter(alt)
             rows = (await supabaseSelectFilter('pos_orders', altFilter, {
-              order: 'created_at.desc',
-              limit: 10000,
+              order: listOrder,
+              limit: listLimit,
               select: POS_ORDER_SELECT,
             })) as typeof rows
             if (rows?.length) break
@@ -154,7 +162,16 @@ export async function GET(request: NextRequest) {
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('[getPosOrders]', { rowCount: (rows || []).length, startDate, endDate, storeCode: storeCode || '(all)', status: status || '(all)', sinceId: sinceId ?? '(none)' })
+      console.log('[getPosOrders]', {
+        rowCount: (rows || []).length,
+        startDate,
+        endDate,
+        storeCode: storeCode || '(all)',
+        status: statusPaidLike ? 'paidLike' : status || '(all)',
+        sinceId: sinceId ?? '(none)',
+        listLimit,
+        listOrder,
+      })
     }
 
     const list = (rows || [])

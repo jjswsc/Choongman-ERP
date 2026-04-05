@@ -147,18 +147,8 @@ export default function PosTerminalPage() {
       )
   }, [warmStoreCodes, t])
 
-  const notifyQueuedSave = useCallback(
-    async (orderNo: string | undefined, queued: boolean | undefined) => {
-      const localQueued = Boolean(queued) || String(orderNo ?? '').startsWith('LOCAL-')
-      if (!localQueued) return
-      await appAlert(
-        t('offlineBannerPendingLine')
-          .replace('{label}', t('offlineBannerPendingOrders'))
-          .replace('{count}', '1')
-      )
-    },
-    [t]
-  )
+  /** 오프라인 큐 적재 시 별도 확인 팝업 없음 — 상단 OfflineBanner가 대기 건수·동기화를 안내 */
+  const notifyQueuedSave = useCallback(async (_orderNo?: string, _queued?: boolean) => {}, [])
 
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [servingTableId, setServingTableId] = useState<string | null>(null)
@@ -536,8 +526,11 @@ export default function PosTerminalPage() {
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
   const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
+  const paymentReceiptScanSeededRef = useRef(false)
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
+    paymentReceiptScanSeededRef.current = false
   }, [currentStoreId])
 
   const pricingAdjustments = useMemo<PosPricingAdjustments>(() => ({
@@ -657,13 +650,13 @@ export default function PosTerminalPage() {
     const taxInvoiceRow = parsedMemo.taxInvoice
       ? buildPosTaxInvoiceThermalHtml({ taxInvoice: parsedMemo.taxInvoice, esc, tr })
       : ''
-    const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
+    const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ct('span') + ct('div') : ''
     const orderNoForPrint = formatPosReceiptOrderNoDisplay({
       posOrderNo: payload.orderNo,
       tableName: payload.tableName,
       memo: payload.memo,
     })
-    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(orderNoForPrint) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + taxInvoiceRow + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
+    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(orderNoForPrint) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + taxInvoiceRow + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ct('span') + ct('div') + ct('div')
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -912,6 +905,55 @@ export default function PosTerminalPage() {
     const today = getPosBusinessDateStr()
     const poll = async () => {
       try {
+        const runPaymentReceiptScan = async () => {
+          if (!autoPrintReceiptOnPayment) return
+          try {
+            const paidLikeRows = await getPosOrders({
+              startStr: today,
+              endStr: today,
+              storeCode: currentStoreId,
+              statusPaidLike: true,
+              limit: 800,
+              orderBy: 'id.desc',
+            })
+            if (!paymentReceiptScanSeededRef.current) {
+              for (const order of paidLikeRows) {
+                const oid = Number(order.id)
+                if (!Number.isFinite(oid) || oid <= 0) continue
+                if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) continue
+                if (posOrderPaymentSum(order) <= 0) continue
+                if (!(order.items || []).length) continue
+                printedPaymentReceiptIdsRef.current.add(oid)
+              }
+              paymentReceiptScanSeededRef.current = true
+              return
+            }
+            const candidates = paidLikeRows.filter((order) => {
+              const oid = Number(order.id)
+              if (!Number.isFinite(oid) || oid <= 0) return false
+              if (printedPaymentReceiptIdsRef.current.has(oid)) return false
+              if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return false
+              if (posOrderPaymentSum(order) <= 0) return false
+              if (!(order.items || []).length) return false
+              return true
+            })
+            candidates.sort((a, b) => Number(a.id) - Number(b.id))
+            let staggerMs = 0
+            for (const order of candidates) {
+              const oid = Number(order.id)
+              printedPaymentReceiptIdsRef.current.add(oid)
+              const snap = order
+              const adj = pricingAdjustments
+              setTimeout(() => {
+                setReceiptData(receiptModalDataFromPosOrderForPayment(snap, adj))
+              }, staggerMs)
+              staggerMs += 900
+            }
+          } catch {
+            /* ignore payment scan errors */
+          }
+        }
+
         const sinceId = hasInitializedMainPosPollRef.current && lastSeenOrderIdRef.current > 0 ? lastSeenOrderIdRef.current : undefined
         const orders = await getPosOrders({
           startStr: today,
@@ -924,6 +966,7 @@ export default function PosTerminalPage() {
           lastSeenOrderIdRef.current = maxId
           orders.forEach((o) => seenOrderIdsRef.current.add(o.id))
           hasInitializedMainPosPollRef.current = true
+          await runPaymentReceiptScan()
           return
         }
         const newOrders = orders
@@ -1037,6 +1080,7 @@ export default function PosTerminalPage() {
             }
           }
         }
+        await runPaymentReceiptScan()
       } catch {
         // ignore poll errors
       }
@@ -1047,7 +1091,17 @@ export default function PosTerminalPage() {
     return () => {
       clearInterval(id)
     }
-  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, menus, t, lang])
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    autoPrintReceiptOnOrder,
+    autoPrintKitchenSlipOnOrder,
+    autoPrintReceiptOnPayment,
+    pricingAdjustments,
+    menus,
+    t,
+    lang,
+  ])
 
   useEffect(() => {
     if (selectedTableId) {

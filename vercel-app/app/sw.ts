@@ -133,9 +133,9 @@ const erpWarmGetApis = {
 }
 
 /**
- * Supabase Storage 공개 URL은 경로에 `.jpg` 등이 포함되어 defaultCache의 이미지 규칙에 걸린다.
- * SW가 교차 출처 이미지를 StaleWhileRevalidate로 다룰 때 Electron(Windows 하이브리드 POS)에서만
- * 썸네일이 비는 사례가 있어, 이 경로는 캐시하지 않고 네트워크만 사용한다.
+ * Supabase Storage 공개 객체는 defaultCache(이미지 규칙 등)에 걸리면 Electron 하이브리드 POS에서만 썸네일이 비는 사례가 있다.
+ * 확장자 없는 파일명·destination 미설정 등으로 예전 매처에서 빠지면 SW 캐시로 떨어지므로,
+ * `*.supabase.co` + `/storage/v1/object/public/` 인 GET 전부 네트워크 전용으로 통일한다.
  */
 const supabaseStoragePublicImagesNetworkOnly = {
   matcher({
@@ -149,11 +149,8 @@ const supabaseStoragePublicImagesNetworkOnly = {
   }) {
     if (request.method !== "GET") return false
     if (!url.pathname.includes("/storage/v1/object/public/")) return false
-    const dest = request.destination
-    const leaf = url.pathname.split("/").pop() || ""
-    const looksLikeImage =
-      dest === "image" || /\.(?:jpe?g|png|gif|webp|svg|ico)$/i.test(leaf.split("?")[0] || "")
-    return looksLikeImage
+    const host = url.hostname.toLowerCase()
+    return host.endsWith(".supabase.co") || host === "supabase.co"
   },
   method: "GET" as const,
   handler: new NetworkOnly(),

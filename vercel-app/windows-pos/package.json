@@ -28,7 +28,7 @@
         "nsis",
         "portable"
       ],
-      "signAndEditExecutable": false,
+      "signAndEditExecutable": true,
       "icon": "assets/icon.ico"
     },
     "nsis": {

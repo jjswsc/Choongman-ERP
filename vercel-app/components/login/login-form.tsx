@@ -25,6 +25,7 @@ import { isLangCode, useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 import {
   copyWindowsInstallerUrl,
   WINDOWS_ERP_SETUP_PATH,
@@ -121,6 +122,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [pwError, setPwError] = useState("")
   const [loadError, setLoadError] = useState<string | null>(null)
   const [browserOnline, setBrowserOnline] = useState(true)
+  const [hybridPosShell, setHybridPosShell] = useState(false)
   const initialNoticeShownRef = useRef(false)
   const loginAppPrefHydratedRef = useRef(false)
 
@@ -172,11 +174,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const windowsInstallerLabel =
     (effectiveIsAdminPage ? tMsg("erpWindowsDownload") : tMsg("posWindowsDownload")) ||
     (effectiveIsAdminPage ? "윈도우 ERP 설치파일 받기" : "윈도우 POS 설치파일 받기")
+  /** 하이브리드 POS 앱 안에서는 "윈도우 POS 받기"만 숨김 — ERP 로그인 화면의 ERP 받기는 유지 */
+  const showWindowsInstallerButton = effectiveIsAdminPage || !hybridPosShell
   const handleWindowsInstallerCopy = useCallback(async () => {
     const r = await copyWindowsInstallerUrl(windowsInstallerPath)
     if (r.ok) await appAlert(tMsg("windowsInstallerCopyHint") || "")
     else await appAlert((tMsg("windowsInstallerCopyFail") || "") + r.url)
   }, [tMsg, windowsInstallerPath])
+
+  useEffect(() => {
+    setHybridPosShell(isCmPosHybridShell())
+  }, [])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -652,13 +660,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               >
                 {t.enterOfflineMode}
               </button>
-              <button
-                type="button"
-                onClick={() => void handleWindowsInstallerCopy()}
-                className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
-              >
-                {windowsInstallerLabel}
-              </button>
+              {showWindowsInstallerButton ? (
+                <button
+                  type="button"
+                  onClick={() => void handleWindowsInstallerCopy()}
+                  className="block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+                >
+                  {windowsInstallerLabel}
+                </button>
+              ) : null}
             </div>
           ) : (
           <form onSubmit={handleSubmit}>
@@ -796,13 +806,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               {submitting ? t.loggingIn : t.login}
             </button>
 
-            <button
-              type="button"
-              onClick={() => void handleWindowsInstallerCopy()}
-              className="mt-2 block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
-            >
-              {windowsInstallerLabel}
-            </button>
+            {showWindowsInstallerButton ? (
+              <button
+                type="button"
+                onClick={() => void handleWindowsInstallerCopy()}
+                className="mt-2 block w-full rounded-md bg-sky-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-sky-500"
+              >
+                {windowsInstallerLabel}
+              </button>
+            ) : null}
 
             <button
               type="button"

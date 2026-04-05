@@ -226,6 +226,7 @@ export function HrTab() {
       })
         .then(async (res) => {
           const isGpsPending = res.code === "ATT_GPS_PENDING"
+          const isQueued = (res as { queued?: boolean }).queued === true
           const isDuplicate =
             typeof res.message === "string" &&
             res.message.includes("오늘 이미") &&
@@ -245,7 +246,7 @@ export function HrTab() {
           if (isGpsPending) await appAlert(t("attGpsPendingSaved"))
           else await appAlert(translateApiMessage(res.message, t) || t("msg_done"))
 
-          if ((res.message && res.message.includes("✅")) || isGpsPending) {
+          if ((res.message && res.message.includes("✅")) || isGpsPending || isQueued) {
             loadButtonState()
             loadTodayLog()
           }

@@ -397,48 +397,52 @@ export default function POSMainPage() {
         </DialogContent>
       </Dialog>
 
-      <footer className="flex-shrink-0 h-14 px-4 min-[1025px]:px-6 border-t border-slate-200 flex items-center justify-between bg-white/90 backdrop-blur-sm shadow-[0_-1px_0_0_rgba(0,0,0,0.05)]">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+      <footer className="flex-shrink-0 border-t border-slate-200 bg-white/90 px-2 py-2 backdrop-blur-sm shadow-[0_-1px_0_0_rgba(0,0,0,0.05)] min-[1025px]:px-6 sm:px-4 flex flex-col gap-2 min-[520px]:flex-row min-[520px]:items-center min-[520px]:justify-between min-[520px]:py-1.5 min-[520px]:min-h-14">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <Circle className="w-2.5 h-2.5 fill-emerald-500 text-emerald-500 animate-pulse" />
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">
+            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-mono sm:text-[10px]">
               {t('posOnline')}
             </span>
           </div>
-          <div className="flex items-center gap-3 rounded-lg bg-slate-100/80 px-3 py-1.5 border border-slate-200">
-            <span className="text-slate-500 text-xs font-medium">{t('posSwitchUserStore')}</span>
-            <span className="text-sm font-semibold text-slate-800">{storeCode || 'POS'}</span>
-            <span className="text-slate-300">|</span>
-            <span className="text-slate-500 text-xs font-medium">{t('posCurrentUser')}</span>
-            <span className="text-sm font-semibold text-slate-800">{auth?.user || '—'}</span>
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-slate-200 bg-slate-100/80 px-2 py-1 sm:gap-x-3 sm:px-3 sm:py-1.5">
+            <span className="shrink-0 text-slate-500 text-[11px] font-medium sm:text-xs">{t('posSwitchUserStore')}</span>
+            <span className="min-w-0 truncate text-xs font-semibold text-slate-800 sm:text-sm">{storeCode || 'POS'}</span>
+            <span className="hidden text-slate-300 sm:inline">|</span>
+            <span className="shrink-0 text-slate-500 text-[11px] font-medium sm:text-xs">{t('posCurrentUser')}</span>
+            <span className="min-w-0 max-w-[42vw] break-words text-xs font-semibold leading-tight text-slate-800 min-[520px]:max-w-[12rem] sm:text-sm md:max-w-none">
+              {auth?.user || '—'}
+            </span>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={openSwitchUser}
-            className="h-8 px-3 text-xs font-medium border-emerald-400 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-500"
-          >
-            {t('posSwitchUser')}
-          </Button>
-          {hybridPosShell ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void handleResetCacheReload()}
-              title={t('posResetCacheReloadTitle') || ''}
-              className="h-8 gap-1.5 px-3 text-xs font-medium border-amber-300/80 text-amber-900 hover:bg-amber-50 hover:border-amber-400"
+              onClick={openSwitchUser}
+              className="h-8 whitespace-nowrap px-2 text-[11px] font-medium border-emerald-400 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-500 sm:px-3 sm:text-xs"
             >
-              <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {t('posResetCacheReload')}
+              {t('posSwitchUser')}
             </Button>
-          ) : null}
+            {hybridPosShell ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleResetCacheReload()}
+                title={t('posResetCacheReloadTitle') || ''}
+                className="h-8 gap-1 px-2 text-[11px] font-medium border-amber-300/80 text-amber-900 hover:bg-amber-50 hover:border-amber-400 sm:gap-1.5 sm:px-3 sm:text-xs"
+              >
+                <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="hidden sm:inline">{t('posResetCacheReload')}</span>
+              </Button>
+            ) : null}
+          </div>
         </div>
         {currentTime && (
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-slate-500">{formatDate(currentTime)}</span>
-            <span className="text-sm font-mono font-medium tabular-nums text-slate-800">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 pt-2 min-[520px]:border-t-0 min-[520px]:pt-0 sm:gap-4">
+            <span className="whitespace-nowrap text-[11px] text-slate-500 sm:text-xs">{formatDate(currentTime)}</span>
+            <span className="whitespace-nowrap text-xs font-mono font-medium tabular-nums text-slate-800 sm:text-sm">
               {formatTime(currentTime)}
             </span>
           </div>

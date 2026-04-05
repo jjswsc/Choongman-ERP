@@ -88,7 +88,8 @@ try {
       $env:CSC_KEY_PASSWORD = $CertPassword
     }
   } else {
-    # Unsigned build: avoid winCodeSign extract / symlink issues on Windows
+    # Unsigned: 서명은 하지 않되, package.json 의 signAndEditExecutable 은 true 로 두어
+    # 메인 .exe 에 win.icon 이 rcedit 으로 들어가게 함(false 이면 제거 프로그램만 아이콘 적용됨).
     $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
   }
 

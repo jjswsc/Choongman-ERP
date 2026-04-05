@@ -84,6 +84,7 @@ try {
       $env:CSC_KEY_PASSWORD = $CertPassword
     }
   } else {
+    # Unsigned: 서명 생략 + 메인 .exe 아이콘(rcedit)은 package.json signAndEditExecutable: true
     $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
   }
 

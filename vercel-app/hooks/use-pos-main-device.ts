@@ -7,6 +7,24 @@ import { buildPosClientHint } from '@/lib/pos-device-client-hint'
 const STORAGE_KEY = 'pos_main_device'
 const DEVICE_TOKEN_KEY = 'pos_device_token'
 
+/** localStorage 미설정: 서버 목록과 병합. '0'/'false': 사용자가 주문 단말로 명시 → 서버에 토큰이 남아 있어도 메인 UI로 두지 않음 */
+function getLocalMainExplicit(): 'main' | 'order' | 'unset' {
+  if (typeof window === 'undefined') return 'unset'
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    if (v === '1' || v === 'true') return 'main'
+    if (v === '0' || v === 'false') return 'order'
+    return 'unset'
+  } catch {
+    return 'unset'
+  }
+}
+
+function sanitizeMainTokensForExplicitOrder(tokens: string[], deviceToken: string): string[] {
+  if (getLocalMainExplicit() !== 'order') return tokens
+  return tokens.filter((t) => t !== deviceToken)
+}
+
 function getOrCreateDeviceToken(): string {
   if (typeof window === 'undefined') return ''
   try {
@@ -24,12 +42,7 @@ function getOrCreateDeviceToken(): string {
 export function usePosMainDevice(storeCode: string | null): [boolean, (value: boolean) => void] {
   const [localIsMain, setLocalIsMain] = React.useState<boolean>(() => {
     if (typeof window === 'undefined') return false
-    try {
-      const v = localStorage.getItem(STORAGE_KEY)
-      return v === '1' || v === 'true'
-    } catch {
-      return false
-    }
+    return getLocalMainExplicit() === 'main'
   })
   const [serverMainTokens, setServerMainTokens] = React.useState<string[]>([])
   const [deviceToken] = React.useState(() => getOrCreateDeviceToken())
@@ -52,7 +65,8 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
         const legacy = s?.mainDeviceToken != null && String(s.mainDeviceToken).trim()
           ? [String(s.mainDeviceToken).trim()]
           : []
-        setServerMainTokens(list.length > 0 ? list : legacy)
+        const merged = list.length > 0 ? list : legacy
+        setServerMainTokens(sanitizeMainTokensForExplicitOrder(merged, deviceToken))
       })
       .catch(() => {
         if (!cancelled && seq === settingsFetchSeqRef.current) setServerMainTokens([])
@@ -63,13 +77,15 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
   }, [storeCode, deviceToken])
 
   /**
-   * 서버에 다른 메인 기기만 있고 아직 본인 토큰이 목록에 없을 때도, 사용자가 메인으로 켠 직후(local)는 반영해야 함.
-   * (기존: server 목록 length>0 이면 localIsMain 무시 → 메인 버튼이 계속 주문으로 돌아가는 현상)
+   * 명시적 주문 단말('0')이면 서버 목록에 토큰이 남아 있어도 메인으로 보이지 않음(늦게 도착한 getPosPrinterSettings 대응).
+   * 미설정(unset)이면 서버에 본인 토큰이 있으면 메인으로 표시.
    */
-  const isMain = React.useMemo(
-    () => localIsMain || serverMainTokens.includes(deviceToken),
-    [serverMainTokens, deviceToken, localIsMain]
-  )
+  const isMain = React.useMemo(() => {
+    const mode = getLocalMainExplicit()
+    if (mode === 'order') return false
+    if (mode === 'main') return true
+    return serverMainTokens.includes(deviceToken)
+  }, [serverMainTokens, deviceToken, localIsMain])
 
   const setValue = React.useCallback(
     (value: boolean) => {
@@ -111,7 +127,8 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
               const legacy = s?.mainDeviceToken != null && String(s.mainDeviceToken).trim()
                 ? [String(s.mainDeviceToken).trim()]
                 : []
-              setServerMainTokens(list.length > 0 ? list : legacy)
+              const merged = list.length > 0 ? list : legacy
+              setServerMainTokens(sanitizeMainTokensForExplicitOrder(merged, deviceToken))
             } catch {
               // keep optimistic state
             }
@@ -138,7 +155,8 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
               const legacy = s?.mainDeviceToken != null && String(s.mainDeviceToken).trim()
                 ? [String(s.mainDeviceToken).trim()]
                 : []
-              setServerMainTokens(list.length > 0 ? list : legacy)
+              const merged = list.length > 0 ? list : legacy
+              setServerMainTokens(sanitizeMainTokensForExplicitOrder(merged, deviceToken))
             } catch {
               /* ignore */
             }

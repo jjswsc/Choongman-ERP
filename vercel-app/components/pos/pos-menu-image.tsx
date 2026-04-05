@@ -1,35 +1,15 @@
 /* eslint-disable @next/next/no-img-element -- 하이브리드(Electron/WebView)에서 외부 스토리지 URL은 네이티브 img가 더 안정적 */
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
+import {
+  fetchAndCacheMenuImage,
+  getMenuImageBlobObjectUrl,
+} from "@/lib/offline/pos-menu-images-cache"
+import { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
 
-/**
- * Capacitor/WebView에서 HTTPS 페이지 + http 이미지가 혼합 콘텐츠로 막히는 경우가 있어 보정.
- * Supabase Storage 공개 URL은 https만 사용하는 것이 안전.
- */
-export function normalizePosMenuImageUrl(raw: string): string {
-  const u = String(raw ?? "").trim()
-  if (!u) return ""
-  if (u.startsWith("//")) return `https:${u}`
-  /** 동일 출처 상대 경로 — Electron·웹 모두 현재 POS 오리진으로 절대화 */
-  if (u.startsWith("/") && typeof window !== "undefined" && window.location?.origin) {
-    return `${window.location.origin}${u}`
-  }
-  if (u.startsWith("http://")) {
-    const rest = u.slice("http://".length)
-    const host = (rest.split("/")[0] ?? "").toLowerCase()
-    if (host.endsWith(".supabase.co") || host === "supabase.co") {
-      return `https://${rest}`
-    }
-  }
-  return u
-}
-
-function isWindowsPosHybridShell(): boolean {
-  if (typeof window === "undefined") return false
-  const w = window as Window & { cmPosShell?: { printHtml?: unknown } }
-  return typeof w.cmPosShell?.printHtml === "function"
-}
+export { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
 
 type PosMenuFillImageProps = {
   src: string
@@ -40,16 +20,57 @@ type PosMenuFillImageProps = {
 /** 메뉴 타일용 — next/image 대신 img로 설치형·웹뷰에서 외부 스토리지 로딩 안정화 */
 export function PosMenuFillImage({ src, alt, className = "" }: PosMenuFillImageProps) {
   const href = useMemo(() => normalizePosMenuImageUrl(src), [src])
-  const hybrid = isWindowsPosHybridShell()
+  const hybrid = isCmPosHybridShell()
+  const [blobSrc, setBlobSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!hybrid || !href) {
+      setBlobSrc(null)
+      return
+    }
+    let cancelled = false
+    const createdUrls: string[] = []
+    ;(async () => {
+      let u = await getMenuImageBlobObjectUrl(href)
+      if (cancelled) {
+        if (u) URL.revokeObjectURL(u)
+        return
+      }
+      if (u) {
+        createdUrls.push(u)
+        setBlobSrc(u)
+        return
+      }
+      setBlobSrc(null)
+      await fetchAndCacheMenuImage(href)
+      if (cancelled) return
+      u = await getMenuImageBlobObjectUrl(href)
+      if (cancelled) {
+        if (u) URL.revokeObjectURL(u)
+        return
+      }
+      if (u) {
+        createdUrls.push(u)
+        setBlobSrc(u)
+      }
+    })()
+    return () => {
+      cancelled = true
+      for (const x of createdUrls) URL.revokeObjectURL(x)
+    }
+  }, [hybrid, href])
+
   if (!href) return null
+  const imgSrc = hybrid ? blobSrc ?? href : href
   return (
     <img
-      src={href}
+      src={imgSrc}
       alt={alt}
       className={cnAbsoluteFill(className)}
       loading={hybrid ? "eager" : "lazy"}
       decoding="async"
-      referrerPolicy="no-referrer-when-downgrade"
+      /** 교차 출처 스토리지가 Referer 정책으로 막는 경우 완화 */
+      referrerPolicy="no-referrer"
       onError={(e) => {
         const t = e.target as HTMLImageElement
         if (t) t.style.display = "none"

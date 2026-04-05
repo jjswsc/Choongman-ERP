@@ -573,18 +573,18 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       <h2>${t('posSettlementReport') || 'POS 결산 리포트'}</h2>
       <p><strong>${t('store') || '매장'}</strong>: ${storeLabel} &nbsp;|&nbsp; <strong>${t('posSettleDate') || '결산일'}</strong>: ${settleDate}</p>
       <table>
-      <tr><td>${t('posSystemSubtotal') || '공급가액'}</td><td class="r">${systemSubtotal.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posSystemVat') || 'VAT (7%)'}</td><td class="r">${systemVat.toLocaleString()} ฿</td></tr>
-      <tr class="t"><td class="b">${t('posSystemTotal') || '시스템 매출'}</td><td class="r b">${systemTotal.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posCashActual') || '돈통 시제'}</td><td class="r">${cashActualNum.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posCard') || '카드'}</td><td class="r">${cardNum.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posPaymentQrCode') || 'QR 코드'}</td><td class="r">${qrNum.toLocaleString()} ฿</td></tr>
-      <tr class="t"><td class="b">${t('posPaymentDeliveryApp') || '배달앱'}</td><td class="r b">${deliveryAppTotalNum.toLocaleString()} ฿</td></tr>
-      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}</td><td class="r">${deliveryNum.toLocaleString()} ฿</td></tr>
-      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}</td><td class="r">${dineInNum.toLocaleString()} ฿</td></tr>
-      <tr><td>${t('posPaymentOther') || '기타'}</td><td class="r">${otherNum.toLocaleString()} ฿</td></tr>
-      <tr class="t"><td class="b">${t('posInputTotal') || '입력 합계'}</td><td class="r b">${totalInput.toLocaleString()} ฿</td></tr>
-      <tr class="t"><td class="b">${t('posDifference') || '차액'}</td><td class="r b">${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posSystemSubtotal') || '공급가액'}</td><td class="r">${systemSubtotal.toLocaleString()}</td></tr>
+      <tr><td>${t('posSystemVat') || 'VAT (7%)'}</td><td class="r">${systemVat.toLocaleString()}</td></tr>
+      <tr class="t"><td class="b">${t('posSystemTotal') || '시스템 매출'}</td><td class="r b">${systemTotal.toLocaleString()}</td></tr>
+      <tr><td>${t('posCashActual') || '돈통 시제'}</td><td class="r">${cashActualNum.toLocaleString()}</td></tr>
+      <tr><td>${t('posCard') || '카드'}</td><td class="r">${cardNum.toLocaleString()}</td></tr>
+      <tr><td>${t('posPaymentQrCode') || 'QR 코드'}</td><td class="r">${qrNum.toLocaleString()}</td></tr>
+      <tr class="t"><td class="b">${t('posPaymentDeliveryApp') || '배달앱'}</td><td class="r b">${deliveryAppTotalNum.toLocaleString()}</td></tr>
+      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}</td><td class="r">${deliveryNum.toLocaleString()}</td></tr>
+      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}</td><td class="r">${dineInNum.toLocaleString()}</td></tr>
+      <tr><td>${t('posPaymentOther') || '기타'}</td><td class="r">${otherNum.toLocaleString()}</td></tr>
+      <tr class="t"><td class="b">${t('posInputTotal') || '입력 합계'}</td><td class="r b">${totalInput.toLocaleString()}</td></tr>
+      <tr class="t"><td class="b">${t('posDifference') || '차액'}</td><td class="r b">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</td></tr>
       </table>
       ${memo ? `<p class="t"><strong>${t('posMemo') || '비고'}</strong>: ${memo}</p>` : ''}
       ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}

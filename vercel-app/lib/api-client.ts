@@ -6357,6 +6357,11 @@ export async function getPosOrders(params?: {
   sinceId?: number
   /** 단건 조회(결제 영수증 동기화 등). 지정 시 날짜·sinceId 없이 id 우선 조회 */
   orderId?: number
+  /** status가 paid 또는 completed 인 행만 (OR). 메인 기기 결제 영수증 폴링 등 */
+  statusPaidLike?: boolean
+  orderBy?: 'created_at.desc' | 'id.desc'
+  /** 목록 조회 시 행 수 상한(서버에서 최대 2000으로 캡) */
+  limit?: number
 }): Promise<PosOrder[]> {
   const q = new URLSearchParams()
   if (params?.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
@@ -6365,6 +6370,9 @@ export async function getPosOrders(params?: {
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.status) q.set('status', params.status)
   if (params?.sinceId != null && params.sinceId > 0) q.set('sinceId', String(params.sinceId))
+  if (params?.statusPaidLike) q.set('statusPaidLike', '1')
+  if (params?.orderBy) q.set('orderBy', params.orderBy)
+  if (params?.limit != null && params.limit > 0) q.set('limit', String(params.limit))
   const res = await apiFetchWithOffline('/api/getPosOrders?' + q.toString())
   const data = await res.json().catch(() => null)
   if (!Array.isArray(data)) return []

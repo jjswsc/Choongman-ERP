@@ -19,6 +19,7 @@ import {
 import { getAppDataWithCache, getLoginDataWithCache, getStoreListWithCache } from '@/lib/offline/erp-offline'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { warmPosMenuImagesFromMenuList } from '@/lib/offline/pos-menu-images-cache'
 
 export type WarmPosOfflineCacheResult = {
   ok: boolean
@@ -51,7 +52,10 @@ export async function warmPosOfflineCache(opts: {
   }
 
   await Promise.all([
-    safeWarm('menus', () => getPosMenus(), errors),
+    safeWarm('menus', async () => {
+      const menus = await getPosMenus()
+      await warmPosMenuImagesFromMenuList(Array.isArray(menus) ? menus : [], { concurrency: 6 })
+    }, errors),
     safeWarm('categories', () => getPosMenuCategories(), errors),
     safeWarm('options', () => getPosMenuOptions(), errors),
     safeWarm('promos', () => getPosPromosWithItems(), errors),

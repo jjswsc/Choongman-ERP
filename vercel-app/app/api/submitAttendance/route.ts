@@ -20,6 +20,11 @@ function addDays(dateStr: string, delta: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** getTodayAttendanceTypes와 동일: `store_name` ILIKE *fragment* (CM 접두·표기 차이 허용) */
+function attendanceStoreIlikePattern(storeName: string): string {
+  return '*' + String(storeName || '').replace(/\*/g, '') + '*'
+}
+
 function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3
   const radLat1 = (lat1 * Math.PI) / 180
@@ -108,10 +113,11 @@ export async function POST(request: NextRequest) {
 
     const oncePerDayTypes = ['출근', '퇴근', '휴식시작', '휴식종료']
     if (oncePerDayTypes.includes(logType)) {
+      const storeIlike = encodeURIComponent(attendanceStoreIlikePattern(storeName))
       const logFilter =
         empId > 0
-          ? `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}`
-          : `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+          ? `store_name=ilike.${storeIlike}&employee_id=eq.${empId}`
+          : `store_name=ilike.${storeIlike}&name=ilike.${encodeURIComponent(empName)}`
       const logs = (await supabaseSelectFilter('attendance_logs', logFilter, {
         order: 'log_at.desc',
         limit: 100,
@@ -356,8 +362,11 @@ export async function POST(request: NextRequest) {
         }
       }
     } else if (logType === '휴식종료') {
+      const storeIlikeResume = encodeURIComponent(attendanceStoreIlikePattern(storeName))
       const allLogsFilter =
-        empId > 0 ? `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${empId}` : `name=ilike.${encodeURIComponent(empName)}`
+        empId > 0
+          ? `store_name=ilike.${storeIlikeResume}&employee_id=eq.${empId}`
+          : `name=ilike.${encodeURIComponent(empName)}`
       const allLogs = (await supabaseSelectFilter('attendance_logs', allLogsFilter, {
         order: 'log_at.desc',
         limit: 50,

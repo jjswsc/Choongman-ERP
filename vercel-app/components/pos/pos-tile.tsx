@@ -58,14 +58,14 @@ export function POSTile({ tile, onClick, label }: POSTileProps) {
       onClick={onClick}
       disabled={!tile.enabled}
       className={cn(
-        "group relative flex overflow-hidden",
+        "group relative flex w-full max-w-full min-w-0 overflow-hidden",
         "rounded-2xl border transition-all duration-300 ease-out",
         "touch-manipulation select-none",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
         "active:scale-[0.98]",
         isLarge && "flex-col items-center justify-center col-span-2 row-span-2",
-        !isLarge && "flex-row items-center justify-center gap-3 px-3",
-        "h-full min-h-[88px] min-[1025px]:min-h-[96px]",
+        !isLarge && "flex-row items-center justify-center gap-2 px-2 min-[480px]:gap-3 min-[480px]:px-3",
+        "h-full min-h-[80px] min-[480px]:min-h-[88px] min-[1025px]:min-h-[96px]",
         isLarge && "min-h-[72px] min-[1025px]:min-h-[80px]",
         variant === "primary" && [
           "bg-gradient-to-br from-emerald-500 to-emerald-600",
@@ -117,8 +117,8 @@ export function POSTile({ tile, onClick, label }: POSTileProps) {
       <div className={cn("relative z-10 flex flex-col items-center min-w-0", !isLarge && "items-start")}>
         <span
           className={cn(
-            "relative z-10 font-medium tracking-tight transition-colors duration-300",
-            isLarge ? "text-center text-lg min-[1025px]:text-xl" : "text-left text-sm min-[1025px]:text-base",
+            "relative z-10 min-w-0 font-medium tracking-tight transition-colors duration-300 break-keep [overflow-wrap:anywhere] leading-snug",
+            isLarge ? "text-center text-lg min-[1025px]:text-xl" : "text-left text-xs min-[480px]:text-sm min-[1025px]:text-base",
             variant === "primary" && "text-white",
             variant === "accent" && "text-white",
             variant === "default" && "text-slate-700 group-hover:text-slate-900"

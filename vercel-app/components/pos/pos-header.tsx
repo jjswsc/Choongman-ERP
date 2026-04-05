@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,6 +18,7 @@ import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { appAlert } from "@/lib/app-message"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
 
 interface PosHeaderProps {
@@ -81,6 +82,10 @@ export function POSHeader({
   const router = useRouter()
   const { lang, setLang } = useLang()
   const t = useT(lang)
+  const [hideWindowsPosDownload, setHideWindowsPosDownload] = useState(false)
+  useEffect(() => {
+    setHideWindowsPosDownload(isCmPosHybridShell())
+  }, [])
   const sales = totalSales ?? totalAmount
   const showStoreSelect = canChangeStore && stores.length > 0 && currentStoreId && onStoreChange
   const offlinePrefetchTitle = t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
@@ -108,11 +113,11 @@ export function POSHeader({
   return (
     <header
       className={cn(
-        "grid min-h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-border bg-card px-3 py-2 sm:gap-x-3 sm:px-4 lg:h-14 lg:gap-x-4 lg:py-0",
+        "grid min-h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1 border-b border-border bg-card px-2 py-2 sm:gap-x-2 sm:px-3 md:px-4 lg:h-14 lg:gap-x-3 lg:py-0",
         className
       )}
     >
-      <div className="flex min-w-0 flex-nowrap items-center gap-x-1.5 overflow-x-auto sm:gap-x-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-w-0 flex-nowrap items-center gap-x-1 overflow-x-auto sm:gap-x-1.5 md:gap-x-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Button
             type="button"
@@ -153,9 +158,9 @@ export function POSHeader({
         </div>
 
         {showStoreSelect && (
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 max-w-full items-center gap-1 sm:gap-2">
             <Select value={currentStoreId} onValueChange={onStoreChange}>
-              <SelectTrigger className="w-[160px] h-8">
+              <SelectTrigger className="h-8 w-[min(140px,28vw)] sm:w-[160px]">
                 <SelectValue placeholder={t('posStoreSelect')} />
               </SelectTrigger>
               <SelectContent>
@@ -175,24 +180,26 @@ export function POSHeader({
               <RefreshCw className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">{t('posRefresh')}</span>
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 shrink-0 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
-              disabled={prefetchOfflineDataBusy}
-              title={windowsPosButtonTitle}
-              onClick={(e) => {
-                if (e.shiftKey && onPrefetchOfflineData) {
-                  onPrefetchOfflineData()
-                  return
-                }
-                void handlePosInstallerCopy()
-              }}
-            >
-              <HardDriveDownload className="h-4 w-4 shrink-0" />
-              <span className="hidden max-[380px]:hidden sm:inline">{windowsPosDownloadLabel}</span>
-            </Button>
+            {!hideWindowsPosDownload ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
+                disabled={prefetchOfflineDataBusy}
+                title={windowsPosButtonTitle}
+                onClick={(e) => {
+                  if (e.shiftKey && onPrefetchOfflineData) {
+                    onPrefetchOfflineData()
+                    return
+                  }
+                  void handlePosInstallerCopy()
+                }}
+              >
+                <HardDriveDownload className="h-4 w-4 shrink-0" />
+                <span className="hidden max-[380px]:hidden sm:inline">{windowsPosDownloadLabel}</span>
+              </Button>
+            ) : null}
           </div>
         )}
 
@@ -212,12 +219,12 @@ export function POSHeader({
         )}
       </div>
 
-      <h1 className="min-w-0 truncate px-1 text-center text-sm font-bold leading-tight text-foreground sm:text-base lg:text-lg">
+      <h1 className="min-w-0 max-w-full justify-self-center truncate px-0.5 text-center text-xs font-bold leading-tight text-foreground sm:px-1 sm:text-sm md:text-base lg:text-lg">
         {title}
       </h1>
 
-      <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 lg:gap-4">
-        {!showStoreSelect && (
+      <div className="flex min-w-0 shrink-0 items-center justify-end gap-1 overflow-x-auto sm:gap-1.5 md:gap-2 lg:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {!showStoreSelect && !hideWindowsPosDownload ? (
           <Button
             type="button"
             variant="outline"
@@ -236,9 +243,9 @@ export function POSHeader({
             <HardDriveDownload className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline">{windowsPosDownloadLabel}</span>
           </Button>
-        )}
+        ) : null}
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
-          <SelectTrigger className="h-8 w-[5.5rem] gap-1 sm:w-[100px]" aria-label={t('posLanguage')}>
+          <SelectTrigger className="h-8 w-[4.75rem] shrink-0 gap-0.5 sm:w-[5.5rem] sm:gap-1 md:w-[100px]" aria-label={t('posLanguage')}>
             <Languages className="w-3.5 h-3.5 shrink-0" />
             <SelectValue />
           </SelectTrigger>
@@ -250,7 +257,7 @@ export function POSHeader({
             ))}
           </SelectContent>
         </Select>
-        <span className="whitespace-nowrap text-sm font-bold tabular-nums text-foreground sm:text-base lg:text-lg">
+        <span className="shrink-0 whitespace-nowrap text-xs font-bold tabular-nums text-foreground sm:text-sm md:text-base lg:text-lg">
           {sales.toLocaleString()} ฿
         </span>
         {canAccessAdminProp && (

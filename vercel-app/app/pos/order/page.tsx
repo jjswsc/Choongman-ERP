@@ -1885,55 +1885,55 @@ export default function PosOrderPage() {
                         {it.name} × {it.qty}
                       </span>
                       <span className="tabular-nums">
-                        {formatBahtNum(it.price * it.qty)} ฿
+                        {formatBahtNum(it.price * it.qty)}
                       </span>
                     </div>
                   ))}
                 </div>
                 <div className="receipt-row flex justify-between text-xs border-t pt-2 mt-2">
                   <span>{t("posSubtotal") || "소계"}</span>
-                  <span className="tabular-nums">{formatBahtNum(receiptData.subtotal)} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(receiptData.subtotal)}</span>
                 </div>
                 {receiptData.discountAmt > 0 && (
                   <div className="receipt-row flex justify-between text-xs text-green-600">
                     <span>{t("posDiscount") || "할인"}{receiptData.discountReason ? ` ${receiptData.discountReason}` : ""}</span>
-                    <span className="tabular-nums">-{formatBahtNum(receiptData.discountAmt)} ฿</span>
+                    <span className="tabular-nums">-{formatBahtNum(receiptData.discountAmt)}</span>
                   </div>
                 )}
                 {(receiptData.deliveryFee ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                    <span className="tabular-nums">+{formatBahtNum(receiptData.deliveryFee)} ฿</span>
+                    <span className="tabular-nums">+{formatBahtNum(receiptData.deliveryFee)}</span>
                   </div>
                 )}
                 {(receiptData.packagingFee ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                    <span className="tabular-nums">+{formatBahtNum(receiptData.packagingFee)} ฿</span>
+                    <span className="tabular-nums">+{formatBahtNum(receiptData.packagingFee)}</span>
                   </div>
                 )}
                 {(receiptData.vatFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posVatLabel") || "부가세"}</span>
-                    <span className="tabular-nums">{receiptData.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.vatFeeAmt)} ฿</span>
+                    <span className="tabular-nums">{receiptData.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.vatFeeAmt)}</span>
                   </div>
                 )}
                 {(receiptData.serviceFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posServiceFee") || "서비스비"}</span>
-                    <span className="tabular-nums">{receiptData.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.serviceFeeAmt)} ฿</span>
+                    <span className="tabular-nums">{receiptData.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.serviceFeeAmt)}</span>
                   </div>
                 )}
                 {(receiptData.cardFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posCardFee") || "카드비"}</span>
-                    <span className="tabular-nums">{receiptData.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.cardFeeAmt)} ฿</span>
+                    <span className="tabular-nums">{receiptData.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.cardFeeAmt)}</span>
                   </div>
                 )}
                 {(receiptData.otherFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posOtherFee") || "기타"}</span>
-                    <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.otherFeeAmt)} ฿</span>
+                    <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.otherFeeAmt)}</span>
                   </div>
                 )}
                 {parsedReceiptMemo.plainMemo && (
@@ -1943,7 +1943,7 @@ export default function PosOrderPage() {
                 )}
                 <div className="receipt-total flex justify-between">
                   <span>{t("posTotal") || "합계"}</span>
-                  <span className="tabular-nums">{formatBahtNum(receiptData.total)} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(receiptData.total)}</span>
                 </div>
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
