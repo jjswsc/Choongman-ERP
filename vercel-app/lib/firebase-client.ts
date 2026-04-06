@@ -1,5 +1,6 @@
 "use client"
 
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 import { getApps, initializeApp, getApp, type FirebaseApp } from "firebase/app"
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging"
 
@@ -51,6 +52,12 @@ export function preRegisterServiceWorker(): void {
   if (typeof window === "undefined" || !navigator?.serviceWorker?.register) return
   // Local dev + HMR에서 SW 캐시가 _next 청크를 오염시키면 ChunkLoadError/SyntaxError가 반복된다.
   if (process.env.NODE_ENV !== "production") return
+  /**
+   * Windows Electron 하이브리드: Serwist가 Supabase 등 교차 출처 `<img>` GET을 처리할 때
+   * 데스크톱 Chromium에서만 썸네일이 비는 사례가 있음(브라우저 탭은 정상).
+   * POS 셸은 IndexedDB·직접 fetch로 오프라인 보조를 쓰므로 SW 없이 동작하게 한다.
+   */
+  if (isCmPosHybridShell()) return
   navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {})
 }
 

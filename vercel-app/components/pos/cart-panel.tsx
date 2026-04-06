@@ -1947,7 +1947,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </div>
 
         {/* 주문 타입 / 회원 / 테이블 등 */}
-        <div className="space-y-1.5 shrink-0 px-3">
+        <div className="space-y-1 shrink-0 px-3">
           {!lockOrderType && (
             <div className="flex items-center gap-2">
               <Label className="text-sm w-12 flex-shrink-0">{t('posOrderTypeLabel')}</Label>
@@ -2068,8 +2068,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </div>
           )}
 
-          {/* 회원 검색 결과 & 비회원 버튼 */}
-          <div className="flex flex-wrap gap-1 min-h-[26px] items-center">
+          {/* 회원 검색 결과 & 비회원 버튼 — 비어 있을 때는 높이를 두지 않아 손님 메모와 간격 축소 */}
+          <div
+            className={cn(
+              'flex flex-wrap items-center gap-1',
+              selectedMemberId || memberOptions.length > 0 ? 'min-h-[26px]' : 'min-h-0'
+            )}
+          >
             {selectedMemberId && (
               <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setSelectedMemberId('')}>
                 {t('posMemberNone') || '비회원'}
@@ -2124,7 +2129,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </div>
 
         {/* Options - 쿠폰/할인은 결제 페이지에서 입력. 손님 메모는 내용 있을 때만 표시 */}
-        <div className="space-y-2 pt-3 border-t shrink-0 px-3" aria-label={t('posCustomerMemo') || '손님 메모'}>
+        <div className="space-y-1.5 border-t pt-1.5 shrink-0 px-3" aria-label={t('posCustomerMemo') || '손님 메모'}>
           {customerMemo.trim() || editingCustomerMemo ? (
             <div className={cn(
               "rounded-md p-2",

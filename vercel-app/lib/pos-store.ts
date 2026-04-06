@@ -168,11 +168,12 @@ export function usePosStore() {
         const activeOrders = (ordersRes || []).filter(
           (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
         )
+        /** 선불(paid): 결제 후에도 테이블·주문 유지. 후불은 completed 시 퇴장 처리로 비움 */
         const dineInOrders = activeOrders.filter(
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded', 'completed', 'paid'].includes((o.status ?? '').toLowerCase())
+            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
         return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
@@ -303,11 +304,12 @@ export function usePosStore() {
         const activeOrders = (ordersRes || []).filter(
           (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
         )
+        /** 선불(paid): 결제 후에도 테이블·주문 유지. 후불은 completed 시 퇴장 처리로 비움 */
         const dineInOrders = activeOrders.filter(
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded', 'completed', 'paid'].includes((o.status ?? '').toLowerCase())
+            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
         return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }

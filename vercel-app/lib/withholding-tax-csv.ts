@@ -11,6 +11,7 @@ export type WithholdingTaxLedgerRow = {
   form_hint?: string | null
   certificate_no?: string | null
   memo?: string | null
+  store_name?: string | null
 }
 
 function escCell(s: string): string {
@@ -23,6 +24,7 @@ export function withholdingTaxLedgerToCsv(rows: WithholdingTaxLedgerRow[]): stri
     'id',
     'payment_date',
     'tax_month',
+    'store_name',
     'payee_name',
     'payee_tax_id',
     'income_type',
@@ -40,6 +42,7 @@ export function withholdingTaxLedgerToCsv(rows: WithholdingTaxLedgerRow[]): stri
         String(r.id ?? ''),
         escCell(String(r.payment_date ?? '')),
         escCell(String(r.tax_month ?? '')),
+        escCell(String(r.store_name ?? '')),
         escCell(String(r.payee_name ?? '')),
         escCell(String(r.payee_tax_id ?? '')),
         escCell(String(r.income_type ?? '')),

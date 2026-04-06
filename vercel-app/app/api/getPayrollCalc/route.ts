@@ -558,6 +558,24 @@ export interface PayrollCalcRow {
   earlyMin: number
   earlyDed: number
   sso: number
+  /** SSO 산정 기준 임금(기본급·시급제 월 환산) — 사회보험 신고 열 wage_base 와 동일 */
+  ssoBase?: number
+  /** 인사 마스터 SSO 공제 제외 */
+  ssoExempt?: boolean
+  /** 인사 id_number (신분증 번호, 엑셀 citizen_id 등에 사용) */
+  idNumber?: string
+  /** 인사 name_title (คำนำหน้า) */
+  nameTitle?: string
+  /** 인사 sso_number — SSO 가입자/증 번호(공식 양식 ประจำตัวผู้ประกันตน) */
+  ssoMemberNo?: string
+  /** 생년월일 YYYY-MM-DD */
+  dateOfBirth?: string
+  /** 입사일 YYYY-MM-DD */
+  joinDate?: string
+  /** 퇴사일 YYYY-MM-DD */
+  resignDate?: string
+  /** 태국 ม.33 일반: 고용주 부담금 = 본인 부담금(각 5%) */
+  employerSso?: number
   tax: number
   otherDed: number
   netPay: number
@@ -611,6 +629,32 @@ export async function GET(request: NextRequest) {
 
     // attendance_allowance·sso_exempt 미적용 DB는 후보 순으로 내려가며 조회 (42703 등)
     const empPayrollSelectCandidatesBase = [
+      // name_title·sso_number 포함 (미배포 DB는 아래 블록으로 폴백)
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number,name_title,sso_number',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number,name_title,sso_number',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number,name_title,sso_number',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number,name_title,sso_number',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,name_title,sso_number',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,name_title,sso_number',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,name_title,sso_number',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,name_title,sso_number,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,name_title,sso_number',
+      // id_number·name_title·sso_number 미배포 DB
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number,sso_exempt',
+      'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,id_number',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number,sso_exempt',
+      'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,id_number',
       'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date,sso_exempt',
       'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,attendance_allowance,birth,join_date,resign_date',
       'id,store,name,job,role,grade,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,resign_date,sso_exempt',
@@ -641,6 +685,9 @@ export async function GET(request: NextRequest) {
       join_date?: string
       resign_date?: string
       sso_exempt?: boolean | null
+      id_number?: string | null
+      name_title?: string | null
+      sso_number?: string | null
     }
     let empRows: EmpRowPayroll[] | null = null
     let empLoadErr: unknown = null
@@ -915,6 +962,12 @@ export async function GET(request: NextRequest) {
         if (!scheduleWorkDatesByKey[key]) scheduleWorkDatesByKey[key] = new Set<string>()
         scheduleWorkDatesByKey[key].add(d)
       }
+    }
+
+    const empYmd = (v: unknown): string => {
+      if (v == null || v === '') return ''
+      const s = typeof v === 'string' ? v.trim() : String(v).trim()
+      return s ? s.slice(0, 10) : ''
     }
 
     const list: PayrollCalcRow[] = []
@@ -1442,6 +1495,13 @@ export async function GET(request: NextRequest) {
         amount: sso,
       })
 
+      const idNumRaw = (e as EmpRowPayroll).id_number != null ? String((e as EmpRowPayroll).id_number).trim() : ''
+      const idDigits = idNumRaw.replace(/\D/g, '')
+      const nameTitle =
+        (e as EmpRowPayroll).name_title != null ? String((e as EmpRowPayroll).name_title).trim() : ''
+      const ssoMemRaw =
+        (e as EmpRowPayroll).sso_number != null ? String((e as EmpRowPayroll).sso_number).trim() : ''
+
       list.push({
         id: employeeId > 0 ? `${normMonth}_${store}_${employeeId}` : normMonth + '_' + store + '_' + name,
         month: normMonth,
@@ -1468,6 +1528,15 @@ export async function GET(request: NextRequest) {
         earlyMin,
         earlyDed,
         sso,
+        ssoBase,
+        ssoExempt,
+        ...(idDigits ? { idNumber: idDigits.length === 13 ? idDigits : idNumRaw } : {}),
+        ...(nameTitle ? { nameTitle } : {}),
+        ...(ssoMemRaw ? { ssoMemberNo: ssoMemRaw } : {}),
+        dateOfBirth: empYmd((e as EmpRowPayroll).birth),
+        joinDate: empYmd((e as EmpRowPayroll).join_date),
+        resignDate: empYmd((e as EmpRowPayroll).resign_date),
+        employerSso: ssoExempt ? 0 : sso,
         tax: 0,
         otherDed: unpaidAbsenceDed,
         netPay,

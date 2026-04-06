@@ -1,6 +1,5 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,16 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, LayoutDashboard, HardDriveDownload } from "lucide-react"
+import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, LayoutDashboard } from "lucide-react"
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { appAlert } from "@/lib/app-message"
-import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
-import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
 
 interface PosHeaderProps {
   /** V0: 매장 목록 (있으면 매장 선택기 표시) */
@@ -46,9 +42,6 @@ interface PosHeaderProps {
   canChangeStore?: boolean
   /** 테이블 현황 등 새로고침 시 호출 (미전달 시 location.reload) */
   onRefresh?: () => void
-  /** 인터넷이 될 때 로컬에 POS 오프라인용 캐시 채우기 */
-  onPrefetchOfflineData?: () => void
-  prefetchOfflineDataBusy?: boolean
   title?: string
   className?: string
   /** 메인 포스 모드 (프린터 연결, 태블릿 주문 수신 인쇄) */
@@ -72,8 +65,6 @@ export function POSHeader({
   canAccessAdmin: canAccessAdminProp = true,
   canChangeStore = true,
   onRefresh,
-  onPrefetchOfflineData,
-  prefetchOfflineDataBusy = false,
   title = "POS",
   className,
   isMainPosDevice,
@@ -82,22 +73,8 @@ export function POSHeader({
   const router = useRouter()
   const { lang, setLang } = useLang()
   const t = useT(lang)
-  const [hideWindowsPosDownload, setHideWindowsPosDownload] = useState(false)
-  useEffect(() => {
-    setHideWindowsPosDownload(isCmPosHybridShell())
-  }, [])
   const sales = totalSales ?? totalAmount
   const showStoreSelect = canChangeStore && stores.length > 0 && currentStoreId && onStoreChange
-  const offlinePrefetchTitle = t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
-  const windowsPosDownloadLabel = t("posWindowsDownload") || "윈도우 POS 받기"
-  const handlePosInstallerCopy = useCallback(async () => {
-    const r = await copyWindowsInstallerUrl(WINDOWS_POS_SETUP_PATH)
-    if (r.ok) await appAlert(t("windowsInstallerCopyHint") || "")
-    else await appAlert((t("windowsInstallerCopyFail") || "") + r.url)
-  }, [t])
-  const windowsPosButtonTitle = onPrefetchOfflineData
-    ? `${windowsPosDownloadLabel} (Shift+Click: ${offlinePrefetchTitle})`
-    : windowsPosDownloadLabel
 
   const langOptions: { value: typeof lang; labelKey: string }[] = [
     { value: 'ko', labelKey: 'posLangKo' },
@@ -180,26 +157,6 @@ export function POSHeader({
               <RefreshCw className="h-4 w-4 sm:mr-1" />
               <span className="hidden sm:inline">{t('posRefresh')}</span>
             </Button>
-            {!hideWindowsPosDownload ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 shrink-0 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
-                disabled={prefetchOfflineDataBusy}
-                title={windowsPosButtonTitle}
-                onClick={(e) => {
-                  if (e.shiftKey && onPrefetchOfflineData) {
-                    onPrefetchOfflineData()
-                    return
-                  }
-                  void handlePosInstallerCopy()
-                }}
-              >
-                <HardDriveDownload className="h-4 w-4 shrink-0" />
-                <span className="hidden max-[380px]:hidden sm:inline">{windowsPosDownloadLabel}</span>
-              </Button>
-            ) : null}
           </div>
         )}
 
@@ -224,26 +181,6 @@ export function POSHeader({
       </h1>
 
       <div className="flex min-w-0 shrink-0 items-center justify-end gap-1 overflow-x-auto sm:gap-1.5 md:gap-2 lg:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {!showStoreSelect && !hideWindowsPosDownload ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 shrink-0 gap-1 border-sky-600/40 px-2 text-sky-900 hover:bg-sky-50 sm:px-3"
-            disabled={prefetchOfflineDataBusy}
-            title={windowsPosButtonTitle}
-            onClick={(e) => {
-              if (e.shiftKey && onPrefetchOfflineData) {
-                onPrefetchOfflineData()
-                return
-              }
-              void handlePosInstallerCopy()
-            }}
-          >
-            <HardDriveDownload className="h-4 w-4 shrink-0" />
-            <span className="hidden sm:inline">{windowsPosDownloadLabel}</span>
-          </Button>
-        ) : null}
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
           <SelectTrigger className="h-8 w-[4.75rem] shrink-0 gap-0.5 sm:w-[5.5rem] sm:gap-1 md:w-[100px]" aria-label={t('posLanguage')}>
             <Languages className="w-3.5 h-3.5 shrink-0" />

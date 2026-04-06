@@ -7,8 +7,8 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
 const KITCHEN_SLIP_BODY_WIDTH_MM = 76
-/** top, right, bottom, left — 오른쪽은 비인쇄 여백 대비 넓게 */
-const KITCHEN_SLIP_PADDING_MM = { t: 1, r: 4, b: 1, l: 2 } as const
+/** top, right, bottom, left — 오른쪽은 열전사·Electron 비인쇄영역 대비 (기존 4mm → +10mm) */
+const KITCHEN_SLIP_PADDING_MM = { t: 1, r: 14, b: 1, l: 2 } as const
 /** @page 높이: 짧으면 긴 주방전표가 2페이지로 잘림. 600mm까지 한 페이지로 묶음. */
 const POS_PAPER_HEIGHT_MM = 600
 

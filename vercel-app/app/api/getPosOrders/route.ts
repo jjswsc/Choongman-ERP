@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { verifyToken } from '@/lib/jwt-auth'
+import { isOfficeRole } from '@/lib/permissions'
+
+async function resolveBearerCaller(
+  request: NextRequest
+): Promise<{ role: string; store: string } | null> {
+  const auth = request.headers.get('authorization') || ''
+  const m = auth.match(/^Bearer\s+(\S+)/i)
+  if (!m?.[1]) return null
+  const payload = await verifyToken(m[1].trim())
+  if (!payload) return null
+  return {
+    role: String(payload.role ?? '').trim(),
+    store: String(payload.store ?? '').trim(),
+  }
+}
 
 const POS_ORDER_SELECT =
   'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
@@ -13,7 +29,16 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
-  const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const caller = await resolveBearerCaller(request)
+  let effectiveStoreCode = requestedStore
+  if (caller && !isOfficeRole(caller.role)) {
+    const own = caller.store.trim()
+    if (!own) {
+      return NextResponse.json([], { headers })
+    }
+    effectiveStoreCode = own
+  }
   const status = String(searchParams.get('status') || '').trim()
   const sinceIdRaw = searchParams.get('sinceId')?.trim()
   const sinceId = sinceIdRaw && /^\d+$/.test(sinceIdRaw) ? parseInt(sinceIdRaw, 10) : null
@@ -80,8 +105,8 @@ export async function GET(request: NextRequest) {
     /** 단건 id 조회: Realtime UPDATE 후 풀 행 보강용 */
     if (orderId != null && orderId > 0) {
       const idFilters = [`id=eq.${orderId}`]
-      if (storeCode && storeCode !== 'All') {
-        idFilters.push(`store_code=ilike.${encodeURIComponent(storeCode)}`)
+      if (effectiveStoreCode && effectiveStoreCode !== 'All') {
+        idFilters.push(`store_code=ilike.${encodeURIComponent(effectiveStoreCode)}`)
       }
       let idRows = (await supabaseSelectFilter('pos_orders', idFilters.join('&'), {
         order: 'created_at.desc',
@@ -89,11 +114,11 @@ export async function GET(request: NextRequest) {
         select: POS_ORDER_SELECT,
       })) as typeof rows
 
-      if (!idRows?.length && storeCode) {
+      if (!idRows?.length && effectiveStoreCode) {
         const variants = [
-          storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
-          storeCode.replace(/^CM\s+/i, '').trim(),
-        ].filter((v) => v && v !== storeCode)
+          effectiveStoreCode.startsWith('CM ') ? effectiveStoreCode.slice(3).trim() : `CM ${effectiveStoreCode}`.trim(),
+          effectiveStoreCode.replace(/^CM\s+/i, '').trim(),
+        ].filter((v) => v && v !== effectiveStoreCode)
         for (const alt of variants) {
           const altFilter = `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`
           idRows = (await supabaseSelectFilter('pos_orders', altFilter, {
@@ -128,7 +153,7 @@ export async function GET(request: NextRequest) {
         return parts.join('&')
       }
 
-      const filterStr = buildListFilter(storeCode)
+      const filterStr = buildListFilter(effectiveStoreCode)
 
       if (filterStr) {
         rows = (await supabaseSelectFilter('pos_orders', filterStr, {
@@ -137,11 +162,11 @@ export async function GET(request: NextRequest) {
           select: POS_ORDER_SELECT,
         })) as typeof rows
 
-        if (!rows?.length && storeCode) {
+        if (!rows?.length && effectiveStoreCode) {
           const variants = [
-            storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
-            storeCode.replace(/^CM\s+/i, '').trim(),
-          ].filter((v) => v && v !== storeCode)
+            effectiveStoreCode.startsWith('CM ') ? effectiveStoreCode.slice(3).trim() : `CM ${effectiveStoreCode}`.trim(),
+            effectiveStoreCode.replace(/^CM\s+/i, '').trim(),
+          ].filter((v) => v && v !== effectiveStoreCode)
           for (const alt of variants) {
             const altFilter = buildListFilter(alt)
             rows = (await supabaseSelectFilter('pos_orders', altFilter, {
@@ -166,7 +191,8 @@ export async function GET(request: NextRequest) {
         rowCount: (rows || []).length,
         startDate,
         endDate,
-        storeCode: storeCode || '(all)',
+        requestedStore: requestedStore || '(none)',
+        effectiveStore: effectiveStoreCode || '(all)',
         status: statusPaidLike ? 'paidLike' : status || '(all)',
         sinceId: sinceId ?? '(none)',
         listLimit,

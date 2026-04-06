@@ -48,6 +48,7 @@ import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
+import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
@@ -110,6 +111,7 @@ export function PosTerminalMenuScreen({
   const { lang } = useLang()
   const t = useT(lang)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
   const [selectedMainCategory, setSelectedMainCategory] = React.useState('')
@@ -793,7 +795,7 @@ export function PosTerminalMenuScreen({
                 data-menu-card="promo"
               >
                 <div className="relative flex h-[92px] shrink-0 items-center justify-center overflow-hidden rounded-lg bg-amber-100">
-                  <span className="text-2xl">🏷️</span>
+                  <span className="font-pos-emoji text-2xl">🏷️</span>
                 </div>
                 <div
                   className="mt-1 overflow-hidden break-words font-medium leading-tight text-slate-800"
@@ -826,7 +828,7 @@ export function PosTerminalMenuScreen({
                 )}
                 data-menu-card="menu"
               >
-                <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                <div className="relative h-[92px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {isAdminMode && (
                     <span
                       role="button"
@@ -849,11 +851,7 @@ export function PosTerminalMenuScreen({
                       <Pencil className="h-3 w-3" />
                     </span>
                   )}
-                  {m.imageUrl ? (
-                    <PosMenuFillImage src={m.imageUrl} alt={m.name} />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-2xl text-slate-400">🍗</div>
-                  )}
+                  <PosMenuFillImage src={m.imageUrl || ''} alt={m.name} />
                 </div>
                 <div
                   className="mt-1 overflow-hidden break-words font-medium leading-tight text-slate-800"
@@ -1301,8 +1299,14 @@ export function PosTerminalMenuScreen({
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                         <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded border bg-slate-100">
-                          {menuEditForm.imageUrl ? (
-                            <PosMenuFillImage src={menuEditForm.imageUrl} alt="menu-preview" />
+                          {menuEditForm.imageUrl.trim() ? (
+                            <PosMenuFillImage
+                              src={menuEditForm.imageUrl}
+                              alt="menu-preview"
+                              variant="preview"
+                              className="object-contain"
+                              previewErrorLabel={t('posMenuImageLoadFailed') || '불러올 수 없음'}
+                            />
                           ) : (
                             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{t('posMenuImagePreview') || '미리보기'}</div>
                           )}

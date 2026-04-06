@@ -30,7 +30,11 @@ import {
   type AttendanceLogItem,
   type LeaveHistoryItem,
 } from "@/lib/api-client"
-import { getDayOfWeekBangkok } from "@/lib/attendance-utils"
+import {
+  addDayBangkok,
+  getBangkokHour,
+  getDayOfWeekBangkok,
+} from "@/lib/attendance-utils"
 
 const DAY_KEYS = ["scheduleSun", "scheduleMon", "scheduleTue", "scheduleWed", "scheduleThu", "scheduleFri", "scheduleSat"] as const
 
@@ -117,36 +121,88 @@ interface DailyRecord {
   overtime: string | null
 }
 
-function deriveSummaryFromLogs(logs: AttendanceLogItem[], yearMonth: string): MyAttendanceSummary {
-  const { start, end } = getMonthRange(yearMonth)
-  const byKey: Record<string, { lateMin: number; otMin: number; hasOut: boolean }> = {}
-  for (const r of logs || []) {
-    const dateStr = toDateStrBangkok(r.timestamp || "")
-    if (!dateStr || dateStr < start || dateStr > end) continue
-    if (!byKey[dateStr]) byKey[dateStr] = { lateMin: 0, otMin: 0, hasOut: false }
-    const rec = byKey[dateStr]
-    const type = String(r.type || "").trim()
-    if (type === "출근") rec.lateMin = Math.max(rec.lateMin, r.late_min ?? 0)
-    else if (type === "퇴근") {
-      rec.hasOut = true
-      rec.otMin = Math.max(rec.otMin, r.ot_min ?? 0)
+/** 출근~퇴근 한 세션 (퇴근은 익일 새벽이어도 workDate=출근 달력일) — getAttendanceRecordsAdmin과 동일하게 hour<7이면 전날 근무 종료 */
+interface AttendanceSession {
+  workDate: string
+  inIso: string
+  outIso: string | null
+  lateMin: number
+  otMin: number
+}
+
+function pairAttendanceSessions(logs: AttendanceLogItem[]): AttendanceSession[] {
+  const sorted = (logs || [])
+    .filter((l) => l.timestamp && String(l.timestamp).trim())
+    .sort((a, b) => new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime())
+  const sessions: AttendanceSession[] = []
+  for (const log of sorted) {
+    const type = String(log.type || "").trim()
+    const ts = log.timestamp!
+    if (type === "출근") {
+      sessions.push({
+        workDate: toDateStrBangkok(ts),
+        inIso: ts,
+        outIso: null,
+        lateMin: Number(log.late_min) || 0,
+        otMin: 0,
+      })
+    } else if (type === "퇴근") {
+      const outCalDate = toDateStrBangkok(ts)
+      const isOvernightOut = getBangkokHour(ts) < 7
+      const targetWorkDate = isOvernightOut ? addDayBangkok(outCalDate, -1) : outCalDate
+      for (let i = sessions.length - 1; i >= 0; i--) {
+        const s = sessions[i]
+        if (s.workDate === targetWorkDate && !s.outIso) {
+          s.outIso = ts
+          s.otMin = Math.max(s.otMin, Number(log.ot_min) || 0)
+          break
+        }
+      }
     }
   }
+  return sessions
+}
+
+/** 같은 근무일에 세션이 여러 개면: 미퇴근(진행 중) 우선, 없으면 가장 늦게 출근한 세션(야간 근무) */
+function pickSessionForCalendarDay(sessions: AttendanceSession[], calendarDate: string): AttendanceSession | null {
+  const daySessions = sessions.filter((s) => s.workDate === calendarDate)
+  if (daySessions.length === 0) return null
+  const open = daySessions.filter((s) => !s.outIso)
+  if (open.length) return open[open.length - 1]
+  return daySessions.reduce((a, b) => (new Date(a.inIso) >= new Date(b.inIso) ? a : b))
+}
+
+function workMinutesFromIso(inIso: string, outIso: string): number {
+  const a = new Date(inIso).getTime()
+  const b = new Date(outIso).getTime()
+  if (isNaN(a) || isNaN(b) || b <= a) return 0
+  return Math.floor((b - a) / 60000)
+}
+
+function deriveSummaryFromSessions(sessions: AttendanceSession[], yearMonth: string): MyAttendanceSummary {
+  const { start, end } = getMonthRange(yearMonth)
   let normalDays = 0
   let otMinutes = 0
   let otDays = 0
   let lateMinutes = 0
   let lateDays = 0
-  for (const rec of Object.values(byKey)) {
-    if (rec.lateMin > 0) {
-      lateMinutes += rec.lateMin
+  const d = getAllDaysInMonth(yearMonth)
+  for (const { date } of d) {
+    if (date < start || date > end) continue
+    const s = pickSessionForCalendarDay(sessions, date)
+    if (!s) continue
+    const late = s.lateMin
+    const hasOut = !!s.outIso
+    const ot = hasOut ? s.otMin : 0
+    if (late > 0) {
+      lateMinutes += late
       lateDays += 1
     }
-    if (rec.otMin > 0) {
-      otMinutes += rec.otMin
+    if (ot > 0) {
+      otMinutes += ot
       otDays += 1
     }
-    if (rec.hasOut && rec.lateMin === 0) normalDays += 1
+    if (hasOut && late === 0) normalDays += 1
   }
   return {
     normalDays,
@@ -159,45 +215,19 @@ function deriveSummaryFromLogs(logs: AttendanceLogItem[], yearMonth: string): My
 
 function buildDailyRecords(
   yearMonth: string,
-  logs: AttendanceLogItem[],
+  sessions: AttendanceSession[],
   leaveDates: Set<string>,
   t: (k: string) => string
 ): DailyRecord[] {
   const days = getAllDaysInMonth(yearMonth)
-  const byDate: Record<
-    string,
-    {
-      clockIn: string | null
-      clockOut: string | null
-      lateMin: number
-      otMin: number
-    }
-  > = {}
-
-  for (const log of logs) {
-    const ts = log.timestamp
-    const dateStr = toDateStrBangkok(ts)
-    const type = log.type
-    if (!byDate[dateStr]) {
-      byDate[dateStr] = { clockIn: null, clockOut: null, lateMin: 0, otMin: 0 }
-    }
-    const rec = byDate[dateStr]
-    if (type === "출근") {
-      rec.clockIn = rec.clockIn || toTimeStr(ts)
-      rec.lateMin = Math.max(rec.lateMin, log.late_min ?? 0)
-    } else if (type === "퇴근") {
-      rec.clockOut = toTimeStr(ts)
-      rec.otMin = Math.max(rec.otMin, log.ot_min ?? 0)
-    }
-  }
 
   return days.map(({ date, day }) => {
     const dayName = t(DAY_KEYS[day])
     const isWeekend = day === 0 || day === 6
     const isLeave = leaveDates.has(date)
-    const rec = byDate[date]
+    const s = pickSessionForCalendarDay(sessions, date)
 
-    if (isWeekend && !rec) {
+    if (isWeekend && !s) {
       return {
         date: `${date.slice(5, 7)}/${date.slice(8, 10)}`,
         day: dayName,
@@ -209,7 +239,7 @@ function buildDailyRecords(
         overtime: null,
       }
     }
-    if (isLeave && !rec) {
+    if (isLeave && !s) {
       return {
         date: `${date.slice(5, 7)}/${date.slice(8, 10)}`,
         day: dayName,
@@ -221,7 +251,7 @@ function buildDailyRecords(
         overtime: null,
       }
     }
-    if (!rec || !rec.clockIn) {
+    if (!s) {
       return {
         date: `${date.slice(5, 7)}/${date.slice(8, 10)}`,
         day: dayName,
@@ -234,19 +264,13 @@ function buildDailyRecords(
       }
     }
 
-    const clockIn = rec.clockIn
-    const clockOut = rec.clockOut
-    const lateMin = rec.lateMin
-    const otMin = rec.otMin
+    const clockIn = toTimeStr(s.inIso)
+    const clockOut = s.outIso ? toTimeStr(s.outIso) : null
+    const lateMin = s.lateMin
+    const otMin = s.otMin
 
-    // Compute work hours from clock in/out (approximate)
     let workMin = 0
-    if (clockIn && clockOut) {
-      const [inH, inM] = clockIn.split(":").map(Number)
-      const [outH, outM] = clockOut.split(":").map(Number)
-      workMin = outH * 60 + outM - (inH * 60 + inM)
-      if (workMin < 0) workMin += 24 * 60
-    }
+    if (s.outIso) workMin = workMinutesFromIso(s.inIso, s.outIso)
     const workHours = workMin > 0 ? formatWorkHours(workMin) : null
     const overtime =
       otMin > 0 ? formatWorkHours(otMin) : workMin > 8 * 60 ? formatWorkHours(workMin - 8 * 60) : null
@@ -259,7 +283,7 @@ function buildDailyRecords(
       day: dayName,
       dayIndex: day,
       clockIn,
-      clockOut: clockOut || null,
+      clockOut,
       status,
       workHours,
       overtime: otMin > 0 ? formatWorkHours(otMin) : overtime,
@@ -332,11 +356,13 @@ export function MyAttendance() {
       setLoading(false)
       return
     }
+    // 말일 야간 근무 → 익일 새벽 퇴근 로그가 범위에 포함되도록 종료일 하루 연장
+    const fetchEnd = addDayBangkok(end, 1)
     const leaveSet = new Set<string>()
     const apiPromise = Promise.all([
       getAttendanceList({
         startDate: start,
-        endDate: end,
+        endDate: fetchEnd,
         storeFilter: store,
         employeeFilter: name,
         ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
@@ -348,14 +374,15 @@ export function MyAttendance() {
     )
     Promise.race([apiPromise, timeoutPromise])
       .then(([logs, leaveInfo]) => {
-        setSummary(deriveSummaryFromLogs(logs || [], myMonth))
+        const sessions = pairAttendanceSessions(logs || [])
+        setSummary(deriveSummaryFromSessions(sessions, myMonth))
         const history = (leaveInfo?.history || []) as LeaveHistoryItem[]
         for (const h of history) {
           if (h.date && (h.status === "승인" || h.status === "Approved")) {
             leaveSet.add(h.date)
           }
         }
-        const records = buildDailyRecords(myMonth, logs || [], leaveSet, tRef.current)
+        const records = buildDailyRecords(myMonth, sessions, leaveSet, tRef.current)
         setDailyRecords(records)
         setExpandedDates(new Set())
       })

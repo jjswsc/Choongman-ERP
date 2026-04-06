@@ -38,7 +38,7 @@ import {
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
-import { warmAdminOfflineCache } from '@/lib/offline/pos-offline-warm'
+import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
@@ -131,21 +131,6 @@ export default function PosTerminalPage() {
     clearTableOrder,
     loadingTables,
   } = usePosStore()
-
-  const warmStoreCodes = useMemo(() => stores.map((s) => s.id), [stores])
-  const [prefetchOfflineBusy, setPrefetchOfflineBusy] = useState(false)
-  const handlePrefetchOffline = useCallback(async () => {
-    if (!warmStoreCodes.length) return
-    setPrefetchOfflineBusy(true)
-    const r = await warmAdminOfflineCache({ storeCodes: warmStoreCodes })
-    setPrefetchOfflineBusy(false)
-    if (r.ok) await appAlert(t('posOfflinePrefetchDone'))
-    else
-      await appAlert(
-        (t('posOfflinePrefetchFail') || '') +
-          (r.errors.length ? ` (${r.errors.slice(0, 4).join(', ')})` : '')
-      )
-  }, [warmStoreCodes, t])
 
   /** 오프라인 큐 적재 시 별도 확인 팝업 없음 — 상단 OfflineBanner가 대기 건수·동기화를 안내 */
   const notifyQueuedSave = useCallback(async (_orderNo?: string, _queued?: boolean) => {}, [])
@@ -254,6 +239,22 @@ export default function PosTerminalPage() {
     byId: new Map(),
     byName: new Map(),
   })
+  const applyPosMenusList = useCallback((list: unknown) => {
+    const arr = Array.isArray(list) ? (list as PosMenu[]) : []
+    setMenus(arr)
+    const byId = new Map<string, number>()
+    const byName = new Map<string, number>()
+    arr.forEach((m: PosMenu) => {
+      const min = Number(m.cookingTimeMin ?? 0)
+      if (!Number.isFinite(min) || min <= 0) return
+      const id = String(m.id || '').trim()
+      const name = String(m.name || '').trim()
+      if (id) byId.set(id, min)
+      if (name) byName.set(name, min)
+    })
+    setMenuTargets({ byId, byName })
+  }, [])
+  usePosMenusCatalogLiveRefresh(applyPosMenusList)
   const drawerOpenWarnedRef = useRef(false)
 
   useEffect(() => {
@@ -422,26 +423,12 @@ export default function PosTerminalPage() {
         setOtherMode('separate')
       })
     getPosMenus()
-      .then((list) => {
-        const arr = Array.isArray(list) ? list : []
-        setMenus(arr)
-        const byId = new Map<string, number>()
-        const byName = new Map<string, number>()
-        arr.forEach((m: PosMenu) => {
-          const min = Number(m.cookingTimeMin ?? 0)
-          if (!Number.isFinite(min) || min <= 0) return
-          const id = String(m.id || '').trim()
-          const name = String(m.name || '').trim()
-          if (id) byId.set(id, min)
-          if (name) byName.set(name, min)
-        })
-        setMenuTargets({ byId, byName })
-      })
+      .then(applyPosMenusList)
       .catch(() => {
         setMenus([])
         setMenuTargets({ byId: new Map(), byName: new Map() })
       })
-  }, [currentStoreId])
+  }, [currentStoreId, applyPosMenusList])
 
   useEffect(() => {
     if (!pendingPayRequest) return
@@ -2024,10 +2011,12 @@ export default function PosTerminalPage() {
                 if (orderIdToComplete != null) {
                   const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
                   await updatePosOrderStatus({ id: orderIdToComplete, status: targetStatus })
-                  /** 선불·후불 모두 결제 완료 시 테이블 비움 (paid 상태는 테이블 점유에서 제외되지만 UI는 즉시 반영) */
-                  if (payload.tableName) clearTableOrder(currentStoreId, payload.tableName)
-                } else if (pay != null && payload.tableName) {
-                  /** 오프라인 단일 save(closeStatus)만 한 경우에도 테이블 비우기 */
+                  /** 후불(완료)만 즉시 테이블 비움. 선불(paid)은 테이블·내역 유지 */
+                  if (!payload.isPrepaid && payload.tableName) {
+                    clearTableOrder(currentStoreId, payload.tableName)
+                  }
+                } else if (pay != null && payload.tableName && !payload.isPrepaid) {
+                  /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                   clearTableOrder(currentStoreId, payload.tableName)
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
@@ -2164,8 +2153,6 @@ export default function PosTerminalPage() {
         currentStoreId={currentStoreId}
         onStoreChange={setCurrentStoreId}
         onRefresh={refetchStores}
-        onPrefetchOfflineData={warmStoreCodes.length ? handlePrefetchOffline : undefined}
-        prefetchOfflineDataBusy={prefetchOfflineBusy}
         todayCompleted={todayCompleted}
         totalSales={totalSales}
         showBackButton

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { workflowStoreScopeFromStoreTb } from '@/lib/accounting-ledger-store-filter'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -15,6 +16,9 @@ export async function POST(request: NextRequest) {
     const note = body.note != null ? String(body.note).slice(0, 2000) : null
     const owner = body.owner != null ? String(body.owner).slice(0, 200) : null
     const updatedBy = body.updatedBy != null ? String(body.updatedBy).slice(0, 200) : null
+    const storeScope = workflowStoreScopeFromStoreTb(
+      body.storeFilter != null ? String(body.storeFilter) : 'All'
+    )
 
     if (!/^\d{4}-\d{2}$/.test(yearMonth) || !filingType) {
       return NextResponse.json({ success: false, error: 'INVALID_BODY' }, { status: 400, headers })
@@ -24,12 +28,13 @@ export async function POST(request: NextRequest) {
 
     const exists = (await supabaseSelectFilter(
       'accounting_filing_workflow_status',
-      `year_month=eq.${encodeURIComponent(yearMonth)}&filing_type=eq.${encodeURIComponent(filingType)}`,
+      `year_month=eq.${encodeURIComponent(yearMonth)}&filing_type=eq.${encodeURIComponent(filingType)}&store_scope=eq.${encodeURIComponent(storeScope)}`,
       { select: 'id', limit: 1 }
     )) as { id?: number }[] | null
     const row = {
       year_month: yearMonth,
       filing_type: filingType,
+      store_scope: storeScope,
       status,
       note,
       owner,

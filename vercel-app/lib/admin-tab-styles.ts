@@ -24,3 +24,10 @@ export const adminTabsIconCn =
 export const adminTabsContentCn = 'mt-0 p-4 sm:p-6 focus-visible:ring-0'
 
 export const adminTabsContentFlushCn = 'mt-0 focus-visible:ring-0'
+
+/** 세무 신고 등 바깥 탭 카드 안에 embed 할 때 — 안쪽 Tabs에 테두리·그림자·배경 박스 없음 */
+export const adminTabsRootEmbeddedCn =
+  'w-full overflow-visible rounded-none border-0 bg-transparent shadow-none'
+
+/** embed 시 바깥 TabsContent가 패딩을 담당 */
+export const adminTabsContentEmbeddedCn = 'mt-0 p-0 focus-visible:ring-0'

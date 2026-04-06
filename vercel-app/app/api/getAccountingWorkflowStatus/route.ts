@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { workflowStoreScopeFromStoreTb } from '@/lib/accounting-ledger-store-filter'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -8,6 +9,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userRole = String(searchParams.get('userRole') || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim().slice(0, 7)
+  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
+  const storeScope = workflowStoreScopeFromStoreTb(storeFilter || 'All')
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
     return NextResponse.json({ error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })
   }
@@ -24,9 +27,9 @@ export async function GET(request: NextRequest) {
   try {
     const rows = await supabaseSelectFilter(
       'accounting_filing_workflow_status',
-      `year_month=eq.${encodeURIComponent(yearMonth)}`,
+      `year_month=eq.${encodeURIComponent(yearMonth)}&store_scope=eq.${encodeURIComponent(storeScope)}`,
       {
-        select: 'id,year_month,filing_type,status,note,owner,updated_by,updated_at',
+        select: 'id,year_month,filing_type,status,note,owner,updated_by,updated_at,store_scope',
         limit: 200,
         order: 'filing_type.asc',
       }

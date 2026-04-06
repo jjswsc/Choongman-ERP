@@ -52,6 +52,11 @@ body {
   font-family: var(--font-pretendard), "Noto Sans Thai", "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 
+/* POS: Pretendard가 이모지 코드포인트를 비우는 환경(Electron/Windows) 대비 — 프로모 🏷·타일 🍗 */
+.font-pos-emoji {
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif;
+}
+
 /* 인쇄 시 사이드바/헤더 숨김, 재고 테이블만 A4에 맞게 출력 */
 @page {
   size: A4;

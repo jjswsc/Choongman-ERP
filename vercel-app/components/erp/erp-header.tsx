@@ -1,12 +1,12 @@
 "use client"
 
 import { appAlert } from "@/lib/app-message"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User, Smartphone, ArrowLeft, HardDriveDownload, Languages, Download } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -27,9 +27,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
-import { useStoreList } from "@/lib/api-client"
-import { isFranchiseeRole, isOfficeRole } from "@/lib/permissions"
-import { warmAdminOfflineCache } from "@/lib/offline/pos-offline-warm"
+import { isFranchiseeRole } from "@/lib/permissions"
 import { useAutoTranslate } from "@/lib/auto-translate"
 import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
 
@@ -54,8 +52,6 @@ export function ErpHeader() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { enabled: autoTranslateEnabled, setEnabled: setAutoTranslateEnabled } = useAutoTranslate()
-  const { stores } = useStoreList()
-  const [prefetchBusy, setPrefetchBusy] = useState(false)
   const franchiseeSwitchStores = useMemo(() => {
     if (!auth || !isFranchiseeRole(auth.role || "")) return null
     const a = auth.allowedStores
@@ -63,28 +59,9 @@ export function ErpHeader() {
     return a
   }, [auth])
 
-  const warmStoreCodes = useMemo(() => {
-    if (isOfficeRole(auth?.role || "")) return stores
-    if (franchiseeSwitchStores && franchiseeSwitchStores.length > 0) return franchiseeSwitchStores
-    if (auth?.store) return [auth.store]
-    return stores.length ? [stores[0]] : []
-  }, [auth?.role, auth?.store, stores, franchiseeSwitchStores])
-  const handlePrefetchOffline = useCallback(async () => {
-    setPrefetchBusy(true)
-    const r = await warmAdminOfflineCache({ storeCodes: warmStoreCodes })
-    setPrefetchBusy(false)
-    if (r.ok) await appAlert(t("posOfflinePrefetchDone"))
-    else
-      await appAlert(
-        (t("posOfflinePrefetchFail") || "") +
-          (r.errors.length ? ` (${r.errors.slice(0, 4).join(", ")})` : "")
-      )
-  }, [warmStoreCodes, t])
   const isLoginPage = pathname === "/admin/login"
   const isDashboard = pathname === "/admin" || pathname === "/admin/"
   const showBackButton = !isLoginPage && !isDashboard
-  const offlinePrefetchTitle =
-    t("adminOfflinePrefetchTitle") || t("posOfflinePrefetchTitle") || ""
   const erpWindowsDownloadLabel = t("erpWindowsDownload") || "윈도우 ERP 받기"
   const handleErpInstallerCopy = useCallback(async () => {
     const r = await copyWindowsInstallerUrl(WINDOWS_ERP_SETUP_PATH)
@@ -163,21 +140,6 @@ export function ErpHeader() {
         >
           <Download className="h-4 w-4 shrink-0" />
           <span className="hidden sm:inline">{erpWindowsDownloadLabel}</span>
-        </Button>
-        <Separator orientation="vertical" className="mx-1 h-5" />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1 border-emerald-600/40 px-2 text-emerald-800 hover:bg-emerald-50 sm:px-3"
-          disabled={prefetchBusy}
-          title={offlinePrefetchTitle}
-          onClick={() => void handlePrefetchOffline()}
-        >
-          <HardDriveDownload className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline">
-            {prefetchBusy ? t("posOfflinePrefetching") : t("posOfflinePrefetch")}
-          </span>
         </Button>
         <Separator orientation="vertical" className="mx-1 h-5" />
         <Button

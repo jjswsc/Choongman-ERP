@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 
 function parseUserRole(request: NextRequest, body?: Record<string, unknown>): string {
   const fromQuery = new URL(request.url).searchParams.get('userRole')
@@ -24,16 +25,18 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const taxMonth = String(searchParams.get('taxMonth') || '').trim().slice(0, 7)
+  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
   if (!/^\d{4}-\d{2}$/.test(taxMonth)) {
     return NextResponse.json({ error: 'INVALID_TAX_MONTH' }, { status: 400, headers })
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'withholding_tax_ledger_entries',
-      `tax_month=eq.${encodeURIComponent(taxMonth)}`,
-      { select: '*', limit: 5000, order: 'payment_date.asc,id.asc' }
-    )) as Record<string, unknown>[] | null
+    const filter = appendStoreNameFilter(`tax_month=eq.${encodeURIComponent(taxMonth)}`, storeFilter)
+    const rows = (await supabaseSelectFilter('withholding_tax_ledger_entries', filter, {
+      select: '*',
+      limit: 5000,
+      order: 'payment_date.asc,id.asc',
+    })) as Record<string, unknown>[] | null
     return NextResponse.json({ entries: rows || [] }, { headers })
   } catch (e) {
     console.error('withholdingTaxLedger GET:', e)
@@ -68,6 +71,10 @@ export async function POST(request: NextRequest) {
       form_hint: body.formHint != null ? String(body.formHint).slice(0, 64) : null,
       certificate_no: body.certificateNo != null ? String(body.certificateNo).slice(0, 128) : null,
       memo: body.memo != null ? String(body.memo).slice(0, 2000) : null,
+      store_name:
+        body.storeName != null && String(body.storeName).trim() !== ''
+          ? String(body.storeName).slice(0, 200)
+          : null,
       updated_at: new Date().toISOString(),
     }
 

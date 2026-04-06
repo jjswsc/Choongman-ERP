@@ -12,7 +12,10 @@ import {
   shouldPreferOfflineCache,
 } from '@/lib/offline/network'
 
-/** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦어지므로 상한 둠 */
+/** getPosMenus / fetchPosCatalogCached 와 동일 키 — 백그라운드 갱신 시 UI 동기화에 사용 */
+export const ERP_POS_CATALOG_MENUS_CACHE_KEY = 'erp:posCatalog:menus' as const
+
+/** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦아지므로 상한 둠 */
 const POS_CATALOG_FETCH_MS = 4_000
 
 function catalogFetchSignal(): AbortSignal | undefined {
@@ -44,9 +47,48 @@ async function readCacheOrNull<T>(cacheKey: string): Promise<T | null> {
   }
 }
 
+/** IDB에 최신 카탈로그가 저장된 뒤 POS 화면이 구버전 메뉴(이미지 URL 없음 등)를 붙잡지 않도록 알림 */
+export function notifyPosCatalogUpdated(cacheKey: string, data: unknown): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent('cm-erp-pos-catalog-updated', { detail: { cacheKey, data } }))
+  } catch {
+    /* ignore */
+  }
+}
+
 async function fetchCatalogAndPersist<T>(relativeUrl: string, cacheKey: string, fallback: T): Promise<T> {
   const signal = catalogFetchSignal()
-  const res = await apiFetch(relativeUrl, signal ? { signal } : undefined)
+  let res: Response
+  try {
+    res = await apiFetch(relativeUrl, signal ? { signal } : undefined)
+  } catch (e) {
+    // #region agent log
+    if (
+      typeof window !== 'undefined' &&
+      e instanceof Error &&
+      e.name === 'AbortError' &&
+      relativeUrl.includes('getPosMenuOptions')
+    ) {
+      fetch('http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': 'd9674e',
+        },
+        body: JSON.stringify({
+          sessionId: 'd9674e',
+          hypothesisId: 'H-ABORT',
+          location: 'pos-catalog-offline.ts:fetchCatalogAndPersist',
+          message: 'catalog fetch aborted (likely AbortSignal.timeout)',
+          data: { relativeUrl: relativeUrl.slice(0, 80), cacheKey: cacheKey.slice(0, 48) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+    }
+    // #endregion
+    throw e
+  }
   if (res.ok) reportNetworkSuccess()
   else if (res.status >= 500) reportNetworkFailure()
   if (!res.ok) {
@@ -85,6 +127,7 @@ async function fetchCatalogAndPersist<T>(relativeUrl: string, cacheKey: string, 
   }
   try {
     await setErpCache(cacheKey, data)
+    notifyPosCatalogUpdated(cacheKey, data)
   } catch {
     /* SSR 등 IndexedDB 없음 */
   }

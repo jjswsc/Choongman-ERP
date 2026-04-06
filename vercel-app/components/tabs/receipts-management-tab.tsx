@@ -150,10 +150,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
     if (!isToday || orders.length === 0) return null
     const completed = orders.filter((o) => ['completed', 'paid', 'ready'].includes(o.status))
     const pending = orders.filter((o) => ['pending', 'cooking'].includes(o.status))
+    const cancelled = orders.filter((o) => o.status === 'cancelled')
     return {
       completedCount: completed.length,
       completedTotal: completed.reduce((s, o) => s + (o.total ?? 0), 0),
       pendingCount: pending.length,
+      cancelledCount: cancelled.length,
+      cancelledTotal: cancelled.reduce((s, o) => s + (o.total ?? 0), 0),
     }
   }, [isToday, orders, statusFilter])
 
@@ -342,6 +345,17 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                   {t('posCount') || '건'}
                 </div>
               )}
+              {todaySummary.cancelledCount > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-sm text-rose-700">
+                  <span>
+                    {t('posTodayCancelled') || '오늘 취소'}: {todaySummary.cancelledCount}
+                    {t('posCount') || '건'}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    ({todaySummary.cancelledTotal.toLocaleString()} ฿)
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -372,7 +386,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                       <tr
                         className={cn(
                           'border-b cursor-pointer hover:bg-muted/20 transition',
-                          expandedId === o.id && 'bg-muted/20'
+                          expandedId === o.id && 'bg-muted/20',
+                          o.status === 'cancelled' &&
+                            'bg-rose-50/60 hover:bg-rose-50/80 dark:bg-rose-950/25 dark:hover:bg-rose-950/35'
                         )}
                         onClick={() => setExpandedId((prev) => (prev === o.id ? null : o.id))}
                       >
@@ -392,7 +408,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                             className={cn(
                               'rounded px-2 py-0.5 text-xs',
                               o.status === 'completed' && 'bg-emerald-50 text-emerald-700',
-                              o.status === 'cancelled' && 'text-muted-foreground',
+                              o.status === 'cancelled' &&
+                                'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
                               o.status === 'pending' && 'bg-amber-50 text-amber-700'
                             )}
                           >

@@ -2,6 +2,10 @@
 
 Windows 설치형 하이브리드 POS 셸(Electron)입니다.
 
+## 인쇄 레이아웃 (영수증·주방) 확정본
+
+웹 POS와 **같은** HTML/CSS는 `vercel-app` 에서 만들어지고, 하이브리드는 Electron이 그걸 인쇄한다. **여백·그리드·`main.js` 인쇄 옵션까지 한곳에 적어 둔 문서**는 저장소 **`.cursor/rules/pos-print-layout-baseline.mdc`** 이다 (웹·하이브리드 공통 기준).
+
 ## 런타임 설정
 
 기본 설정 파일: `runtime-config.json`
@@ -40,15 +44,19 @@ npm run dev
 
 ## 빌드
 
-PowerShell에서 **서명 인증서 없이** 빌드할 때는 아래처럼 환경 변수를 켜두세요.  
-(안 하면 `winCodeSign` 압축 해제 단계에서 심볼릭 링크 오류가 날 수 있습니다.)
+`package.json`의 `win.signAndEditExecutable`은 **false**(기본)로 두는 것을 권장합니다.  
+`true`이면 electron-builder가 `winCodeSign` 번들을 풀 때 **macOS용 심볼릭 링크**를 만들려다, Windows에서 **개발자 모드**가 꺼져 있거나 **관리자 권한**이 없으면 `Cannot create symbolic link` 로 실패할 수 있습니다.
+
+- **아이콘**: NSIS 설치/제거 프로그램·바로가기 등에는 `installerIcon` / `uninstallerIcon`(ICO)이 적용됩니다. 메인 `Choongman POS.exe`에 직접 ICO를 넣으려면 개발자 모드를 켠 뒤 `signAndEditExecutable`을 `true`로 바꿔 빌드하세요.
+
+미서명 빌드 시(선택):
 
 ```powershell
 $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
 npm run build:win
 ```
 
-또는 `vercel-app/scripts/build-windows-pos.ps1`는 인증서를 생략하면 위 설정을 자동으로 합니다.
+`vercel-app/scripts/build-windows-pos.ps1`는 인증서를 생략하면 위 설정을 자동으로 넣습니다.
 
 `npm run build:win` 실행 시 `../scripts/generate-windows-pos-icon.ps1`가 자동 실행되어
 `windows-pos/assets/icon.ico`를 생성/갱신합니다. 소스는 `../assets/brand/choongman-logo.png`이며,

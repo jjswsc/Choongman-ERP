@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { vatLedgerToCsv, type VatLedgerRow } from '@/lib/vat-ledger-csv'
 
 export async function GET(request: NextRequest) {
@@ -9,6 +10,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userRole = String(searchParams.get('userRole') || '').trim()
   const taxMonth = String(searchParams.get('taxMonth') || '').trim().slice(0, 7)
+  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
 
   try {
     assertCanManageAccountingCompliance(userRole)
@@ -24,11 +26,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'vat_ledger_entries',
-      `tax_month=eq.${encodeURIComponent(taxMonth)}`,
-      { select: '*', limit: 5000, order: 'doc_date.asc,id.asc' }
-    )) as VatLedgerRow[] | null
+    const filter = appendStoreNameFilter(`tax_month=eq.${encodeURIComponent(taxMonth)}`, storeFilter)
+    const rows = (await supabaseSelectFilter('vat_ledger_entries', filter, {
+      select: '*',
+      limit: 5000,
+      order: 'doc_date.asc,id.asc',
+    })) as VatLedgerRow[] | null
 
     const csv = vatLedgerToCsv(rows || [])
     const out = new NextResponse(csv, {

@@ -8,8 +8,10 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
+  adminTabsContentEmbeddedCn,
   adminTabsListRowCn,
   adminTabsRootCn,
+  adminTabsRootEmbeddedCn,
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
@@ -22,12 +24,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Landmark, ExternalLink, Save, Plus, Trash2 } from "lucide-react"
+import { Landmark, ExternalLink, Save, Plus, Trash2, Download, CalendarClock } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { canManageAccountingCompliance } from "@/lib/accounting-auth"
 import { THAI_FILING_DEFINITIONS, type ThaiFilingType } from "@/lib/thai-filing-scope"
+import {
+  THAI_FILING_SCHEDULE_SECTIONS,
+  THAI_FILING_SCHEDULE_TABLE_ROWS,
+} from "@/lib/thai-filing-schedule-guide"
 import { THAI_GOV_FILING_CHANNELS, GOV_INTEGRATION_PHASES } from "@/lib/thai-gov-filing-channels"
 import { CHART_OF_ACCOUNTS_BY_CODE } from "@/lib/chart-of-accounts-mapping"
 import {
@@ -55,9 +61,16 @@ import {
   type AccountingWorkflowStatusRow,
   type ThaiFilingResponsibility,
   type TrialBalanceRow,
+  apiFetch,
 } from "@/lib/api-client"
 import { isOfficeRole, isManagerOrFranchiseeRole } from "@/lib/permissions"
+import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert } from "@/lib/app-message"
+import {
+  downloadThaiSsoFilingBlankTemplateXlsx,
+  downloadThaiSsoFilingFromPayrollXlsx,
+  THAI_SSO_TEMPLATE_COLUMN_HELP,
+} from "@/lib/thai-sso-filing-template"
 
 type VatDraft = {
   id?: number
@@ -88,6 +101,7 @@ type WhtDraft = {
   form_hint: string
   certificate_no: string
   memo: string
+  store_name: string
 }
 
 function ymNow(): string {
@@ -112,7 +126,7 @@ function emptyVat(taxMonth: string): VatDraft {
   }
 }
 
-function emptyWht(taxMonth: string): WhtDraft {
+function emptyWht(taxMonth: string, defaultStoreName: string): WhtDraft {
   return {
     payment_date: `${taxMonth}-01`,
     tax_month: taxMonth,
@@ -125,10 +139,36 @@ function emptyWht(taxMonth: string): WhtDraft {
     form_hint: "",
     certificate_no: "",
     memo: "",
+    store_name: defaultStoreName,
   }
 }
 
-export function AdminAccountingCompliance() {
+function pickPayrollApiMsg(data: { msg?: unknown; message?: unknown }): string {
+  const raw = data.msg ?? data.message
+  if (raw == null || raw === "") return ""
+  return String(raw).trim()
+}
+
+type AdminAccountingComplianceProps = {
+  initialTab?: string
+  hideTabBar?: boolean
+  initialPp30SubView?: "output" | "input" | "wht"
+  /** 세무 신고 셸과 동기화 시 본문의 중복 년·매장 입력 숨김 */
+  filingYearMonth?: string
+  onFilingYearMonthChange?: (v: string) => void
+  filingStoreFilter?: string
+  onFilingStoreFilterChange?: (v: string) => void
+}
+
+export function AdminAccountingCompliance({
+  initialTab = "scope",
+  hideTabBar = false,
+  initialPp30SubView = "output",
+  filingYearMonth,
+  onFilingYearMonthChange,
+  filingStoreFilter,
+  onFilingStoreFilterChange,
+}: AdminAccountingComplianceProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -139,12 +179,23 @@ export function AdminAccountingCompliance() {
   const isManager = isManagerOrFranchiseeRole(role)
   const managerStore = (auth?.store || "").trim()
 
-  const [tab, setTab] = React.useState("scope")
-  const [taxMonth, setTaxMonth] = React.useState(ymNow)
+  const externalFiling =
+    filingYearMonth !== undefined &&
+    onFilingYearMonthChange !== undefined &&
+    filingStoreFilter !== undefined &&
+    onFilingStoreFilterChange !== undefined
+
+  const [internalTaxMonth, setInternalTaxMonth] = React.useState(ymNow)
+  const taxMonth = externalFiling ? filingYearMonth : internalTaxMonth
+  const setTaxMonth = externalFiling ? onFilingYearMonthChange : setInternalTaxMonth
+
+  const [tab, setTab] = React.useState(initialTab)
   const [yearMonthTb, setYearMonthTb] = React.useState(ymNow)
-  const [storeTb, setStoreTb] = React.useState(() =>
+  const [internalStoreTb, setInternalStoreTb] = React.useState(() =>
     isManager && managerStore ? managerStore : "All"
   )
+  const storeTb = externalFiling ? filingStoreFilter : internalStoreTb
+  const setStoreTb = externalFiling ? onFilingStoreFilterChange : setInternalStoreTb
 
   const [resp, setResp] = React.useState<Record<string, ThaiFilingResponsibility>>({})
   const [notes, setNotes] = React.useState("")
@@ -156,16 +207,56 @@ export function AdminAccountingCompliance() {
   const [vatRows, setVatRows] = React.useState<VatDraft[]>([])
   const [whtRows, setWhtRows] = React.useState<WhtDraft[]>([])
   const [periodType, setPeriodType] = React.useState<"monthly" | "half_year" | "annual">("monthly")
+  /** 법인세 연간: API는 yearMonth의 연도만 사용 — UI는 연도만 고름 */
+  const [citFiscalYear, setCitFiscalYear] = React.useState(() => Number(ymNow().slice(0, 4)))
   /** 부가세(ภ.พ.30) 탭: FlowAccount Tax 메뉴와 유사 — 매출/매입/원천 3가지 조회 */
-  const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "wht">("output")
+  const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "wht">(initialPp30SubView)
   const [taxSummary, setTaxSummary] = React.useState<ThaiTaxFilingSummary | null>(null)
   const [citData, setCitData] = React.useState<CorporateTaxComputationData | null>(null)
   const [workflowRows, setWorkflowRows] = React.useState<AccountingWorkflowStatusRow[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [ssoStoreFilter, setSsoStoreFilter] = React.useState(() =>
+    isManager && managerStore ? managerStore : "All"
+  )
+  const [ssoPayrollExporting, setSsoPayrollExporting] = React.useState(false)
 
   React.useEffect(() => {
-    if (isManager && managerStore) setStoreTb(managerStore)
+    if (externalFiling) return
+    if (isManager && managerStore) setInternalStoreTb(managerStore)
+  }, [externalFiling, isManager, managerStore])
+
+  React.useEffect(() => {
+    setTab(initialTab)
+  }, [initialTab])
+
+  React.useEffect(() => {
+    setPp30SubView(initialPp30SubView)
+  }, [initialPp30SubView])
+
+  React.useEffect(() => {
+    if (isManager && managerStore) setSsoStoreFilter(managerStore)
   }, [isManager, managerStore])
+
+  React.useEffect(() => {
+    const y = Number(String(taxMonth).slice(0, 4))
+    if (Number.isFinite(y) && y >= 1900 && y <= 2100) setCitFiscalYear(y)
+  }, [taxMonth])
+
+  const citYearMonthForApi = React.useMemo(() => {
+    if (periodType === "annual") return `${citFiscalYear}-01`
+    return taxMonth
+  }, [periodType, citFiscalYear, taxMonth])
+
+  const citFiscalYearOptions = React.useMemo(() => {
+    const base = Number(getBangkokRecentYearMonths(1)[0].slice(0, 4))
+    const out: number[] = []
+    for (let y = base + 1; y >= base - 15; y--) out.push(y)
+    if (!out.includes(citFiscalYear) && citFiscalYear >= 1900 && citFiscalYear <= 2100) {
+      out.push(citFiscalYear)
+      out.sort((a, b) => b - a)
+    }
+    return out
+  }, [citFiscalYear])
 
   const loadPrefs = React.useCallback(async () => {
     if (!canUse || !auth?.user) return
@@ -232,14 +323,14 @@ export function AdminAccountingCompliance() {
     if (!canUse) return
     setLoading(true)
     try {
-      const data = await getVatLedger({ userRole: role, taxMonth })
+      const data = await getVatLedger({ userRole: role, taxMonth, storeFilter: storeTb })
       setVatRows(mapVat(data.entries || []))
     } catch {
       setVatRows([])
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, mapVat])
+  }, [canUse, role, taxMonth, storeTb, mapVat])
 
   const mapWht = React.useCallback(
     (entries: Record<string, unknown>[]): WhtDraft[] =>
@@ -256,6 +347,7 @@ export function AdminAccountingCompliance() {
         form_hint: String(r.form_hint || ""),
         certificate_no: String(r.certificate_no || ""),
         memo: String(r.memo || ""),
+        store_name: String(r.store_name || ""),
       })),
     [taxMonth]
   )
@@ -264,14 +356,18 @@ export function AdminAccountingCompliance() {
     if (!canUse) return
     setLoading(true)
     try {
-      const data = await getWithholdingTaxLedger({ userRole: role, taxMonth })
+      const data = await getWithholdingTaxLedger({
+        userRole: role,
+        taxMonth,
+        storeFilter: storeTb,
+      })
       setWhtRows(mapWht(data.entries || []))
     } catch {
       setWhtRows([])
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, mapWht])
+  }, [canUse, role, taxMonth, storeTb, mapWht])
 
   const loadTaxSummary = React.useCallback(async () => {
     if (!canUse) return
@@ -281,6 +377,7 @@ export function AdminAccountingCompliance() {
         userRole: role,
         yearMonth: taxMonth,
         periodType,
+        storeFilter: storeTb,
       })
       setTaxSummary(data)
     } catch {
@@ -288,7 +385,7 @@ export function AdminAccountingCompliance() {
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType])
+  }, [canUse, role, taxMonth, periodType, storeTb])
 
   const loadCit = React.useCallback(async () => {
     if (!canUse) return
@@ -296,7 +393,7 @@ export function AdminAccountingCompliance() {
     try {
       const data = await getCorporateTaxComputation({
         userRole: role,
-        yearMonth: taxMonth,
+        yearMonth: citYearMonthForApi,
         periodType,
         storeFilter: storeTb,
         userStore: auth?.store,
@@ -307,20 +404,75 @@ export function AdminAccountingCompliance() {
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, storeTb, auth?.store])
+  }, [canUse, role, citYearMonthForApi, periodType, storeTb, auth?.store])
 
   const loadWorkflow = React.useCallback(async () => {
     if (!canUse) return
     setLoading(true)
     try {
-      const data = await getAccountingWorkflowStatus({ userRole: role, yearMonth: taxMonth })
+      const data = await getAccountingWorkflowStatus({
+        userRole: role,
+        yearMonth: taxMonth,
+        storeFilter: storeTb,
+      })
       setWorkflowRows(data.rows || [])
     } catch {
       setWorkflowRows([])
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth])
+  }, [canUse, role, taxMonth, storeTb])
+
+  const exportSsoFromPayroll = React.useCallback(async () => {
+    if (!canUse || !auth?.user) return
+    setSsoPayrollExporting(true)
+    try {
+      const pickStore = externalFiling ? storeTb : ssoStoreFilter
+      const effectiveStore =
+        isManager && managerStore ? managerStore : pickStore === "All" ? "" : pickStore
+      const params = new URLSearchParams({
+        month: taxMonth,
+        storeFilter: effectiveStore,
+        userStore: auth?.store || "",
+        userRole: role,
+      })
+      const res = await apiFetch(`/api/getPayrollCalc?${params}`)
+      const data = (await res.json()) as {
+        success?: boolean
+        list?: Record<string, unknown>[]
+        msg?: unknown
+        message?: unknown
+        detail?: unknown
+      }
+      if (!data.success || !Array.isArray(data.list)) {
+        const base = pickPayrollApiMsg(data) || t("accCompSsoPayrollFail")
+        const det = data.detail != null && String(data.detail).trim() ? String(data.detail).trim() : ""
+        appAlert(det ? `${base}\n(${det})` : base)
+        return
+      }
+      if (data.list.length === 0) {
+        appAlert(t("accCompSsoPayrollEmpty"))
+        return
+      }
+      downloadThaiSsoFilingFromPayrollXlsx({ yearMonth: taxMonth, payrollRows: data.list })
+    } catch {
+      appAlert(t("accCompSsoPayrollFail"))
+    } finally {
+      setSsoPayrollExporting(false)
+    }
+  }, [
+    canUse,
+    auth?.user,
+    auth?.store,
+    isManager,
+    managerStore,
+    ssoStoreFilter,
+    externalFiling,
+    storeTb,
+    taxMonth,
+    role,
+    t,
+  ])
 
   React.useEffect(() => {
     if (canUse) void loadPrefs()
@@ -342,7 +494,7 @@ export function AdminAccountingCompliance() {
     if (!canUse || tab !== "summary") return
     if (pp30SubView === "wht") void loadWht()
     else void loadVat()
-  }, [canUse, tab, pp30SubView, taxMonth, loadVat, loadWht])
+  }, [canUse, tab, pp30SubView, taxMonth, storeTb, loadVat, loadWht])
 
   React.useEffect(() => {
     if (canUse && tab === "cit") void loadCit()
@@ -441,6 +593,7 @@ export function AdminAccountingCompliance() {
         formHint: row.form_hint || null,
         certificateNo: row.certificate_no || null,
         memo: row.memo || null,
+        storeName: row.store_name?.trim() ? row.store_name.trim() : null,
         createdBy: auth?.user,
       })
       if (!res.success) throw new Error(res.error)
@@ -480,6 +633,7 @@ export function AdminAccountingCompliance() {
         note: cur?.note || null,
         owner: cur?.owner || null,
         updatedBy: auth?.user || null,
+        storeFilter: storeTb,
       })
       await loadWorkflow()
       appAlert(t("accCompSaved"))
@@ -495,6 +649,24 @@ export function AdminAccountingCompliance() {
 
   const vatOutputRows = React.useMemo(() => vatRows.filter((r) => r.direction === "output"), [vatRows])
   const vatInputRows = React.useMemo(() => vatRows.filter((r) => r.direction === "input"), [vatRows])
+
+  const storeOptionLabel = React.useCallback(
+    (code: string) => (code === "All" ? t("all") : code),
+    [t]
+  )
+
+  const workflowStatusLabel = React.useCallback(
+    (s: string) => {
+      const m: Record<string, string> = {
+        todo: t("accCompWorkflowStatusTodo"),
+        in_progress: t("accCompWorkflowStatusInProgress"),
+        review: t("accCompWorkflowStatusReview"),
+        done: t("accCompWorkflowStatusDone"),
+      }
+      return m[s] || s
+    },
+    [t]
+  )
 
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []
@@ -514,41 +686,96 @@ export function AdminAccountingCompliance() {
     )
   }
 
+  const tabsRootClass = hideTabBar ? adminTabsRootEmbeddedCn : adminTabsRootCn
+  const tabsContentClass = hideTabBar ? adminTabsContentEmbeddedCn : adminTabsContentCn
+
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
-              <TabsTrigger value="scope" className={adminTabsTriggerCn}>
-                {t("accCompTabScope")}
-              </TabsTrigger>
-              <TabsTrigger value="channels" className={adminTabsTriggerCn}>
-                {t("accCompTabChannels")}
-              </TabsTrigger>
-              <TabsTrigger value="resp" className={adminTabsTriggerCn}>
-                {t("accCompTabResp")}
-              </TabsTrigger>
-              <TabsTrigger value="period" className={adminTabsTriggerCn}>
-                {t("accCompTabPeriod")}
-              </TabsTrigger>
-              <TabsTrigger value="trial" className={adminTabsTriggerCn}>
-                {t("accCompTabTrial")}
-              </TabsTrigger>
-              <TabsTrigger value="summary" className={adminTabsTriggerCn}>
-                {t("accCompTabPp30")}
-              </TabsTrigger>
-              <TabsTrigger value="cit" className={adminTabsTriggerCn}>
-                CIT(PND50/51)
-              </TabsTrigger>
-              <TabsTrigger value="workflow" className={adminTabsTriggerCn}>
-                Workflow
-              </TabsTrigger>
-            </TabsList>
+      <Tabs value={tab} onValueChange={setTab} className={tabsRootClass}>
+        {!hideTabBar && (
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="scope" className={adminTabsTriggerCn}>
+                  {t("accCompTabScope")}
+                </TabsTrigger>
+                <TabsTrigger value="channels" className={adminTabsTriggerCn}>
+                  {t("accCompTabChannels")}
+                </TabsTrigger>
+                <TabsTrigger value="resp" className={adminTabsTriggerCn}>
+                  {t("accCompTabResp")}
+                </TabsTrigger>
+                <TabsTrigger value="period" className={adminTabsTriggerCn}>
+                  {t("accCompTabPeriod")}
+                </TabsTrigger>
+                <TabsTrigger value="trial" className={adminTabsTriggerCn}>
+                  {t("accCompTabTrial")}
+                </TabsTrigger>
+                <TabsTrigger value="summary" className={adminTabsTriggerCn}>
+                  {t("accCompTabPp30")}
+                </TabsTrigger>
+                <TabsTrigger value="cit" className={adminTabsTriggerCn}>
+                  {t("accCompTabCit")}
+                </TabsTrigger>
+                <TabsTrigger value="sso" className={adminTabsTriggerCn}>
+                  {t("accCompTabSso")}
+                </TabsTrigger>
+                <TabsTrigger value="workflow" className={adminTabsTriggerCn}>
+                  {t("accCompTabWorkflow")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
           </div>
-        </div>
+        )}
 
-        <TabsContent value="scope" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="scope" className={cn(tabsContentClass, "space-y-3")}>
+          <Card className="border-amber-200/70 dark:border-amber-900/45">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                {t("accCompSchedGuideTitle")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompSchedGuideDisclaimer")}</p>
+              <div className="space-y-3">
+                {THAI_FILING_SCHEDULE_SECTIONS.map((s) => (
+                  <div
+                    key={s.titleKey}
+                    className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 dark:bg-muted/10"
+                  >
+                    <div className="font-medium text-foreground">{t(s.titleKey)}</div>
+                    <p className="mt-1.5 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                      {t(s.bodyKey)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="font-medium text-sm mb-2">{t("accCompSched_tbl_title")}</div>
+                <div className="overflow-x-auto rounded-md border border-border/80">
+                  <table className="w-full text-xs border-collapse min-w-[520px]">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_item")}</th>
+                        <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_period")}</th>
+                        <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_deadline")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {THAI_FILING_SCHEDULE_TABLE_ROWS.map(([itemKey, periodKey, deadlineKey], idx) => (
+                        <tr key={idx} className="border-b border-border/50 last:border-0">
+                          <td className="p-2 align-top font-medium">{t(itemKey)}</td>
+                          <td className="p-2 align-top text-muted-foreground">{t(periodKey)}</td>
+                          <td className="p-2 align-top text-muted-foreground">{t(deadlineKey)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -581,10 +808,10 @@ export function AdminAccountingCompliance() {
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2">Code</th>
-                    <th className="text-left p-2">KO</th>
-                    <th className="text-left p-2">EN</th>
-                    <th className="text-left p-2">TFRS (참고)</th>
+                    <th className="text-left p-2">{t("accCompColCode")}</th>
+                    <th className="text-left p-2">{t("accCompChartColKo")}</th>
+                    <th className="text-left p-2">{t("accCompChartColEn")}</th>
+                    <th className="text-left p-2">{t("accCompChartColTfrs")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -602,7 +829,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="channels" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="channels" className={cn(tabsContentClass, "space-y-3")}>
           <Card>
             <CardContent className="pt-6 text-sm space-y-4">
               <p className="text-muted-foreground">{GOV_INTEGRATION_PHASES.phase1}</p>
@@ -638,7 +865,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="resp" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="resp" className={cn(tabsContentClass, "space-y-3")}>
           <Card>
             <CardContent className="pt-6 space-y-4">
               {THAI_FILING_DEFINITIONS.map((d) => {
@@ -682,14 +909,14 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="period" className={adminTabsContentCn}>
+        <TabsContent value="period" className={tabsContentClass}>
           <Card>
             <CardContent className="pt-6 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2">{t("accCompTabPeriod")}</th>
-                    <th className="text-left p-2">Status</th>
+                    <th className="text-left p-2">{t("accCompColYearMonth")}</th>
+                    <th className="text-left p-2">{t("accCompColStatus")}</th>
                     <th className="text-right p-2"> </th>
                   </tr>
                 </thead>
@@ -722,19 +949,20 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="trial" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="trial" className={cn(tabsContentClass, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <div className="text-xs text-muted-foreground mb-1">YYYY-MM</div>
+              <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
               <Input
-                className="w-[140px]"
+                type="month"
+                className="h-9 w-[160px]"
                 value={yearMonthTb}
-                onChange={(e) => setYearMonthTb(e.target.value.slice(0, 7))}
+                onChange={(e) => setYearMonthTb(e.target.value)}
               />
             </div>
             {isOffice && (
               <div>
-                <div className="text-xs text-muted-foreground mb-1">Store</div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
                 <Select value={storeTb} onValueChange={setStoreTb}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue />
@@ -742,7 +970,7 @@ export function AdminAccountingCompliance() {
                   <SelectContent>
                     {storeOptions.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {storeOptionLabel(s)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -769,11 +997,11 @@ export function AdminAccountingCompliance() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b bg-muted/40">
-                    <th className="text-left p-2">Code</th>
-                    <th className="text-left p-2">Name</th>
-                    <th className="text-right p-2">Dr</th>
-                    <th className="text-right p-2">Cr</th>
-                    <th className="text-right p-2">Net Dr</th>
+                    <th className="text-left p-2">{t("accCompColCode")}</th>
+                    <th className="text-left p-2">{t("accCompColName")}</th>
+                    <th className="text-right p-2">{t("accCompColDebit")}</th>
+                    <th className="text-right p-2">{t("accCompColCredit")}</th>
+                    <th className="text-right p-2">{t("accCompColNetDr")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -792,23 +1020,26 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="summary" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="summary" className={cn(tabsContentClass, "space-y-3")}>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">{t("accCompTabPp30")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2 items-end">
+                {!externalFiling ? (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
+                    <Input
+                      type="month"
+                      className="h-9 w-[160px]"
+                      value={taxMonth}
+                      onChange={(e) => setTaxMonth(e.target.value)}
+                    />
+                  </div>
+                ) : null}
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">year_month</div>
-                  <Input
-                    className="w-[140px]"
-                    value={taxMonth}
-                    onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
-                  />
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">period_type</div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompPeriodType")}</div>
                   <Select
                     value={periodType}
                     onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}
@@ -817,12 +1048,29 @@ export function AdminAccountingCompliance() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="monthly">monthly</SelectItem>
-                      <SelectItem value="half_year">half_year</SelectItem>
-                      <SelectItem value="annual">annual</SelectItem>
+                      <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
+                      <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
+                      <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {isOffice && !externalFiling ? (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
+                    <Select value={storeTb} onValueChange={setStoreTb}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storeOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {storeOptionLabel(s)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
@@ -868,20 +1116,24 @@ export function AdminAccountingCompliance() {
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>
-                      Output net: {(taxSummary?.vat.outputNet || 0).toLocaleString()}
+                      {t("accCompVatOutputNet")}: {(taxSummary?.vat.outputNet || 0).toLocaleString()}
                     </div>
                     <div>
-                      Output VAT: {(taxSummary?.vat.outputVat || 0).toLocaleString()}
+                      {t("accCompVatOutputVat")}: {(taxSummary?.vat.outputVat || 0).toLocaleString()}
                     </div>
                     <div>
-                      Payable VAT: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
+                      {t("accCompVatPayable")}: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
                     </div>
                     <div>
-                      Rows (매출): {vatOutputRows.length.toLocaleString()} / VAT total rows:{" "}
+                      {t("accCompVatRowsSales")}: {vatOutputRows.length.toLocaleString()} / {t("accCompVatTotalRows")}:{" "}
                       {(taxSummary?.vat.rowCount || 0).toLocaleString()}
                     </div>
-                    <div>Missing TIN: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}</div>
-                    <div>Missing Invoice: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}</div>
+                    <div>
+                      {t("accCompMissingTin")}: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      {t("accCompMissingInvoice")}: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}
+                    </div>
                   </div>
                   {taxSummary ? (
                     <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
@@ -897,7 +1149,7 @@ export function AdminAccountingCompliance() {
                           {t("accCompWhtLabelRows")}: {(taxSummary.wht.rowCount || 0).toLocaleString()}
                         </div>
                         <div>
-                          Missing TIN (WHT): {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
+                          {t("accCompMissingTinWht")}: {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
                         </div>
                       </div>
                       <p className="text-[10px] text-muted-foreground">
@@ -919,7 +1171,7 @@ export function AdminAccountingCompliance() {
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
-                        href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth })}
+                        href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth, storeFilter: storeTb })}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -956,12 +1208,12 @@ export function AdminAccountingCompliance() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="output">output</SelectItem>
-                                <SelectItem value="input">input</SelectItem>
+                                <SelectItem value="output">{t("accCompDirOutput")}</SelectItem>
+                                <SelectItem value="input">{t("accCompDirInput")}</SelectItem>
                               </SelectContent>
                             </Select>
                             <Input
-                              placeholder="counterparty"
+                              placeholder={t("accCompPhCounterparty")}
                               value={row.counterparty_name}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -970,7 +1222,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="TIN"
+                              placeholder={t("accCompPhTin")}
                               value={row.counterparty_tax_id}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -979,7 +1231,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="invoice #"
+                              placeholder={t("accCompPhInvoiceNo")}
                               value={row.invoice_number}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -988,7 +1240,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="net"
+                              placeholder={t("accCompPhNet")}
                               value={row.net_amount}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -997,7 +1249,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="VAT"
+                              placeholder={t("accCompPhVat")}
                               value={row.vat_amount}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1006,7 +1258,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="total"
+                              placeholder={t("accCompPhTotal")}
                               value={row.total_amount}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1016,7 +1268,7 @@ export function AdminAccountingCompliance() {
                             />
                             <Input
                               className="md:col-span-2"
-                              placeholder="vat_status"
+                              placeholder={t("accCompPhVatStatus")}
                               value={row.vat_status}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1026,7 +1278,7 @@ export function AdminAccountingCompliance() {
                             />
                             <Input
                               className="md:col-span-2"
-                              placeholder="memo"
+                              placeholder={t("accCompPhMemo")}
                               value={row.memo}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1059,16 +1311,16 @@ export function AdminAccountingCompliance() {
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>
-                      Input net: {(taxSummary?.vat.inputNet || 0).toLocaleString()}
+                      {t("accCompVatInputNet")}: {(taxSummary?.vat.inputNet || 0).toLocaleString()}
                     </div>
                     <div>
-                      Input VAT: {(taxSummary?.vat.inputVat || 0).toLocaleString()}
+                      {t("accCompVatInputVat")}: {(taxSummary?.vat.inputVat || 0).toLocaleString()}
                     </div>
                     <div>
-                      Payable VAT: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
+                      {t("accCompVatPayable")}: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
                     </div>
                     <div>
-                      Rows (매입): {vatInputRows.length.toLocaleString()} / VAT total rows:{" "}
+                      {t("accCompVatRowsPurchase")}: {vatInputRows.length.toLocaleString()} / {t("accCompVatTotalRows")}:{" "}
                       {(taxSummary?.vat.rowCount || 0).toLocaleString()}
                     </div>
                   </div>
@@ -1086,7 +1338,7 @@ export function AdminAccountingCompliance() {
                           {t("accCompWhtLabelRows")}: {(taxSummary.wht.rowCount || 0).toLocaleString()}
                         </div>
                         <div>
-                          Missing TIN (WHT): {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
+                          {t("accCompMissingTinWht")}: {(taxSummary.wht.missingTaxIdCount || 0).toLocaleString()}
                         </div>
                       </div>
                       <p className="text-[10px] text-muted-foreground">
@@ -1108,7 +1360,7 @@ export function AdminAccountingCompliance() {
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
-                        href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth })}
+                        href={getExportVatLedgerCsvUrl({ userRole: role, taxMonth, storeFilter: storeTb })}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -1145,12 +1397,12 @@ export function AdminAccountingCompliance() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="output">output</SelectItem>
-                                <SelectItem value="input">input</SelectItem>
+                                <SelectItem value="output">{t("accCompDirOutput")}</SelectItem>
+                                <SelectItem value="input">{t("accCompDirInput")}</SelectItem>
                               </SelectContent>
                             </Select>
                             <Input
-                              placeholder="counterparty"
+                              placeholder={t("accCompPhCounterparty")}
                               value={row.counterparty_name}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1159,7 +1411,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="TIN"
+                              placeholder={t("accCompPhTin")}
                               value={row.counterparty_tax_id}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1168,7 +1420,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="invoice #"
+                              placeholder={t("accCompPhInvoiceNo")}
                               value={row.invoice_number}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1177,7 +1429,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="net"
+                              placeholder={t("accCompPhNet")}
                               value={row.net_amount}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1186,7 +1438,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="VAT"
+                              placeholder={t("accCompPhVat")}
                               value={row.vat_amount}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1195,7 +1447,7 @@ export function AdminAccountingCompliance() {
                               }
                             />
                             <Input
-                              placeholder="total"
+                              placeholder={t("accCompPhTotal")}
                               value={row.total_amount}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1205,7 +1457,7 @@ export function AdminAccountingCompliance() {
                             />
                             <Input
                               className="md:col-span-2"
-                              placeholder="vat_status"
+                              placeholder={t("accCompPhVatStatus")}
                               value={row.vat_status}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1215,7 +1467,7 @@ export function AdminAccountingCompliance() {
                             />
                             <Input
                               className="md:col-span-2"
-                              placeholder="memo"
+                              placeholder={t("accCompPhMemo")}
                               value={row.memo}
                               onChange={(e) =>
                                 setVatRows((prev) =>
@@ -1247,29 +1499,44 @@ export function AdminAccountingCompliance() {
               {pp30SubView === "wht" && (
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                    <div>Gross: {(taxSummary?.wht.totalGross || 0).toLocaleString()}</div>
-                    <div>Withheld: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}</div>
-                    <div>Rows: {(taxSummary?.wht.rowCount || 0).toLocaleString()}</div>
-                    <div>Missing TIN: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}</div>
-                    <div>Missing Cert#: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}</div>
+                    <div>
+                      {t("accCompWhtGrossShort")}: {(taxSummary?.wht.totalGross || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      {t("accCompWhtWithheldShort")}: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      {t("accCompWhtRowsShort")}: {(taxSummary?.wht.rowCount || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      {t("accCompMissingTin")}: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}
+                    </div>
+                    <div>
+                      {t("accCompMissingCertNo")}: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setWhtRows((prev) => [...prev, emptyWht(taxMonth)])}
+                      onClick={() =>
+                        setWhtRows((prev) => [
+                          ...prev,
+                          emptyWht(taxMonth, storeTb !== "All" ? storeTb : ""),
+                        ])
+                      }
                     >
                       <Plus className="h-4 w-4 mr-1" />
                       {t("accCompVatAdd")}
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
-                        href={getExportWithholdingTaxLedgerCsvUrl({ userRole: role, taxMonth })}
+                        href={getExportWithholdingTaxLedgerCsvUrl({ userRole: role, taxMonth, storeFilter: storeTb })}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        WHT CSV
+                        {t("accCompWhtExportCsv")}
                       </a>
                     </Button>
                   </div>
@@ -1290,7 +1557,16 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="payee"
+                            placeholder={t("accCompStore")}
+                            value={row.store_name}
+                            onChange={(e) =>
+                              setWhtRows((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, store_name: e.target.value } : x))
+                              )
+                            }
+                          />
+                          <Input
+                            placeholder={t("accCompPhPayee")}
                             value={row.payee_name}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1299,7 +1575,7 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="payee TIN"
+                            placeholder={t("accCompPhPayeeTin")}
                             value={row.payee_tax_id}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1308,7 +1584,7 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="income type"
+                            placeholder={t("accCompPhIncomeType")}
                             value={row.income_type}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1317,7 +1593,7 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="gross"
+                            placeholder={t("accCompPhGross")}
                             value={row.gross_amount}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1326,7 +1602,7 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="rate %"
+                            placeholder={t("accCompPhWhtRate")}
                             value={row.wht_rate}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1335,7 +1611,7 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="WHT amt"
+                            placeholder={t("accCompPhWhtAmt")}
                             value={row.wht_amount}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1344,7 +1620,7 @@ export function AdminAccountingCompliance() {
                             }
                           />
                           <Input
-                            placeholder="form (PND3/53...)"
+                            placeholder={t("accCompPhFormHint")}
                             value={row.form_hint}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1354,7 +1630,7 @@ export function AdminAccountingCompliance() {
                           />
                           <Input
                             className="md:col-span-2"
-                            placeholder="certificate #"
+                            placeholder={t("accCompPhCertNo")}
                             value={row.certificate_no}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1364,7 +1640,7 @@ export function AdminAccountingCompliance() {
                           />
                           <Input
                             className="md:col-span-2"
-                            placeholder="memo"
+                            placeholder={t("accCompPhMemo")}
                             value={row.memo}
                             onChange={(e) =>
                               setWhtRows((prev) =>
@@ -1395,29 +1671,68 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="cit" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="cit" className={cn(tabsContentClass, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <div className="text-xs text-muted-foreground mb-1">year_month</div>
-              <Input
-                className="w-[140px]"
-                value={taxMonth}
-                onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
-              />
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">period_type</div>
+              <div className="text-xs text-muted-foreground mb-1">{t("accCompPeriodType")}</div>
               <Select value={periodType} onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="monthly">monthly</SelectItem>
-                  <SelectItem value="half_year">half_year</SelectItem>
-                  <SelectItem value="annual">annual</SelectItem>
+                  <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
+                  <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
+                  <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {periodType === "annual" ? (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompCitFiscalYear")}</div>
+                <Select
+                  value={String(citFiscalYear)}
+                  onValueChange={(v) => setCitFiscalYear(Number(v))}
+                >
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {citFiscalYearOptions.map((y) => (
+                      <SelectItem key={y} value={String(y)}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : !externalFiling ? (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
+                <Input
+                  type="month"
+                  className="h-9 w-[160px]"
+                  value={taxMonth}
+                  onChange={(e) => setTaxMonth(e.target.value)}
+                />
+              </div>
+            ) : null}
+            {isOffice && !externalFiling ? (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
+                <Select value={storeTb} onValueChange={setStoreTb}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {storeOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {storeOptionLabel(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <Button type="button" variant="secondary" onClick={() => void loadCit()} disabled={loading}>
               {t("search")}
             </Button>
@@ -1425,7 +1740,7 @@ export function AdminAccountingCompliance() {
               <a
                 href={getExportCorporateTaxPackageCsvUrl({
                   userRole: role,
-                  yearMonth: taxMonth,
+                  yearMonth: citYearMonthForApi,
                   periodType,
                   storeFilter: storeTb,
                   userStore: auth?.store,
@@ -1433,32 +1748,169 @@ export function AdminAccountingCompliance() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                CIT Package CSV
+                {t("accCompCitPackageCsv")}
               </a>
             </Button>
           </div>
           <Card>
             <CardContent className="pt-6 text-sm space-y-2">
-              <div>Accounting profit: {(citData?.accountingProfit || 0).toLocaleString()}</div>
-              <div>Tax add-backs: {(citData?.taxAddBack || 0).toLocaleString()}</div>
-              <div>Tax deductions: {(citData?.taxDeduction || 0).toLocaleString()}</div>
-              <div>Taxable income: {(citData?.taxableIncome || 0).toLocaleString()}</div>
-              <div>Tax rate: {((citData?.taxRate || 0) * 100).toFixed(2)}%</div>
-              <div>Estimated CIT: {(citData?.estimatedTax || 0).toLocaleString()}</div>
+              <div>
+                {t("accCompCitAccountingProfit")}: {(citData?.accountingProfit || 0).toLocaleString()}
+              </div>
+              <div>
+                {t("accCompCitTaxAddBacks")}: {(citData?.taxAddBack || 0).toLocaleString()}
+              </div>
+              <div>
+                {t("accCompCitTaxDeductions")}: {(citData?.taxDeduction || 0).toLocaleString()}
+              </div>
+              <div>
+                {t("accCompCitTaxableIncome")}: {(citData?.taxableIncome || 0).toLocaleString()}
+              </div>
+              <div>
+                {t("accCompCitTaxRate")}: {((citData?.taxRate || 0) * 100).toFixed(2)}%
+              </div>
+              <div>
+                {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="workflow" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="sso" className={cn(tabsContentClass, "space-y-3")}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Landmark className="h-4 w-4" />
+                {t("accCompTabSso")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <p className="text-muted-foreground leading-relaxed">{t("accCompSsoIntro")}</p>
+              <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                <li>{t("accCompSsoStep1")}</li>
+                <li>{t("accCompSsoStep2")}</li>
+                <li>{t("accCompSsoStep3")}</li>
+              </ul>
+              <p className="text-xs text-amber-800 dark:text-amber-200/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 rounded-md px-3 py-2">
+                {t("accCompSsoDisclaimer")}
+              </p>
+              <details className="text-xs text-muted-foreground rounded-md border border-border/60 px-3 py-2 bg-muted/20">
+                <summary className="cursor-pointer font-medium text-foreground/90">{t("accCompSsoGapTitle")}</summary>
+                <p className="mt-2 whitespace-pre-line leading-relaxed">{t("accCompSsoGapBody")}</p>
+              </details>
+              <p className="text-muted-foreground text-xs">{t("accCompSsoPayrollHint")}</p>
+              <div className="flex flex-wrap gap-2 items-end">
+                {!externalFiling ? (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
+                    <Input
+                      type="month"
+                      className="h-9 w-[160px]"
+                      value={taxMonth}
+                      onChange={(e) => setTaxMonth(e.target.value)}
+                    />
+                  </div>
+                ) : null}
+                {isOffice && !externalFiling ? (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">{t("accCompSsoPayrollStore")}</div>
+                    <Select value={ssoStoreFilter} onValueChange={setSsoStoreFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storeOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {storeOptionLabel(s)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void exportSsoFromPayroll()}
+                  disabled={ssoPayrollExporting}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {ssoPayrollExporting ? t("loading") : t("accCompSsoFromPayroll")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => downloadThaiSsoFilingBlankTemplateXlsx({ yearMonth: taxMonth })}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {t("accCompSsoDownloadBlank")}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                  <a href="https://www.sso.go.th/" target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    {t("accCompSsoOpenSsoSite")}
+                  </a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t("accCompSsoColumnGuideTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto pt-0">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-2 font-medium">field</th>
+                    <th className="text-left p-2 font-medium">ไทย</th>
+                    <th className="text-left p-2 font-medium">English</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {THAI_SSO_TEMPLATE_COLUMN_HELP.map((c) => (
+                    <tr key={c.field} className="border-b border-border/50">
+                      <td className="p-2 font-mono text-[11px]">{c.field}</td>
+                      <td className="p-2">{c.labelTh}</td>
+                      <td className="p-2 text-muted-foreground">{c.labelEn}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="workflow" className={cn(tabsContentClass, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">year_month</div>
-              <Input
-                className="w-[140px]"
-                value={taxMonth}
-                onChange={(e) => setTaxMonth(e.target.value.slice(0, 7))}
-              />
-            </div>
+            {!externalFiling ? (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
+                <Input
+                  type="month"
+                  className="h-9 w-[160px]"
+                  value={taxMonth}
+                  onChange={(e) => setTaxMonth(e.target.value)}
+                />
+              </div>
+            ) : null}
+            {isOffice && !externalFiling ? (
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
+                <Select value={storeTb} onValueChange={setStoreTb}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {storeOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {storeOptionLabel(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             <Button type="button" variant="secondary" onClick={() => void loadWorkflow()} disabled={loading}>
               {t("search")}
             </Button>
@@ -1468,9 +1920,9 @@ export function AdminAccountingCompliance() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left p-2">Filing</th>
-                    <th className="text-left p-2">Status</th>
-                    <th className="text-right p-2">Action</th>
+                    <th className="text-left p-2">{t("accCompColFiling")}</th>
+                    <th className="text-left p-2">{t("accCompColStatus")}</th>
+                    <th className="text-right p-2">{t("accCompColAction")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1480,12 +1932,28 @@ export function AdminAccountingCompliance() {
                     return (
                       <tr key={d.id} className="border-b border-border/50">
                         <td className="p-2">{lang === "th" ? d.labelTh : lang === "ko" ? d.labelKo : d.labelEn}</td>
-                        <td className="p-2">{status}</td>
+                        <td className="p-2">{workflowStatusLabel(status)}</td>
                         <td className="p-2 text-right">
                           <div className="inline-flex gap-1">
-                            <Button type="button" size="sm" variant="outline" onClick={() => void upsertWorkflowStatus(d.id, "in_progress")}>Start</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => void upsertWorkflowStatus(d.id, "review")}>Review</Button>
-                            <Button type="button" size="sm" onClick={() => void upsertWorkflowStatus(d.id, "done")}>Done</Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void upsertWorkflowStatus(d.id, "in_progress")}
+                            >
+                              {t("accCompWorkflowStart")}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void upsertWorkflowStatus(d.id, "review")}
+                            >
+                              {t("accCompWorkflowReview")}
+                            </Button>
+                            <Button type="button" size="sm" onClick={() => void upsertWorkflowStatus(d.id, "done")}>
+                              {t("accCompWorkflowDone")}
+                            </Button>
                           </div>
                         </td>
                       </tr>

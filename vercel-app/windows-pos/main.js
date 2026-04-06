@@ -63,6 +63,14 @@ const updateManifestUrl =
   runtimeConfig.updateManifestUrl ||
   `${ALLOWED_ORIGIN}/downloads/windows-pos/latest.json`;
 
+/** 디버그: Network 탭 등 — `runtime-config.json` 의 openDevtools 또는 환경 변수 WINDOWS_POS_DEVTOOLS=1 */
+const OPEN_DEVTOOLS_ON_START = readConfigBool(
+  process.env.WINDOWS_POS_DEVTOOLS !== undefined && process.env.WINDOWS_POS_DEVTOOLS !== ""
+    ? process.env.WINDOWS_POS_DEVTOOLS
+    : runtimeConfig.openDevtools,
+  false
+);
+
 const printSilentResolved =
   process.env.WINDOWS_POS_PRINT_SILENT !== undefined && process.env.WINDOWS_POS_PRINT_SILENT !== ""
     ? process.env.WINDOWS_POS_PRINT_SILENT
@@ -378,7 +386,8 @@ function getThermalHtmlPrintOptions() {
     landscape: false,
     /** 한 장에 여러 페이지 축소 배치 방지(일부 드라이버 기본값 이슈) */
     pagesPerSheet: 1,
-    margins: { marginType: "none" },
+    /** none 은 논리 폭을 용지 끝까지 쓰여 열전사 오른쪽 비인쇄 영역에서 잘리기 쉬움 → 드라이버 printable area 사용 */
+    margins: { marginType: "printableArea" },
     pageSize: {
       width: THERMAL_PAGE_WIDTH_80MM,
       height: THERMAL_PAGE_HEIGHT_600MM,
@@ -705,6 +714,11 @@ function buildAppMenu() {
           },
         },
         {
+          label: "Toggle Developer Tools",
+          role: "toggleDevTools",
+          accelerator: process.platform === "darwin" ? "Alt+Command+I" : "F12",
+        },
+        {
           label: "Reset cache + reload",
           accelerator: "CommandOrControl+Shift+R",
           click: () => {
@@ -754,6 +768,14 @@ function createWindow() {
   });
 
   void mainWindow.loadURL(POS_URL);
+
+  if (OPEN_DEVTOOLS_ON_START) {
+    mainWindow.webContents.once("did-finish-load", () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.openDevTools({ mode: "detach" });
+      }
+    });
+  }
 
   setTimeout(() => {
     void checkForUpdateIfAvailable();
@@ -917,6 +939,42 @@ if (!gotLock) {
     });
 
     createWindow();
+
+    const toggleMainWindowDevTools = () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+        } else {
+          mainWindow.webContents.openDevTools({ mode: "detach" });
+        }
+      }
+    };
+
+    let devToolsGlobalOk = globalShortcut.register("F12", toggleMainWindowDevTools);
+    if (!devToolsGlobalOk) {
+      const fallbackAccel =
+        process.platform === "darwin" ? "Command+Option+I" : "CommandOrControl+Shift+I";
+      devToolsGlobalOk = globalShortcut.register(fallbackAccel, toggleMainWindowDevTools);
+      if (devToolsGlobalOk) {
+        const human =
+          process.platform === "darwin"
+            ? "Cmd+Option+I"
+            : "Ctrl+Shift+I";
+        const hint =
+          process.platform === "darwin"
+            ? "or use the application menu View → Toggle Developer Tools."
+            : "or press Alt once to show the menu bar, then View → Toggle Developer Tools.";
+        console.warn(
+          `[POS] F12 global shortcut could not be registered (often taken by the OS or another app). Use ${human} to toggle DevTools, ${hint}`
+        );
+      } else {
+        const hint =
+          process.platform === "darwin"
+            ? "Use the application menu View → Toggle Developer Tools."
+            : "Press Alt to show the menu bar, then View → Toggle Developer Tools.";
+        console.warn(`[POS] Could not register global DevTools shortcuts (F12 or fallback). ${hint}`);
+      }
+    }
 
     const registered = globalShortcut.register("CommandOrControl+Shift+U", () => {
       void checkForUpdateManual();

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildMonthInFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 
 type VatRow = {
   direction?: string
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
   const yearMonth = String(searchParams.get('yearMonth') || '').trim()
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
+  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
 
   try {
     assertCanManageAccountingCompliance(userRole)
@@ -40,13 +42,16 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthList = buildMonthInFilter(period.months)
+    const monthBase = `tax_month=in.(${monthList})`
+    const vatFilter = appendStoreNameFilter(monthBase, storeFilter)
+    const whtFilter = appendStoreNameFilter(monthBase, storeFilter)
 
     const [vatRows, whtRows] = await Promise.all([
-      supabaseSelectFilter('vat_ledger_entries', `tax_month=in.(${monthList})`, {
+      supabaseSelectFilter('vat_ledger_entries', vatFilter, {
         select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number',
         limit: 20000,
       }) as Promise<VatRow[] | null>,
-      supabaseSelectFilter('withholding_tax_ledger_entries', `tax_month=in.(${monthList})`, {
+      supabaseSelectFilter('withholding_tax_ledger_entries', whtFilter, {
         select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no',
         limit: 20000,
       }) as Promise<WhtRow[] | null>,

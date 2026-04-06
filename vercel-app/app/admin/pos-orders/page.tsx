@@ -223,6 +223,16 @@ export default function PosOrdersPage() {
   >({})
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  /** 목록 API에 넘길 매장: 본사(오피스)는 선택값·「전체」는 미지정, 매니저/가맹점주 등은 로그인 매장 고정 */
+  const orderListStoreCode = React.useMemo(() => {
+    if (canSearchAll) {
+      if (storeFilter && storeFilter !== "All") return storeFilter.trim()
+      return undefined
+    }
+    const s = (auth?.store || "").trim()
+    return s || undefined
+  }, [canSearchAll, auth?.store, storeFilter])
+
   const currentStoreCode = canSearchAll
     ? (storeFilter && storeFilter !== "All" ? storeFilter : "")
     : (auth?.store || "")
@@ -598,27 +608,27 @@ export default function PosOrdersPage() {
     getPosOrders({
       startStr,
       endStr,
-      storeCode: canSearchAll && storeFilter && storeFilter !== "All" ? storeFilter : undefined,
-      status: statusFilter,
+      storeCode: orderListStoreCode,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
     })
       .then(setOrders)
       .catch(() => setOrders([]))
       .finally(() => setLoading(false))
-  }, [startStr, endStr, storeFilter, statusFilter, canSearchAll])
+  }, [startStr, endStr, orderListStoreCode, statusFilter])
 
   const loadAttempts = React.useCallback(() => {
     setAttemptsLoading(true)
     getPosPaymentAttempts({
       startStr,
       endStr,
-      storeCode: canSearchAll && storeFilter && storeFilter !== "All" ? storeFilter : undefined,
+      storeCode: orderListStoreCode,
       status: attemptStatusFilter,
       limit: 2000,
     })
       .then(setAttempts)
       .catch(() => setAttempts([]))
       .finally(() => setAttemptsLoading(false))
-  }, [startStr, endStr, storeFilter, canSearchAll, attemptStatusFilter])
+  }, [startStr, endStr, orderListStoreCode, attemptStatusFilter])
 
   const loadTenderRules = React.useCallback(() => {
     setRulesLoading(true)
@@ -886,10 +896,13 @@ export default function PosOrdersPage() {
     const pending = orders.filter((o) =>
       ['pending', 'cooking'].includes(o.status)
     )
+    const cancelled = orders.filter((o) => o.status === 'cancelled')
     return {
       completedCount: completed.length,
       completedTotal: completed.reduce((s, o) => s + (o.total ?? 0), 0),
       pendingCount: pending.length,
+      cancelledCount: cancelled.length,
+      cancelledTotal: cancelled.reduce((s, o) => s + (o.total ?? 0), 0),
     }
   }, [isToday, orders, statusFilter])
 
@@ -1017,7 +1030,7 @@ export default function PosOrdersPage() {
           </div>
           {canSearchAll && (
             <Select value={storeFilter} onValueChange={setStoreFilter}>
-              <SelectTrigger className="h-9 w-28 text-sm">
+              <SelectTrigger className="h-9 w-[min(12rem,42vw)] min-w-[7rem] text-sm">
                 <SelectValue placeholder={t("store") || "매장"} />
               </SelectTrigger>
               <SelectContent>
@@ -1030,6 +1043,12 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
+          {!canSearchAll && (auth?.store || "").trim() ? (
+            <span className="inline-flex max-w-[min(20rem,55vw)] items-center gap-1 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+              <span className="shrink-0">{t("posOrdersStoreScope") || "조회 매장"}:</span>
+              <span className="min-w-0 truncate font-medium text-foreground">{auth?.store}</span>
+            </span>
+          ) : null}
           {activeTab !== "linkposFailed" && (
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9 w-32 text-sm">
@@ -1119,6 +1138,17 @@ export default function PosOrdersPage() {
                 {t("posCount") || "건"}
               </div>
             )}
+            {todaySummary.cancelledCount > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-rose-700">
+                <span>
+                  {t("posTodayCancelled") || "오늘 취소"}: {todaySummary.cancelledCount}
+                  {t("posCount") || "건"}
+                </span>
+                <span className="tabular-nums text-muted-foreground">
+                  ({todaySummary.cancelledTotal.toLocaleString()} ฿)
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1192,7 +1222,9 @@ export default function PosOrdersPage() {
                           <tr
                             className={cn(
                               "border-b cursor-pointer hover:bg-muted/20",
-                              expandedId === o.id && "bg-muted/20"
+                              expandedId === o.id && "bg-muted/20",
+                              o.status === "cancelled" &&
+                                "bg-rose-50/60 hover:bg-rose-50/80 dark:bg-rose-950/25 dark:hover:bg-rose-950/35"
                             )}
                             onClick={() =>
                               setExpandedId((prev) => (prev === o.id ? null : o.id))
@@ -1241,7 +1273,8 @@ export default function PosOrdersPage() {
                                   className={cn(
                                     "h-8 w-full max-w-[110px] border-0 shadow-none focus:ring-0",
                                     o.status === "completed" && "text-green-600",
-                                    o.status === "cancelled" && "text-muted-foreground"
+                                    o.status === "cancelled" &&
+                                      "text-rose-800 bg-rose-100/80 dark:bg-rose-950/40 dark:text-rose-200"
                                   )}
                                 >
                                   <SelectValue />

@@ -88,8 +88,8 @@ try {
       $env:CSC_KEY_PASSWORD = $CertPassword
     }
   } else {
-    # Unsigned: 서명은 하지 않되, package.json 의 signAndEditExecutable 은 true 로 두어
-    # 메인 .exe 에 win.icon 이 rcedit 으로 들어가게 함(false 이면 제거 프로그램만 아이콘 적용됨).
+    # 미서명: CSC 비활성화. win.signAndEditExecutable 은 package.json 에서 false 권장
+    # (true 이면 winCodeSign 7z 안의 macOS 심볼릭 링크를 풀 때, 개발자 모드/관리자 권한이 없으면 실패함).
     $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
   }
 

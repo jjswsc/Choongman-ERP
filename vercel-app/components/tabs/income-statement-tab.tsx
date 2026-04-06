@@ -18,7 +18,12 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getIncomeStatement, useStoreList, type IncomeStatementData } from "@/lib/api-client"
 import { formatAccountSubjectLabel } from "@/lib/account-subject-display"
-import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import {
+  aggregateIncomeStatementByYear,
+  FINANCIAL_COMPARE_MAX_MONTHS,
+  incomeStatementCogs,
+} from "@/lib/financial-statements-compare"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
@@ -36,7 +41,34 @@ import {
   type IncomeStatementXlsxRow,
 } from "@/lib/income-statement-export"
 
-export function IncomeStatementTab() {
+function incomeMetricsForCompare(d: IncomeStatementData | undefined) {
+  if (!d || d.error) return null
+  const sales = Number(d.sales) || 0
+  const purchases = Number(d.purchases) || 0
+  const expenses = Number(d.expenses) || 0
+  const cogs = incomeStatementCogs(d)
+  const grossProfit =
+    d.grossProfit != null && Number.isFinite(Number(d.grossProfit))
+      ? Number(d.grossProfit)
+      : sales - cogs
+  const netProfit =
+    d.netProfit != null && Number.isFinite(Number(d.netProfit))
+      ? Number(d.netProfit)
+      : grossProfit - expenses
+  return { sales, purchases, cogs, grossProfit, expenses, netProfit }
+}
+
+type IncomeStatementTabProps = {
+  /** @deprecated 시작·종료월을 쓰세요. 있으면 시작=종료로 동기화 */
+  yearMonth?: string
+  yearMonthStart?: string
+  yearMonthEnd?: string
+  storeFilter?: string
+  hideControls?: boolean
+  queryToken?: number
+}
+
+export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -46,9 +78,15 @@ export function IncomeStatementTab() {
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
   const managerStore = (auth?.store || "").trim()
 
-  const [yearMonth, setYearMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
+  const defaultYm = props.yearMonth || getBangkokRecentYearMonths(1)[0]
+  const [yearMonthStart, setYearMonthStart] = React.useState(
+    () => props.yearMonthStart ?? props.yearMonth ?? defaultYm
+  )
+  const [yearMonthEnd, setYearMonthEnd] = React.useState(
+    () => props.yearMonthEnd ?? props.yearMonth ?? defaultYm
+  )
   const [storeFilter, setStoreFilter] = React.useState(() =>
-    isManager && managerStore ? managerStore : "All"
+    props.storeFilter ?? (isManager && managerStore ? managerStore : "All")
   )
   const [data, setData] = React.useState<IncomeStatementData | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -70,12 +108,31 @@ export function IncomeStatementTab() {
   }, [isManager, managerStore])
 
   React.useEffect(() => {
-    setExpandPurchases(false)
-    setExpandExpenseAccounts(false)
-  }, [yearMonth, storeFilter])
+    if (props.yearMonth) {
+      setYearMonthStart(props.yearMonth)
+      setYearMonthEnd(props.yearMonth)
+    }
+  }, [props.yearMonth])
 
   React.useEffect(() => {
-    const o = readIncomeStatementSalesOverride(yearMonth, storeFilter)
+    if (props.yearMonthStart) setYearMonthStart(props.yearMonthStart)
+  }, [props.yearMonthStart])
+
+  React.useEffect(() => {
+    if (props.yearMonthEnd) setYearMonthEnd(props.yearMonthEnd)
+  }, [props.yearMonthEnd])
+
+  React.useEffect(() => {
+    if (props.storeFilter) setStoreFilter(props.storeFilter)
+  }, [props.storeFilter])
+
+  React.useEffect(() => {
+    setExpandPurchases(false)
+    setExpandExpenseAccounts(false)
+  }, [yearMonthStart, yearMonthEnd, storeFilter])
+
+  React.useEffect(() => {
+    const o = readIncomeStatementSalesOverride(yearMonthEnd, storeFilter)
     if (o?.enabled) {
       setManualEnabled(true)
       setManualAmountStr(String(o.amount))
@@ -83,10 +140,10 @@ export function IncomeStatementTab() {
       setManualEnabled(false)
       setManualAmountStr("")
     }
-  }, [yearMonth, storeFilter])
+  }, [yearMonthEnd, storeFilter])
 
   React.useEffect(() => {
-    const o = readIncomeStatementBeginningInvOverride(yearMonth, storeFilter)
+    const o = readIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter)
     if (o?.enabled) {
       setBegInvManualEnabled(true)
       setBegInvAmountStr(String(o.amount))
@@ -94,43 +151,156 @@ export function IncomeStatementTab() {
       setBegInvManualEnabled(false)
       setBegInvAmountStr("")
     }
-  }, [yearMonth, storeFilter])
+  }, [yearMonthEnd, storeFilter])
 
   React.useEffect(() => {
     if (!manualEnabled) {
-      writeIncomeStatementSalesOverride(yearMonth, storeFilter, false, 0)
+      writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, false, 0)
       return
     }
     const p = parseSalesOverrideInput(manualAmountStr)
     if (p == null) return
-    writeIncomeStatementSalesOverride(yearMonth, storeFilter, true, p)
-  }, [yearMonth, storeFilter, manualEnabled, manualAmountStr])
+    writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, true, p)
+  }, [yearMonthEnd, storeFilter, manualEnabled, manualAmountStr])
 
   React.useEffect(() => {
     if (!begInvManualEnabled) {
-      writeIncomeStatementBeginningInvOverride(yearMonth, storeFilter, false, 0)
+      writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, false, 0)
       return
     }
     const p = parseSalesOverrideInput(begInvAmountStr)
     if (p == null) return
-    writeIncomeStatementBeginningInvOverride(yearMonth, storeFilter, true, p)
-  }, [yearMonth, storeFilter, begInvManualEnabled, begInvAmountStr])
+    writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, true, p)
+  }, [yearMonthEnd, storeFilter, begInvManualEnabled, begInvAmountStr])
+
+  const periodMonthsFull = React.useMemo(
+    () => expandBangkokYearMonthsInclusive(yearMonthStart, yearMonthEnd),
+    [yearMonthStart, yearMonthEnd]
+  )
+  const periodMonths = React.useMemo(() => {
+    if (periodMonthsFull.length <= FINANCIAL_COMPARE_MAX_MONTHS) return periodMonthsFull
+    return periodMonthsFull.slice(-FINANCIAL_COMPARE_MAX_MONTHS)
+  }, [periodMonthsFull])
+  const periodRangeTruncated = periodMonthsFull.length > periodMonths.length
+  const isRangeCompare = periodMonths.length > 1
+
+  const [compareIncomeRows, setCompareIncomeRows] = React.useState<
+    { ym: string; data: IncomeStatementData }[]
+  >([])
+  const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
+  const [incomeCompareFetchId, setIncomeCompareFetchId] = React.useState(0)
+
+  const runIncomeFetch = React.useCallback(() => {
+    const sf = storeFilter !== "All" ? storeFilter : undefined
+    const months = periodMonths
+
+    if (months.length <= 1) {
+      const ym = months[0] ?? yearMonthEnd
+      setLoading(true)
+      setCompareIncomeRows([])
+      getIncomeStatement({
+        yearMonth: ym,
+        storeFilter: sf,
+        userStore: auth?.store,
+        userRole: auth?.role,
+        includeDebug: showExpenseDetails,
+      })
+        .then((r) => setData(r))
+        .catch(() => setData(null))
+        .finally(() => setLoading(false))
+      return
+    }
+
+    setLoading(true)
+    setData(null)
+    Promise.all(
+      months.map((ym) =>
+        getIncomeStatement({
+          yearMonth: ym,
+          storeFilter: sf,
+          userStore: auth?.store,
+          userRole: auth?.role,
+          includeDebug: false,
+        })
+      )
+    )
+      .then((arr) =>
+        setCompareIncomeRows(
+          months.map((ym, i) => ({
+            ym,
+            data: arr[i] as IncomeStatementData,
+          }))
+        )
+      )
+      .catch(() => setCompareIncomeRows([]))
+      .finally(() => {
+        setIncomeCompareFetchId((x) => x + 1)
+        setLoading(false)
+      })
+  }, [
+    periodMonths,
+    storeFilter,
+    auth?.store,
+    auth?.role,
+    showExpenseDetails,
+    yearMonthEnd,
+  ])
+
+  React.useEffect(() => {
+    if (!props.hideControls) return
+    if (props.queryToken == null) return
+    runIncomeFetch()
+  }, [props.hideControls, props.queryToken, runIncomeFetch])
 
   const loadData = React.useCallback(() => {
-    setLoading(true)
-    getIncomeStatement({
-      yearMonth,
-      storeFilter: storeFilter !== "All" ? storeFilter : undefined,
-      userStore: auth?.store,
-      userRole: auth?.role,
-      includeDebug: showExpenseDetails,
-    })
-      .then((r) => setData(r))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
-  }, [yearMonth, storeFilter, auth?.store, auth?.role, showExpenseDetails])
+    runIncomeFetch()
+  }, [runIncomeFetch])
 
-  const yearMonthOptions = getBangkokRecentYearMonths(24).map((value) => {
+  const incomeYearCompare = React.useMemo(
+    () => aggregateIncomeStatementByYear(compareIncomeRows),
+    [compareIncomeRows]
+  )
+
+  const showIncomeCompareTable =
+    isRangeCompare && !loading && compareIncomeRows.length > 0
+
+  type IncomeCompareMetrics = NonNullable<ReturnType<typeof incomeMetricsForCompare>>
+
+  const incomeComparePlRows = React.useMemo(
+    () => [
+      { key: "sales", label: t("pL_sales"), pick: (m: IncomeCompareMetrics) => m.sales },
+      { key: "purchases", label: t("pL_purchases"), pick: (m: IncomeCompareMetrics) => m.purchases },
+      { key: "cogs", label: t("pL_cogs"), pick: (m: IncomeCompareMetrics) => m.cogs },
+      { key: "gross", label: t("pL_grossProfit"), pick: (m: IncomeCompareMetrics) => m.grossProfit },
+      { key: "expenses", label: t("pL_expenses"), pick: (m: IncomeCompareMetrics) => m.expenses },
+      { key: "net", label: t("pL_netProfit"), pick: (m: IncomeCompareMetrics) => m.netProfit },
+    ],
+    [t]
+  )
+
+  const incomeCompareCols = React.useMemo(() => {
+    if (compareGranularity === "month") {
+      return compareIncomeRows.map(({ ym, data }) => ({
+        key: ym,
+        label: ym,
+        metrics: incomeMetricsForCompare(data),
+      }))
+    }
+    return incomeYearCompare.map((y) => ({
+      key: y.year,
+      label: y.year,
+      metrics: {
+        sales: y.sales,
+        purchases: y.purchases,
+        cogs: y.cogs,
+        grossProfit: y.grossProfit,
+        expenses: y.expenses,
+        netProfit: y.netProfit,
+      } satisfies IncomeCompareMetrics,
+    }))
+  }, [compareGranularity, compareIncomeRows, incomeYearCompare])
+
+  const yearMonthOptions = getBangkokRecentYearMonths(60).map((value) => {
     const [y, m] = value.split("-").map(Number)
     return { value, label: `${y}년 ${m}월` }
   })
@@ -339,7 +509,7 @@ export function IncomeStatementTab() {
   const onManualCheckedChange = (checked: boolean) => {
     setManualEnabled(checked)
     if (checked && data) {
-      const saved = readIncomeStatementSalesOverride(yearMonth, storeFilter)
+      const saved = readIncomeStatementSalesOverride(yearMonthEnd, storeFilter)
       setManualAmountStr(saved?.enabled ? String(saved.amount) : String(data.sales))
     }
     if (!checked) {
@@ -352,44 +522,83 @@ export function IncomeStatementTab() {
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center gap-3 mb-4">
-            <Select value={yearMonth} onValueChange={setYearMonth}>
-              <SelectTrigger className="w-[140px] h-9">
-                <SelectValue placeholder={t("pL_month")} />
-              </SelectTrigger>
-              <SelectContent>
-                {yearMonthOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(isOffice || isManager) && (
-              <Select
-                value={storeFilter}
-                onValueChange={setStoreFilter}
-                disabled={isManager || !storeOptions.length}
-              >
-                <SelectTrigger className="w-[160px] h-9">
-                  <SelectValue placeholder={t("pL_store")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {isOffice && <SelectItem value="All">{t("all") || "전체"}</SelectItem>}
-                  {storeOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {!props.hideControls && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {t("fs_periodStartMonth")}
+                  </span>
+                  <Select
+                    value={yearMonthStart}
+                    onValueChange={(v) => {
+                      setYearMonthStart(v)
+                      if (v > yearMonthEnd) setYearMonthEnd(v)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-9">
+                      <SelectValue placeholder={t("fs_periodStartMonth")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {yearMonthOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground shrink-0">~</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {t("fs_periodEndMonth")}
+                  </span>
+                  <Select
+                    value={yearMonthEnd}
+                    onValueChange={(v) => {
+                      setYearMonthEnd(v)
+                      if (v < yearMonthStart) setYearMonthStart(v)
+                    }}
+                  >
+                    <SelectTrigger className="w-[140px] h-9">
+                      <SelectValue placeholder={t("fs_periodEndMonth")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {yearMonthOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {(isOffice || isManager) && (
+                  <Select
+                    value={storeFilter}
+                    onValueChange={setStoreFilter}
+                    disabled={isManager || !storeOptions.length}
+                  >
+                    <SelectTrigger className="w-[160px] h-9">
+                      <SelectValue placeholder={t("pL_store")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isOffice && <SelectItem value="All">{t("all") || "전체"}</SelectItem>}
+                      {storeOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button size="sm" onClick={loadData} disabled={loading}>
+                  <Search className="h-4 w-4 mr-1" />
+                  {t("btn_query")}
+                </Button>
+              </>
             )}
-            <Button size="sm" onClick={loadData} disabled={loading}>
-              <Search className="h-4 w-4 mr-1" />
-              {t("btn_query")}
-            </Button>
             <Button
               size="sm"
               variant={showExpenseDetails ? "default" : "outline"}
+              disabled={isRangeCompare}
+              title={isRangeCompare ? t("fs_multiPeriodExportsNote") : undefined}
               onClick={() => setShowExpenseDetails((v) => !v)}
             >
               {showExpenseDetails ? t("pL_expenseDetailOn") : t("pL_expenseDetailOff")}
@@ -397,7 +606,8 @@ export function IncomeStatementTab() {
             <Button
               size="sm"
               variant="outline"
-              disabled={!data || !view || loading}
+              disabled={!data || !view || loading || isRangeCompare}
+              title={isRangeCompare ? t("fs_multiPeriodExportsNote") : undefined}
               onClick={handleDownloadXlsx}
             >
               <Table className="h-4 w-4 mr-1" />
@@ -406,7 +616,8 @@ export function IncomeStatementTab() {
             <Button
               size="sm"
               variant="outline"
-              disabled={!data || !view || loading || exportingPdf}
+              disabled={!data || !view || loading || exportingPdf || isRangeCompare}
+              title={isRangeCompare ? t("fs_multiPeriodExportsNote") : undefined}
               onClick={() => void handleDownloadPdf()}
             >
               <FileDown className="h-4 w-4 mr-1" />
@@ -420,68 +631,167 @@ export function IncomeStatementTab() {
             </p>
           ) : (
             <>
-              <div className="space-y-3 mb-4 pb-4 border-b">
-                <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="pl-manual-sales"
-                      checked={manualEnabled}
-                      onCheckedChange={(v) => onManualCheckedChange(v === true)}
-                    />
-                    <Label htmlFor="pl-manual-sales" className="text-sm font-normal cursor-pointer">
-                      {t("pL_manualSalesUse")}
-                    </Label>
-                  </div>
-                  {manualEnabled && (
-                    <Input
-                      className="w-40 h-9 font-mono"
-                      inputMode="decimal"
-                      placeholder={t("pL_manualSalesPlaceholder")}
-                      value={manualAmountStr}
-                      onChange={(e) => setManualAmountStr(e.target.value)}
-                      aria-label={t("pL_manualSalesPlaceholder")}
-                    />
+              {showIncomeCompareTable && (
+                <div className="mb-6 space-y-3">
+                  {periodRangeTruncated && (
+                    <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      {t("fs_periodTruncated").replace("{n}", String(FINANCIAL_COMPARE_MAX_MONTHS))}
+                    </p>
                   )}
-                  <p className="text-xs text-muted-foreground max-w-md shrink-0">{t("pL_manualSalesNote")}</p>
-                </div>
-                <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="pl-manual-beg-inv"
-                      checked={begInvManualEnabled}
-                      onCheckedChange={(v) => {
-                        const checked = v === true
-                        setBegInvManualEnabled(checked)
-                        if (checked) {
-                          const saved = readIncomeStatementBeginningInvOverride(yearMonth, storeFilter)
-                          if (saved?.enabled) setBegInvAmountStr(String(saved.amount))
-                          else if (data) setBegInvAmountStr(String(data.beginningInventory ?? 0))
-                          else setBegInvAmountStr("")
-                        } else setBegInvAmountStr("")
-                      }}
-                    />
-                    <Label htmlFor="pl-manual-beg-inv" className="text-sm font-normal cursor-pointer">
-                      {t("pL_manualBegInvUse")}
-                    </Label>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={compareGranularity === "month" ? "default" : "outline"}
+                      onClick={() => setCompareGranularity("month")}
+                    >
+                      {t("fs_compareByMonth")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={compareGranularity === "year" ? "default" : "outline"}
+                      onClick={() => setCompareGranularity("year")}
+                    >
+                      {t("fs_compareByYear")}
+                    </Button>
                   </div>
-                  {begInvManualEnabled && (
-                    <Input
-                      className="w-40 h-9 font-mono"
-                      inputMode="decimal"
-                      placeholder={t("pL_manualBegInvPlaceholder")}
-                      value={begInvAmountStr}
-                      onChange={(e) => setBegInvAmountStr(e.target.value)}
-                      aria-label={t("pL_manualBegInvPlaceholder")}
-                    />
+                  {compareGranularity === "year" && (
+                    <p className="text-xs text-muted-foreground">{t("fs_compareYearPlNote")}</p>
                   )}
-                  <p className="text-xs text-muted-foreground max-w-xl">{t("pL_manualBegInvNote")}</p>
+                  <div className="text-xs text-muted-foreground">
+                    {yearMonthStart === yearMonthEnd
+                      ? yearMonthEnd
+                      : `${yearMonthStart} ~ ${yearMonthEnd}`}{" "}
+                    · {storeLabel}
+                  </div>
+                  {incomeCompareCols.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      {t("inNoData") || "조회된 내역이 없습니다."}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="text-sm w-full min-w-max">
+                        <thead>
+                          <tr className="border-b bg-muted/40">
+                            <th className="text-left p-2 font-medium sticky left-0 bg-muted/40 z-10 min-w-[140px]">
+                              {t("pL_colItem")}
+                            </th>
+                            {incomeCompareCols.map((c) => (
+                              <th key={c.key} className="text-right p-2 font-medium font-mono whitespace-nowrap">
+                                {c.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {incomeComparePlRows.map((row) => (
+                            <tr key={row.key} className="border-b last:border-0">
+                              <td className="p-2 font-medium sticky left-0 bg-background z-10">{row.label}</td>
+                              {incomeCompareCols.map((c) => {
+                                const m = c.metrics
+                                const v = m ? row.pick(m) : null
+                                const isNet = row.key === "net"
+                                return (
+                                  <td
+                                    key={c.key}
+                                    className={`p-2 text-right font-mono whitespace-nowrap ${
+                                      isNet && v != null && v < 0 ? "text-destructive" : ""
+                                    } ${isNet && v != null && v >= 0 ? "font-semibold text-primary" : ""}`}
+                                  >
+                                    {v == null || m == null ? "—" : formatBath(v)}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-                {!data && (
-                  <p className="text-xs text-muted-foreground">{t("pL_manualOverridesAfterQuery")}</p>
+              )}
+              {isRangeCompare &&
+                !showIncomeCompareTable &&
+                !loading &&
+                incomeCompareFetchId > 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    {t("inNoData") || "조회된 내역이 없습니다."}
+                  </p>
                 )}
-              </div>
+              {isRangeCompare &&
+                !showIncomeCompareTable &&
+                !loading &&
+                incomeCompareFetchId === 0 &&
+                !props.hideControls && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
+                  </p>
+                )}
+              {!isRangeCompare && (
+                <div className="space-y-3 mb-4 pb-4 border-b">
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="pl-manual-sales"
+                        checked={manualEnabled}
+                        onCheckedChange={(v) => onManualCheckedChange(v === true)}
+                      />
+                      <Label htmlFor="pl-manual-sales" className="text-sm font-normal cursor-pointer">
+                        {t("pL_manualSalesUse")}
+                      </Label>
+                    </div>
+                    {manualEnabled && (
+                      <Input
+                        className="w-40 h-9 font-mono"
+                        inputMode="decimal"
+                        placeholder={t("pL_manualSalesPlaceholder")}
+                        value={manualAmountStr}
+                        onChange={(e) => setManualAmountStr(e.target.value)}
+                        aria-label={t("pL_manualSalesPlaceholder")}
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground max-w-md shrink-0">{t("pL_manualSalesNote")}</p>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="pl-manual-beg-inv"
+                        checked={begInvManualEnabled}
+                        onCheckedChange={(v) => {
+                          const checked = v === true
+                          setBegInvManualEnabled(checked)
+                          if (checked) {
+                            const saved = readIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter)
+                            if (saved?.enabled) setBegInvAmountStr(String(saved.amount))
+                            else if (data) setBegInvAmountStr(String(data.beginningInventory ?? 0))
+                            else setBegInvAmountStr("")
+                          } else setBegInvAmountStr("")
+                        }}
+                      />
+                      <Label htmlFor="pl-manual-beg-inv" className="text-sm font-normal cursor-pointer">
+                        {t("pL_manualBegInvUse")}
+                      </Label>
+                    </div>
+                    {begInvManualEnabled && (
+                      <Input
+                        className="w-40 h-9 font-mono"
+                        inputMode="decimal"
+                        placeholder={t("pL_manualBegInvPlaceholder")}
+                        value={begInvAmountStr}
+                        onChange={(e) => setBegInvAmountStr(e.target.value)}
+                        aria-label={t("pL_manualBegInvPlaceholder")}
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground max-w-xl">{t("pL_manualBegInvNote")}</p>
+                  </div>
+                  {!data && (
+                    <p className="text-xs text-muted-foreground">{t("pL_manualOverridesAfterQuery")}</p>
+                  )}
+                </div>
+              )}
 
-              {data && view ? (
+              {!isRangeCompare && data && view ? (
             <div className="overflow-x-auto">
               <div ref={printRef} className="rounded-md bg-white p-3 text-foreground">
                 <div className="text-lg font-semibold mb-1">{t("incomeStatementTitle")}</div>
@@ -704,11 +1014,11 @@ export function IncomeStatementTab() {
                 </table>
               </div>
             </div>
-              ) : (
+              ) : !isRangeCompare ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
                 </p>
-              )}
+              ) : null}
             </>
           )}
         </CardContent>

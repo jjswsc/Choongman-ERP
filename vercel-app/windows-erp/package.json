@@ -2,6 +2,7 @@
   "name": "choongman-erp-windows",
   "version": "0.1.0",
   "private": true,
+  "author": "Choongman",
   "description": "Windows installed hybrid ERP shell (Electron)",
   "main": "main.js",
   "scripts": {
@@ -28,7 +29,7 @@
         "nsis",
         "portable"
       ],
-      "signAndEditExecutable": true,
+      "signAndEditExecutable": false,
       "icon": "assets/icon.ico"
     },
     "nsis": {

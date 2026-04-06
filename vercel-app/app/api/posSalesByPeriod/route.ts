@@ -1,7 +1,9 @@
 /**
- * 기간별 집계 (월/주/일/요일/시간대별). pos_orders 기반. 시간대는 방콕 시각 기준 0–23시.
- * 다중 매장: store_code=in.(...) DB 필터.
- * splitByStore=1 이고 매장 2개 이상이면 { split, series } 반환.
+ * 기간별 집계 (연/월/주/일/요일/시간대별). pos_orders 기반. 버킷은 방콕 달력 기준.
+ * splitByStore=1 이면 매장별 시리즈: { split, series } (매장 0·1·N 모두).
+ * - 매장 2개 이상: 요청 매장 코드별 부분집합 집계
+ * - 매장 1개: 해당 필터 행 전체를 한 키로 집계
+ * - 매장 0개(전체): 응답 행에 등장한 store_code 기준으로 분해
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
@@ -44,11 +46,24 @@ export async function GET(request: NextRequest) {
     const truncated = rows.length >= FETCH_LIMIT
     if (truncated) headers.set('X-Sales-Truncated', '1')
 
-    if (splitByStore && stores.length >= 2) {
+    if (splitByStore) {
       const series: Record<string, ReturnType<typeof aggregatePosSalesByPeriod>> = {}
-      for (const code of stores) {
-        const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
-        series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed)
+      if (stores.length >= 2) {
+        for (const code of stores) {
+          const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
+          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed)
+        }
+      } else if (stores.length === 1) {
+        const code = stores[0]
+        series[code] = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed)
+      } else {
+        const codes = [
+          ...new Set(rows.map((r) => String(r.store_code ?? '').trim()).filter(Boolean)),
+        ].sort((a, b) => a.localeCompare(b))
+        for (const code of codes) {
+          const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
+          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed)
+        }
       }
       return NextResponse.json({ split: true as const, series, truncated }, { headers })
     }

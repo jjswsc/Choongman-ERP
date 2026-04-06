@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-04T12:28:33.935Z",
-  "entryCount": 671,
+  "generatedAt": "2026-04-05T08:52:48.632Z",
+  "entryCount": 669,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -53,7 +53,7 @@
     },
     {
       "path": "app/admin/pos-orders/page.tsx",
-      "line": 616,
+      "line": 626,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "admin/pos-orders"
@@ -2055,35 +2055,21 @@
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 80,
+      "line": 113,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 93,
+      "line": 126,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 122,
-      "kind": "limit",
-      "value": 10000,
-      "apiLabel": "getPosOrders"
-    },
-    {
-      "path": "app/api/getPosOrders/route.ts",
-      "line": 141,
-      "kind": "limit",
-      "value": 10000,
-      "apiLabel": "getPosOrders"
-    },
-    {
-      "path": "app/api/getPosOrders/route.ts",
-      "line": 150,
+      "line": 183,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
@@ -3756,49 +3742,49 @@
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 94,
+      "line": 99,
       "kind": "limit",
       "value": 1,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 117,
+      "line": 123,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 181,
+      "line": 187,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 284,
+      "line": 290,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 296,
+      "line": 302,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 310,
+      "line": 316,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 363,
+      "line": 372,
       "kind": "limit",
       "value": 50,
       "apiLabel": "submitAttendance"
@@ -4022,9 +4008,16 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 280,
+      "line": 271,
       "kind": "limit",
       "value": 300,
+      "apiLabel": "pos/terminal"
+    },
+    {
+      "path": "app/pos/terminal/page.tsx",
+      "line": 903,
+      "kind": "limit",
+      "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
@@ -4481,13 +4474,6 @@
       "kind": "limit",
       "value": 10,
       "apiLabel": "lib:notification-settings-server"
-    },
-    {
-      "path": "lib/offline/pos-offline-warm.ts",
-      "line": 58,
-      "kind": "limit",
-      "value": 5000,
-      "apiLabel": "lib:offline/pos-offline-warm"
     },
     {
       "path": "lib/payroll-haz-eval-grade-settings.ts",

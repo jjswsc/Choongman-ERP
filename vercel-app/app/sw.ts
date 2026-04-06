@@ -133,11 +133,10 @@ const erpWarmGetApis = {
 }
 
 /**
- * Supabase Storage 공개 객체는 defaultCache(이미지 규칙 등)에 걸리면 Electron 하이브리드 POS에서만 썸네일이 비는 사례가 있다.
- * 확장자 없는 파일명·destination 미설정 등으로 예전 매처에서 빠지면 SW 캐시로 떨어지므로,
- * `*.supabase.co` + `/storage/v1/object/public/` 인 GET 전부 네트워크 전용으로 통일한다.
+ * Supabase Storage 객체 GET은 defaultCache에 걸리면 Electron 하이브리드에서 썸네일이 비는 사례가 있다.
+ * public / sign(서명) / 기타 object 경로를 모두 네트워크 전용으로 통일한다.
  */
-const supabaseStoragePublicImagesNetworkOnly = {
+const supabaseStorageObjectImagesNetworkOnly = {
   matcher({
     url,
     request,
@@ -148,9 +147,51 @@ const supabaseStoragePublicImagesNetworkOnly = {
     event?: ExtendableEvent
   }) {
     if (request.method !== "GET") return false
-    if (!url.pathname.includes("/storage/v1/object/public/")) return false
+    if (!url.pathname.includes("/storage/v1/object/")) return false
     const host = url.hostname.toLowerCase()
     return host.endsWith(".supabase.co") || host === "supabase.co"
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
+}
+
+/**
+ * `<img src="https://다른도메인/...">` 는 defaultCache 이미지 규칙에 걸리면 opaque·오염 캐시로
+ * Electron 하이브리드에서만 안 보이는 사례가 있다. 교차 출처 image GET 은 캐시하지 않는다.
+ */
+const crossOriginImageGetNetworkOnly = {
+  matcher({
+    request,
+    sameOrigin,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (request.method !== "GET" || sameOrigin) return false
+    return request.destination === "image"
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
+}
+
+/**
+ * 메뉴 썸네일 동일 출처 프록시: fetch/img가 defaultCache에 걸리면 SW(sw.js) 경유 시
+ * (canceled)/ERR_FAILED·빈 타일이 난다. 캐시하지 않고 항상 네트워크만 사용.
+ */
+const posMenuImageProxyGetNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return sameOrigin && request.method === "GET" && pathname === "/api/posMenuImageProxy"
   },
   method: "GET" as const,
   handler: new NetworkOnly(),
@@ -193,13 +234,15 @@ const serwist = new Serwist({
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  /** 설치 패키지 → `/_next/static` → POS warm API → ERP warm API → 나머지 defaultCache */
+  /** posMenuImageProxy 는 href가 `...png`로 끝나 defaultCache 이미지 RegExp에도 걸릴 수 있어 반드시 최우선 등록 */
   runtimeCaching: [
+    posMenuImageProxyGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,
     posWarmGetApis,
     erpWarmGetApis,
-    supabaseStoragePublicImagesNetworkOnly,
+    supabaseStorageObjectImagesNetworkOnly,
+    crossOriginImageGetNetworkOnly,
     ...defaultCache,
   ],
   fallbacks: {

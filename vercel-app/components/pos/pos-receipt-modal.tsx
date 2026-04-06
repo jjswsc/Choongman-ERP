@@ -6,6 +6,13 @@ import { getPosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
+import {
+  RECEIPT_AMOUNT_COL_MM,
+  RECEIPT_CONTENT_NUDGE_LEFT_MM,
+  RECEIPT_GRID_COL_GAP_PX,
+  RECEIPT_INNER_INSET_LEFT_MM,
+  RECEIPT_INNER_INSET_RIGHT_MM,
+} from '@/lib/pos-receipt-layout'
 import type { PosMenu } from '@/lib/api-client'
 import { useLang } from '@/lib/lang-context'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -47,12 +54,6 @@ export type ReceiptModalData = {
 }
 
 const POS_PAPER_SIDE_PADDING_MM = 0
-/** 80mm 용지에서 본문 칸을 좌우 각 0.5cm 안쪽으로(가운데 정렬·양쪽 잘림 완화) */
-const RECEIPT_INNER_INSET_LEFT_MM = 5
-/** 오른쪽은 숫자·통화 기호 잘림 방지를 위해 한 자리 정도 더 안쪽으로 */
-const RECEIPT_INNER_INSET_RIGHT_MM = 7
-/** 프린터 물리 여백 보정: 본문 블록 전체를 왼쪽으로 이만큼 이동 */
-const RECEIPT_CONTENT_NUDGE_LEFT_MM = 3
 function getPosPaperBaseCss(fontFamily: string, fontSizePx: number) {
   return `
     ${posThermalReceiptPageSizeRule()}
@@ -324,14 +325,16 @@ export function PosReceiptModal({
             .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
             .receipt-divider-strong { border-top: 2px solid #000; margin: 8px 0; }
             .receipt-order-no-print { color: #000 !important; font-weight: 700 !important; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; font-size: 10px; line-height: 1.2; }
+            .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; }
             .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }
             .receipt-meta-row { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; }
             .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #000; color: #000; box-sizing: border-box; }
+            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #000; color: #000; box-sizing: border-box; }
+            .receipt-item-head > span:last-child { font-size: 10px; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; color: #000; }
             .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; }
             .receipt-muted { color: #000; }

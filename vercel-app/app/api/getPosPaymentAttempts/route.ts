@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { verifyToken } from '@/lib/jwt-auth'
+import { isOfficeRole } from '@/lib/permissions'
+
+async function resolveBearerCaller(
+  request: NextRequest
+): Promise<{ role: string; store: string } | null> {
+  const auth = request.headers.get('authorization') || ''
+  const m = auth.match(/^Bearer\s+(\S+)/i)
+  if (!m?.[1]) return null
+  const payload = await verifyToken(m[1].trim())
+  if (!payload) return null
+  return {
+    role: String(payload.role ?? '').trim(),
+    store: String(payload.store ?? '').trim(),
+  }
+}
+
+function storeCodesLooselyEqual(a: string, b: string): boolean {
+  const x = String(a || '').trim()
+  const y = String(b || '').trim()
+  if (!x || !y) return false
+  if (x === y) return true
+  const xl = x.toLowerCase()
+  const yl = y.toLowerCase()
+  if (xl === yl) return true
+  const nx = xl.replace(/^cm\s+/, '').trim()
+  const ny = yl.replace(/^cm\s+/, '').trim()
+  return nx === ny
+}
 
 /** LINKPOS 결제 시도 조회 (실패 관리 탭용) */
 export async function GET(request: NextRequest) {
@@ -9,7 +38,16 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
-  const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const caller = await resolveBearerCaller(request)
+  let effectiveStoreCode = requestedStore
+  if (caller && !isOfficeRole(caller.role)) {
+    const own = caller.store.trim()
+    if (!own) {
+      return NextResponse.json([], { headers })
+    }
+    effectiveStoreCode = own
+  }
   const status = String(searchParams.get('status') || 'failed').trim().toLowerCase()
   const limit = Math.max(1, Math.min(5000, Number(searchParams.get('limit') || 1000)))
 
@@ -100,8 +138,8 @@ export async function GET(request: NextRequest) {
     })
 
     const filteredByStore =
-      storeCode && storeCode !== 'All'
-        ? mapped.filter((x) => String(x.storeCode || '').trim() === storeCode)
+      effectiveStoreCode && effectiveStoreCode !== 'All'
+        ? mapped.filter((x) => storeCodesLooselyEqual(effectiveStoreCode, String(x.storeCode || '')))
         : mapped
 
     return NextResponse.json(filteredByStore, { headers })

@@ -59,14 +59,18 @@ import {
   formatPosOrderNoForPrint,
   normalizeStoreSlugForOrderNo,
 } from "@/lib/pos-order-no"
+import {
+  RECEIPT_AMOUNT_COL_MM,
+  RECEIPT_CONTENT_NUDGE_LEFT_MM,
+  RECEIPT_GRID_COL_GAP_PX,
+  RECEIPT_INNER_INSET_LEFT_MM,
+  RECEIPT_INNER_INSET_RIGHT_MM,
+} from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 
 type PreviewKind = "receipt" | "kitchen"
 
 const POS_PAPER_SIDE_PADDING_MM = 0
-const RECEIPT_INNER_INSET_LEFT_MM = 5
-const RECEIPT_INNER_INSET_RIGHT_MM = 7
-const RECEIPT_CONTENT_NUDGE_LEFT_MM = 3
 const RECEIPT_ASSET_MAX_BYTES = 1024 * 700
 
 const buildCode128BarcodeUrl = (raw: string) => {
@@ -861,13 +865,15 @@ export default function PosPrintersPage() {
             .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
             .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
             .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; font-size: 10px; line-height: 1.2; }
+            .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; }
             .receipt-meta-row { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; }
             .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #111; box-sizing: border-box; }
+            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #111; box-sizing: border-box; }
+            .receipt-item-head > span:last-child { font-size: 10px; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
             .receipt-muted { color: #000; }
             .paid-stamp-wrap { text-align: center; margin: 10px 0; }

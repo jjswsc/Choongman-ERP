@@ -32,6 +32,8 @@ npm run dev
 
 ## 빌드
 
+`win.signAndEditExecutable`은 **false**(기본) 권장. `true`일 때 `winCodeSign` 압축 해제 중 심볼릭 링크 오류가 나면 Windows **개발자 모드**를 켜거나, `false`로 빌드하세요.
+
 ```powershell
 $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
 npm run build:win

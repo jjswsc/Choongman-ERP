@@ -114,3 +114,43 @@ export function getBangkokRecentYearMonths(count: number, base: Date = new Date(
   }
   return out
 }
+
+/** `YYYY-MM` 파싱 (방콕 달력 월) */
+export function parseBangkokYearMonth(ym: string): { y: number; m: number } | null {
+  const s = String(ym ?? '').trim()
+  if (!/^\d{4}-\d{2}$/.test(s)) return null
+  const y = Number(s.slice(0, 4))
+  const m = Number(s.slice(5, 7))
+  if (!Number.isFinite(y) || m < 1 || m > 12) return null
+  return { y, m }
+}
+
+/**
+ * 시작월~종료월(포함) 모든 `YYYY-MM`. 순서가 뒤바뀌면 자동 교환.
+ * 잘못된 형식이면 빈 배열.
+ */
+export function expandBangkokYearMonthsInclusive(startYm: string, endYm: string): string[] {
+  const a = parseBangkokYearMonth(startYm)
+  const b = parseBangkokYearMonth(endYm)
+  if (!a || !b) return []
+  let y = a.y
+  let m = a.m
+  let endY = b.y
+  let endM = b.m
+  if (y > endY || (y === endY && m > endM)) {
+    y = b.y
+    m = b.m
+    endY = a.y
+    endM = a.m
+  }
+  const out: string[] = []
+  while (y < endY || (y === endY && m <= endM)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m += 1
+    if (m > 12) {
+      m = 1
+      y += 1
+    }
+  }
+  return out
+}

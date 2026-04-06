@@ -25,7 +25,7 @@ import {
   invalidateAppDataCache as invalidateAppDataCacheOffline,
   invalidateAdminItemsCache,
 } from './offline/erp-offline'
-import { fetchPosCatalogCached } from './offline/pos-catalog-offline'
+import { ERP_POS_CATALOG_MENUS_CACHE_KEY, fetchPosCatalogCached } from './offline/pos-catalog-offline'
 import { readAutoTranslateEnabled } from './auto-translate'
 
 export { apiFetch } from './api/fetch'
@@ -1913,8 +1913,9 @@ export async function getTrialBalance(params: {
   }>
 }
 
-export async function getVatLedger(params: { userRole: string; taxMonth: string }) {
+export async function getVatLedger(params: { userRole: string; taxMonth: string; storeFilter?: string }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
   return res.json() as Promise<{ entries: Record<string, unknown>[] }>
 }
@@ -1937,8 +1938,13 @@ export async function deleteVatLedgerEntry(params: { userRole: string; id: numbe
   return res.json() as Promise<{ success: boolean }>
 }
 
-export async function getWithholdingTaxLedger(params: { userRole: string; taxMonth: string }) {
+export async function getWithholdingTaxLedger(params: {
+  userRole: string
+  taxMonth: string
+  storeFilter?: string
+}) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/withholdingTaxLedger?${q}`)
   return res.json() as Promise<{ entries: Record<string, unknown>[] }>
 }
@@ -1961,16 +1967,22 @@ export async function deleteWithholdingTaxLedgerEntry(params: { userRole: string
   return res.json() as Promise<{ success: boolean }>
 }
 
-export function getExportVatLedgerCsvUrl(params: { userRole: string; taxMonth: string }) {
+export function getExportVatLedgerCsvUrl(params: { userRole: string; taxMonth: string; storeFilter?: string }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportVatLedgerCsv?${q}`
   }
   return `/api/exportVatLedgerCsv?${q}`
 }
 
-export function getExportWithholdingTaxLedgerCsvUrl(params: { userRole: string; taxMonth: string }) {
+export function getExportWithholdingTaxLedgerCsvUrl(params: {
+  userRole: string
+  taxMonth: string
+  storeFilter?: string
+}) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportWithholdingTaxLedgerCsv?${q}`
   }
@@ -2078,12 +2090,14 @@ export async function getThaiTaxFilingSummary(params: {
   userRole: string
   yearMonth: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
 }) {
   const q = new URLSearchParams({
     userRole: params.userRole,
     yearMonth: params.yearMonth,
     periodType: params.periodType || 'monthly',
   })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getThaiTaxFilingSummary?${q}`)
   return res.json() as Promise<ThaiTaxFilingSummary>
 }
@@ -2167,10 +2181,16 @@ export type AccountingWorkflowStatusRow = {
   owner?: string | null
   updated_by?: string | null
   updated_at?: string | null
+  store_scope?: string | null
 }
 
-export async function getAccountingWorkflowStatus(params: { userRole: string; yearMonth: string }) {
+export async function getAccountingWorkflowStatus(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+}) {
   const q = new URLSearchParams({ userRole: params.userRole, yearMonth: params.yearMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getAccountingWorkflowStatus?${q}`)
   return res.json() as Promise<{ rows: AccountingWorkflowStatusRow[] }>
 }
@@ -2183,6 +2203,7 @@ export async function saveAccountingWorkflowStatus(params: {
   note?: string | null
   owner?: string | null
   updatedBy?: string | null
+  storeFilter?: string
 }) {
   const res = await apiFetchWithOffline('/api/saveAccountingWorkflowStatus', {
     method: 'POST',
@@ -2801,7 +2822,7 @@ export type PosSalesByPeriodResult =
 export async function getPosSalesByPeriod(params: {
   startStr: string
   endStr: string
-  groupBy: 'month' | 'week' | 'day' | 'dow' | 'hour'
+  groupBy: 'year' | 'month' | 'week' | 'day' | 'dow' | 'hour'
   pos?: string
   stores?: string[]
   orderTypes?: string[]
@@ -3939,7 +3960,7 @@ export interface PosMenuOption {
 }
 
 export async function getPosMenus() {
-  return fetchPosCatalogCached<PosMenu[]>('erp:posCatalog:menus', '/api/getPosMenus', [])
+  return fetchPosCatalogCached<PosMenu[]>(ERP_POS_CATALOG_MENUS_CACHE_KEY, '/api/getPosMenus', [])
 }
 
 export async function getNextPosMenuCode(mainCategory: string) {

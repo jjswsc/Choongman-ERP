@@ -2,7 +2,12 @@
  * 하이브리드 POS: 메뉴 썸네일을 IndexedDB에 보관 (Electron 캐시 초기화는 cachestorage·HTTP만 비움)
  */
 
-import { isPosMenuImageUrlCacheable, normalizePosMenuImageUrl } from '@/lib/pos-menu-image-url'
+import {
+  isPosMenuImageUrlCacheable,
+  normalizePosMenuImageUrl,
+  shouldProxyPosMenuImageForHybrid,
+  toHybridProxiedMenuImageHref,
+} from '@/lib/pos-menu-image-url'
 import { getDB, STORES } from '@/lib/offline/db'
 
 const MENU_IMAGE_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -81,12 +86,22 @@ export async function putMenuImageCache(normalizedUrl: string, body: ArrayBuffer
   })
 }
 
+function buildMenuImageFetchUrl(normalizedUrl: string): string {
+  if (typeof window === 'undefined') return normalizedUrl
+  /** Supabase 직접 fetch는 CORS·Serwist와 충돌해 Network에서 fetch+ERR_FAILED/(canceled)가 난다. 동일 출처 프록시로만 받는다. */
+  if (shouldProxyPosMenuImageForHybrid(normalizedUrl)) {
+    return `${window.location.origin}${toHybridProxiedMenuImageHref(normalizedUrl)}`
+  }
+  return normalizedUrl
+}
+
 export async function fetchAndCacheMenuImage(normalizedUrl: string): Promise<boolean> {
   if (typeof window === 'undefined') return false
   const origin = window.location.origin
   if (!isPosMenuImageUrlCacheable(normalizedUrl, origin)) return false
   try {
-    const res = await fetch(normalizedUrl, {
+    const fetchUrl = buildMenuImageFetchUrl(normalizedUrl)
+    const res = await fetch(fetchUrl, {
       mode: 'cors',
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
@@ -110,6 +125,12 @@ export async function warmPosMenuImagesFromMenuList(
   opts?: { concurrency?: number }
 ): Promise<void> {
   if (typeof window === 'undefined') return
+  /**
+   * https + Serwist 환경에서 백그라운드 fetch 워밍이 SW·다수 동시 요청과 겹쳐
+   * Network 탭에 (canceled)/ERR_FAILED 만 쌓이고 UI 썸네일은 `<img src=/api/posMenuImageProxy>` 가 담당.
+   * 오프라인 썸네일 IDB는 https PWA에서 생략(온라인 시 프록시로 충분).
+   */
+  if (window.location.protocol === 'https:') return
   const origin = window.location.origin
   const concurrency = Math.max(1, opts?.concurrency ?? 6)
   const seen = new Set<string>()

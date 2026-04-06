@@ -139,6 +139,8 @@ export function aggregatePosSalesByPeriod(
 
     if (groupBy === 'month') {
       add(bkkDate.slice(0, 7), r)
+    } else if (groupBy === 'year') {
+      add(bkkDate.slice(0, 4), r)
     } else if (groupBy === 'week') {
       const start = getStartOfWeek(new Date(dt))
       const end = new Date(start)
@@ -158,6 +160,11 @@ export function aggregatePosSalesByPeriod(
   }
 
   if (groupBy === 'month') {
+    return Object.entries(byKey)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => toRow(k, v))
+  }
+  if (groupBy === 'year') {
     return Object.entries(byKey)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => toRow(k, v))

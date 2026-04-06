@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useRouter, usePathname } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronUp, Home } from "lucide-react"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -162,6 +163,37 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     )
     setShellMinimizeAvailable(typeof window.cmPosShell?.minimizeWindow === "function")
     setShellQuitAvailable(typeof window.cmPosShell?.quitApp === "function")
+  }, [])
+
+  /**
+   * 하이브리드: Serwist 미등록 정책과 맞추어, 예전에 깔린 SW가 있으면 제거 후 1회 새로고침.
+   * (이미 SW가 없으면 플래그만 세우고 리로드 없음.)
+   */
+  useEffect(() => {
+    if (!isCmPosHybridShell() || !navigator.serviceWorker?.getRegistrations) return
+    const flag = "cm-pos-hybrid-sw-cleared-v1"
+    try {
+      if (sessionStorage.getItem(flag) === "1") return
+    } catch {
+      return
+    }
+    void navigator.serviceWorker.getRegistrations().then(async (regs) => {
+      if (regs.length === 0) {
+        try {
+          sessionStorage.setItem(flag, "1")
+        } catch {
+          /* ignore */
+        }
+        return
+      }
+      await Promise.all(regs.map((r) => r.unregister()))
+      try {
+        sessionStorage.setItem(flag, "1")
+      } catch {
+        /* ignore */
+      }
+      window.location.reload()
+    })
   }, [])
 
   useEffect(() => {

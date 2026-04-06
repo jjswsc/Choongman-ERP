@@ -17,9 +17,13 @@ const DOW_KEYS = [
 
 export function translatePeriodAxisLabel(
   row: { key: string; label: string },
-  groupBy: "month" | "week" | "day" | "dow" | "hour",
+  groupBy: "year" | "month" | "week" | "day" | "dow" | "hour",
   tr: (key: string, fallback: string) => string
 ): string {
+  if (groupBy === "year") {
+    const y = row.key
+    if (/^\d{4}$/.test(y)) return y
+  }
   if (groupBy === "dow") {
     const i = Number(row.key)
     if (i >= 0 && i <= 6) {

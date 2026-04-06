@@ -6,6 +6,7 @@ import {
   supabaseUpdate,
 } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 
 function parseUserRole(request: NextRequest, body?: Record<string, unknown>): string {
   const fromQuery = new URL(request.url).searchParams.get('userRole')
@@ -29,16 +30,18 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const taxMonth = String(searchParams.get('taxMonth') || '').trim().slice(0, 7)
+  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
   if (!/^\d{4}-\d{2}$/.test(taxMonth)) {
     return NextResponse.json({ error: 'INVALID_TAX_MONTH' }, { status: 400, headers })
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'vat_ledger_entries',
-      `tax_month=eq.${encodeURIComponent(taxMonth)}`,
-      { select: '*', limit: 5000, order: 'doc_date.asc,id.asc' }
-    )) as Record<string, unknown>[] | null
+    const filter = appendStoreNameFilter(`tax_month=eq.${encodeURIComponent(taxMonth)}`, storeFilter)
+    const rows = (await supabaseSelectFilter('vat_ledger_entries', filter, {
+      select: '*',
+      limit: 5000,
+      order: 'doc_date.asc,id.asc',
+    })) as Record<string, unknown>[] | null
     return NextResponse.json({ entries: rows || [] }, { headers })
   } catch (e) {
     console.error('vatLedger GET:', e)
@@ -74,7 +77,10 @@ export async function POST(request: NextRequest) {
       total_amount: Number(body.totalAmount ?? body.total_amount) || 0,
       vat_status: body.vatStatus != null ? String(body.vatStatus).slice(0, 64) : null,
       memo: body.memo != null ? String(body.memo).slice(0, 2000) : null,
-      store_name: body.storeName != null ? String(body.storeName).slice(0, 200) : null,
+      store_name:
+        body.storeName != null && String(body.storeName).trim() !== ''
+          ? String(body.storeName).slice(0, 200)
+          : null,
       updated_at: new Date().toISOString(),
     }
 

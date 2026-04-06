@@ -68,9 +68,17 @@ import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { printPosHtmlDocument } from "@/lib/pos-print-html"
+import {
+  RECEIPT_AMOUNT_COL_MM,
+  RECEIPT_CONTENT_NUDGE_LEFT_MM,
+  RECEIPT_GRID_COL_GAP_PX,
+  RECEIPT_INNER_INSET_LEFT_MM,
+  RECEIPT_INNER_INSET_RIGHT_MM,
+} from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
+import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -116,6 +124,7 @@ export default function PosOrderPage() {
     [canSearchAll, auth?.store, stores]
   )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
@@ -839,9 +848,6 @@ export default function PosOrderPage() {
   }
 
   const POS_PAPER_SIDE_PADDING_MM = 0
-  const RECEIPT_INNER_INSET_LEFT_MM = 5
-  const RECEIPT_INNER_INSET_RIGHT_MM = 7
-  const RECEIPT_CONTENT_NUDGE_LEFT_MM = 3
   const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
     ${posThermalReceiptPageSizeRule()}
     html, body { margin: 0; padding: 0; }
@@ -889,9 +895,10 @@ export default function PosOrderPage() {
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: 1mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; break-inside: avoid; page-break-inside: avoid; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) 19mm; column-gap: 5px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; font-size: 10px; line-height: 1.2; }
+            .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; }
             .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
             .receipt-biz { margin: 2px 0; font-size: 11px; }
             .receipt-brand-logo { display: inline-block; height: auto; object-fit: contain; }
@@ -1098,7 +1105,7 @@ export default function PosOrderPage() {
                 className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98] touch-manipulation"
               >
                 <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-amber-100 flex items-center justify-center">
-                  <span className="text-3xl">🏷️</span>
+                  <span className="font-pos-emoji text-3xl">🏷️</span>
                 </div>
                 <div
                   className="mt-1 overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
@@ -1122,14 +1129,8 @@ export default function PosOrderPage() {
                 onClick={() => addToCart(m)}
                 className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition hover:border-emerald-400 hover:shadow-md active:scale-[0.98] touch-manipulation"
               >
-                <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-slate-100">
-                  {m.imageUrl ? (
-                    <PosMenuFillImage src={m.imageUrl} alt={m.name} />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-3xl text-slate-400">
-                      🍗
-                    </div>
-                  )}
+                <div className="relative h-[92px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                  <PosMenuFillImage src={m.imageUrl || ''} alt={m.name} />
                 </div>
                 <div
                   className="mt-1 overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
