@@ -102,3 +102,39 @@ create table if not exists public.ai_usage_logs (
 create index if not exists idx_ai_usage_logs_created_at
   on public.ai_usage_logs (created_at desc);
 
+create table if not exists public.external_store_profiles (
+  id bigserial primary key,
+  store_name text not null unique,
+  lat double precision null,
+  lon double precision null,
+  country_code text not null default 'TH',
+  timezone text not null default 'Asia/Bangkok',
+  enabled boolean not null default true,
+  note text null,
+  created_at timestamp without time zone not null default now(),
+  updated_at timestamp without time zone null
+);
+
+create table if not exists public.external_context_daily (
+  id bigserial primary key,
+  date_bkk date not null,
+  store_name text not null,
+  weather_code integer null,
+  weather_text text null,
+  temp_min_c double precision null,
+  temp_max_c double precision null,
+  rain_mm double precision null,
+  rain_prob integer null,
+  humidity_avg integer null,
+  wind_max_kmh double precision null,
+  is_holiday boolean not null default false,
+  holiday_name text null,
+  event_tags text[] not null default '{}',
+  source text not null default 'open-meteo+nager',
+  fetched_at timestamp without time zone not null default now(),
+  unique(date_bkk, store_name)
+);
+
+create index if not exists idx_external_context_daily_store_date
+  on public.external_context_daily (store_name, date_bkk desc);
+

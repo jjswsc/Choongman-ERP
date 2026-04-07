@@ -92,6 +92,9 @@ export async function GET(request: NextRequest) {
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   let employeeFilter = String(searchParams.get('employeeFilter') || searchParams.get('employee') || searchParams.get('name') || '').trim()
+  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const employeeIdFilter =
+    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
   const statusFilter = String(searchParams.get('statusFilter') || searchParams.get('status') || 'all').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
@@ -104,12 +107,14 @@ export async function GET(request: NextRequest) {
 
   const startStr = startDate.slice(0, 10)
   const endStr = endDate.slice(0, 10)
-  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+  const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
   // 자정 넘김 퇴근(익일 00:00~06:59 방콕) 포함: log_at 조회 끝을 익일 07:00 방콕(= 익일 00:00 UTC)까지 연장
   const logEndISOExclusive = addDay(endStr, 1) + 'T00:00:00.000Z'
 
   const isAllStores = !storeFilter || storeFilter === 'All' || storeFilter.toLowerCase() === 'all' || storeFilter === '전체' || storeFilter === '전체 매장'
-  const isAllEmployees = !employeeFilter || employeeFilter === 'All' || employeeFilter === '전체 직원'
+  const isAllEmployeesByName = !employeeFilter || employeeFilter === 'All' || employeeFilter === '전체 직원'
+  const hasEmployeeIdFilter = employeeIdFilter > 0
+  const isAllEmployees = !hasEmployeeIdFilter && isAllEmployeesByName
   const pendingOnly = statusFilter === 'pending'
 
   const isManager = userRole === 'manager'
@@ -140,7 +145,9 @@ export async function GET(request: NextRequest) {
     if (!isAllStores && storeFilter) {
       attLogFilterParts.unshift(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
     }
-    if (!isAllEmployees && employeeFilter) {
+    if (hasEmployeeIdFilter) {
+      attLogFilterParts.push(`employee_id=eq.${employeeIdFilter}`)
+    } else if (!isAllEmployeesByName && employeeFilter) {
       attLogFilterParts.push(`name=eq.${encodeURIComponent(employeeFilter)}`)
     }
     const attLogFilter = attLogFilterParts.join('&')
@@ -193,7 +200,7 @@ export async function GET(request: NextRequest) {
           partTimeKeys.add(`${store}|${normalizeNameForSchedule(nm)}`)
         }
       }
-    } catch (_) { /* ignore */ }
+    } catch { /* ignore */ }
 
     type SchRow = {
       schedule_date?: string

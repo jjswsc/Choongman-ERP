@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     const dataLat = validated.parsed.lat ?? raw.lat
     const dataLng = validated.parsed.lng ?? raw.lng
     let empName = String(empNameRaw || '').trim()
-    const empId = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+    let empId = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
     if (empId > 0) {
       const empRows = (await supabaseSelectFilter(
         'employees',
@@ -106,6 +106,21 @@ export async function POST(request: NextRequest) {
         )
       }
       if (String(er.name || '').trim()) empName = String(er.name || '').trim()
+    } else {
+      // 하위호환: 구버전 세션에 employeeId가 없어도 저장 시점에는 id를 채워 일관성 확보
+      const matched = (await supabaseSelectFilter(
+        'employees',
+        `store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
+        { limit: 5, select: 'id,name' }
+      )) as { id?: number; name?: string }[]
+      if ((matched || []).length === 1) {
+        const m = matched[0]
+        const inferredId = m.id != null && Number.isFinite(Number(m.id)) ? Math.floor(Number(m.id)) : 0
+        if (inferredId > 0) {
+          empId = inferredId
+          if (String(m.name || '').trim()) empName = String(m.name || '').trim()
+        }
+      }
     }
 
     const todayStrVal = todayStr()
@@ -182,8 +197,7 @@ export async function POST(request: NextRequest) {
     }
 
     let targetLat = 0,
-      targetLng = 0,
-      locationOk = false
+      targetLng = 0
     const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
       id?: number
       gps_name?: string
@@ -252,7 +266,6 @@ export async function POST(request: NextRequest) {
         Number(dataLat),
         Number(dataLng)
       )
-      if (dist <= 999) locationOk = true
       // 매장 999m 밖이면 기록 거부 (출근/퇴근/휴식 공통)
       if (dist > 999) {
         return NextResponse.json(
@@ -425,7 +438,8 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
       if (/employee_id|42703|column/i.test(em) && 'employee_id' in payload) {
-        const { employee_id: _eid, ...fallbackPayload } = payload
+        const fallbackPayload = { ...payload }
+        delete fallbackPayload.employee_id
         await supabaseInsert('attendance_logs', fallbackPayload)
       } else {
         throw e

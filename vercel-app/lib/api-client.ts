@@ -1009,6 +1009,7 @@ export async function getAttendanceRecordsAdmin(params: {
   endDate: string
   storeFilter?: string
   employeeFilter?: string
+  employeeId?: number
   statusFilter?: string
   userStore?: string
   userRole?: string
@@ -1018,6 +1019,7 @@ export async function getAttendanceRecordsAdmin(params: {
   if (params.endDate) q.set('endDate', params.endDate)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.employeeFilter) q.set('employeeFilter', params.employeeFilter)
+  if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
   if (params.statusFilter) q.set('statusFilter', params.statusFilter || 'all')
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)

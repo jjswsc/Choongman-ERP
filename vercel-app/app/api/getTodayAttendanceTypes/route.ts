@@ -28,11 +28,29 @@ export async function GET(request: NextRequest) {
           : ''
       if (byIdFilter) {
         try {
-          return await supabaseSelectFilter('attendance_logs', byIdFilter, {
+          const byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
             order: 'log_at.desc',
             limit: 50,
-            select: 'log_at,log_type',
-          })
+            select: 'log_at,log_type,employee_id',
+          })) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          const byNameRows = (await supabaseSelectFilter(
+            'attendance_logs',
+            `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
+            { order: 'log_at.desc', limit: 50, select: 'log_at,log_type,employee_id' }
+          )) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          const merged = new Map<string, { log_at?: string; log_type?: string; employee_id?: number | null }>()
+          const pushRow = (r: { log_at?: string; log_type?: string; employee_id?: number | null }) => {
+            const rowEmpId =
+              r.employee_id != null && Number.isFinite(Number(r.employee_id))
+                ? Math.floor(Number(r.employee_id))
+                : 0
+            if (rowEmpId > 0 && rowEmpId !== employeeId) return
+            const k = `${String(r.log_at || '')}|${String(r.log_type || '').trim()}`
+            if (!merged.has(k)) merged.set(k, r)
+          }
+          for (const r of byIdRows || []) pushRow(r)
+          for (const r of byNameRows || []) pushRow(r)
+          return Array.from(merged.values()).sort((a, b) => String(b.log_at || '').localeCompare(String(a.log_at || '')))
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e)
           if (!/employee_id|42703|column/i.test(em)) throw e
@@ -43,7 +61,7 @@ export async function GET(request: NextRequest) {
         `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
         { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' }
       )
-    })()) as { log_at?: string; log_type?: string }[]
+    })()) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
 
     const arr = rows || []
 
@@ -84,8 +102,6 @@ export async function GET(request: NextRequest) {
     // 전날 출근 후 퇴근 누락이면: 출근도 types에 넣어 퇴근 버튼 활성화 (hasClockIn=true)
     for (let i = 0; i < arr.length; i++) {
       const typ = String(arr[i].log_type || '').trim()
-      const logAt = arr[i].log_at
-      const rowDate = logAt ? new Date(logAt).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
       if (typ === '출근') {
         // 오픈 세션이면 당일/전날 출근 모두 인정 → 퇴근 버튼 활성화
         if (!types.includes(typ)) types.push(typ)

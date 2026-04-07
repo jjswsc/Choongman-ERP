@@ -13,6 +13,7 @@ import {
   approveAiAction,
   getAiActionHistory,
   getAiMetrics,
+  syncExternalContext,
   proposeAiAction,
   type AiActionType,
   type AiAskResponse,
@@ -47,6 +48,18 @@ const DEFAULT_PAYLOADS: Record<AiActionType, Record<string, unknown>> = {
     storeScope: "All",
     note: "AI센터 승인 실행",
     owner: "",
+  },
+  create_weather_campaign_draft: {
+    title: "우천 예보 연계 배달 프로모션 초안",
+    content: "강수확률 60% 이상일 때 배달앱 쿠폰/세트 프로모션 운영안",
+    targetStore: "All",
+  },
+  create_shift_adjustment_draft: {
+    taskTitle: "기상 악화 대비 인력 재배치 초안",
+    description: "비 예보 피크시간대 조리/배달 인력 보강",
+    owner: "",
+    storeScope: "All",
+    dueDate: "",
   },
 }
 
@@ -89,6 +102,8 @@ export function AiCenterClient() {
 
   const [metrics, setMetrics] = React.useState<AiMetrics | null>(null)
   const [metricsLoading, setMetricsLoading] = React.useState(false)
+  const [syncLoading, setSyncLoading] = React.useState(false)
+  const [syncMsg, setSyncMsg] = React.useState("")
 
   const reloadHistory = React.useCallback(async () => {
     setHistoryLoading(true)
@@ -170,6 +185,20 @@ export function AiCenterClient() {
       setActionError(e instanceof Error ? e.message : String(e))
     } finally {
       setApproveLoadingId(null)
+    }
+  }
+
+  const onSyncExternal = async () => {
+    setSyncLoading(true)
+    setSyncMsg("")
+    try {
+      const res = await syncExternalContext(7)
+      setSyncMsg(`외부 환경 동기화 완료: ${res.synced}건`)
+      await reloadMetrics()
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSyncLoading(false)
     }
   }
 
@@ -279,6 +308,26 @@ export function AiCenterClient() {
                       </div>
                     </div>
                   )}
+                  {!!askRes.externalSummary && (
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">외부 환경 요약</p>
+                      <p className="text-sm">{askRes.externalSummary}</p>
+                    </div>
+                  )}
+                  {!!askRes.externalSignals?.length && (
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">외부 환경 상세 (최근)</p>
+                      <div className="space-y-1">
+                        {askRes.externalSignals.slice(0, 8).map((s, i) => (
+                          <p key={`${s.date}-${i}`} className="text-xs text-muted-foreground">
+                            {s.date} · {s.store} · {s.weatherText} · 강수확률 {s.rainProb ?? "-"}% ·
+                            온도 {s.tempMinC ?? "-"}~{s.tempMaxC ?? "-"}C
+                            {s.isHoliday ? ` · 휴일(${s.holidayName || "-"})` : ""}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -296,6 +345,8 @@ export function AiCenterClient() {
                       <SelectItem value="create_followup_task">후속 태스크 생성</SelectItem>
                       <SelectItem value="update_followup_task_status">후속 태스크 상태 변경</SelectItem>
                       <SelectItem value="save_accounting_workflow_status">회계 워크플로우 상태 저장</SelectItem>
+                      <SelectItem value="create_weather_campaign_draft">날씨 연계 마케팅 초안</SelectItem>
+                      <SelectItem value="create_shift_adjustment_draft">날씨 연계 인력조정 초안</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -391,6 +442,13 @@ export function AiCenterClient() {
 
           <TabsContent value="metrics">
             <div className="rounded-lg border bg-card p-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => void onSyncExternal()} disabled={syncLoading}>
+                  {syncLoading && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                  날씨/휴일 데이터 동기화
+                </Button>
+                {!!syncMsg && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
+              </div>
               {metricsLoading && <p className="text-sm text-muted-foreground">지표 로딩 중...</p>}
               {metrics && (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

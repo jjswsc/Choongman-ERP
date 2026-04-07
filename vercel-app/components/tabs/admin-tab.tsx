@@ -1,7 +1,7 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -84,7 +84,7 @@ export function AdminTab() {
   const [noRecordList, setNoRecordList] = useState<AttendanceNoRecordRow[]>([])
   const [attLoading, setAttLoading] = useState(false)
   const [attHasSearched, setAttHasSearched] = useState(false)
-  const [otMinutesByRow, setOtMinutesByRow] = useState<Record<number | string, string>>({})
+  const [, setOtMinutesByRow] = useState<Record<number | string, string>>({})
 
   const { stores: storeList } = useStoreList()
   const isOffice = auth?.role && ["director", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
@@ -396,7 +396,7 @@ export function AdminTab() {
                         <td className="px-2 py-2 text-center">
                           {(() => {
                             if (row.plannedWorkHrs === 0) return "-"
-                            if (row.diffMin < 0) return <span className="text-amber-600">{row.earlyMin ?? Math.abs(row.diffMin)}</span>
+                            if (row.diffMin < 0) return <span className="text-amber-600">{savedEarly}</span>
                             if (row.diffMin > 0) return <span className="text-blue-600">{row.otMin ?? row.diffMin}</span>
                             if (row.lateMin > 0) return <span className="text-red-600">{row.lateMin}</span>
                             return "-"
@@ -479,6 +479,55 @@ export function AdminTab() {
                                 {t("att_btn_approve")}
                               </Button>
                               <Button type="button" size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
+                            </div>
+                          ) : !hasPendingOut &&
+                            row.outLogId != null &&
+                            !isAttendanceOutApproved(row.approval) &&
+                            row.outTimeStr &&
+                            row.outTimeStr !== "-" &&
+                            (row.diffMin < 0 ||
+                              row.lateMin > 0 ||
+                              (row.diffMin > 0 && (row.otMin ?? 0) >= 30) ||
+                              String(row.status || "").includes("조퇴")) ? (
+                            <div className="flex items-center gap-1 justify-center flex-wrap">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="default"
+                                className="h-6 px-1.5 text-[10px]"
+                                onClick={async (e) => {
+                                  e.preventDefault()
+                                  const outId = row.outLogId!
+                                  const keyForInput = String(outId)
+                                  const form = (e.currentTarget as HTMLButtonElement).form
+                                  const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
+                                  const fromInput = input?.value?.trim()
+                                  const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : defaultVal
+                                  const n = parseInt(otVal, 10)
+                                  const num = !isNaN(n) && n >= 0 ? n : undefined
+                                  if (row.diffMin < 0) {
+                                    handleApprove(outId, undefined, undefined, num ?? 0)
+                                  } else if (row.diffMin > 0 || row.otMin >= 30) {
+                                    if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
+                                      await handleApprove(pendingIn, undefined, true, undefined, true)
+                                    }
+                                    handleApprove(outId, num ?? undefined, undefined)
+                                  } else {
+                                    handleApprove(outId, undefined, undefined)
+                                  }
+                                }}
+                              >
+                                {t("att_btn_approve")}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-1.5 text-[10px]"
+                                onClick={() => handleReject(row.outLogId!)}
+                              >
+                                {t("att_btn_reject")}
+                              </Button>
                             </div>
                           ) : !hasPendingOut &&
                             row.outLogId != null &&

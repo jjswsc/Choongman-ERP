@@ -48,6 +48,17 @@ export function validateAiActionInput(input: CatalogInput): CatalogResult {
       }
       return { preview: `회계 워크플로우 상태 변경: ${yearMonth} ${filingType} -> ${status}` }
     }
+    case "create_weather_campaign_draft": {
+      const title = String(input.payload.title || "").trim()
+      const content = String(input.payload.content || "").trim()
+      if (!title || !content) throw new Error("title/content are required")
+      return { preview: `날씨 연계 마케팅 초안: ${title.slice(0, 80)}` }
+    }
+    case "create_shift_adjustment_draft": {
+      const taskTitle = String(input.payload.taskTitle || "").trim()
+      if (!taskTitle) throw new Error("taskTitle is required")
+      return { preview: `날씨 연계 인력조정 초안: ${taskTitle.slice(0, 80)}` }
+    }
     default:
       throw new Error("unsupported actionType")
   }
@@ -141,6 +152,35 @@ export async function executeAiAction(input: {
       updated_at: now,
     })) as { id?: number }[] | null
     return { resultType: "accounting_workflow", resultId: Number(inserted?.[0]?.id || 0) }
+  }
+
+  if (input.actionType === "create_weather_campaign_draft") {
+    const row = {
+      title: String(input.payload.title || "").trim().slice(0, 200),
+      content: String(input.payload.content || "").trim().slice(0, 20000),
+      target_store: String(input.payload.targetStore || input.scoped.store || "All").trim().slice(0, 120),
+      created_by: input.scoped.name.slice(0, 120),
+      created_at: now,
+      source: "ai_weather_campaign",
+    }
+    const inserted = (await supabaseInsert("ai_notice_drafts", row)) as { id?: number }[] | null
+    return { resultType: "weather_campaign_draft", resultId: Number(inserted?.[0]?.id || 0) }
+  }
+
+  if (input.actionType === "create_shift_adjustment_draft") {
+    const row = {
+      title: String(input.payload.taskTitle || "").trim().slice(0, 200),
+      description: String(input.payload.description || "").trim().slice(0, 4000),
+      owner: String(input.payload.owner || "").trim().slice(0, 120),
+      store_scope: String(input.payload.storeScope || input.scoped.store || "All").trim().slice(0, 120),
+      due_date: String(input.payload.dueDate || "").trim().slice(0, 10) || null,
+      status: "todo",
+      created_by: input.scoped.name.slice(0, 120),
+      created_at: now,
+      source: "ai_shift_adjustment",
+    }
+    const inserted = (await supabaseInsert("ai_followup_tasks", row)) as { id?: number }[] | null
+    return { resultType: "shift_adjustment_draft", resultId: Number(inserted?.[0]?.id || 0) }
   }
 
   throw new Error("unsupported actionType")

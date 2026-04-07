@@ -114,7 +114,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   const [loading, setLoading] = React.useState(false)
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
-  const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
+  const [, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -760,6 +760,65 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                   {t("att_btn_approve")}
                                 </Button>
                                 <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
+                              </div>
+                            ) : !hasPendingOut &&
+                              row.outLogId != null &&
+                              !isAttendanceOutApproved(row.approval) &&
+                              row.outTimeStr &&
+                              row.outTimeStr !== "-" &&
+                              (row.diffMin < 0 ||
+                                row.lateMin > 0 ||
+                                (row.diffMin > 0 && (row.otMin ?? 0) >= 30) ||
+                                String(row.status || "").includes("조퇴")) ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="default"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={async (e) => {
+                                    e.preventDefault()
+                                    const outId = row.outLogId!
+                                    const keyForInput = String(outId)
+                                    const form = (e.currentTarget as HTMLButtonElement).form
+                                    const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
+                                    const fromInput = input?.value?.trim()
+                                    const defaultVal =
+                                      row.plannedWorkHrs > 0 && row.diffMin < 0
+                                        ? (row.earlyMin ?? Math.abs(row.diffMin))
+                                        : row.plannedWorkHrs > 0 && row.diffMin > 0
+                                          ? row.diffMin >= 30
+                                            ? row.diffMin
+                                            : 0
+                                          : row.lateMin > 0
+                                            ? Math.max(1, row.lateMin)
+                                            : 0
+                                    const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
+                                    const n = parseInt(otVal, 10)
+                                    const num = !isNaN(n) && n >= 0 ? n : undefined
+                                    if (row.diffMin < 0) {
+                                      handleApprove(outId, undefined, undefined, num ?? 0)
+                                    } else if (row.diffMin > 0 || row.otMin >= 30) {
+                                      if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
+                                        await handleApprove(pendingIn, undefined, true, undefined, true)
+                                      }
+                                      handleApprove(outId, num ?? undefined, undefined)
+                                    } else {
+                                      handleApprove(outId, undefined, undefined)
+                                    }
+                                  }}
+                                >
+                                  {t("att_btn_approve")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => handleReject(row.outLogId!)}
+                                >
+                                  {t("att_btn_reject")}
+                                </Button>
                               </div>
                             ) : !hasPendingOut &&
                               row.outLogId != null &&

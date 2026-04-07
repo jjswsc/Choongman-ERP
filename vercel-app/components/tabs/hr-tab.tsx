@@ -148,10 +148,11 @@ export function HrTab() {
       endDate,
       storeFilter: auth.store,
       employeeFilter: auth.user,
+      ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
       userStore: auth.store,
       userRole: auth?.role,
     }).then(setDailyRecords)
-  }, [auth?.store, auth?.user, auth?.role])
+  }, [auth?.store, auth?.user, auth?.role, auth?.employeeId])
 
   const loadLeaveInfo = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -187,7 +188,7 @@ export function HrTab() {
         setCompanyName("")
       })
       .finally(() => setPayrollLoading(false))
-  }, [auth?.store, auth?.user, payrollMonth])
+  }, [auth?.store, auth?.user, auth?.employeeId, payrollMonth])
 
   useEffect(() => {
     if (!auth?.store || !auth?.user) {

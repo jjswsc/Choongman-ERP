@@ -32,4 +32,6 @@ export type AiActionType =
   | "create_followup_task"
   | "update_followup_task_status"
   | "save_accounting_workflow_status"
+  | "create_weather_campaign_draft"
+  | "create_shift_adjustment_draft"
 

@@ -29,3 +29,10 @@ node scripts/ai-index-knowledge.cjs --source docs --sourceName docs --store All 
 - 문서 파일명은 검색 품질을 위해 의미 있는 이름 사용
 - 대용량 파일은 사전 분리 후 적재 권장
 
+## 외부 환경(날씨/휴일) 연동
+1. `external_store_profiles`에 매장별 `lat`, `lon` 입력
+2. 관리자 권한으로 아래 API 실행
+   - `POST /api/ai/external/sync`
+   - body 예: `{ "days": 7 }`
+3. 결과는 `external_context_daily`에 저장되며, AI 질의에서 자동 참조됨
+
