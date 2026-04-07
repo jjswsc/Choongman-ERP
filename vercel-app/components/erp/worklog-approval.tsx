@@ -33,23 +33,14 @@ import {
   translateTexts,
   type WorkLogManagerItem,
 } from "@/lib/api-client"
-
-function defaultStartStr() {
-  const d = new Date()
-  d.setDate(d.getDate() - 7)
-  return d.toISOString().slice(0, 10)
-}
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 export function WorklogApproval() {
   const { lang } = useLang()
   const t = useT(lang)
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
-  const [startStr, setStartStr] = React.useState(todayStr)
-  const [endStr, setEndStr] = React.useState(todayStr)
+  const [startStr, setStartStr] = React.useState(() => getBangkokTodayDateString())
+  const [endStr, setEndStr] = React.useState(() => getBangkokTodayDateString())
   const [deptFilter, setDeptFilter] = React.useState("all")
   const [employeeFilter, setEmployeeFilter] = React.useState("all")
   const [statusFilter, setStatusFilter] = React.useState("all")

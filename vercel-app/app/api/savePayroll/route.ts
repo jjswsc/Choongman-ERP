@@ -73,6 +73,96 @@ function buildPayrollPayeeCode(monthStr: string, store: string, name: string, em
   return `${base}::wm::expense`
 }
 
+/** DB unique 가 (month, lower(trim(store)), employee_id) 인 경우 PostgREST on_conflict=month,store,employee_id 와 불일치 → upsert 가 INSERT 만 시도해 23505 발생 */
+function normalizePayrollStoreKey(s: unknown): string {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * payroll_records: employee_id 있으면 월+직원 id 로 기존 행 조회 후 id 기준 갱신(매장명 대소문자·공백 정규화 키 일치).
+ * 없으면 month,store,name upsert.
+ */
+async function savePayrollRecordsChunk(monthStr: string, chunk: Record<string, unknown>[]) {
+  const withEid: Record<string, unknown>[] = []
+  const withoutEid: Record<string, unknown>[] = []
+  for (const r of chunk) {
+    const eid = r.employee_id
+    if (eid != null && Number.isFinite(Number(eid)) && Number(eid) > 0) {
+      withEid.push(r)
+    } else {
+      withoutEid.push(r)
+    }
+  }
+
+  if (withEid.length > 0) {
+    const dedup = new Map<string, Record<string, unknown>>()
+    for (const r of withEid) {
+      const eid = Math.floor(Number(r.employee_id))
+      const sk = normalizePayrollStoreKey(r.store)
+      dedup.set(`${sk}|${eid}`, r)
+    }
+    const rowsToSave = [...dedup.values()]
+    const eidSet = [...new Set(rowsToSave.map((r) => Math.floor(Number(r.employee_id))))]
+    const filter = `month=eq.${encodeURIComponent(monthStr)}&employee_id=in.(${eidSet.join(',')})`
+    const existing = (await supabaseSelectFilter('payroll_records', filter, {
+      select: 'id,month,store,employee_id',
+      limit: Math.max(200, eidSet.length * 4),
+    })) as { id: number; month: string; store: string; employee_id: number }[] | null
+
+    const existingIdByKey = new Map<string, number>()
+    for (const ex of existing || []) {
+      const m = String(ex.month || '').slice(0, 7)
+      if (m !== monthStr) continue
+      const eid = Math.floor(Number(ex.employee_id))
+      if (!Number.isFinite(eid) || eid <= 0) continue
+      const key = `${normalizePayrollStoreKey(ex.store)}|${eid}`
+      const id = Number(ex.id)
+      if (!Number.isFinite(id) || id <= 0) continue
+      const prev = existingIdByKey.get(key)
+      if (prev == null || id < prev) existingIdByKey.set(key, id)
+    }
+
+    for (const r of rowsToSave) {
+      const eid = Math.floor(Number(r.employee_id))
+      const key = `${normalizePayrollStoreKey(r.store)}|${eid}`
+      const id = existingIdByKey.get(key)
+      if (id != null && id > 0) {
+        await supabaseUpdate('payroll_records', id, r)
+      } else {
+        await supabaseInsert('payroll_records', r)
+      }
+    }
+  }
+
+  if (withoutEid.length > 0) {
+    try {
+      await supabaseUpsert('payroll_records', withoutEid, 'month,store,name')
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (/23505|duplicate|unique/i.test(em)) {
+        for (const r of withoutEid) {
+          const name = String(r.name || '').trim()
+          const store = String(r.store || '').trim()
+          const cand = (await supabaseSelectFilter(
+            'payroll_records',
+            `month=eq.${encodeURIComponent(monthStr)}&name=eq.${encodeURIComponent(name)}`,
+            { select: 'id,store', limit: 30 }
+          )) as { id: number; store: string }[] | null
+          const hit = (cand || []).find(
+            (x) => normalizePayrollStoreKey(x.store) === normalizePayrollStoreKey(store)
+          )
+          if (hit?.id) await supabaseUpdate('payroll_records', hit.id, r)
+          else await supabaseInsert('payroll_records', r)
+        }
+      } else {
+        throw e
+      }
+    }
+  }
+}
+
 async function resolvePayrollAccountSubject(): Promise<{ id: number | null; code: string; name: string }> {
   try {
     const rows = (await supabaseSelectFilter('account_subjects', 'type=eq.expense', {
@@ -166,15 +256,8 @@ export async function POST(request: NextRequest) {
 
     for (let j = 0; j < rows.length; j += CHUNK) {
       const chunk = rows.slice(j, j + CHUNK)
-      const canUseEmployeeKey = chunk.every(
-        (r) => r.employee_id != null && Number.isFinite(Number(r.employee_id)) && Number(r.employee_id) > 0
-      )
       try {
-        if (canUseEmployeeKey) {
-          await supabaseUpsert('payroll_records', chunk, 'month,store,employee_id')
-        } else {
-          await supabaseUpsert('payroll_records', chunk, 'month,store,name')
-        }
+        await savePayrollRecordsChunk(monthStr, chunk)
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (/employee_id|employee_code|42703|column/i.test(em)) {
@@ -183,9 +266,6 @@ export async function POST(request: NextRequest) {
             return rest
           })
           await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
-        } else if (canUseEmployeeKey) {
-          // employee_id on_conflict 인덱스가 없으면 기존 키로 재시도
-          await supabaseUpsert('payroll_records', chunk, 'month,store,name')
         } else {
           throw e
         }

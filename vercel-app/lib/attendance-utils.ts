@@ -6,6 +6,12 @@ import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 export const ATTENDANCE_TZ = 'Asia/Bangkok'
 
+/** 퇴근 로그 `approved` — 급여·getAttendanceRecordsAdmin은 승인/승인완료 모두 승인 처리. UI도 동일해야 조정 반영 버튼이 빠지지 않음 */
+export function isAttendanceOutApproved(approval: string | undefined | null): boolean {
+  const a = String(approval || '').trim()
+  return a === '승인완료' || a === '승인'
+}
+
 /** 현재 시각을 방콕 기준 날짜 YYYY-MM-DD */
 export function todayStrBangkok(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })

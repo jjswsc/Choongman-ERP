@@ -29,7 +29,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw, ArrowRightLeft, FileText } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -48,6 +48,8 @@ import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
   getPayableTransactionItems,
+  getInvoiceData,
+  getInvoiceSettings,
   addBalanceTransaction,
   updateReceivableReceiveCheck,
   syncOrderReceivable,
@@ -59,6 +61,9 @@ import {
   type PayableTransactionItem,
   type OrderInvoiceTotals,
 } from "@/lib/api-client"
+import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
+import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
+import type { InvoiceData } from "@/components/invoice"
 
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
@@ -123,6 +128,74 @@ export function ReceivablePayableTab() {
   const [bulkRecProgress, setBulkRecProgress] = React.useState("")
   const [bulkOutboundRecSyncing, setBulkOutboundRecSyncing] = React.useState(false)
   const [bulkOutboundRecProgress, setBulkOutboundRecProgress] = React.useState("")
+  const [taxInvoiceLoadingKey, setTaxInvoiceLoadingKey] = React.useState<string | null>(null)
+
+  const handleTaxInvoicePrint = React.useCallback(
+    async (
+      row: NonNullable<ReceivablePayableItem["items"]>[number],
+      outletStoreName: string
+    ) => {
+      if (row.ref_type !== "Order" || !row.receive_checked) return
+      const orderId = orderIdFromReceivableOrderRow(row)
+      if (orderId == null) {
+        await appAlert(tt("recTaxInvoiceNoOrderId", "주문을 식별할 수 없습니다."))
+        return
+      }
+      const loadKey = `tax-${row.id ?? orderId}`
+      setTaxInvoiceLoadingKey(loadKey)
+      try {
+        const [{ items, orderInvoiceTotals }, invoiceDataRes, invSettings] = await Promise.all([
+          getPayableTransactionItems({ refType: "Order", refId: orderId }),
+          getInvoiceData(),
+          getInvoiceSettings(),
+        ])
+        if (!items.length) {
+          await appAlert(tt("recTaxInvoiceNoLines", "주문 품목이 없어 Tax Invoice를 만들 수 없습니다."))
+          return
+        }
+        const { company, clients } = invoiceDataRes
+        const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
+        const client = resolveInvoiceClientForTarget(outletStoreName, company, clients)
+        const docNo =
+          (row.invoice_no || "").trim() ||
+          (row.trans_date != null && row.ref_id != null
+            ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}`
+            : `IV-ORDER-${orderId}`)
+        const dateStr = (row.trans_date || "").slice(0, 10) || new Date().toISOString().slice(0, 10)
+        const data: InvoiceData = buildThaiSalesInvoiceData({
+          documentType: "Tax Invoice",
+          documentNo: docNo,
+          issueDate: dateStr,
+          dueDate: dateStr,
+          referenceNo: docNo,
+          company,
+          client,
+          invSettings: settings,
+          lines: items.map((it) => ({
+            code: it.code,
+            name: it.name,
+            spec: it.spec,
+            qty: Math.abs(it.qty || 0),
+            amount: Math.round(Math.abs(it.amount || 0)),
+          })),
+          orderInvoiceTotals,
+        })
+        sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
+        const printWindow = window.open("/admin/invoice-print", "_blank")
+        if (!printWindow) {
+          await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+          return
+        }
+        printWindow.focus()
+      } catch (e) {
+        console.error(e)
+        await appAlert(t("invLoadFailed"))
+      } finally {
+        setTaxInvoiceLoadingKey(null)
+      }
+    },
+    [t, tt]
+  )
 
   React.useEffect(() => {
     const rows = listData.flatMap((item) => item.items || [])
@@ -916,6 +989,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
                                     <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>
+                                    <th className="text-center py-2 px-1 w-[72px] text-xs font-semibold whitespace-nowrap">
+                                      {t("recColTaxInvoice") || "Tax Invoice"}
+                                    </th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                     {showRecSyncBtn && (
@@ -940,7 +1016,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recLineItems = recLineEntry?.items ?? []
                                     const recOrderTotals = recLineEntry?.orderInvoiceTotals
                                     const recLinesLoading = loadingItemsFor === recRowKey
-                                    const recLineColSpan = 8 + (showRecSyncBtn ? 1 : 0)
+                                    const recLineColSpan = 9 + (showRecSyncBtn ? 1 : 0)
                                     const canEditReceiveCheck =
                                       row.ref_type === "Order" &&
                                       row.id != null &&
@@ -1043,6 +1119,31 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           </div>
                                         ) : (
                                           <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                      <td className="py-1.5 px-1 w-[72px] text-center align-middle">
+                                        {row.ref_type === "Order" && row.receive_checked && rowOrderId != null ? (
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 w-8 p-0 shrink-0"
+                                            disabled={taxInvoiceLoadingKey != null}
+                                            title={tt("recTaxInvoicePrintTitle", "Tax Invoice 인쇄")}
+                                            aria-label={tt("recTaxInvoicePrintTitle", "Tax Invoice 인쇄")}
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              void handleTaxInvoicePrint(row, item.storeName || "")
+                                            }}
+                                          >
+                                            {taxInvoiceLoadingKey === `tax-${row.id ?? rowOrderId}` ? (
+                                              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                            ) : (
+                                              <FileText className="h-4 w-4" />
+                                            )}
+                                          </Button>
+                                        ) : (
+                                          <span className="text-muted-foreground text-xs">—</span>
                                         )}
                                       </td>
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>

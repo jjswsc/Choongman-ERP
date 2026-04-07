@@ -813,7 +813,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     total <= 0 ? 0 : Math.max(0, Math.round((total / Math.max(1, effectiveDutchCount)) * 100) / 100)
   const dutchRemainingPeople = showSplit ? Math.max(0, splitCount - splitPaidSteps) : 0
   const partialPayDisabled = showSplit ? dutchRemainingPeople <= 0 : total <= 0 || paymentSumMatch
-  const DISCOUNT_PRESETS = [10, 15, 20, 50]
+  const DISCOUNT_PRESETS = [5, 10, 15, 20, 25, 30, 50]
   const paymentTabs: { id: PaymentMethodTab; label: string; icon: typeof Banknote }[] = [
     { id: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
     { id: 'card', label: t('posPaymentCard') || '카드', icon: CreditCard },

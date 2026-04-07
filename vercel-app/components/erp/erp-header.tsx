@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft, Languages, Download, Bot } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -190,6 +190,12 @@ export function ErpHeader() {
         </Select>
         <Separator orientation="vertical" className="mx-1 h-5" />
         {/* Search */}
+        <Button variant="ghost" size="icon" asChild className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <Link href={`/admin/ai-center?intent=qa&q=${encodeURIComponent(`${pathname || "/admin"} 화면 관련 질문`)}`}>
+            <Bot className="h-4 w-4" />
+            <span className="sr-only">AI 센터</span>
+          </Link>
+        </Button>
         <Button
           variant="ghost"
           size="icon"

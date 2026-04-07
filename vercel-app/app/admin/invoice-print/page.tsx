@@ -39,7 +39,9 @@ export default function InvoicePrintPage() {
   if (datas.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
-        <p className="text-muted-foreground">No invoice data. Select items from Outbound History and use Print Invoice.</p>
+        <p className="text-muted-foreground">
+          No invoice data. Use Print Invoice on Outbound History, or Tax Invoice on Receivables (paid orders).
+        </p>
         <Button variant="outline" onClick={() => window.close()}>
           Close
         </Button>

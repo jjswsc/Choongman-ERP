@@ -5,6 +5,7 @@ import {
   supabaseInsert,
   supabaseUpdate,
 } from '@/lib/supabase-server'
+import { addBangkokCalendarDays } from '@/lib/bangkok-time'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -52,9 +53,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const tomorrow = new Date(date + 'T12:00:00')
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const nextDateStr = tomorrow.toISOString().slice(0, 10)
+    const nextDateStr = addBangkokCalendarDays(date, 1)
 
     for (let idx = 0; idx < logs.length; idx++) {
       const item = logs[idx]

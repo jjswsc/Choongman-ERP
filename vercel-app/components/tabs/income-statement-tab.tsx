@@ -16,7 +16,13 @@ import {
 import { ChevronDown, ChevronRight, FileDown, Search, Table } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getIncomeStatement, useStoreList, type IncomeStatementData } from "@/lib/api-client"
+import {
+  fetchIncomeStatementOverrides,
+  getIncomeStatement,
+  saveIncomeStatementOverrides,
+  useStoreList,
+  type IncomeStatementData,
+} from "@/lib/api-client"
 import { formatAccountSubjectLabel } from "@/lib/account-subject-display"
 import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
@@ -31,6 +37,11 @@ import {
   writeIncomeStatementBeginningInvOverride,
 } from "@/lib/income-statement-beginning-inv-override"
 import {
+  readIncomeStatementOverrideSource,
+  writeIncomeStatementOverrideSource,
+  type IncomeStatementOverrideSource,
+} from "@/lib/income-statement-override-source"
+import {
   readIncomeStatementSalesOverride,
   writeIncomeStatementSalesOverride,
   parseSalesOverrideInput,
@@ -40,6 +51,265 @@ import {
   sanitizeFilenamePart,
   type IncomeStatementXlsxRow,
 } from "@/lib/income-statement-export"
+
+/** 수동 매출·기초재고 오버라이드 없이 API 값만으로 표시용 view (기간 비교 월별 상세 등) */
+function incomeStatementViewFromApiData(data: IncomeStatementData) {
+  const sales = Number(data.sales) || 0
+  const purchases = Number(data.purchases) || 0
+  const expenses = Number(data.expenses) || 0
+  const endingInv = data.endingInventory ?? 0
+  const sysBeg = data.beginningInventory ?? 0
+  const cogs = incomeStatementCogs(data)
+  const grossProfit =
+    data.grossProfit != null && Number.isFinite(Number(data.grossProfit))
+      ? Number(data.grossProfit)
+      : sales - cogs
+  const netProfit =
+    data.netProfit != null && Number.isFinite(Number(data.netProfit))
+      ? Number(data.netProfit)
+      : grossProfit - expenses
+  const pctBase = sales > 0 ? sales : 0
+  const pct = (n: number) => (pctBase > 0 ? `${((n / pctBase) * 100).toFixed(1)}%` : "—")
+  return {
+    sales,
+    grossProfit,
+    netProfit,
+    pct,
+    cogs,
+    beginningInventory: sysBeg,
+    expenses,
+    useManualSales: false as boolean,
+    systemSales: Number(data.sales) || 0,
+    useManualBegInv: false as boolean,
+    systemBeginningInventory: sysBeg,
+  }
+}
+
+type IncomeStatementViewModel = ReturnType<typeof incomeStatementViewFromApiData>
+
+function IncomePlDetailTableContent({
+  data,
+  view,
+  periodLine,
+  showExpenseDetails,
+  expandPurchases,
+  onTogglePurchases,
+  expandExpenseAccounts,
+  onToggleExpenseAccounts,
+  printRef,
+  titleClassName = "text-lg font-semibold mb-1",
+  wrapperClassName = "rounded-md bg-white p-3 text-foreground",
+}: {
+  data: IncomeStatementData
+  view: IncomeStatementViewModel
+  periodLine: string
+  showExpenseDetails: boolean
+  expandPurchases: boolean
+  onTogglePurchases: () => void
+  expandExpenseAccounts: boolean
+  onToggleExpenseAccounts: () => void
+  printRef?: React.RefObject<HTMLDivElement | null>
+  titleClassName?: string
+  wrapperClassName?: string
+}) {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
+  const purchaseVendorLabel = (key: string) => {
+    if (key === "__pl_hq_orders__") return t("pL_purchaseHqOrders") || "본사·물류 발주"
+    if (key === "__pl_vendor_unknown__") return t("pL_vendorUnknown") || "거래처 미지정"
+    return key
+  }
+
+  return (
+    <div ref={printRef ?? undefined} className={wrapperClassName}>
+      <div className={titleClassName}>{t("incomeStatementTitle")}</div>
+      <div className="text-sm text-muted-foreground mb-2">{periodLine}</div>
+      {view.useManualSales && (
+        <div className="text-xs text-muted-foreground mb-2">
+          {t("pL_systemSalesLabel")}: {formatBath(view.systemSales)}
+        </div>
+      )}
+      {view.useManualBegInv && (
+        <div className="text-xs text-muted-foreground mb-2">
+          {t("pL_systemBegInvLabel")}: {formatBath(view.systemBeginningInventory)}
+        </div>
+      )}
+      {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
+        <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {data.diagnostics?.warnings?.join(" / ")}
+        </div>
+      )}
+      <table className="w-full max-w-md text-sm">
+        <thead>
+          <tr className="border-b text-muted-foreground">
+            <th className="py-2 text-left font-medium"></th>
+            <th className="py-2 text-right font-medium pr-2">{t("pL_colAmount") || "금액"}</th>
+            <th className="py-2 text-right font-medium w-14">{t("pL_pctOfSales")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b">
+            <td className="py-2 font-medium">{t("pL_sales")}</td>
+            <td className="py-2 text-right font-mono pr-2">{formatBath(view.sales)}</td>
+            <td className="py-2 text-right text-muted-foreground">100.0%</td>
+          </tr>
+          <tr className="border-b">
+            <td className="py-2 text-muted-foreground pl-4">+ {t("pL_beginningInv")}</td>
+            <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+              {formatBath(view.beginningInventory)}
+            </td>
+            <td className="py-2 text-right text-muted-foreground">{view.pct(view.beginningInventory)}</td>
+          </tr>
+          <tr
+            className="border-b cursor-pointer hover:bg-muted/40 select-none"
+            onClick={onTogglePurchases}
+            title={t("pL_clickToExpand") || ""}
+          >
+            <td className="py-2 text-muted-foreground pl-4">
+              <span className="inline-flex items-center gap-1">
+                {expandPurchases ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                )}
+                + {t("pL_purchases")}
+              </span>
+            </td>
+            <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(data.purchases)}</td>
+            <td className="py-2 text-right text-muted-foreground">{view.pct(data.purchases)}</td>
+          </tr>
+          {expandPurchases &&
+            (data.purchaseByVendor?.length || 0) > 0 &&
+            data.purchaseByVendor!.map((row) => (
+              <tr key={row.key} className="border-b bg-muted/20">
+                <td className="py-1.5 text-muted-foreground pl-10 text-xs">{purchaseVendorLabel(row.key)}</td>
+                <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
+                  {formatBath(row.amount)}
+                </td>
+                <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
+              </tr>
+            ))}
+          {expandPurchases && !(data.purchaseByVendor?.length || 0) && (
+            <tr className="border-b bg-muted/20">
+              <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
+                {t("inNoData") || "조회된 내역이 없습니다."}
+              </td>
+            </tr>
+          )}
+          <tr className="border-b">
+            <td className="py-2 text-muted-foreground pl-4">- {t("pL_endingInv")}</td>
+            <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+              {formatBath(data.endingInventory ?? 0)}
+            </td>
+            <td className="py-2 text-right text-muted-foreground">{view.pct(-(data.endingInventory ?? 0))}</td>
+          </tr>
+          <tr className="border-b">
+            <td className="py-2 text-muted-foreground">= {t("pL_cogs")}</td>
+            <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(view.cogs)}</td>
+            <td className="py-2 text-right text-muted-foreground">{view.pct(view.cogs)}</td>
+          </tr>
+          <tr className="border-b">
+            <td className="py-2 font-medium text-primary">{t("pL_grossProfit")}</td>
+            <td className="py-2 text-right font-mono font-medium text-primary pr-2">
+              {formatBath(view.grossProfit)}
+            </td>
+            <td className="py-2 text-right text-primary font-medium">{view.pct(view.grossProfit)}</td>
+          </tr>
+          <tr
+            className="border-b cursor-pointer hover:bg-muted/40 select-none"
+            onClick={onToggleExpenseAccounts}
+            title={t("pL_clickToExpand") || ""}
+          >
+            <td className="py-2 text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                {expandExpenseAccounts ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                )}
+                - {t("pL_expenses")}
+              </span>
+            </td>
+            <td className="py-2 text-right font-mono text-muted-foreground pr-2">{formatBath(data.expenses)}</td>
+            <td className="py-2 text-right text-muted-foreground">{view.pct(data.expenses)}</td>
+          </tr>
+          {expandExpenseAccounts &&
+            (data.expenseByAccountSubject?.length || 0) > 0 &&
+            data.expenseByAccountSubject!.map((row, idx) => (
+              <tr key={`${row.accountSubjectId ?? "u"}-${idx}`} className="border-b bg-muted/20">
+                <td className="py-1.5 text-muted-foreground pl-10 text-xs">
+                  {row.accountSubjectId == null
+                    ? t("pL_accountUnclassified") || "계정 미지정"
+                    : formatAccountSubjectLabel(lang, {
+                        code: row.code,
+                        name: row.name,
+                        nameEn: row.nameEn,
+                        nameTh: row.nameTh,
+                      }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")}
+                </td>
+                <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
+                  {formatBath(row.amount)}
+                </td>
+                <td className="py-1.5 text-right text-muted-foreground text-xs">{view.pct(row.amount)}</td>
+              </tr>
+            ))}
+          {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
+            <tr className="border-b bg-muted/20">
+              <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
+                {t("inNoData") || "조회된 내역이 없습니다."}
+              </td>
+            </tr>
+          )}
+          {showExpenseDetails && (
+            <>
+              <tr className="border-b">
+                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourcePetty") || "현금시재(패티캐시)"}</td>
+                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                  {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
+                </td>
+                <td className="py-2 text-right text-muted-foreground">
+                  {view.pct(data.expenseBreakdown?.pettyCash ?? 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceBank") || "통장 출금"}</td>
+                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                  {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
+                </td>
+                <td className="py-2 text-right text-muted-foreground">
+                  {view.pct(data.expenseBreakdown?.bankWithdraw ?? 0)}
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceFixed") || "고정비"}</td>
+                <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                  {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
+                </td>
+                <td className="py-2 text-right text-muted-foreground">
+                  {view.pct(data.expenseBreakdown?.fixedExpenses ?? 0)}
+                </td>
+              </tr>
+            </>
+          )}
+          <tr>
+            <td className="py-3 font-bold">{t("pL_netProfit")}</td>
+            <td
+              className={`py-3 text-right font-mono font-bold pr-2 ${
+                view.netProfit >= 0 ? "text-primary" : "text-destructive"
+              }`}
+            >
+              {formatBath(view.netProfit)}
+            </td>
+            <td className={`py-3 text-right font-bold ${view.netProfit >= 0 ? "text-primary" : "text-destructive"}`}>
+              {view.pct(view.netProfit)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 function incomeMetricsForCompare(d: IncomeStatementData | undefined) {
   if (!d || d.error) return null
@@ -93,11 +363,19 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [showExpenseDetails, setShowExpenseDetails] = React.useState(false)
   const [expandPurchases, setExpandPurchases] = React.useState(false)
   const [expandExpenseAccounts, setExpandExpenseAccounts] = React.useState(false)
+  const [compareExpandPurchases, setCompareExpandPurchases] = React.useState<Record<string, boolean>>({})
+  const [compareExpandExpenses, setCompareExpandExpenses] = React.useState<Record<string, boolean>>({})
   const [manualEnabled, setManualEnabled] = React.useState(false)
   const [manualAmountStr, setManualAmountStr] = React.useState("")
   const [begInvManualEnabled, setBegInvManualEnabled] = React.useState(false)
   const [begInvAmountStr, setBegInvAmountStr] = React.useState("")
   const [exportingPdf, setExportingPdf] = React.useState(false)
+  const [overrideSource, setOverrideSource] = React.useState<IncomeStatementOverrideSource>(() =>
+    readIncomeStatementOverrideSource()
+  )
+  const [sharedLoading, setSharedLoading] = React.useState(false)
+  const [sharedReady, setSharedReady] = React.useState(false)
+  const [sharedSaveError, setSharedSaveError] = React.useState<string | null>(null)
 
   const printRef = React.useRef<HTMLDivElement | null>(null)
 
@@ -132,28 +410,74 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   }, [yearMonthStart, yearMonthEnd, storeFilter])
 
   React.useEffect(() => {
-    const o = readIncomeStatementSalesOverride(yearMonthEnd, storeFilter)
-    if (o?.enabled) {
-      setManualEnabled(true)
-      setManualAmountStr(String(o.amount))
-    } else {
-      setManualEnabled(false)
-      setManualAmountStr("")
-    }
-  }, [yearMonthEnd, storeFilter])
+    writeIncomeStatementOverrideSource(overrideSource)
+  }, [overrideSource])
 
   React.useEffect(() => {
-    const o = readIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter)
-    if (o?.enabled) {
-      setBegInvManualEnabled(true)
-      setBegInvAmountStr(String(o.amount))
-    } else {
-      setBegInvManualEnabled(false)
-      setBegInvAmountStr("")
+    let cancelled = false
+    if (overrideSource === "local") {
+      setSharedLoading(false)
+      setSharedReady(true)
+      const s = readIncomeStatementSalesOverride(yearMonthEnd, storeFilter)
+      if (s?.enabled) {
+        setManualEnabled(true)
+        setManualAmountStr(String(s.amount))
+      } else {
+        setManualEnabled(false)
+        setManualAmountStr("")
+      }
+      const b = readIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter)
+      if (b?.enabled) {
+        setBegInvManualEnabled(true)
+        setBegInvAmountStr(String(b.amount))
+      } else {
+        setBegInvManualEnabled(false)
+        setBegInvAmountStr("")
+      }
+      return () => {
+        cancelled = true
+      }
     }
-  }, [yearMonthEnd, storeFilter])
+
+    setSharedReady(false)
+    setSharedLoading(true)
+    setSharedSaveError(null)
+
+    void fetchIncomeStatementOverrides({
+      yearMonth: yearMonthEnd,
+      storeFilter,
+      userStore: auth?.store,
+      userRole: auth?.role,
+    }).then((r) => {
+      if (cancelled) return
+      if (!r.success || !r.row) {
+        setSharedSaveError(r.error || "LOAD_FAILED")
+        setManualEnabled(false)
+        setManualAmountStr("")
+        setBegInvManualEnabled(false)
+        setBegInvAmountStr("")
+        setSharedLoading(false)
+        setSharedReady(true)
+        return
+      }
+      const row = r.row
+      setManualEnabled(row.sales_override_enabled)
+      setManualAmountStr(row.sales_override_enabled ? String(row.sales_override_amount) : "")
+      setBegInvManualEnabled(row.beginning_inv_override_enabled)
+      setBegInvAmountStr(
+        row.beginning_inv_override_enabled ? String(row.beginning_inv_override_amount) : ""
+      )
+      setSharedLoading(false)
+      setSharedReady(true)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [overrideSource, yearMonthEnd, storeFilter, auth?.store, auth?.role])
 
   React.useEffect(() => {
+    if (overrideSource !== "local") return
     if (!manualEnabled) {
       writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, false, 0)
       return
@@ -161,9 +485,10 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     const p = parseSalesOverrideInput(manualAmountStr)
     if (p == null) return
     writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, true, p)
-  }, [yearMonthEnd, storeFilter, manualEnabled, manualAmountStr])
+  }, [overrideSource, yearMonthEnd, storeFilter, manualEnabled, manualAmountStr])
 
   React.useEffect(() => {
+    if (overrideSource !== "local") return
     if (!begInvManualEnabled) {
       writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, false, 0)
       return
@@ -171,7 +496,49 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     const p = parseSalesOverrideInput(begInvAmountStr)
     if (p == null) return
     writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, true, p)
-  }, [yearMonthEnd, storeFilter, begInvManualEnabled, begInvAmountStr])
+  }, [overrideSource, yearMonthEnd, storeFilter, begInvManualEnabled, begInvAmountStr])
+
+  React.useEffect(() => {
+    if (overrideSource !== "shared" || !sharedReady || sharedLoading) return
+    if (manualEnabled && parseSalesOverrideInput(manualAmountStr) == null) return
+    if (begInvManualEnabled && parseSalesOverrideInput(begInvAmountStr) == null) return
+
+    const salesAmt = parseSalesOverrideInput(manualAmountStr) ?? 0
+    const begAmt = parseSalesOverrideInput(begInvAmountStr) ?? 0
+    const salesOn = manualEnabled && parseSalesOverrideInput(manualAmountStr) != null
+    const begOn = begInvManualEnabled && parseSalesOverrideInput(begInvAmountStr) != null
+
+    const h = setTimeout(() => {
+      void saveIncomeStatementOverrides({
+        yearMonth: yearMonthEnd,
+        storeFilter,
+        userStore: auth?.store,
+        userRole: auth?.role,
+        updatedBy: auth?.user,
+        salesOverrideEnabled: salesOn,
+        salesOverrideAmount: salesOn ? salesAmt : 0,
+        beginningInvOverrideEnabled: begOn,
+        beginningInvOverrideAmount: begOn ? begAmt : 0,
+      }).then((r) => {
+        if (!r.success) setSharedSaveError(r.error || "SAVE_FAILED")
+        else setSharedSaveError(null)
+      })
+    }, 750)
+    return () => clearTimeout(h)
+  }, [
+    overrideSource,
+    sharedReady,
+    sharedLoading,
+    yearMonthEnd,
+    storeFilter,
+    manualEnabled,
+    manualAmountStr,
+    begInvManualEnabled,
+    begInvAmountStr,
+    auth?.store,
+    auth?.role,
+    auth?.user,
+  ])
 
   const periodMonthsFull = React.useMemo(
     () => expandBangkokYearMonthsInclusive(yearMonthStart, yearMonthEnd),
@@ -189,6 +556,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   >([])
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
   const [incomeCompareFetchId, setIncomeCompareFetchId] = React.useState(0)
+
+  React.useEffect(() => {
+    setCompareExpandPurchases({})
+    setCompareExpandExpenses({})
+  }, [incomeCompareFetchId])
 
   const runIncomeFetch = React.useCallback(() => {
     const sf = storeFilter !== "All" ? storeFilter : undefined
@@ -220,7 +592,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
           storeFilter: sf,
           userStore: auth?.store,
           userRole: auth?.role,
-          includeDebug: false,
+          includeDebug: showExpenseDetails,
         })
       )
     )
@@ -509,8 +881,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const onManualCheckedChange = (checked: boolean) => {
     setManualEnabled(checked)
     if (checked && data) {
-      const saved = readIncomeStatementSalesOverride(yearMonthEnd, storeFilter)
-      setManualAmountStr(saved?.enabled ? String(saved.amount) : String(data.sales))
+      if (overrideSource === "local") {
+        const saved = readIncomeStatementSalesOverride(yearMonthEnd, storeFilter)
+        setManualAmountStr(saved?.enabled ? String(saved.amount) : String(data.sales))
+      } else {
+        const p = parseSalesOverrideInput(manualAmountStr)
+        setManualAmountStr(p != null ? String(p) : String(data.sales))
+      }
     }
     if (!checked) {
       setManualAmountStr("")
@@ -597,8 +974,6 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
             <Button
               size="sm"
               variant={showExpenseDetails ? "default" : "outline"}
-              disabled={isRangeCompare}
-              title={isRangeCompare ? t("fs_multiPeriodExportsNote") : undefined}
               onClick={() => setShowExpenseDetails((v) => !v)}
             >
               {showExpenseDetails ? t("pL_expenseDetailOn") : t("pL_expenseDetailOff")}
@@ -709,6 +1084,51 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                       </table>
                     </div>
                   )}
+                  {incomeCompareCols.length > 0 && (
+                    <div className="pt-6 mt-2 border-t space-y-4">
+                      <p className="text-sm font-medium">{t("fs_monthlyPlDetailHeading")}</p>
+                      {compareIncomeRows.map(({ ym, data: rowData }) => {
+                        if (rowData.error) {
+                          return (
+                            <div
+                              key={ym}
+                              className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm"
+                            >
+                              <span className="font-medium font-mono">{ym}</span>
+                              <span className="text-muted-foreground ml-2">{rowData.error}</span>
+                            </div>
+                          )
+                        }
+                        const v = incomeStatementViewFromApiData(rowData)
+                        return (
+                          <div key={ym} className="overflow-x-auto">
+                            <IncomePlDetailTableContent
+                              data={rowData}
+                              view={v}
+                              periodLine={`${ym} · ${storeLabel}`}
+                              showExpenseDetails={showExpenseDetails}
+                              expandPurchases={!!compareExpandPurchases[ym]}
+                              onTogglePurchases={() =>
+                                setCompareExpandPurchases((prev) => ({
+                                  ...prev,
+                                  [ym]: !prev[ym],
+                                }))
+                              }
+                              expandExpenseAccounts={!!compareExpandExpenses[ym]}
+                              onToggleExpenseAccounts={() =>
+                                setCompareExpandExpenses((prev) => ({
+                                  ...prev,
+                                  [ym]: !prev[ym],
+                                }))
+                              }
+                              titleClassName="text-base font-semibold mb-1"
+                              wrapperClassName="rounded-md border bg-muted/20 p-3 text-foreground"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               {isRangeCompare &&
@@ -730,11 +1150,35 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 )}
               {!isRangeCompare && (
                 <div className="space-y-3 mb-4 pb-4 border-b">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">{t("pL_overrideStorageLabel")}</span>
+                    <Select
+                      value={overrideSource}
+                      onValueChange={(v) => setOverrideSource(v as IncomeStatementOverrideSource)}
+                      disabled={sharedLoading}
+                    >
+                      <SelectTrigger className="w-[220px] h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="local">{t("pL_overrideSourceLocal")}</SelectItem>
+                        <SelectItem value="shared">{t("pL_overrideSourceShared")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {overrideSource === "shared" && sharedLoading && (
+                      <span className="text-xs text-muted-foreground">{t("pL_overrideSharedLoading")}</span>
+                    )}
+                    {overrideSource === "shared" && sharedSaveError && !sharedLoading && (
+                      <span className="text-xs text-destructive">{t("pL_overrideSharedErr")}: {sharedSaveError}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground max-w-3xl">{t("pL_overrideStorageNote")}</p>
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="pl-manual-sales"
                         checked={manualEnabled}
+                        disabled={overrideSource === "shared" && (sharedLoading || !sharedReady)}
                         onCheckedChange={(v) => onManualCheckedChange(v === true)}
                       />
                       <Label htmlFor="pl-manual-sales" className="text-sm font-normal cursor-pointer">
@@ -749,23 +1193,34 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                         value={manualAmountStr}
                         onChange={(e) => setManualAmountStr(e.target.value)}
                         aria-label={t("pL_manualSalesPlaceholder")}
+                        disabled={overrideSource === "shared" && (sharedLoading || !sharedReady)}
                       />
                     )}
-                    <p className="text-xs text-muted-foreground max-w-md shrink-0">{t("pL_manualSalesNote")}</p>
+                    <p className="text-xs text-muted-foreground max-w-md shrink-0">
+                      {overrideSource === "local" ? t("pL_manualSalesNote") : t("pL_manualSalesNoteShared")}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="pl-manual-beg-inv"
                         checked={begInvManualEnabled}
+                        disabled={overrideSource === "shared" && (sharedLoading || !sharedReady)}
                         onCheckedChange={(v) => {
                           const checked = v === true
                           setBegInvManualEnabled(checked)
                           if (checked) {
-                            const saved = readIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter)
-                            if (saved?.enabled) setBegInvAmountStr(String(saved.amount))
-                            else if (data) setBegInvAmountStr(String(data.beginningInventory ?? 0))
-                            else setBegInvAmountStr("")
+                            if (overrideSource === "local") {
+                              const saved = readIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter)
+                              if (saved?.enabled) setBegInvAmountStr(String(saved.amount))
+                              else if (data) setBegInvAmountStr(String(data.beginningInventory ?? 0))
+                              else setBegInvAmountStr("")
+                            } else {
+                              const p = parseSalesOverrideInput(begInvAmountStr)
+                              if (p != null) setBegInvAmountStr(String(p))
+                              else if (data) setBegInvAmountStr(String(data.beginningInventory ?? 0))
+                              else setBegInvAmountStr("")
+                            }
                           } else setBegInvAmountStr("")
                         }}
                       />
@@ -781,9 +1236,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                         value={begInvAmountStr}
                         onChange={(e) => setBegInvAmountStr(e.target.value)}
                         aria-label={t("pL_manualBegInvPlaceholder")}
+                        disabled={overrideSource === "shared" && (sharedLoading || !sharedReady)}
                       />
                     )}
-                    <p className="text-xs text-muted-foreground max-w-xl">{t("pL_manualBegInvNote")}</p>
+                    <p className="text-xs text-muted-foreground max-w-xl">
+                      {overrideSource === "local" ? t("pL_manualBegInvNote") : t("pL_manualBegInvNoteShared")}
+                    </p>
                   </div>
                   {!data && (
                     <p className="text-xs text-muted-foreground">{t("pL_manualOverridesAfterQuery")}</p>
@@ -792,228 +1250,19 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
               )}
 
               {!isRangeCompare && data && view ? (
-            <div className="overflow-x-auto">
-              <div ref={printRef} className="rounded-md bg-white p-3 text-foreground">
-                <div className="text-lg font-semibold mb-1">{t("incomeStatementTitle")}</div>
-                <div className="text-sm text-muted-foreground mb-2">
-                  {data.yearMonth} · {storeLabel}
+                <div className="overflow-x-auto">
+                  <IncomePlDetailTableContent
+                    data={data}
+                    view={view}
+                    periodLine={`${data.yearMonth} · ${storeLabel}`}
+                    showExpenseDetails={showExpenseDetails}
+                    expandPurchases={expandPurchases}
+                    onTogglePurchases={() => setExpandPurchases((v) => !v)}
+                    expandExpenseAccounts={expandExpenseAccounts}
+                    onToggleExpenseAccounts={() => setExpandExpenseAccounts((v) => !v)}
+                    printRef={printRef}
+                  />
                 </div>
-                {view.useManualSales && (
-                  <div className="text-xs text-muted-foreground mb-2">
-                    {t("pL_systemSalesLabel")}: {formatBath(view.systemSales)}
-                  </div>
-                )}
-                {view.useManualBegInv && (
-                  <div className="text-xs text-muted-foreground mb-2">
-                    {t("pL_systemBegInvLabel")}: {formatBath(view.systemBeginningInventory)}
-                  </div>
-                )}
-                {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
-                  <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    {data.diagnostics?.warnings?.join(" / ")}
-                  </div>
-                )}
-                <table className="w-full max-w-md text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="py-2 text-left font-medium"></th>
-                      <th className="py-2 text-right font-medium pr-2">{t("pL_colAmount") || "금액"}</th>
-                      <th className="py-2 text-right font-medium w-14">{t("pL_pctOfSales")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b">
-                      <td className="py-2 font-medium">{t("pL_sales")}</td>
-                      <td className="py-2 text-right font-mono pr-2">{formatBath(view.sales)}</td>
-                      <td className="py-2 text-right text-muted-foreground">100.0%</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-2 text-muted-foreground pl-4">+ {t("pL_beginningInv")}</td>
-                      <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                        {formatBath(view.beginningInventory)}
-                      </td>
-                      <td className="py-2 text-right text-muted-foreground">
-                        {view.pct(view.beginningInventory)}
-                      </td>
-                    </tr>
-                    <tr
-                      className="border-b cursor-pointer hover:bg-muted/40 select-none"
-                      onClick={() => setExpandPurchases((v) => !v)}
-                      title={t("pL_clickToExpand") || ""}
-                    >
-                      <td className="py-2 text-muted-foreground pl-4">
-                        <span className="inline-flex items-center gap-1">
-                          {expandPurchases ? (
-                            <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
-                          )}
-                          + {t("pL_purchases")}
-                        </span>
-                      </td>
-                      <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                        {formatBath(data.purchases)}
-                      </td>
-                      <td className="py-2 text-right text-muted-foreground">{view.pct(data.purchases)}</td>
-                    </tr>
-                    {expandPurchases &&
-                      (data.purchaseByVendor?.length || 0) > 0 &&
-                      data.purchaseByVendor!.map((row) => (
-                        <tr key={row.key} className="border-b bg-muted/20">
-                          <td className="py-1.5 text-muted-foreground pl-10 text-xs">
-                            {purchaseVendorLabel(row.key)}
-                          </td>
-                          <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
-                            {formatBath(row.amount)}
-                          </td>
-                          <td className="py-1.5 text-right text-muted-foreground text-xs">
-                            {view.pct(row.amount)}
-                          </td>
-                        </tr>
-                      ))}
-                    {expandPurchases && !(data.purchaseByVendor?.length || 0) && (
-                      <tr className="border-b bg-muted/20">
-                        <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
-                          {t("inNoData") || "조회된 내역이 없습니다."}
-                        </td>
-                      </tr>
-                    )}
-                    <tr className="border-b">
-                      <td className="py-2 text-muted-foreground pl-4">- {t("pL_endingInv")}</td>
-                      <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                        {formatBath(data.endingInventory ?? 0)}
-                      </td>
-                      <td className="py-2 text-right text-muted-foreground">
-                        {view.pct(-(data.endingInventory ?? 0))}
-                      </td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-2 text-muted-foreground">= {t("pL_cogs")}</td>
-                      <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                        {formatBath(view.cogs)}
-                      </td>
-                      <td className="py-2 text-right text-muted-foreground">{view.pct(view.cogs)}</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="py-2 font-medium text-primary">{t("pL_grossProfit")}</td>
-                      <td className="py-2 text-right font-mono font-medium text-primary pr-2">
-                        {formatBath(view.grossProfit)}
-                      </td>
-                      <td className="py-2 text-right text-primary font-medium">
-                        {view.pct(view.grossProfit)}
-                      </td>
-                    </tr>
-                    <tr
-                      className="border-b cursor-pointer hover:bg-muted/40 select-none"
-                      onClick={() => setExpandExpenseAccounts((v) => !v)}
-                      title={t("pL_clickToExpand") || ""}
-                    >
-                      <td className="py-2 text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          {expandExpenseAccounts ? (
-                            <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
-                          )}
-                          - {t("pL_expenses")}
-                        </span>
-                      </td>
-                      <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                        {formatBath(data.expenses)}
-                      </td>
-                      <td className="py-2 text-right text-muted-foreground">{view.pct(data.expenses)}</td>
-                    </tr>
-                    {expandExpenseAccounts &&
-                      (data.expenseByAccountSubject?.length || 0) > 0 &&
-                      data.expenseByAccountSubject!.map((row, idx) => (
-                        <tr
-                          key={`${row.accountSubjectId ?? "u"}-${idx}`}
-                          className="border-b bg-muted/20"
-                        >
-                          <td className="py-1.5 text-muted-foreground pl-10 text-xs">
-                            {row.accountSubjectId == null
-                              ? t("pL_accountUnclassified") || "계정 미지정"
-                              : formatAccountSubjectLabel(lang, {
-                                  code: row.code,
-                                  name: row.name,
-                                  nameEn: row.nameEn,
-                                  nameTh: row.nameTh,
-                                }) ||
-                                (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")}
-                          </td>
-                          <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
-                            {formatBath(row.amount)}
-                          </td>
-                          <td className="py-1.5 text-right text-muted-foreground text-xs">
-                            {view.pct(row.amount)}
-                          </td>
-                        </tr>
-                      ))}
-                    {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
-                      <tr className="border-b bg-muted/20">
-                        <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
-                          {t("inNoData") || "조회된 내역이 없습니다."}
-                        </td>
-                      </tr>
-                    )}
-                    {showExpenseDetails && (
-                      <>
-                        <tr className="border-b">
-                          <td className="py-2 text-muted-foreground pl-4">
-                            - {t("pL_expenseSourcePetty") || "현금시재(패티캐시)"}
-                          </td>
-                          <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                            {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
-                          </td>
-                          <td className="py-2 text-right text-muted-foreground">
-                            {view.pct(data.expenseBreakdown?.pettyCash ?? 0)}
-                          </td>
-                        </tr>
-                        <tr className="border-b">
-                          <td className="py-2 text-muted-foreground pl-4">
-                            - {t("pL_expenseSourceBank") || "통장 출금"}
-                          </td>
-                          <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                            {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
-                          </td>
-                          <td className="py-2 text-right text-muted-foreground">
-                            {view.pct(data.expenseBreakdown?.bankWithdraw ?? 0)}
-                          </td>
-                        </tr>
-                        <tr className="border-b">
-                          <td className="py-2 text-muted-foreground pl-4">
-                            - {t("pL_expenseSourceFixed") || "고정비"}
-                          </td>
-                          <td className="py-2 text-right font-mono text-muted-foreground pr-2">
-                            {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
-                          </td>
-                          <td className="py-2 text-right text-muted-foreground">
-                            {view.pct(data.expenseBreakdown?.fixedExpenses ?? 0)}
-                          </td>
-                        </tr>
-                      </>
-                    )}
-                    <tr>
-                      <td className="py-3 font-bold">{t("pL_netProfit")}</td>
-                      <td
-                        className={`py-3 text-right font-mono font-bold pr-2 ${
-                          view.netProfit >= 0 ? "text-primary" : "text-destructive"
-                        }`}
-                      >
-                        {formatBath(view.netProfit)}
-                      </td>
-                      <td
-                        className={`py-3 text-right font-bold ${
-                          view.netProfit >= 0 ? "text-primary" : "text-destructive"
-                        }`}
-                      >
-                        {view.pct(view.netProfit)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
               ) : !isRangeCompare ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   {t("msg_click_query") || "조회 버튼을 눌러 주세요."}

@@ -60,6 +60,16 @@ function parseYmd(ymd: string): { y: number; m: number; d: number } {
   }
 }
 
+/** 방콕 달력 `ymd`에서 `deltaDays`일 후의 YYYY-MM-DD (음수 가능). DST 없음 가정으로 일 단위 가산. */
+export function addBangkokCalendarDays(ymd: string, deltaDays: number): string {
+  const startMs = Date.parse(getBangkokStartOfDayUtcIso(ymd))
+  if (Number.isNaN(startMs)) {
+    throw new Error(`addBangkokCalendarDays: invalid date ${ymd}`)
+  }
+  const ms = startMs + deltaDays * 86400000
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })
+}
+
 /** 방콕 자정 기준 UTC ISO */
 export function getBangkokStartOfDayUtcIso(ymd: string): string {
   const { y, m, d } = parseYmd(ymd)

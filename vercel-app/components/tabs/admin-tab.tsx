@@ -48,6 +48,7 @@ import { NoticeCompose } from "@/components/erp/notice-compose"
 import { NoticeHistory } from "@/components/erp/notice-history"
 import { displayLabelShort } from "@/lib/utils"
 import { cn } from "@/lib/utils"
+import { isAttendanceOutApproved } from "@/lib/attendance-utils"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -351,7 +352,14 @@ export function AdminTab() {
                     const earlyMinDisplay = row.diffMin < 0 ? Math.abs(row.diffMin) : 0
                     const savedEarly = row.earlyMin ?? earlyMinDisplay
                     const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
-                    const showAdjustInput = (!isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")))) || (row.status && String(row.status).includes("정상(승인)"))
+                    const statusStr = String(row.status || "")
+                    const showAdjustInput =
+                      (!isNormal &&
+                        ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
+                          row.lateMin > 0 ||
+                          (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
+                      (row.status && String(row.status).includes("정상(승인)")) ||
+                      (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
                     const adjustKey = hasPendingOut && (pendingOut != null || row.pendingId != null)
                       ? (pendingOut ?? row.pendingId)!
                       : row.outLogId != null
@@ -472,7 +480,16 @@ export function AdminTab() {
                               </Button>
                               <Button type="button" size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                             </div>
-                          ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")) || (row.status && String(row.status).includes("정상(승인)"))) ? (
+                          ) : !hasPendingOut &&
+                            row.outLogId != null &&
+                            isAttendanceOutApproved(row.approval) &&
+                            (row.diffMin < 0 ||
+                              (row.earlyMin ?? 0) > 0 ||
+                              (row.diffMin > 0 && (row.otMin ?? 0) >= 30) ||
+                              row.lateMin > 0 ||
+                              (row.status && String(row.status).includes("강제퇴근(승인)")) ||
+                              (row.status && String(row.status).includes("정상(승인)")) ||
+                              String(row.status || "").includes("조퇴")) ? (
                             <Button
                               type="button"
                               size="sm"

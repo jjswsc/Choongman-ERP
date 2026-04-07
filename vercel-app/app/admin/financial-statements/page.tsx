@@ -30,6 +30,42 @@ import { IncomeStatementTab } from "@/components/tabs/income-statement-tab"
 import { BalanceSheetTab } from "@/components/tabs/balance-sheet-tab"
 import { cn } from "@/lib/utils"
 
+function FinancialSummaryMetricCard({
+  label,
+  amount,
+  loading,
+  loadingLabel,
+  formatBaht,
+  detailLabel,
+  onClick,
+}: {
+  label: string
+  amount: number
+  loading: boolean
+  loadingLabel: string
+  formatBaht: (n: number) => string
+  detailLabel: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="rounded-lg border p-3 text-left hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium text-muted-foreground">{label}</div>
+        <span className="inline-flex shrink-0 items-center justify-center rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-sm font-semibold text-primary shadow-sm">
+          {detailLabel}
+        </span>
+      </div>
+      <div className="text-lg font-semibold tabular-nums mt-1.5">
+        {loading ? loadingLabel : formatBaht(amount)}
+      </div>
+    </button>
+  )
+}
+
 export default function FinancialStatementsPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -206,69 +242,51 @@ export default function FinancialStatementsPage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-5">
-              <button
-                type="button"
-                className="rounded-lg border p-3 text-left hover:bg-muted/30 transition-colors"
+              <FinancialSummaryMetricCard
+                label={t("pL_sales")}
+                amount={sales}
+                loading={loadingSummary}
+                loadingLabel={t("loading")}
+                formatBaht={formatBaht}
+                detailLabel={t("receivPayViewDetail")}
                 onClick={() => setTab("income")}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-muted-foreground">{t("pL_sales")}</div>
-                  <span className="text-[11px] text-primary underline">{t("receivPayViewDetail")}</span>
-                </div>
-                <div className="text-base font-semibold mt-1">{loadingSummary ? t("loading") : formatBaht(sales)}</div>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border p-3 text-left hover:bg-muted/30 transition-colors"
+              />
+              <FinancialSummaryMetricCard
+                label={t("pL_netProfit")}
+                amount={netProfit}
+                loading={loadingSummary}
+                loadingLabel={t("loading")}
+                formatBaht={formatBaht}
+                detailLabel={t("receivPayViewDetail")}
                 onClick={() => setTab("income")}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-muted-foreground">{t("pL_netProfit")}</div>
-                  <span className="text-[11px] text-primary underline">{t("receivPayViewDetail")}</span>
-                </div>
-                <div className="text-base font-semibold mt-1">
-                  {loadingSummary ? t("loading") : formatBaht(netProfit)}
-                </div>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border p-3 text-left hover:bg-muted/30 transition-colors"
+              />
+              <FinancialSummaryMetricCard
+                label={t("bs_assets")}
+                amount={assets}
+                loading={loadingSummary}
+                loadingLabel={t("loading")}
+                formatBaht={formatBaht}
+                detailLabel={t("receivPayViewDetail")}
                 onClick={() => setTab("balance")}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-muted-foreground">{t("bs_assets")}</div>
-                  <span className="text-[11px] text-primary underline">{t("receivPayViewDetail")}</span>
-                </div>
-                <div className="text-base font-semibold mt-1">
-                  {loadingSummary ? t("loading") : formatBaht(assets)}
-                </div>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border p-3 text-left hover:bg-muted/30 transition-colors"
+              />
+              <FinancialSummaryMetricCard
+                label={t("bs_liabilities")}
+                amount={liabilities}
+                loading={loadingSummary}
+                loadingLabel={t("loading")}
+                formatBaht={formatBaht}
+                detailLabel={t("receivPayViewDetail")}
                 onClick={() => setTab("balance")}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-muted-foreground">{t("bs_liabilities")}</div>
-                  <span className="text-[11px] text-primary underline">{t("receivPayViewDetail")}</span>
-                </div>
-                <div className="text-base font-semibold mt-1">
-                  {loadingSummary ? t("loading") : formatBaht(liabilities)}
-                </div>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border p-3 text-left hover:bg-muted/30 transition-colors"
+              />
+              <FinancialSummaryMetricCard
+                label={t("bs_equity")}
+                amount={equity}
+                loading={loadingSummary}
+                loadingLabel={t("loading")}
+                formatBaht={formatBaht}
+                detailLabel={t("receivPayViewDetail")}
                 onClick={() => setTab("balance")}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs text-muted-foreground">{t("bs_equity")}</div>
-                  <span className="text-[11px] text-primary underline">{t("receivPayViewDetail")}</span>
-                </div>
-                <div className="text-base font-semibold mt-1">
-                  {loadingSummary ? t("loading") : formatBaht(equity)}
-                </div>
-              </button>
+              />
             </div>
           </CardContent>
         </Card>

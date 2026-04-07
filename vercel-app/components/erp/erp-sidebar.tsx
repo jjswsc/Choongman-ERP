@@ -40,6 +40,7 @@ import {
   Landmark,
   GitBranch,
   Handshake,
+  Bot,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -61,6 +62,7 @@ import {
   canAccessPosCoupons,
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
+  canAccessAiCenter,
 } from "@/lib/permissions"
 interface MenuItem {
   titleKey: string
@@ -77,6 +79,7 @@ interface MenuSection {
 
 const mainItems: MenuItem[] = [
   { titleKey: "adminDashboard", icon: LayoutDashboard, href: "/admin" },
+  { titleKey: "aiCenter", icon: Bot, href: "/admin/ai-center" },
   { titleKey: "adminNotices", icon: Megaphone, href: "/admin/notices" },
   { titleKey: "adminWorkLog", icon: ClipboardList, href: "/admin/work-log" },
   { titleKey: "posCostAnalysis", icon: Calculator, href: "/admin/pos-cost-analysis" },
@@ -302,6 +305,7 @@ export function ErpSidebar() {
               <div className="space-y-0.5">
                 {mainItems
                   .filter((item) => item.href !== "/admin/pos-cost-analysis" || canAccessPosCostAnalysis(auth?.role || ""))
+                  .filter((item) => item.href !== "/admin/ai-center" || canAccessAiCenter(auth?.role || ""))
                   .map((item) => (
                   <Link
                     key={item.href}

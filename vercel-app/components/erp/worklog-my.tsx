@@ -36,10 +36,7 @@ import {
   type WorkLogItem,
   type WorkLogData,
 } from "@/lib/api-client"
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 
 const PRIORITIES = [
   { value: "긴급", key: "workLogPriorityUrgent" },
@@ -55,7 +52,7 @@ interface WorklogMyProps {
 export function WorklogMy({ userName }: WorklogMyProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const [dateStr, setDateStr] = React.useState(todayStr)
+  const [dateStr, setDateStr] = React.useState(() => getBangkokTodayDateString())
   const [selectedStaff, setSelectedStaff] = React.useState(userName)
   const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
   const [data, setData] = React.useState<WorkLogData | null>(null)

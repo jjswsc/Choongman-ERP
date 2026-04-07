@@ -22,6 +22,8 @@ import {
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
+import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
+import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -989,71 +991,24 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   ): InvoiceData => {
     const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
     const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
-    const { subtotalRounded: subtotal, vatRounded: vatAmount, grandTotal } = thaiInvoiceTotalsFromRawSubtotal(
-      group.totalAmt || 0
-    )
-    const vatRate = 7
-    const rawCompanyName = company?.companyName || "S&J Global Co., Ltd"
-    const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
-    const termsRaw = invSettings.terms_and_conditions ?? "[]"
-    let termsAndConditions: string[] = []
-    try {
-      const arr = JSON.parse(termsRaw)
-      termsAndConditions = Array.isArray(arr) ? arr.map(String) : []
-    } catch {
-      termsAndConditions = []
-    }
-    const stampBase = typeof window !== "undefined" && window.location?.origin ? window.location.origin : ""
-    return {
-      documentType: "Delivery Note / Tax Invoice",
+    return buildThaiSalesInvoiceData({
+      documentType: "Invoice",
       documentNo: docNo,
+      issueDate: dateStr,
       dueDate: dateStr,
       referenceNo: group.invoiceNo || "-",
-      issueDate: dateStr,
-      paymentTerms: invSettings.payment_terms || "Net 30 Days",
-      shippingMethod: invSettings.shipping_method || "Company Delivery",
-      seller: {
-        name: companyName,
-        address: company?.address || "-",
-        taxId: company?.taxId || "-",
-        phone: company?.phone || "-",
-        email: invSettings.seller_email || undefined,
-        website: invSettings.seller_website || undefined,
-      },
-      client: {
-        name: (client as InvoiceDataClient)?.companyName || group.target || "-",
-        address: (client as InvoiceDataClient)?.address || "-",
-        taxId: (client as InvoiceDataClient)?.taxId || "-",
-        phone: (client as InvoiceDataClient)?.phone || "-",
-      },
-      items: (group.items || []).map((it, idx) => {
-        const amt = Math.round(Math.abs(it.amount || 0))
-        const qty = Math.abs(it.qty || 0)
-        const unitPrice = qty ? amt / qty : 0
-        return {
-          id: idx + 1,
-          itemCode: it.code,
-          description: (it.name || "-") + (it.spec ? ` ${it.spec}` : ""),
-          quantity: qty,
-          unitPrice,
-          discount: 0,
-          amount: amt,
-        }
-      }),
-      subtotal,
-      vatRate,
-      vatAmount,
-      grandTotal,
-      bankInfo: {
-        bankName: invSettings.bank_name || "Kasikorn Bank (KBank)",
-        accountNo: invSettings.account_no || "",
-        accountName: invSettings.account_name || companyName,
-        swiftCode: invSettings.swift_code || undefined,
-      },
-      remarks: invSettings.remarks || "Please transfer payment to the bank account shown above.",
-      termsAndConditions,
-      stampImageUrl: stampBase ? `${stampBase}/company-stamp.png` : "/company-stamp.png",
-    }
+      company,
+      client,
+      invSettings,
+      lines: (group.items || []).map((it) => ({
+        code: it.code,
+        name: it.name,
+        spec: it.spec,
+        qty: Math.abs(it.qty || 0),
+        amount: Math.round(Math.abs(it.amount || 0)),
+      })),
+      orderInvoiceTotals: thaiInvoiceTotalsFromRawSubtotal(group.totalAmt || 0),
+    })
   }
 
   const handlePrintInvoice = async () => {
@@ -1067,25 +1022,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       const { company, clients } = invoiceDataRes
       const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
       const invoiceDatas: InvoiceData[] = checked.map((g) => {
-        const targetNorm = (g.target || "").trim()
-        const targetLower = targetNorm.toLowerCase()
-        const foundClient = clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])
-        let client: InvoiceDataClient | { companyName: string }
-        if (foundClient) {
-          client = foundClient
-        } else {
-          const isOfficeTarget = OFFICE_STORES.some((s) => (g.target || "").toLowerCase().includes(s.toLowerCase()))
-          if (isOfficeTarget && company) {
-            client = {
-              companyName: company.companyName,
-              address: company.address || "-",
-              taxId: company.taxId || "-",
-              phone: company.phone || "-",
-            }
-          } else {
-            client = { companyName: g.target || "-" }
-          }
-        }
+        const client = resolveInvoiceClientForTarget(g.target || "", company, clients)
         return buildInvoiceData(g, company, client, settings)
       })
       sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))

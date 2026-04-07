@@ -130,6 +130,21 @@ export function canAccessAdmin(role: string): boolean {
   )
 }
 
+/** AI 센터 접근 가능 (관리자 계열 + 회계, POS 전용 역할 제외) */
+export function canAccessAiCenter(role: string): boolean {
+  return (
+    isOfficeRole(role) ||
+    isManagerRole(role) ||
+    isFranchiseeRole(role) ||
+    isAccountingRole(role)
+  )
+}
+
+/** AI 제안 실행 승인 가능 (매장 관리자 이상 + 본사/회계) */
+export function canApproveAiActions(role: string): boolean {
+  return canAccessAiCenter(role)
+}
+
 /** 설정 페이지 접근 가능 (Director, Officer만) */
 export function canAccessSettings(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()

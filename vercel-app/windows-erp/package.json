@@ -12,6 +12,7 @@
     "build:win": "npm run icon:win && electron-builder --win nsis portable"
   },
   "build": {
+    "afterPack": "scripts/after-pack-win-icon.cjs",
     "forceCodeSigning": false,
     "appId": "com.choongman.erp.windows",
     "productName": "Choongman ERP",
@@ -48,6 +49,7 @@
   "devDependencies": {
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
-    "png-to-ico": "^2.1.8"
+    "png-to-ico": "^2.1.8",
+    "rcedit": "^4.0.1"
   }
 }

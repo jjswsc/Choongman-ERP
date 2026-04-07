@@ -1800,6 +1800,73 @@ export async function getIncomeStatement(params: {
   return res.json() as Promise<IncomeStatementData>
 }
 
+export type IncomeStatementOverrideRow = {
+  year_month: string
+  store_key: string
+  sales_override_enabled: boolean
+  sales_override_amount: number
+  beginning_inv_override_enabled: boolean
+  beginning_inv_override_amount: number
+  updated_at?: string | null
+  updated_by?: string | null
+}
+
+export async function fetchIncomeStatementOverrides(params: {
+  yearMonth: string
+  storeFilter: string
+  userStore?: string
+  userRole?: string
+}): Promise<{ success: boolean; row?: IncomeStatementOverrideRow; error?: string }> {
+  const q = new URLSearchParams()
+  q.set("yearMonth", params.yearMonth)
+  q.set("storeFilter", params.storeFilter)
+  if (params.userStore) q.set("userStore", params.userStore)
+  if (params.userRole) q.set("userRole", params.userRole)
+  const res = await apiFetchWithOffline(`/api/incomeStatementOverrides?${q}`)
+  const j = (await res.json()) as {
+    success?: boolean
+    row?: IncomeStatementOverrideRow
+    error?: string
+  }
+  if (!res.ok) {
+    return { success: false, error: j.error || `HTTP_${res.status}` }
+  }
+  return { success: Boolean(j.success), row: j.row, error: j.error }
+}
+
+export async function saveIncomeStatementOverrides(params: {
+  yearMonth: string
+  storeFilter: string
+  userStore?: string
+  userRole?: string
+  updatedBy?: string
+  salesOverrideEnabled: boolean
+  salesOverrideAmount: number
+  beginningInvOverrideEnabled: boolean
+  beginningInvOverrideAmount: number
+}): Promise<{ success: boolean; error?: string }> {
+  const res = await apiFetchWithOffline("/api/incomeStatementOverrides", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      yearMonth: params.yearMonth,
+      storeFilter: params.storeFilter,
+      userStore: params.userStore,
+      userRole: params.userRole,
+      updatedBy: params.updatedBy,
+      salesOverrideEnabled: params.salesOverrideEnabled,
+      salesOverrideAmount: params.salesOverrideAmount,
+      beginningInvOverrideEnabled: params.beginningInvOverrideEnabled,
+      beginningInvOverrideAmount: params.beginningInvOverrideAmount,
+    }),
+  })
+  const j = (await res.json()) as { success?: boolean; error?: string }
+  if (!res.ok) {
+    return { success: false, error: j.error || `HTTP_${res.status}` }
+  }
+  return { success: Boolean(j.success), error: j.error }
+}
+
 export interface UnpostedBankTransaction {
   id: number
   transDate: string
