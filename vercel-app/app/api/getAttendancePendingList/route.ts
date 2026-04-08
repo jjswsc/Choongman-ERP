@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
 
 const TZ = 'Asia/Bangkok'
 
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     let rows: Row[] = []
 
     if (store && store !== 'All' && store !== '전체') {
-      const filter = `store_name=ilike.${encodeURIComponent(store)}&approved=eq.대기`
+      const filter = `${attendanceStoreNamePostgrestFilter(store)}&approved=eq.대기`
       rows = (await supabaseSelectFilter('attendance_logs', filter, {
         order: 'log_at.desc',
         limit: 500,

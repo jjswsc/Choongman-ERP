@@ -19,6 +19,7 @@ import {
   getMyPayroll,
   getHeadOfficeInfo,
   type AttendanceDailyRow,
+  type TodayAttendanceState,
 } from "@/lib/api-client"
 import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ } from "@/lib/attendance-utils"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
@@ -68,7 +69,12 @@ export function HrTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const [todayTypes, setTodayTypes] = useState<string[]>([])
+  const [todayAttendanceState, setTodayAttendanceState] = useState<TodayAttendanceState>({
+    types: [],
+    canBreakStart: false,
+    canBreakEnd: false,
+    isOnBreak: false,
+  })
   const [dailyRecords, setDailyRecords] = useState<AttendanceDailyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
@@ -139,7 +145,7 @@ export function HrTab() {
       name: auth.user,
       ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
       ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
-    }).then(setTodayTypes)
+    }).then(setTodayAttendanceState)
   }, [auth?.store, auth?.user, auth?.employeeId, auth?.employeeCode])
 
   const loadTodayLog = useCallback(() => {
@@ -335,10 +341,11 @@ export function HrTab() {
     }
   }
 
+  const todayTypes = todayAttendanceState.types || []
   const hasClockIn = todayTypes.includes("출근")
-  const hasBreak = todayTypes.includes("휴식시작")
-  const hasResume = todayTypes.includes("휴식종료")
   const hasClockOut = todayTypes.includes("퇴근")
+  const canBreakStart = todayAttendanceState.canBreakStart
+  const canBreakEnd = todayAttendanceState.canBreakEnd
 
   const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   const formatMonthLabel = (m: string) => {
@@ -485,7 +492,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
             </Button>
             <Button
               className="h-12 bg-[#ea580c] hover:bg-[#ea580c]/90"
-              disabled={!hasClockIn || hasBreak || hasClockOut || !!submitting}
+              disabled={!canBreakStart || !!submitting}
               onClick={() => sendAttendance("휴식시작")}
             >
               <Coffee className="mr-2 h-4 w-4" />
@@ -493,7 +500,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
             </Button>
             <Button
               className="h-12 bg-[#2563eb] hover:bg-[#2563eb]/90"
-              disabled={!hasClockIn || !hasBreak || hasResume || hasClockOut || !!submitting}
+              disabled={!canBreakEnd || !!submitting}
               onClick={() => sendAttendance("휴식종료")}
             >
               <Play className="mr-2 h-4 w-4" />

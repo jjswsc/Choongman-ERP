@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { attendanceStoreNamePostgrestFilter, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 
 export async function GET(request: NextRequest) {
@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
 
     const rows = (await (async () => {
-      const byNameFilter = `store_name=ilike.${encodeURIComponent(storeFilter)}&name=ilike.${encodeURIComponent(employeeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+      const storeQ = attendanceStoreNamePostgrestFilter(storeFilter)
+      const byNameFilter = `${storeQ}&name=ilike.${encodeURIComponent(employeeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
       const selectColsWithCode =
         'log_at,log_type,status,late_min,ot_min,approved,employee_id,employee_code'
       const selectColsNoCode = 'log_at,log_type,status,late_min,ot_min,approved,employee_id'
@@ -55,12 +56,12 @@ export async function GET(request: NextRequest) {
 
       if (employeeId > 0) {
         try {
-          const byIdFilter = `store_name=ilike.${encodeURIComponent(storeFilter)}&employee_id=eq.${employeeId}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+          const byIdFilter = `${storeQ}&employee_id=eq.${employeeId}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
           const byIdRows = await selectLogs(byIdFilter, true)
           const byNameRows = await selectLogs(byNameFilter, true)
           const codeLegFilter =
             employeeCodeNorm.length > 0
-              ? `store_name=ilike.${encodeURIComponent(storeFilter)}&employee_code=eq.${encodeURIComponent(employeeCodeNorm)}&employee_id=is.null&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+              ? `${storeQ}&employee_code=eq.${encodeURIComponent(employeeCodeNorm)}&employee_id=is.null&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
               : ''
           let byCodeRows: typeof byIdRows = []
           if (codeLegFilter) {

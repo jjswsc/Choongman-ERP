@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
+import {
+  attendanceStoreNamePostgrestFilter,
+  bangkokDateRangeToUtc,
+  toDateStrBangkok,
+  getBangkokHour,
+  addDayBangkok,
+} from '@/lib/attendance-utils'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
 
@@ -23,7 +30,7 @@ export async function GET(request: NextRequest) {
     const nextDayStr = addDayBangkok(dateStr, 1)
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(dateStr, nextDayStr)
     const logFilter = `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
-    const storeFilter = isAll ? '' : `&store_name=ilike.${encodeURIComponent(store)}`
+    const storeFilter = isAll ? '' : `&${attendanceStoreNamePostgrestFilter(store)}`
     let rows: AttRow[] = []
     if (isAll) {
       rows = (await supabaseSelectFilter('attendance_logs', logFilter, {
@@ -44,7 +51,7 @@ export async function GET(request: NextRequest) {
     for (const r of rows || []) {
       const rowDate = toDateStrBangkok(r.log_at)
       const rowStore = String(r.store_name || '').trim()
-      if (!isAll && rowStore.toLowerCase() !== store.toLowerCase()) continue
+      if (!isAll && !storesMatchForGradeLookup(rowStore, store)) continue
       const name = String(r.name || '').trim()
       const key = `${rowStore}|${name}`
       const type = String(r.log_type || '').trim()

@@ -3,6 +3,12 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 
 const TZ = 'Asia/Bangkok'
+const DEFAULT_ATTENDANCE_STATE = {
+  types: [] as string[],
+  canBreakStart: false,
+  canBreakEnd: false,
+  isOnBreak: false,
+}
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -18,7 +24,7 @@ export async function GET(request: NextRequest) {
   )
 
   if (!storeName || !name) {
-    return NextResponse.json([], { headers })
+    return NextResponse.json(DEFAULT_ATTENDANCE_STATE, { headers })
   }
 
   try {
@@ -126,7 +132,18 @@ export async function GET(request: NextRequest) {
           const typ = String(r.log_type || '').trim()
           if (typ && !types.includes(typ)) types.push(typ)
         }
-        return NextResponse.json(types, { headers })
+        const hasClockIn = types.includes('출근')
+        const hasClockOut = types.includes('퇴근')
+        const canBreakStart = hasClockIn && !hasClockOut
+        return NextResponse.json(
+          {
+            types,
+            canBreakStart,
+            canBreakEnd: false,
+            isOnBreak: false,
+          },
+          { headers }
+        )
       }
     }
 
@@ -142,9 +159,41 @@ export async function GET(request: NextRequest) {
       if (typ && !types.includes(typ)) types.push(typ)
     }
 
-    return NextResponse.json(types, { headers })
+    const hasClockIn = types.includes('출근')
+    const hasClockOut = types.includes('퇴근')
+    let isOnBreak = false
+    const latestBoundaryIdx = arr.findIndex((r) => {
+      const typ = String(r.log_type || '').trim()
+      return typ === '출근' || typ === '퇴근'
+    })
+    const latestBoundaryType =
+      latestBoundaryIdx >= 0 ? String(arr[latestBoundaryIdx]?.log_type || '').trim() : ''
+    if (latestBoundaryType === '출근') {
+      for (let i = 0; i < latestBoundaryIdx; i++) {
+        const typ = String(arr[i].log_type || '').trim()
+        if (typ === '휴식시작') {
+          isOnBreak = true
+          break
+        }
+        if (typ === '휴식종료') {
+          isOnBreak = false
+          break
+        }
+      }
+    }
+    const canBreakStart = hasClockIn && !hasClockOut && !isOnBreak
+    const canBreakEnd = hasClockIn && !hasClockOut && isOnBreak
+    return NextResponse.json(
+      {
+        types,
+        canBreakStart,
+        canBreakEnd,
+        isOnBreak,
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('getTodayAttendanceTypes:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(DEFAULT_ATTENDANCE_STATE, { headers })
   }
 }

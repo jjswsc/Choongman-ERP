@@ -3,6 +3,8 @@
  * @see components/employees/employee-form.tsx EMP_NAME_TITLE_OPTIONS
  */
 
+import { expandStoreVariantsForGrade } from '@/lib/grade-store-key-variants'
+
 export const EMPLOYEE_NAME_TITLE_CANONICAL = ["Mr.", "Mrs.", "Ms.", "Miss"] as const
 
 /** Miss 를 Ms 보다 먼저 두어 "Miss.x" 오인 방지 */
@@ -69,6 +71,94 @@ export function formatEmployeeDisplayName(name: string, nameTitle?: string): str
   if (!n) return t || ""
   if (!t) return n
   return `${t} ${n}`
+}
+
+type EmployeeRowForAttendanceDisplay = {
+  id?: number
+  store?: string
+  name?: string
+  name_title?: string | null
+}
+
+/**
+ * 근태 API용: 인사 마스터에서 표시명 맵 (id·매장|이름 변형 키).
+ * attendance_logs.name 은 호칭 유무가 들쭉날쭉해도 동일 직원은 "Mr. …" 형태로 맞춤.
+ */
+export function buildAttendanceDisplayMapsFromEmployees(
+  empRows: EmployeeRowForAttendanceDisplay[] | null | undefined
+): {
+  displayByEmployeeId: Record<number, string>
+  displayByStoreAndBareName: Record<string, string>
+} {
+  const displayByEmployeeId: Record<number, string> = {}
+  const displayByStoreAndBareName: Record<string, string> = {}
+  for (const e of empRows || []) {
+    const store = String(e.store || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    const nm = String(e.name || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    if (!store || !nm) continue
+    const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+    const disp = formatEmployeeDisplayName(nm, String(e.name_title ?? "").trim())
+    if (eid > 0) displayByEmployeeId[eid] = disp
+    for (const vs of expandStoreVariantsForGrade(store)) {
+      const v = String(vs || "")
+        .trim()
+        .replace(/\s+/g, " ")
+      if (!v) continue
+      const k1 = `${v}|${nm}`
+      const k2 = `${v}|${normalizeEmployeeNameForGradeMatch(nm)}`
+      displayByStoreAndBareName[k1] = disp
+      if (k2 !== k1) displayByStoreAndBareName[k2] = disp
+    }
+  }
+  return { displayByEmployeeId, displayByStoreAndBareName }
+}
+
+/**
+ * 근태 그리드 한 행: 로그 store/name/id 로 표시명 결정.
+ */
+export function resolveEmployeeDisplayNameForAttendanceGrid(
+  logStore: string,
+  logName: string,
+  employeeId: number,
+  displayByEmployeeId: Record<number, string>,
+  displayByStoreAndBareName: Record<string, string>
+): string {
+  const st = String(logStore || "")
+    .trim()
+    .replace(/\s+/g, " ")
+  const raw = String(logName || "")
+    .trim()
+    .replace(/\s+/g, " ")
+  if (employeeId > 0) {
+    const byId = displayByEmployeeId[employeeId]
+    if (byId) return byId
+  }
+  const split = splitEmbeddedNameTitle(raw)
+  const nameCandidates = new Set<string>()
+  if (raw) nameCandidates.add(raw)
+  const rawNorm = normalizeEmployeeNameForGradeMatch(raw)
+  if (rawNorm) nameCandidates.add(rawNorm)
+  if (split.name) {
+    nameCandidates.add(split.name)
+    const sn = normalizeEmployeeNameForGradeMatch(split.name)
+    if (sn) nameCandidates.add(sn)
+  }
+  const storeCandidates = st ? expandStoreVariantsForGrade(st) : []
+  for (const vs of storeCandidates) {
+    const v = String(vs || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    if (!v) continue
+    for (const nc of nameCandidates) {
+      const hit = displayByStoreAndBareName[`${v}|${nc}`]
+      if (hit) return hit
+    }
+  }
+  return formatEmployeeDisplayName(split.name || raw, split.extractedTitle)
 }
 
 /** 평가·등급 매칭 등: 호칭 제거한 이름 (Miss 포함) */

@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   supabaseCreateSignedUploadUrl,
+  supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 
 const BUCKET = 'store-repair-photos'
 const MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'])
+
+function looksLikeMissingStorageBucket(msg: string): boolean {
+  return (
+    /Bucket not found/i.test(msg) ||
+    /bucket does not exist/i.test(msg) ||
+    /No such bucket/i.test(msg) ||
+    (/not found/i.test(msg) && /bucket/i.test(msg))
+  )
+}
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -43,18 +53,39 @@ export async function POST(request: NextRequest) {
       .slice(0, 80)
     const storagePath = `${storeSlug}/${Date.now()}-${safeName}`
 
-    const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
-    const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
+    const issue = async () => {
+      const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })
+      const publicUrl = supabaseStoragePublicUrl(BUCKET, storagePath)
+      return { signedUrl, publicUrl }
+    }
+
+    let signedUrl: string
+    let publicUrl: string
+    try {
+      ;({ signedUrl, publicUrl } = await issue())
+    } catch (firstErr) {
+      const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
+      if (looksLikeMissingStorageBucket(fm)) {
+        await supabaseStorageCreateBucketIfNeeded(BUCKET, {
+          public: true,
+          file_size_limit: MAX_BYTES,
+          allowed_mime_types: Array.from(ALLOWED),
+        })
+        ;({ signedUrl, publicUrl } = await issue())
+      } else {
+        throw firstErr
+      }
+    }
 
     return NextResponse.json({ success: true, signedUrl, publicUrl, storagePath }, { headers })
   } catch (e) {
     console.error('uploadStoreRepairPhoto/presign:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('Bucket not found') || msg.includes('404') || msg.includes('does not exist')) {
+    if (looksLikeMissingStorageBucket(msg)) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Supabase Storage 버킷 "store-repair-photos"를 먼저 생성하세요. (vercel-app/sql/store_repair_tickets.sql 안내)',
+          message: '수리 사진 저장소가 설정되지 않았습니다.',
         },
         { status: 400, headers }
       )

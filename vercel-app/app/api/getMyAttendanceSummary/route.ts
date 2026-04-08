@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
       break_min?: number
     }
 
-    const filter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(userName)}&log_at=gte.${start}&log_at=lt.${endExclusive}`
+    const filter = `${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(userName)}&log_at=gte.${start}&log_at=lt.${endExclusive}`
     const rows = (await supabaseSelectFilter('attendance_logs', filter, {
       order: 'log_at.asc',
       limit: 500,

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
+import {
+  attendanceStoreNamePostgrestFilter,
+  employeeStorePostgrestFilter,
+} from '@/lib/attendance-utils'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 /** submitAttendance 와 동일: employee_code / employee_id 컬럼 미배포 시 순차 제거 후 재시도 */
 async function insertAttendanceLogRow(payload: Record<string, unknown>) {
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isManager = userRole === 'manager'
-    if (isManager && userStore && String(storeName).trim() !== userStore) {
+    if (isManager && userStore && !storesMatchForGradeLookup(String(storeName).trim(), userStore)) {
       return NextResponse.json(
         { success: false, message: '해당 매장만 처리할 수 있습니다.' },
         { headers }
@@ -90,8 +95,8 @@ export async function POST(request: NextRequest) {
     // 스케줄 조회
     const schFilter =
       employeeId > 0
-        ? `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}`
-        : `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+        ? `schedule_date=eq.${dateStr}&${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${employeeId}`
+        : `schedule_date=eq.${dateStr}&${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}`
     const schRows = (await supabaseSelectFilter('schedules', schFilter, { limit: 1 })) as {
       schedule_date?: string
       store_name?: string
@@ -123,7 +128,7 @@ export async function POST(request: NextRequest) {
     if (employeeId > 0) {
       const empRows = (await supabaseSelectFilter(
         'employees',
-        `id=eq.${employeeId}&store=ilike.${encodeURIComponent(storeName)}`,
+        `id=eq.${employeeId}&${employeeStorePostgrestFilter(storeName)}`,
         { limit: 1, select: 'name,employee_code' }
       )) as { name?: string; employee_code?: string | null }[]
       const er = empRows?.[0]
@@ -134,7 +139,7 @@ export async function POST(request: NextRequest) {
     } else {
       const matched = (await supabaseSelectFilter(
         'employees',
-        `store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
+        `${employeeStorePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
         { limit: 5, select: 'id,name,employee_code' }
       )) as { id?: number; name?: string; employee_code?: string | null }[]
       if ((matched || []).length === 1) {
@@ -154,7 +159,7 @@ export async function POST(request: NextRequest) {
         try {
           return await supabaseSelectFilter(
             'leave_requests',
-            `leave_date=eq.${dateStr}&store=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&status=eq.승인`,
+            `leave_date=eq.${dateStr}&${employeeStorePostgrestFilter(storeName)}&employee_id=eq.${employeeId}&status=eq.승인`,
             { limit: 5, select: 'id' }
           )
         } catch (e) {
@@ -162,7 +167,7 @@ export async function POST(request: NextRequest) {
           if (!/employee_id|42703|column/i.test(em)) throw e
         }
       }
-      const leaveFilter = `leave_date=eq.${dateStr}&store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`
+      const leaveFilter = `leave_date=eq.${dateStr}&${employeeStorePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`
       return await supabaseSelectFilter('leave_requests', leaveFilter, { limit: 5, select: 'id' })
     })()) as { id?: number }[]
     if (leaveRows && leaveRows.length > 0) {
@@ -181,7 +186,7 @@ export async function POST(request: NextRequest) {
         try {
           const byId = (await supabaseSelectFilter(
             'attendance_logs',
-            `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+            `${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
             { limit: 10, select: 'log_type' }
           )) as { log_type?: string }[]
           const merged: { log_type?: string }[] = [...(byId || [])]
@@ -189,7 +194,7 @@ export async function POST(request: NextRequest) {
             try {
               const byCode = (await supabaseSelectFilter(
                 'attendance_logs',
-                `store_name=ilike.${encodeURIComponent(storeName)}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+                `${attendanceStoreNamePostgrestFilter(storeName)}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
                 { limit: 10, select: 'log_type' }
               )) as { log_type?: string }[]
               merged.push(...(byCode || []))
@@ -205,7 +210,7 @@ export async function POST(request: NextRequest) {
           return []
         }
       }
-      const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(logName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
+      const attFilter = `${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(logName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
       return await supabaseSelectFilter('attendance_logs', attFilter, {
         limit: 10,
         select: 'log_type',

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
         maxRows: 2_000_000,
       })) as SchRow[]
     } else {
-      const f = `${schFilter}&store_name=ilike.${encodeURIComponent(storeFilter)}`
+      const f = `${schFilter}&${attendanceStoreNamePostgrestFilter(storeFilter)}`
       schRows = (await supabaseSelectFilterAllPages('schedules', f, {
         order: 'schedule_date.asc',
         pageSize: 8000,
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
     type AttRow = { log_at?: string; store_name?: string; name?: string; employee_id?: number | null; log_type?: string }
     const attFilter = isAllStores
       ? `log_at=gte.${startStr}&log_at=lt.${endExclusive}`
-      : `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${startStr}&log_at=lt.${endExclusive}`
+      : `${attendanceStoreNamePostgrestFilter(storeFilter)}&log_at=gte.${startStr}&log_at=lt.${endExclusive}`
     const attRows = (await (async () => {
       try {
         return await supabaseSelectFilter('attendance_logs', attFilter, {

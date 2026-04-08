@@ -5,6 +5,7 @@ import {
   ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
 } from '@/lib/postgrest-narrow-select'
 import {
+  attendanceStoreNamePostgrestFilter,
   bangkokDateRangeToUtc,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
@@ -12,8 +13,10 @@ import {
 } from '@/lib/attendance-utils'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
 import {
+  buildAttendanceDisplayMapsFromEmployees,
   normalizeEmployeeCodeForMatch,
   normalizeEmployeeNameForGradeMatch,
+  resolveEmployeeDisplayNameForAttendanceGrid,
 } from '@/lib/employee-display-name'
 
 const TZ = 'Asia/Bangkok'
@@ -191,7 +194,7 @@ export async function GET(request: NextRequest) {
       `log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
     ]
     if (!isAllStores && storeFilter) {
-      attLogFilterParts.unshift(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
+      attLogFilterParts.unshift(attendanceStoreNamePostgrestFilter(storeFilter))
     }
 
     let attRows: AttRow[]
@@ -237,22 +240,28 @@ export async function GET(request: NextRequest) {
       attRows = await fetchAttGrid(parts.join('&'))
     }
 
-    /** 파트타임/시급 식별 + 직원코드 맵 */
+    /** 파트타임/시급 식별 + 직원코드 맵 + 그리드 표시명(Mr./Ms. + name) */
     const partTimeKeys = new Set<string>()
     const codeByStoreName: Record<string, string> = {}
     const codeByEmployeeId: Record<number, string> = {}
+    let displayByEmployeeId: Record<number, string> = {}
+    let displayByStoreAndBareName: Record<string, string> = {}
     try {
       const empRows = (await supabaseSelect('employees', {
-        select: 'id,store,name,job,sal_type,employee_code',
+        select: 'id,store,name,name_title,job,sal_type,employee_code',
         limit: 5000,
       })) as {
         id?: number
         store?: string
         name?: string
+        name_title?: string | null
         job?: string
         sal_type?: string
         employee_code?: string | null
       }[]
+      const maps = buildAttendanceDisplayMapsFromEmployees(empRows)
+      displayByEmployeeId = maps.displayByEmployeeId
+      displayByStoreAndBareName = maps.displayByStoreAndBareName
       const partTimeSal = /시급|hourly|hour|part-time|part\s*time/i
       const partTimeJob = /part|파트|part-time/i
       for (const e of empRows || []) {
@@ -296,7 +305,7 @@ export async function GET(request: NextRequest) {
     /** schedules: 고정 limit는 데이터 증가 시 항상 부족 → Range 페이지로 전부 수집. 매장 필터로 트래픽·메모리 절감 */
     const schParts = [`schedule_date=gte.${startStr}`, `schedule_date=lte.${endStr.slice(0, 10)}`]
     if (!isAllStores && storeFilter) {
-      schParts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
+      schParts.push(attendanceStoreNamePostgrestFilter(storeFilter))
     }
     const schFilter = schParts.join('&')
     const schRows = (await supabaseSelectFilterAllPages('schedules', schFilter, {
@@ -564,7 +573,13 @@ export async function GET(request: NextRequest) {
       result.push({
         date: dateForRow,
         store: rec.store,
-        name: rec.name,
+        name: resolveEmployeeDisplayNameForAttendanceGrid(
+          rec.store,
+          rec.name,
+          rec.employeeId,
+          displayByEmployeeId,
+          displayByStoreAndBareName
+        ),
         ...(rec.employeeId > 0 ? { employeeId: rec.employeeId } : {}),
         ...(() => {
           const c0 = rec.employeeId > 0 ? codeByEmployeeId[rec.employeeId] || '' : ''

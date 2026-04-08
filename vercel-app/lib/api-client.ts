@@ -576,6 +576,13 @@ export async function updateOrderCart(params: {
 }
 
 // ─── 인사 (HR) ───
+export interface TodayAttendanceState {
+  types: string[]
+  canBreakStart: boolean
+  canBreakEnd: boolean
+  isOnBreak: boolean
+}
+
 export async function getTodayAttendanceTypes(params: {
   storeName: string
   name: string
@@ -590,7 +597,30 @@ export async function getTodayAttendanceTypes(params: {
   if (params.employeeCode != null && String(params.employeeCode).trim())
     q.set('employeeCode', String(params.employeeCode).trim())
   const res = await apiFetchWithOffline(`/api/getTodayAttendanceTypes?${q}`)
-  return res.json() as Promise<string[]>
+  const raw: unknown = await res.json()
+  // 구버전 API: string[] 만 반환 (클라만 먼저 배포된 경우 대비)
+  if (Array.isArray(raw)) {
+    const types = raw.filter((x): x is string => typeof x === 'string')
+    const hasClockIn = types.includes('출근')
+    const hasClockOut = types.includes('퇴근')
+    const hasBreakStart = types.includes('휴식시작')
+    const hasBreakEnd = types.includes('휴식종료')
+    const isOnBreak = hasBreakStart && !hasBreakEnd
+    return {
+      types,
+      canBreakStart: hasClockIn && !hasClockOut && !isOnBreak,
+      canBreakEnd: hasClockIn && !hasClockOut && isOnBreak,
+      isOnBreak,
+    }
+  }
+  const o = raw as Record<string, unknown>
+  const types = Array.isArray(o.types) ? o.types.filter((x): x is string => typeof x === 'string') : []
+  return {
+    types,
+    canBreakStart: o.canBreakStart === true,
+    canBreakEnd: o.canBreakEnd === true,
+    isOnBreak: o.isOnBreak === true,
+  }
 }
 
 export interface AttendanceLogItem {

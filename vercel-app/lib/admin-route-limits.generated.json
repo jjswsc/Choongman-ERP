@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-08T11:55:41.436Z",
+  "generatedAt": "2026-04-08T13:00:11.637Z",
   "entryCount": 690,
   "entries": [
     {
@@ -291,56 +291,56 @@
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 93,
+      "line": 100,
       "kind": "limit",
       "value": 1,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 125,
+      "line": 132,
       "kind": "limit",
       "value": 1,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 136,
+      "line": 143,
       "kind": "limit",
       "value": 5,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 156,
+      "line": 163,
       "kind": "limit",
       "value": 5,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 164,
+      "line": 171,
       "kind": "limit",
       "value": 5,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 183,
+      "line": 190,
       "kind": "limit",
       "value": 10,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 191,
+      "line": 198,
       "kind": "limit",
       "value": 10,
       "apiLabel": "createAttendanceFromSchedule"
     },
     {
       "path": "app/api/createAttendanceFromSchedule/route.ts",
-      "line": 208,
+      "line": 215,
       "kind": "limit",
       "value": 10,
       "apiLabel": "createAttendanceFromSchedule"
@@ -802,133 +802,133 @@
     },
     {
       "path": "app/api/getAttendanceList/route.ts",
-      "line": 38,
+      "line": 39,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendanceList"
     },
     {
       "path": "app/api/getAttendanceList/route.ts",
-      "line": 112,
+      "line": 113,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendanceList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 72,
+      "line": 73,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 73,
+      "line": 74,
       "kind": "maxRows",
       "value": 2000000,
-      "apiLabel": "getAttendanceNoRecordList"
-    },
-    {
-      "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 79,
-      "kind": "pageSize",
-      "value": 8000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
       "line": 80,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "getAttendanceNoRecordList"
+    },
+    {
+      "path": "app/api/getAttendanceNoRecordList/route.ts",
+      "line": 81,
       "kind": "maxRows",
       "value": 2000000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 96,
+      "line": 97,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 104,
+      "line": 105,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 130,
+      "line": 131,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 138,
+      "line": 139,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 160,
+      "line": 161,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendancePendingList/route.ts",
-      "line": 57,
+      "line": 58,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendancePendingList"
     },
     {
       "path": "app/api/getAttendancePendingList/route.ts",
-      "line": 64,
+      "line": 65,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendancePendingList"
     },
     {
       "path": "app/api/getAttendancePendingList/route.ts",
-      "line": 71,
+      "line": 72,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getAttendancePendingList"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 154,
+      "line": 157,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 155,
+      "line": 158,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 247,
+      "line": 252,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 304,
+      "line": 313,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 305,
+      "line": 314,
       "kind": "maxRows",
       "value": 2000000,
       "apiLabel": "getAttendanceRecordsAdmin"
@@ -1586,7 +1586,7 @@
     },
     {
       "path": "app/api/getMyAttendanceSummary/route.ts",
-      "line": 61,
+      "line": 62,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getMyAttendanceSummary"
@@ -2517,49 +2517,49 @@
     },
     {
       "path": "app/api/getTodayAttendanceSummary/route.ts",
-      "line": 31,
+      "line": 38,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getTodayAttendanceSummary"
     },
     {
       "path": "app/api/getTodayAttendanceSummary/route.ts",
-      "line": 37,
+      "line": 44,
       "kind": "limit",
       "value": 500,
       "apiLabel": "getTodayAttendanceSummary"
     },
     {
       "path": "app/api/getTodayAttendanceTypes/route.ts",
-      "line": 41,
+      "line": 47,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getTodayAttendanceTypes"
     },
     {
       "path": "app/api/getTodayAttendanceTypes/route.ts",
-      "line": 49,
+      "line": 55,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getTodayAttendanceTypes"
     },
     {
       "path": "app/api/getTodayAttendanceTypes/route.ts",
-      "line": 56,
+      "line": 62,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getTodayAttendanceTypes"
     },
     {
       "path": "app/api/getTodayAttendanceTypes/route.ts",
-      "line": 64,
+      "line": 70,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getTodayAttendanceTypes"
     },
     {
       "path": "app/api/getTodayAttendanceTypes/route.ts",
-      "line": 94,
+      "line": 100,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getTodayAttendanceTypes"
@@ -3812,70 +3812,70 @@
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 101,
+      "line": 100,
       "kind": "limit",
       "value": 1,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 117,
+      "line": 116,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 141,
+      "line": 140,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 149,
+      "line": 148,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 178,
+      "line": 177,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 241,
+      "line": 282,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 343,
+      "line": 384,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 355,
+      "line": 396,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 369,
+      "line": 410,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 425,
+      "line": 466,
       "kind": "limit",
       "value": 50,
       "apiLabel": "submitAttendance"

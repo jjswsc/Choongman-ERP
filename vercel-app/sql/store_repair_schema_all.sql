@@ -1,5 +1,5 @@
 -- 매장 수리 신고 + 진행 로그 (한 번에 실행)
--- Storage: Supabase > Storage > 버킷 store-repair-photos 생성 (사진 업로드용)
+-- Storage: 버킷 store-repair-photos — store_repair_photos_storage_bucket.sql 또는 앱 presign 자동 생성
 
 -- 1) 티켓 테이블 (먼저 필요)
 CREATE TABLE IF NOT EXISTS store_repair_tickets (

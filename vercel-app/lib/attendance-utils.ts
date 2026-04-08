@@ -6,6 +6,36 @@ import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 export const ATTENDANCE_TZ = 'Asia/Bangkok'
 
+/**
+ * PostgREST `store_name=ilike` 값(인코딩 전): *부분일치* — "Union Mall" ↔ "CM Union Mall" 등.
+ * submitAttendance·모바일 근태와 동일 취지.
+ */
+export function attendanceStoreIlikeFragment(storeName: string): string {
+  return '*' + String(storeName || '').replace(/\*/g, '').trim() + '*'
+}
+
+function postgrestIlikeColumnFilter(column: 'store_name' | 'store', storeFilter: string): string {
+  const raw = String(storeFilter || '').trim().replace(/\s+/g, ' ')
+  if (!raw) return ''
+  // 단일 `store_name=ilike.*검색어*` 만 사용 (PostgREST 에서 * = SQL %).
+  // `or=(...)` / `ilike(any).{...}` 는 환경에 따라 400 이거나 200+빈 결과로 나와 조회가 통째로 비는 사례가 있음.
+  // "Office" 선택 시 `*Office*` 로 "CM Office" 로그도 부분 일치.
+  const frag = '*' + raw.replace(/\*/g, '') + '*'
+  return `${column}=ilike.${encodeURIComponent(frag)}`
+}
+
+/**
+ * attendance_logs / schedules 의 `store_name` — 부분일치 `*…*` (CM 접두·표기는 검색어 부분 문자열로 커버).
+ */
+export function attendanceStoreNamePostgrestFilter(storeFilter: string): string {
+  return postgrestIlikeColumnFilter('store_name', storeFilter)
+}
+
+/** employees / leave_requests 등 `store` 컬럼 — 동일 CM·표기 차이 허용 */
+export function employeeStorePostgrestFilter(storeFilter: string): string {
+  return postgrestIlikeColumnFilter('store', storeFilter)
+}
+
 /** 퇴근 로그 `approved` — 급여·getAttendanceRecordsAdmin은 승인/승인완료 모두 승인 처리. UI도 동일해야 조정 반영 버튼이 빠지지 않음 */
 export function isAttendanceOutApproved(approval: string | undefined | null): boolean {
   const a = String(approval || '').trim()

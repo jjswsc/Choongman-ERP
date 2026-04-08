@@ -126,6 +126,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "지급 처리되었습니다.": "paymentProcessed",
   [ACCOUNT_SUBJECT_HEADER_MESSAGE_KO]: "accountSubjectHeaderNotAllowed",
   "존재하지 않는 계정과목입니다.": "accountSubjectNotFound",
+
+  // 매장 수리 사진 Storage
+  "수리 사진 저장소가 설정되지 않았습니다.": "repair_photo_storage_not_configured",
 }
 
 /**

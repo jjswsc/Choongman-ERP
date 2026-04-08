@@ -567,6 +567,48 @@ export function supabaseStoragePublicUrl(bucket: string, objectPath: string): st
 }
 
 /**
+ * Storage: 버킷 생성 (service_role). 이미 있으면 성공으로 간주.
+ * presign 전에 버킷 누락을 자동 복구할 때 사용.
+ */
+export async function supabaseStorageCreateBucketIfNeeded(
+  bucketName: string,
+  options: {
+    public: boolean
+    file_size_limit?: number
+    allowed_mime_types?: string[] | null
+  }
+): Promise<void> {
+  const { url, key } = getConfig()
+  const base = url.replace(/\/$/, '')
+  const body: Record<string, unknown> = {
+    name: bucketName,
+    public: options.public,
+  }
+  if (options.file_size_limit != null) body.file_size_limit = options.file_size_limit
+  if (options.allowed_mime_types != null) body.allowed_mime_types = options.allowed_mime_types
+
+  const res = await supabaseFetch(`${base}/storage/v1/bucket`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  const text = await res.text()
+  if (res.ok) return
+  if (
+    res.status === 409 ||
+    res.status === 422 ||
+    /already exists|Duplicate|duplicate bucket/i.test(text)
+  ) {
+    return
+  }
+  throw new Error(`Supabase create bucket failed (${res.status}): ${text}`)
+}
+
+/**
  * Storage: 클라이언트 직접 업로드용 signed upload URL 발급 (POST /object/upload/sign/…)
  * 업로드 본문은 Vercel을 거치지 않음 → Incoming 절감.
  */
