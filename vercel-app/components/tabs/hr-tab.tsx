@@ -138,8 +138,9 @@ export function HrTab() {
       storeName: auth.store,
       name: auth.user,
       ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+      ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
     }).then(setTodayTypes)
-  }, [auth?.store, auth?.user, auth?.employeeId])
+  }, [auth?.store, auth?.user, auth?.employeeId, auth?.employeeCode])
 
   const loadTodayLog = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -150,10 +151,11 @@ export function HrTab() {
       storeFilter: auth.store,
       employeeFilter: auth.user,
       ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+      ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
       userStore: auth.store,
       userRole: auth?.role,
     }).then(setDailyRecords)
-  }, [auth?.store, auth?.user, auth?.role, auth?.employeeId])
+  }, [auth?.store, auth?.user, auth?.role, auth?.employeeId, auth?.employeeCode])
 
   const loadLeaveInfo = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -225,6 +227,7 @@ export function HrTab() {
         lat,
         lng,
         ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
+        ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
       })
         .then(async (res) => {
           const isGpsPending = res.code === "ATT_GPS_PENDING"

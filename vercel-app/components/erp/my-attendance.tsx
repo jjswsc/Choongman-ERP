@@ -366,6 +366,7 @@ export function MyAttendance() {
         storeFilter: store,
         employeeFilter: name,
         ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
+        ...(auth?.employeeCode ? { employeeCode: auth.employeeCode } : {}),
       }),
       getMyLeaveInfo({ store, name, ...(employeeId != null && employeeId > 0 ? { employeeId } : {}) }),
     ])
@@ -391,7 +392,7 @@ export function MyAttendance() {
         setDailyRecords([])
       })
       .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, auth?.employeeId, myMonth])
+  }, [auth?.store, auth?.user, auth?.employeeId, auth?.employeeCode, myMonth])
 
   React.useEffect(() => {
     if (auth?.store && auth?.user) loadData()

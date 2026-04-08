@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
+import {
+  ATTENDANCE_LOG_PAYROLL_COLS,
+  ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
+} from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 import {
   calcSSO,
@@ -67,15 +70,15 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
       attRows = (await supabaseSelectFilterAllPages(
         'attendance_logs',
         `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { ...attPages, select: `${ATTENDANCE_LOG_PAYROLL_COLS},employee_id` }
+        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS }
       )) as AttRow[]
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_id|42703|column/i.test(em)) throw e
+      if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
       attRows = (await supabaseSelectFilterAllPages(
         'attendance_logs',
         `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        attPages
+        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE }
       )) as AttRow[]
     }
   } else {
@@ -83,15 +86,15 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
       attRows = (await supabaseSelectFilterAllPages(
         'attendance_logs',
         `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { ...attPages, select: `${ATTENDANCE_LOG_PAYROLL_COLS},employee_id` }
+        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS }
       )) as AttRow[]
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_id|42703|column/i.test(em)) throw e
+      if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
       attRows = (await supabaseSelectFilterAllPages(
         'attendance_logs',
         `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        attPages
+        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE }
       )) as AttRow[]
     }
   }

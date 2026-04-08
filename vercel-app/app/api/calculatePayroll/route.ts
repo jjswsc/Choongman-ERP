@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
+import {
+  ATTENDANCE_LOG_PAYROLL_COLS,
+  ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
+} from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 import {
   calcSSO,
@@ -83,20 +86,20 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
         `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
         {
           order: 'log_at.asc',
-          select: `${ATTENDANCE_LOG_PAYROLL_COLS},employee_id`,
+          select: ATTENDANCE_LOG_PAYROLL_COLS,
           pageSize: 2500,
           maxRows: 120000,
         }
       )
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_id|42703|column/i.test(em)) throw e
+      if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
       return await supabaseSelectFilterAllPages(
         'attendance_logs',
         `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
         {
           order: 'log_at.asc',
-          select: ATTENDANCE_LOG_PAYROLL_COLS,
+          select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
           pageSize: 2500,
           maxRows: 120000,
         }

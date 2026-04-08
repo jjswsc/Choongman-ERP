@@ -1,5 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
+import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
+
+/** submitAttendance 와 동일: employee_code / employee_id 컬럼 미배포 시 순차 제거 후 재시도 */
+async function insertAttendanceLogRow(payload: Record<string, unknown>) {
+  let toInsert: Record<string, unknown> = { ...payload }
+  for (;;) {
+    try {
+      await supabaseInsert('attendance_logs', toInsert)
+      return
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (/employee_code|42703|column/i.test(em) && 'employee_code' in toInsert) {
+        const next = { ...toInsert }
+        delete next.employee_code
+        toInsert = next
+        continue
+      }
+      if (/employee_id|42703|column/i.test(em) && 'employee_id' in toInsert) {
+        const next = { ...toInsert }
+        delete next.employee_id
+        toInsert = next
+        continue
+      }
+      throw e
+    }
+  }
+}
 
 function parsePlanToDate(dateStr: string, planVal: string): Date | null {
   if (!dateStr || !planVal || typeof planVal !== 'string') return null
@@ -40,7 +67,7 @@ export async function POST(request: NextRequest) {
     const storeName = String(body?.store || body?.storeName || '').trim()
     const empName = String(body?.name || body?.empName || '').trim()
     const employeeIdRaw = body?.employeeId
-    const employeeId =
+    let employeeId =
       employeeIdRaw != null && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
@@ -90,6 +117,37 @@ export async function POST(request: NextRequest) {
     const planBE = String(sch.break_end || '').trim()
     const planInPrevDay = !!sch.plan_in_prev_day
 
+    // 직원코드 스냅샷·표준 이름 (submitAttendance 와 동일 규칙)
+    let empCodeNorm = ''
+    let logName = empName
+    if (employeeId > 0) {
+      const empRows = (await supabaseSelectFilter(
+        'employees',
+        `id=eq.${employeeId}&store=ilike.${encodeURIComponent(storeName)}`,
+        { limit: 1, select: 'name,employee_code' }
+      )) as { name?: string; employee_code?: string | null }[]
+      const er = empRows?.[0]
+      if (er) {
+        if (String(er.name || '').trim()) logName = String(er.name || '').trim()
+        empCodeNorm = normalizeEmployeeCodeForMatch(String(er.employee_code ?? ''))
+      }
+    } else {
+      const matched = (await supabaseSelectFilter(
+        'employees',
+        `store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
+        { limit: 5, select: 'id,name,employee_code' }
+      )) as { id?: number; name?: string; employee_code?: string | null }[]
+      if ((matched || []).length === 1) {
+        const m = matched[0]
+        const inferredId = m.id != null && Number.isFinite(Number(m.id)) ? Math.floor(Number(m.id)) : 0
+        if (inferredId > 0) {
+          employeeId = inferredId
+          if (String(m.name || '').trim()) logName = String(m.name || '').trim()
+          empCodeNorm = normalizeEmployeeCodeForMatch(String(m.employee_code ?? ''))
+        }
+      }
+    }
+
     // 해당 날짜에 승인된 휴가가 있으면 긴급 인정 불가
     const leaveRows = (await (async () => {
       if (employeeId > 0) {
@@ -121,17 +179,33 @@ export async function POST(request: NextRequest) {
     const attRows = (await (async () => {
       if (employeeId > 0) {
         try {
-          return await supabaseSelectFilter(
+          const byId = (await supabaseSelectFilter(
             'attendance_logs',
             `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
             { limit: 10, select: 'log_type' }
-          )
+          )) as { log_type?: string }[]
+          const merged: { log_type?: string }[] = [...(byId || [])]
+          if (empCodeNorm) {
+            try {
+              const byCode = (await supabaseSelectFilter(
+                'attendance_logs',
+                `store_name=ilike.${encodeURIComponent(storeName)}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+                { limit: 10, select: 'log_type' }
+              )) as { log_type?: string }[]
+              merged.push(...(byCode || []))
+            } catch (e) {
+              const em = e instanceof Error ? e.message : String(e)
+              if (!/employee_code|42703|column/i.test(em)) throw e
+            }
+          }
+          return merged
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e)
           if (!/employee_id|42703|column/i.test(em)) throw e
+          return []
         }
       }
-      const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
+      const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(logName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
       return await supabaseSelectFilter('attendance_logs', attFilter, {
         limit: 10,
         select: 'log_type',
@@ -172,7 +246,7 @@ export async function POST(request: NextRequest) {
     const inPayload: Record<string, unknown> = {
       log_at: inDate.toISOString(),
       store_name: storeName,
-      name: empName,
+      name: logName,
       log_type: '출근',
       lat: '',
       lng: '',
@@ -186,22 +260,13 @@ export async function POST(request: NextRequest) {
       approved: '승인완료',
     }
     if (employeeId > 0) inPayload.employee_id = employeeId
-    try {
-      await supabaseInsert('attendance_logs', inPayload)
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (/employee_id|42703|column/i.test(em) && 'employee_id' in inPayload) {
-        const { employee_id: _eid, ...fallback } = inPayload
-        await supabaseInsert('attendance_logs', fallback)
-      } else {
-        throw e
-      }
-    }
+    if (empCodeNorm) inPayload.employee_code = empCodeNorm
+    await insertAttendanceLogRow(inPayload)
 
     const outPayload: Record<string, unknown> = {
       log_at: outDate.toISOString(),
       store_name: storeName,
-      name: empName,
+      name: logName,
       log_type: '퇴근',
       lat: '',
       lng: '',
@@ -215,17 +280,8 @@ export async function POST(request: NextRequest) {
       approved: '승인완료',
     }
     if (employeeId > 0) outPayload.employee_id = employeeId
-    try {
-      await supabaseInsert('attendance_logs', outPayload)
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (/employee_id|42703|column/i.test(em) && 'employee_id' in outPayload) {
-        const { employee_id: _eid, ...fallback } = outPayload
-        await supabaseInsert('attendance_logs', fallback)
-      } else {
-        throw e
-      }
-    }
+    if (empCodeNorm) outPayload.employee_code = empCodeNorm
+    await insertAttendanceLogRow(outPayload)
 
     return NextResponse.json(
       { success: true, message: '긴급 인정이 완료되었습니다.' },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
   const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
   const employeeId =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
+  const employeeCodeNorm = normalizeEmployeeCodeForMatch(
+    String(searchParams.get('employeeCode') || searchParams.get('code') || '').trim()
+  )
 
   if (!startDate || !endDate || !storeFilter || !employeeFilter) {
     return NextResponse.json([], { headers })
@@ -23,36 +27,50 @@ export async function GET(request: NextRequest) {
 
     const rows = (await (async () => {
       const byNameFilter = `store_name=ilike.${encodeURIComponent(storeFilter)}&name=ilike.${encodeURIComponent(employeeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
-      const selectCols = 'log_at,log_type,status,late_min,ot_min,approved,employee_id'
+      const selectColsWithCode =
+        'log_at,log_type,status,late_min,ot_min,approved,employee_id,employee_code'
+      const selectColsNoCode = 'log_at,log_type,status,late_min,ot_min,approved,employee_id'
+
+      const selectLogs = async (filter: string, withCode: boolean) => {
+        try {
+          return (await supabaseSelectFilter('attendance_logs', filter, {
+            order: 'log_at.asc',
+            limit: 500,
+            select: withCode ? selectColsWithCode : selectColsNoCode,
+          })) as {
+            log_at?: string
+            log_type?: string
+            status?: string
+            late_min?: number
+            ot_min?: number
+            approved?: string | null
+            employee_id?: number | null
+          }[]
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          if (!withCode || !/employee_code|42703|column/i.test(em)) throw e
+          return selectLogs(filter, false)
+        }
+      }
+
       if (employeeId > 0) {
         try {
           const byIdFilter = `store_name=ilike.${encodeURIComponent(storeFilter)}&employee_id=eq.${employeeId}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
-          const byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
-            order: 'log_at.asc',
-            limit: 500,
-            select: selectCols,
-          })) as {
-            log_at?: string
-            log_type?: string
-            status?: string
-            late_min?: number
-            ot_min?: number
-            approved?: string | null
-            employee_id?: number | null
-          }[]
-          const byNameRows = (await supabaseSelectFilter('attendance_logs', byNameFilter, {
-            order: 'log_at.asc',
-            limit: 500,
-            select: selectCols,
-          })) as {
-            log_at?: string
-            log_type?: string
-            status?: string
-            late_min?: number
-            ot_min?: number
-            approved?: string | null
-            employee_id?: number | null
-          }[]
+          const byIdRows = await selectLogs(byIdFilter, true)
+          const byNameRows = await selectLogs(byNameFilter, true)
+          const codeLegFilter =
+            employeeCodeNorm.length > 0
+              ? `store_name=ilike.${encodeURIComponent(storeFilter)}&employee_code=eq.${encodeURIComponent(employeeCodeNorm)}&employee_id=is.null&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+              : ''
+          let byCodeRows: typeof byIdRows = []
+          if (codeLegFilter) {
+            try {
+              byCodeRows = await selectLogs(codeLegFilter, true)
+            } catch (e) {
+              const em = e instanceof Error ? e.message : String(e)
+              if (!/employee_code|42703|column/i.test(em)) throw e
+            }
+          }
           const merged = new Map<string, {
             log_at?: string
             log_type?: string
@@ -82,6 +100,7 @@ export async function GET(request: NextRequest) {
           }
           for (const r of byIdRows || []) pushRow(r)
           for (const r of byNameRows || []) pushRow(r)
+          for (const r of byCodeRows || []) pushRow(r)
           return Array.from(merged.values()).sort((a, b) => String(a.log_at || '').localeCompare(String(b.log_at || '')))
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e)

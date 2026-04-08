@@ -15,7 +15,7 @@ import {
   normalizedAllowedStoresFromJwt,
   rowRoleLooksFranchisee,
 } from '@/lib/franchisee-multi-store'
-import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 
@@ -387,7 +387,7 @@ export async function POST(req: NextRequest) {
     // 직원 수정 시: 기존 데이터 조회 (급여 변경 이력·attendance 갱신용)
     const existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
       limit: 1,
-      select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow',
+      select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code',
     })) as {
       store?: string
       name?: string
@@ -395,10 +395,12 @@ export async function POST(req: NextRequest) {
       sal_amt?: number
       position_allowance?: number
       haz_allow?: number
+      employee_code?: string | null
     }[]
     const old = existing?.[0]
     const oldStore = old ? String(old.store || '').trim() : ''
     const oldName = old ? String(old.name || '').trim() : ''
+    const oldCode = old ? String(old.employee_code || '').trim() : ''
     const nameOrStoreChanged = (oldName !== newName || oldStore !== newStore) && (oldName || oldStore)
 
     const oldSalType = old ? String(old.sal_type || '').trim() : ''
@@ -451,15 +453,44 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const syncCodeNorm = normalizeEmployeeCodeForMatch(
+      String(
+        payload.employee_code != null && String(payload.employee_code).trim()
+          ? (payload.employee_code as string)
+          : codeRaw || oldCode
+      )
+    )
+    const syncAttPatch: Record<string, unknown> = {
+      store_name: String(payload.store || '').trim(),
+      name: String(payload.name || '').trim(),
+    }
+    if (syncCodeNorm) syncAttPatch.employee_code = syncCodeNorm
+
+    const patchAttendanceLogs = async (filter: string, patch: Record<string, unknown>) => {
+      try {
+        await supabaseUpdateByFilter('attendance_logs', filter, patch)
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (/employee_code|42703|column/i.test(em) && 'employee_code' in patch) {
+          const rest = { ...patch }
+          delete rest.employee_code
+          await supabaseUpdateByFilter('attendance_logs', filter, rest)
+        }
+      }
+    }
+
+    try {
+      await patchAttendanceLogs(`employee_id=eq.${rowId}`, syncAttPatch)
+    } catch (_) {
+      // attendance_logs 동기화 실패해도 직원 저장은 완료됨
+    }
+
     if (nameOrStoreChanged) {
       try {
-        const attFilter = `store_name=ilike.${encodeURIComponent(oldStore)}&name=ilike.${encodeURIComponent(oldName)}`
-        await supabaseUpdateByFilter('attendance_logs', attFilter, {
-          store_name: newStore,
-          name: newName,
-        })
+        const attFilter = `store_name=ilike.${encodeURIComponent(oldStore)}&name=ilike.${encodeURIComponent(oldName)}&employee_id=is.null`
+        await patchAttendanceLogs(attFilter, syncAttPatch)
       } catch (_) {
-        // attendance_logs 업데이트 실패해도 직원 저장은 완료됨
+        // 레거시(NULL id) 행 갱신 실패는 무시
       }
     }
 

@@ -4,7 +4,10 @@ import {
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
-import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
+import {
+  ATTENDANCE_LOG_PAYROLL_COLS,
+  ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
+} from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import {
   clockOutCountsForPayroll,
@@ -714,7 +717,7 @@ export async function GET(request: NextRequest) {
           `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
           {
             order: 'log_at.asc',
-            select: `${ATTENDANCE_LOG_PAYROLL_COLS},employee_id`,
+            select: ATTENDANCE_LOG_PAYROLL_COLS,
             pageSize: 2500,
             maxRows: 120000,
           }
@@ -733,13 +736,13 @@ export async function GET(request: NextRequest) {
         }[]
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
-        if (!/employee_id|42703|column/i.test(em)) throw e
+        if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
         return (await supabaseSelectFilterAllPages(
           'attendance_logs',
           `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
           {
             order: 'log_at.asc',
-            select: ATTENDANCE_LOG_PAYROLL_COLS,
+            select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
             pageSize: 2500,
             maxRows: 120000,
           }
@@ -747,6 +750,7 @@ export async function GET(request: NextRequest) {
           log_at?: string
           store_name?: string
           name?: string
+          employee_id?: number | null
           log_type?: string
           late_min?: number
           early_min?: number

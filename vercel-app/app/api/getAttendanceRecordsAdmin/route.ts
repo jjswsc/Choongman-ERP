@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { ATTENDANCE_LOG_ADMIN_GRID_COLS } from '@/lib/postgrest-narrow-select'
+import {
+  ATTENDANCE_LOG_ADMIN_GRID_COLS,
+  ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
+} from '@/lib/postgrest-narrow-select'
 import {
   bangkokDateRangeToUtc,
   plannedWorkMinutesFromPlans,
@@ -8,7 +11,10 @@ import {
   scheduleDateKey,
 } from '@/lib/attendance-utils'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
-import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import {
+  normalizeEmployeeCodeForMatch,
+  normalizeEmployeeNameForGradeMatch,
+} from '@/lib/employee-display-name'
 
 const TZ = 'Asia/Bangkok'
 
@@ -95,6 +101,10 @@ export async function GET(request: NextRequest) {
   const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
   const employeeIdFilter =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
+  const employeeCodeNorm = normalizeEmployeeCodeForMatch(
+    String(searchParams.get('employeeCode') || searchParams.get('code') || '').trim()
+  )
+  const hasEmployeeCodeFilter = employeeCodeNorm.length > 0
   const statusFilter = String(searchParams.get('statusFilter') || searchParams.get('status') || 'all').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
@@ -127,6 +137,7 @@ export async function GET(request: NextRequest) {
       store_name?: string
       name?: string
       employee_id?: number | null
+      employee_code?: string | null
       log_type?: string
       late_min?: number
       early_min?: number
@@ -138,6 +149,43 @@ export async function GET(request: NextRequest) {
 
     // 급여(getPayrollCalc)와 동일 구간의 로그를 모두 수집. limit 2000만 쓰면 log_at.asc 앞쪽 행만 오고
     // 직원 필터는 루프에서 적용되어 말일·특정 직원 행이 누락될 수 있음(지각 공제는 있는데 근태 표에 없음).
+    const attGridPage = {
+      order: 'log_at.asc' as const,
+      pageSize: 2500,
+      maxRows: 120_000,
+    }
+    const fetchAttGrid = async (filter: string): Promise<AttRow[]> => {
+      try {
+        return (await supabaseSelectFilterAllPages('attendance_logs', filter, {
+          ...attGridPage,
+          select: ATTENDANCE_LOG_ADMIN_GRID_COLS,
+        })) as AttRow[]
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_code|42703|column/i.test(em)) throw e
+        return (await supabaseSelectFilterAllPages('attendance_logs', filter, {
+          ...attGridPage,
+          select: ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
+        })) as AttRow[]
+      }
+    }
+    const mergeAttByLogId = (chunks: AttRow[][]): AttRow[] => {
+      const seenLogIds = new Set<number>()
+      const merged: AttRow[] = []
+      for (const chunk of chunks) {
+        for (const r of chunk || []) {
+          const lid = r.id != null && Number.isFinite(Number(r.id)) ? Math.floor(Number(r.id)) : NaN
+          if (!Number.isNaN(lid)) {
+            if (seenLogIds.has(lid)) continue
+            seenLogIds.add(lid)
+          }
+          merged.push(r)
+        }
+      }
+      merged.sort((a, b) => String(a.log_at || '').localeCompare(String(b.log_at || '')))
+      return merged
+    }
+
     const attLogFilterParts = [
       `log_at=gte.${encodeURIComponent(startISO)}`,
       `log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
@@ -145,18 +193,49 @@ export async function GET(request: NextRequest) {
     if (!isAllStores && storeFilter) {
       attLogFilterParts.unshift(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
     }
-    if (hasEmployeeIdFilter) {
-      attLogFilterParts.push(`employee_id=eq.${employeeIdFilter}`)
-    } else if (!isAllEmployeesByName && employeeFilter) {
-      attLogFilterParts.push(`name=eq.${encodeURIComponent(employeeFilter)}`)
+
+    let attRows: AttRow[]
+    if (hasEmployeeIdFilter && employeeFilter.trim()) {
+      const trimmedName = employeeFilter.trim()
+      // ① employee_id ② 이름+id NULL ③ 직원코드+id NULL(레거시)
+      const idFilter = [...attLogFilterParts, `employee_id=eq.${employeeIdFilter}`].join('&')
+      const legacyFilter = [
+        ...attLogFilterParts,
+        `name=eq.${encodeURIComponent(trimmedName)}`,
+        `employee_id=is.null`,
+      ].join('&')
+      const fetches: Promise<AttRow[]>[] = [fetchAttGrid(idFilter), fetchAttGrid(legacyFilter)]
+      if (hasEmployeeCodeFilter) {
+        fetches.push(
+          fetchAttGrid(
+            [
+              ...attLogFilterParts,
+              `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`,
+              `employee_id=is.null`,
+            ].join('&')
+          )
+        )
+      }
+      attRows = mergeAttByLogId(await Promise.all(fetches))
+    } else if (hasEmployeeIdFilter) {
+      const idFilter = [...attLogFilterParts, `employee_id=eq.${employeeIdFilter}`].join('&')
+      if (hasEmployeeCodeFilter) {
+        const codeLegacyFilter = [
+          ...attLogFilterParts,
+          `employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`,
+          `employee_id=is.null`,
+        ].join('&')
+        attRows = mergeAttByLogId(await Promise.all([fetchAttGrid(idFilter), fetchAttGrid(codeLegacyFilter)]))
+      } else {
+        attRows = await fetchAttGrid(idFilter)
+      }
+    } else {
+      const parts = [...attLogFilterParts]
+      if (!isAllEmployeesByName && employeeFilter) {
+        parts.push(`name=eq.${encodeURIComponent(employeeFilter)}`)
+      }
+      attRows = await fetchAttGrid(parts.join('&'))
     }
-    const attLogFilter = attLogFilterParts.join('&')
-    const attRows = (await supabaseSelectFilterAllPages('attendance_logs', attLogFilter, {
-      order: 'log_at.asc',
-      select: ATTENDANCE_LOG_ADMIN_GRID_COLS,
-      pageSize: 2500,
-      maxRows: 120_000,
-    })) as AttRow[]
 
     /** 파트타임/시급 식별 + 직원코드 맵 */
     const partTimeKeys = new Set<string>()
@@ -277,7 +356,7 @@ export async function GET(request: NextRequest) {
       }
       const rowStore = String(r.store_name || '').trim()
       const name = String(r.name || '').trim()
-      if (!isAllEmployees && name !== employeeFilter) continue
+      if (!isAllEmployees && !hasEmployeeIdFilter && name !== employeeFilter) continue
 
       const eid =
         r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
@@ -376,7 +455,11 @@ export async function GET(request: NextRequest) {
           d.setDate(d.getDate() + 1)
           return d.toISOString().slice(0, 10)
         })()
-        const nextRec = byKey[`${nextDay}|${rec.store}|${rec.name}`]
+        const nextKey =
+          rec.employeeId > 0
+            ? `${nextDay}|${rec.store}|#${rec.employeeId}`
+            : `${nextDay}|${rec.store}|${rec.name}`
+        const nextRec = byKey[nextKey]
         if (nextRec && nextRec.outTime && !nextRec.inTime) {
           outTimeForRow = nextRec.outTime
           earlyMinDb = nextRec.earlyMinFromDb

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { parseOr400, submitAttendanceSchema } from '@/lib/api-validate'
+import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 const TZ = 'Asia/Bangkok'
 
 function todayStr() {
@@ -92,12 +93,13 @@ export async function POST(request: NextRequest) {
     const dataLng = validated.parsed.lng ?? raw.lng
     let empName = String(empNameRaw || '').trim()
     let empId = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+    let empCodeNorm = ''
     if (empId > 0) {
       const empRows = (await supabaseSelectFilter(
         'employees',
         `id=eq.${empId}&store=ilike.${encodeURIComponent(storeName)}`,
-        { limit: 1, select: 'id,name' }
-      )) as { id?: number; name?: string }[]
+        { limit: 1, select: 'id,name,employee_code' }
+      )) as { id?: number; name?: string; employee_code?: string | null }[]
       const er = empRows?.[0]
       if (!er) {
         return NextResponse.json(
@@ -106,19 +108,21 @@ export async function POST(request: NextRequest) {
         )
       }
       if (String(er.name || '').trim()) empName = String(er.name || '').trim()
+      empCodeNorm = normalizeEmployeeCodeForMatch(String(er.employee_code ?? ''))
     } else {
       // 하위호환: 구버전 세션에 employeeId가 없어도 저장 시점에는 id를 채워 일관성 확보
       const matched = (await supabaseSelectFilter(
         'employees',
         `store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
-        { limit: 5, select: 'id,name' }
-      )) as { id?: number; name?: string }[]
+        { limit: 5, select: 'id,name,employee_code' }
+      )) as { id?: number; name?: string; employee_code?: string | null }[]
       if ((matched || []).length === 1) {
         const m = matched[0]
         const inferredId = m.id != null && Number.isFinite(Number(m.id)) ? Math.floor(Number(m.id)) : 0
         if (inferredId > 0) {
           empId = inferredId
           if (String(m.name || '').trim()) empName = String(m.name || '').trim()
+          empCodeNorm = normalizeEmployeeCodeForMatch(String(m.employee_code ?? ''))
         }
       }
     }
@@ -129,15 +133,51 @@ export async function POST(request: NextRequest) {
     const oncePerDayTypes = ['출근', '퇴근', '휴식시작', '휴식종료']
     if (oncePerDayTypes.includes(logType)) {
       const storeIlike = encodeURIComponent(attendanceStoreIlikePattern(storeName))
-      const logFilter =
-        empId > 0
-          ? `store_name=ilike.${storeIlike}&employee_id=eq.${empId}`
-          : `store_name=ilike.${storeIlike}&name=ilike.${encodeURIComponent(empName)}`
-      const logs = (await supabaseSelectFilter('attendance_logs', logFilter, {
-        order: 'log_at.desc',
-        limit: 100,
-        select: 'log_at,log_type',
-      })) as { log_at?: string; log_type?: string }[]
+      let logs: { log_at?: string; log_type?: string }[]
+      if (empId > 0) {
+        const byIdFilter = `store_name=ilike.${storeIlike}&employee_id=eq.${empId}`
+        const byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
+          order: 'log_at.desc',
+          limit: 100,
+          select: 'id,log_at,log_type',
+        })) as { id?: number; log_at?: string; log_type?: string }[]
+        if (empCodeNorm) {
+          try {
+            const codeLeg = `store_name=ilike.${storeIlike}&employee_code=eq.${encodeURIComponent(empCodeNorm)}&employee_id=is.null`
+            const codeRows = (await supabaseSelectFilter('attendance_logs', codeLeg, {
+              order: 'log_at.desc',
+              limit: 100,
+              select: 'id,log_at,log_type',
+            })) as { id?: number; log_at?: string; log_type?: string }[]
+            const seen = new Set<number>()
+            const merged: { log_at?: string; log_type?: string }[] = []
+            const push = (r: { id?: number; log_at?: string; log_type?: string }) => {
+              const lid = r.id != null && Number.isFinite(Number(r.id)) ? Math.floor(Number(r.id)) : NaN
+              if (!Number.isNaN(lid)) {
+                if (seen.has(lid)) return
+                seen.add(lid)
+              }
+              merged.push({ log_at: r.log_at, log_type: r.log_type })
+            }
+            for (const r of byIdRows || []) push(r)
+            for (const r of codeRows || []) push(r)
+            merged.sort((a, b) => String(b.log_at || '').localeCompare(String(a.log_at || '')))
+            logs = merged.slice(0, 100)
+          } catch (e) {
+            const em = e instanceof Error ? e.message : String(e)
+            if (!/employee_code|42703|column/i.test(em)) throw e
+            logs = (byIdRows || []).map(({ log_at, log_type }) => ({ log_at, log_type }))
+          }
+        } else {
+          logs = (byIdRows || []).map(({ log_at, log_type }) => ({ log_at, log_type }))
+        }
+      } else {
+        logs = (await supabaseSelectFilter(
+          'attendance_logs',
+          `store_name=ilike.${storeIlike}&name=ilike.${encodeURIComponent(empName)}`,
+          { order: 'log_at.desc', limit: 100, select: 'log_at,log_type' }
+        )) as { log_at?: string; log_type?: string }[]
+      }
       const todayLogs = (logs || []).filter((r) => {
         const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
         return rowDate === todayStrVal
@@ -433,15 +473,26 @@ export async function POST(request: NextRequest) {
       approved: '대기',
     }
     if (empId > 0) payload.employee_id = empId
-    try {
-      await supabaseInsert('attendance_logs', payload)
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (/employee_id|42703|column/i.test(em) && 'employee_id' in payload) {
-        const fallbackPayload = { ...payload }
-        delete fallbackPayload.employee_id
-        await supabaseInsert('attendance_logs', fallbackPayload)
-      } else {
+    if (empCodeNorm) payload.employee_code = empCodeNorm
+    let toInsert: Record<string, unknown> = { ...payload }
+    for (;;) {
+      try {
+        await supabaseInsert('attendance_logs', toInsert)
+        break
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (/employee_code|42703|column/i.test(em) && 'employee_code' in toInsert) {
+          const next = { ...toInsert }
+          delete next.employee_code
+          toInsert = next
+          continue
+        }
+        if (/employee_id|42703|column/i.test(em) && 'employee_id' in toInsert) {
+          const next = { ...toInsert }
+          delete next.employee_id
+          toInsert = next
+          continue
+        }
         throw e
       }
     }

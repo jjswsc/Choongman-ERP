@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 
 const TZ = 'Asia/Bangkok'
 
@@ -12,6 +13,9 @@ export async function GET(request: NextRequest) {
   const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
   const employeeId =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
+  const employeeCodeNorm = normalizeEmployeeCodeForMatch(
+    String(searchParams.get('employeeCode') || searchParams.get('code') || '').trim()
+  )
 
   if (!storeName || !name) {
     return NextResponse.json([], { headers })
@@ -28,16 +32,43 @@ export async function GET(request: NextRequest) {
           : ''
       if (byIdFilter) {
         try {
-          const byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
-            order: 'log_at.desc',
-            limit: 50,
-            select: 'log_at,log_type,employee_id',
-          })) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          const selWithCode = 'log_at,log_type,employee_id,employee_code'
+          const selNoCode = 'log_at,log_type,employee_id'
+          let byIdRows: { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          try {
+            byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
+              order: 'log_at.desc',
+              limit: 50,
+              select: selWithCode,
+            })) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          } catch (e) {
+            const em = e instanceof Error ? e.message : String(e)
+            if (!/employee_code|42703|column/i.test(em)) throw e
+            byIdRows = (await supabaseSelectFilter('attendance_logs', byIdFilter, {
+              order: 'log_at.desc',
+              limit: 50,
+              select: selNoCode,
+            })) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          }
           const byNameRows = (await supabaseSelectFilter(
             'attendance_logs',
             `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
-            { order: 'log_at.desc', limit: 50, select: 'log_at,log_type,employee_id' }
+            { order: 'log_at.desc', limit: 50, select: selNoCode }
           )) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+          let byCodeRows: typeof byIdRows = []
+          if (employeeCodeNorm.length > 0) {
+            const codeF = `store_name=ilike.${encodeURIComponent(storePattern)}&employee_code=eq.${encodeURIComponent(employeeCodeNorm)}&employee_id=is.null`
+            try {
+              byCodeRows = (await supabaseSelectFilter('attendance_logs', codeF, {
+                order: 'log_at.desc',
+                limit: 50,
+                select: selWithCode,
+              })) as { log_at?: string; log_type?: string; employee_id?: number | null }[]
+            } catch (e) {
+              const em = e instanceof Error ? e.message : String(e)
+              if (!/employee_code|42703|column/i.test(em)) throw e
+            }
+          }
           const merged = new Map<string, { log_at?: string; log_type?: string; employee_id?: number | null }>()
           const pushRow = (r: { log_at?: string; log_type?: string; employee_id?: number | null }) => {
             const rowEmpId =
@@ -50,6 +81,7 @@ export async function GET(request: NextRequest) {
           }
           for (const r of byIdRows || []) pushRow(r)
           for (const r of byNameRows || []) pushRow(r)
+          for (const r of byCodeRows || []) pushRow(r)
           return Array.from(merged.values()).sort((a, b) => String(b.log_at || '').localeCompare(String(a.log_at || '')))
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e)

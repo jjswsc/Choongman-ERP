@@ -576,12 +576,19 @@ export async function updateOrderCart(params: {
 }
 
 // ─── 인사 (HR) ───
-export async function getTodayAttendanceTypes(params: { storeName: string; name: string; employeeId?: number }) {
+export async function getTodayAttendanceTypes(params: {
+  storeName: string
+  name: string
+  employeeId?: number
+  employeeCode?: string
+}) {
   const q = new URLSearchParams({
     storeName: params.storeName,
     name: params.name,
   })
   if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
+  if (params.employeeCode != null && String(params.employeeCode).trim())
+    q.set('employeeCode', String(params.employeeCode).trim())
   const res = await apiFetchWithOffline(`/api/getTodayAttendanceTypes?${q}`)
   return res.json() as Promise<string[]>
 }
@@ -601,6 +608,8 @@ export async function getAttendanceList(params: {
   storeFilter: string
   employeeFilter: string
   employeeId?: number
+  /** employees.employee_code — 레거시 로그(employee_id NULL) 병합용 */
+  employeeCode?: string
 }) {
   const q = new URLSearchParams({
     startDate: params.startDate,
@@ -609,6 +618,8 @@ export async function getAttendanceList(params: {
     employeeFilter: params.employeeFilter,
   })
   if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
+  if (params.employeeCode != null && String(params.employeeCode).trim())
+    q.set('employeeCode', String(params.employeeCode).trim())
   const res = await apiFetchWithOffline(`/api/getAttendanceList?${q}`)
   return res.json() as Promise<AttendanceLogItem[]>
 }
@@ -620,6 +631,8 @@ export async function submitAttendance(params: {
   lat: string | number
   lng: string | number
   employeeId?: number
+  /** 선택; 서버는 employees에서 코드를 다시 확인해 스냅샷 저장 */
+  employeeCode?: string
 }) {
   const res = await apiFetchWithOffline('/api/submitAttendance', {
     method: 'POST',
@@ -1014,6 +1027,7 @@ export async function getAttendanceRecordsAdmin(params: {
   storeFilter?: string
   employeeFilter?: string
   employeeId?: number
+  employeeCode?: string
   statusFilter?: string
   userStore?: string
   userRole?: string
@@ -1024,6 +1038,8 @@ export async function getAttendanceRecordsAdmin(params: {
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.employeeFilter) q.set('employeeFilter', params.employeeFilter)
   if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
+  if (params.employeeCode != null && String(params.employeeCode).trim())
+    q.set('employeeCode', String(params.employeeCode).trim())
   if (params.statusFilter) q.set('statusFilter', params.statusFilter || 'all')
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
