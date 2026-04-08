@@ -156,12 +156,13 @@ function buildPayrollEmailHtml(p: Record<string, unknown>, monthStr: string): st
   const splBonus = Number(p.spl_bonus ?? p.splBonus) || 0
   const otAmt = Number(p.ot_amt ?? p.otAmt) || 0
   const lateDed = Number(p.late_ded ?? p.lateDed) || 0
+  const earlyDed = Number(p.early_ded ?? p.earlyDed) || 0
   const sso = Number(p.sso) || 0
   const tax = Number(p.tax) || 0
   const otherDed = Number(p.other_ded ?? p.otherDed) || 0
   const netPay = Number(p.net_pay ?? p.netPay) || 0
   const totalAllow = posAllow + hazAllow + birthBonus + holidayPay + splBonus
-  const totalDed = lateDed + sso + tax + otherDed
+  const totalDed = lateDed + earlyDed + sso + tax + otherDed
   const yearMonth = formatMonthEn(monthStr)
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 

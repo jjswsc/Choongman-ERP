@@ -22,6 +22,7 @@ export function parseDeliveryAppCodeFromItemsJson(itemsJson: string | null | und
 
 export function resolveOrderDeliveryAppCode(row: {
   delivery_app_code?: string | null
+  delivery_payment_channel?: string | null
   order_type?: string | null
   items_json?: string | null
 }): string {
@@ -30,5 +31,9 @@ export function resolveOrderDeliveryAppCode(row: {
     .toLowerCase()
   if (col) return col
   if (String(row.order_type ?? '').trim() !== 'delivery') return ''
+  const payCh = String(row.delivery_payment_channel ?? '')
+    .trim()
+    .toLowerCase()
+  if (payCh && payCh !== 'dine_in') return payCh
   return parseDeliveryAppCodeFromItemsJson(row.items_json ?? undefined)
 }

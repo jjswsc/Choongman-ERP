@@ -12,6 +12,7 @@ CREATE OR REPLACE FUNCTION cm_norm_store(v text)
 RETURNS text
 LANGUAGE sql
 IMMUTABLE
+SET search_path = public
 AS $$
   SELECT lower(regexp_replace(trim(coalesce(v, '')), '\s+', ' ', 'g'));
 $$;
@@ -21,6 +22,7 @@ CREATE OR REPLACE FUNCTION cm_norm_name(v text)
 RETURNS text
 LANGUAGE sql
 IMMUTABLE
+SET search_path = public
 AS $$
   SELECT lower(
     regexp_replace(
@@ -137,6 +139,7 @@ ON attendance_employee_manual_map (cm_norm_store(store_name), cm_norm_name(raw_n
 CREATE OR REPLACE FUNCTION touch_attendance_employee_manual_map_updated_at()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   NEW.updated_at := now();

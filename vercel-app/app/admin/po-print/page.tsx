@@ -6,6 +6,8 @@ import {
   PurchaseOrderPrint,
   type PoPrintData,
   type PoPrintCompany,
+  isPoApprovedStatus,
+  isPoAccountingTaxInvoiceMode,
 } from "@/components/invoice/purchase-order-print"
 import { Button } from "@/components/ui/button"
 import { getInvoiceData } from "@/lib/api-client"
@@ -79,13 +81,24 @@ export default function PoPrintPage() {
     window.print()
   }
 
-  const labels = React.useMemo(
-    () => ({
-      poTitle: t("poTitle") || "PURCHASE ORDER",
-      poNo: t("poNo") || "PO No",
+  const labels = React.useMemo(() => {
+    const acct = Boolean(data?.accountingBillToStyle)
+    const taxMode = isPoAccountingTaxInvoiceMode(
+      data?.accountingBillToStyle,
+      data?.status,
+      data?.invoiceReceived
+    )
+    const approved = data ? isPoApprovedStatus(data.status) : false
+    return {
+      poTitle: acct
+        ? taxMode
+          ? t("poAccountingPrintTitleTaxInvoice") || "TAX INVOICE"
+          : t("poAccountingPrintTitleInvoice") || "INVOICE"
+        : t("poTitle") || "PURCHASE ORDER",
+      poNo: acct ? t("poAccountingInvoiceNoLabel") || "Invoice No." : t("poNo") || "PO No",
       poDate: t("poDate") || "Date",
       from: "FROM",
-      supplier: "SUPPLIER",
+      supplier: acct ? t("poPrintBillTo") || "BILL TO (FRANCHISE)" : "SUPPLIER",
       shipTo: t("poShipTo") || "SHIP TO",
       no: "No",
       item: t("item") || "Item",
@@ -107,10 +120,17 @@ export default function PoPrintPage() {
         t("poAuthorizedSignatureStamp") || "Authorized Signature & Company Stamp",
       poMetaStore: t("poMetaStore") || "Store",
       poMetaStoreVendor: t("poMetaStoreVendor") || "Store vendor",
+      poPrintLegalEntity: t("poPrintLegalEntity") || "Legal entity",
       poFormatBadgeExternal: t("poFormatBadgeExternal") || "External format",
-    }),
-    [t]
-  )
+      poHeaderBadge: acct
+        ? taxMode
+          ? t("poAccountingPrintBadgeTaxInvoice") || "Tax Invoice"
+          : approved
+            ? t("poAccountingPrintBadgeApproved") || "Approved"
+            : t("poAccountingPrintBadgeDraft") || "Draft"
+        : undefined,
+    }
+  }, [t, data])
 
   if (!loaded) {
     return (

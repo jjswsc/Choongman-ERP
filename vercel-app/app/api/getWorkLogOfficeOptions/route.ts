@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { isEmployedAsOf } from '@/lib/employee-headcount-utils'
 
 /** 업무일지용 - 오피스 소속 부서·직원만 (store 비었거나 본사/오피스인 경우, 매장명 있으면 제외) */
 const OFFICE_STORE_PATTERNS = ['본사', '오피스', 'office', 'hq', 'headquarters', '본점']
@@ -15,9 +17,28 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const list = (await supabaseSelect('employees', { order: 'name.asc', select: 'name,nick,job,store' })) || []
-    const all = list as { name?: string; nick?: string; job?: string; store?: string }[]
-    const officeOnly = all.filter((e) => isOfficeStaff(e.store || ''))
+    const todayBkk = getBangkokTodayDateString()
+    const list =
+      (await supabaseSelect('employees', {
+        order: 'name.asc',
+        select: 'name,nick,job,store,join_date,resign_date',
+      })) || []
+    const all = list as {
+      name?: string
+      nick?: string
+      job?: string
+      store?: string
+      join_date?: unknown
+      resign_date?: unknown
+    }[]
+    const officeOnly = all.filter((e) => {
+      if (!isOfficeStaff(e.store || '')) return false
+      return isEmployedAsOf(
+        e.join_date != null ? String(e.join_date) : '',
+        e.resign_date != null ? String(e.resign_date) : '',
+        todayBkk
+      )
+    })
     const useList = officeOnly
     const staff = useList.map((e) => {
       const n = String(e.name || '').trim()

@@ -1,10 +1,117 @@
 -- Supabase Database Linter: 0013_rls_disabled_in_public, 0023_sensitive_columns_exposed
--- 대상: CSV에 나온 public 테이블들에 RLS 활성화 + 개발·기존 앱 호환용 permissive 정책
+-- 대상: public 테이블 RLS 활성화 + 개발·기존 앱 호환용 permissive 정책 (FOR ALL, USING(true)).
 --
--- 서버만 service_role 로 붙는다면 정책 없이 RLS만 켜도 되지만, anon 키 경로가 있으면 0건이 될 수 있음.
--- marketing_campaigns_rls_policies.sql 과 동일 패턴 (FOR ALL + USING(true)).
+-- 포함 테이블: store_job_headcount, store_repair_*, api_request_idempotency_keys,
+--   income_statement_overrides, ai_*, external_*, attendance_employee_manual_map,
+--   pos_tax_invoice_recipients, po_billing_settings, marketing_campaign_design_tasks,
+--   pos_payment_attempts, pos_linkpos_tender_rules, pos_grab_webhook_events
+--
+-- 보안 강화 시: 아래 정책을 역할·매장·JWT 클레임 기준으로 좁히거나, 서버만 service_role 사용.
+-- 서버만 service_role 이면 RLS는 우회되므로 앱 동작은 유지되며, anon/authenticated 는 정책에 묶임.
+--
+-- 하단 § GRANT: RLS 켠 뒤 PostgREST(anon/authenticated)에서 permission denied 나는 경우를 미리 맞춤.
+--   (테이블이 아직 없으면 해당 GRANT 줄에서 오류 → 테이블 생성 스크립트 실행 후 재실행)
 --
 -- Supabase Dashboard → SQL Editor → 실행
+
+-- api_request_idempotency_keys
+ALTER TABLE IF EXISTS public.api_request_idempotency_keys ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all api_request_idempotency_keys" ON public.api_request_idempotency_keys;
+CREATE POLICY "Allow all api_request_idempotency_keys"
+  ON public.api_request_idempotency_keys
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- income_statement_overrides (sql/income_statement_overrides.sql 주석과 동일 취지)
+ALTER TABLE IF EXISTS public.income_statement_overrides ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all income_statement_overrides" ON public.income_statement_overrides;
+CREATE POLICY "Allow all income_statement_overrides"
+  ON public.income_statement_overrides
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ai_knowledge_chunks
+ALTER TABLE IF EXISTS public.ai_knowledge_chunks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all ai_knowledge_chunks" ON public.ai_knowledge_chunks;
+CREATE POLICY "Allow all ai_knowledge_chunks"
+  ON public.ai_knowledge_chunks
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ai_action_requests
+ALTER TABLE IF EXISTS public.ai_action_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all ai_action_requests" ON public.ai_action_requests;
+CREATE POLICY "Allow all ai_action_requests"
+  ON public.ai_action_requests
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ai_notice_drafts
+ALTER TABLE IF EXISTS public.ai_notice_drafts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all ai_notice_drafts" ON public.ai_notice_drafts;
+CREATE POLICY "Allow all ai_notice_drafts"
+  ON public.ai_notice_drafts
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ai_action_events
+ALTER TABLE IF EXISTS public.ai_action_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all ai_action_events" ON public.ai_action_events;
+CREATE POLICY "Allow all ai_action_events"
+  ON public.ai_action_events
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ai_followup_tasks
+ALTER TABLE IF EXISTS public.ai_followup_tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all ai_followup_tasks" ON public.ai_followup_tasks;
+CREATE POLICY "Allow all ai_followup_tasks"
+  ON public.ai_followup_tasks
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- ai_usage_logs
+ALTER TABLE IF EXISTS public.ai_usage_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all ai_usage_logs" ON public.ai_usage_logs;
+CREATE POLICY "Allow all ai_usage_logs"
+  ON public.ai_usage_logs
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- external_store_profiles
+ALTER TABLE IF EXISTS public.external_store_profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all external_store_profiles" ON public.external_store_profiles;
+CREATE POLICY "Allow all external_store_profiles"
+  ON public.external_store_profiles
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- external_context_daily
+ALTER TABLE IF EXISTS public.external_context_daily ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all external_context_daily" ON public.external_context_daily;
+CREATE POLICY "Allow all external_context_daily"
+  ON public.external_context_daily
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- attendance_employee_manual_map (attendance_employee_id_third_pass.sql)
+ALTER TABLE IF EXISTS public.attendance_employee_manual_map ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all attendance_employee_manual_map" ON public.attendance_employee_manual_map;
+CREATE POLICY "Allow all attendance_employee_manual_map"
+  ON public.attendance_employee_manual_map
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
 
 -- store_job_headcount
 ALTER TABLE IF EXISTS public.store_job_headcount ENABLE ROW LEVEL SECURITY;
@@ -86,3 +193,29 @@ CREATE POLICY "Allow all pos_grab_webhook_events"
   FOR ALL
   USING (true)
   WITH CHECK (true);
+
+-- ─── REST(anon / authenticated) 권한 — RLS 정책과 함께 써야 API 키 경로가 동작 ───
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  public.api_request_idempotency_keys,
+  public.income_statement_overrides,
+  public.ai_knowledge_chunks,
+  public.ai_action_requests,
+  public.ai_notice_drafts,
+  public.ai_action_events,
+  public.ai_followup_tasks,
+  public.ai_usage_logs,
+  public.external_store_profiles,
+  public.external_context_daily,
+  public.attendance_employee_manual_map,
+  public.store_job_headcount,
+  public.store_repair_tickets,
+  public.store_repair_progress_logs,
+  public.pos_tax_invoice_recipients,
+  public.po_billing_settings,
+  public.marketing_campaign_design_tasks,
+  public.pos_payment_attempts,
+  public.pos_linkpos_tender_rules,
+  public.pos_grab_webhook_events
+TO anon, authenticated;

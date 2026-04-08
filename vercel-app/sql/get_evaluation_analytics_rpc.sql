@@ -5,6 +5,7 @@ CREATE OR REPLACE FUNCTION public.eval_json_total_score(data text)
 RETURNS numeric
 LANGUAGE plpgsql
 IMMUTABLE
+SET search_path = public
 AS $$
 DECLARE
   j jsonb;
@@ -38,6 +39,7 @@ CREATE OR REPLACE FUNCTION public.get_evaluation_analytics(
 RETURNS jsonb
 LANGUAGE sql
 STABLE
+SET search_path = public
 AS $$
 WITH base AS (
   SELECT

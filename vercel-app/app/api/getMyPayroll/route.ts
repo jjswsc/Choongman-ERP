@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
       spl_bonus: Number(r.spl_bonus) || 0,
       ot_amt: Number(r.ot_amt) || 0,
       late_ded: Number(r.late_ded) || 0,
+      early_ded: Number(r.early_ded) || 0,
       sso: Number(r.sso) || 0,
       tax: Number(r.tax) || 0,
       other_ded: Number(r.other_ded) || 0,

@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       validFrom?: string | null
       validTo?: string | null
       marketingActualCost?: number | null
-      /** true: 캠페인 없이 메뉴 관리 세트만 저장 시 자동 코드(SET-####) */
+      /** true: 캠페인 없이 메뉴 관리 세트만 저장 시 자동 코드(SET-1 …) */
       standaloneSetMenu?: boolean
       userRole?: string
       userName?: string

@@ -33,3 +33,25 @@ export function appendStoreCodeFilter(baseFilter: string, stores: string[]): str
   const inClause = `in.(${inner.join(',')})`
   return `${baseFilter}&store_code=${encodeURIComponent(inClause)}`
 }
+
+/**
+ * POS `store_code`와 ERP 매장 목록 문자열이 어긋날 때(getPosOrders와 동일).
+ * 예: 목록은 "Asoke", DB는 "CM Asoke" 또는 반대.
+ */
+export function storeCodeSearchVariants(primary: string): string[] {
+  const s = String(primary || "").trim()
+  if (!s) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  const add = (v: string) => {
+    const x = v.trim()
+    if (!x || seen.has(x.toLowerCase())) return
+    seen.add(x.toLowerCase())
+    out.push(x)
+  }
+  add(s)
+  const withCm = s.toUpperCase().startsWith("CM ") ? s.slice(3).trim() : `CM ${s}`.trim()
+  add(withCm)
+  add(s.replace(/^CM\s+/i, "").trim())
+  return out
+}

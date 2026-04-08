@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import Link from "next/link"
@@ -58,13 +58,13 @@ function isChickenMenu(code: string | undefined): boolean {
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
-  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+  return /^S\s*[-]?\s*∞ê£∞é┤\s*$/i.test(n) || n === "S ∞ê£∞é┤" || n === "S - ∞ê£∞é┤" || n === "S-∞ê£∞é┤"
 }
 
-/** 세트·시뮬 드롭다운: 숨긴 S 기본과 구분하기 위한 Select value */
+/** ∞ä╕φè╕┬╖∞ï£δ«¼ δô£δí¡δïñ∞Ü┤: ∞ê¿Ω╕┤ S Ω╕░δ│╕Ω│╝ Ω╡¼δ╢äφòÿΩ╕░ ∞£äφò£ Select value */
 const CHICKEN_BASE_SELECT_VALUE = "__pos_chicken_s_default__"
 
-/** 주문·프로모 공통 배달앱 코드 (POS 라벨 인식과 동일: grab / lineman / shopee) */
+/** ∞ú╝δ¼╕┬╖φöäδí£δ¬¿ Ω│╡φå╡ δ░░δï¼∞ò▒ ∞╜öδô£ (POS δ¥╝δ▓¿ ∞¥╕∞ï¥Ω│╝ δÅÖ∞¥╝: grab / lineman / shopee) */
 const DEFAULT_PICKER_DELIVERY_APPS = [
   { code: "grab", nameKey: "posDeliveryAppGrab" as const },
   { code: "lineman", nameKey: "posDeliveryAppLineMan" as const },
@@ -107,10 +107,10 @@ export type PosSetMenuTabWorkspaceProps = {
   schemaBannerDismissed: boolean
   onDismissSchemaBanner: () => void
   onAfterSave: () => void
-  /** 조회 탭 등에서 넘길 때: 해당 프로모 편집으로 전환 후 부모에서 초기화 */
+  /** ∞í░φÜî φâ¡ δô▒∞ùÉ∞ä£ δäÿΩ╕╕ δòî: φò┤δï╣ φöäδí£δ¬¿ φÄ╕∞ºæ∞£╝δí£ ∞áäφÖÿ φ¢ä δ╢Çδ¬¿∞ùÉ∞ä£ ∞┤êΩ╕░φÖö */
   focusPromoId?: string | null
   onFocusPromoConsumed?: () => void
-  /** 마케팅 화면: 항상 이 캠페인에 연결(신규는 standaloneSetMenu false, 코드 자동 채번) */
+  /** δºê∞╝Çφîà φÖöδ⌐┤: φò¡∞âü ∞¥┤ ∞║áφÄÿ∞¥╕∞ùÉ ∞ù░Ω▓░(∞ïáΩ╖£δèö standaloneSetMenu false, ∞╜öδô£ ∞₧ÉδÅÖ ∞▒äδ▓ê) */
   fixedMarketingCampaignId?: string | null
 }
 
@@ -121,9 +121,9 @@ type ComposerLine = {
   qty: number
   menuName: string
   optionLabel?: string
-  /** 행 단위 할인율(%) — 비우면 세트 규칙을 따름 */
+  /** φûë δï¿∞£ä φòá∞¥╕∞£¿(%) ΓÇö δ╣ä∞Ü░δ⌐┤ ∞ä╕φè╕ Ω╖£∞╣Ö∞¥ä δö░δªä */
   lineDiscountPct?: string
-  /** 행 단위 판매가(총액) — 비우면 행 할인율/세트 규칙으로 계산 */
+  /** φûë δï¿∞£ä φîÉδºñΩ░Ç(∞┤¥∞òí) ΓÇö δ╣ä∞Ü░δ⌐┤ φûë φòá∞¥╕∞£¿/∞ä╕φè╕ Ω╖£∞╣Ö∞£╝δí£ Ω│ä∞é░ */
   lineSalePrice?: string
 }
 
@@ -168,7 +168,7 @@ export function PosSetMenuTabWorkspace({
 
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [editPromoId, setEditPromoId] = React.useState<string | null>(null)
-  /** 신규 초안 세션(캠페인 고정 시 다음 코드 재채번) */
+  /** ∞ïáΩ╖£ ∞┤ê∞òê ∞ä╕∞àÿ(∞║áφÄÿ∞¥╕ Ω│á∞áò ∞ï£ δïñ∞¥î ∞╜öδô£ ∞₧¼∞▒äδ▓ê) */
   const [promoDraftGen, setPromoDraftGen] = React.useState(0)
   const [form, setForm] = React.useState(emptyForm)
   const [lines, setLines] = React.useState<ComposerLine[]>([])
@@ -176,32 +176,30 @@ export function PosSetMenuTabWorkspace({
   const [savingSet, setSavingSet] = React.useState(false)
   const [loadingEdit, setLoadingEdit] = React.useState(false)
 
-  /** editPromoId가 null로 유지되는 동안 promos/menus 갱신마다 줄을 비우지 않기 위함 */
+  /** editPromoIdΩ░Ç nullδí£ ∞£á∞ºÇδÉÿδèö δÅÖ∞òê promos/menus Ω░▒∞ïáδºêδïñ ∞ñä∞¥ä δ╣ä∞Ü░∞ºÇ ∞òèΩ╕░ ∞£äφò¿ */
   const prevEditPromoIdForEffectRef = React.useRef<string | null | undefined>(undefined)
-  /** 같은 프로모를 이미 폼+줄에 반영했으면 promos 목록만 바뀐 경우 API 재조회·줄 덮어쓰기 생략 */
+  /** Ω░Ö∞¥Ç φöäδí£δ¬¿δÑ╝ ∞¥┤δ»╕ φÅ╝+∞ñä∞ùÉ δ░ÿ∞ÿüφûê∞£╝δ⌐┤ promos δ¬⌐δí¥δºî δ░öδÇÉ Ω▓╜∞Ü░ API ∞₧¼∞í░φÜî┬╖∞ñä δì«∞û┤∞ô░Ω╕░ ∞â¥δ₧╡ */
   const lastHydratedPromoIdRef = React.useRef<string | null>(null)
-  /** 번들 마스터 저장 직후 DB items는 아직 비어 있으므로 빈 배열로 줄을 덮어쓰지 않음 */
+  /** δ▓êδôñ δºê∞èñφä░ ∞áÇ∞₧Ñ ∞ºüφ¢ä DB itemsδèö ∞òä∞ºü δ╣ä∞û┤ ∞₧ê∞£╝δ»Çδí£ δ╣ê δ░░∞ù┤δí£ ∞ñä∞¥ä δì«∞û┤∞ô░∞ºÇ ∞òè∞¥î */
   const preserveLinesAfterMasterSaveRef = React.useRef<string | null>(null)
 
   const [pickMain, setPickMain] = React.useState("all")
   const [pickSub, setPickSub] = React.useState("all")
   const [pickSearchInput, setPickSearchInput] = React.useState("")
-  /** [검색] 후 적용된 검색어(빈 문자열 = 이름·코드 필터 없음, 대·소분류만 적용) */
+  /** [Ω▓Ç∞âë] φ¢ä ∞áü∞Ü⌐δÉ£ Ω▓Ç∞âë∞û┤(δ╣ê δ¼╕∞₧É∞ù┤ = ∞¥┤δªä┬╖∞╜öδô£ φòäφä░ ∞ùå∞¥î, δîÇ┬╖∞åîδ╢äδÑÿδºî ∞áü∞Ü⌐) */
   const [pickSearchApplied, setPickSearchApplied] = React.useState("")
-  /** 검색 버튼/Enter로 목록을 연 뒤에만 리스트 표시 */
+  /** Ω▓Ç∞âë δ▓äφè╝/Enterδí£ δ¬⌐δí¥∞¥ä ∞ù░ δÆñ∞ùÉδºî δª¼∞èñφè╕ φæ£∞ï£ */
   const [pickMenuListShown, setPickMenuListShown] = React.useState(false)
   const [pickMenuId, setPickMenuId] = React.useState("")
   const [pickQty, setPickQty] = React.useState("1")
-  /** Step 1 메뉴 고를 때 참고할 가격 기준(매장/배달) */
+  /** Step 1 δ⌐öδë┤ Ω│áδÑ╝ δòî ∞░╕Ω│áφòá Ω░ÇΩ▓⌐ Ω╕░∞ñÇ(δºñ∞₧Ñ/δ░░δï¼) */
   const [pickPricingBasis, setPickPricingBasis] = React.useState<"hall" | "delivery">("hall")
 
   const [discountMode, setDiscountMode] = React.useState<"pct" | "baht">("pct")
   const [discountPctStr, setDiscountPctStr] = React.useState("")
   const [discountBahtStr, setDiscountBahtStr] = React.useState("")
   const [salesSetCountStr, setSalesSetCountStr] = React.useState("")
-  /** Step 3 가격 분석: 세트당 보조금(플랫폼 지원 등) — DB 미저장 시뮬 */
-  const [priceAnalysisSubsidyStr, setPriceAnalysisSubsidyStr] = React.useState("")
-  /** 가격 분석: 홀·배달 채널 모두 켜진 경우 전환 */
+  /** Ω░ÇΩ▓⌐ δ╢ä∞ä¥: φÖÇ┬╖δ░░δï¼ ∞▒äδäÉ δ¬¿δæÉ ∞╝£∞ºä Ω▓╜∞Ü░ ∞áäφÖÿ */
   const [priceAnalysisChannel, setPriceAnalysisChannel] = React.useState<"hall" | "delivery">("hall")
 
   const [costMap, setCostMap] = React.useState<Record<string, CostEntry>>({})
@@ -446,7 +444,7 @@ export function PosSetMenuTabWorkspace({
       ? Number(form.priceDelivery)
       : saleHall
 
-  /** 홀·포장은 동일 정가 합; 배달은 별도 정가 합 */
+  /** φÖÇ┬╖φÅ¼∞₧Ñ∞¥Ç δÅÖ∞¥╝ ∞áòΩ░Ç φò⌐; δ░░δï¼∞¥Ç δ│äδÅä ∞áòΩ░Ç φò⌐ */
   const showPricingHall = form.channelHall || form.channelTakeout
   const showPricingDelivery = form.channelDelivery
 
@@ -468,6 +466,8 @@ export function PosSetMenuTabWorkspace({
   )
 
   const salesSetCount = Math.max(0, Number(salesSetCountStr.replace(/,/g, "")) || 0)
+  const projectedProfitHall = salesSetCount > 0 ? economics.marginBaht * salesSetCount : null
+  const projectedProfitDelivery = salesSetCount > 0 ? economics.marginBahtDel * salesSetCount : null
 
   const activePriceAnalysis: "hall" | "delivery" =
     showPricingHall && showPricingDelivery
@@ -476,26 +476,12 @@ export function PosSetMenuTabWorkspace({
         ? "hall"
         : "delivery"
   const paCostTotal = activePriceAnalysis === "hall" ? costHallTotal : costDelTotal
+  const paCostRate = activePriceAnalysis === "hall" ? economics.costRateHall : economics.costRateDelivery
+  const paMarginPct = activePriceAnalysis === "hall" ? economics.marginPercent : economics.marginPercentDel
+  const paMarginBaht = activePriceAnalysis === "hall" ? economics.marginBaht : economics.marginBahtDel
   const paSaleRef = activePriceAnalysis === "hall" ? saleHall : saleDel
-  const subsidyRaw = String(priceAnalysisSubsidyStr).replace(/,/g, "").trim()
-  const subsidyN = Number(subsidyRaw)
-  const priceAnalysisSubsidyBaht =
-    subsidyRaw === "" || !Number.isFinite(subsidyN) ? 0 : Math.max(0, subsidyN)
-  const paRevenueForAnalysis = paSaleRef + priceAnalysisSubsidyBaht
-  const paCostRate = paRevenueForAnalysis > 0 ? (paCostTotal / paRevenueForAnalysis) * 100 : 0
-  const paMarginBaht = paRevenueForAnalysis - paCostTotal
-  const paMarginPct = paRevenueForAnalysis > 0 ? (paMarginBaht / paRevenueForAnalysis) * 100 : 0
 
-  const projectedProfitHall =
-    salesSetCount > 0 && showPricingHall && activePriceAnalysis === "hall"
-      ? (saleHall + priceAnalysisSubsidyBaht - costHallTotal) * salesSetCount
-      : null
-  const projectedProfitDelivery =
-    salesSetCount > 0 && showPricingDelivery && activePriceAnalysis === "delivery"
-      ? (saleDel + priceAnalysisSubsidyBaht - costDelTotal) * salesSetCount
-      : null
-
-  /** 가격분석 채널 기준 — 조합 표 하단 요약 행·각 줄 정가/원가 표시에 사용 */
+  /** Ω░ÇΩ▓⌐δ╢ä∞ä¥ ∞▒äδäÉ Ω╕░∞ñÇ ΓÇö ∞í░φò⌐ φæ£ φòÿδï¿ ∞Üö∞ò╜ φûë┬╖Ω░ü ∞ñä ∞áòΩ░Ç/∞¢ÉΩ░Ç φæ£∞ï£∞ùÉ ∞é¼∞Ü⌐ */
   const composeSummaryReg = activePriceAnalysis === "hall" ? regularSum : regularSumDelivery
   const composeSummaryDiscPct =
     composeSummaryReg > 0 ? ((composeSummaryReg - paSaleRef) / composeSummaryReg) * 100 : 0
@@ -749,7 +735,7 @@ export function PosSetMenuTabWorkspace({
     return r
   }, [promos])
 
-  /** DB에 이미 있는 프로모션 표시명 목록 (그룹 선택용) */
+  /** DB∞ùÉ ∞¥┤δ»╕ ∞₧êδèö φöäδí£δ¬¿∞àÿ φæ£∞ï£δ¬à δ¬⌐δí¥ (Ω╖╕δú╣ ∞äáφâ¥∞Ü⌐) */
   const promoGroupNamesSorted = React.useMemo(() => {
     const s = new Set<string>()
     for (const p of promos) {
@@ -759,7 +745,7 @@ export function PosSetMenuTabWorkspace({
     return [...s].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
   }, [promos])
 
-  /** 셀렉트에 현재 입력 중인 이름도 올려서 값이 항상 유효하도록 */
+  /** ∞àÇδáëφè╕∞ùÉ φÿä∞₧¼ ∞₧àδáÑ ∞ñæ∞¥╕ ∞¥┤δªäδÅä ∞ÿ¼δáñ∞ä£ Ω░Æ∞¥┤ φò¡∞âü ∞£áφÜ¿φòÿδÅäδí¥ */
   const namesForGroupSelect = React.useMemo(() => {
     const cur = form.name.trim()
     const merged = new Set(promoGroupNamesSorted)
@@ -787,13 +773,13 @@ export function PosSetMenuTabWorkspace({
     setPriceAnalysisChannel("hall")
   }, [])
 
-  /** 오른쪽 목록: 프로모션명(마스터 name) 기준 그룹 */
+  /** ∞ÿñδÑ╕∞¬╜ δ¬⌐δí¥: φöäδí£δ¬¿∞àÿδ¬à(δºê∞èñφä░ name) Ω╕░∞ñÇ Ω╖╕δú╣ */
   const mirrorMenusByPromoName = React.useMemo(() => {
     const m = new Map<string, PosMenu[]>()
     for (const menu of mirrorMenus) {
       const pid = String(menu.promoId ?? "").trim()
       const pr = pid ? promoById[pid] : undefined
-      const label = (pr?.name ?? menu.name ?? "").trim() || "—"
+      const label = (pr?.name ?? menu.name ?? "").trim() || "ΓÇö"
       if (!m.has(label)) m.set(label, [])
       m.get(label)!.push(menu)
     }
@@ -804,7 +790,7 @@ export function PosSetMenuTabWorkspace({
     return entries
   }, [mirrorMenus, promoById])
 
-  /** 우측 목록: 현재 편집 중인 프로모션명(그룹)과 같은 이름의 미러 세트만 */
+  /** ∞Ü░∞╕í δ¬⌐δí¥: φÿä∞₧¼ φÄ╕∞ºæ ∞ñæ∞¥╕ φöäδí£δ¬¿∞àÿδ¬à(Ω╖╕δú╣)Ω│╝ Ω░Ö∞¥Ç ∞¥┤δªä∞¥ÿ δ»╕δƒ¼ ∞ä╕φè╕δºî */
   const savedSetsNameKey = React.useMemo(() => {
     if (editPromoId) {
       const pr = promoById[editPromoId]
@@ -858,7 +844,7 @@ export function PosSetMenuTabWorkspace({
         let label = menu?.name?.trim() || `#${mid.slice(0, 8)}`
         if (opt?.name?.trim()) label += ` (${optPart(opt.name)})`
         const q = Number(it.quantity) || 1
-        if (q !== 1) label += ` ×${q}`
+        if (q !== 1) label += ` ├ù${q}`
         return label
       })
       return { previewLines: allLines.slice(0, 4), total: items.length }
@@ -946,13 +932,12 @@ export function PosSetMenuTabWorkspace({
     setDiscountPctStr("")
     setDiscountBahtStr("")
     setSalesSetCountStr("")
-    setPriceAnalysisSubsidyStr("")
     setPickPricingBasis("hall")
     setPriceAnalysisChannel("hall")
     setPromoDraftGen((n) => n + 1)
   }
 
-  /** 같은 프로모션명·채널·가격 등은 유지하고 새 세트(새 코드)만 구성 */
+  /** Ω░Ö∞¥Ç φöäδí£δ¬¿∞àÿδ¬à┬╖∞▒äδäÉ┬╖Ω░ÇΩ▓⌐ δô▒∞¥Ç ∞£á∞ºÇφòÿΩ│á ∞âê ∞ä╕φè╕(∞âê ∞╜öδô£)δºî Ω╡¼∞ä▒ */
   const startNewSetKeepPromoMeta = () => {
     preserveLinesAfterMasterSaveRef.current = null
     lastHydratedPromoIdRef.current = null
@@ -962,7 +947,6 @@ export function PosSetMenuTabWorkspace({
     setDiscountPctStr("")
     setDiscountBahtStr("")
     setSalesSetCountStr("")
-    setPriceAnalysisSubsidyStr("")
     setForm((p) => ({ ...p, code: "" }))
   }
 
@@ -971,7 +955,6 @@ export function PosSetMenuTabWorkspace({
     setDiscountPctStr("")
     setDiscountBahtStr("")
     setSalesSetCountStr("")
-    setPriceAnalysisSubsidyStr("")
     setPickMenuId("")
   }
 
@@ -1021,7 +1004,7 @@ export function PosSetMenuTabWorkspace({
     [optionsByMenuId]
   )
 
-  /** 옵션 0·1개는 즉시 조합 반영, 2개 이상만 옵션 선택 패널 */
+  /** ∞ÿ╡∞àÿ 0┬╖1Ω░£δèö ∞ªë∞ï£ ∞í░φò⌐ δ░ÿ∞ÿü, 2Ω░£ ∞¥┤∞âüδºî ∞ÿ╡∞àÿ ∞äáφâ¥ φî¿δäÉ */
   const handlePickMenuFromList = (m: PosMenu) => {
     const mid = String(m.id)
     const opts = pickOptionsForMenu(mid, m.code)
@@ -1076,7 +1059,7 @@ export function PosSetMenuTabWorkspace({
     [regularSumDelivery, discountPctStr, discountBahtStr, discountMode]
   )
 
-  /** 할인 시뮬 → 판매가: 가격 분석에서 선택한 채널(홀/배달 토글)에만 반영. 채널이 하나뿐이면 해당 채널로 고정. */
+  /** φòá∞¥╕ ∞ï£δ«¼ ΓåÆ φîÉδºñΩ░Ç: Ω░ÇΩ▓⌐ δ╢ä∞ä¥∞ùÉ∞ä£ ∞äáφâ¥φò£ ∞▒äδäÉ(φÖÇ/δ░░δï¼ φåáΩ╕Ç)∞ùÉδºî δ░ÿ∞ÿü. ∞▒äδäÉ∞¥┤ φòÿδéÿδ┐É∞¥┤δ⌐┤ φò┤δï╣ ∞▒äδäÉδí£ Ω│á∞áò. */
   const applyDiscountToActiveChannel = React.useCallback(() => {
     if (showPricingHall && !showPricingDelivery) {
       setForm((p) => ({ ...p, price: String(resolvedDiscountSaleHallThb) }))
@@ -1162,7 +1145,7 @@ export function PosSetMenuTabWorkspace({
     }
   }
 
-  /** 프로모 마스터만 (이름·채널·가격·VAT 등). 조합 줄은 저장하지 않음 */
+  /** φöäδí£δ¬¿ δºê∞èñφä░δºî (∞¥┤δªä┬╖∞▒äδäÉ┬╖Ω░ÇΩ▓⌐┬╖VAT δô▒). ∞í░φò⌐ ∞ñä∞¥Ç ∞áÇ∞₧Ñφòÿ∞ºÇ ∞òè∞¥î */
   const handleSavePromo = async () => {
     if (savingPromo || savingSet) return
     const { name, codeTrim, payload } = buildSavePromoPayload()
@@ -1205,7 +1188,7 @@ export function PosSetMenuTabWorkspace({
     }
   }
 
-  /** 조합 줄만. 프로모 마스터는 먼저 저장되어 있어야 함 */
+  /** ∞í░φò⌐ ∞ñäδºî. φöäδí£δ¬¿ δºê∞èñφä░δèö δ¿╝∞áÇ ∞áÇ∞₧ÑδÉÿ∞û┤ ∞₧ê∞û┤∞ò╝ φò¿ */
   const handleSaveSetComposition = async () => {
     if (savingPromo || savingSet) return
     if (!editPromoId) {
@@ -1280,10 +1263,10 @@ export function PosSetMenuTabWorkspace({
       )}
 
       <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
-        {/* 좌: 카테고리 + 메뉴 */}
+        {/* ∞óî: ∞╣┤φàîΩ│áδª¼ + δ⌐öδë┤ */}
         <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 shadow-sm xl:col-span-4 dark:bg-zinc-950/40">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-            Step 1 · {t("posMenuBundleSimPickTitle")}
+            Step 1 ┬╖ {t("posMenuBundleSimPickTitle")}
           </p>
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-foreground">{t("posMenuBundleSimPickTitle")}</p>
@@ -1424,11 +1407,11 @@ export function PosSetMenuTabWorkspace({
                           <p className="truncate text-[10px] text-muted-foreground font-mono">{m.code}</p>
                           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold tabular-nums leading-snug">
                             <span className="text-foreground">
-                              {t("itemsCost")} ฿
-                              {listCost != null ? listCost.toFixed(1) : costAnalysisLoaded ? "—" : "…"}
+                              {t("itemsCost")} α╕┐
+                              {listCost != null ? listCost.toFixed(1) : costAnalysisLoaded ? "ΓÇö" : "ΓÇª"}
                             </span>
                             <span className="text-emerald-700 dark:text-emerald-300">
-                              {t("itemsPrice")} ฿{Math.round(listPrice).toLocaleString()}
+                              {t("itemsPrice")} α╕┐{Math.round(listPrice).toLocaleString()}
                             </span>
                           </div>
                         </div>
@@ -1482,13 +1465,13 @@ export function PosSetMenuTabWorkspace({
           ) : null}
         </div>
 
-        {/* 중앙: 세트 요약 + 구성 + 지표 */}
+        {/* ∞ñæ∞òÖ: ∞ä╕φè╕ ∞Üö∞ò╜ + Ω╡¼∞ä▒ + ∞ºÇφæ£ */}
         <div className="space-y-4 xl:col-span-8">
           <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm ring-1 ring-emerald-500/10 dark:bg-zinc-950/35">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-                  Step 2 · {t("posSetTabComposeHeader")}
+                  Step 2 ┬╖ {t("posSetTabComposeHeader")}
                 </p>
                 <p className="text-sm font-bold tracking-tight">{t("posSetTabComposeHeader")}</p>
                 {lines.length > 0 ? (
@@ -1512,13 +1495,13 @@ export function PosSetMenuTabWorkspace({
                     ) : (
                       <>
                         <span className="font-mono tabular-nums">
-                          {t("posPromoCostSum")} ฿{costHallTotal.toFixed(1)}
+                          {t("posPromoCostSum")} α╕┐{costHallTotal.toFixed(1)}
                         </span>
-                        <span className="text-border">·</span>
+                        <span className="text-border">┬╖</span>
                         <span className="font-mono tabular-nums">
                           {t("posMenuBundleCostRate")} {economics.costRateHall.toFixed(1)}%
                         </span>
-                        <span className="text-border">·</span>
+                        <span className="text-border">┬╖</span>
                         <span
                           className={cn(
                             "font-mono tabular-nums",
@@ -1546,7 +1529,7 @@ export function PosSetMenuTabWorkspace({
                         <span className="font-mono tabular-nums">
                           {t("posMenuBundleCostRate")} {economics.costRateDelivery.toFixed(1)}%
                         </span>
-                        <span className="text-border">·</span>
+                        <span className="text-border">┬╖</span>
                         <span
                           className={cn(
                             "font-mono tabular-nums",
@@ -1729,10 +1712,10 @@ export function PosSetMenuTabWorkspace({
                             />
                           </td>
                           <td className="px-1 py-2 text-right font-mono text-sm tabular-nums text-muted-foreground">
-                            {!costsReady && lines.length > 0 ? "…" : `฿${lineCost.toFixed(1)}`}
+                            {!costsReady && lines.length > 0 ? "ΓÇª" : `α╕┐${lineCost.toFixed(1)}`}
                           </td>
                           <td className="px-1 py-2 text-right font-mono text-sm tabular-nums">
-                            ฿{Math.round(reg).toLocaleString()}
+                            α╕┐{Math.round(reg).toLocaleString()}
                           </td>
                           <td className="px-1 py-1.5">
                             <Input
@@ -1762,7 +1745,7 @@ export function PosSetMenuTabWorkspace({
                           </td>
                           <td className="px-1 py-2 text-right font-mono text-sm tabular-nums">{`${rowCostRate.toFixed(1)}%`}</td>
                           <td className={cn("px-1 py-2 text-right font-mono text-sm tabular-nums", rowMargin >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-destructive")}>
-                            ฿{rowMargin.toFixed(1)}
+                            α╕┐{rowMargin.toFixed(1)}
                           </td>
                           <td className={cn("px-1 py-2 text-right font-mono text-sm tabular-nums", rowMarginPct >= 0 ? "text-rose-700 dark:text-rose-400" : "text-destructive")}>
                             {`${rowMarginPct.toFixed(1)}%`}
@@ -1786,27 +1769,27 @@ export function PosSetMenuTabWorkspace({
                 {lines.length > 0 && (showPricingHall || showPricingDelivery) ? (
                   <tfoot>
                     <tr className="border-t-2 border-primary/25 bg-muted/45">
-                      <td className="px-1 py-3 text-center text-sm text-muted-foreground">—</td>
+                      <td className="px-1 py-3 text-center text-sm text-muted-foreground">ΓÇö</td>
                       <td className="px-2 py-3 text-sm font-semibold leading-snug">
                         {activePriceAnalysis === "hall"
                           ? t("posSetTabComposeSummaryLabelHall")
                           : t("posSetTabComposeSummaryLabelDel")}
                       </td>
-                      <td className="px-2 py-3 text-right text-sm text-muted-foreground">—</td>
+                      <td className="px-2 py-3 text-right text-sm text-muted-foreground">ΓÇö</td>
                       <td className="px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums">
-                        {!costsReady ? "…" : `฿${paCostTotal.toFixed(1)}`}
+                        {!costsReady ? "ΓÇª" : `α╕┐${paCostTotal.toFixed(1)}`}
                       </td>
                       <td className="px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums">
-                        ฿{Math.round(composeSummaryReg).toLocaleString()}
+                        α╕┐{Math.round(composeSummaryReg).toLocaleString()}
                       </td>
                       <td className="px-1 py-3 text-right font-mono text-sm tabular-nums">
                         {(lineSummary?.discountPctAvg ?? composeSummaryDiscPct).toFixed(1)}%
                       </td>
                       <td className="bg-amber-200/55 px-1 py-3 text-right font-mono text-sm font-bold tabular-nums dark:bg-amber-950/45">
-                        ฿{Math.round(lineSummary?.saleTotal ?? paSaleRef).toLocaleString()}
+                        α╕┐{Math.round(lineSummary?.saleTotal ?? paSaleRef).toLocaleString()}
                       </td>
                       <td className="px-1 py-3 text-right font-mono text-sm tabular-nums">
-                        {lines.length ? `${paCostRate.toFixed(1)}%` : "—"}
+                        {lines.length ? `${paCostRate.toFixed(1)}%` : "ΓÇö"}
                       </td>
                       <td
                         className={cn(
@@ -1814,7 +1797,7 @@ export function PosSetMenuTabWorkspace({
                           lines.length && paMarginBaht >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"
                         )}
                       >
-                        {lines.length ? `฿${paMarginBaht.toFixed(1)}` : "—"}
+                        {lines.length ? `α╕┐${paMarginBaht.toFixed(1)}` : "ΓÇö"}
                       </td>
                       <td
                         className={cn(
@@ -1822,7 +1805,7 @@ export function PosSetMenuTabWorkspace({
                           lines.length && paMarginPct >= 0 ? "text-rose-700 dark:text-rose-400" : "text-destructive"
                         )}
                       >
-                        {lines.length ? `${paMarginPct.toFixed(1)}%` : "—"}
+                        {lines.length ? `${paMarginPct.toFixed(1)}%` : "ΓÇö"}
                       </td>
                       <td className="px-1 py-3" />
                     </tr>
@@ -1842,7 +1825,7 @@ export function PosSetMenuTabWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-                  Step 3 · {t("posSetTabPricingFlowTitle")}
+                  Step 3 ┬╖ {t("posSetTabPricingFlowTitle")}
                 </p>
                 <p className="text-base font-bold">{t("posSetTabPriceAnalysis")}</p>
               </div>
@@ -1883,7 +1866,7 @@ export function PosSetMenuTabWorkspace({
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t("posSetTabRegularSumHallLabel")}
                     </p>
-                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">฿{Math.round(regularSum).toLocaleString()}</p>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">α╕┐{Math.round(regularSum).toLocaleString()}</p>
                   </div>
                 ) : null}
                 {showPricingDelivery ? (
@@ -1891,7 +1874,7 @@ export function PosSetMenuTabWorkspace({
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t("posSetTabRegularSumDeliveryLabel")}
                     </p>
-                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">฿{Math.round(regularSumDelivery).toLocaleString()}</p>
+                    <p className="mt-1 font-mono text-base font-semibold tabular-nums">α╕┐{Math.round(regularSumDelivery).toLocaleString()}</p>
                   </div>
                 ) : null}
                 {showPricingHall || showPricingDelivery ? (
@@ -1928,25 +1911,6 @@ export function PosSetMenuTabWorkspace({
                   ) : null}
                 </div>
               ) : null}
-              {showPricingHall || showPricingDelivery ? (
-                <div className="flex min-h-[72px] flex-col justify-between rounded-lg border border-border/50 bg-background/40 px-3 py-2.5">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t("posSetTabPriceAnalysisSubsidy")}
-                  </label>
-                  <Input
-                    className="mt-1 h-9 text-right text-sm tabular-nums"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={priceAnalysisSubsidyStr}
-                    onChange={(e) => setPriceAnalysisSubsidyStr(e.target.value)}
-                  />
-                  {t("posSetTabPriceAnalysisSubsidyHint") ? (
-                    <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
-                      {t("posSetTabPriceAnalysisSubsidyHint")}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
             {lineAverages ? (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -1960,7 +1924,7 @@ export function PosSetMenuTabWorkspace({
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("posSetTabLineAvgSalePrice")}
                   </p>
-                  <p className="mt-1 font-mono text-base font-semibold tabular-nums">฿{lineAverages.saleAvg.toFixed(1)}</p>
+                  <p className="mt-1 font-mono text-base font-semibold tabular-nums">α╕┐{lineAverages.saleAvg.toFixed(1)}</p>
                 </div>
               </div>
             ) : null}
@@ -2021,23 +1985,23 @@ export function PosSetMenuTabWorkspace({
               <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
                 <p className="text-xs font-semibold text-muted-foreground">{t("posPromoCostSum")}</p>
                 <p className="mt-1 font-mono text-base font-semibold tabular-nums">
-                  {lines.length === 0 || costsReady ? `฿${paCostTotal.toFixed(1)}` : t("posPromoSimulatorCalculating")}
+                  {lines.length === 0 || costsReady ? `α╕┐${paCostTotal.toFixed(1)}` : t("posPromoSimulatorCalculating")}
                 </p>
               </div>
               <div className="rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5">
                 <p className="text-xs font-semibold text-muted-foreground">{t("posMenuBundleCostRate")}</p>
-                <p className="mt-1 font-mono text-base tabular-nums">{lines.length ? `${paCostRate.toFixed(1)}%` : "—"}</p>
+                <p className="mt-1 font-mono text-base tabular-nums">{lines.length ? `${paCostRate.toFixed(1)}%` : "ΓÇö"}</p>
               </div>
               <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 dark:bg-emerald-950/20">
                 <p className="text-xs font-semibold text-muted-foreground">{t("posMenuBundleMarginPct")}</p>
                 <p className={cn("mt-1 font-mono text-base font-semibold tabular-nums", paMarginBaht >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                  {lines.length ? `${paMarginPct.toFixed(1)}%` : "—"}
+                  {lines.length ? `${paMarginPct.toFixed(1)}%` : "ΓÇö"}
                 </p>
               </div>
               <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 dark:bg-emerald-950/20">
                 <p className="text-xs font-semibold text-muted-foreground">{t("posMenuBundleMarginBaht")}</p>
                 <p className={cn("mt-1 font-mono text-base font-semibold tabular-nums", paMarginBaht >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                  {lines.length ? `฿${paMarginBaht.toFixed(1)}` : "—"}
+                  {lines.length ? `α╕┐${paMarginBaht.toFixed(1)}` : "ΓÇö"}
                 </p>
               </div>
             </div>
@@ -2056,13 +2020,13 @@ export function PosSetMenuTabWorkspace({
             {projectedProfitHall != null && salesSetCount > 0 && showPricingHall && activePriceAnalysis === "hall" ? (
               <div className="flex justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-semibold">
                 <span className="text-muted-foreground">{t("posSetTabProjectedProfit")}</span>
-                <span className="font-mono text-primary tabular-nums">฿{Math.round(projectedProfitHall).toLocaleString()}</span>
+                <span className="font-mono text-primary tabular-nums">α╕┐{Math.round(projectedProfitHall).toLocaleString()}</span>
               </div>
             ) : null}
             {projectedProfitDelivery != null && salesSetCount > 0 && showPricingDelivery && activePriceAnalysis === "delivery" ? (
               <div className="flex justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-sm font-semibold">
                 <span className="text-muted-foreground">{t("posSetTabProjectedProfitDelivery")}</span>
-                <span className="font-mono text-primary tabular-nums">฿{Math.round(projectedProfitDelivery).toLocaleString()}</span>
+                <span className="font-mono text-primary tabular-nums">α╕┐{Math.round(projectedProfitDelivery).toLocaleString()}</span>
               </div>
             ) : null}
 
@@ -2099,10 +2063,10 @@ export function PosSetMenuTabWorkspace({
             <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSavePromoFooterHint")}</p>
           </div>
 
-        {/* 저장된 세트 (가격 분석과 동일 폭 1/2, 카드는 열 안에서 가로 전체) */}
+        {/* ∞áÇ∞₧ÑδÉ£ ∞ä╕φè╕ (Ω░ÇΩ▓⌐ δ╢ä∞ä¥Ω│╝ δÅÖ∞¥╝ φÅ¡ 1/2, ∞╣┤δô£δèö ∞ù┤ ∞òê∞ùÉ∞ä£ Ω░Çδí£ ∞áä∞▓┤) */}
         <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 rounded-xl border border-border/80 bg-muted/15 p-4 shadow-sm xl:order-2 dark:bg-zinc-950/40">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-            Step 4 · {t("posSetTabSavedSetsTitle")}
+            Step 4 ┬╖ {t("posSetTabSavedSetsTitle")}
           </p>
           <div className="flex flex-col gap-2">
             <p className="text-sm font-bold">{t("posSetTabSavedSetsTitle")}</p>
@@ -2174,7 +2138,7 @@ export function PosSetMenuTabWorkspace({
                       )}
                     >
                       <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-12 md:items-start md:gap-x-3 md:gap-y-1">
-                        {/* 메타: 코드·상태·채널·이름 */}
+                        {/* δ⌐öφâÇ: ∞╜öδô£┬╖∞âüφâ£┬╖∞▒äδäÉ┬╖∞¥┤δªä */}
                         <div className="min-w-0 md:col-span-4">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="min-w-0 truncate font-mono text-xs font-semibold tabular-nums">
@@ -2208,7 +2172,7 @@ export function PosSetMenuTabWorkspace({
                             </span>
                           </div>
                           <p className="mt-0.5 line-clamp-1 text-xs font-medium leading-snug text-foreground">
-                            {pr?.name || m.name || "—"}
+                            {pr?.name || m.name || "ΓÇö"}
                           </p>
                           {delOn && delCodes.length > 0 ? (
                             <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
@@ -2217,12 +2181,12 @@ export function PosSetMenuTabWorkspace({
                                   const row = DEFAULT_PICKER_DELIVERY_APPS.find((d) => d.code === c)
                                   return row ? t(row.nameKey) : c
                                 })
-                                .join(" · ")}
+                                .join(" ┬╖ ")}
                             </p>
                           ) : null}
                         </div>
 
-                        {/* 구성 미리보기 — 가로 공간 활용 */}
+                        {/* Ω╡¼∞ä▒ δ»╕δª¼δ│┤Ω╕░ ΓÇö Ω░Çδí£ Ω│╡Ω░ä φÖ£∞Ü⌐ */}
                         <div className="min-w-0 border-t border-border/40 pt-2 md:col-span-5 md:border-l md:border-t-0 md:pl-3 md:pt-0">
                           <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                             {t("posSetTabSavedSetBundleLines")}
@@ -2233,13 +2197,13 @@ export function PosSetMenuTabWorkspace({
                             ) : null}
                           </p>
                           {preview?.status === "loading" ? (
-                            <p className="animate-pulse text-xs text-muted-foreground">…</p>
+                            <p className="animate-pulse text-xs text-muted-foreground">ΓÇª</p>
                           ) : null}
                           {preview?.status === "err" ? (
                             <p className="text-xs text-destructive">{t("posSetTabSavedSetComposeLoadErr")}</p>
                           ) : null}
                           {preview?.status === "ok" && preview.total === 0 ? (
-                            <p className="text-xs text-muted-foreground">—</p>
+                            <p className="text-xs text-muted-foreground">ΓÇö</p>
                           ) : null}
                           {preview?.status === "ok" && preview.previewLines.length > 0 ? (
                             <ul className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
@@ -2248,7 +2212,7 @@ export function PosSetMenuTabWorkspace({
                                   key={`${pid}-${i}`}
                                   className="line-clamp-1 min-w-0 text-left text-[11px] leading-snug text-foreground/90"
                                 >
-                                  · {line}
+                                  ┬╖ {line}
                                 </li>
                               ))}
                             </ul>
@@ -2263,7 +2227,7 @@ export function PosSetMenuTabWorkspace({
                           ) : null}
                         </div>
 
-                        {/* 가격·할인 */}
+                        {/* Ω░ÇΩ▓⌐┬╖φòá∞¥╕ */}
                         <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-border/40 pt-2 text-xs md:col-span-3 md:flex-col md:items-end md:border-l md:border-t-0 md:pl-3 md:pt-0 md:text-right">
                           {showDisc ? (
                             <p className="font-medium text-amber-800 dark:text-amber-200">
@@ -2274,13 +2238,13 @@ export function PosSetMenuTabWorkspace({
                           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 md:flex-col md:items-end md:gap-0">
                             <p className="font-mono tabular-nums text-muted-foreground">
                               {t("posMenuPriceHall")}{" "}
-                              <span className="text-foreground">฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}</span>
+                              <span className="text-foreground">α╕┐{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}</span>
                             </p>
                             {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0 ? (
                               <p className="font-mono tabular-nums text-muted-foreground">
                                 {t("posMenuPriceDelivery")}{" "}
                                 <span className="text-foreground">
-                                  ฿{Math.round(Number(pr.priceDelivery)).toLocaleString()}
+                                  α╕┐{Math.round(Number(pr.priceDelivery)).toLocaleString()}
                                 </span>
                               </p>
                             ) : null}

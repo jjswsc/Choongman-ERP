@@ -9,6 +9,7 @@ RETURNS TABLE(item_code text, total_qty numeric)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
+SET search_path = public
 AS $$
   SELECT sl.item_code::text, SUM(sl.qty)::numeric
   FROM stock_logs sl

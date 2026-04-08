@@ -19,13 +19,27 @@ import {
   getVendorsForPurchase,
   processPurchaseOrderApproval,
   processPurchaseOrderCancel,
+  updatePurchaseOrderInvoice,
   type PurchaseOrderRow,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search, XCircle } from "lucide-react"
-import { isPoApprovedStatus } from "@/components/invoice/purchase-order-print"
+import {
+  Printer,
+  FileSpreadsheet,
+  History,
+  RefreshCw,
+  CheckCircle,
+  ArrowDownToLine,
+  Search,
+  XCircle,
+  FileCheck,
+} from "lucide-react"
+import {
+  isPoApprovedStatus,
+  isPoAccountingTaxInvoiceMode,
+} from "@/components/invoice/purchase-order-print"
 import {
   formatPoDisplayDate,
   isAccountingPurchaseOrderByCartJson,
@@ -60,6 +74,7 @@ export function AdminPurchaseOrderHistory() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
   const [cancellingId, setCancellingId] = React.useState<number | null>(null)
+  const [taxInvoiceToggleId, setTaxInvoiceToggleId] = React.useState<number | null>(null)
   const [vendors, setVendors] = React.useState<{ code: string; name: string; address?: string; taxId?: string; phone?: string }[]>([])
   const [startDate, setStartDate] = React.useState(() => addCalendarMonthsBangkokYmd(todayStrBangkok(), -1))
   const [endDate, setEndDate] = React.useState(() => todayStrBangkok())
@@ -193,8 +208,33 @@ export function AdminPurchaseOrderHistory() {
     [load, t]
   )
 
+  const handleToggleAccountingTaxInvoice = React.useCallback(
+    async (po: PurchaseOrderRow) => {
+      const id = po.id
+      if (!id || !isAccountingPurchaseOrderByCartJson(po.cart_json) || !isPoApprovedStatus(po.status)) return
+      setTaxInvoiceToggleId(id)
+      try {
+        const res = await updatePurchaseOrderInvoice({
+          poId: id,
+          invoiceReceived: !po.invoice_received,
+        })
+        if (res.success) {
+          load()
+        } else {
+          await appAlert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
+        }
+      } catch (e) {
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setTaxInvoiceToggleId(null)
+      }
+    },
+    [load, t]
+  )
+
   const exportPoExcel = (po: PurchaseOrderRow) => {
     const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
+    const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
     const dateStr = formatPoDisplayDate(po, poDateLocale)
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -239,22 +279,41 @@ export function AdminPurchaseOrderHistory() {
       while (arr.length < n) arr.push("")
       return arr.slice(0, n).map((v) => String(v))
     }
+    const excelDocTitle = isAcctPo
+      ? isPoAccountingTaxInvoiceMode(isAcctPo, po.status, po.invoice_received)
+        ? t("poAccountingPrintTitleTaxInvoice")
+        : t("poAccountingPrintTitleInvoice")
+      : t("poTitle")
     const allRows = [
-      pad([t("poTitle"), poNo], colCount),
+      pad([excelDocTitle, poNo], colCount),
       pad([t("poDate"), dateStr], colCount),
       pad([t("poShipTo"), po.location_name || "", po.location_address || ""], colCount),
-      pad([t("poVendor"), po.vendor_name || ""], colCount),
+      pad(
+        [
+          isAcctPo ? t("poPrintBillTo") : t("poVendor"),
+          isAcctPo && meta?.relatedStore
+            ? `${meta.relatedStore} / ${(po.vendor_name || "").trim()}`.replace(/\s*\/\s*$/, "").trim()
+            : po.vendor_name || "",
+        ],
+        colCount
+      ),
       ...(meta?.relatedStore || meta?.storeVendorName
-        ? [
-            pad(
-              [
-                t("poMetaStore"),
-                meta?.relatedStore || "",
-                meta?.storeVendorName ? `${t("poMetaStoreVendor")}: ${meta.storeVendorName}` : "",
-              ],
-              colCount
-            ),
-          ]
+        ? isAcctPo && meta?.relatedStore
+          ? meta?.storeVendorName &&
+            String(meta.storeVendorName).trim() &&
+            String(meta.storeVendorName).trim() !== String(po.vendor_name || "").trim()
+            ? [pad([t("poMetaStoreVendor"), String(meta.storeVendorName).trim(), ""], colCount)]
+            : []
+          : [
+              pad(
+                [
+                  t("poMetaStore"),
+                  meta?.relatedStore || "",
+                  meta?.storeVendorName ? `${t("poMetaStoreVendor")}: ${meta.storeVendorName}` : "",
+                ],
+                colCount
+              ),
+            ]
         : []),
       ...(meta?.poFormatLabel ? [pad([t("poFormPresetLabel"), meta.poFormatLabel], colCount)] : []),
       pad([], colCount),
@@ -324,6 +383,7 @@ ${allRows.map((row, ri) => {
       (v) => v.code === po.vendor_code || v.name === po.vendor_name
     )
 
+    const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const poPrintData = {
       poNo,
       createdAt: dateStr,
@@ -349,6 +409,8 @@ ${allRows.map((row, ri) => {
       relatedStore: meta?.relatedStore,
       storeVendorName: meta?.storeVendorName,
       poFormatLabel: meta?.poFormatLabel,
+      accountingBillToStyle: isAcctPo,
+      invoiceReceived: Boolean(po.invoice_received),
     }
     sessionStorage.setItem("po-print-data", JSON.stringify(poPrintData))
     const printWindow = window.open("/admin/po-print", "_blank")
@@ -491,7 +553,7 @@ ${allRows.map((row, ri) => {
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
                         <div className="flex items-center gap-0.5">
-                          {isPoApprovedStatus(po.status) && (
+                          {isPoApprovedStatus(po.status) && !isAcct && (
                             <Link href={`/admin/inbound?fromPo=${po.id}`}>
                               <Button
                                 variant="ghost"
@@ -502,6 +564,21 @@ ${allRows.map((row, ri) => {
                                 <ArrowDownToLine className="h-4 w-4" />
                               </Button>
                             </Link>
+                          )}
+                          {isAcct && isPoApprovedStatus(po.status) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-8 w-8 hover:bg-primary/10 ${
+                                po.invoice_received ? "text-green-600" : "text-muted-foreground"
+                              }`}
+                              title={t("poAccountingTaxInvoiceToggleTitle")}
+                              aria-pressed={po.invoice_received === true}
+                              onClick={() => void handleToggleAccountingTaxInvoice(po)}
+                              disabled={taxInvoiceToggleId === po.id}
+                            >
+                              <FileCheck className="h-4 w-4" />
+                            </Button>
                           )}
                           {!isPoApprovedStatus(po.status) && (
                             <Button

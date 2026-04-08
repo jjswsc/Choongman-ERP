@@ -3,7 +3,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import Link from "next/link"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator, ClipboardList } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator, ClipboardList, Download, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -48,6 +48,8 @@ import {
   updatePosMenuSoldOut,
   getPosPromos,
   getPosPromoSchemaStatus,
+  importPosMenus,
+  refreshPosMenusCatalogCache,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
@@ -159,6 +161,8 @@ export default function PosMenusPage() {
   const [allMainCategories, setAllMainCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [refreshLoading, setRefreshLoading] = React.useState(false)
+  const [menuImportBusy, setMenuImportBusy] = React.useState(false)
+  const menuImportInputRef = React.useRef<HTMLInputElement>(null)
   const [formData, setFormData] = React.useState(emptyForm)
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -276,6 +280,62 @@ export default function PosMenusPage() {
       setBusy(false)
     }
   }, [t])
+
+  const handleDownloadPosMenuTemplate = React.useCallback(async () => {
+    try {
+      const { buildPosMenuImportTemplateBlob } = await import("@/lib/pos-menu-import-xlsx")
+      const blob = await buildPosMenuImportTemplateBlob()
+      const a = document.createElement("a")
+      const url = URL.createObjectURL(blob)
+      a.href = url
+      a.download = "pos-menus-import-template.xlsx"
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      await appAlert(String(e instanceof Error ? e.message : e))
+    }
+  }, [])
+
+  const handlePosMenuImportFileChange = React.useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ""
+      if (!file) return
+      setMenuImportBusy(true)
+      try {
+        const { parsePosMenuImportWorkbook } = await import("@/lib/pos-menu-import-xlsx")
+        const menus = await parsePosMenuImportWorkbook(file)
+        if (menus.length === 0) {
+          await appAlert(
+            "업로드할 유효한 행이 없습니다. 첫 행은 양식과 동일한 영문 헤더(code, name, …)인지 확인해 주세요."
+          )
+          return
+        }
+        const ok = await appConfirm(
+          `총 ${menus.length}행을 반영합니다. 동일 메뉴 코드는 덮어씁니다. 프로모션 연동 메뉴는 건너뜁니다. 계속할까요?`
+        )
+        if (!ok) return
+        const r = await importPosMenus(menus)
+        await refreshPosMenusCatalogCache()
+        await loadMenusAndCategories()
+        const detailLines = [
+          `신규 ${r.inserted ?? 0}건, 갱신 ${r.updated ?? 0}건, 건너뜀·실패 ${r.skipped ?? 0}건`,
+          ...(r.errors?.length ? ["", ...r.errors.slice(0, 20)] : []),
+          r.errorsTruncated ? "\n… (오류 일부만 표시)" : "",
+        ].join("\n")
+        const title = r.success
+          ? "일괄 반영이 완료되었습니다."
+          : "일부 행만 반영되었거나 모두 건너뛰었습니다."
+        await appAlert(`${title}\n\n${detailLines}`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        await appAlert(translateApiMessage(msg, t) || msg)
+      } finally {
+        setMenuImportBusy(false)
+      }
+    },
+    [t, loadMenusAndCategories]
+  )
 
   const refreshSetTabAfterSave = React.useCallback(() => {
     void getPosPromos()
@@ -1941,16 +2001,47 @@ export default function PosMenusPage() {
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
               <h3 className="text-sm font-bold">{t("posMenuList") || "메뉴 목록"}</h3>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                disabled={refreshLoading}
-                onClick={() => loadMenusAndCategories(setRefreshLoading)}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", refreshLoading && "animate-spin")} />
-                {t("btn_query") || t("stockBtnSearch") || "조회"}
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <input
+                  ref={menuImportInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  className="hidden"
+                  onChange={handlePosMenuImportFileChange}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={menuImportBusy}
+                  onClick={handleDownloadPosMenuTemplate}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  {t("posMenuImportTemplate")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={menuImportBusy}
+                  onClick={() => menuImportInputRef.current?.click()}
+                >
+                  <Upload className={cn("h-3.5 w-3.5 mr-1.5", menuImportBusy && "animate-pulse")} />
+                  {menuImportBusy ? (t("loading") || "처리 중…") : t("posMenuImportUpload")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={refreshLoading}
+                  onClick={() => loadMenusAndCategories(setRefreshLoading)}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", refreshLoading && "animate-spin")} />
+                  {t("btn_query") || t("stockBtnSearch") || "조회"}
+                </Button>
+              </div>
             </div>
             <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
               <Select

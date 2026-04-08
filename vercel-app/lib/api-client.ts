@@ -25,7 +25,9 @@ import {
   invalidateAppDataCache as invalidateAppDataCacheOffline,
   invalidateAdminItemsCache,
 } from './offline/erp-offline'
-import { ERP_POS_CATALOG_MENUS_CACHE_KEY, fetchPosCatalogCached } from './offline/pos-catalog-offline'
+import { ERP_POS_CATALOG_MENUS_CACHE_KEY, fetchPosCatalogCached, notifyPosCatalogUpdated } from './offline/pos-catalog-offline'
+import { setErpCache } from './offline/cache'
+import type { PosMenuUpsertApiBody } from './pos-menu-upsert-server'
 import { readAutoTranslateEnabled } from './auto-translate'
 
 export { apiFetch } from './api/fetch'
@@ -140,6 +142,8 @@ export interface MyPayrollData {
   spl_bonus: number
   ot_amt: number
   late_ded: number
+  /** 조퇴 공제 — 관리자 표의 지각 열은 late_ded+early_ded 합계 */
+  early_ded: number
   sso: number
   tax: number
   other_ded: number
@@ -4528,6 +4532,44 @@ export async function savePosMenu(
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export type ImportPosMenusResult = {
+  success: boolean
+  message?: string
+  inserted?: number
+  updated?: number
+  skipped?: number
+  errors?: string[]
+  errorsTruncated?: boolean
+}
+
+/** POS 메뉴 일괄 업로드 (코드 기준 갱신·신규). 관리자 전용 — 온라인만. */
+export async function importPosMenus(menus: PosMenuUpsertApiBody[]): Promise<ImportPosMenusResult> {
+  const res = await apiFetch('/api/importPosMenus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ menus }),
+  })
+  const data = (await res.json().catch(() => ({}))) as ImportPosMenusResult
+  if (!res.ok) {
+    throw new Error(data.message || `요청 실패 (${res.status})`)
+  }
+  return data
+}
+
+/** getPosMenus IDB 캐시를 서버 목록으로 덮어쓴 뒤 이벤트 알림 (일괄 저장 직후 목록 즉시 반영) */
+export async function refreshPosMenusCatalogCache(): Promise<void> {
+  try {
+    const res = await apiFetch('/api/getPosMenus')
+    if (!res.ok) return
+    const list = (await res.json()) as unknown
+    if (!Array.isArray(list)) return
+    await setErpCache(ERP_POS_CATALOG_MENUS_CACHE_KEY, list)
+    notifyPosCatalogUpdated(ERP_POS_CATALOG_MENUS_CACHE_KEY, list)
+  } catch {
+    /* ignore */
+  }
+}
+
 /** uploadPosMenuImage: 비 JSON 응답(413 HTML 등) 시 message로 구분 */
 export const POS_MENU_UPLOAD_TOO_LARGE = '__POS_MENU_UPLOAD_TOO_LARGE__'
 
@@ -4712,7 +4754,7 @@ export async function savePosPromo(params: {
   validFrom?: string | null
   validTo?: string | null
   marketingActualCost?: number | null
-  /** 메뉴 관리 세트: 캠페인 없이 저장 (서버가 SET-#### 코드 부여) */
+  /** 메뉴 관리 세트: 캠페인 없이 저장 (서버가 SET-1 … 코드 부여) */
   standaloneSetMenu?: boolean
   userRole?: string
   userName?: string

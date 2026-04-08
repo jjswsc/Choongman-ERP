@@ -41,6 +41,10 @@ export interface PoPrintData {
   storeVendorName?: string
   /** 외부/타사 PO 양식 참고 문구 */
   poFormatLabel?: string
+  /** 회계·청구 PO: 인쇄에서 공급자 블록을 청구처로 표시하고 매장명을 강조 */
+  accountingBillToStyle?: boolean
+  /** 회계 청구 PO: 수금·Tax Invoice 발행 확인(updatePurchaseOrderInvoice) */
+  invoiceReceived?: boolean
 }
 
 export interface PoPrintCompany {
@@ -61,6 +65,15 @@ function formatCurrency(amount: number): string {
 export function isPoApprovedStatus(status?: string): boolean {
   const s = String(status ?? "").trim().toLowerCase()
   return s === "approved"
+}
+
+/** 회계 청구 PO: 승인 + 수금(인보이스) 확인 시 인쇄 제목을 Tax Invoice 로 (물류 미수금 Tax Invoice 와 유사) */
+export function isPoAccountingTaxInvoiceMode(
+  accountingBillToStyle?: boolean,
+  status?: string,
+  invoiceReceived?: boolean
+): boolean {
+  return Boolean(accountingBillToStyle && isPoApprovedStatus(status) && invoiceReceived)
 }
 
 function groupCartByStore(cart: PoPrintItem[]): Map<string, PoPrintItem[]> {
@@ -112,12 +125,27 @@ export function PurchaseOrderPrint({
     poMetaStore?: string
     poMetaStoreVendor?: string
     poFormatBadgeExternal?: string
+    /** 회계 PO 인쇄: 법인명 보조 라벨 */
+    poPrintLegalEntity?: string
+    /** 회계 청구: Draft / Approved / Tax Invoice 뱃지 (외부 양식 없을 때) */
+    poHeaderBadge?: string
   }
 }) {
   const t = (key: keyof NonNullable<typeof labels>) => labels?.[key] ?? key
   const approved = isPoApprovedStatus(data.status)
   const hasStore = data.cart.some((c) => c.store && String(c.store).trim())
   const byStore = hasStore ? groupCartByStore(data.cart) : null
+  const billToFranchiseLayout =
+    Boolean(data.accountingBillToStyle) &&
+    Boolean(String(data.relatedStore ?? "").trim()) &&
+    Boolean(String(data.vendorName ?? "").trim())
+
+  const externalFormat = Boolean(data.poFormatLabel && String(data.poFormatLabel).trim())
+  const headerBadgeText = externalFormat
+    ? labels?.poFormatBadgeExternal ?? "External format"
+    : labels?.poHeaderBadge != null && String(labels.poHeaderBadge).trim() !== ""
+      ? String(labels.poHeaderBadge)
+      : "Original"
 
   return (
     <div className="invoice-container max-w-4xl mx-auto w-full print:max-w-full print:mx-0 bg-white shadow-lg print:shadow-none print:bg-white rounded-lg overflow-hidden border border-slate-200 print:border-0">
@@ -131,7 +159,7 @@ export function PurchaseOrderPrint({
               <p className="mt-1 max-w-xl text-sm font-medium leading-snug text-white/95">{data.poFormatLabel}</p>
             ) : null}
             <Badge variant="secondary" className="mt-2 bg-white/20 text-white hover:bg-white/30">
-              {data.poFormatLabel ? t("poFormatBadgeExternal") || "External format" : "Original"}
+              {headerBadgeText}
             </Badge>
           </div>
           <div className="text-right text-sm space-y-1">
@@ -186,37 +214,77 @@ export function PurchaseOrderPrint({
             <span>{t("supplier") || "SUPPLIER"}</span>
           </div>
           <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-2 print:border-slate-300">
-            <h3 className="font-bold text-lg">{data.vendorName}</h3>
-            <div className="text-sm text-muted-foreground space-y-1">
-              <div className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{data.vendorAddress || "-"}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 shrink-0" />
-                <span>Tax ID: {data.vendorTaxId || "-"}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Phone:</span>
-                <span>{data.vendorPhone || "-"}</span>
-              </div>
-              {(data.relatedStore || data.storeVendorName) && (
-                <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
-                  {data.relatedStore ? (
-                    <p>
-                      <span className="font-medium text-slate-800">{t("poMetaStore") || "Store"}:</span>{" "}
-                      {data.relatedStore}
-                    </p>
-                  ) : null}
-                  {data.storeVendorName ? (
-                    <p className="mt-0.5">
-                      <span className="font-medium text-slate-800">{t("poMetaStoreVendor") || "Store vendor"}:</span>{" "}
+            {billToFranchiseLayout ? (
+              <>
+                <h3 className="font-bold text-lg">{data.relatedStore}</h3>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>
+                    <span className="font-medium text-slate-700">
+                      {t("poPrintLegalEntity") || "Legal entity"}:
+                    </span>{" "}
+                    {data.vendorName}
+                  </p>
+                  {data.storeVendorName &&
+                  String(data.storeVendorName).trim() &&
+                  data.storeVendorName !== data.vendorName ? (
+                    <p className="text-xs text-slate-600">
+                      <span className="font-medium text-slate-800">
+                        {t("poMetaStoreVendor") || "Store vendor"}:
+                      </span>{" "}
                       {data.storeVendorName}
                     </p>
                   ) : null}
+                  <div className="flex items-start gap-2 pt-1">
+                    <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{data.vendorAddress || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span>Tax ID: {data.vendorTaxId || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span>Phone:</span>
+                    <span>{data.vendorPhone || "-"}</span>
+                  </div>
                 </div>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                <h3 className="font-bold text-lg">{data.vendorName}</h3>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{data.vendorAddress || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span>Tax ID: {data.vendorTaxId || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span>Phone:</span>
+                    <span>{data.vendorPhone || "-"}</span>
+                  </div>
+                  {(data.relatedStore || data.storeVendorName) && (
+                    <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
+                      {data.relatedStore ? (
+                        <p>
+                          <span className="font-medium text-slate-800">{t("poMetaStore") || "Store"}:</span>{" "}
+                          {data.relatedStore}
+                        </p>
+                      ) : null}
+                      {data.storeVendorName ? (
+                        <p className="mt-0.5">
+                          <span className="font-medium text-slate-800">
+                            {t("poMetaStoreVendor") || "Store vendor"}:
+                          </span>{" "}
+                          {data.storeVendorName}
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

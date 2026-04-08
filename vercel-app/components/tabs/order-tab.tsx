@@ -92,6 +92,16 @@ function parsePositiveIntQty(s: string): number {
   return Number.isFinite(n) && n >= 1 ? n : 1
 }
 
+/** 일부 수령 후 추가 수령 시: 아직 미수령인 줄 번호만 */
+function getEligibleReceiveIndices(o: OrderHistoryItem): number[] {
+  const items = o.items ?? []
+  const partial =
+    o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료"
+  if (!partial) return items.map((_, i) => i)
+  const rec = new Set(o.receivedIndices ?? [])
+  return items.map((_, i) => i).filter((i) => !rec.has(i))
+}
+
 interface CartItem {
   code: string
   name: string
@@ -275,12 +285,13 @@ export function OrderTab() {
     return ""
   }
 
-  const canReceive = (o: OrderHistoryItem) =>
-    !o.isForceOutbound &&
-    o.status === "Approved" &&
-    o.deliveryStatus !== "배송완료" &&
-    o.deliveryStatus !== "배송 완료" &&
-    o.deliveryStatus !== "일부배송완료" && o.deliveryStatus !== "일부 배송 완료"
+  const canReceive = (o: OrderHistoryItem) => {
+    if (o.isForceOutbound || o.status !== "Approved") return false
+    if (o.deliveryStatus === "배송완료" || o.deliveryStatus === "배송 완료") return false
+    const partial = o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료"
+    if (partial && getEligibleReceiveIndices(o).length === 0) return false
+    return true
+  }
 
   const receiveCameraRef = useRef<HTMLInputElement>(null)
   const receiveFileRef = useRef<HTMLInputElement>(null)
@@ -313,16 +324,23 @@ export function OrderTab() {
     return receivedQtysRef.current[orderId]?.[itemIdx] ?? receivedQtys[orderId]?.[itemIdx] ?? defaultQty
   }
 
-  const isAllInspected = (o: OrderHistoryItem) => {
-    const items = o.items || []
-    if (items.length === 0) return true
+  const isAllEligibleInspected = (o: OrderHistoryItem) => {
+    const eligible = getEligibleReceiveIndices(o)
+    if (eligible.length === 0) return true
     const checked = inspectedItems[o.id] ?? new Set<number>()
-    return items.every((_, idx) => checked.has(idx))
+    return eligible.every((idx) => checked.has(idx))
   }
 
   const MAX_RECEIVE_PHOTOS = 5
 
   const openReceiveModal = (orderId: number, o: OrderHistoryItem) => {
+    setInspectedItems((prev) => ({ ...prev, [orderId]: new Set<number>() }))
+    setReceivedQtys((prev) => {
+      const next = { ...prev }
+      delete next[orderId]
+      receivedQtysRef.current = next
+      return next
+    })
     setReceiveModal({ orderId, order: o })
     setReceivePhotoFiles([])
     setReceivePhotoPreviews((prev) => {
@@ -385,10 +403,12 @@ export function OrderTab() {
       await appAlert(t("receivePhotoRequired"))
       return
     }
-    const isPartial = receiveModal.order && !isAllInspected(receiveModal.order)
+    const eligible = receiveModal.order ? getEligibleReceiveIndices(receiveModal.order) : []
+    const isPartial = receiveModal.order && !isAllEligibleInspected(receiveModal.order)
     if (isPartial) {
       const inspectedSet = inspectedItems[receiveModal.order!.id] ?? new Set<number>()
-      if (inspectedSet.size === 0) {
+      const picked = [...inspectedSet].filter((i) => eligible.includes(i))
+      if (picked.length === 0) {
         await appAlert(t("inspectPartialMinItems"))
         return
       }
@@ -407,9 +427,10 @@ export function OrderTab() {
         return
       }
       try {
-        const isPartial = modal.order && !isAllInspected(modal.order)
+        const elig = modal.order ? getEligibleReceiveIndices(modal.order) : []
         const inspectedSet = modal.order ? (inspectedItems[modal.order.id] ?? new Set<number>()) : new Set<number>()
-        const inspectedIndices = Array.from(inspectedSet).sort((a, b) => a - b)
+        const inspectedIndices = [...inspectedSet].filter((i) => elig.includes(i)).sort((a, b) => a - b)
+        const isPartial = modal.order ? inspectedIndices.length < elig.length : false
         const items = modal.order?.items ?? []
         const receivedQtysMap: Record<number, number> = {}
         if (isPartial) {
@@ -419,7 +440,8 @@ export function OrderTab() {
             receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, origQty)
           })
         } else {
-          items.forEach((it, idx) => {
+          elig.forEach((idx) => {
+            const it = items[idx]
             receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, it?.qty ?? 0)
           })
         }
@@ -532,7 +554,7 @@ export function OrderTab() {
           >
             <h3 className="mb-2 font-semibold">{t("receivePhotoTitle")}</h3>
             <p className="mb-3 text-sm text-muted-foreground">{t("receivePhotoHint")}</p>
-            {receiveModal.order && !isAllInspected(receiveModal.order) && (
+            {receiveModal.order && !isAllEligibleInspected(receiveModal.order) && (
               <p className="mb-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">{t("inspectPartialWarning")}</p>
             )}
             <input
@@ -904,6 +926,7 @@ export function OrderTab() {
                                 byLocation.get(loc)!.push(it)
                               }
                               const groups = Array.from(byLocation.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+                              const eligibleReceiveIdx = getEligibleReceiveIndices(o)
                               return groups.map(([loc, locItems]) => (
                                 <div key={loc} className="space-y-1.5">
                                   <div className="text-xs font-semibold text-primary/90 border-b border-border/60 pb-1">
@@ -916,7 +939,7 @@ export function OrderTab() {
                                   </div>
                                   {locItems.map((it) => {
                                     const idx = it.index ?? items.indexOf(it)
-                                    const showCheck = canReceive(o)
+                                    const showCheck = canReceive(o) && eligibleReceiveIdx.includes(idx)
                                     const checked = (inspectedItems[o.id] ?? new Set<number>()).has(idx)
                                     const isReceived = o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료"
                                       ? (o.receivedIndices ?? []).includes(idx)

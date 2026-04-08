@@ -173,8 +173,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       const isExempt = c.taxType === 'exempt' || c.taxType === 'zero' || c.taxType === '면세' || c.taxType === '영세율'
       if (!isExempt) taxableSub += amt
     }
-    const v = Math.round(taxableSub * 0.07)
-    return { subtotal: sub, vat: v, total: sub + v }
+    const vatRaw = taxableSub * 0.07
+    const v = Math.round(vatRaw * 100) / 100
+    const total = Math.round((sub + v) * 100) / 100
+    return { subtotal: sub, vat: v, total }
   }, [cart])
   /** 본사(회계) 발주일 — 방콕 달력 YYYY-MM-DD */
   const [poOrderDate, setPoOrderDate] = React.useState(todayStrBangkok)
@@ -243,6 +245,16 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     setBillingStart(startStr)
     setBillingEnd(endStr)
   }, [allowManualLines])
+
+  /** 회계 PO: 매장 선택 시 sales_outlet 일치 거래처(법인) 자동 설정 */
+  React.useEffect(() => {
+    if (!allowManualLines) return
+    if (relatedStore === "_none") return
+    const hit = vendorForSalesOutletStore(vendors, relatedStore)
+    if (!hit) return
+    setVendorSelect((prev) => (prev?.code === hit.code ? prev : hit))
+    setVendorSearchQuery("")
+  }, [allowManualLines, relatedStore, vendors])
 
   const addManualLineToCart = React.useCallback(() => {
     const name = manualLineName.trim()
@@ -697,9 +709,50 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
           </CardContent>
         </Card>
 
+        {allowManualLines ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{t("poRelatedStore")}</CardTitle>
+              <p className="mt-1 text-xs font-normal text-muted-foreground">
+                {t("poAccountingRelatedStoreFirstHint")}
+              </p>
+              <p className="mt-1 text-xs font-normal text-muted-foreground">
+                {t("poVendorOrStoreHintAccounting")}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <label className="text-xs text-muted-foreground">{t("expenseStoreSelect")}</label>
+              <Select value={relatedStore} onValueChange={setRelatedStore}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("expenseStoreSelect")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">{t("poRelatedStoreNone")}</SelectItem>
+                  {storeList.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {relatedStore !== "_none" ? (
+                storeOutletVendor ? (
+                  <p className="text-xs text-foreground">
+                    {t("poStoreResolvedVendor").replace("{name}", storeOutletVendor.name)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-500">{t("poStoreNoVendorMatch")}</p>
+                )
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">{t("purchaseOrderVendor")}</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              {allowManualLines ? t("poAccountingCounterpartyTitle") : t("purchaseOrderVendor")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div ref={vendorContainerRef} className="relative">
@@ -707,7 +760,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 <Input
                   ref={vendorInputRef}
                   type="text"
-                  placeholder={t("vendorSearchPh") || "거래처 검색 또는 직접 입력 (코드, 이름)"}
+                  placeholder={
+                    allowManualLines
+                      ? t("poAccountingVendorSearchPh")
+                      : t("vendorSearchPh") || "거래처 검색 또는 직접 입력 (코드, 이름)"
+                  }
                   value={vendorDropdownOpen ? vendorSearchQuery : (vendorSelect?.name ?? vendorSearchQuery)}
                   onChange={(e) => {
                     setVendorSearchQuery(e.target.value)
@@ -783,40 +840,6 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             ) : null}
           </CardContent>
         </Card>
-
-        {allowManualLines ? (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">{t("poRelatedStore")}</CardTitle>
-              <p className="mt-1 text-xs font-normal text-muted-foreground">{t("poVendorOrStoreHint")}</p>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <label className="text-xs text-muted-foreground">{t("expenseStoreSelect")}</label>
-              <Select value={relatedStore} onValueChange={setRelatedStore}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("expenseStoreSelect")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">{t("poRelatedStoreNone")}</SelectItem>
-                  {storeList.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {relatedStore !== "_none" ? (
-                storeOutletVendor ? (
-                  <p className="text-xs text-foreground">
-                    {t("poStoreResolvedVendor").replace("{name}", storeOutletVendor.name)}
-                  </p>
-                ) : (
-                  <p className="text-xs text-amber-700 dark:text-amber-500">{t("poStoreNoVendorMatch")}</p>
-                )
-              ) : null}
-            </CardContent>
-          </Card>
-        ) : null}
       </div>
 
       {allowManualLines ? (

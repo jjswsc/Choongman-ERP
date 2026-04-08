@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
       const isExempt = taxType === 'exempt' || taxType === '면세' || taxType === '영세율' || taxType === 'zero'
       if (!isExempt) taxableSubtotal += amt
     }
-    const vat = Math.round(taxableSubtotal * 0.07)
-    const total = subtotal + vat
+    const vat = Math.round(taxableSubtotal * 0.07 * 100) / 100
+    const total = Math.round((subtotal + vat) * 100) / 100
 
     const cartJson = serializePurchaseOrderCart(cart, meta)
 

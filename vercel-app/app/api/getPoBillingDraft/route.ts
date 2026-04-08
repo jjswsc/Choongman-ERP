@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
-import { appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
+import { appendStoreCodeFilter, storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 import {
   aggregatePoBillingSales,
   buildPoBillingDraftLines,
@@ -42,13 +42,18 @@ export async function GET(request: NextRequest) {
     }
 
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
-    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    filter = appendStoreCodeFilter(filter, [store])
+    const baseTimeFilter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
 
-    const orderRows = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: FETCH_LIMIT,
-      select: 'order_type,total,status,store_code,delivery_app_code,items_json',
-    })) as PoBillingOrderRow[]
+    let orderRows: PoBillingOrderRow[] = []
+    for (const storeVariant of storeCodeSearchVariants(store)) {
+      const filter = appendStoreCodeFilter(baseTimeFilter, [storeVariant])
+      orderRows = (await supabaseSelectFilter('pos_orders', filter, {
+        limit: FETCH_LIMIT,
+        select:
+          'order_type,total,status,store_code,delivery_app_code,delivery_payment_channel,items_json',
+      })) as PoBillingOrderRow[]
+      if (orderRows.length > 0) break
+    }
 
     if (orderRows.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 

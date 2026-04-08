@@ -49,6 +49,7 @@ create index if not exists idx_member_events_provider_event_type on public.membe
 create or replace function public.set_members_updated_at()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at := now() at time zone 'Asia/Bangkok';

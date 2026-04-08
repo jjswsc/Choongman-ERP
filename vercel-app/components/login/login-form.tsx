@@ -31,6 +31,11 @@ import {
   WINDOWS_ERP_SETUP_PATH,
   WINDOWS_POS_SETUP_PATH,
 } from "@/lib/windows-installer-copy"
+import {
+  isBrowserOnline,
+  runReachabilityProbe,
+  REACHABILITY_EVENT,
+} from "@/lib/offline/network"
 
 function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
   // #region agent log
@@ -188,14 +193,21 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    setBrowserOnline(navigator.onLine)
+    const sync = () => setBrowserOnline(isBrowserOnline())
+    sync()
+    void runReachabilityProbe().then(sync)
     const onOn = () => setBrowserOnline(true)
-    const onOff = () => setBrowserOnline(false)
+    const onOff = () => {
+      sync()
+      void runReachabilityProbe().then(sync)
+    }
     window.addEventListener("online", onOn)
     window.addEventListener("offline", onOff)
+    window.addEventListener(REACHABILITY_EVENT, sync)
     return () => {
       window.removeEventListener("online", onOn)
       window.removeEventListener("offline", onOff)
+      window.removeEventListener(REACHABILITY_EVENT, sync)
     }
   }, [])
 
@@ -218,23 +230,28 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setLoading(true)
     sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:start", "fetchLoginData started", {
       browserOnlineNow: typeof navigator !== "undefined" ? navigator.onLine : null,
+      effectiveOnline: isBrowserOnline(),
     })
-    /** 브라우저 오프라인이면 네트워크 대기 없이 즉시 종료 — 6초 타임아웃으로 로그인 화면이 느려지는 것 방지 */
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      setLoginData({})
-      setLoadError(null)
-      setLoading(false)
-      return
-    }
-    const timeoutMs = 6000
-    const withTimeout = Promise.race([
-      getLoginData(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
-      ),
-    ])
-    withTimeout
-      .then((d) => {
+    /** navigator.onLine 거짓 false 대비: 짧은 프로브 후에도 오프라인이면 즉시 종료 */
+    const run = async () => {
+      if (typeof navigator !== "undefined" && !isBrowserOnline()) {
+        await runReachabilityProbe()
+      }
+      if (!isBrowserOnline()) {
+        setLoginData({})
+        setLoadError(null)
+        setLoading(false)
+        return
+      }
+      const timeoutMs = 6000
+      const withTimeout = Promise.race([
+        getLoginData(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
+        ),
+      ])
+      try {
+        const d = await withTimeout
         sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:then", "fetchLoginData resolved", {
           source: d?._source ?? null,
           storeCount: Object.keys(d?.users || {}).length,
@@ -246,8 +263,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           setLoadError(null)
         }
         setLoading(false)
-      })
-      .catch((e) => {
+      } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         sendLoginDebugLog("H3", "components/login/login-form.tsx:fetchLoginData:catch", "fetchLoginData rejected", {
           error: msg,
@@ -259,7 +275,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         )
         setLoginData({})
         setLoading(false)
-      })
+      }
+    }
+    void run()
   }, [])
 
   useEffect(() => {
@@ -313,7 +331,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
     setSubmitting(true)
     clearFormError()
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    if (typeof navigator !== "undefined" && !isBrowserOnline()) {
+      await runReachabilityProbe()
+    }
+    if (!isBrowserOnline()) {
       setError(pickLoginStr(tMsg, "msg_login_network_error"))
       setErrorIsConnectivity(true)
       setSubmitting(false)

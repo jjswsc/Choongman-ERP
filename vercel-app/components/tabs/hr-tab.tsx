@@ -117,6 +117,7 @@ export function HrTab() {
     spl_bonus: number
     ot_amt: number
     late_ded: number
+    early_ded?: number
     sso: number
     tax: number
     other_ded: number
@@ -388,7 +389,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
 <tr><td>${t("pay_spl_bonus")}</td><td class="num">+${fmt(payrollData.spl_bonus)}</td></tr>
 <tr><td>${t("pay_ot_hours")}</td><td class="num">+${fmt(payrollData.ot_amt)}</td></tr>
 <tr class="section"><th colspan="2">${t("payPrintDeduct")}</th></tr>
-<tr><td>${t("pay_late_ded")}</td><td class="num deduct">-${fmt(payrollData.late_ded)}</td></tr>
+<tr><td>${t("pay_explain_title_late_early")}</td><td class="num deduct">-${fmt((payrollData.late_ded || 0) + (payrollData.early_ded ?? 0))}</td></tr>
 <tr><td>${t("pay_sso")}</td><td class="num deduct">-${fmt(payrollData.sso)}</td></tr>
 <tr><td>${t("pay_tax")}</td><td class="num deduct">-${fmt(payrollData.tax)}</td></tr>
 <tr><td>${t("pay_other_ded")}</td><td class="num deduct">-${fmt(payrollData.other_ded)}</td></tr>
@@ -775,8 +776,10 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                   <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.ot_amt)}</span>
                 </div>
                 <div className="px-3 py-2 flex justify-between border-t border-border/40 bg-destructive/5">
-                  <span className="text-muted-foreground">{t("pay_late_ded")}</span>
-                  <span className="text-destructive">-{fmt(payrollData.late_ded)}</span>
+                  <span className="text-muted-foreground">{t("pay_explain_title_late_early")}</span>
+                  <span className="text-destructive">
+                    -{fmt((payrollData.late_ded || 0) + (payrollData.early_ded ?? 0))}
+                  </span>
                 </div>
                 <div className="px-3 py-2 flex justify-between border-t border-border/40 bg-destructive/5">
                   <span className="text-muted-foreground">{t("pay_sso")}</span>
