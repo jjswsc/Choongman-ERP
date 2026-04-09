@@ -3,6 +3,10 @@ import { supabaseInsert } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import {
+  upsertPayableFromBankPurchasePayment,
+  upsertReceivableFromBankReceive,
+} from '@/lib/receivable-payable'
 
 /** 통장 거래 등록 (매입 대금/매출 수령 시 미지급금/미수금 자동 연동) */
 export async function POST(request: NextRequest) {
@@ -113,25 +117,21 @@ export async function POST(request: NextRequest) {
     const bankId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
 
     if (bankId && validCategory === 'purchase_payment' && vendorCode) {
-      await supabaseInsert('payable_transactions', {
-        vendor_code: vendorCode,
-        amount: -Math.abs(amount),
-        ref_type: 'Payment',
-        ref_id: null,
-        trans_date: transDate.slice(0, 10),
+      await upsertPayableFromBankPurchasePayment({
+        bankTransactionId: bankId,
+        vendorCode,
+        amountAbs: Math.abs(amount),
+        transDate,
         memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
-        bank_transaction_id: bankId,
       })
     }
     if (bankId && validCategory === 'receivable_receive' && storeNameForReceivable) {
-      await supabaseInsert('receivable_transactions', {
-        store_name: storeNameForReceivable,
-        amount: -Math.abs(amount),
-        ref_type: 'Receive',
-        ref_id: null,
-        trans_date: transDate.slice(0, 10),
+      await upsertReceivableFromBankReceive({
+        bankTransactionId: bankId,
+        storeName: storeNameForReceivable,
+        amountAbs: Math.abs(amount),
+        transDate,
         memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
-        bank_transaction_id: bankId,
       })
     }
 

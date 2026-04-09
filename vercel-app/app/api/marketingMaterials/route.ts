@@ -5,6 +5,7 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 import { campaignNoByIdMap } from '@/lib/marketing-campaign-code-resolve'
 import {
   fetchCampaignMetaForExpenseMemo,
@@ -65,6 +66,14 @@ function isColumnSchemaError(e: unknown): boolean {
     /Could not find the .* column/i.test(s) ||
     /column .* does not exist/i.test(s)
   )
+}
+
+function normalizeStoreName(val: unknown): string {
+  return String(val ?? '').trim()
+}
+
+function isStoreScopedRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
 }
 
 /** 판촉물 목록 조회 */
@@ -147,6 +156,8 @@ export async function POST(req: NextRequest) {
       userName?: string
       user_role?: string
       user_name?: string
+      userStore?: string
+      user_store?: string
     }
 
     const campaignId = String(body.campaignId ?? '').trim()
@@ -154,6 +165,26 @@ export async function POST(req: NextRequest) {
     const editingId = body.id?.trim()
     const userRole = String(body.userRole ?? body.user_role ?? '')
     const userName = String(body.userName ?? body.user_name ?? '').trim()
+    const userStore = normalizeStoreName(body.userStore ?? body.user_store ?? '')
+    const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
+    if (isStoreScopedRole(userRole) && !scopedStore) {
+      return NextResponse.json(
+        { success: false, message: '매니저/가맹점주 저장에는 사용자 매장 정보가 필요합니다.' },
+        { headers }
+      )
+    }
+    const requestedBranches = Array.isArray(body.branches) ? body.branches : []
+    if (scopedStore) {
+      const requestedInvalid = requestedBranches.some(
+        (b) => normalizeStoreName(b).toLowerCase() !== scopedStore.toLowerCase()
+      )
+      if (requestedInvalid) {
+        return NextResponse.json(
+          { success: false, message: `매니저/가맹점주는 본인 매장(${scopedStore})만 저장할 수 있습니다.` },
+          { headers }
+        )
+      }
+    }
 
     if (!campaignId || !name) {
       return NextResponse.json(
@@ -184,8 +215,10 @@ export async function POST(req: NextRequest) {
       quantity: Math.max(1, Number(body.quantity) || 1),
       unit_cost: parseNum(body.unitCost),
       actual_cost: parseNum(body.actualCost),
-      branches: Array.isArray(body.branches) ? body.branches : [],
-      is_hq_wide: Boolean(body.isHqWide),
+      branches: scopedStore
+        ? [scopedStore]
+        : requestedBranches,
+      is_hq_wide: scopedStore ? false : Boolean(body.isHqWide),
       display_start_date: parseDate(body.displayStartDate),
       display_end_date: parseDate(body.displayEndDate),
       placement_spots: parsePlacementSpots(body.placementSpots),

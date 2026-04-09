@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate, supabaseUpsert } from '@/lib/supabase-server'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelectFilter,
+  supabaseUpdate,
+  supabaseUpsert,
+} from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 
@@ -302,7 +308,8 @@ export async function POST(request: NextRequest) {
       const employeeCode = String(r.employeeCode || '').trim()
       const employeeId =
         r.employeeId != null && Number.isFinite(Number(r.employeeId)) ? Math.floor(Number(r.employeeId)) : 0
-      const employeeToken = employeeCode || (employeeId > 0 ? `id${employeeId}` : '')
+      /** 직원코드 문자열이 바뀌면 payee_code가 달라져 급여·미지급 행이 중복될 수 있음 → employee_id가 있으면 항상 id{n} 고정 */
+      const employeeToken = employeeId > 0 ? `id${employeeId}` : employeeCode
       if (!store || !name || netPay <= 0) continue
 
       const payeeCode = buildPayrollPayeeCode(monthStr, store, name, employeeToken)
@@ -322,6 +329,29 @@ export async function POST(request: NextRequest) {
           status: existingStatus === 'approved' ? 'approved' : 'planned',
           updated_at: new Date().toISOString(),
         })
+        const expenseMemo = `급여 발생 ${monthStr} ${name}`.slice(0, 200)
+        const payRows = (await supabaseSelectFilter(
+          'payable_transactions',
+          `expense_accrual_id=eq.${existingId}&ref_type=eq.Expense`,
+          { order: 'id.asc', limit: 30, select: 'id' }
+        )) as { id?: number }[]
+        if (payRows?.length) {
+          const keep = payRows[0].id
+          if (keep) {
+            await supabaseUpdate('payable_transactions', keep, {
+              amount: netPay,
+              trans_date: expenseDate,
+              memo: expenseMemo,
+              vendor_code: `EMP:${name}`.slice(0, 120),
+              account_subject_id: expenseSubject.id,
+              expense_date: expenseDate,
+              due_date: dueDate,
+            })
+          }
+          for (const p of payRows.slice(1)) {
+            if (p.id) await supabaseDeleteByFilter('payable_transactions', `id=eq.${p.id}`)
+          }
+        }
         updatedAccrualCount++
         continue
       }

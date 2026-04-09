@@ -9,6 +9,7 @@ import {
 import { isAccountingRole } from '@/lib/permissions'
 import { normalizeEvalItemType } from '@/lib/eval-item-type'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import { EVAL_RESULTS_ORDER } from '@/lib/evaluation-postgrest-filters'
 
 const OFFICE_ROLES = ['director', 'ceo', 'hr', 'officer']
 
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
           memo: memoTrim,
           json_data: jsonStr,
         })
-        await updateEmployeeGrade(storeTrim, empTrim, gradeTrim)
+        await updateEmployeeGrade(storeTrim, empTrim)
         return NextResponse.json('UPDATED', { headers })
       }
     }
@@ -94,7 +95,7 @@ export async function POST(req: Request) {
       memo: memoTrim,
       json_data: jsonStr,
     })
-    await updateEmployeeGrade(storeTrim, empTrim, gradeTrim)
+    await updateEmployeeGrade(storeTrim, empTrim)
     return NextResponse.json('SAVED', { headers })
   } catch (e) {
     console.error('saveEvaluationResult:', e)
@@ -102,10 +103,34 @@ export async function POST(req: Request) {
   }
 }
 
-async function updateEmployeeGrade(store: string, employeeName: string, finalGrade: string) {
+async function updateEmployeeGrade(store: string, employeeName: string) {
   const raw = String(employeeName || '').trim()
   if (!raw) return
   const candidates = [...new Set([raw, normalizeEmployeeNameForGradeMatch(raw)].filter(Boolean))]
+  let latestGrade = ''
+  for (const name of candidates) {
+    const encName = encodeURIComponent(name)
+    const encStore = encodeURIComponent(store)
+    try {
+      const rows = (await supabaseSelectFilter(
+        'evaluation_results',
+        `store_name=eq.${encStore}&employee_name=eq.${encName}`,
+        {
+          limit: 1,
+          order: EVAL_RESULTS_ORDER,
+          select: 'final_grade,eval_date,id',
+        }
+      )) as { final_grade?: string }[] | null
+      const g = rows && rows[0] && String(rows[0].final_grade || '').trim()
+      if (g) {
+        latestGrade = g
+        break
+      }
+    } catch {
+      // try next
+    }
+  }
+  if (!latestGrade) return
   const encStore = encodeURIComponent(store)
   for (const name of candidates) {
     const encName = encodeURIComponent(name)
@@ -117,7 +142,7 @@ async function updateEmployeeGrade(store: string, employeeName: string, finalGra
           { limit: 1 }
         )) as { id?: number }[] | null
         if (rows && rows.length > 0 && rows[0].id != null) {
-          await supabaseUpdate('employees', rows[0].id, { grade: finalGrade })
+          await supabaseUpdate('employees', rows[0].id, { grade: latestGrade })
           return
         }
       } catch {

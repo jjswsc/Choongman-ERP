@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { upsertPayableFromBankPurchasePayment } from '@/lib/receivable-payable'
 import {
   postWithdrawalJournal,
   type WithdrawalCategory,
@@ -180,14 +181,12 @@ export async function POST(request: NextRequest) {
       }
       // 매입 대금(통장): payable_transactions에 지급 기록 → 미지급금 차감, 지급 예정 반영
       if (category === 'purchase_payment' && vendorCode && bankTransactionId) {
-        await supabaseInsert('payable_transactions', {
-          vendor_code: vendorCode,
-          amount: -amount,
-          ref_type: 'Payment',
-          ref_id: null,
-          trans_date: transDate,
+        await upsertPayableFromBankPurchasePayment({
+          bankTransactionId,
+          vendorCode,
+          amountAbs: amount,
+          transDate,
           memo: memo ? `통장 지급(매입): ${memo.slice(0, 200)}` : `통장 지급(매입): ${vendorCode}`,
-          bank_transaction_id: bankTransactionId,
         })
       }
 

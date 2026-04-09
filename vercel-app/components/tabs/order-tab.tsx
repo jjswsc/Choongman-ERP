@@ -92,6 +92,15 @@ function parsePositiveIntQty(s: string): number {
   return Number.isFinite(n) && n >= 1 ? n : 1
 }
 
+/** 모바일에서 카메라/갤러리가 image/* 외 MIME(빈 문자열, octet-stream)으로 주는 경우가 있어 허용 */
+function isLikelyReceiveImageFile(f: File): boolean {
+  if (f.type.startsWith("image/")) return true
+  if (f.type === "application/octet-stream" || f.type === "") {
+    return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(f.name || "")
+  }
+  return false
+}
+
 /** 일부 수령 후 추가 수령 시: 아직 미수령인 줄 번호만 */
 function getEligibleReceiveIndices(o: OrderHistoryItem): number[] {
   const items = o.items ?? []
@@ -334,13 +343,7 @@ export function OrderTab() {
   const MAX_RECEIVE_PHOTOS = 5
 
   const openReceiveModal = (orderId: number, o: OrderHistoryItem) => {
-    setInspectedItems((prev) => ({ ...prev, [orderId]: new Set<number>() }))
-    setReceivedQtys((prev) => {
-      const next = { ...prev }
-      delete next[orderId]
-      receivedQtysRef.current = next
-      return next
-    })
+    // 모달을 열 때 검수 체크·수량을 지우지 않음 — 아코디언에서 선택한 뒤 열면 그대로 반영되어야 함(이전에는 초기화되어 부분수령 제출이 불가능했음)
     setReceiveModal({ orderId, order: o })
     setReceivePhotoFiles([])
     setReceivePhotoPreviews((prev) => {
@@ -362,7 +365,7 @@ export function OrderTab() {
 
   const appendReceivePhotos = (newFiles: FileList | null) => {
     if (!newFiles?.length) return
-    const valid = Array.from(newFiles).filter((f) => f.type.startsWith("image/"))
+    const valid = Array.from(newFiles).filter(isLikelyReceiveImageFile)
     if (!valid.length) return
     setReceivePhotoFiles((prev) => {
       const next = [...prev, ...valid].slice(0, MAX_RECEIVE_PHOTOS)
@@ -384,7 +387,7 @@ export function OrderTab() {
 
   const onReceiveCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file && file.type.startsWith("image/")) {
+    if (file && isLikelyReceiveImageFile(file)) {
       const dt = new DataTransfer()
       dt.items.add(file)
       appendReceivePhotos(dt.files)

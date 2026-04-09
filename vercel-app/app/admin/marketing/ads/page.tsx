@@ -363,6 +363,7 @@ export default function MarketingAdsPage() {
         actualSpent: Number(form.actualSpent) || 0,
         userRole: auth?.role,
         userName: auth?.user,
+        userStore: auth?.store,
       })
       if (res.success) {
         const extra = res.expenseSyncMessage ? `\n\n${res.expenseSyncMessage}` : ""

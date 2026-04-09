@@ -5,6 +5,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 
 const ALLOWED_PLACEMENT_SPOTS = new Set(['counter', 'tv', 'table', 'entrance'])
 
@@ -22,6 +23,14 @@ function parseSpot(val: unknown): string {
   if (!s) return 'counter'
   if (ALLOWED_PLACEMENT_SPOTS.has(s)) return s
   return s.slice(0, 64)
+}
+
+function normalizeStoreName(val: unknown): string {
+  return String(val ?? '').trim()
+}
+
+function isStoreScopedRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
 }
 
 /** 홍보물 매장별 배치 이력 조회 */
@@ -87,13 +96,37 @@ export async function POST(req: NextRequest) {
       installedOn?: string
       removedOn?: string | null
       note?: string
+      userRole?: string
+      userStore?: string
+      user_role?: string
+      user_store?: string
     }
 
     const editingId = String(body.id ?? '').trim()
     const materialId = String(body.materialId ?? '').trim()
     const campaignIdRaw = String(body.campaignId ?? '').trim()
     const campaignId = campaignIdRaw ? Number(campaignIdRaw) : null
-    const storeName = String(body.storeName ?? '').trim()
+    const userRole = String(body.userRole ?? body.user_role ?? '')
+    const userStore = normalizeStoreName(body.userStore ?? body.user_store ?? '')
+    const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
+    if (isStoreScopedRole(userRole) && !scopedStore) {
+      return NextResponse.json(
+        { success: false, message: '매니저/가맹점주 저장에는 사용자 매장 정보가 필요합니다.' },
+        { headers }
+      )
+    }
+    const requestedStoreName = String(body.storeName ?? '').trim()
+    if (
+      scopedStore &&
+      requestedStoreName &&
+      requestedStoreName.toLowerCase() !== scopedStore.toLowerCase()
+    ) {
+      return NextResponse.json(
+        { success: false, message: `매니저/가맹점주는 본인 매장(${scopedStore})만 저장할 수 있습니다.` },
+        { headers }
+      )
+    }
+    const storeName = scopedStore || String(body.storeName ?? '').trim()
     const placementSpot = parseSpot(body.placementSpot)
     const materialType = String(body.materialType ?? '').trim() || null
     const installedOn = parseDate(body.installedOn)

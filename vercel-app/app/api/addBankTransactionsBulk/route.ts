@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import {
+  upsertPayableFromBankPurchasePayment,
+  upsertReceivableFromBankReceive,
+} from '@/lib/receivable-payable'
 
 const EXISTING_FETCH_LIMIT = 25000
 
@@ -147,26 +151,22 @@ export async function POST(request: NextRequest) {
       const bankId = Array.isArray(btInserted) && btInserted[0] ? btInserted[0].id : undefined
 
       if (bankId && transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {
-        await supabaseInsert('payable_transactions', {
-          vendor_code: vendorCode,
-          amount: -Math.abs(amount),
-          ref_type: 'Payment',
-          ref_id: null,
-          trans_date: transDate.slice(0, 10),
+        await upsertPayableFromBankPurchasePayment({
+          bankTransactionId: bankId,
+          vendorCode,
+          amountAbs: Math.abs(amount),
+          transDate,
           memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
-          bank_transaction_id: bankId,
         })
       }
 
       if (bankId && transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) {
-        await supabaseInsert('receivable_transactions', {
-          store_name: storeNameForReceivable,
-          amount: -Math.abs(amount),
-          ref_type: 'Receive',
-          ref_id: null,
-          trans_date: transDate,
+        await upsertReceivableFromBankReceive({
+          bankTransactionId: bankId,
+          storeName: storeNameForReceivable,
+          amountAbs: Math.abs(amount),
+          transDate,
           memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
-          bank_transaction_id: bankId,
         })
       }
 

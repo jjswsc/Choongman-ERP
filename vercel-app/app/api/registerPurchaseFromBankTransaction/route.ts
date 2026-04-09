@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { postPayableSettlementJournal } from '@/lib/accounting-posting'
+import { upsertPayableFromBankPurchasePayment } from '@/lib/receivable-payable'
 
 type BankTxRow = { id?: number; account_id?: number; trans_date?: string; trans_type?: string; amount?: number }
 
@@ -39,18 +40,22 @@ export async function POST(request: NextRequest) {
     }
 
     const updateExisting = Boolean(body.updateExisting ?? body.update_existing)
-    const linkedPayable = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 })) as { id?: number }[] | null
-
-    if (linkedPayable?.length && !updateExisting) {
-      return NextResponse.json({ success: false, message: '이미 연결된 통장 거래입니다.' }, { status: 400, headers })
+    const anyBankLinked = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}`, {
+      limit: 20,
+      select: 'id,expense_accrual_id,ref_type',
+    })) as { id?: number; expense_accrual_id?: number | null; ref_type?: string }[] | null
+    const expenseBacked = (anyBankLinked || []).some((r) => r.expense_accrual_id != null)
+    if (expenseBacked) {
+      return NextResponse.json(
+        { success: false, message: '지출 발생으로 연결된 통장 거래입니다. 매입 지급으로 바꿀 수 없습니다.' },
+        { status: 400, headers }
+      )
     }
-    if (linkedPayable?.length && updateExisting) {
-      await supabaseUpdate('payable_transactions', linkedPayable[0].id!, { vendor_code: vendorCode })
-      await supabaseUpdate('bank_transactions', bankTransactionId, {
-        vendor_code: vendorCode,
-        note: `purchase_payment:${vendorCode}`,
-      })
-      return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+    const linkedPurchase = (anyBankLinked || []).filter(
+      (r) => String(r.ref_type || '') === 'Payment' && (r.expense_accrual_id == null || r.expense_accrual_id === 0)
+    )
+    if (linkedPurchase.length === 1 && !updateExisting) {
+      return NextResponse.json({ success: false, message: '이미 연결된 통장 거래입니다.' }, { status: 400, headers })
     }
 
     const amount = Math.abs(Number(bankRow.amount || 0))
@@ -59,14 +64,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '통장 거래 정보가 올바르지 않습니다.' }, { status: 400, headers })
     }
 
-    await supabaseInsert('payable_transactions', {
-      vendor_code: vendorCode,
-      amount: -Math.abs(amount),
-      ref_type: 'Payment',
-      ref_id: null,
-      trans_date: transDate,
+    if (linkedPurchase.length >= 1 && updateExisting) {
+      await upsertPayableFromBankPurchasePayment({
+        bankTransactionId,
+        vendorCode,
+        amountAbs: amount,
+        transDate,
+        memo: `통장 지급(매입): ${vendorCode}`.slice(0, 240),
+      })
+      await supabaseUpdate('bank_transactions', bankTransactionId, {
+        vendor_code: vendorCode,
+        note: `purchase_payment:${vendorCode}`,
+      })
+      return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+    }
+
+    await upsertPayableFromBankPurchasePayment({
+      bankTransactionId,
+      vendorCode,
+      amountAbs: amount,
+      transDate,
       memo: `통장 지급(매입): ${vendorCode}`.slice(0, 240),
-      bank_transaction_id: bankTransactionId,
     })
 
     await supabaseUpdate('bank_transactions', bankTransactionId, {

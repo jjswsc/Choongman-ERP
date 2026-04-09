@@ -149,6 +149,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const isPosLoginPage = pathname === "/pos/login"
   const isFirstScreen = pathname === "/pos" || pathname === "/pos/"
   const isTerminalPage = pathname === "/pos/terminal"
+  const isCustomerDisplayPage = pathname === "/pos/customer-display"
   const [shellUpdateAvailable, setShellUpdateAvailable] = useState(false)
   const [shellExitFullscreenAvailable, setShellExitFullscreenAvailable] = useState(false)
   const [shellMinimizeAvailable, setShellMinimizeAvailable] = useState(false)
@@ -307,14 +308,16 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   }
 
   const isLocalPage = pathname?.startsWith?.("/pos/local")
-  const useViewport = isFirstScreen || isTerminalPage
+  const useViewport = isFirstScreen || isTerminalPage || isCustomerDisplayPage
   const showPosHeader = !isFirstScreen && !isLocalPage
+  const hideChromeForCustomerDisplay = isCustomerDisplayPage
+  const effectiveShowPosHeader = showPosHeader && !hideChromeForCustomerDisplay
   const showThinMain = !showPosHeader && showShellThinBar
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
       {topBarRevealStrip}
-      {showTopChrome(showPosHeader) ? (
+      {showTopChrome(effectiveShowPosHeader) ? (
         <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:px-4">
           <div className="flex min-w-0 flex-1 items-center gap-1">
             {topBarToggleButton("header")}
@@ -346,7 +349,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
           />
         </header>
       ) : null}
-      {showTopChrome(showThinMain) ? (
+      {showTopChrome(showThinMain && !hideChromeForCustomerDisplay) ? (
         <div className="flex h-9 shrink-0 items-center justify-end border-b border-slate-200 bg-white px-2 shadow-sm sm:px-3">
           {topBarToggleButton("thin")}
           <PosShellHeaderRightCluster

@@ -22,6 +22,74 @@ declare global {
         reason?: string
         warnings?: string[]
       }>
+      configureCustomerDisplay?: (params: {
+        enabled: boolean
+        autoOpen: boolean
+        monitorPreference: 'secondary-first' | 'primary-only'
+        storeCode?: string
+      }) => Promise<{ ok: boolean; reason?: string }>
+      openCustomerDisplayWindow?: () => Promise<{ ok: boolean; reason?: string }>
+      closeCustomerDisplayWindow?: () => Promise<{ ok: boolean; reason?: string }>
+      setCustomerDisplayState?: (payload: {
+        storeCode: string
+        kind: 'idle' | 'ordering' | 'payment' | 'qr'
+        updatedAt: string
+        title?: string
+        message?: string
+        qrPayload?: string
+        items?: Array<{ name: string; qty: number; amount: number }>
+        totalAmount?: number
+        breakdown?: {
+          subtotal: number
+          discountAmt: number
+          vatFeeAmt: number
+          vatRate?: number
+          vatMode?: "included" | "separate"
+          serviceFeeAmt: number
+          serviceRate?: number
+          serviceMode?: "included" | "separate"
+          cardFeeAmt: number
+          cardRate?: number
+          cardMode?: "included" | "separate"
+          otherFeeAmt: number
+          otherRate?: number
+          otherMode?: "included" | "separate"
+          total: number
+        }
+        showOrderSummary?: boolean
+        showOrderTotal?: boolean
+      }) => Promise<{ ok: boolean; reason?: string }>
+      onCustomerDisplayState?: (
+        handler: (payload: {
+          storeCode: string
+          kind: 'idle' | 'ordering' | 'payment' | 'qr'
+          updatedAt: string
+          title?: string
+          message?: string
+          qrPayload?: string
+          items?: Array<{ name: string; qty: number; amount: number }>
+          totalAmount?: number
+          breakdown?: {
+            subtotal: number
+            discountAmt: number
+            vatFeeAmt: number
+            vatRate?: number
+            vatMode?: "included" | "separate"
+            serviceFeeAmt: number
+            serviceRate?: number
+            serviceMode?: "included" | "separate"
+            cardFeeAmt: number
+            cardRate?: number
+            cardMode?: "included" | "separate"
+            otherFeeAmt: number
+            otherRate?: number
+            otherMode?: "included" | "separate"
+            total: number
+          }
+          showOrderSummary?: boolean
+          showOrderTotal?: boolean
+        }) => void
+      ) => () => void
     }
   }
 }

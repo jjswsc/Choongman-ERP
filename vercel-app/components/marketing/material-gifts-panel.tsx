@@ -37,6 +37,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { MarketingCampaignFinderPanel } from "@/components/marketing/marketing-campaign-finder-panel"
+import { useAuth } from "@/lib/auth-context"
 
 type MatMeta = { name: string; campaignId: string | null }
 
@@ -70,6 +71,7 @@ export function MarketingMaterialGiftsPanel({
 }: MarketingMaterialGiftsPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
   const { stores, loading: storesLoading } = useStoreList()
 
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
@@ -287,6 +289,8 @@ export function MarketingMaterialGiftsPanel({
         allocatedQty,
         distributedQty,
         ruleNote: addDraft.ruleNote.trim(),
+        userRole: auth?.role,
+        userStore: auth?.store,
       })
       if (res.success) {
         setAddDraft({ ...defaultAdd, materialId: addDraft.materialId })
@@ -336,6 +340,8 @@ export function MarketingMaterialGiftsPanel({
         allocatedQty,
         distributedQty,
         ruleNote: editDraft.ruleNote.trim(),
+        userRole: auth?.role,
+        userStore: auth?.store,
       })
       if (res.success) {
         setEditingId(null)

@@ -19,6 +19,7 @@ import {
   type MarketingMaterialTypeOption,
 } from "@/lib/marketing-material-type-options"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
+import { useAuth } from "@/lib/auth-context"
 
 type DeploymentDraft = {
   key: string
@@ -67,6 +68,7 @@ export function MarketingMaterialDeploymentEditor({
   tr,
   onSaved,
 }: Props) {
+  const { auth } = useAuth()
   const [rows, setRows] = React.useState<DeploymentDraft[]>([])
   const [savingKey, setSavingKey] = React.useState("")
   const depSig = React.useMemo(
@@ -132,6 +134,8 @@ export function MarketingMaterialDeploymentEditor({
         installedOn: row.installedOn.trim(),
         removedOn: row.removedOn.trim() || null,
         note: row.note.trim(),
+        userRole: auth?.role,
+        userStore: auth?.store,
       })
       if (!res.success) {
         await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))

@@ -10,6 +10,11 @@ import {
   parseExtraStoresColumn,
 } from '@/lib/franchisee-multi-store'
 import { buildSetAuthCookieHeader } from '@/lib/auth-cookie'
+import {
+  employeeRowsMatchingSubmittedStore,
+  fetchErpStoresMaster,
+  pickBestEmployeeStoreMatch,
+} from '@/lib/erp-store-master'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -23,7 +28,6 @@ export async function POST(req: NextRequest) {
     if (validated.errorResponse) return validated.errorResponse
     const { store, name, pw, isAdminPage } = validated.parsed
 
-    const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
     type EmpLoginRow = {
       id?: number
       employee_code?: string | null
@@ -35,30 +39,32 @@ export async function POST(req: NextRequest) {
       resign_date?: string | null
       extra_stores?: unknown
     }
-    let rows: EmpLoginRow[]
+    const nameFilter = `name=eq.${encodeURIComponent(name)}`
+    let byName: EmpLoginRow[]
     try {
-      rows = (await supabaseSelectFilter('employees', filter, {
-        limit: 1,
+      byName = (await supabaseSelectFilter('employees', nameFilter, {
+        limit: 120,
         select: 'id,employee_code,store,name,password,role,job,resign_date,extra_stores',
       })) as EmpLoginRow[]
     } catch {
       try {
-        rows = (await supabaseSelectFilter('employees', filter, {
-          limit: 1,
+        byName = (await supabaseSelectFilter('employees', nameFilter, {
+          limit: 120,
           select: 'store,name,password,role,job,resign_date,extra_stores',
         })) as EmpLoginRow[]
       } catch {
-        rows = (await supabaseSelectFilter('employees', filter, {
-          limit: 1,
+        byName = (await supabaseSelectFilter('employees', nameFilter, {
+          limit: 120,
           select: 'store,name,password,role,job,resign_date',
         })) as EmpLoginRow[]
       }
     }
-    if (!rows || rows.length === 0) {
+    const masters = await fetchErpStoresMaster()
+    const matched = employeeRowsMatchingSubmittedStore(byName || [], store, masters)
+    const row = pickBestEmployeeStoreMatch(matched, store)
+    if (!row) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
-
-    const row = rows[0]
     const resignStr = row.resign_date ? String(row.resign_date).trim().slice(0, 10) : ''
     if (resignStr) {
       const todayStr = new Date().toISOString().slice(0, 10)

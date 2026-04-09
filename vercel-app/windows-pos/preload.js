@@ -18,4 +18,21 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   },
   /** App 메뉴의 Reset cache + reload 와 동일(확인 대화상자는 메인 프로세스) */
   resetCacheAndReload: () => ipcRenderer.invoke("cm-pos-reset-cache-reload"),
+  configureCustomerDisplay: (params) => ipcRenderer.invoke("cm-pos-customer-display-configure", params || {}),
+  openCustomerDisplayWindow: () => ipcRenderer.invoke("cm-pos-customer-display-open"),
+  closeCustomerDisplayWindow: () => ipcRenderer.invoke("cm-pos-customer-display-close"),
+  setCustomerDisplayState: (payload) => ipcRenderer.invoke("cm-pos-customer-display-state", payload || {}),
+  onCustomerDisplayState: (handler) => {
+    if (typeof handler !== "function") return () => {};
+    const channel = "cm-pos-customer-display-state"
+    const listener = (_event, payload) => {
+      try {
+        handler(payload)
+      } catch {
+        // ignore handler errors
+      }
+    }
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
+  },
 });

@@ -5,6 +5,7 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 import { normalizeMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { parsePhasePeriodsFromUnknown } from '@/lib/marketing-campaign-periods'
 
@@ -38,6 +39,14 @@ function parseBranches(val: unknown): string[] {
     return s.split(/[\n,;]/).map((x) => x.trim()).filter(Boolean)
   }
   return []
+}
+
+function normalizeStoreName(val: unknown): string {
+  return String(val ?? '').trim()
+}
+
+function isStoreScopedRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
 }
 
 function getBangkokYYMM() {
@@ -222,6 +231,10 @@ export async function POST(req: NextRequest) {
       conclusion?: string
       collabManagement?: boolean
       phasePeriods?: unknown
+      userRole?: string
+      userStore?: string
+      user_role?: string
+      user_store?: string
     }
 
     const topic = String(body.topic ?? '').trim()
@@ -234,7 +247,30 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const branches = Array.isArray(body.branches) ? body.branches : parseBranches(body.branches)
+    const userRole = String(body.userRole ?? body.user_role ?? '')
+    const userStore = normalizeStoreName(body.userStore ?? body.user_store ?? '')
+    const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
+    if (isStoreScopedRole(userRole) && !scopedStore) {
+      return NextResponse.json(
+        { success: false, message: '매니저/가맹점주 저장에는 사용자 매장 정보가 필요합니다.' },
+        { headers }
+      )
+    }
+    const requestedBranches = Array.isArray(body.branches) ? body.branches : parseBranches(body.branches)
+    if (scopedStore) {
+      const requestedInvalid = requestedBranches.some(
+        (b) => normalizeStoreName(b).toLowerCase() !== scopedStore.toLowerCase()
+      )
+      if (requestedInvalid) {
+        return NextResponse.json(
+          { success: false, message: `매니저/가맹점주는 본인 매장(${scopedStore})만 저장할 수 있습니다.` },
+          { headers }
+        )
+      }
+    }
+    const branches = scopedStore
+      ? [scopedStore]
+      : requestedBranches
     const phasePeriods = parsePhasePeriodsFromUnknown(body.phasePeriods)
 
     const campaignNo =

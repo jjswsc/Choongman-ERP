@@ -69,6 +69,10 @@ import {
 } from '@/lib/pos-payment-receipt-from-order'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
+import {
+  publishPosCustomerDisplayState,
+  type PosCustomerDisplayPayload,
+} from '@/lib/pos-customer-display-state'
 
 /** Supabase Realtime INSERT 페이로드의 id는 number가 아닐 수 있음(bigint 등 → 문자열) */
 function coercePosOrderIdFromRealtime(raw: unknown): number | null {
@@ -210,6 +214,15 @@ export default function PosTerminalPage() {
   const [cardBaseMode, setCardBaseMode] = useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
   const [otherRate, setOtherRate] = useState(0)
   const [otherMode, setOtherMode] = useState<'included' | 'separate'>('separate')
+  const [dualMonitorEnabled, setDualMonitorEnabled] = useState(false)
+  const [customerDisplayAutoOpen, setCustomerDisplayAutoOpen] = useState(true)
+  const [customerDisplayMonitorPreference, setCustomerDisplayMonitorPreference] = useState<'secondary-first' | 'primary-only'>('secondary-first')
+  const [customerDisplayDefaultState, setCustomerDisplayDefaultState] = useState<'idle' | 'qr'>('idle')
+  const [customerDisplayIdleMessage, setCustomerDisplayIdleMessage] = useState('')
+  const [customerDisplayPaymentMessage, setCustomerDisplayPaymentMessage] = useState('')
+  const [customerDisplayQrPayload, setCustomerDisplayQrPayload] = useState('')
+  const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
+  const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   /** 기존 주문 결제 시 영수증 orderNo (pendingPayRequest/pendingTakeoutPayRequest에 있던 값) */
   const [pendingReceiptOrderNo, setPendingReceiptOrderNo] = useState<string | null>(null)
   const [todaySales, setTodaySales] = useState<{
@@ -368,6 +381,17 @@ export default function PosTerminalPage() {
         )
         setOtherRate(Math.max(0, Number(s.otherRate ?? 0)))
         setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
+        setDualMonitorEnabled(Boolean(s.dualMonitorEnabled))
+        setCustomerDisplayAutoOpen(s.customerDisplayAutoOpen !== false)
+        setCustomerDisplayMonitorPreference(
+          s.customerDisplayMonitorPreference === 'primary-only' ? 'primary-only' : 'secondary-first'
+        )
+        setCustomerDisplayDefaultState(s.customerDisplayDefaultState === 'qr' ? 'qr' : 'idle')
+        setCustomerDisplayIdleMessage(String(s.customerDisplayIdleMessage ?? '').trim())
+        setCustomerDisplayPaymentMessage(String(s.customerDisplayPaymentMessage ?? '').trim())
+        setCustomerDisplayQrPayload(String(s.customerDisplayQrPayload ?? '').trim())
+        setCustomerDisplayShowOrderSummary(s.customerDisplayShowOrderSummary !== false)
+        setCustomerDisplayShowOrderTotal(s.customerDisplayShowOrderTotal !== false)
       })
       .catch(() => {
         setCookingRules({
@@ -421,6 +445,15 @@ export default function PosTerminalPage() {
         setCardBaseMode('card_only')
         setOtherRate(0)
         setOtherMode('separate')
+        setDualMonitorEnabled(false)
+        setCustomerDisplayAutoOpen(true)
+        setCustomerDisplayMonitorPreference('secondary-first')
+        setCustomerDisplayDefaultState('idle')
+        setCustomerDisplayIdleMessage('')
+        setCustomerDisplayPaymentMessage('')
+        setCustomerDisplayQrPayload('')
+        setCustomerDisplayShowOrderSummary(true)
+        setCustomerDisplayShowOrderTotal(true)
       })
     getPosMenus()
       .then(applyPosMenusList)
@@ -505,6 +538,62 @@ export default function PosTerminalPage() {
     Boolean(pendingDineInOrderId) ||
     Boolean(pendingTakeoutOrderId) ||
     Boolean(pendingDeliveryOrderId)
+  const customerDisplayOrderItems = useMemo(
+    () =>
+      terminalCartLines.map((line) => {
+        const qty = Math.max(1, Number((line as unknown as { quantity?: number; qty?: number }).quantity ?? (line as unknown as { qty?: number }).qty ?? 1))
+        const price = Math.max(0, Number((line as unknown as { price?: number }).price ?? 0))
+        return {
+          name: String((line as unknown as { name?: string }).name || ''),
+          qty,
+          amount: qty * price,
+        }
+      }),
+    [terminalCartLines]
+  )
+  const customerDisplayOrderTotal = useMemo(
+    () => customerDisplayOrderItems.reduce((sum, it) => sum + it.amount, 0),
+    [customerDisplayOrderItems]
+  )
+  const pricingAdjustments = useMemo<PosPricingAdjustments>(() => ({
+    vatRate,
+    vatMode,
+    serviceRate,
+    serviceMode,
+    cardRate,
+    cardMode,
+    cardBaseMode,
+    otherRate,
+    otherMode,
+  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
+
+  const customerDisplayBreakdown = useMemo(() => {
+    const subtotal = customerDisplayOrderTotal
+    const discountAmt = 0
+    const pricing = computePosPricing({
+      subtotal,
+      discountAmt,
+      cardPaymentAmount: 0,
+      adjustments: pricingAdjustments,
+    })
+    return {
+      subtotal,
+      discountAmt,
+      vatFeeAmt: pricing.vatFeeAmt,
+      vatRate: pricingAdjustments.vatRate,
+      vatMode: pricingAdjustments.vatMode,
+      serviceFeeAmt: pricing.serviceFeeAmt,
+      serviceRate: pricingAdjustments.serviceRate,
+      serviceMode: pricingAdjustments.serviceMode,
+      cardFeeAmt: pricing.cardFeeAmt,
+      cardRate: pricingAdjustments.cardRate,
+      cardMode: pricingAdjustments.cardMode,
+      otherFeeAmt: pricing.otherFeeAmt,
+      otherRate: pricingAdjustments.otherRate,
+      otherMode: pricingAdjustments.otherMode,
+      total: pricing.finalTotal,
+    }
+  }, [customerDisplayOrderTotal, pricingAdjustments])
   const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
   /** lg 미만: 태블릿 가로(1024~1279)도 하단 고정 카트·터치 밀도 large와 맞춤 */
   const isNarrowViewport = useMediaQuery('(max-width: 1279px)')
@@ -520,17 +609,78 @@ export default function PosTerminalPage() {
     paymentReceiptScanSeededRef.current = false
   }, [currentStoreId])
 
-  const pricingAdjustments = useMemo<PosPricingAdjustments>(() => ({
-    vatRate,
-    vatMode,
-    serviceRate,
-    serviceMode,
-    cardRate,
-    cardMode,
-    cardBaseMode,
-    otherRate,
-    otherMode,
-  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
+  useEffect(() => {
+    if (!currentStoreId) return
+    const shell = window.cmPosShell
+    if (typeof shell?.configureCustomerDisplay !== 'function') return
+    void shell.configureCustomerDisplay({
+      enabled: dualMonitorEnabled,
+      autoOpen: customerDisplayAutoOpen,
+      monitorPreference: customerDisplayMonitorPreference,
+      storeCode: currentStoreId,
+    })
+  }, [currentStoreId, dualMonitorEnabled, customerDisplayAutoOpen, customerDisplayMonitorPreference])
+
+  useEffect(() => {
+    if (!currentStoreId || !dualMonitorEnabled) return
+    const base: PosCustomerDisplayPayload = {
+      storeCode: currentStoreId,
+      kind: 'idle',
+      updatedAt: new Date().toISOString(),
+      showOrderSummary: customerDisplayShowOrderSummary,
+      showOrderTotal: customerDisplayShowOrderTotal,
+    }
+    const payload: PosCustomerDisplayPayload =
+      hasPendingPaymentFlow
+        ? {
+            ...base,
+            kind: 'payment',
+            title: t('posCustomerPayment') || '결제 진행 중',
+            message: customerDisplayPaymentMessage || undefined,
+            items: customerDisplayOrderItems,
+            totalAmount: customerDisplayBreakdown.total,
+            breakdown: customerDisplayBreakdown,
+          }
+        : customerDisplayOrderItems.length > 0
+          ? {
+              ...base,
+              kind: 'ordering',
+              title: t('posCustomerOrdering') || '주문 확인',
+              items: customerDisplayOrderItems,
+              totalAmount: customerDisplayOrderTotal,
+            }
+          : customerDisplayDefaultState === 'qr'
+            ? {
+                ...base,
+                kind: 'qr',
+                title: t('posCustomerQrTitle') || 'QR 코드',
+                qrPayload: customerDisplayQrPayload,
+              }
+            : {
+                ...base,
+                kind: 'idle',
+                message: customerDisplayIdleMessage || undefined,
+              }
+    publishPosCustomerDisplayState(payload)
+    const shell = window.cmPosShell
+    if (typeof shell?.setCustomerDisplayState === 'function') {
+      void shell.setCustomerDisplayState(payload)
+    }
+  }, [
+    currentStoreId,
+    dualMonitorEnabled,
+    customerDisplayShowOrderSummary,
+    customerDisplayShowOrderTotal,
+    hasPendingPaymentFlow,
+    customerDisplayPaymentMessage,
+    customerDisplayOrderTotal,
+    customerDisplayBreakdown,
+    customerDisplayOrderItems,
+    customerDisplayDefaultState,
+    customerDisplayQrPayload,
+    customerDisplayIdleMessage,
+    t,
+  ])
 
   useEffect(() => {
     if (activeTab === 'tables' && !selectedTableId) {

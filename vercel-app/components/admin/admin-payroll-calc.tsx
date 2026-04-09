@@ -57,6 +57,9 @@ type PayrollRow = {
   employeeCode?: string
   dept?: string
   role?: string
+  kitchenGrade?: string
+  serviceGrade?: string
+  managerGrade?: string
   salary: number
   posAllow: number
   hazAllow: number
@@ -221,6 +224,9 @@ export function AdminPayrollCalc() {
           employeeCode: String(r.employee_code || ""),
           dept: String(r.dept || ""),
           role: String(r.role || ""),
+          kitchenGrade: String(r.kitchen_grade || ""),
+          serviceGrade: String(r.service_grade || ""),
+          managerGrade: String(r.manager_grade || ""),
           salary: Number(r.salary) || 0,
           posAllow: Number(r.pos_allow) ?? 0,
           hazAllow: Number(r.haz_allow) ?? 0,
@@ -283,6 +289,9 @@ export function AdminPayrollCalc() {
           employeeCode: String(r.employeeCode || ""),
           dept: String(r.dept || ""),
           role: String(r.role || ""),
+          kitchenGrade: String(r.kitchenGrade || ""),
+          serviceGrade: String(r.serviceGrade || ""),
+          managerGrade: String(r.managerGrade || ""),
           salary: Number(r.salary) || 0,
           posAllow: Number(r.posAllow) || 0,
           hazAllow: Number(r.hazAllow) || 0,
@@ -614,13 +623,15 @@ export function AdminPayrollCalc() {
 
         {hasResult && (
           <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-xs border-collapse min-w-[1120px]">
+            <table className="w-full text-xs border-collapse min-w-[1220px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4rem] max-w-[5.5rem]">{t("pay_col_store")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4.5rem] max-w-[6.5rem]">{t("pay_col_name")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[4.5rem]">{t("emp_label_employee_code")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[3.5rem]">{t("eval_analytics_type_kitchen")}</th>
+                  <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[3.5rem]">{t("eval_analytics_type_service")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
                   <th colSpan={6} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
@@ -674,6 +685,16 @@ export function AdminPayrollCalc() {
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
+                    </td>
+                    <td className="p-1.5 text-center whitespace-nowrap">
+                      <span className="inline-flex rounded px-1 py-0.5 bg-muted text-[10px] font-semibold">
+                        {String(r.kitchenGrade || "").trim() || "-"}
+                      </span>
+                    </td>
+                    <td className="p-1.5 text-center whitespace-nowrap">
+                      <span className="inline-flex rounded px-1 py-0.5 bg-muted text-[10px] font-semibold">
+                        {String(r.serviceGrade || "").trim() || "-"}
+                      </span>
                     </td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(r.salary)}</td>
                     <td className="p-1.5 text-right whitespace-nowrap tabular-nums">
@@ -795,6 +816,8 @@ export function AdminPayrollCalc() {
                   <td colSpan={2} className="p-1.5 text-left">
                     {i18nVar(t("pay_calc_table_total"), { n: String(list.length) })}
                   </td>
+                  <td className="p-1.5 text-center">—</td>
+                  <td className="p-1.5 text-center">—</td>
                   <td className="p-1.5 text-center">—</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.salary)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.posAllow)}</td>

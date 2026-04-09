@@ -82,7 +82,7 @@ export function ReceivablePayableTab() {
     return v
   }, [t])
   const { auth } = useAuth()
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, formatStoreLabel, resolveStoreKey } = useStoreList()
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
 
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
@@ -247,9 +247,9 @@ export function ReceivablePayableTab() {
   // 매니저(회계권한 없을 때): 미지급금 매장 선택을 자기 매장으로 고정
   React.useEffect(() => {
     if (!canSelectStores && isManager && managerStore) {
-      setPayableStoreFilter(managerStore)
+      setPayableStoreFilter(resolveStoreKey(managerStore))
     }
-  }, [canSelectStores, isManager, managerStore])
+  }, [canSelectStores, isManager, managerStore, resolveStoreKey])
 
   // 본사/회계직원: 미지급금 매장 기본값 office
   const initPayableStoreRef = React.useRef(false)
@@ -265,9 +265,9 @@ export function ReceivablePayableTab() {
   // 매니저 + receivable 탭: 수령 입력 시 자기 매장 자동 선택
   React.useEffect(() => {
     if (tab === "receivable" && isManager && managerStore && !addEntity) {
-      setAddEntity(managerStore)
+      setAddEntity(resolveStoreKey(managerStore))
     }
-  }, [tab, isManager, managerStore])
+  }, [tab, isManager, managerStore, addEntity, resolveStoreKey])
 
   // 매니저(회계권한 없을 때): 미지급금 탭 접근 불가 → receivable로 고정
   React.useEffect(() => {
@@ -597,7 +597,7 @@ export function ReceivablePayableTab() {
   }
 
   const receivableStores = tab === "receivable"
-    ? (isManager && managerStore ? [managerStore] : (storeList || []))
+    ? (isManager && managerStore ? [resolveStoreKey(managerStore)] : (storeList || []))
     : []
 
   const formatVendorDisplay = (vendorCode?: string) => {
@@ -687,7 +687,16 @@ export function ReceivablePayableTab() {
     const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")
     const header = isRec
       ? [entityCol, t("date") || "날짜", t("type") || "구분", t("recColOrderNo") || "주문번호", t("recColReceiveStatus") || "수령여부", t("recColReceiveCheck") || "수금확인", t("amount") || "금액", t("memo") || "메모"]
-      : [entityCol, t("date") || "날짜", t("type") || "구분", t("poInvoice") || "인보이스", t("payColPaymentStatus") || "지급여부", t("amount") || "금액", t("memo") || "메모"]
+      : [
+          entityCol,
+          t("date") || "날짜",
+          t("type") || "구분",
+          t("poInvoice") || "인보이스",
+          tt("payColAttributedStore", "귀속 매장"),
+          t("payColPaymentStatus") || "지급여부",
+          t("amount") || "금액",
+          t("memo") || "메모",
+        ]
     const rows: string[][] = [header]
     for (const item of listData) {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
@@ -713,7 +722,16 @@ export function ReceivablePayableTab() {
         rows.push(
           isRec
             ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), receiveCheckCell, String(row.amount ?? 0), getMemo(row.memo) || ""]
-            : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), invPayable, statusPay(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
+            : [
+                name,
+                row.trans_date || "-",
+                typeLabel(row.ref_type || ""),
+                invPayable,
+                (row as { attributed_store?: string }).attributed_store || "",
+                statusPay(row),
+                String(row.amount ?? 0),
+                getMemo(row.memo) || "",
+              ]
         )
       }
     }
@@ -748,7 +766,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         <h1 className="text-lg font-bold mb-2">{printTitle}</h1>
         <p className="text-sm text-muted-foreground mb-4">
           {startStr} ~ {endStr}
-          {isRec && storeFilter !== "All" && ` · ${t("outColStore")}: ${storeFilter}`}
+          {storeFilter !== "All" && (isRec ? ` · ${t("outColStore")}: ${storeFilter}` : ` · ${tt("payColAttributedStore", "귀속 매장")}: ${storeFilter}`)}
           {!isRec && vendorFilter !== "All" && ` · ${t("vendor")}: ${vendorFilter}`}
         </p>
         {listData.length > 0 && (
@@ -773,6 +791,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           </th>
                         )}
                         {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "인보이스"}</th>}
+                        {!isRec && (
+                          <th className="text-center py-1 px-2 w-[100px] whitespace-nowrap">
+                            {tt("payColAttributedStore", "귀속 매장")}
+                          </th>
+                        )}
                         <th className="text-center py-1 px-2 w-[95px]">{isRec ? (t("recColReceiveStatus") || "수령여부") : (t("payColPaymentStatus") || "지급여부")}</th>
                         {isRec && <th className="text-center py-1 px-2 w-[88px] whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>}
                         <th className="text-center py-1 px-2 w-[135px]">{t("amount") || "금액"}</th>
@@ -806,6 +829,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             </td>
                           )}
                           {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
+                          {!isRec && (
+                            <td className="py-1 px-2 text-center text-muted-foreground text-[11px] whitespace-nowrap">
+                              {(row as { attributed_store?: string }).attributed_store || "—"}
+                            </td>
+                          )}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급"))}</td>
                           {isRec && (
                             <td className="py-1 px-2 text-center text-xs">
@@ -865,7 +893,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <SelectContent>
                           <SelectItem value="All">{(t("recFilterSalesOutletAll") || "전체 매출처")}</SelectItem>
                           {salesOutletOptions.map((s) => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                            <SelectItem key={s} value={s}>{formatStoreLabel(s)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1332,7 +1360,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             <SelectItem value="All">{(t("recFilterStoreAll") || "전체 매장")}</SelectItem>
                           )}
                           {(storeList || []).map((s) => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                            <SelectItem key={s} value={s}>{formatStoreLabel(s)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1425,6 +1453,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
                                     <th className="text-center py-2 px-4 w-[100px] font-semibold">{t("poInvoice") || "인보이스"}</th>
+                                    <th className="text-center py-2 px-4 w-[92px] font-semibold whitespace-nowrap">
+                                      {tt("payColAttributedStore", "귀속 매장")}
+                                    </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("payColPaymentStatus") || "지급여부"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
@@ -1493,6 +1524,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               )
                                             ) : "-"}
                                           </td>
+                                          <td className="py-1.5 px-4 w-[92px] text-center text-muted-foreground text-xs whitespace-nowrap">
+                                            {(row as { attributed_store?: string }).attributed_store || "—"}
+                                          </td>
                                           <td className="py-1.5 px-4 w-[95px] text-center">
                                             <span className={cn(
                                               "text-xs font-medium px-2 py-0.5 rounded",
@@ -1506,7 +1540,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         </tr>
                                         {isExpanded && (
                                           <tr className="border-b border-border/50 bg-muted/10">
-                                            <td colSpan={7} className="py-2 px-4">
+                                            <td colSpan={8} className="py-2 px-4">
                                               {isLoading ? (
                                                 <p className="text-xs text-muted-foreground py-2">{t("loadingItems")}</p>
                                               ) : items.length > 0 ? (
@@ -1612,7 +1646,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   </SelectTrigger>
                   <SelectContent>
                     {tab === "receivable"
-                      ? receivableStores.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)
+                      ? receivableStores.map((s) => (
+                          <SelectItem key={s} value={s}>{formatStoreLabel(s)}</SelectItem>
+                        ))
                       : vendors.map((v) => <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>)}
                   </SelectContent>
                 </Select>

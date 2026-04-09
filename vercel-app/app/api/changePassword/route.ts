@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { verifyPassword, hashPassword } from '@/lib/password'
 import { parseOr400, changePasswordSchema } from '@/lib/api-validate'
+import {
+  employeeRowsMatchingSubmittedStore,
+  fetchErpStoresMaster,
+  pickBestEmployeeStoreMatch,
+} from '@/lib/erp-store-master'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -15,18 +20,19 @@ export async function POST(req: NextRequest) {
     if (validated.errorResponse) return validated.errorResponse
     const { store, name, oldPw, newPw } = validated.parsed
 
-    const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const rows = (await supabaseSelectFilter('employees', filter)) as {
+    const nameFilter = `name=eq.${encodeURIComponent(name)}`
+    const byName = (await supabaseSelectFilter('employees', nameFilter, { limit: 120 })) as {
       id?: string | number
       store?: string
       name?: string
       password?: string
     }[]
-    if (!rows || rows.length === 0) {
+    const masters = await fetchErpStoresMaster()
+    const matched = employeeRowsMatchingSubmittedStore(byName || [], store, masters)
+    const row = pickBestEmployeeStoreMatch(matched, store)
+    if (!row) {
       return NextResponse.json({ success: false, message: '일치하는 계정을 찾을 수 없습니다.' }, { headers })
     }
-
-    const row = rows[0]
     const storedPw = String(row.password || '').trim()
     const oldOk = await verifyPassword(oldPw, storedPw)
     if (!oldOk) {

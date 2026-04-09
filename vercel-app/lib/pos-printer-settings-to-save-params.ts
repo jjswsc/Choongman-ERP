@@ -30,6 +30,18 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     | "sm"
     | "md"
     | "lg"
+  const rawDisplayMonitorPreference = String(s.customerDisplayMonitorPreference || "secondary-first")
+  const customerDisplayMonitorPreference = (
+    rawDisplayMonitorPreference === "primary-only" ? "primary-only" : "secondary-first"
+  ) as "secondary-first" | "primary-only"
+  const rawDisplayTheme = String(s.customerDisplayTheme || "dark")
+  const customerDisplayTheme = (
+    rawDisplayTheme === "light" ? "light" : rawDisplayTheme === "brand" ? "brand" : "dark"
+  ) as "dark" | "light" | "brand"
+  const rawDisplayDefaultState = String(s.customerDisplayDefaultState || "idle")
+  const customerDisplayDefaultState = (
+    rawDisplayDefaultState === "qr" ? "qr" : "idle"
+  ) as "idle" | "qr"
 
   return {
     storeCode: s.storeCode,
@@ -110,6 +122,16 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     cardBaseMode,
     otherRate: Math.max(0, Number(s.otherRate ?? 0)),
     otherMode: (String(s.otherMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",
+    dualMonitorEnabled: Boolean(s.dualMonitorEnabled),
+    customerDisplayAutoOpen: s.customerDisplayAutoOpen !== false,
+    customerDisplayMonitorPreference,
+    customerDisplayTheme,
+    customerDisplayDefaultState,
+    customerDisplayIdleMessage: String(s.customerDisplayIdleMessage ?? "").trim(),
+    customerDisplayPaymentMessage: String(s.customerDisplayPaymentMessage ?? "").trim(),
+    customerDisplayQrPayload: String(s.customerDisplayQrPayload ?? "").trim(),
+    customerDisplayShowOrderSummary: s.customerDisplayShowOrderSummary !== false,
+    customerDisplayShowOrderTotal: s.customerDisplayShowOrderTotal !== false,
     kitchenRouteByMenu: normalizeKitchenRouteMapInput(s.kitchenRouteByMenu),
     kitchenRouteByCategory: normalizeKitchenRouteMapInput(s.kitchenRouteByCategory),
     kitchenRouteByCategoryMain: normalizeKitchenRouteMapInput(s.kitchenRouteByCategoryMain),

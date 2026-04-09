@@ -141,6 +141,20 @@ export async function POST(req: NextRequest) {
         : 'card_only'
     const otherRate = Math.max(0, Number(body?.otherRate ?? 0))
     const otherMode = String(body?.otherMode || 'separate') === 'included' ? 'included' : 'separate'
+    const dualMonitorEnabled = Boolean(body?.dualMonitorEnabled)
+    const customerDisplayAutoOpen = body?.customerDisplayAutoOpen !== false
+    const rawDisplayMonitorPreference = String(body?.customerDisplayMonitorPreference || 'secondary-first')
+    const customerDisplayMonitorPreference =
+      rawDisplayMonitorPreference === 'primary-only' ? 'primary-only' : 'secondary-first'
+    const rawDisplayTheme = String(body?.customerDisplayTheme || 'dark')
+    const customerDisplayTheme =
+      rawDisplayTheme === 'light' ? 'light' : rawDisplayTheme === 'brand' ? 'brand' : 'dark'
+    const customerDisplayDefaultState = String(body?.customerDisplayDefaultState || 'idle') === 'qr' ? 'qr' : 'idle'
+    const customerDisplayIdleMessage = String(body?.customerDisplayIdleMessage ?? '').trim()
+    const customerDisplayPaymentMessage = String(body?.customerDisplayPaymentMessage ?? '').trim()
+    const customerDisplayQrPayload = String(body?.customerDisplayQrPayload ?? '').trim()
+    const customerDisplayShowOrderSummary = body?.customerDisplayShowOrderSummary !== false
+    const customerDisplayShowOrderTotal = body?.customerDisplayShowOrderTotal !== false
     const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
     const receiptPrintLangRaw = String(body?.receiptPrintLang ?? '').trim()
     const receiptPrintLang = receiptPrintLangRaw && validPrintLangs.includes(receiptPrintLangRaw) ? receiptPrintLangRaw : ''
@@ -230,6 +244,16 @@ export async function POST(req: NextRequest) {
       card_base_mode: cardBaseMode,
       other_rate: otherRate,
       other_mode: otherMode,
+      dual_monitor_enabled: dualMonitorEnabled,
+      customer_display_auto_open: customerDisplayAutoOpen,
+      customer_display_monitor_preference: customerDisplayMonitorPreference,
+      customer_display_theme: customerDisplayTheme,
+      customer_display_default_state: customerDisplayDefaultState,
+      customer_display_idle_message: customerDisplayIdleMessage,
+      customer_display_payment_message: customerDisplayPaymentMessage,
+      customer_display_qr_payload: customerDisplayQrPayload,
+      customer_display_show_order_summary: customerDisplayShowOrderSummary,
+      customer_display_show_order_total: customerDisplayShowOrderTotal,
       updated_at: new Date().toISOString(),
       ...(routeMenuPatch !== undefined ? { kitchen_route_by_menu: routeMenuPatch } : {}),
       ...(routeCatPatch !== undefined ? { kitchen_route_by_category: routeCatPatch } : {}),

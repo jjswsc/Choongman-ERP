@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdate, supabaseSelectFilter, supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { supabaseUpdate, supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import {
+  upsertPayableFromBankPurchasePayment,
+  upsertReceivableFromBankReceive,
+} from '@/lib/receivable-payable'
 import {
   extractExpenseAccrualPrefix,
   extractWithdrawalCategoryFromNote,
@@ -45,6 +49,7 @@ export async function POST(request: NextRequest) {
       store_name?: string
       user_name?: string
       account_subject_id?: number | null
+      vendor_code?: string | null
     }[]
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
@@ -129,22 +134,42 @@ export async function POST(request: NextRequest) {
         await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTxId}`)
       }
       if (finalCategory === 'receivable_receive' && finalStoreName) {
-        // 매출 수령 + 매장 선택: 미수금 수령 건 생성 또는 업데이트
-        const linkedRecv = (await supabaseSelectFilter('receivable_transactions', `bank_transaction_id=eq.${bankTxId}`, { limit: 1 })) as { id?: number }[]
-        const recvRow = {
-          store_name: finalStoreName,
-          amount: -amount,
-          ref_type: 'Receive',
-          ref_id: null,
-          trans_date: transDate,
+        await upsertReceivableFromBankReceive({
+          bankTransactionId: bankTxId,
+          storeName: finalStoreName,
+          amountAbs: amount,
+          transDate,
           memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
-          bank_transaction_id: bankTxId,
-        }
-        if (linkedRecv?.length) {
-          await supabaseUpdate('receivable_transactions', linkedRecv[0].id!, recvRow)
-        } else {
-          await supabaseInsert('receivable_transactions', recvRow)
-        }
+        })
+      }
+    }
+
+    // 매입 지급(미지급): 출금 용도 변경 시 통장 1건당 Payment 1행 유지
+    if (transType === 'withdraw') {
+      const wAmount = Math.abs(Number(existing[0].amount) || 0)
+      const wMemo = String(existing[0].memo || '').trim()
+      const wTransDate = transDate
+      const finalVendor =
+        patch.vendor_code !== undefined
+          ? String(patch.vendor_code || '').trim() || null
+          : String(existing[0].vendor_code || '').trim() || null
+      const wasPurchasePay = prevCategory === 'purchase_payment'
+      const isPurchasePay = String(finalCategory || '').toLowerCase() === 'purchase_payment'
+
+      if (wasPurchasePay && (!isPurchasePay || !finalVendor)) {
+        await supabaseDeleteByFilter(
+          'payable_transactions',
+          `bank_transaction_id=eq.${bankTxId}&ref_type=eq.Payment&expense_accrual_id=is.null`
+        )
+      }
+      if (isPurchasePay && finalVendor) {
+        await upsertPayableFromBankPurchasePayment({
+          bankTransactionId: bankTxId,
+          vendorCode: finalVendor,
+          amountAbs: wAmount,
+          transDate: wTransDate,
+          memo: wMemo ? `통장 지급: ${wMemo.slice(0, 200)}` : '통장 지급',
+        })
       }
     }
 

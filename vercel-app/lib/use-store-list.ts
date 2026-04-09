@@ -1,14 +1,22 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getStoreListWithCache } from './offline/erp-offline'
+import { resolveStoreListKey, labelForStore } from './store-list-keys'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5분 (메모리 캐시)
 
 export type StaffByStore = Record<string, { name: string; nick: string; job?: string; role?: string }[]>
 
 let cache: {
-  data: { stores: string[]; users: Record<string, string[]>; staffByStore?: StaffByStore } | null
+  data: {
+    stores: string[]
+    users: Record<string, string[]>
+    staffByStore?: StaffByStore
+    storeLabels?: Record<string, string>
+    legacyToCanonical?: Record<string, string>
+    usedMaster?: boolean
+  } | null
   expiry: number
 } = { data: null, expiry: 0 }
 
@@ -16,7 +24,20 @@ export function useStoreList() {
   const [stores, setStores] = useState<string[]>([])
   const [users, setUsers] = useState<Record<string, string[]>>({})
   const [staffByStore, setStaffByStore] = useState<StaffByStore>({})
+  const [storeLabels, setStoreLabels] = useState<Record<string, string>>({})
+  const [legacyToCanonical, setLegacyToCanonical] = useState<Record<string, string>>({})
+  const [usedMaster, setUsedMaster] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  const resolveStoreKey = useCallback(
+    (raw: string) => resolveStoreListKey(raw, stores, legacyToCanonical),
+    [stores, legacyToCanonical]
+  )
+
+  const formatStoreLabel = useCallback(
+    (code: string) => labelForStore(storeLabels, code),
+    [storeLabels]
+  )
 
   const load = useCallback(() => {
     const now = Date.now()
@@ -24,21 +45,38 @@ export function useStoreList() {
       setStores(cache.data.stores)
       setUsers(cache.data.users)
       setStaffByStore(cache.data.staffByStore || {})
+      setStoreLabels(cache.data.storeLabels || {})
+      setLegacyToCanonical(cache.data.legacyToCanonical || {})
+      setUsedMaster(cache.data.usedMaster ?? false)
       setLoading(false)
       return
     }
     setLoading(true)
     getStoreListWithCache()
       .then((d) => {
-        cache = { data: d, expiry: Date.now() + CACHE_TTL_MS }
-        setStores(d.stores || [])
-        setUsers(d.users || {})
-        setStaffByStore(d.staffByStore || {})
+        const payload = {
+          stores: d.stores || [],
+          users: d.users || {},
+          staffByStore: d.staffByStore || {},
+          storeLabels: d.storeLabels || {},
+          legacyToCanonical: d.legacyToCanonical || {},
+          usedMaster: d.usedMaster ?? false,
+        }
+        cache = { data: payload, expiry: Date.now() + CACHE_TTL_MS }
+        setStores(payload.stores)
+        setUsers(payload.users)
+        setStaffByStore(payload.staffByStore)
+        setStoreLabels(payload.storeLabels)
+        setLegacyToCanonical(payload.legacyToCanonical)
+        setUsedMaster(payload.usedMaster)
       })
       .catch(() => {
         setStores([])
         setUsers({})
         setStaffByStore({})
+        setStoreLabels({})
+        setLegacyToCanonical({})
+        setUsedMaster(false)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -47,5 +85,22 @@ export function useStoreList() {
     load()
   }, [load])
 
-  return { stores, users, staffByStore, loading, refetch: load }
+  const storeOptions = useMemo(
+    () => stores.map((code) => ({ code, label: labelForStore(storeLabels, code) })),
+    [stores, storeLabels]
+  )
+
+  return {
+    stores,
+    users,
+    staffByStore,
+    storeLabels,
+    legacyToCanonical,
+    usedMaster,
+    storeOptions,
+    resolveStoreKey,
+    formatStoreLabel,
+    loading,
+    refetch: load,
+  }
 }

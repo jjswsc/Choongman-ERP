@@ -9,6 +9,8 @@ import { expandStoreVariantsForGrade } from '@/lib/grade-store-key-variants'
 import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter } from '@/lib/evaluation-postgrest-filters'
 
 type GradeEntry = { grade: string; date?: Date }
+type EvalType = 'kitchen' | 'service' | 'manager'
+type GradeBucket = Partial<Record<EvalType | 'latestAny', GradeEntry>>
 
 /** 평가 행 1건에 대해 직원 목록·평가 분석(buildEvaluatedEmployeeKeys)과 동일한 키 변형 */
 function gradeLookupKeysForEvalRow(store: string, employeeName: string): string[] {
@@ -32,22 +34,39 @@ function gradeLookupKeysForEvalRow(store: string, employeeName: string): string[
   return Array.from(set)
 }
 
-function mergeGrade(out: Record<string, GradeEntry>, store: string, name: string, grade: string, dateVal: Date | null) {
+function mergeGrade(
+  out: Record<string, GradeBucket>,
+  store: string,
+  name: string,
+  evalType: EvalType,
+  grade: string,
+  dateVal: Date | null
+) {
   const g = grade ? String(grade).trim() : ''
   if (!g) return
   for (const key of gradeLookupKeysForEvalRow(store, name)) {
-    const existing = out[key]
+    const bucket = out[key] || {}
+    const existing = bucket[evalType]
     if (!existing || (dateVal && (!existing.date || dateVal > existing.date))) {
-      out[key] = { grade: g, date: dateVal || undefined }
+      bucket[evalType] = { grade: g, date: dateVal || undefined }
     }
+    const latest = bucket.latestAny
+    if (!latest || (dateVal && (!latest.date || dateVal > latest.date))) {
+      bucket.latestAny = { grade: g, date: dateVal || undefined }
+    }
+    out[key] = bucket
   }
 }
 
-function pickLatestGrade(out: Record<string, GradeEntry>, keys: string[]): GradeEntry | undefined {
+function pickLatestGrade(
+  out: Record<string, GradeBucket>,
+  keys: string[],
+  evalType: EvalType | 'latestAny'
+): GradeEntry | undefined {
   let best: GradeEntry | undefined
   let bestT = -Infinity
   for (const k of keys) {
-    const hit = out[k]
+    const hit = out[k]?.[evalType]
     if (!hit) continue
     const t = hit.date && !isNaN(hit.date.getTime()) ? hit.date.getTime() : 0
     if (t >= bestT) {
@@ -94,7 +113,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const out: Record<string, GradeEntry> = {}
+    const out: Record<string, GradeBucket> = {}
 
     for (const type of ['kitchen', 'service', 'manager'] as const) {
       // eval_date.desc 전역 상위 N행만 가져오면, 다른 매장의 최신 평가에 밀려 오래된 행만 있는 매장이 통째로 빠질 수 있음 → 상한 넉넉히
@@ -116,7 +135,7 @@ export async function GET() {
         const grade = row.final_grade ? String(row.final_grade).trim() : ''
         const dateVal = row.eval_date ? new Date(row.eval_date) : null
         if (!store || !name || !grade) continue
-        mergeGrade(out, store, name, grade, dateVal && !isNaN(dateVal.getTime()) ? dateVal : null)
+        mergeGrade(out, store, name, type, grade, dateVal && !isNaN(dateVal.getTime()) ? dateVal : null)
       }
     }
 
@@ -148,19 +167,45 @@ export async function GET() {
       if (!empStore || !empName) continue
       const display = formatEmployeeDisplayName(empName, nameTitle).trim().replace(/\s+/g, ' ')
       const candidateKeys = gradeLookupKeysForEmployee(empStore, empName, display, empNick)
-      const info = pickLatestGrade(out, candidateKeys)
-      if (!info) continue
+      const kitchenInfo = pickLatestGrade(out, candidateKeys, 'kitchen')
+      const serviceInfo = pickLatestGrade(out, candidateKeys, 'service')
+      const managerInfo = pickLatestGrade(out, candidateKeys, 'manager')
+      const latestAnyInfo = pickLatestGrade(out, candidateKeys, 'latestAny')
+      if (!kitchenInfo && !serviceInfo && !managerInfo && !latestAnyInfo) continue
       const keyName = empStore + '|' + empName
       const keyNick = empNick && empNick !== empName ? empStore + '|' + empNick : ''
-      if (!out[keyName] || (info.date && (!out[keyName].date || info.date > (out[keyName].date || new Date(0))))) {
-        out[keyName] = { grade: info.grade, date: info.date }
+      const packed: GradeBucket = {}
+      if (kitchenInfo) packed.kitchen = { grade: kitchenInfo.grade, date: kitchenInfo.date }
+      if (serviceInfo) packed.service = { grade: serviceInfo.grade, date: serviceInfo.date }
+      if (managerInfo) packed.manager = { grade: managerInfo.grade, date: managerInfo.date }
+      if (latestAnyInfo) packed.latestAny = { grade: latestAnyInfo.grade, date: latestAnyInfo.date }
+      if (Object.keys(packed).length === 0) continue
+      out[keyName] = packed
+      if (keyNick) {
+        out[keyNick] = packed
       }
-      if (keyNick && !out[keyNick]) out[keyNick] = { grade: info.grade }
     }
 
-    const result: Record<string, { grade: string }> = {}
+    const result: Record<
+      string,
+      {
+        grade: string
+        kitchenGrade?: string
+        serviceGrade?: string
+        managerGrade?: string
+        latestAny?: string
+      }
+    > = {}
     for (const [k, v] of Object.entries(out)) {
-      result[k] = { grade: v.grade }
+      const latest = v.latestAny?.grade || ''
+      result[k] = {
+        // 하위 호환: 기존 단일 grade 소비처
+        grade: latest,
+        latestAny: latest || undefined,
+        kitchenGrade: v.kitchen?.grade || undefined,
+        serviceGrade: v.service?.grade || undefined,
+        managerGrade: v.manager?.grade || undefined,
+      }
     }
     return NextResponse.json(result, { headers })
   } catch (e) {

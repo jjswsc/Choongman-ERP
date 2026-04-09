@@ -98,3 +98,94 @@ export async function upsertReceivableFromOrder(params: {
     await supabaseInsert('receivable_transactions', row)
   }
 }
+
+/**
+ * 통장 연동 매입 지급(ref Payment, 지출발생 미연동) — bank_transaction_id당 1행 유지.
+ * CSV 재저장·출금관리 등으로 동일 통장 건에 insert가 반복되면 미지급 내역이 중복되어 보일 수 있어 upsert.
+ */
+export async function upsertPayableFromBankPurchasePayment(params: {
+  bankTransactionId: number
+  vendorCode: string
+  amountAbs: number
+  transDate: string
+  memo: string
+}): Promise<void> {
+  const { bankTransactionId, vendorCode, amountAbs, transDate, memo } = params
+  if (!bankTransactionId || !vendorCode || !amountAbs) return
+  const filter = `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Payment&expense_accrual_id=is.null`
+  const rows = (await supabaseSelectFilter('payable_transactions', filter, {
+    order: 'id.asc',
+    limit: 50,
+    select: 'id',
+  })) as { id?: number }[]
+  const row = {
+    vendor_code: vendorCode,
+    amount: -Math.abs(amountAbs),
+    ref_type: 'Payment' as const,
+    ref_id: null as null,
+    trans_date: transDate.slice(0, 10),
+    memo: memo.slice(0, 240),
+    bank_transaction_id: bankTransactionId,
+  }
+  if (rows?.length) {
+    const keepId = rows[0].id
+    if (keepId) {
+      await supabaseUpdate('payable_transactions', keepId, {
+        vendor_code: row.vendor_code,
+        amount: row.amount,
+        trans_date: row.trans_date,
+        memo: row.memo,
+      })
+    }
+    for (const r of rows.slice(1)) {
+      if (r.id) await supabaseDeleteByFilter('payable_transactions', `id=eq.${r.id}`)
+    }
+  } else {
+    await supabaseInsert('payable_transactions', row)
+  }
+}
+
+/**
+ * 통장 연동 매출 수령(ref Receive) — bank_transaction_id당 1행 유지 (미수금 중복 방지).
+ */
+export async function upsertReceivableFromBankReceive(params: {
+  bankTransactionId: number
+  storeName: string
+  amountAbs: number
+  transDate: string
+  memo: string
+}): Promise<void> {
+  const { bankTransactionId, storeName, amountAbs, transDate, memo } = params
+  if (!bankTransactionId || !storeName || !amountAbs) return
+  const filter = `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Receive`
+  const rows = (await supabaseSelectFilter('receivable_transactions', filter, {
+    order: 'id.asc',
+    limit: 50,
+    select: 'id',
+  })) as { id?: number }[]
+  const row = {
+    store_name: storeName,
+    amount: -Math.abs(amountAbs),
+    ref_type: 'Receive' as const,
+    ref_id: null as null,
+    trans_date: transDate.slice(0, 10),
+    memo: memo.slice(0, 240),
+    bank_transaction_id: bankTransactionId,
+  }
+  if (rows?.length) {
+    const keepId = rows[0].id
+    if (keepId) {
+      await supabaseUpdate('receivable_transactions', keepId, {
+        store_name: row.store_name,
+        amount: row.amount,
+        trans_date: row.trans_date,
+        memo: row.memo,
+      })
+    }
+    for (const r of rows.slice(1)) {
+      if (r.id) await supabaseDeleteByFilter('receivable_transactions', `id=eq.${r.id}`)
+    }
+  } else {
+    await supabaseInsert('receivable_transactions', row)
+  }
+}

@@ -59,6 +59,7 @@ import {
   emptyForm,
   type EmployeeTableRow,
   type EmployeeFormData,
+  type EmployeeEvalJumpTarget,
 } from "@/components/employees"
 import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
@@ -158,7 +159,7 @@ export default function EmployeesPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { auth } = useAuth()
-  const { stores: storeListFromApi } = useStoreList()
+  const { stores: storeListFromApi, storeLabels: erpStoreLabels, resolveStoreKey } = useStoreList()
   const userStore = (auth?.store || "").trim()
   const userRole = (auth?.role || "").trim()
 
@@ -178,6 +179,17 @@ export default function EmployeesPage() {
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
   const [franchiseeMulti, setFranchiseeMulti] = React.useState<FranchiseeMultiStoreSettings | null>(null)
+  const [hrMainTab, setHrMainTab] = React.useState("list")
+  const [evalJumpPayload, setEvalJumpPayload] = React.useState<EmployeeEvalJumpTarget | null>(null)
+  const clearEvalJump = React.useCallback(() => setEvalJumpPayload(null), [])
+
+  const adminRowToForm = React.useCallback(
+    (e: AdminEmployeeItem): EmployeeFormData => {
+      const f = toFormData(e)
+      return { ...f, store: resolveStoreKey(f.store) }
+    },
+    [resolveStoreKey]
+  )
 
   React.useEffect(() => {
     if (!isOfficeRole(userRole) && !isAccountingRole(userRole)) {
@@ -220,9 +232,6 @@ export default function EmployeesPage() {
 
         const merged: EmployeeTableRow[] = list.map((e) => {
           const fromSheet = e.grade != null && String(e.grade).trim() !== "" ? String(e.grade).trim() : null
-          if (fromSheet) {
-            return { ...e, finalGrade: fromSheet }
-          }
           const store = String(e.store || "").trim().replace(/\s+/g, " ")
           const name = String(e.name || "").trim().replace(/\s+/g, " ")
           const nick = String(e.nick || "").trim().replace(/\s+/g, " ")
@@ -239,15 +248,26 @@ export default function EmployeesPage() {
               gradeKeys.push(`${st}|${nick}`, `${st.toLowerCase()}|${nick.toLowerCase()}`)
             }
           }
-          let g: string | null = null
+          let latestAny = ""
+          let kitchen = ""
+          let service = ""
+          let manager = ""
           for (const k of gradeKeys) {
-            const hit = gradesRes && gradesRes[k]?.grade
-            if (hit && String(hit).trim()) {
-              g = String(hit).trim()
-              break
-            }
+            const hit = gradesRes?.[k]
+            if (!hit) continue
+            if (!latestAny && hit.grade && String(hit.grade).trim()) latestAny = String(hit.grade).trim()
+            if (!kitchen && hit.kitchenGrade && String(hit.kitchenGrade).trim()) kitchen = String(hit.kitchenGrade).trim()
+            if (!service && hit.serviceGrade && String(hit.serviceGrade).trim()) service = String(hit.serviceGrade).trim()
+            if (!manager && hit.managerGrade && String(hit.managerGrade).trim()) manager = String(hit.managerGrade).trim()
+            if (latestAny && kitchen && service && manager) break
           }
-          return { ...e, finalGrade: g && String(g).trim() ? g : "-" }
+          return {
+            ...e,
+            finalGrade: fromSheet || latestAny || "-",
+            kitchenGrade: kitchen || "-",
+            serviceGrade: service || "-",
+            managerGrade: manager || "-",
+          }
         })
         fullListRef.current = merged
         setAllEmployees(merged)
@@ -309,13 +329,13 @@ export default function EmployeesPage() {
         e = e || cand[0]
       }
       if (e) {
-        setForm(toFormData(e))
+        setForm(adminRowToForm(e))
         setHasSearched(true)
         setStoreFilter(String(e.store || "").trim() ? String(e.store) : "All")
         router.replace("/admin/employees", { scroll: false })
       }
     })
-  }, [payrollOpenQueryKey, loadEmployeeList, router])
+  }, [payrollOpenQueryKey, loadEmployeeList, router, adminRowToForm])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions
@@ -373,7 +393,7 @@ export default function EmployeesPage() {
 
   const handleEdit = (idx: number) => {
     const e = filteredRows[idx]
-    if (e) setForm(toFormData(e))
+    if (e) setForm(adminRowToForm(e))
   }
 
   const handleDelete = async (rowId: number) => {
@@ -429,7 +449,7 @@ export default function EmployeesPage() {
 
   const handleNew = () => {
     const base = { ...emptyForm }
-    if ((isManager || isFranchiseeRole(userRole)) && userStore) base.store = userStore
+    if ((isManager || isFranchiseeRole(userRole)) && userStore) base.store = resolveStoreKey(userStore)
     setForm(base)
   }
   const storesForFilter = React.useMemo(() => {
@@ -485,7 +505,7 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="list" className={adminTabsRootCn}>
+        <Tabs value={hrMainTab} onValueChange={setHrMainTab} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -534,6 +554,7 @@ export default function EmployeesPage() {
                   form={form}
                   onChange={setForm}
                   stores={storesForForm}
+                  storeLabels={erpStoreLabels}
                   jobOptions={jobOptions}
                   onSave={handleSave}
                   onNew={handleNew}
@@ -609,6 +630,8 @@ export default function EmployeesPage() {
                 stores={storesForForm}
                 employees={allEmployees}
                 onSaved={loadEmployeeList}
+                jumpToEmployee={evalJumpPayload}
+                onJumpToEmployeeConsumed={clearEvalJump}
               />
             </TabsContent>
           )}
@@ -618,6 +641,20 @@ export default function EmployeesPage() {
                 stores={storesForFilter}
                 canPickAllStores={evalAnalyticsCanPickAllStores}
                 canUseAiSummary={isOffice}
+                onOpenEvalForUnevaluated={
+                  isOffice
+                    ? (row) => {
+                        setEvalJumpPayload({
+                          key: Date.now(),
+                          store: row.store,
+                          name: row.name,
+                          nick: row.nick,
+                          job: row.job,
+                        })
+                        setHrMainTab("eval")
+                      }
+                    : undefined
+                }
               />
             </TabsContent>
           )}

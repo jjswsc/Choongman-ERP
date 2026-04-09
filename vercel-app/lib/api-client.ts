@@ -29,6 +29,10 @@ import { ERP_POS_CATALOG_MENUS_CACHE_KEY, fetchPosCatalogCached, notifyPosCatalo
 import { setErpCache } from './offline/cache'
 import type { PosMenuUpsertApiBody } from './pos-menu-upsert-server'
 import { readAutoTranslateEnabled } from './auto-translate'
+import {
+  attachEvalAnalyticsRedirectFlag,
+  parseEvalAnalyticsErrorResponse,
+} from './eval-analytics-http-error'
 
 export { apiFetch } from './api/fetch'
 export { apiFetchWithOffline }
@@ -1588,6 +1592,8 @@ export interface ReceivablePayableItem {
     invoice_no?: string
     invoice_received?: boolean
     receive_checked?: boolean
+    /** 미지급: 입고·발주·지출·통장·패티에서 해석한 귀속 매장 */
+    attributed_store?: string
   }[]
 }
 
@@ -1820,6 +1826,8 @@ export interface IncomeStatementData {
   diagnostics?: {
     warnings: string[]
     limits: Record<string, { fetched: number; limit: number; total?: number }>
+    /** 직접 입고 + 통장 매입지급에 동시에 잡힌 거래처 키(코드) */
+    purchaseInboundBankOverlapVendorKeys?: string[]
   }
   expenseByAccountSubject?: {
     accountSubjectId: number | null
@@ -1829,7 +1837,7 @@ export interface IncomeStatementData {
     nameTh: string | null
     amount: number
   }[]
-  purchaseByVendor?: { key: string; amount: number }[]
+  purchaseByVendor?: { key: string; amount: number; label?: string }[]
   grossProfit: number
   netProfit: number
   error?: string
@@ -1850,6 +1858,74 @@ export async function getIncomeStatement(params: {
   if (params.includeDebug) q.set('includeDebug', '1')
   const res = await apiFetchWithOffline(`/api/getIncomeStatement?${q}`)
   return res.json() as Promise<IncomeStatementData>
+}
+
+/** 손익 매입 거래처 행 상세 (직접입고 / 통장 매입지급 / 본사승인 발주) */
+export type IncomeStatementPurchaseDrillInboundRow = {
+  kind: 'inbound'
+  id: number | null
+  logDate: string
+  location: string
+  itemCode: string
+  qty: number
+  unitCost: number
+  lineAmount: number
+  vendorTarget: string | null
+}
+
+export type IncomeStatementPurchaseDrillBankRow = {
+  kind: 'bank'
+  id: number
+  transDate: string
+  amount: number
+  vendorCode: string | null
+  memo: string | null
+  note: string | null
+  store: string | null
+}
+
+export type IncomeStatementPurchaseDrillOrderRow = {
+  kind: 'hq_order'
+  id: number
+  orderDate: string
+  total: number
+  storeName: string | null
+  status: string | null
+}
+
+export type IncomeStatementPurchaseDrillDown = {
+  vendorKey: string
+  yearMonth: string
+  startStr: string
+  endStr: string
+  storeFilter: string
+  isHqOrders: boolean
+  hqOrders: IncomeStatementPurchaseDrillOrderRow[]
+  inbound: IncomeStatementPurchaseDrillInboundRow[]
+  bankPayments: IncomeStatementPurchaseDrillBankRow[]
+  truncated: { inbound: boolean; bank: boolean; orders: boolean }
+  error?: string
+}
+
+export async function getIncomeStatementPurchaseDrillDown(params: {
+  yearMonth: string
+  storeFilter?: string
+  userStore?: string
+  userRole?: string
+  vendorKey: string
+}): Promise<IncomeStatementPurchaseDrillDown> {
+  const q = new URLSearchParams()
+  q.set('yearMonth', params.yearMonth)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  q.set('vendorKey', params.vendorKey)
+  const res = await apiFetchWithOffline(`/api/getIncomeStatementPurchaseDrillDown?${q}`)
+  const data = (await res.json()) as IncomeStatementPurchaseDrillDown & { error?: string }
+  if (!res.ok) {
+    return { ...data, error: data.error || `HTTP ${res.status}` }
+  }
+  return data
 }
 
 export type IncomeStatementOverrideRow = {
@@ -4998,6 +5074,8 @@ export async function saveMarketingCampaign(params: {
   conclusion?: string
   collabManagement?: boolean
   phasePeriods?: MarketingCampaignPhasePeriod[]
+  userRole?: string
+  userStore?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingCampaigns', {
     method: 'POST',
@@ -5513,6 +5591,7 @@ export async function saveMarketingAd(params: {
   actualSpent?: number
   userRole?: string
   userName?: string
+  userStore?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingAds', {
     method: 'POST',
@@ -5603,6 +5682,7 @@ export async function saveMarketingInfluencer(params: {
   note?: string
   userRole?: string
   userName?: string
+  userStore?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingInfluencers', {
     method: 'POST',
@@ -5684,6 +5764,7 @@ export async function saveMarketingMaterial(params: {
   note?: string
   userRole?: string
   userName?: string
+  userStore?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingMaterials', {
     method: 'POST',
@@ -5723,6 +5804,8 @@ export async function saveMarketingMaterialDeployment(params: {
   installedOn: string
   removedOn?: string | null
   note?: string
+  userRole?: string
+  userStore?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingMaterialDeployments', {
     method: 'POST',
@@ -5781,6 +5864,8 @@ export async function saveMarketingMaterialGift(params: {
   distributedQty?: number
   remainingQty?: number
   ruleNote?: string
+  userRole?: string
+  userStore?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingMaterialGifts', {
     method: 'POST',
@@ -5986,6 +6071,16 @@ export interface PosPrinterSettings {
    */
   mainDeviceToken?: string | null
   mainDeviceTokens?: string[]
+  dualMonitorEnabled?: boolean
+  customerDisplayAutoOpen?: boolean
+  customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
+  customerDisplayTheme?: 'dark' | 'light' | 'brand'
+  customerDisplayDefaultState?: 'idle' | 'qr'
+  customerDisplayIdleMessage?: string
+  customerDisplayPaymentMessage?: string
+  customerDisplayQrPayload?: string
+  customerDisplayShowOrderSummary?: boolean
+  customerDisplayShowOrderTotal?: boolean
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -6076,6 +6171,16 @@ export async function savePosPrinterSettings(params: {
   cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
   otherRate?: number
   otherMode?: 'included' | 'separate'
+  dualMonitorEnabled?: boolean
+  customerDisplayAutoOpen?: boolean
+  customerDisplayMonitorPreference?: 'secondary-first' | 'primary-only'
+  customerDisplayTheme?: 'dark' | 'light' | 'brand'
+  customerDisplayDefaultState?: 'idle' | 'qr'
+  customerDisplayIdleMessage?: string
+  customerDisplayPaymentMessage?: string
+  customerDisplayQrPayload?: string
+  customerDisplayShowOrderSummary?: boolean
+  customerDisplayShowOrderTotal?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/savePosPrinterSettings', {
     method: 'POST',
@@ -7845,7 +7950,18 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
 
 export async function getEmployeeLatestGrades() {
   const res = await apiFetchWithOffline('/api/getEmployeeLatestGrades')
-  return res.json() as Promise<Record<string, { grade: string }>>
+  return res.json() as Promise<
+    Record<
+      string,
+      {
+        grade: string
+        kitchenGrade?: string
+        serviceGrade?: string
+        managerGrade?: string
+        latestAny?: string
+      }
+    >
+  >
 }
 
 export async function saveAdminEmployee(params: {
@@ -8001,11 +8117,12 @@ export async function getEvaluationAnalytics(params: {
   q.set('type', (params.type || 'all').trim())
   if (params.store && params.store !== 'All') q.set('store', params.store.trim())
   const res = await apiFetchWithOffline(`/api/getEvaluationAnalytics?${q}`)
+  const text = await res.text()
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(err || '집계 조회 실패')
+    const { message, redirectToAdminLogin } = parseEvalAnalyticsErrorResponse(res.status, text)
+    throw attachEvalAnalyticsRedirectFlag(new Error(message || '집계 조회 실패'), redirectToAdminLogin)
   }
-  return res.json() as Promise<EvaluationAnalyticsPayload>
+  return JSON.parse(text) as EvaluationAnalyticsPayload
 }
 
 /** 직원 평가 집계 AI 요약 (본사·회계, OPENAI_API_KEY 필요) */
@@ -8027,14 +8144,8 @@ export async function summarizeEvaluationAnalytics(params: {
   })
   const text = await res.text()
   if (!res.ok) {
-    let msg = text
-    try {
-      const j = JSON.parse(text) as { error?: string }
-      if (j.error) msg = j.error
-    } catch {
-      //
-    }
-    throw new Error(msg || '요약 실패')
+    const { message, redirectToAdminLogin } = parseEvalAnalyticsErrorResponse(res.status, text)
+    throw attachEvalAnalyticsRedirectFlag(new Error(message || '요약 실패'), redirectToAdminLogin)
   }
   return JSON.parse(text) as { summary: string; source: string }
 }

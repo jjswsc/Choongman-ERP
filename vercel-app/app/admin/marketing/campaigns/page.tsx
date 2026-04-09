@@ -1049,6 +1049,8 @@ export default function MarketingCampaignsPage() {
         kpiUnit: form.kpiUnit,
         campaignPerformance: form.campaignPerformance.trim(),
         conclusion: form.conclusion.trim(),
+        userRole: auth?.role,
+        userStore: auth?.store,
       })
       if (res.success) {
         const savedId = String((editingId || res.id || "").trim())
@@ -1171,6 +1173,7 @@ export default function MarketingCampaignsPage() {
         status: "finish",
         userRole: auth?.role,
         userName: auth?.user,
+        userStore: auth?.store,
       })
       if (res.success) {
         setInfForm(defaultInfForm)
@@ -1220,6 +1223,7 @@ export default function MarketingCampaignsPage() {
         note: matForm.note.trim(),
         userRole: auth?.role,
         userName: auth?.user,
+        userStore: auth?.store,
       })
       if (res.success) {
         setMatForm({ ...defaultMatForm })
@@ -1307,6 +1311,8 @@ export default function MarketingCampaignsPage() {
         allocatedQty,
         distributedQty,
         ruleNote: giftAddDraft.ruleNote.trim(),
+        userRole: auth?.role,
+        userStore: auth?.store,
       })
       if (res.success) {
         setGiftAddDraft({ ...defaultGiftDraft })
@@ -1342,6 +1348,8 @@ export default function MarketingCampaignsPage() {
         allocatedQty,
         distributedQty,
         ruleNote: giftEditDraft.ruleNote.trim(),
+        userRole: auth?.role,
+        userStore: auth?.store,
       })
       if (res.success) {
         setEditingGiftId(null)

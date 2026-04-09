@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload } from "@/lib/utils"
-import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
+import { formatEmployeeDisplayName, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { getEvaluationDistinctStores } from "@/lib/api-client"
 
@@ -41,8 +41,9 @@ function normJobKey(j: string) {
 }
 
 function jobsForEvalType(evalType: "kitchen" | "service" | "manager"): Set<string> {
-  if (evalType === "kitchen") return new Set(["kitchen"])
-  if (evalType === "service") return new Set(["service"])
+  // 매니저는 주방/서비스 평가를 모두 받는다.
+  if (evalType === "kitchen") return new Set(["kitchen", "officer", "director", "manager"])
+  if (evalType === "service") return new Set(["service", "officer", "director", "manager"])
   return new Set(["officer", "director", "manager"])
 }
 
@@ -53,6 +54,47 @@ function employeeJobMatchesEvalType(job: string, evalType: "kitchen" | "service"
     if (j === a) return true
   }
   return false
+}
+
+/** 미평가 분석 행·직무 문자열 → 평가 유형 */
+function evalTypeFromJobLabel(job: string): "kitchen" | "service" | "manager" {
+  const j = normJobKey(job)
+  if (j === "kitchen") return "kitchen"
+  if (j === "service") return "service"
+  return "manager"
+}
+
+export type EmployeeEvalJumpTarget = {
+  key: number
+  store: string
+  name: string
+  nick: string
+  job: string
+}
+
+function findEmployeeForEvalJump(
+  list: (AdminEmployeeItem & { finalGrade?: string })[],
+  jump: Omit<EmployeeEvalJumpTarget, "key">
+) {
+  const jStore = String(jump.store || "").trim()
+  const jName = String(jump.name || "").trim()
+  const jNick = String(jump.nick || "").trim()
+  const jNameNorm = jName ? normalizeEmployeeNameForGradeMatch(jName) : ""
+  for (const e of list) {
+    const atStore =
+      storesMatchForGradeLookup(e.store || "", jStore) ||
+      (Array.isArray(e.extraStores) &&
+        e.extraStores.some((x) => storesMatchForGradeLookup(String(x || ""), jStore)))
+    if (!atStore) continue
+    const n = String(e.name || "").trim()
+    const nick = String(e.nick || "").trim()
+    if (jName && n === jName) return e
+    if (jNick && nick === jNick) return e
+    if (jNick && n === jNick) return e
+    const nNorm = n ? normalizeEmployeeNameForGradeMatch(n) : ""
+    if (jNameNorm && nNorm && jNameNorm === nNorm) return e
+  }
+  return undefined
 }
 const EVAL_INCIDENT_KEYS = [
   "eval_incident_1",
@@ -87,12 +129,17 @@ export interface EmployeeEvalTabProps {
   stores: string[]
   employees: (AdminEmployeeItem & { finalGrade?: string })[]
   onSaved?: () => void
+  /** 분석 탭 등에서 행 클릭 시 평가 대상·매장·유형을 맞춤 */
+  jumpToEmployee?: EmployeeEvalJumpTarget | null
+  onJumpToEmployeeConsumed?: () => void
 }
 
 export function EmployeeEvalTab({
   stores,
   employees,
   onSaved,
+  jumpToEmployee,
+  onJumpToEmployeeConsumed,
 }: EmployeeEvalTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -156,6 +203,39 @@ export function EmployeeEvalTab({
     }
     return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
   }, [stores, storesFromEvalDb])
+
+  const lastHandledEvalJumpKey = React.useRef<number | null>(null)
+  React.useEffect(() => {
+    if (!jumpToEmployee) {
+      lastHandledEvalJumpKey.current = null
+      return
+    }
+    if (lastHandledEvalJumpKey.current === jumpToEmployee.key) return
+    lastHandledEvalJumpKey.current = jumpToEmployee.key
+    const jump = {
+      store: jumpToEmployee.store,
+      name: jumpToEmployee.name,
+      nick: jumpToEmployee.nick,
+      job: jumpToEmployee.job,
+    }
+    const jStore = String(jump.store || "").trim()
+    const pickedStore =
+      storeOptionsForEval.find((s) => storesMatchForGradeLookup(s, jStore)) || jStore
+    const match = findEmployeeForEvalJump(employees, jump)
+    const jobForType = String(match?.job || jump.job || "").trim()
+    const nextType = evalTypeFromJobLabel(jobForType)
+    setEvalStore(pickedStore)
+    setEvalType(nextType)
+    setEvalJobFilter(EVAL_JOB_FILTER_MATCH)
+    if (match) {
+      const nameForSelect = String(match.name || "").trim() ? String(match.name) : "__unnamed__"
+      setEvalEmployee(nameForSelect)
+    } else {
+      setEvalEmployee("")
+      void appAlert(t("eval_jump_not_found"))
+    }
+    onJumpToEmployeeConsumed?.()
+  }, [jumpToEmployee, employees, storeOptionsForEval, onJumpToEmployeeConsumed])
 
   React.useEffect(() => {
     const isManager = isManagerRole(auth?.role || "")

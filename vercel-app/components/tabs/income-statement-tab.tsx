@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,15 +14,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ChevronDown, ChevronRight, FileDown, Search, Table } from "lucide-react"
+import { ChevronDown, ChevronRight, ExternalLink, FileDown, Loader2, Search, Table } from "lucide-react"
+import Link from "next/link"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   fetchIncomeStatementOverrides,
   getIncomeStatement,
+  getIncomeStatementPurchaseDrillDown,
   saveIncomeStatementOverrides,
   useStoreList,
   type IncomeStatementData,
+  type IncomeStatementPurchaseDrillDown,
 } from "@/lib/api-client"
 import { formatAccountSubjectLabel } from "@/lib/account-subject-display"
 import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/lib/bangkok-time"
@@ -52,40 +56,354 @@ import {
   type IncomeStatementXlsxRow,
 } from "@/lib/income-statement-export"
 
-/** 수동 매출·기초재고 오버라이드 없이 API 값만으로 표시용 view (기간 비교 월별 상세 등) */
-function incomeStatementViewFromApiData(data: IncomeStatementData) {
-  const sales = Number(data.sales) || 0
-  const purchases = Number(data.purchases) || 0
-  const expenses = Number(data.expenses) || 0
-  const endingInv = data.endingInventory ?? 0
-  const sysBeg = data.beginningInventory ?? 0
-  const cogs = incomeStatementCogs(data)
-  const grossProfit =
-    data.grossProfit != null && Number.isFinite(Number(data.grossProfit))
-      ? Number(data.grossProfit)
-      : sales - cogs
-  const netProfit =
-    data.netProfit != null && Number.isFinite(Number(data.netProfit))
-      ? Number(data.netProfit)
-      : grossProfit - expenses
-  const pctBase = sales > 0 ? sales : 0
-  const pct = (n: number) => (pctBase > 0 ? `${((n / pctBase) * 100).toFixed(1)}%` : "—")
-  return {
-    sales,
-    grossProfit,
-    netProfit,
-    pct,
-    cogs,
-    beginningInventory: sysBeg,
-    expenses,
-    useManualSales: false as boolean,
-    systemSales: Number(data.sales) || 0,
-    useManualBegInv: false as boolean,
-    systemBeginningInventory: sysBeg,
-  }
+function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
+  if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사·물류 발주'
+  if (row.key === '__pl_vendor_unknown__') return t('pL_vendorUnknown') || '거래처 미지정'
+  const n = String(row.label || '').trim()
+  return n || row.key
 }
 
-type IncomeStatementViewModel = ReturnType<typeof incomeStatementViewFromApiData>
+function purchaseVendorLabelForKey(
+  key: string,
+  purchaseByVendor: IncomeStatementData['purchaseByVendor'] | undefined
+): string | undefined {
+  const row = purchaseByVendor?.find((r) => r.key === key)
+  const n = String(row?.label || '').trim()
+  return n || undefined
+}
+
+function purchaseAmountForVendor(data: IncomeStatementData | undefined, vendorKey: string): number {
+  if (!data?.purchaseByVendor) return 0
+  const r = data.purchaseByVendor.find((x) => x.key === vendorKey)
+  return r ? Number(r.amount) || 0 : 0
+}
+
+function mergePurchaseVendorKeysForCompare(
+  rows: { ym: string; data: IncomeStatementData }[]
+): { key: string; label?: string }[] {
+  const labelByKey = new Map<string, string | undefined>()
+  for (const { data } of rows) {
+    if (data.error) continue
+    for (const r of data.purchaseByVendor || []) {
+      if (!labelByKey.has(r.key)) {
+        const lbl = String(r.label || '').trim()
+        labelByKey.set(r.key, lbl || undefined)
+      } else if (!labelByKey.get(r.key)) {
+        const lbl = String(r.label || '').trim()
+        if (lbl) labelByKey.set(r.key, lbl)
+      }
+    }
+  }
+  const keys = [...labelByKey.keys()]
+  keys.sort((a, b) => {
+    const ta = rows.reduce((s, x) => s + purchaseAmountForVendor(x.data, a), 0)
+    const tb = rows.reduce((s, x) => s + purchaseAmountForVendor(x.data, b), 0)
+    return tb - ta
+  })
+  return keys.map((key) => ({ key, label: labelByKey.get(key) }))
+}
+
+function expenseAmountForSubject(
+  data: IncomeStatementData | undefined,
+  accountSubjectId: number | null
+): number {
+  if (!data?.expenseByAccountSubject) return 0
+  const r = data.expenseByAccountSubject.find((x) => x.accountSubjectId === accountSubjectId)
+  return r ? Number(r.amount) || 0 : 0
+}
+
+function mergeExpenseSubjectsForCompare(rows: { data: IncomeStatementData }[]): {
+  accountSubjectId: number | null
+  code: string
+  name: string
+  nameEn: string | null
+  nameTh: string | null
+}[] {
+  const metaByKey = new Map<
+    string,
+    {
+      accountSubjectId: number | null
+      code: string
+      name: string
+      nameEn: string | null
+      nameTh: string | null
+    }
+  >()
+  for (const { data } of rows) {
+    if (data.error) continue
+    for (const r of data.expenseByAccountSubject || []) {
+      const k = r.accountSubjectId == null ? '__null__' : String(r.accountSubjectId)
+      if (!metaByKey.has(k)) {
+        metaByKey.set(k, {
+          accountSubjectId: r.accountSubjectId,
+          code: r.code,
+          name: r.name,
+          nameEn: r.nameEn,
+          nameTh: r.nameTh,
+        })
+      }
+    }
+  }
+  const list = [...metaByKey.values()]
+  list.sort((a, b) => {
+    const ta = rows.reduce((s, x) => s + expenseAmountForSubject(x.data, a.accountSubjectId), 0)
+    const tb = rows.reduce((s, x) => s + expenseAmountForSubject(x.data, b.accountSubjectId), 0)
+    return tb - ta
+  })
+  return list
+}
+
+function yearlyPurchaseVendorAmount(
+  rows: { ym: string; data: IncomeStatementData }[],
+  year: string,
+  vendorKey: string
+): number {
+  let s = 0
+  for (const { ym, data } of rows) {
+    if (!ym.startsWith(year)) continue
+    if (data.error) continue
+    s += purchaseAmountForVendor(data, vendorKey)
+  }
+  return s
+}
+
+function yearlyExpenseSubjectAmount(
+  rows: { ym: string; data: IncomeStatementData }[],
+  year: string,
+  accountSubjectId: number | null
+): number {
+  let s = 0
+  for (const { ym, data } of rows) {
+    if (!ym.startsWith(year)) continue
+    if (data.error) continue
+    s += expenseAmountForSubject(data, accountSubjectId)
+  }
+  return s
+}
+
+function yearlyExpenseBreakdownField(
+  rows: { ym: string; data: IncomeStatementData }[],
+  year: string,
+  field: "pettyCash" | "bankWithdraw" | "fixedExpenses"
+): number {
+  let s = 0
+  for (const { ym, data } of rows) {
+    if (!ym.startsWith(year)) continue
+    if (data.error) continue
+    s += Number(data.expenseBreakdown?.[field]) || 0
+  }
+  return s
+}
+
+function IncomePurchaseDrillDialog({
+  open,
+  onOpenChange,
+  purchaseDrillTitle,
+  purchaseDrillLoading,
+  purchaseDrillData,
+  t,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  purchaseDrillTitle: string
+  purchaseDrillLoading: boolean
+  purchaseDrillData: IncomeStatementPurchaseDrillDown | null
+  t: (k: string) => string
+}) {
+  const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o)
+        if (!o) {
+          // caller clears data/loading when closing
+        }
+      }}
+    >
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {t("pL_purchaseDrillTitle")} — {purchaseDrillTitle}
+          </DialogTitle>
+          {purchaseDrillData && (
+            <p className="text-xs text-muted-foreground font-normal">
+              {purchaseDrillData.startStr} ~ {purchaseDrillData.endStr}
+              {purchaseDrillData.storeFilter && purchaseDrillData.storeFilter !== "All"
+                ? ` · ${purchaseDrillData.storeFilter}`
+                : ""}
+            </p>
+          )}
+        </DialogHeader>
+        {purchaseDrillLoading && (
+          <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            {t("pL_purchaseDrillLoading")}
+          </div>
+        )}
+        {!purchaseDrillLoading && purchaseDrillData?.error && (
+          <p className="text-sm text-destructive py-2">{purchaseDrillData.error}</p>
+        )}
+        {!purchaseDrillLoading && purchaseDrillData && !purchaseDrillData.error && (
+          <div className="space-y-4 text-sm">
+            {(purchaseDrillData.truncated.inbound ||
+              purchaseDrillData.truncated.bank ||
+              purchaseDrillData.truncated.orders) && (
+              <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-md px-2 py-1.5">
+                {t("pL_purchaseDrillTruncated")}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3 text-xs">
+              <Link
+                href="/admin/orders"
+                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("pL_purchaseDrillLinkOrders")}
+              </Link>
+              <Link
+                href="/admin/bank-transactions"
+                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("pL_purchaseDrillLinkBank")}
+              </Link>
+              <Link
+                href="/admin/inbound"
+                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("pL_purchaseDrillLinkInbound")}
+              </Link>
+            </div>
+
+            {purchaseDrillData.isHqOrders && purchaseDrillData.hqOrders.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                  {t("pL_purchaseDrillHqOrders")}
+                </p>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
+                        <th className="text-right p-2">{t("pL_colAmount")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStatus")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseDrillData.hqOrders.map((r) => (
+                        <tr key={r.id} className="border-b border-border/60">
+                          <td className="p-2 font-mono">{r.id}</td>
+                          <td className="p-2 whitespace-nowrap">{r.orderDate}</td>
+                          <td className="p-2 max-w-[140px] truncate">{r.storeName || "—"}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.total)}</td>
+                          <td className="p-2">{r.status || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {purchaseDrillData.inbound.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                  {t("pL_purchaseDrillInbound")}
+                </p>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColLoc")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColItem")}</th>
+                        <th className="text-right p-2">{t("pL_purchaseDrillColQty")}</th>
+                        <th className="text-right p-2">{t("pL_purchaseDrillColUnitCost")}</th>
+                        <th className="text-right p-2">{t("pL_colAmount")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseDrillData.inbound.map((r, i) => (
+                        <tr key={`${r.id ?? "x"}-${i}`} className="border-b border-border/60">
+                          <td className="p-2 whitespace-nowrap">{r.logDate}</td>
+                          <td className="p-2 max-w-[100px] truncate">{r.location}</td>
+                          <td className="p-2 font-mono">{r.itemCode}</td>
+                          <td className="p-2 text-right font-mono">{r.qty}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.unitCost)}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.lineAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {purchaseDrillData.bankPayments.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                  {t("pL_purchaseDrillBank")}
+                </p>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
+                        <th className="text-right p-2">{t("pL_colAmount")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColMemo")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseDrillData.bankPayments.map((r) => (
+                        <tr key={r.id} className="border-b border-border/60">
+                          <td className="p-2 font-mono">{r.id}</td>
+                          <td className="p-2 whitespace-nowrap">{r.transDate}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.amount)}</td>
+                          <td className="p-2 max-w-[200px] truncate" title={r.memo || r.note || ""}>
+                            {r.memo || r.note || "—"}
+                          </td>
+                          <td className="p-2 max-w-[100px] truncate">{r.store || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!(
+              (purchaseDrillData.isHqOrders && purchaseDrillData.hqOrders.length > 0) ||
+              purchaseDrillData.inbound.length > 0 ||
+              purchaseDrillData.bankPayments.length > 0
+            ) && (
+              <p className="text-sm text-muted-foreground py-4">{t("pL_purchaseDrillEmpty")}</p>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type IncomeStatementViewModel = {
+  sales: number
+  grossProfit: number
+  netProfit: number
+  pct: (n: number) => string
+  cogs: number
+  beginningInventory: number
+  expenses: number
+  useManualSales: boolean
+  systemSales: number
+  useManualBegInv: boolean
+  systemBeginningInventory: number
+}
 
 function IncomePlDetailTableContent({
   data,
@@ -97,6 +415,7 @@ function IncomePlDetailTableContent({
   expandExpenseAccounts,
   onToggleExpenseAccounts,
   printRef,
+  purchaseDrillContext,
   titleClassName = "text-lg font-semibold mb-1",
   wrapperClassName = "rounded-md bg-white p-3 text-foreground",
 }: {
@@ -109,17 +428,44 @@ function IncomePlDetailTableContent({
   expandExpenseAccounts: boolean
   onToggleExpenseAccounts: () => void
   printRef?: React.RefObject<HTMLDivElement | null>
+  /** 있으면 매입 거래처 행 클릭 시 해당 월·범위 상세 조회 */
+  purchaseDrillContext?: {
+    yearMonth: string
+    storeFilter?: string
+    userStore?: string
+    userRole?: string
+  } | null
   titleClassName?: string
   wrapperClassName?: string
 }) {
   const { lang } = useLang()
   const t = useT(lang)
   const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
-  const purchaseVendorLabel = (key: string) => {
-    if (key === "__pl_hq_orders__") return t("pL_purchaseHqOrders") || "본사·물류 발주"
-    if (key === "__pl_vendor_unknown__") return t("pL_vendorUnknown") || "거래처 미지정"
-    return key
-  }
+
+  const [purchaseDrillOpen, setPurchaseDrillOpen] = React.useState(false)
+  const [purchaseDrillLoading, setPurchaseDrillLoading] = React.useState(false)
+  const [purchaseDrillData, setPurchaseDrillData] = React.useState<IncomeStatementPurchaseDrillDown | null>(null)
+  const [purchaseDrillTitle, setPurchaseDrillTitle] = React.useState("")
+
+  const openPurchaseDrill = React.useCallback(
+    (row: { key: string; label?: string }) => {
+      if (!purchaseDrillContext?.yearMonth) return
+      setPurchaseDrillTitle(purchaseVendorRowLabel(row, t))
+      setPurchaseDrillOpen(true)
+      setPurchaseDrillLoading(true)
+      setPurchaseDrillData(null)
+      getIncomeStatementPurchaseDrillDown({
+        yearMonth: purchaseDrillContext.yearMonth,
+        storeFilter: purchaseDrillContext.storeFilter,
+        userStore: purchaseDrillContext.userStore,
+        userRole: purchaseDrillContext.userRole,
+        vendorKey: row.key,
+      })
+        .then((d) => setPurchaseDrillData(d))
+        .finally(() => setPurchaseDrillLoading(false))
+    },
+    [purchaseDrillContext, t]
+  )
 
   return (
     <div ref={printRef ?? undefined} className={wrapperClassName}>
@@ -138,6 +484,22 @@ function IncomePlDetailTableContent({
       {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
         <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {data.diagnostics?.warnings?.join(" / ")}
+        </div>
+      )}
+      {(data.diagnostics?.purchaseInboundBankOverlapVendorKeys?.length || 0) > 0 && (
+        <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p className="mb-1.5 leading-relaxed">{t("pL_diagInboundBankOverlap")}</p>
+          <ul className="list-disc pl-4 space-y-0.5 font-mono text-[11px]">
+            {data.diagnostics!.purchaseInboundBankOverlapVendorKeys!.map((vk) => {
+              const lbl = purchaseVendorLabelForKey(vk, data.purchaseByVendor)
+              return (
+                <li key={vk}>
+                  {vk}
+                  {lbl ? <span className="text-amber-950/80 font-sans not-italic"> — {lbl}</span> : null}
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
       <table className="w-full max-w-md text-sm">
@@ -182,8 +544,19 @@ function IncomePlDetailTableContent({
           {expandPurchases &&
             (data.purchaseByVendor?.length || 0) > 0 &&
             data.purchaseByVendor!.map((row) => (
-              <tr key={row.key} className="border-b bg-muted/20">
-                <td className="py-1.5 text-muted-foreground pl-10 text-xs">{purchaseVendorLabel(row.key)}</td>
+              <tr
+                key={row.key}
+                className={
+                  purchaseDrillContext?.yearMonth
+                    ? "border-b bg-muted/20 cursor-pointer hover:bg-muted/40"
+                    : "border-b bg-muted/20"
+                }
+                onClick={purchaseDrillContext?.yearMonth ? () => openPurchaseDrill(row) : undefined}
+                title={
+                  purchaseDrillContext?.yearMonth ? t("pL_purchaseDrillClickHint") : undefined
+                }
+              >
+                <td className="py-1.5 text-muted-foreground pl-10 text-xs">{purchaseVendorRowLabel(row, t)}</td>
                 <td className="py-1.5 text-right font-mono text-muted-foreground pr-2 text-xs">
                   {formatBath(row.amount)}
                 </td>
@@ -194,6 +567,13 @@ function IncomePlDetailTableContent({
             <tr className="border-b bg-muted/20">
               <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
                 {t("inNoData") || "조회된 내역이 없습니다."}
+              </td>
+            </tr>
+          )}
+          {expandPurchases && (
+            <tr className="border-b bg-muted/10">
+              <td colSpan={3} className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed">
+                {t("pL_purchaseCompositionNote")}
               </td>
             </tr>
           )}
@@ -307,6 +687,21 @@ function IncomePlDetailTableContent({
           </tr>
         </tbody>
       </table>
+
+      <IncomePurchaseDrillDialog
+        open={purchaseDrillOpen}
+        onOpenChange={(o) => {
+          setPurchaseDrillOpen(o)
+          if (!o) {
+            setPurchaseDrillData(null)
+            setPurchaseDrillLoading(false)
+          }
+        }}
+        purchaseDrillTitle={purchaseDrillTitle}
+        purchaseDrillLoading={purchaseDrillLoading}
+        purchaseDrillData={purchaseDrillData}
+        t={t}
+      />
     </div>
   )
 }
@@ -363,8 +758,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [showExpenseDetails, setShowExpenseDetails] = React.useState(false)
   const [expandPurchases, setExpandPurchases] = React.useState(false)
   const [expandExpenseAccounts, setExpandExpenseAccounts] = React.useState(false)
-  const [compareExpandPurchases, setCompareExpandPurchases] = React.useState<Record<string, boolean>>({})
-  const [compareExpandExpenses, setCompareExpandExpenses] = React.useState<Record<string, boolean>>({})
+  const [compareUnifiedExpandPurchases, setCompareUnifiedExpandPurchases] = React.useState(false)
+  const [compareUnifiedExpandExpenses, setCompareUnifiedExpandExpenses] = React.useState(false)
+  const [compareDrillOpen, setCompareDrillOpen] = React.useState(false)
+  const [compareDrillLoading, setCompareDrillLoading] = React.useState(false)
+  const [compareDrillData, setCompareDrillData] = React.useState<IncomeStatementPurchaseDrillDown | null>(null)
+  const [compareDrillTitle, setCompareDrillTitle] = React.useState("")
   const [manualEnabled, setManualEnabled] = React.useState(false)
   const [manualAmountStr, setManualAmountStr] = React.useState("")
   const [begInvManualEnabled, setBegInvManualEnabled] = React.useState(false)
@@ -558,8 +957,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [incomeCompareFetchId, setIncomeCompareFetchId] = React.useState(0)
 
   React.useEffect(() => {
-    setCompareExpandPurchases({})
-    setCompareExpandExpenses({})
+    setCompareUnifiedExpandPurchases(false)
+    setCompareUnifiedExpandExpenses(false)
   }, [incomeCompareFetchId])
 
   const runIncomeFetch = React.useCallback(() => {
@@ -672,6 +1071,51 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     }))
   }, [compareGranularity, compareIncomeRows, incomeYearCompare])
 
+  const compareMergedPurchaseVendors = React.useMemo(
+    () => mergePurchaseVendorKeysForCompare(compareIncomeRows),
+    [compareIncomeRows]
+  )
+
+  const compareMergedExpenseSubjects = React.useMemo(
+    () => mergeExpenseSubjectsForCompare(compareIncomeRows),
+    [compareIncomeRows]
+  )
+
+  const compareMergedOverlapKeys = React.useMemo(() => {
+    const s = new Set<string>()
+    for (const { data } of compareIncomeRows) {
+      for (const k of data.diagnostics?.purchaseInboundBankOverlapVendorKeys || []) s.add(k)
+    }
+    return [...s].sort()
+  }, [compareIncomeRows])
+
+  const compareMergedWarnings = React.useMemo(() => {
+    const lines = new Set<string>()
+    for (const { data } of compareIncomeRows) {
+      for (const w of data.diagnostics?.warnings || []) lines.add(w)
+    }
+    return [...lines]
+  }, [compareIncomeRows])
+
+  const openComparePurchaseDrill = React.useCallback(
+    (ym: string, row: { key: string; label?: string }) => {
+      setCompareDrillTitle(purchaseVendorRowLabel(row, t))
+      setCompareDrillOpen(true)
+      setCompareDrillLoading(true)
+      setCompareDrillData(null)
+      void getIncomeStatementPurchaseDrillDown({
+        yearMonth: ym,
+        storeFilter: storeFilter !== "All" ? storeFilter : undefined,
+        userStore: auth?.store,
+        userRole: auth?.role,
+        vendorKey: row.key,
+      })
+        .then((d) => setCompareDrillData(d))
+        .finally(() => setCompareDrillLoading(false))
+    },
+    [storeFilter, auth?.store, auth?.role, t]
+  )
+
   const yearMonthOptions = getBangkokRecentYearMonths(60).map((value) => {
     const [y, m] = value.split("-").map(Number)
     return { value, label: `${y}년 ${m}월` }
@@ -727,19 +1171,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         ? t("pettyScopeOffice") || "본사"
         : storeFilter
 
-  const purchaseVendorLabel = (key: string) => {
-    if (key === "__pl_hq_orders__") return t("pL_purchaseHqOrders") || "본사·물류 발주"
-    if (key === "__pl_vendor_unknown__") return t("pL_vendorUnknown") || "거래처 미지정"
-    return key
-  }
-
   const buildXlsxRows = React.useCallback((): IncomeStatementXlsxRow[] => {
     if (!data || !view) return []
-    const vendorLabel = (key: string) => {
-      if (key === "__pl_hq_orders__") return t("pL_purchaseHqOrders") || "본사·물류 발주"
-      if (key === "__pl_vendor_unknown__") return t("pL_vendorUnknown") || "거래처 미지정"
-      return key
-    }
     const rows: IncomeStatementXlsxRow[] = []
     rows.push({ label: t("pL_sales"), amount: view.sales, pct: "100.0%" })
     rows.push({
@@ -755,7 +1188,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     if ((data.purchaseByVendor?.length || 0) > 0) {
       for (const row of data.purchaseByVendor!) {
         rows.push({
-          label: `      ${vendorLabel(row.key)}`,
+          label: `      ${purchaseVendorRowLabel(row, t)}`,
           amount: row.amount,
           pct: view.pct(row.amount),
         })
@@ -1045,89 +1478,533 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                       {t("inNoData") || "조회된 내역이 없습니다."}
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-md border">
-                      <table className="text-sm w-full min-w-max">
-                        <thead>
-                          <tr className="border-b bg-muted/40">
-                            <th className="text-left p-2 font-medium sticky left-0 bg-muted/40 z-10 min-w-[140px]">
-                              {t("pL_colItem")}
-                            </th>
-                            {incomeCompareCols.map((c) => (
-                              <th key={c.key} className="text-right p-2 font-medium font-mono whitespace-nowrap">
-                                {c.label}
+                    <>
+                      {showExpenseDetails && compareMergedWarnings.length > 0 && (
+                        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          {compareMergedWarnings.join(" / ")}
+                        </div>
+                      )}
+                      {compareMergedOverlapKeys.length > 0 && (
+                        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          <p className="mb-1.5 leading-relaxed">{t("pL_diagInboundBankOverlap")}</p>
+                          <ul className="list-disc pl-4 space-y-0.5 font-mono text-[11px]">
+                            {compareMergedOverlapKeys.map((vk) => {
+                              let lbl: string | undefined
+                              for (const { data } of compareIncomeRows) {
+                                lbl = purchaseVendorLabelForKey(vk, data.purchaseByVendor)
+                                if (lbl) break
+                              }
+                              return (
+                                <li key={vk}>
+                                  {vk}
+                                  {lbl ? (
+                                    <span className="text-amber-950/80 font-sans not-italic"> — {lbl}</span>
+                                  ) : null}
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                      {compareGranularity === "year" && (
+                        <p className="text-xs text-muted-foreground">{t("fs_compareYearOnlySummaryNote")}</p>
+                      )}
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="text-sm w-full min-w-max">
+                          <caption className="caption-top text-left text-sm font-semibold text-foreground py-2 px-2 border-b border-border">
+                            {t("incomeStatementTitle")}
+                          </caption>
+                          <thead>
+                            <tr className="border-b bg-muted/40">
+                              <th className="text-left p-2 font-medium sticky left-0 bg-muted/40 z-10 min-w-[160px]">
+                                {t("pL_colItem")}
                               </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {incomeComparePlRows.map((row) => (
-                            <tr key={row.key} className="border-b last:border-0">
-                              <td className="p-2 font-medium sticky left-0 bg-background z-10">{row.label}</td>
-                              {incomeCompareCols.map((c) => {
-                                const m = c.metrics
-                                const v = m ? row.pick(m) : null
-                                const isNet = row.key === "net"
-                                return (
-                                  <td
-                                    key={c.key}
-                                    className={`p-2 text-right font-mono whitespace-nowrap ${
-                                      isNet && v != null && v < 0 ? "text-destructive" : ""
-                                    } ${isNet && v != null && v >= 0 ? "font-semibold text-primary" : ""}`}
-                                  >
-                                    {v == null || m == null ? "—" : formatBath(v)}
-                                  </td>
-                                )
-                              })}
+                              {incomeCompareCols.map((c) => (
+                                <th
+                                  key={c.key}
+                                  className="text-right p-2 font-medium font-mono whitespace-nowrap"
+                                >
+                                  {c.label}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {incomeCompareCols.length > 0 && (
-                    <div className="pt-6 mt-2 border-t space-y-4">
-                      <p className="text-sm font-medium">{t("fs_monthlyPlDetailHeading")}</p>
-                      {compareIncomeRows.map(({ ym, data: rowData }) => {
-                        if (rowData.error) {
-                          return (
-                            <div
-                              key={ym}
-                              className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm"
-                            >
-                              <span className="font-medium font-mono">{ym}</span>
-                              <span className="text-muted-foreground ml-2">{rowData.error}</span>
-                            </div>
-                          )
-                        }
-                        const v = incomeStatementViewFromApiData(rowData)
-                        return (
-                          <div key={ym} className="overflow-x-auto">
-                            <IncomePlDetailTableContent
-                              data={rowData}
-                              view={v}
-                              periodLine={`${ym} · ${storeLabel}`}
-                              showExpenseDetails={showExpenseDetails}
-                              expandPurchases={!!compareExpandPurchases[ym]}
-                              onTogglePurchases={() =>
-                                setCompareExpandPurchases((prev) => ({
-                                  ...prev,
-                                  [ym]: !prev[ym],
-                                }))
-                              }
-                              expandExpenseAccounts={!!compareExpandExpenses[ym]}
-                              onToggleExpenseAccounts={() =>
-                                setCompareExpandExpenses((prev) => ({
-                                  ...prev,
-                                  [ym]: !prev[ym],
-                                }))
-                              }
-                              titleClassName="text-base font-semibold mb-1"
-                              wrapperClassName="rounded-md border bg-muted/20 p-3 text-foreground"
-                            />
-                          </div>
-                        )
-                      })}
-                    </div>
+                          </thead>
+                          <tbody>
+                            {compareGranularity === "year" ? (
+                              <>
+                                {incomeComparePlRows.map((row) => (
+                                  <React.Fragment key={row.key}>
+                                    <tr
+                                      className={`border-b last:border-0 ${
+                                        row.key === "purchases" || row.key === "expenses"
+                                          ? "cursor-pointer hover:bg-muted/40 select-none"
+                                          : ""
+                                      }`}
+                                      onClick={
+                                        row.key === "purchases"
+                                          ? () => setCompareUnifiedExpandPurchases((v) => !v)
+                                          : row.key === "expenses"
+                                            ? () => setCompareUnifiedExpandExpenses((v) => !v)
+                                            : undefined
+                                      }
+                                    >
+                                      <td className="p-2 font-medium sticky left-0 bg-background z-10">
+                                        {row.key === "purchases" || row.key === "expenses" ? (
+                                          <span className="inline-flex items-center gap-1">
+                                            {row.key === "purchases" ? (
+                                              compareUnifiedExpandPurchases ? (
+                                                <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                                              ) : (
+                                                <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                                              )
+                                            ) : compareUnifiedExpandExpenses ? (
+                                              <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                                            ) : (
+                                              <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                                            )}
+                                            {row.label}
+                                          </span>
+                                        ) : (
+                                          row.label
+                                        )}
+                                      </td>
+                                      {incomeCompareCols.map((c) => {
+                                        const m = c.metrics
+                                        const v = m ? row.pick(m) : null
+                                        const isNet = row.key === "net"
+                                        return (
+                                          <td
+                                            key={c.key}
+                                            className={`p-2 text-right font-mono whitespace-nowrap ${
+                                              isNet && v != null && v < 0 ? "text-destructive" : ""
+                                            } ${isNet && v != null && v >= 0 ? "font-semibold text-primary" : ""}`}
+                                          >
+                                            {v == null || m == null ? "—" : formatBath(v)}
+                                          </td>
+                                        )
+                                      })}
+                                    </tr>
+                                    {row.key === "purchases" &&
+                                      compareUnifiedExpandPurchases &&
+                                      compareMergedPurchaseVendors.map((pv) => (
+                                        <tr
+                                          key={`y-pv-${pv.key}`}
+                                          className="border-b bg-muted/10 last:border-0"
+                                        >
+                                          <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            {purchaseVendorRowLabel(pv, t)}
+                                          </td>
+                                          {incomeCompareCols.map((c) => (
+                                            <td
+                                              key={c.key}
+                                              className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                              title={t("fs_compareYearAggregateHint")}
+                                            >
+                                              {formatBath(
+                                                yearlyPurchaseVendorAmount(compareIncomeRows, c.key, pv.key)
+                                              )}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    {row.key === "purchases" && compareUnifiedExpandPurchases && (
+                                      <tr className="border-b bg-muted/10 last:border-0">
+                                        <td
+                                          colSpan={incomeCompareCols.length + 1}
+                                          className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed"
+                                        >
+                                          {t("pL_purchaseCompositionNote")}
+                                        </td>
+                                      </tr>
+                                    )}
+                                    {row.key === "expenses" &&
+                                      compareUnifiedExpandExpenses &&
+                                      compareMergedExpenseSubjects.map((sub) => (
+                                        <tr
+                                          key={`y-es-${sub.accountSubjectId ?? "u"}`}
+                                          className="border-b bg-muted/10 last:border-0"
+                                        >
+                                          <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                            {sub.accountSubjectId == null
+                                              ? t("pL_accountUnclassified") || "계정 미지정"
+                                              : formatAccountSubjectLabel(lang, {
+                                                  code: sub.code,
+                                                  name: sub.name,
+                                                  nameEn: sub.nameEn,
+                                                  nameTh: sub.nameTh,
+                                                }) ||
+                                                (sub.accountSubjectId != null
+                                                  ? `#${sub.accountSubjectId}`
+                                                  : "")}
+                                          </td>
+                                          {incomeCompareCols.map((c) => (
+                                            <td
+                                              key={c.key}
+                                              className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                              title={t("fs_compareYearAggregateHint")}
+                                            >
+                                              {formatBath(
+                                                yearlyExpenseSubjectAmount(
+                                                  compareIncomeRows,
+                                                  c.key,
+                                                  sub.accountSubjectId
+                                                )
+                                              )}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    {row.key === "expenses" &&
+                                      compareUnifiedExpandExpenses &&
+                                      showExpenseDetails && (
+                                        <>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                              - {t("pL_expenseSourcePetty")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "pettyCash"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                              - {t("pL_expenseSourceBank")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "bankWithdraw"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                              - {t("pL_expenseSourceFixed")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "fixedExpenses"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        </>
+                                      )}
+                                  </React.Fragment>
+                                ))}
+                              </>
+                            ) : (
+                              <>
+                                <tr className="border-b">
+                                  <td className="p-2 font-medium sticky left-0 bg-background z-10">
+                                    {t("pL_sales")}
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    <td
+                                      key={ym}
+                                      className="p-2 text-right font-mono whitespace-nowrap"
+                                    >
+                                      {rowData.error ? "—" : formatBath(Number(rowData.sales) || 0)}
+                                    </td>
+                                  ))}
+                                </tr>
+                                <tr className="border-b">
+                                  <td className="p-2 text-muted-foreground pl-4 sticky left-0 bg-background z-10">
+                                    + {t("pL_beginningInv")}
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    <td
+                                      key={ym}
+                                      className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
+                                    >
+                                      {rowData.error
+                                        ? "—"
+                                        : formatBath(Number(rowData.beginningInventory) || 0)}
+                                    </td>
+                                  ))}
+                                </tr>
+                                <tr
+                                  className="border-b cursor-pointer hover:bg-muted/40 select-none"
+                                  onClick={() => setCompareUnifiedExpandPurchases((v) => !v)}
+                                >
+                                  <td className="p-2 text-muted-foreground pl-4 sticky left-0 bg-background z-10">
+                                    <span className="inline-flex items-center gap-1">
+                                      {compareUnifiedExpandPurchases ? (
+                                        <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                                      )}
+                                      + {t("pL_purchases")}
+                                    </span>
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    <td
+                                      key={ym}
+                                      className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
+                                    >
+                                      {rowData.error ? "—" : formatBath(Number(rowData.purchases) || 0)}
+                                    </td>
+                                  ))}
+                                </tr>
+                                {compareUnifiedExpandPurchases &&
+                                  compareMergedPurchaseVendors.map((pv) => (
+                                    <tr key={pv.key} className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        {purchaseVendorRowLabel(pv, t)}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => {
+                                        const amt = purchaseAmountForVendor(rowData, pv.key)
+                                        const canDrill = !rowData.error && amt > 0
+                                        return (
+                                          <td
+                                            key={ym}
+                                            className={`p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap ${
+                                              canDrill ? "cursor-pointer hover:bg-muted/50 underline-offset-2" : ""
+                                            }`}
+                                            title={canDrill ? t("pL_purchaseDrillClickHint") : undefined}
+                                            onClick={
+                                              canDrill
+                                                ? (e) => {
+                                                    e.stopPropagation()
+                                                    openComparePurchaseDrill(ym, pv)
+                                                  }
+                                                : undefined
+                                            }
+                                          >
+                                            {rowData.error ? "—" : formatBath(amt)}
+                                          </td>
+                                        )
+                                      })}
+                                    </tr>
+                                  ))}
+                                {compareUnifiedExpandPurchases && (
+                                  <tr className="border-b bg-muted/10">
+                                    <td
+                                      colSpan={compareIncomeRows.length + 1}
+                                      className="py-2 pl-6 pr-2 text-xs text-muted-foreground leading-relaxed"
+                                    >
+                                      {t("pL_purchaseCompositionNote")}
+                                    </td>
+                                  </tr>
+                                )}
+                                <tr className="border-b">
+                                  <td className="p-2 text-muted-foreground pl-4 sticky left-0 bg-background z-10">
+                                    - {t("pL_endingInv")}
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    <td
+                                      key={ym}
+                                      className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
+                                    >
+                                      {rowData.error
+                                        ? "—"
+                                        : formatBath(Number(rowData.endingInventory) || 0)}
+                                    </td>
+                                  ))}
+                                </tr>
+                                <tr className="border-b">
+                                  <td className="p-2 text-muted-foreground sticky left-0 bg-background z-10">
+                                    = {t("pL_cogs")}
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    <td
+                                      key={ym}
+                                      className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
+                                    >
+                                      {rowData.error ? "—" : formatBath(incomeStatementCogs(rowData))}
+                                    </td>
+                                  ))}
+                                </tr>
+                                <tr className="border-b">
+                                  <td className="p-2 font-medium text-primary sticky left-0 bg-background z-10">
+                                    {t("pL_grossProfit")}
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => {
+                                    const m = incomeMetricsForCompare(rowData)
+                                    const v = m?.grossProfit ?? null
+                                    return (
+                                      <td
+                                        key={ym}
+                                        className={`p-2 text-right font-mono font-medium whitespace-nowrap ${
+                                          v != null && v < 0 ? "text-destructive" : "text-primary"
+                                        }`}
+                                      >
+                                        {v == null ? "—" : formatBath(v)}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                                <tr
+                                  className="border-b cursor-pointer hover:bg-muted/40 select-none"
+                                  onClick={() => setCompareUnifiedExpandExpenses((v) => !v)}
+                                >
+                                  <td className="p-2 text-muted-foreground sticky left-0 bg-background z-10">
+                                    <span className="inline-flex items-center gap-1">
+                                      {compareUnifiedExpandExpenses ? (
+                                        <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 shrink-0 opacity-70" />
+                                      )}
+                                      - {t("pL_expenses")}
+                                    </span>
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    <td
+                                      key={ym}
+                                      className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
+                                    >
+                                      {rowData.error ? "—" : formatBath(Number(rowData.expenses) || 0)}
+                                    </td>
+                                  ))}
+                                </tr>
+                                {compareUnifiedExpandExpenses &&
+                                  compareMergedExpenseSubjects.map((sub) => (
+                                    <tr key={String(sub.accountSubjectId ?? "u")} className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        {sub.accountSubjectId == null
+                                          ? t("pL_accountUnclassified") || "계정 미지정"
+                                          : formatAccountSubjectLabel(lang, {
+                                              code: sub.code,
+                                              name: sub.name,
+                                              nameEn: sub.nameEn,
+                                              nameTh: sub.nameTh,
+                                            }) ||
+                                            (sub.accountSubjectId != null
+                                              ? `#${sub.accountSubjectId}`
+                                              : "")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(
+                                                expenseAmountForSubject(rowData, sub.accountSubjectId)
+                                              )}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                {compareUnifiedExpandExpenses && showExpenseDetails && (
+                                  <>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        - {t("pL_expenseSourcePetty")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.pettyCash ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        - {t("pL_expenseSourceBank")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.bankWithdraw ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
+                                        - {t("pL_expenseSourceFixed")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-xs text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.fixedExpenses ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  </>
+                                )}
+                                <tr className="border-b last:border-0">
+                                  <td className="p-2 font-bold sticky left-0 bg-background z-10">
+                                    {t("pL_netProfit")}
+                                  </td>
+                                  {compareIncomeRows.map(({ ym, data: rowData }) => {
+                                    const m = incomeMetricsForCompare(rowData)
+                                    const v = m?.netProfit ?? null
+                                    return (
+                                      <td
+                                        key={ym}
+                                        className={`p-2 text-right font-mono font-bold whitespace-nowrap ${
+                                          v != null && v < 0 ? "text-destructive" : ""
+                                        } ${v != null && v >= 0 ? "text-primary" : ""}`}
+                                      >
+                                        {v == null ? "—" : formatBath(v)}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              </>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <IncomePurchaseDrillDialog
+                        open={compareDrillOpen}
+                        onOpenChange={(o) => {
+                          setCompareDrillOpen(o)
+                          if (!o) {
+                            setCompareDrillData(null)
+                            setCompareDrillLoading(false)
+                          }
+                        }}
+                        purchaseDrillTitle={compareDrillTitle}
+                        purchaseDrillLoading={compareDrillLoading}
+                        purchaseDrillData={compareDrillData}
+                        t={t}
+                      />
+                    </>
                   )}
                 </div>
               )}
@@ -1261,6 +2138,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                     expandExpenseAccounts={expandExpenseAccounts}
                     onToggleExpenseAccounts={() => setExpandExpenseAccounts((v) => !v)}
                     printRef={printRef}
+                    purchaseDrillContext={{
+                      yearMonth: data.yearMonth,
+                      storeFilter: storeFilter !== "All" ? storeFilter : undefined,
+                      userStore: auth?.store,
+                      userRole: auth?.role,
+                    }}
                   />
                 </div>
               ) : !isRangeCompare ? (

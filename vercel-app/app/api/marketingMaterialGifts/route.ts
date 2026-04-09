@@ -5,11 +5,20 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
   const n = typeof val === 'number' ? val : parseFloat(String(val))
   return Number.isNaN(n) ? 0 : n
+}
+
+function normalizeStoreName(val: unknown): string {
+  return String(val ?? '').trim()
+}
+
+function isStoreScopedRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
 }
 
 /** 사은품 배정/배포 목록 조회 */
@@ -76,10 +85,34 @@ export async function POST(req: NextRequest) {
       distributedQty?: number
       remainingQty?: number
       ruleNote?: string
+      userRole?: string
+      userStore?: string
+      user_role?: string
+      user_store?: string
     }
 
     const materialId = String(body.materialId ?? '').trim()
-    const storeName = String(body.storeName ?? '').trim()
+    const userRole = String(body.userRole ?? body.user_role ?? '')
+    const userStore = normalizeStoreName(body.userStore ?? body.user_store ?? '')
+    const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
+    if (isStoreScopedRole(userRole) && !scopedStore) {
+      return NextResponse.json(
+        { success: false, message: '매니저/가맹점주 저장에는 사용자 매장 정보가 필요합니다.' },
+        { headers }
+      )
+    }
+    const requestedStoreName = String(body.storeName ?? '').trim()
+    if (
+      scopedStore &&
+      requestedStoreName &&
+      requestedStoreName.toLowerCase() !== scopedStore.toLowerCase()
+    ) {
+      return NextResponse.json(
+        { success: false, message: `매니저/가맹점주는 본인 매장(${scopedStore})만 저장할 수 있습니다.` },
+        { headers }
+      )
+    }
+    const storeName = scopedStore || String(body.storeName ?? '').trim()
     const giftName = String(body.giftName ?? '').trim()
     const campaignIdRaw = String(body.campaignId ?? '').trim()
     const campaignId = campaignIdRaw ? Number(campaignIdRaw) : null

@@ -24,6 +24,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 import { EMPLOYEE_NAME_TITLE_CANONICAL } from "@/lib/employee-display-name"
+import { labelForStore } from "@/lib/store-list-keys"
 
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
@@ -106,6 +107,8 @@ interface EmployeeFormProps {
   form: EmployeeFormData
   onChange: (form: EmployeeFormData) => void
   stores: string[]
+  /** erp_stores 연동 시 매장 Select 표시명 */
+  storeLabels?: Record<string, string>
   /** 직무 옵션 (Supabase employees.job 기준). 없으면 기본 4종 + Logistic */
   jobOptions?: string[]
   onSave: () => void
@@ -131,6 +134,7 @@ export function EmployeeForm({
   form,
   onChange,
   stores,
+  storeLabels = {},
   jobOptions = DEFAULT_JOB_OPTIONS,
   onSave,
   onNew,
@@ -229,7 +233,7 @@ export function EmployeeForm({
                 <SelectContent>
                   <SelectItem value="__none__">-</SelectItem>
                   {stores.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                    <SelectItem key={s} value={s}>{labelForStore(storeLabels, s)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -436,7 +440,7 @@ export function EmployeeForm({
                       checked={form.extraStores.includes(st)}
                       onCheckedChange={() => toggleExtraStore(st)}
                     />
-                    <span>{st}</span>
+                    <span>{labelForStore(storeLabels, st)}</span>
                   </label>
                 ))}
             </div>

@@ -146,6 +146,16 @@ export async function GET(request: NextRequest) {
     kitchenRouteByMenu: {} as Record<string, 0 | 1 | 2 | 3>,
     kitchenRouteByCategory: {} as Record<string, 0 | 1 | 2 | 3>,
     kitchenRouteByCategoryMain: {} as Record<string, 0 | 1 | 2 | 3>,
+    dualMonitorEnabled: false,
+    customerDisplayAutoOpen: true,
+    customerDisplayMonitorPreference: 'secondary-first' as const,
+    customerDisplayTheme: 'dark' as const,
+    customerDisplayDefaultState: 'idle' as const,
+    customerDisplayIdleMessage: '',
+    customerDisplayPaymentMessage: '',
+    customerDisplayQrPayload: '',
+    customerDisplayShowOrderSummary: true,
+    customerDisplayShowOrderTotal: true,
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -231,6 +241,16 @@ export async function GET(request: NextRequest) {
       kitchen_route_by_menu?: unknown
       kitchen_route_by_category?: unknown
       kitchen_route_by_category_main?: unknown
+      dual_monitor_enabled?: boolean
+      customer_display_auto_open?: boolean
+      customer_display_monitor_preference?: string
+      customer_display_theme?: string
+      customer_display_default_state?: string
+      customer_display_idle_message?: string
+      customer_display_payment_message?: string
+      customer_display_qr_payload?: string
+      customer_display_show_order_summary?: boolean
+      customer_display_show_order_total?: boolean
     }[] | null
 
     const raw = rows?.[0]
@@ -359,6 +379,25 @@ export async function GET(request: NextRequest) {
       kitchenRouteByMenu: parseKitchenRouteMapDb(raw?.kitchen_route_by_menu),
       kitchenRouteByCategory: parseKitchenRouteMapDb(raw?.kitchen_route_by_category),
       kitchenRouteByCategoryMain: parseKitchenRouteMapDb(raw?.kitchen_route_by_category_main),
+      dualMonitorEnabled: Boolean(raw?.dual_monitor_enabled),
+      customerDisplayAutoOpen: raw?.customer_display_auto_open !== false,
+      customerDisplayMonitorPreference:
+        String(raw?.customer_display_monitor_preference || 'secondary-first') === 'primary-only'
+          ? 'primary-only'
+          : 'secondary-first',
+      customerDisplayTheme:
+        String(raw?.customer_display_theme || 'dark') === 'light'
+          ? 'light'
+          : String(raw?.customer_display_theme || 'dark') === 'brand'
+            ? 'brand'
+            : 'dark',
+      customerDisplayDefaultState:
+        String(raw?.customer_display_default_state || 'idle') === 'qr' ? 'qr' : 'idle',
+      customerDisplayIdleMessage: String(raw?.customer_display_idle_message ?? '').trim(),
+      customerDisplayPaymentMessage: String(raw?.customer_display_payment_message ?? '').trim(),
+      customerDisplayQrPayload: String(raw?.customer_display_qr_payload ?? '').trim(),
+      customerDisplayShowOrderSummary: raw?.customer_display_show_order_summary !== false,
+      customerDisplayShowOrderTotal: raw?.customer_display_show_order_total !== false,
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)

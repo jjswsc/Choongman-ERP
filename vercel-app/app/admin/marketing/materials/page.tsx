@@ -474,6 +474,7 @@ export default function MarketingMaterialsPage() {
         note: materialAddForm.note.trim(),
         userRole: auth?.role,
         userName: auth?.user,
+        userStore: auth?.store,
       })
       if (res.success) {
         const materialId = String(res.id ?? "").trim()
@@ -490,6 +491,8 @@ export default function MarketingMaterialsPage() {
                 installedOn: row.installedOn.trim(),
                 removedOn: row.removedOn.trim() || null,
                 note: row.note.trim(),
+                userRole: auth?.role,
+                userStore: auth?.store,
               })
             )
           )

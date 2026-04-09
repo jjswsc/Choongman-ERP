@@ -1,5 +1,6 @@
 import { supabaseCountFilter, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
+import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 
 const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 const BASE_LIMIT = 20000
@@ -16,6 +17,8 @@ export type IncomeStatementLineDetail = {
   /** UI에서 `__pl_hq_orders__` 등 특수 키면 i18n으로 치환 */
   key: string
   amount: number
+  /** vendors.name — 있으면 화면·엑셀에 코드 대신 표시 */
+  label?: string
 }
 
 export type IncomeStatementReport = {
@@ -52,6 +55,8 @@ export type IncomeStatementReport = {
   diagnostics?: {
     warnings: string[]
     limits: Record<string, { fetched: number; limit: number; total?: number }>
+    /** 직접 입고·통장 매입지급에 동시에 잡힌 거래처 키 — 이중 집계 가능성 안내 */
+    purchaseInboundBankOverlapVendorKeys?: string[]
   }
 }
 
@@ -96,6 +101,190 @@ export function isOfficeStore(s: string): boolean {
   return OFFICE_STORES.some((o) => x === o || x.toLowerCase().includes('office'))
 }
 
+/**
+ * 손익·재고 등 매장 스코프: 드롭다운 값(직원 store 문자열) + POS `store_code` 표기(CM 접두 등) 통일.
+ * @see storeCodeSearchVariants — 매출 API와 동일 규칙
+ */
+function incomeStoreSearchVariants(term: string): string[] {
+  const raw = String(term || '').trim()
+  if (!raw) return []
+  return [...new Set([raw, ...storeCodeSearchVariants(raw)])].filter(Boolean)
+}
+
+/** PostgREST 단일 컬럼: 변형 중 하나라도 ilike 일치 (이름·코드 혼용 DB 대응) */
+function buildStoreFieldOrIlikeFragment(field: string, storeFilter: string): string {
+  if (!storeFilter || storeFilter === 'All') return ''
+  if (storeFilter === '입고등록') {
+    return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`
+  }
+  const variants = incomeStoreSearchVariants(storeFilter)
+  if (variants.length === 1) {
+    return `${field}=ilike.${encodeURIComponent(sqlIlikeContains(variants[0]))}`
+  }
+  const inner = variants.map((v) => `${field}.ilike.${encodeURIComponent(sqlIlikeContains(v))}`).join(',')
+  return `or=(${inner})`
+}
+
+/**
+ * pos_orders.store_code 기준: **정확 일치(eq)** + **부분 일치(ilike)** 를 OR로 묶음.
+ * ERP 매장명과 POS 코드가 같을 때는 eq가 우선, 다를 때 ilike·CM 변형으로 보조.
+ */
+function buildPosStoreCodeFilterFragment(storeFilter: string): string {
+  if (!storeFilter || storeFilter === 'All') return ''
+  const variants = incomeStoreSearchVariants(storeFilter)
+  const clauses: string[] = []
+  const seen = new Set<string>()
+  for (const v of variants) {
+    const t = String(v).trim()
+    if (!t) continue
+    const eq = `store_code.eq.${encodeURIComponent(t)}`
+    const like = `store_code.ilike.${encodeURIComponent(sqlIlikeContains(t))}`
+    for (const c of [eq, like]) {
+      if (!seen.has(c)) {
+        seen.add(c)
+        clauses.push(c)
+      }
+    }
+  }
+  if (clauses.length === 0) return ''
+  if (clauses.length === 1) return clauses[0]
+  return `or=(${clauses.join(',')})`
+}
+
+/** 손익·통장 행 등 JS 측 매장 매칭 (변형 허용) */
+function storeMatchesIncomeFilter(storeValue: string, filter: string): boolean {
+  const a = String(storeValue || '').trim().toLowerCase()
+  if (!filter || filter.trim().toLowerCase() === 'all') return true
+  if (!a) return false
+  for (const v of incomeStoreSearchVariants(filter)) {
+    const b = String(v || '').trim().toLowerCase()
+    if (!b) continue
+    if (a === b || a.includes(b) || b.includes(a)) return true
+  }
+  return false
+}
+
+function sqlIlikeContains(term: string): string {
+  const t = String(term || '').trim()
+  if (!t) return '%'
+  return `%${t.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
+}
+
+/** vendors.code(대소문자 무시) → 표시용 이름 */
+async function loadVendorCodeNormToNameMap(): Promise<Record<string, string>> {
+  try {
+    const rows = (await supabaseSelect('vendors', { select: 'code,name', limit: 20000 })) as
+      | { code?: string; name?: string }[]
+      | null
+    const m: Record<string, string> = {}
+    for (const r of rows || []) {
+      const c = String(r.code || '').trim()
+      const n = String(r.name || '').trim()
+      if (!c) continue
+      m[c.toLowerCase()] = n || c
+    }
+    return m
+  } catch {
+    return {}
+  }
+}
+
+function enrichPurchaseByVendorLabels(
+  rows: IncomeStatementLineDetail[],
+  vendorNormToName: Record<string, string>
+): IncomeStatementLineDetail[] {
+  return rows.map((r) => {
+    const k = String(r.key || '').trim()
+    if (!k || k.startsWith('__pl_')) return { ...r }
+    const name = vendorNormToName[k.toLowerCase()]
+    return name ? { ...r, label: name } : { ...r }
+  })
+}
+
+/** 같은 기간에 직접입고와 통장 매입지급(purchase_payment) 모두 양수인 거래처 코드 */
+function collectInboundBankOverlapVendorKeys(
+  inbound: Record<string, number>,
+  bank: Record<string, number>
+): string[] {
+  const out: string[] = []
+  for (const k of Object.keys(inbound)) {
+    if ((Number(inbound[k]) || 0) > 0 && (Number(bank[k]) || 0) > 0) out.push(k)
+  }
+  out.sort()
+  return out
+}
+
+function mergeVendorAmountMap(target: Record<string, number>, add: Record<string, number>) {
+  for (const [k, v] of Object.entries(add)) {
+    const amt = Number(v) || 0
+    if (amt <= 0) continue
+    target[k] = (target[k] || 0) + amt
+  }
+}
+
+/**
+ * 통장 출금 중 category=purchase_payment — 손익 '매입' 거래처별 내역에 반영 (미지급 정산 지급).
+ * COGS용 입고·발주와 중복될 수 있으나, 사용자가 통장에서만 매입처를 구분해 등록한 경우 표시 누락을 막기 위함.
+ */
+async function fetchBankPurchasePaymentsByVendor(params: {
+  isHQ: boolean
+  storeFilter: string
+  startStr: string
+  endStr: string
+}): Promise<Record<string, number>> {
+  const { isHQ, storeFilter, startStr, endStr } = params
+  let accountIds: number[] = []
+  try {
+    if (isHQ) {
+      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 2000 })) as
+        | { id?: number; store?: string }[]
+        | null
+      accountIds = (bankAccRows || [])
+        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .map((a) => Number(a.id))
+        .filter((id) => !isNaN(id) && id > 0)
+    } else if (storeFilter !== 'All') {
+      const bankAccRows = (await supabaseSelectFilter(
+        'bank_accounts',
+        buildStoreFieldOrIlikeFragment('store', storeFilter),
+        { select: 'id', limit: 2000 }
+      )) as { id?: number }[] | null
+      accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
+    } else {
+      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as { id?: number }[] | null
+      accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
+    }
+  } catch {
+    return {}
+  }
+  if (accountIds.length === 0) return {}
+  const idList = accountIds.join(',')
+  let btRows: { amount?: number; vendor_code?: string; store?: string | null }[] | null
+  try {
+    btRows = (await supabaseSelectFilter(
+      'bank_transactions',
+      `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
+      { select: 'amount,vendor_code,store', limit: BASE_LIMIT }
+    )) as { amount?: number; vendor_code?: string; store?: string | null }[] | null
+  } catch {
+    return {}
+  }
+  const out: Record<string, number> = {}
+  for (const r of btRows || []) {
+    if (storeFilter !== 'All') {
+      const bts = String(r.store || '').trim()
+      if (isHQ) {
+        if (bts && !isOfficeStore(bts) && !bts.startsWith('Office-')) continue
+      } else {
+        if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
+      }
+    }
+    const v = String(r.vendor_code || '').trim() || '__pl_vendor_unknown__'
+    out[v] = (out[v] || 0) + Math.abs(Number(r.amount) || 0)
+  }
+  return out
+}
+
 export function normalizeIncomeScope(input: IncomeScopeInput): {
   yearMonth: string
   startStr: string
@@ -123,7 +312,7 @@ async function getDirectInboundPurchasesByVendor(
 ): Promise<Record<string, number>> {
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   let filter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
-  if (locationFilter) filter += `&location=ilike.${encodeURIComponent(locationFilter)}`
+  if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
 
   const rows = (await supabaseSelectFilter('stock_logs', filter, {
     select: 'item_code,qty,unit_cost,vendor_target,location',
@@ -177,7 +366,7 @@ async function getFixedExpensesAggregate(
       if (isHQ) {
         if (!isOfficeStore(st) && !st.startsWith('Office-')) continue
       } else if (storeFilter !== 'All') {
-        if (st.toLowerCase() !== storeFilter.toLowerCase()) continue
+        if (!storeMatchesIncomeFilter(st, storeFilter)) continue
       }
       const amt = Number(r.monthly_amount) || 0
       total += amt
@@ -285,7 +474,7 @@ async function getInventoryValue(
     ? getBangkokDateRangeUtc(boundary, boundary).dayStartUtcIso
     : getBangkokDateRangeUtc(boundary, boundary).nextDayStartUtcIso
   let filter = `log_date=${op}.${cutoffUtcIso}`
-  if (locationFilter) filter += `&location=ilike.${encodeURIComponent(locationFilter)}`
+  if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
 
   const rows = (await supabaseSelectFilter('stock_logs', filter, {
     select: 'location,item_code,qty',
@@ -314,6 +503,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   const warnings: string[] = []
   const limits: Record<string, { fetched: number; limit: number; total?: number }> = {}
+  let purchaseInboundBankOverlapVendorKeys: string[] = []
 
   const itemRows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost' })) as { code?: string; cost?: number }[] | null
   const itemCostMap: Record<string, number> = {}
@@ -345,7 +535,20 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     limits.orders_outbound = { fetched: outboundOrders?.length || 0, limit: BASE_LIMIT }
 
     const inboundByVendorHq = await getDirectInboundPurchasesByVendor('입고등록', startStr, endStr, itemCostMap, false)
-    purchases += Object.values(inboundByVendorHq).reduce((a, b) => a + b, 0)
+    const bankPayByVendorHq = await fetchBankPurchasePaymentsByVendor({
+      isHQ: true,
+      storeFilter,
+      startStr,
+      endStr,
+    })
+    const purchaseVendorMapHq: Record<string, number> = { ...inboundByVendorHq }
+    mergeVendorAmountMap(purchaseVendorMapHq, bankPayByVendorHq)
+    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
+      inboundByVendorHq,
+      bankPayByVendorHq
+    )
+    /** 거래처별 내역과 동일: 직접입고 + 통장 매입지급(purchase_payment) */
+    purchases += Object.values(purchaseVendorMapHq).reduce((a, b) => a + b, 0)
 
     const pettyAll = (await supabaseSelectFilter(
       'petty_cash_transactions',
@@ -407,14 +610,14 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     }
     beginningInventory = await getInventoryValue('본사', startStr, true, itemCostMap)
     endingInventory = await getInventoryValue('본사', endStr, false, itemCostMap)
-    purchaseByVendor = Object.entries(inboundByVendorHq)
+    purchaseByVendor = Object.entries(purchaseVendorMapHq)
       .filter(([, v]) => v > 0)
       .map(([key, amount]) => ({ key, amount }))
       .sort((a, b) => b.amount - a.amount)
   } else {
     const posFilter =
       `created_at=gte.${dayStartUtcIso}&created_at=lt.${nextDayStartUtcIso}` +
-      (storeFilter !== 'All' ? `&store_code=ilike.${encodeURIComponent(storeFilter)}` : '')
+      (storeFilter !== 'All' ? `&${buildPosStoreCodeFilterFragment(storeFilter)}` : '')
     const posOrders = (await supabaseSelectFilter('pos_orders', posFilter, {
       select: 'total,status',
       limit: BASE_LIMIT,
@@ -428,7 +631,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
-      (storeFilter !== 'All' ? `&store_name=eq.${encodeURIComponent(storeFilter)}` : '')
+      (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
     const orders = (await supabaseSelectFilter('orders', orderFilter, {
       select: 'total',
       limit: BASE_LIMIT,
@@ -440,11 +643,26 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       storeFilter !== 'All'
         ? await getDirectInboundPurchasesByVendor(storeFilter, startStr, endStr, itemCostMap, false)
         : await getDirectInboundPurchasesByVendor(null, startStr, endStr, itemCostMap, true)
-    const inboundTotalStore = Object.values(inboundByVendorStore).reduce((a, b) => a + b, 0)
-    purchases += ordersPurchaseSubtotal + inboundTotalStore
+    const bankPayByVendorStore = await fetchBankPurchasePaymentsByVendor({
+      isHQ: false,
+      storeFilter,
+      startStr,
+      endStr,
+    })
+    const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStore }
+    mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
+    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
+      inboundByVendorStore,
+      bankPayByVendorStore
+    )
+    /** 본사·물류 발주(orders) + 거래처별(직접입고 + 통장 매입지급) — 펼침 합계와 매입 총액 일치 */
+    const purchaseVendorDetailTotal = Object.values(purchaseVendorMapStore).reduce((a, b) => a + b, 0)
+    purchases += ordersPurchaseSubtotal + purchaseVendorDetailTotal
 
     let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
-    if (storeFilter !== 'All') pettyFilter += `&store=eq.${encodeURIComponent(storeFilter)}`
+    if (storeFilter !== 'All') {
+      pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
+    }
     const pettyRows = (await supabaseSelectFilter('petty_cash_transactions', pettyFilter, {
       select: 'amount,trans_type,account_subject_id',
       limit: BASE_LIMIT,
@@ -459,7 +677,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
     try {
       const bankAccRows = storeFilter !== 'All'
-        ? ((await supabaseSelectFilter('bank_accounts', `store=ilike.${encodeURIComponent(storeFilter)}`, { select: 'id', limit: 2000 })) as { id?: number }[] | null)
+        ? ((await supabaseSelectFilter(
+            'bank_accounts',
+            buildStoreFieldOrIlikeFragment('store', storeFilter),
+            { select: 'id', limit: 2000 }
+          )) as { id?: number }[] | null)
         : ((await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as { id?: number }[] | null)
       const accountIds = (bankAccRows || []).map((a) => a.id).filter((id): id is number => id != null)
       if (accountIds.length > 0) {
@@ -511,7 +733,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     if (ordersPurchaseSubtotal > 0) {
       purchaseByVendor.push({ key: '__pl_hq_orders__', amount: ordersPurchaseSubtotal })
     }
-    for (const [key, amount] of Object.entries(inboundByVendorStore)) {
+    for (const [key, amount] of Object.entries(purchaseVendorMapStore)) {
       if (amount > 0) purchaseByVendor.push({ key, amount })
     }
     purchaseByVendor.sort((a, b) => b.amount - a.amount)
@@ -541,6 +763,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const subjectMeta = await loadAccountSubjectMeta()
   const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
 
+  const vendorNormToName = await loadVendorCodeNormToNameMap()
+  purchaseByVendor = enrichPurchaseByVendorLabels(purchaseByVendor, vendorNormToName)
+
   return {
     yearMonth,
     startStr,
@@ -563,7 +788,276 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     },
     expenseByAccountSubject,
     purchaseByVendor,
-    diagnostics: input.includeDebug ? { warnings, limits } : undefined,
+    diagnostics:
+      input.includeDebug || purchaseInboundBankOverlapVendorKeys.length > 0
+        ? {
+            warnings: input.includeDebug ? warnings : [],
+            limits: input.includeDebug ? limits : {},
+            ...(purchaseInboundBankOverlapVendorKeys.length > 0
+              ? { purchaseInboundBankOverlapVendorKeys }
+              : {}),
+          }
+        : undefined,
+  }
+}
+
+const PURCHASE_DRILL_LIMIT = 500
+
+export type IncomeStatementPurchaseDrillInboundRow = {
+  kind: 'inbound'
+  id: number | null
+  logDate: string
+  location: string
+  itemCode: string
+  qty: number
+  unitCost: number
+  lineAmount: number
+  vendorTarget: string | null
+}
+
+export type IncomeStatementPurchaseDrillBankRow = {
+  kind: 'bank'
+  id: number
+  transDate: string
+  amount: number
+  vendorCode: string | null
+  memo: string | null
+  note: string | null
+  store: string | null
+}
+
+export type IncomeStatementPurchaseDrillOrderRow = {
+  kind: 'hq_order'
+  id: number
+  orderDate: string
+  total: number
+  storeName: string | null
+  status: string | null
+}
+
+export type IncomeStatementPurchaseDrillDownResult = {
+  vendorKey: string
+  yearMonth: string
+  startStr: string
+  endStr: string
+  storeFilter: string
+  /** 본사·물류 발주(승인) 줄 — 매장 손익에서만 */
+  isHqOrders: boolean
+  hqOrders: IncomeStatementPurchaseDrillOrderRow[]
+  inbound: IncomeStatementPurchaseDrillInboundRow[]
+  bankPayments: IncomeStatementPurchaseDrillBankRow[]
+  truncated: { inbound: boolean; bank: boolean; orders: boolean }
+}
+
+function drillVendorMatchesInboundRow(vendorKey: string, vendorTarget: string | null | undefined): boolean {
+  const raw = String(vendorTarget || '').trim()
+  if (vendorKey === '__pl_vendor_unknown__') return !raw
+  return raw === String(vendorKey || '').trim()
+}
+
+function drillVendorMatchesBankRow(vendorKey: string, vendorCode: string | null | undefined): boolean {
+  const raw = String(vendorCode || '').trim()
+  if (vendorKey === '__pl_vendor_unknown__') return !raw
+  return raw === String(vendorKey || '').trim()
+}
+
+async function loadItemCostMapForDrill(): Promise<Record<string, number>> {
+  const itemRows = (await supabaseSelect('items', { limit: 50000, select: 'code,cost' })) as { code?: string; cost?: number }[] | null
+  const itemCostMap: Record<string, number> = {}
+  for (const r of itemRows || []) {
+    const code = String(r.code || '').trim()
+    if (code) itemCostMap[code] = Number(r.cost) || 0
+  }
+  return itemCostMap
+}
+
+/** 손익 매입 거래처 행 클릭 시 — 직접입고·통장 매입지급·(매장만) 본사승인 발주 */
+export async function computeIncomeStatementPurchaseDrillDown(
+  input: IncomeScopeInput & { vendorKey: string }
+): Promise<IncomeStatementPurchaseDrillDownResult> {
+  const vendorKey = String(input.vendorKey || '').trim()
+  const scope = normalizeIncomeScope(input)
+  const { yearMonth, startStr, endStr, storeFilter, isHQ } = scope
+  const empty: IncomeStatementPurchaseDrillDownResult = {
+    vendorKey,
+    yearMonth,
+    startStr,
+    endStr,
+    storeFilter,
+    isHqOrders: false,
+    hqOrders: [],
+    inbound: [],
+    bankPayments: [],
+    truncated: { inbound: false, bank: false, orders: false },
+  }
+  if (!vendorKey) return empty
+
+  if (vendorKey === '__pl_hq_orders__') {
+    if (isHQ) return { ...empty, isHqOrders: true }
+    const orderFilter =
+      `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
+      (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
+    const orders = (await supabaseSelectFilter('orders', orderFilter, {
+      select: 'id,order_date,total,store_name,status',
+      limit: BASE_LIMIT,
+      order: 'order_date.desc',
+    })) as { id?: number; order_date?: string; total?: number; store_name?: string; status?: string }[] | null
+    const hqOrders: IncomeStatementPurchaseDrillOrderRow[] = []
+    for (const o of orders || []) {
+      const id = Number(o.id)
+      if (!id) continue
+      hqOrders.push({
+        kind: 'hq_order',
+        id,
+        orderDate: String(o.order_date || '').slice(0, 10),
+        total: Number(o.total) || 0,
+        storeName: o.store_name != null ? String(o.store_name) : null,
+        status: o.status != null ? String(o.status) : null,
+      })
+    }
+    const truncated = hqOrders.length > PURCHASE_DRILL_LIMIT
+    return {
+      ...empty,
+      isHqOrders: true,
+      hqOrders: truncated ? hqOrders.slice(0, PURCHASE_DRILL_LIMIT) : hqOrders,
+      truncated: { ...empty.truncated, orders: truncated },
+    }
+  }
+
+  const itemCostMap = await loadItemCostMapForDrill()
+  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
+  let inboundFilter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
+  if (isHQ) {
+    inboundFilter += `&${buildStoreFieldOrIlikeFragment('location', '입고등록')}`
+  } else if (storeFilter !== 'All') {
+    inboundFilter += `&${buildStoreFieldOrIlikeFragment('location', storeFilter)}`
+  }
+  const inboundRaw = (await supabaseSelectFilter('stock_logs', inboundFilter, {
+    select: 'id,log_date,location,item_code,qty,unit_cost,vendor_target',
+    limit: BASE_LIMIT,
+    order: 'log_date.desc',
+  })) as {
+    id?: number
+    log_date?: string
+    location?: string
+    item_code?: string
+    qty?: number
+    unit_cost?: number | null
+    vendor_target?: string
+  }[] | null
+
+  const excludeHqInbound = !isHQ && storeFilter === 'All'
+  const inboundAcc: IncomeStatementPurchaseDrillInboundRow[] = []
+  for (const r of inboundRaw || []) {
+    if (String(r.vendor_target || '').trim() === 'From HQ') continue
+    if (excludeHqInbound && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
+    if (!drillVendorMatchesInboundRow(vendorKey, r.vendor_target)) continue
+    const code = String(r.item_code || '').trim()
+    if (!code) continue
+    const qty = Number(r.qty) || 0
+    const unitCost =
+      r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : (itemCostMap[code] ?? 0)
+    const lineAmount = qty * unitCost
+    if (!lineAmount) continue
+    inboundAcc.push({
+      kind: 'inbound',
+      id: r.id != null ? Number(r.id) : null,
+      logDate: String(r.log_date || '').slice(0, 10),
+      location: String(r.location || '').trim(),
+      itemCode: code,
+      qty,
+      unitCost,
+      lineAmount,
+      vendorTarget: r.vendor_target != null ? String(r.vendor_target).trim() || null : null,
+    })
+  }
+  const inboundTruncated = inboundAcc.length > PURCHASE_DRILL_LIMIT
+  const inbound = inboundTruncated ? inboundAcc.slice(0, PURCHASE_DRILL_LIMIT) : inboundAcc
+
+  let accountIds: number[] = []
+  try {
+    if (isHQ) {
+      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 2000 })) as
+        | { id?: number; store?: string }[]
+        | null
+      accountIds = (bankAccRows || [])
+        .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+        .map((a) => Number(a.id))
+        .filter((id) => !isNaN(id) && id > 0)
+    } else if (storeFilter !== 'All') {
+      const bankAccRows = (await supabaseSelectFilter(
+        'bank_accounts',
+        buildStoreFieldOrIlikeFragment('store', storeFilter),
+        { select: 'id', limit: 2000 }
+      )) as { id?: number }[] | null
+      accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
+    } else {
+      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as { id?: number }[] | null
+      accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
+    }
+  } catch {
+    accountIds = []
+  }
+
+  const bankAcc: IncomeStatementPurchaseDrillBankRow[] = []
+  if (accountIds.length > 0) {
+    const idList = accountIds.join(',')
+    let btRows: {
+      id?: number
+      trans_date?: string
+      amount?: number
+      vendor_code?: string
+      memo?: string | null
+      note?: string | null
+      store?: string | null
+    }[] | null
+    try {
+      btRows = (await supabaseSelectFilter(
+        'bank_transactions',
+        `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
+        { select: 'id,trans_date,amount,vendor_code,memo,note,store', limit: BASE_LIMIT, order: 'trans_date.desc' }
+      )) as typeof btRows
+    } catch {
+      btRows = null
+    }
+    for (const r of btRows || []) {
+      if (storeFilter !== 'All') {
+        const bts = String(r.store || '').trim()
+        if (isHQ) {
+          if (bts && !isOfficeStore(bts) && !bts.startsWith('Office-')) continue
+        } else {
+          if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
+        }
+      }
+      if (!drillVendorMatchesBankRow(vendorKey, r.vendor_code)) continue
+      const id = Number(r.id)
+      if (!id) continue
+      bankAcc.push({
+        kind: 'bank',
+        id,
+        transDate: String(r.trans_date || '').slice(0, 10),
+        amount: Math.abs(Number(r.amount) || 0),
+        vendorCode: r.vendor_code != null ? String(r.vendor_code).trim() || null : null,
+        memo: r.memo != null ? String(r.memo) : null,
+        note: r.note != null ? String(r.note) : null,
+        store: r.store != null ? String(r.store) : null,
+      })
+    }
+  }
+  const bankTruncated = bankAcc.length > PURCHASE_DRILL_LIMIT
+  const bankPayments = bankTruncated ? bankAcc.slice(0, PURCHASE_DRILL_LIMIT) : bankAcc
+
+  return {
+    vendorKey,
+    yearMonth,
+    startStr,
+    endStr,
+    storeFilter,
+    isHqOrders: false,
+    hqOrders: [],
+    inbound,
+    bankPayments,
+    truncated: { inbound: inboundTruncated, bank: bankTruncated, orders: false },
   }
 }
 
@@ -590,10 +1084,12 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
         | { id?: number; store?: string; opening_balance?: number }[]
         | null)?.filter((x) => isOfficeStore(String(x.store || '')) || String(x.store || '').startsWith('Office-')) || []
     } else if (storeFilter !== 'All') {
-      bankAccounts = ((await supabaseSelectFilter('bank_accounts', `store=ilike.${encodeURIComponent(storeFilter)}`, {
-        select: 'id,store,opening_balance',
-        limit: 2000,
-      })) as { id?: number; store?: string; opening_balance?: number }[] | null) || []
+      bankAccounts =
+        ((await supabaseSelectFilter(
+          'bank_accounts',
+          `store=ilike.${encodeURIComponent(sqlIlikeContains(storeFilter))}`,
+          { select: 'id,store,opening_balance', limit: 2000 }
+        )) as { id?: number; store?: string; opening_balance?: number }[] | null) || []
     } else {
       bankAccounts = ((await supabaseSelect('bank_accounts', { select: 'id,store,opening_balance', limit: 2000 })) as
         | { id?: number; store?: string; opening_balance?: number }[]
@@ -631,9 +1127,10 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
 
   let receivables = 0
   try {
-    const receivableFilter = storeFilter !== 'All' && !isHQ
-      ? `store_name=ilike.${encodeURIComponent(storeFilter)}`
-      : 'id=gt.0'
+    const receivableFilter =
+      storeFilter !== 'All' && !isHQ
+        ? buildStoreFieldOrIlikeFragment('store_name', storeFilter)
+        : 'id=gt.0'
     const recvRows = (await supabaseSelectFilter('receivable_transactions', receivableFilter, {
       select: 'amount',
       limit: 50000,

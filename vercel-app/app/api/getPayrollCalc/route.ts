@@ -31,6 +31,7 @@ import {
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 import { employeeMeetsMinEvalLetterGrade, hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
+import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter } from '@/lib/evaluation-postgrest-filters'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
@@ -144,6 +145,77 @@ function payrollEmployeeKey(store: string, name: string, employeeId?: number | n
     employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
   if (sid > 0) return `${store}_#${sid}`
   return `${store}_${name}`
+}
+
+type EvalGradeType = 'kitchen' | 'service' | 'manager'
+type EvalGradeEntry = { grade: string; dateVal: Date | null }
+type EvalGradeMap = Record<string, Partial<Record<EvalGradeType, EvalGradeEntry>>>
+
+function evalGradeLookupKeys(store: string, name: string): string[] {
+  const s = String(store || '').trim().replace(/\s+/g, ' ')
+  const n = String(name || '').trim().replace(/\s+/g, ' ')
+  if (!s || !n) return []
+  const nNorm = normalizeEmployeeNameForGradeMatch(n) || n
+  const out = new Set<string>()
+  const add = (a: string, b: string) => {
+    if (!a || !b) return
+    out.add(`${a}|${b}`)
+    out.add(`${a.toLowerCase()}|${b.toLowerCase()}`)
+  }
+  add(s, n)
+  add(s, nNorm)
+  return Array.from(out)
+}
+
+function mergeEvalGrade(
+  map: EvalGradeMap,
+  store: string,
+  name: string,
+  type: EvalGradeType,
+  grade: string,
+  dateVal: Date | null
+) {
+  const g = String(grade || '').trim()
+  if (!g) return
+  for (const k of evalGradeLookupKeys(store, name)) {
+    const bucket = map[k] || {}
+    const prev = bucket[type]
+    if (!prev || (dateVal && (!prev.dateVal || dateVal > prev.dateVal))) {
+      bucket[type] = { grade: g, dateVal }
+    }
+    map[k] = bucket
+  }
+}
+
+function pickEvalGradeBundle(map: EvalGradeMap, store: string, name: string, nick: string) {
+  const keys = new Set<string>([
+    ...evalGradeLookupKeys(store, name),
+    ...evalGradeLookupKeys(store, normalizeEmployeeNameForGradeMatch(name)),
+  ])
+  const nickTrim = String(nick || '').trim()
+  if (nickTrim && nickTrim !== name) {
+    for (const k of evalGradeLookupKeys(store, nickTrim)) keys.add(k)
+  }
+  const pick = (type: EvalGradeType): string => {
+    let best: EvalGradeEntry | null = null
+    for (const k of keys) {
+      const hit = map[k]?.[type]
+      if (!hit) continue
+      if (!best) {
+        best = hit
+        continue
+      }
+      const bestT = best.dateVal && !isNaN(best.dateVal.getTime()) ? best.dateVal.getTime() : 0
+      const hitT = hit.dateVal && !isNaN(hit.dateVal.getTime()) ? hit.dateVal.getTime() : 0
+      if (hitT >= bestT) best = hit
+    }
+    return best?.grade || ''
+  }
+  return {
+    kitchenGrade: pick('kitchen'),
+    serviceGrade: pick('service'),
+    managerGrade: pick('manager'),
+  }
 }
 
 /** store+name / store+정규화이름 양쪽 키에 걸린 승인 휴가를 한 직원 기준으로 합침(근면·결석 연동 누락 방지) */
@@ -544,6 +616,9 @@ export interface PayrollCalcRow {
   employeeCode?: string
   dept: string
   role: string
+  kitchenGrade?: string
+  serviceGrade?: string
+  managerGrade?: string
   salary: number
   posAllow: number
   hazAllow: number
@@ -709,6 +784,27 @@ export async function GET(request: NextRequest) {
     if (empLoadErr) throw empLoadErr
 
     const hazEvalRules = await loadPayrollHazEvalGradeRules()
+    const evalGradeMap: EvalGradeMap = {}
+    for (const evalType of ['kitchen', 'service', 'manager'] as const) {
+      const evalRows = (await supabaseSelectFilterAllPages(
+        'evaluation_results',
+        postgrestEvalTypeInFilter(evalType),
+        {
+          order: EVAL_RESULTS_ORDER,
+          select: 'store_name,employee_name,final_grade,eval_date',
+          pageSize: 8000,
+          maxRows: 40_000,
+        }
+      )) as { store_name?: string; employee_name?: string; final_grade?: string; eval_date?: string }[]
+      for (const row of evalRows || []) {
+        const st = String(row.store_name || '').trim().replace(/\s+/g, ' ')
+        const nm = String(row.employee_name || '').trim().replace(/\s+/g, ' ')
+        const gr = String(row.final_grade || '').trim()
+        if (!st || !nm || !gr) continue
+        const d = row.eval_date ? new Date(row.eval_date) : null
+        mergeEvalGrade(evalGradeMap, st, nm, evalType, gr, d && !isNaN(d.getTime()) ? d : null)
+      }
+    }
 
     const loadAttRows = async () => {
       try {
@@ -996,6 +1092,10 @@ export async function GET(request: NextRequest) {
 
       const dept = String(e.job || '').trim()
       const role = String(e.role || '').trim()
+      const gradeBundle = pickEvalGradeBundle(evalGradeMap, store, name, String((e as { nick?: string }).nick || ''))
+      const kitchenGrade = gradeBundle.kitchenGrade
+      const serviceGrade = gradeBundle.serviceGrade
+      const managerGrade = gradeBundle.managerGrade
       const isDirectorRole = role.toLowerCase().includes('director')
       const salType = String(e.sal_type || 'Monthly').trim().toLowerCase()
       const isHourly = /시급|hourly|hour|part-time|part time/.test(salType)
@@ -1173,11 +1273,12 @@ export async function GET(request: NextRequest) {
 
       const isKitchen = /주방|kitchen|chef|쿡|cook/i.test(dept)
       const empGrade = String((e as EmpRowPayroll).grade || '').trim()
+      const evalGradeForHaz = kitchenGrade || empGrade
       const hazAllow = hazAllowEligibleWithEvalGrade(
         isKitchen,
         hazAllowPerDay,
         workDays,
-        empGrade,
+        evalGradeForHaz,
         hazEvalRules
       )
         ? Math.floor(workDays * hazAllowPerDay)
@@ -1333,11 +1434,11 @@ export async function GET(request: NextRequest) {
         hazAllowPerDay > 0 &&
         workDays > 0 &&
         hazEvalRules.requireEvalGrade &&
-        !employeeMeetsMinEvalLetterGrade(empGrade, hazEvalRules.minEvalGrade)
+        !employeeMeetsMinEvalLetterGrade(evalGradeForHaz, hazEvalRules.minEvalGrade)
       ) {
         explain.hazAllow.push({
           reason: '위험수당 미지급',
-          detail: `평가등급 ${hazEvalRules.minEvalGrade} 이상 필요 (현재: ${empGrade || '미등록'})`,
+          detail: `평가등급 ${hazEvalRules.minEvalGrade} 이상 필요 (현재: ${evalGradeForHaz || '미등록'})`,
           amount: 0,
         })
       }
@@ -1515,6 +1616,9 @@ export async function GET(request: NextRequest) {
         ...(employeeCode ? { employeeCode } : {}),
         dept,
         role,
+        ...(kitchenGrade ? { kitchenGrade } : {}),
+        ...(serviceGrade ? { serviceGrade } : {}),
+        ...(managerGrade ? { managerGrade } : {}),
         salary,
         posAllow: posAllowAmount,
         hazAllow,

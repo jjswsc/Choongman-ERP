@@ -31,6 +31,7 @@ import {
   WINDOWS_ERP_SETUP_PATH,
   WINDOWS_POS_SETUP_PATH,
 } from "@/lib/windows-installer-copy"
+import { labelForStore } from "@/lib/store-list-keys"
 import {
   isBrowserOnline,
   runReachabilityProbe,
@@ -108,6 +109,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const router = useRouter()
   const { auth, setAuth } = useAuth()
   const [loginData, setLoginData] = useState<Record<string, string[]>>({})
+  const [loginStoreLabels, setLoginStoreLabels] = useState<Record<string, string>>({})
   const [store, setStore] = useState("")
   const [user, setUser] = useState("")
   const [pw, setPw] = useState("")
@@ -239,6 +241,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
       if (!isBrowserOnline()) {
         setLoginData({})
+        setLoginStoreLabels({})
         setLoadError(null)
         setLoading(false)
         return
@@ -257,6 +260,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           storeCount: Object.keys(d?.users || {}).length,
         })
         setLoginData(d.users || {})
+        setLoginStoreLabels(d.storeLabels || {})
         if (d._source === 'fallback') {
           setLoadError('SERVER_ERROR')
         } else {
@@ -274,6 +278,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             : msg
         )
         setLoginData({})
+        setLoginStoreLabels({})
         setLoading(false)
       }
     }
@@ -768,7 +773,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               <SelectContent className="login-select-content">
                 {stores.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {s}
+                    {labelForStore(loginStoreLabels, s)}
                   </SelectItem>
                 ))}
               </SelectContent>

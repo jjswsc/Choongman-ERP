@@ -525,6 +525,7 @@ export default function MarketingInfluencersPage() {
         note: form.note.trim(),
         userRole: auth?.role,
         userName: auth?.user,
+        userStore: auth?.store,
       })
       if (res.success) {
         const extra = res.expenseSyncMessage ? `\n\n${res.expenseSyncMessage}` : ""

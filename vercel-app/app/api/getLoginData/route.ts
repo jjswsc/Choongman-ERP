@@ -1,60 +1,73 @@
 import { NextResponse } from 'next/server'
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseSelect } from '@/lib/supabase-server'
+import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
 
 // #region agent log
 const _log = (msg: string, data?: Record<string, unknown>) => {
   try {
     const logPath = join(process.cwd(), '..', 'debug-e3767f.log')
-    appendFileSync(logPath, JSON.stringify({ sessionId: 'e3767f', location: 'getLoginData/route.ts', message: msg, data: data ?? {}, timestamp: Date.now() }) + '\n')
+    appendFileSync(
+      logPath,
+      JSON.stringify({
+        sessionId: 'e3767f',
+        location: 'getLoginData/route.ts',
+        message: msg,
+        data: data ?? {},
+        timestamp: Date.now(),
+      }) + '\n'
+    )
   } catch (_) {}
 }
 // #endregion
 
-/** Supabase 응답이 느린 경우 5분 캐시로 반복 요청 부하 감소 */
-let _loginDataCache: { data: { users: Record<string, string[]>; vendors: string[] }; until: number } | null = null
-const CACHE_TTL_MS = 5 * 60 * 1000
-
-function fetchWithTimeout(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-  timeoutMs = 15_000
-): Promise<Response> {
-  const controller = new AbortController()
-  const t = setTimeout(() => controller.abort(), timeoutMs)
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(t))
+type LoginDataPayload = {
+  users: Record<string, string[]>
+  vendors: string[]
+  storeLabels: Record<string, string>
+  legacyToCanonical: Record<string, string>
+  usedMaster: boolean
 }
 
-async function getLoginDataHandler(url: string, key: string) {
-  const supabase = createClient(url, key, { global: { fetch: fetchWithTimeout } })
-  const empRes = await supabase.from('employees').select('store,name').order('id', { ascending: true })
-  if (empRes.error) throw new Error(empRes.error.message)
-  const vendorRes = await supabase.from('vendors').select('name,gps_name,type').order('id', { ascending: true })
-  if (vendorRes.error) throw new Error(vendorRes.error.message)
-  const empList = empRes.data as { store?: string; name?: string }[] | null
-  const vendorRows = vendorRes.data as { name?: string; gps_name?: string; type?: string }[] | null
-  const userMap: Record<string, string[]> = {}
-  for (let i = 0; i < (empList || []).length; i++) {
-    const store = String((empList as { store?: string }[])[i].store || '').trim()
-    const name = String((empList as { name?: string }[])[i].name || '').trim()
-    if (store && name) {
-      if (!userMap[store]) userMap[store] = []
-      userMap[store].push(name)
-    }
-  }
+/** Supabase 응답이 느린 경우 5분 캐시로 반복 요청 부하 감소 */
+let _loginDataCache: { data: LoginDataPayload; until: number } | null = null
+const CACHE_TTL_MS = 5 * 60 * 1000
+
+async function getLoginDataHandler(): Promise<LoginDataPayload> {
+  const empList = (await supabaseSelect('employees', {
+    order: 'id.asc',
+    select: 'store,name,nick,job,role,resign_date',
+  })) as { store?: string; name?: string; nick?: string; job?: string; role?: string; resign_date?: string | null }[] | null
+
+  const masters = await fetchErpStoresMaster()
+  const built = buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true })
+
+  const vendorRows = (await supabaseSelect('vendors', {
+    select: 'name,gps_name,type',
+    order: 'id.asc',
+    limit: 10000,
+  })) as { name?: string; gps_name?: string; type?: string }[] | null
+
   const vendorList: string[] = []
-  const vRows = (vendorRows || []) as { name?: string; gps_name?: string; type?: string }[]
+  const vRows = vendorRows || []
   for (let v = 0; v < vRows.length; v++) {
     const row = vRows[v]
     const gpsName = String(row.gps_name || '').trim()
     const fullName = String(row.name || '').trim()
     const t = String(row.type || '').toLowerCase()
     const isSales = t === 'sales' || t === '매출' || t === '매출처' || t === 'both' || t === '둘 다'
-    const n = (isSales && gpsName) ? gpsName : fullName
+    const n = isSales && gpsName ? gpsName : fullName
     if (n) vendorList.push(n)
   }
-  return { users: userMap, vendors: vendorList }
+
+  return {
+    users: built.users,
+    vendors: vendorList,
+    storeLabels: built.storeLabels,
+    legacyToCanonical: built.legacyToCanonical,
+    usedMaster: built.usedMaster,
+  }
 }
 
 export async function GET() {
@@ -72,10 +85,11 @@ export async function GET() {
   _log('env check', { hasUrl: !!url, hasKey: !!key, hypothesisId: 'H4' })
   // #endregion
   if (!url || !key) {
-    const msg = 'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
+    const msg =
+      'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
     console.error('getLoginData:', msg)
     return NextResponse.json(
-      { users: {}, vendors: [], error: msg },
+      { users: {}, vendors: [], storeLabels: {}, legacyToCanonical: {}, usedMaster: false, error: msg },
       { status: 503, headers }
     )
   }
@@ -91,10 +105,14 @@ export async function GET() {
     // #region agent log
     _log('before getLoginDataHandler', { hypothesisId: 'H2' })
     // #endregion
-    const data = await getLoginDataHandler(url, key)
+    const data = await getLoginDataHandler()
     _loginDataCache = { data, until: now + CACHE_TTL_MS }
     // #region agent log
-    _log('getLoginDataHandler success', { userCount: Object.keys(data.users ?? {}).length, vendorCount: (data.vendors ?? []).length, hypothesisId: 'H5' })
+    _log('getLoginDataHandler success', {
+      userCount: Object.keys(data.users ?? {}).length,
+      vendorCount: (data.vendors ?? []).length,
+      hypothesisId: 'H5',
+    })
     // #endregion
     return NextResponse.json(data, { headers })
   } catch (e) {
@@ -111,7 +129,7 @@ export async function GET() {
     // #endregion
     console.error('getLoginData:', e)
     return NextResponse.json(
-      { users: {}, vendors: [], error: msg },
+      { users: {}, vendors: [], storeLabels: {}, legacyToCanonical: {}, usedMaster: false, error: msg },
       { status: 503, headers }
     )
   }

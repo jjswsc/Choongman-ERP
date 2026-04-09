@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut } = require("electron");
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut, screen } = require("electron");
 
 /** package.json build.appId 와 동일 — 작업 표시줄·점프 목록이 Electron 기본 아이콘으로 남는 현상 완화 */
 if (process.platform === "win32") {
@@ -184,7 +184,118 @@ function debugLog(hypothesisId, location, message, data) {
 }
 
 let mainWindow = null;
+let customerDisplayWindow = null;
 let isCheckingUpdate = false;
+let customerDisplayConfig = {
+  enabled: false,
+  autoOpen: true,
+  monitorPreference: "secondary-first",
+  storeCode: "",
+};
+let customerDisplayLastState = null;
+
+function getCustomerDisplayUrl() {
+  try {
+    const url = new URL(POS_URL);
+    url.pathname = "/pos/customer-display";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return `${ALLOWED_ORIGIN || "https://choongman-erp.vercel.app"}/pos/customer-display`;
+  }
+}
+
+function resolveCustomerDisplayTarget() {
+  const displays = screen.getAllDisplays();
+  if (!displays.length) return null;
+  if (customerDisplayConfig.monitorPreference === "primary-only") {
+    return screen.getPrimaryDisplay();
+  }
+  const primary = screen.getPrimaryDisplay();
+  const secondary = displays.find((d) => d.id !== primary.id);
+  return secondary || primary;
+}
+
+function placeCustomerWindowOnTarget(win) {
+  if (!win || win.isDestroyed()) return;
+  const target = resolveCustomerDisplayTarget();
+  if (!target) return;
+  const b = target.bounds;
+  win.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height }, false);
+}
+
+function broadcastCustomerDisplayState(payload) {
+  customerDisplayLastState = payload;
+  if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+    customerDisplayWindow.webContents.send("cm-pos-customer-display-state", payload);
+  }
+}
+
+async function ensureCustomerDisplayWindow(forceOpen = false) {
+  const allowOpen = forceOpen || (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen);
+  if (!allowOpen) return { ok: true, reason: "disabled" };
+  if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+    placeCustomerWindowOnTarget(customerDisplayWindow);
+    customerDisplayWindow.show();
+    customerDisplayWindow.focus();
+    return { ok: true };
+  }
+  try {
+    customerDisplayWindow = new BrowserWindow({
+      width: 1200,
+      height: 900,
+      show: false,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        partition: "persist:choongman-pos",
+        spellcheck: false,
+      },
+    });
+    customerDisplayWindow.setMenuBarVisibility(false);
+    customerDisplayWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (ALLOWED_ORIGIN && url.startsWith(ALLOWED_ORIGIN)) {
+        return { action: "allow" };
+      }
+      shell.openExternal(url);
+      return { action: "deny" };
+    });
+    customerDisplayWindow.webContents.on("will-navigate", (event, url) => {
+      if (ALLOWED_ORIGIN && !url.startsWith(ALLOWED_ORIGIN)) {
+        event.preventDefault();
+        shell.openExternal(url);
+      }
+    });
+    customerDisplayWindow.on("closed", () => {
+      customerDisplayWindow = null;
+    });
+    await customerDisplayWindow.loadURL(getCustomerDisplayUrl());
+    placeCustomerWindowOnTarget(customerDisplayWindow);
+    customerDisplayWindow.setFullScreen(true);
+    customerDisplayWindow.show();
+    if (customerDisplayLastState) {
+      customerDisplayWindow.webContents.send("cm-pos-customer-display-state", customerDisplayLastState);
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: String(e && e.message ? e.message : e) };
+  }
+}
+
+function closeCustomerDisplayWindow() {
+  try {
+    if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+      customerDisplayWindow.close();
+    }
+    customerDisplayWindow = null;
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: String(e && e.message ? e.message : e) };
+  }
+}
 
 /** app.asar에는 node_modules가 없음 — semver 패키지 대신 x.y.z만 파싱·비교 */
 function parseSemverTriplet(text) {
@@ -938,7 +1049,110 @@ if (!gotLock) {
       return clearRuntimeCacheAndReloadManual();
     });
 
+    ipcMain.handle("cm-pos-customer-display-configure", async (event, params) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      customerDisplayConfig = {
+        ...customerDisplayConfig,
+        enabled: Boolean(params?.enabled),
+        autoOpen: params?.autoOpen !== false,
+        monitorPreference:
+          String(params?.monitorPreference || "secondary-first") === "primary-only"
+            ? "primary-only"
+            : "secondary-first",
+        storeCode: String(params?.storeCode || customerDisplayConfig.storeCode || "").trim(),
+      };
+      if (!customerDisplayConfig.enabled) {
+        return closeCustomerDisplayWindow();
+      }
+      if (customerDisplayConfig.autoOpen) {
+        return ensureCustomerDisplayWindow(false);
+      }
+      return { ok: true };
+    });
+
+    ipcMain.handle("cm-pos-customer-display-open", async (event) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      return ensureCustomerDisplayWindow(true);
+    });
+
+    ipcMain.handle("cm-pos-customer-display-close", async (event) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      return closeCustomerDisplayWindow();
+    });
+
+    ipcMain.handle("cm-pos-customer-display-state", async (event, payload) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      const storeCode = String(payload?.storeCode || customerDisplayConfig.storeCode || "").trim();
+      const kindRaw = String(payload?.kind || "idle");
+      const kind = ["idle", "ordering", "payment", "qr"].includes(kindRaw) ? kindRaw : "idle";
+      const normalized = {
+        storeCode,
+        kind,
+        updatedAt: String(payload?.updatedAt || new Date().toISOString()),
+        title: typeof payload?.title === "string" ? payload.title : undefined,
+        message: typeof payload?.message === "string" ? payload.message : undefined,
+        qrPayload: typeof payload?.qrPayload === "string" ? payload.qrPayload : undefined,
+        items: Array.isArray(payload?.items) ? payload.items : undefined,
+        totalAmount: Number(payload?.totalAmount || 0),
+        breakdown:
+          payload?.breakdown && typeof payload.breakdown === "object"
+            ? {
+                subtotal: Number(payload.breakdown.subtotal || 0),
+                discountAmt: Number(payload.breakdown.discountAmt || 0),
+                vatFeeAmt: Number(payload.breakdown.vatFeeAmt || 0),
+                vatRate: Number(payload.breakdown.vatRate || 0),
+                vatMode:
+                  String(payload.breakdown.vatMode || "included") === "separate"
+                    ? "separate"
+                    : "included",
+                serviceFeeAmt: Number(payload.breakdown.serviceFeeAmt || 0),
+                serviceRate: Number(payload.breakdown.serviceRate || 0),
+                serviceMode:
+                  String(payload.breakdown.serviceMode || "separate") === "included"
+                    ? "included"
+                    : "separate",
+                cardFeeAmt: Number(payload.breakdown.cardFeeAmt || 0),
+                cardRate: Number(payload.breakdown.cardRate || 0),
+                cardMode:
+                  String(payload.breakdown.cardMode || "separate") === "included"
+                    ? "included"
+                    : "separate",
+                otherFeeAmt: Number(payload.breakdown.otherFeeAmt || 0),
+                otherRate: Number(payload.breakdown.otherRate || 0),
+                otherMode:
+                  String(payload.breakdown.otherMode || "separate") === "included"
+                    ? "included"
+                    : "separate",
+                total: Number(payload.breakdown.total || 0),
+              }
+            : undefined,
+        showOrderSummary: payload?.showOrderSummary !== false,
+        showOrderTotal: payload?.showOrderTotal !== false,
+      };
+      broadcastCustomerDisplayState(normalized);
+      if (customerDisplayConfig.enabled && customerDisplayConfig.autoOpen) {
+        await ensureCustomerDisplayWindow(false);
+      }
+      return { ok: true };
+    });
+
     createWindow();
+
+    const rebalanceCustomerDisplay = () => {
+      if (!customerDisplayWindow || customerDisplayWindow.isDestroyed()) return;
+      placeCustomerWindowOnTarget(customerDisplayWindow);
+    };
+    screen.on("display-added", rebalanceCustomerDisplay);
+    screen.on("display-removed", rebalanceCustomerDisplay);
+    screen.on("display-metrics-changed", rebalanceCustomerDisplay);
 
     const toggleMainWindowDevTools = () => {
       if (mainWindow && !mainWindow.isDestroyed()) {

@@ -20,6 +20,7 @@ import { PosPaymentSettingsContent } from "@/components/pos/pos-payment-settings
 import { PosTerminalMenuScreen } from "@/components/pos/pos-terminal-menu-screen"
 import { PosMenuBoardManagementContent } from "@/components/pos/pos-menu-board-management-content"
 import { PosTerminalSettingsContent } from "@/components/pos/pos-terminal-settings-content"
+import { PosCustomerDisplayContentSettings } from "@/components/pos/pos-customer-display-content-settings"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -32,13 +33,13 @@ export default function PosScreenConfigPage() {
   const t = useT(lang)
   const tabParam = searchParams.get("tab") || "tables"
   const [activeTab, setActiveTab] = React.useState(
-    ["tables", "cook-timer", "menus", "payment", "delivery", "terminal"].includes(tabParam) ? tabParam : "tables"
+    ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "dual-monitor"].includes(tabParam) ? tabParam : "tables"
   )
   const [menusSubTab, setMenusSubTab] = React.useState<"menu-screen" | "menu-board">("menu-screen")
 
   React.useEffect(() => {
     const tab = searchParams.get("tab")
-    if (tab && ["tables", "cook-timer", "menus", "payment", "delivery", "terminal"].includes(tab)) setActiveTab(tab)
+    if (tab && ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "dual-monitor"].includes(tab)) setActiveTab(tab)
   }, [searchParams])
 
   return (
@@ -85,6 +86,10 @@ export default function PosScreenConfigPage() {
                 <TabsTrigger value="terminal" className={adminTabsTriggerCn}>
                   <Smartphone className={adminTabsIconCn} aria-hidden />
                   {t("posScreenConfigTabTerminal") || "단말 설정"}
+                </TabsTrigger>
+                <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
+                  <Monitor className={adminTabsIconCn} aria-hidden />
+                  {t("posDualMonitorTab") || "듀얼 모니터"}
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -173,6 +178,16 @@ export default function PosScreenConfigPage() {
                 {t("posScreenConfigTabTerminalDesc") || "메인 포스(프린터 연결) 1대 지정. 주문 단말은 인쇄 없이 주문만 입력합니다."}
               </p>
               <PosTerminalSettingsContent />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="dual-monitor" className={adminTabsContentFlushCn}>
+            <div className="rounded-xl border bg-card p-6">
+              <h3 className="text-sm font-bold mb-2">{t("posDualMonitorTab") || "듀얼 모니터"}</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("posDualMonitorTabDesc") || "고객용 화면의 평상시/주문중/결제중/QR 표시 콘텐츠를 설정합니다."}
+              </p>
+              <PosCustomerDisplayContentSettings storeCode={auth?.store || null} />
             </div>
           </TabsContent>
         </Tabs>

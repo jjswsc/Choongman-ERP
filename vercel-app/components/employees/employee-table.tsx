@@ -26,6 +26,9 @@ function gradeBadgeStyle(g: string): string {
 
 export interface EmployeeTableRow extends AdminEmployeeItem {
   finalGrade?: string
+  kitchenGrade?: string
+  serviceGrade?: string
+  managerGrade?: string
 }
 
 interface EmployeeTableProps {
@@ -44,6 +47,8 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
   const cols = [
     t("emp_label_store"),
     t("emp_grade"),
+    t("eval_type_kitchen_emp"),
+    t("eval_type_service_emp"),
     t("emp_label_name"),
     t("emp_label_employee_code"),
     t("emp_label_nickname"),
@@ -69,11 +74,11 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
         <tbody className="divide-y divide-border">
           {loading ? (
             <tr>
-              <td colSpan={10} className="py-12 text-center">{t("loading")}</td>
+              <td colSpan={cols.length} className="py-12 text-center">{t("loading")}</td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={10} className="py-12 text-center text-muted-foreground">{t("emp_result_empty")}</td>
+              <td colSpan={cols.length} className="py-12 text-center text-muted-foreground">{t("emp_result_empty")}</td>
             </tr>
           ) : (
             rows.map((e, idx) => {
@@ -81,6 +86,8 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                 ? `${new Date().getFullYear() - new Date(e.birth).getFullYear()}`
                 : "-"
               const grade = e.finalGrade || "-"
+              const kitchenGrade = String(e.kitchenGrade || "").trim() || "-"
+              const serviceGrade = String(e.serviceGrade || "").trim() || "-"
               const resignStr = String(e.resign || "").trim()
               const resignDate = resignStr ? resignStr.slice(0, 10) : ""
               const todayStr = new Date().toISOString().slice(0, 10)
@@ -95,6 +102,16 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                   <td className="px-3 py-2.5 text-center">
                     <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(grade)}`}>
                       {grade}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(kitchenGrade)}`}>
+                      {kitchenGrade}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(serviceGrade)}`}>
+                      {serviceGrade}
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-center font-bold text-card-foreground">

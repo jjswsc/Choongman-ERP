@@ -47,7 +47,7 @@ export default function POSMainPage() {
   const { auth, logout, setAuth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
   const [switchUserOpen, setSwitchUserOpen] = useState(false)
   const [switchLoginData, setSwitchLoginData] = useState<Record<string, string[]>>({})
   const [switchStore, setSwitchStore] = useState('')
@@ -203,14 +203,14 @@ export default function POSMainPage() {
 
   const openSwitchUser = useCallback(() => {
     setSwitchError('')
-    setSwitchStore(auth?.store || '')
+    setSwitchStore(resolveStoreKey((auth?.store || '').trim()))
     setSwitchName('')
     setSwitchPw('')
     setSwitchUserOpen(true)
     getLoginData()
       .then((d) => setSwitchLoginData(d.users || {}))
       .catch(() => setSwitchLoginData({}))
-  }, [auth?.store])
+  }, [auth?.store, resolveStoreKey])
 
   const handleSwitchUser = useCallback(
     async (e: React.FormEvent) => {
@@ -333,7 +333,7 @@ export default function POSMainPage() {
                 <SelectContent>
                   {switchStores.map((s) => (
                     <SelectItem key={s} value={s}>
-                      {s}
+                      {formatStoreLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>

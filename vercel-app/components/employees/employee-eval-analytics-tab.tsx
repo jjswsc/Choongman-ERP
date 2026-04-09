@@ -26,6 +26,7 @@ import {
 } from "@/lib/api-client"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { appAlert } from "@/lib/app-message"
+import { shouldRedirectToAdminLoginAfterEvalAnalyticsError } from "@/lib/eval-analytics-http-error"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -44,12 +45,15 @@ export interface EmployeeEvalAnalyticsTabProps {
   canPickAllStores: boolean
   /** AI 요약 버튼 (본사·회계) */
   canUseAiSummary: boolean
+  /** 본사·회계: 미평가 행 클릭 시 직원 평가 화면으로 연결 */
+  onOpenEvalForUnevaluated?: (row: { store: string; name: string; nick: string; job: string }) => void
 }
 
 export function EmployeeEvalAnalyticsTab({
   stores,
   canPickAllStores,
   canUseAiSummary,
+  onOpenEvalForUnevaluated,
 }: EmployeeEvalAnalyticsTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -79,7 +83,11 @@ export function EmployeeEvalAnalyticsTab({
       setData(payload)
     } catch (e) {
       setData(null)
-      await appAlert(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      await appAlert(msg)
+      if (typeof window !== "undefined" && shouldRedirectToAdminLoginAfterEvalAnalyticsError(e)) {
+        window.location.href = "/admin/login"
+      }
     } finally {
       setLoading(false)
     }
@@ -103,7 +111,11 @@ export function EmployeeEvalAnalyticsTab({
       })
       setAiText(r.summary || "")
     } catch (e) {
-      await appAlert(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      await appAlert(msg)
+      if (typeof window !== "undefined" && shouldRedirectToAdminLoginAfterEvalAnalyticsError(e)) {
+        window.location.href = "/admin/login"
+      }
     } finally {
       setAiLoading(false)
     }
@@ -240,7 +252,12 @@ export function EmployeeEvalAnalyticsTab({
           {data.coverage != null ? (
             <div className="rounded-xl border bg-card p-4">
               <h3 className="mb-1 text-sm font-semibold">{t("eval_analytics_coverage_title")}</h3>
-              <p className="mb-3 text-xs text-muted-foreground">{t("eval_analytics_coverage_hint")}</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                {t("eval_analytics_coverage_hint")}
+                {onOpenEvalForUnevaluated ? (
+                  <span className="mt-1 block text-foreground/90">{t("eval_analytics_unevaluated_open_eval")}</span>
+                ) : null}
+              </p>
               <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <div className="rounded-md border bg-muted/30 px-2 py-1.5">
                   <div className="text-[10px] text-muted-foreground">{t("eval_analytics_coverage_active")}</div>
@@ -272,7 +289,31 @@ export function EmployeeEvalAnalyticsTab({
                     </thead>
                     <tbody>
                       {data.coverage.unevaluated.map((r) => (
-                        <tr key={`${r.store}|${r.name}|${r.nick}`} className="border-b border-border/60">
+                        <tr
+                          key={`${r.store}|${r.name}|${r.nick}`}
+                          className={
+                            onOpenEvalForUnevaluated
+                              ? "cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/60 focus-within:bg-muted/60"
+                              : "border-b border-border/60"
+                          }
+                          onClick={
+                            onOpenEvalForUnevaluated
+                              ? () => onOpenEvalForUnevaluated(r)
+                              : undefined
+                          }
+                          onKeyDown={
+                            onOpenEvalForUnevaluated
+                              ? (ev) => {
+                                  if (ev.key === "Enter" || ev.key === " ") {
+                                    ev.preventDefault()
+                                    onOpenEvalForUnevaluated(r)
+                                  }
+                                }
+                              : undefined
+                          }
+                          tabIndex={onOpenEvalForUnevaluated ? 0 : undefined}
+                          role={onOpenEvalForUnevaluated ? "button" : undefined}
+                        >
                           <td className="px-2 py-1.5">{r.store}</td>
                           <td className="px-2 py-1.5 font-medium">{r.name}</td>
                           <td className="px-2 py-1.5 text-muted-foreground">{r.nick || "—"}</td>
