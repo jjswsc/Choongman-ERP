@@ -75,6 +75,29 @@ function safeMinutes(val: number): number {
   return Math.floor(n)
 }
 
+function findLatestUnclosedStart(
+  logs: { log_at?: string; log_type?: string }[] | null | undefined,
+  startType: '출근' | '휴식시작',
+  endType: '퇴근' | '휴식종료'
+): { log_at?: string; log_type?: string } | null {
+  let endCount = 0
+  for (const r of logs || []) {
+    const t = String(r.log_type || '').trim()
+    if (t === endType) {
+      endCount += 1
+      continue
+    }
+    if (t === startType) {
+      if (endCount > 0) {
+        endCount -= 1
+      } else {
+        return r
+      }
+    }
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -198,6 +221,16 @@ export async function POST(request: NextRequest) {
         if (hasDuplicate) {
           return NextResponse.json(
             { success: false, message: `오늘 이미 [${logType}] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.` },
+            { headers }
+          )
+        }
+        const openShiftStart = findLatestUnclosedStart(logs, '출근', '퇴근')
+        if (openShiftStart) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: '미종료 근무가 있습니다. 먼저 퇴근을 기록한 뒤 새 출근을 진행해 주세요.',
+            },
             { headers }
           )
         }
@@ -396,8 +429,8 @@ export async function POST(request: NextRequest) {
       schRows = (await supabaseSelectFilter('schedules', prevDayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
     }
     let usedYesterdaySchedule = false
-    // 퇴근: 당일 스케줄 없으면 전날(자정 넘는 근무) 스케줄 확인
-    if ((!schRows || schRows.length === 0) && logType === '퇴근') {
+    // 퇴근/휴식종료: 당일 스케줄 없으면 전날(자정 넘는 근무) 스케줄 확인
+    if ((!schRows || schRows.length === 0) && (logType === '퇴근' || logType === '휴식종료')) {
       const yesterday = (() => {
         const d = new Date(todayStrVal + 'T12:00:00Z')
         d.setUTCDate(d.getUTCDate() - 1)
@@ -460,37 +493,30 @@ export async function POST(request: NextRequest) {
       const allLogsFilter =
         empId > 0
           ? `store_name=ilike.${storeIlikeResume}&employee_id=eq.${empId}`
-          : `name=ilike.${encodeURIComponent(empName)}`
+          : `store_name=ilike.${storeIlikeResume}&name=ilike.${encodeURIComponent(empName)}`
       const allLogs = (await supabaseSelectFilter('attendance_logs', allLogsFilter, {
         order: 'log_at.desc',
         limit: 50,
         select: 'log_at,log_type',
       })) as { log_at?: string; log_type?: string }[]
-      for (const r of allLogs || []) {
-        const rowDate = r.log_at
-          ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ })
-          : ''
-        if (
-          rowDate === todayStrVal &&
-          String(r.log_type || '').trim() === '휴식시작'
-        ) {
-          const actualStart = new Date(r.log_at || '')
-          breakMin = isNaN(actualStart.getTime())
-            ? 0
-            : safeMinutes(
-                (nowTime.getTime() - actualStart.getTime()) / (1000 * 60)
-              )
-          if (planBS && planBE) {
-            const pBSDate = parsePlanTimeToDate(todayStrVal, planBS)
-            const pBEDate = parsePlanTimeToDate(todayStrVal, planBE)
-            if (pBSDate && pBEDate) {
-              const planDur = safeMinutes(
-                (pBEDate.getTime() - pBSDate.getTime()) / (1000 * 60)
-              )
-              status = breakMin > planDur ? '휴게초과' : '휴게정상'
-            }
+      const openBreakStart = findLatestUnclosedStart(allLogs, '휴식시작', '휴식종료')
+      if (openBreakStart?.log_at) {
+        const actualStart = new Date(openBreakStart.log_at)
+        breakMin = isNaN(actualStart.getTime())
+          ? 0
+          : safeMinutes(
+              (nowTime.getTime() - actualStart.getTime()) / (1000 * 60)
+            )
+        if (planBS && planBE) {
+          const breakDateStr = actualStart.toLocaleDateString('en-CA', { timeZone: TZ })
+          const pBSDate = parsePlanTimeToDate(breakDateStr, planBS)
+          const pBEDate = parsePlanTimeToDate(breakDateStr, planBE)
+          if (pBSDate && pBEDate) {
+            const planDur = safeMinutes(
+              (pBEDate.getTime() - pBSDate.getTime()) / (1000 * 60)
+            )
+            status = breakMin > planDur ? '휴게초과' : '휴게정상'
           }
-          break
         }
       }
     }

@@ -946,10 +946,22 @@ export async function getAttendancePendingList(params: {
   return res.json() as Promise<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>
 }
 
-export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; optEarlyMinutes?: number | null; waiveLate?: boolean; userStore?: string; userRole?: string }) {
+export async function processAttendanceApproval(params: {
+  id: number
+  decision: string
+  optOtMinutes?: number | null
+  optEarlyMinutes?: number | null
+  optLateMinutes?: number | null
+  optionalInLogId?: number | null
+  waiveLate?: boolean
+  userStore?: string
+  userRole?: string
+}) {
   const body: Record<string, unknown> = { id: params.id, decision: params.decision }
   if (params.optOtMinutes != null) body.optOtMinutes = Number(params.optOtMinutes)
   if (params.optEarlyMinutes != null) body.optEarlyMinutes = Number(params.optEarlyMinutes)
+  if (params.optLateMinutes != null) body.optLateMinutes = Number(params.optLateMinutes)
+  if (params.optionalInLogId != null && params.optionalInLogId > 0) body.optionalInLogId = Number(params.optionalInLogId)
   if (params.waiveLate) body.waiveLate = true
   if (params.userStore) body.userStore = params.userStore
   if (params.userRole) body.userRole = params.userRole
@@ -1040,14 +1052,22 @@ export interface AttendanceDailyRow {
   plannedWorkHrs: number
   diffMin: number
   lateMin: number
+  lateBeforeMin?: number
+  lateAfterMin?: number
   /** DB 저장값(퇴근 로그 early_min). 기존 건 조정 반영 시 사용 */
   earlyMin?: number
+  earlyBeforeMin?: number
+  earlyAfterMin?: number
   otMin: number
+  otBeforeMin?: number
+  otAfterMin?: number
   status: string
   approval: string
   pendingId: number | null
   pendingInId?: number | null
   pendingOutId?: number | null
+  /** 출근 로그 id (지각 분 조정 시 사용, 승인 여부와 무관) */
+  inLogId?: number | null
   /** 퇴근 로그 id (조정 반영 시 사용) */
   outLogId?: number | null
   inStatus?: string
@@ -8073,6 +8093,18 @@ export async function getEvaluationHistory(params: {
   >
 }
 
+/** 평가 결과 1건 삭제 — 서버에서 JWT·매장 권한 검사 */
+export async function deleteEvaluationResult(params: { id: string }) {
+  const res = await apiFetchWithOffline('/api/deleteEvaluationResult', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: params.id }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error || '삭제 실패')
+  return data as { ok?: boolean }
+}
+
 export type EvaluationAnalyticsPayload = {
   summary: {
     totalEvaluations: number
@@ -8209,7 +8241,7 @@ export async function deleteEvaluationItem(params: {
   return res.text() as Promise<string>
 }
 
-/** 평가 결과 저장 (오피스 직원 이상만 가능) */
+/** 평가 결과 저장 — 서버에서 JWT로 본사·회계·해당 매장 매니저/가맹점주만 허용 */
 export async function saveEvaluationResult(params: {
   type: 'kitchen' | 'service' | 'manager'
   id?: string

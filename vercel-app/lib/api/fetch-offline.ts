@@ -55,6 +55,7 @@ const QUEUE_WHITELIST = new Set([
   '/api/savePoBillingSettings',
   '/api/savePayroll',
   '/api/saveEvaluationResult',
+  '/api/deleteEvaluationResult',
   '/api/saveAccountingWorkflowStatus',
   '/api/saveAccountingFilingPreferences',
   '/api/saveStoreRepairTicket',

@@ -17,6 +17,11 @@ import {
   OT_PAYROLL_MIN_MINUTES,
   otMinutesForPayroll,
 } from '@/lib/payroll-utils'
+import {
+  clampNonNegativeMinutes,
+  computeDayEarlyMinutes,
+  resolveEarlyExplicitForPayroll,
+} from '@/lib/attendance-adjustment-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import { isOfficeStore } from '@/lib/permissions'
 import {
@@ -301,6 +306,7 @@ function buildResignByAttKey(
 function buildAttendanceSummary(
   monthStr: string,
   attRows: {
+    id?: number | null
     log_at?: string
     store_name?: string
     name?: string
@@ -315,7 +321,8 @@ function buildAttendanceSummary(
   }[],
   scheduleMap: Record<string, { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }>,
   resignByAttKey: Record<string, string> = {},
-  resignByEmpId: Record<number, string> = {}
+  resignByEmpId: Record<number, string> = {},
+  adjustedEarlyLogIds: Set<number> = new Set()
 ): { summary: Record<string, AttSummary>; dayLines: Record<string, AttendanceDayLines> } {
   const startStr = monthStr + '-01'
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
@@ -340,8 +347,15 @@ function buildAttendanceSummary(
     otMinExplicit: number | null
     /** 퇴근 로그 early_min: 급여 집계 시 정상(승인)이면 조퇴 면제·감액에 사용 */
     earlyMinExplicit: number | null
+    /** 직전 반영 퇴근 로그 id (조퇴 0 면제의 "명시적 조정 여부" 판별용) */
+    outLogId: number | null
   }
   const byDay: Record<string, DayV> = {}
+
+  const dayBucketKey = (dateStr: string, store: string, name: string, employeeId: number | null | undefined) => {
+    const eid = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+    return eid > 0 ? `${dateStr}|${store}|#${eid}` : `${dateStr}|${store}|${name}`
+  }
 
   function addCalendarDay(dateStr: string, delta: number): string {
     const d = new Date(dateStr + 'T12:00:00')
@@ -380,7 +394,7 @@ function buildAttendanceSummary(
       }
     }
 
-    const dayKey = `${rowDate}|${store}|${name}`
+    const dayKey = dayBucketKey(rowDate, store, name, employeeId)
     if (!byDay[dayKey]) {
       byDay[dayKey] = {
         attKey,
@@ -396,6 +410,7 @@ function buildAttendanceSummary(
         otMin: 0,
         otMinExplicit: null,
         earlyMinExplicit: null,
+        outLogId: null,
       }
     }
     const v = byDay[dayKey]
@@ -419,8 +434,8 @@ function buildAttendanceSummary(
     } else if (type === '퇴근') {
       const logAtStr = r.log_at || ''
       const bangkokHour = getBangkokHour(logAtStr)
-      const isOvernightOut = bangkokHour < 7
-      const prevDayKey = `${addCalendarDay(rowDate, -1)}|${store}|${name}`
+      const isOvernightOut = bangkokHour <= 7
+      const prevDayKey = dayBucketKey(addCalendarDay(rowDate, -1), store, name, employeeId)
       const prev = byDay[prevDayKey]
       const applyClockOut = (target: (typeof byDay)[string]) => {
         if (!target.outMs || dt > target.outMs) {
@@ -429,6 +444,10 @@ function buildAttendanceSummary(
           target.outApproved = clockOutCountsForPayroll(r.approved, r.status)
           const stOut = String(r.status || '').trim()
           target.outStatus = stOut
+          target.outLogId =
+            (r as { id?: unknown }).id != null && Number.isFinite(Number((r as { id?: unknown }).id))
+              ? Math.floor(Number((r as { id?: unknown }).id))
+              : null
           const rawOt = (r as { ot_min?: unknown }).ot_min
           target.otMin = Number(rawOt) || 0
           const otParsed =
@@ -439,17 +458,22 @@ function buildAttendanceSummary(
               : null
           target.otMinExplicit = otParsed
           const rawEarly = (r as { early_min?: unknown }).early_min
-          if (
-            target.outApproved &&
-            stOut.includes('정상(승인)') &&
+          const rawEarlyNum =
             rawEarly != null &&
-            rawEarly !== '' &&
+            (typeof rawEarly !== 'string' || rawEarly.trim() !== '') &&
             Number.isFinite(Number(rawEarly))
-          ) {
-            target.earlyMinExplicit = Math.max(0, Math.min(9999, Math.round(Number(rawEarly))))
-          } else {
-            target.earlyMinExplicit = null
-          }
+              ? clampNonNegativeMinutes(Number(rawEarly))
+              : null
+          const hasEarlyAdjustment =
+            target.outLogId != null &&
+            target.outLogId > 0 &&
+            adjustedEarlyLogIds.has(target.outLogId)
+          target.earlyMinExplicit = resolveEarlyExplicitForPayroll({
+            outApproved: target.outApproved,
+            outStatus: stOut,
+            rawEarlyNum,
+            hasEarlyAdjustment,
+          })
         }
       }
       if (isOvernightOut && prev?.inMs != null && prev.outMs == null) {
@@ -468,7 +492,7 @@ function buildAttendanceSummary(
     if (shouldCarryOutToPrev) {
       const parts = dayKey.split('|')
       const rowDate = parts[0]
-      const prevKey = `${addCalendarDay(rowDate, -1)}|${v.store}|${v.name}`
+      const prevKey = dayBucketKey(addCalendarDay(rowDate, -1), v.store, v.name, v.employeeId)
       const prev = byDay[prevKey]
       if (prev && prev.inMs != null && prev.outMs == null) {
         prev.outMs = v.outMs
@@ -478,6 +502,7 @@ function buildAttendanceSummary(
         prev.otMin = v.otMin
         prev.otMinExplicit = v.otMinExplicit
         prev.earlyMinExplicit = v.earlyMinExplicit
+        prev.outLogId = v.outLogId
         v.outMs = null
         v.breakMin = 0
         v.outApproved = false
@@ -485,6 +510,7 @@ function buildAttendanceSummary(
         v.otMin = 0
         v.otMinExplicit = null
         v.earlyMinExplicit = null
+        v.outLogId = null
       }
     }
   }
@@ -558,27 +584,20 @@ function buildAttendanceSummary(
         )
       : 0
     const diffMin = plannedWorkMin > 0 ? Math.round(minWork - plannedWorkMin) : 0
-    // 근태 화면과 동일: 당일 순증 근무(diff>0)면 출근 지각 분은 공제·집계하지 않음(지각했어도 계획보다 길게 근무한 날)
-    const dayLateMin =
-      plannedWorkMin > 0 && diffMin > 0 ? 0 : v.lateMin || 0
+    // 출근 지각 분은 일일 순근무 차이(diff)와 무관하게 집계(연장과 상쇄하지 않음)
+    const dayLateMin = v.lateMin || 0
     map[attKey].lateMin += dayLateMin
     if (dayLateMin >= LATE_HALF_DAY_MIN) {
       map[attKey].lateDaysOver10 = (map[attKey].lateDaysOver10 || 0) + 1
     }
     // 조퇴: 스케줄 대비 부족분. 퇴근이 정상(승인)이고 DB early_min이 있으면 근태 조정 반영(0이면 면제, 상한은 산정 부족분).
-    const computedEarly = plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0
-    const useDbEarly =
-      v.outApproved &&
-      String(v.outStatus || '').includes('정상(승인)') &&
-      plannedWorkMin > 0 &&
-      diffMin < 0 &&
-      v.earlyMinExplicit != null &&
-      Number.isFinite(v.earlyMinExplicit)
-    const dayEarlyMin = useDbEarly
-      ? Math.min(Math.max(0, Math.round(v.earlyMinExplicit!)), computedEarly)
-      : plannedWorkMin > 0
-        ? Math.max(0, -diffMin)
-        : 0
+    const dayEarlyMin = computeDayEarlyMinutes({
+      plannedWorkMin,
+      diffMin,
+      outApproved: v.outApproved,
+      outStatus: String(v.outStatus || ''),
+      earlyMinExplicit: v.earlyMinExplicit,
+    })
     const diffBasedOt = Math.max(0, diffMin)
     const otRaw =
       plannedWorkMin > 0
@@ -818,6 +837,7 @@ export async function GET(request: NextRequest) {
             maxRows: 120000,
           }
         )) as {
+          id?: number | null
           log_at?: string
           store_name?: string
           name?: string
@@ -843,6 +863,7 @@ export async function GET(request: NextRequest) {
             maxRows: 120000,
           }
         )) as {
+          id?: number | null
           log_at?: string
           store_name?: string
           name?: string
@@ -942,6 +963,38 @@ export async function GET(request: NextRequest) {
       loadLeaveRows(),
       loadScheduleRows(),
     ])
+    const adjustedEarlyLogIds = new Set<number>()
+    const attLogIds = Array.from(
+      new Set(
+        (attRows || [])
+          .map((r) => (r.id != null && Number.isFinite(Number(r.id)) ? Math.floor(Number(r.id)) : 0))
+          .filter((n) => n > 0)
+      )
+    )
+    if (attLogIds.length > 0) {
+      const chunkSize = 180
+      for (let i = 0; i < attLogIds.length; i += chunkSize) {
+        const chunk = attLogIds.slice(i, i + chunkSize)
+        try {
+          const rows = (await supabaseSelectFilter('attendance_log_adjustments', `attendance_log_id=in.(${chunk.join(',')})&metric=eq.early_min`, {
+            select: 'attendance_log_id',
+            limit: 5000,
+          })) as { attendance_log_id?: number | null }[]
+          for (const row of rows || []) {
+            const lid =
+              row.attendance_log_id != null && Number.isFinite(Number(row.attendance_log_id))
+                ? Math.floor(Number(row.attendance_log_id))
+                : 0
+            if (lid > 0) adjustedEarlyLogIds.add(lid)
+          }
+        } catch (e) {
+          const em = e instanceof Error ? e.message : String(e)
+          // 운영 전환 중(테이블 미생성)에는 조용히 폴백
+          if (!/attendance_log_adjustments|42P01|relation/i.test(em)) throw e
+          break
+        }
+      }
+    }
     const scheduleMap: Record<string, { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }> = {}
     for (const s of scheduleRows || []) {
       const d = scheduleDateKey(s.schedule_date as string | Date)
@@ -966,7 +1019,8 @@ export async function GET(request: NextRequest) {
       attRows || [],
       scheduleMap,
       resignByAttKey,
-      resignByEmpId
+      resignByEmpId,
+      adjustedEarlyLogIds
     )
     const firstDay = new Date(normMonth + '-01')
     const targetMonth = firstDay.getMonth()

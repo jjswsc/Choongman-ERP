@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { UserCog, Search, Palmtree } from "lucide-react"
+import { Check, UserCog, Search, Palmtree } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
@@ -67,6 +67,39 @@ function statusToKey(s: string): string | null {
   if (st.includes("위치미확인") && st.includes("승인대기")) return "att_status_gps_pending"
   if (st.includes("강제퇴근") && st.includes("승인대기")) return "att_status_forced_out_pending"
   return null
+}
+
+type LateApproveCtx = { optionalInLogId?: number | null; optLateMinutes?: number | null }
+
+function readLateAdjustFromForm(
+  form: HTMLFormElement | null | undefined,
+  inLogKey: number | null
+): LateApproveCtx | undefined {
+  if (!form || inLogKey == null || inLogKey <= 0) return undefined
+  const el = form.elements.namedItem(`adj_late_${inLogKey}`) as HTMLInputElement | null
+  const raw = el?.value?.trim()
+  if (raw === undefined || raw === "") return undefined
+  const n = parseInt(raw, 10)
+  if (isNaN(n) || n < 0 || n > 9999) return undefined
+  return { optionalInLogId: inLogKey, optLateMinutes: n }
+}
+
+function readEarlyOtFromForm(
+  form: HTMLFormElement | null | undefined,
+  adjustKey: string | number,
+  defaults: { early: number; ot: number }
+): { early: number; ot: number } {
+  const ke = String(adjustKey)
+  const eEl = form?.elements.namedItem(`adj_early_${ke}`) as HTMLInputElement | null
+  const oEl = form?.elements.namedItem(`adj_ot_${ke}`) as HTMLInputElement | null
+  const eRaw = eEl?.value?.trim()
+  const oRaw = oEl?.value?.trim()
+  const eNum = eRaw !== undefined && eRaw !== "" ? parseInt(eRaw, 10) : NaN
+  const oNum = oRaw !== undefined && oRaw !== "" ? parseInt(oRaw, 10) : NaN
+  return {
+    early: !isNaN(eNum) && eNum >= 0 ? Math.min(9999, eNum) : defaults.early,
+    ot: !isNaN(oNum) && oNum >= 0 ? Math.min(9999, oNum) : defaults.ot,
+  }
 }
 
 export function AdminTab() {
@@ -145,7 +178,14 @@ export function AdminTab() {
           ? recordList.filter((r) => r.status !== "정상")
           : recordList.filter((r) => r.status === attStatusFilter)
 
-  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null, skipReload?: boolean) => {
+  const handleApprove = async (
+    id: number,
+    optOtMinutes?: number | null,
+    waiveLate?: boolean,
+    optEarlyMinutes?: number | null,
+    skipReload?: boolean,
+    lateCtx?: LateApproveCtx
+  ) => {
     if (!auth) return
     const res = await processAttendanceApproval({
       id,
@@ -153,6 +193,12 @@ export function AdminTab() {
       optOtMinutes: optOtMinutes != null ? optOtMinutes : undefined,
       optEarlyMinutes: optEarlyMinutes != null ? optEarlyMinutes : undefined,
       waiveLate,
+      ...(lateCtx?.optLateMinutes != null && !Number.isNaN(Number(lateCtx.optLateMinutes))
+        ? { optLateMinutes: Number(lateCtx.optLateMinutes) }
+        : {}),
+      ...(lateCtx?.optionalInLogId != null && lateCtx.optionalInLogId > 0
+        ? { optionalInLogId: lateCtx.optionalInLogId }
+        : {}),
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
@@ -333,14 +379,16 @@ export function AdminTab() {
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap tabular-nums">{t("emp_label_employee_code")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_in")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_out")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_break_min")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_actual_hrs")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_planned_hrs")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_diff")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3rem]">{t("att_late_extra")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[4rem]">{t("att_adjust_label")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_break_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_actual_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_planned_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3.5rem]">{t("att_adjust_late")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3.5rem]">{t("att_adjust_early")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3.5rem]">{t("att_adjust_ot")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_status")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[90px]">{t("att_approve_btn")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[48px]">
+                      <Check className="mx-auto h-4 w-4 text-primary" aria-label={t("att_save_btn")} />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -349,8 +397,19 @@ export function AdminTab() {
                     const pendingOut = row.pendingOutId ?? null
                     const hasLegacyPending = !pendingIn && !pendingOut && row.pendingId != null
                     const hasPendingOut = pendingOut != null || (hasLegacyPending && row.pendingId != null)
-                    const earlyMinDisplay = row.diffMin < 0 ? Math.abs(row.diffMin) : 0
-                    const savedEarly = row.earlyMin ?? earlyMinDisplay
+                    const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
+                    const defaultEarly =
+                      row.plannedWorkHrs > 0 && row.diffMin < 0
+                        ? (row.earlyMin ?? Math.abs(row.diffMin))
+                        : 0
+                    const defaultOt =
+                      row.plannedWorkHrs > 0 && row.diffMin > 0
+                        ? isOvertimeRow
+                          ? (row.otMin ?? row.diffMin)
+                          : row.diffMin >= 30
+                            ? (row.otMin ?? row.diffMin)
+                            : 0
+                        : 0
                     const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
                     const statusStr = String(row.status || "")
                     const showAdjustInput =
@@ -365,17 +424,25 @@ export function AdminTab() {
                       : row.outLogId != null
                         ? row.outLogId
                         : `${row.date}-${row.store}-${row.name}`
-                    const isOvertimeCell = row.diffMin > 0 && (row.otMin ?? 0) >= 30
-                    const defaultVal = String(
-                      row.plannedWorkHrs > 0 && row.diffMin < 0
-                        ? (row.earlyMin ?? Math.abs(row.diffMin))
-                        : row.plannedWorkHrs > 0 && row.diffMin > 0
-                          ? (isOvertimeCell ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
-                          : row.lateMin > 0
-                            ? Math.max(1, row.lateMin)
-                            : 0
-                    )
-                    const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
+                    const isPureLate =
+                      row.lateMin > 0 &&
+                      row.diffMin === 0 &&
+                      (row.earlyMin ?? 0) === 0 &&
+                      (row.otMin ?? 0) < 30
+                    const inLogKey = row.inLogId ?? pendingIn ?? null
+                    const lateDefault = String(row.lateMin > 0 ? Math.max(1, row.lateMin) : 0)
+                    const showLateInput =
+                      showAdjustInput &&
+                      row.plannedWorkHrs > 0 &&
+                      inLogKey != null &&
+                      (row.lateMin > 0 || pendingIn != null)
+                    const showOutInput = showAdjustInput && !isPureLate
+                    const lateBefore = Math.max(0, Math.round(row.lateBeforeMin ?? row.lateMin ?? 0))
+                    const lateAfter = Math.max(0, Math.round(row.lateAfterMin ?? row.lateMin ?? 0))
+                    const earlyBefore = Math.max(0, Math.round(row.earlyBeforeMin ?? defaultEarly))
+                    const earlyAfter = Math.max(0, Math.round(row.earlyAfterMin ?? defaultEarly))
+                    const otBefore = Math.max(0, Math.round(row.otBeforeMin ?? defaultOt))
+                    const otAfter = Math.max(0, Math.round(row.otAfterMin ?? defaultOt))
                     return (
                       <tr key={`r-${row.date}-${row.store}-${row.name}-${i}`} className="border-b last:border-b-0">
                         <td className="px-2 py-2 text-center">{row.date}</td>
@@ -387,44 +454,96 @@ export function AdminTab() {
                         <td className="px-2 py-2 text-center">{row.actualWorkHrs}</td>
                         <td className="px-2 py-2 text-center">{row.plannedWorkHrs}</td>
                         <td className="px-2 py-2 text-center">
-                          {row.plannedWorkHrs === 0 ? "-" : (
-                            <span className={row.diffMin < 0 ? "text-amber-600" : undefined}>
-                              {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin}`}
+                          {showLateInput ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                              <span className="text-xs font-medium text-muted-foreground tabular-nums">{lateBefore}→</span>
+                              <Input
+                                key={`late-${inLogKey}`}
+                                name={`adj_late_${inLogKey}`}
+                                type="number"
+                                min={0}
+                                max={999}
+                                placeholder="0"
+                                defaultValue={String(lateAfter)}
+                                className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-red-600 text-center tabular-nums mx-auto"
+                              />
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums">
+                              <span className="text-muted-foreground">{lateBefore}</span>
+                              <span className="text-xs text-muted-foreground">→</span>
+                              <span className="text-red-600">{lateAfter}</span>
                             </span>
                           )}
                         </td>
                         <td className="px-2 py-2 text-center">
-                          {(() => {
-                            if (row.plannedWorkHrs === 0) return "-"
-                            if (row.diffMin < 0) return <span className="text-amber-600">{savedEarly}</span>
-                            if (row.diffMin > 0) return <span className="text-blue-600">{row.otMin ?? row.diffMin}</span>
-                            if (row.lateMin > 0) return <span className="text-red-600">{row.lateMin}</span>
-                            return "-"
-                          })()}
+                          {showOutInput ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                              <span className="text-xs font-medium text-muted-foreground tabular-nums">{earlyBefore}→</span>
+                              <Input
+                                key={`early-${adjustKey}`}
+                                name={`adj_early_${adjustKey}`}
+                                type="number"
+                                min={0}
+                                max={999}
+                                placeholder="0"
+                                defaultValue={String(earlyAfter)}
+                                className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-amber-600 text-center tabular-nums mx-auto"
+                              />
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums">
+                              <span className="text-muted-foreground">{earlyBefore}</span>
+                              <span className="text-xs text-muted-foreground">→</span>
+                              <span className="text-amber-600">{earlyAfter}</span>
+                            </span>
+                          )}
                         </td>
                         <td className="px-2 py-2 text-center">
-                          {showAdjustInput ? (
-                            <Input
-                              key={String(adjustKey)}
-                              name={`adj_${adjustKey}`}
-                              type="number"
-                              min={isLateOrPendingIn ? 1 : 0}
-                              max={999}
-                              placeholder={isLateOrPendingIn ? "1" : "0"}
-                              defaultValue={defaultVal}
-                              data-adjust-key={String(adjustKey)}
-                              className="h-7 min-w-[3rem] w-14 text-xs text-center tabular-nums mx-auto"
-                            />
+                          {showOutInput ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                              <span className="text-xs font-medium text-muted-foreground tabular-nums">{otBefore}→</span>
+                              <Input
+                                key={`ot-${adjustKey}`}
+                                name={`adj_ot_${adjustKey}`}
+                                type="number"
+                                min={0}
+                                max={999}
+                                placeholder="0"
+                                defaultValue={String(otAfter)}
+                                data-adjust-key={String(adjustKey)}
+                                className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-blue-600 text-center tabular-nums mx-auto"
+                              />
+                            </div>
+                          ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
+                              title={t("att_force_out_hint")}
+                              onClick={() => handleApproveNoClockOut(row)}
+                            >
+                              {t("att_approve_forced_out")}
+                            </Button>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums">
+                              <span className="text-muted-foreground">{otBefore}</span>
+                              <span className="text-xs text-muted-foreground">→</span>
+                              <span className="text-blue-600">{otAfter}</span>
+                            </span>
                           )}
                         </td>
                         <td className="px-2 py-2 text-center">
                           {pendingIn != null ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px]">
-                                  {row.inStatus?.includes("위치미확인") ? "위치미확인" : row.status}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-1.5 text-[10px] text-muted-foreground border-border hover:bg-muted"
+                                >
+                                  {t("att_btn_process")}
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="center">
@@ -453,32 +572,27 @@ export function AdminTab() {
                                 type="button"
                                 size="sm"
                                 variant="default"
-                                className="h-6 px-1.5 text-[10px]"
+                                className="h-6 w-6 p-0"
+                                title={t("att_save_btn")}
                                 onClick={async (e) => {
                                   e.preventDefault()
                                   const outId = pendingOut ?? row.pendingId!
                                   const keyForInput = String(pendingOut ?? row.pendingId ?? adjustKey)
                                   const form = (e.currentTarget as HTMLButtonElement).form
-                                  const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
-                                  const fromInput = input?.value?.trim()
-                                  const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : defaultVal
-                                  const n = parseInt(otVal, 10)
-                                  const num = !isNaN(n) && n >= 0 ? n : undefined
-                                  if (row.diffMin < 0) {
-                                    handleApprove(outId, undefined, undefined, num ?? 0)
-                                  } else if (row.diffMin > 0 || row.otMin >= 30) {
-                                    if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
-                                      await handleApprove(pendingIn, undefined, true, undefined, true)
-                                    }
-                                    handleApprove(outId, num ?? undefined, undefined)
-                                  } else {
-                                    handleApprove(outId, undefined, undefined)
+                                  const { early, ot } = readEarlyOtFromForm(form, keyForInput, {
+                                    early: defaultEarly,
+                                    ot: defaultOt,
+                                  })
+                                  const inKey = row.inLogId ?? pendingIn
+                                  const lateCtx = readLateAdjustFromForm(form, inKey)
+                                  if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
+                                    await handleApprove(pendingIn, undefined, true, undefined, true)
                                   }
+                                  handleApprove(outId, ot, undefined, early, false, lateCtx)
                                 }}
                               >
-                                {t("att_btn_approve")}
+                                <Check className="h-3.5 w-3.5" />
                               </Button>
-                              <Button type="button" size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                             </div>
                           ) : !hasPendingOut &&
                             row.outLogId != null &&
@@ -494,39 +608,26 @@ export function AdminTab() {
                                 type="button"
                                 size="sm"
                                 variant="default"
-                                className="h-6 px-1.5 text-[10px]"
+                                className="h-6 w-6 p-0"
+                                title={t("att_save_btn")}
                                 onClick={async (e) => {
                                   e.preventDefault()
                                   const outId = row.outLogId!
                                   const keyForInput = String(outId)
                                   const form = (e.currentTarget as HTMLButtonElement).form
-                                  const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
-                                  const fromInput = input?.value?.trim()
-                                  const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : defaultVal
-                                  const n = parseInt(otVal, 10)
-                                  const num = !isNaN(n) && n >= 0 ? n : undefined
-                                  if (row.diffMin < 0) {
-                                    handleApprove(outId, undefined, undefined, num ?? 0)
-                                  } else if (row.diffMin > 0 || row.otMin >= 30) {
-                                    if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
-                                      await handleApprove(pendingIn, undefined, true, undefined, true)
-                                    }
-                                    handleApprove(outId, num ?? undefined, undefined)
-                                  } else {
-                                    handleApprove(outId, undefined, undefined)
+                                  const { early, ot } = readEarlyOtFromForm(form, keyForInput, {
+                                    early: defaultEarly,
+                                    ot: defaultOt,
+                                  })
+                                  const inKey = row.inLogId ?? pendingIn
+                                  const lateCtx = readLateAdjustFromForm(form, inKey)
+                                  if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
+                                    await handleApprove(pendingIn, undefined, true, undefined, true)
                                   }
+                                  handleApprove(outId, ot, undefined, early, false, lateCtx)
                                 }}
                               >
-                                {t("att_btn_approve")}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-6 px-1.5 text-[10px]"
-                                onClick={() => handleReject(row.outLogId!)}
-                              >
-                                {t("att_btn_reject")}
+                                <Check className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           ) : !hasPendingOut &&
@@ -543,44 +644,41 @@ export function AdminTab() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-6 px-1.5 text-[10px]"
+                              className="h-6 w-6 p-0"
+                              title={t("att_save_btn")}
                                 onClick={(e) => {
                                 e.preventDefault()
                                 const outId = row.outLogId!
                                 const form = (e.currentTarget as HTMLButtonElement).form
-                                const input = form?.elements.namedItem(`adj_${outId}`) as HTMLInputElement | null
-                                const fromInput = input?.value?.trim()
-                                const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
-                                const defaultVal =
-                                  row.plannedWorkHrs > 0 && row.diffMin < 0
-                                    ? (row.earlyMin ?? Math.abs(row.diffMin))
-                                    : row.plannedWorkHrs > 0 && row.diffMin > 0
-                                      ? (isOvertimeRow ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
-                                      : row.lateMin > 0
-                                        ? Math.max(1, row.lateMin)
-                                        : 0
-                                const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
-                                const n = parseInt(otVal, 10)
-                                const num = !isNaN(n) && n >= 0 ? n : 0
-                                // 사용자가 0을 입력한 경우 절대 덮어쓰지 않음. 기존 noUserInput 시 currentOvertime으로 덮어쓰던 로직 제거.
-                                const isLateOnly = row.lateMin > 0 && row.diffMin === 0 && (row.earlyMin ?? 0) === 0 && (row.otMin ?? 0) < 30
-                                if (isLateOnly) {
-                                  handleApprove(outId, undefined, undefined)
-                                } else if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
-                                  handleApprove(outId, undefined, undefined, num)
+                                const { early, ot } = readEarlyOtFromForm(form, outId, {
+                                  early: defaultEarly,
+                                  ot: defaultOt,
+                                })
+                                const inKey = row.inLogId ?? pendingIn
+                                const lateCtx = readLateAdjustFromForm(form, inKey)
+                                const isLateOnly =
+                                  row.lateMin > 0 &&
+                                  row.diffMin === 0 &&
+                                  (row.earlyMin ?? 0) === 0 &&
+                                  (row.otMin ?? 0) < 30
+                                if (isLateOnly && inKey) {
+                                  const onlyLate = readLateAdjustFromForm(form, inKey)
+                                  if (onlyLate?.optLateMinutes != null) {
+                                    handleApprove(inKey, undefined, undefined, undefined, false, {
+                                      optLateMinutes: onlyLate.optLateMinutes,
+                                    })
+                                  } else {
+                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                  }
                                 } else {
-                                  handleApprove(outId, num, undefined)
+                                  handleApprove(outId, ot, undefined, early, false, lateCtx)
                                 }
                               }}
                             >
-                              {t("att_apply_adjust")}
-                            </Button>
-                          ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
-                            <Button type="button" size="sm" variant="outline" className="h-6 px-1.5 text-[10px] text-amber-600" onClick={() => handleApproveNoClockOut(row)}>
-                              {t("att_approve_forced_out")}
+                              <Check className="h-3.5 w-3.5" />
                             </Button>
                           ) : (
-                            <span className="text-[10px] text-muted-foreground">-</span>
+                            <span className="text-[10px] text-muted-foreground"></span>
                           )}
                         </td>
                       </tr>

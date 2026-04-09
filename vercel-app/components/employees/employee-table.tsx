@@ -1,7 +1,6 @@
 "use client"
 
 import { Pencil, Trash2 } from "lucide-react"
-import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { displayLabelShort } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
@@ -24,10 +23,16 @@ function gradeBadgeStyle(g: string): string {
   return "bg-gray-500 text-white"
 }
 
+function isManagerRoleBadge(role: string): boolean {
+  return String(role || "")
+    .trim()
+    .toLowerCase()
+    .includes("manager")
+}
+
 export interface EmployeeTableRow extends AdminEmployeeItem {
   finalGrade?: string
-  kitchenGrade?: string
-  serviceGrade?: string
+  /** 매니저 평가 유형 전용 — 등급 열에서 일반 등급과 나란히 표시 */
   managerGrade?: string
 }
 
@@ -42,13 +47,9 @@ interface EmployeeTableProps {
 }
 
 export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter }: EmployeeTableProps) {
-  const { lang } = useLang()
-  const ageSuffix = lang === "ko" ? "세" : ""
   const cols = [
     t("emp_label_store"),
     t("emp_grade"),
-    t("eval_type_kitchen_emp"),
-    t("eval_type_service_emp"),
     t("emp_label_name"),
     t("emp_label_employee_code"),
     t("emp_label_nickname"),
@@ -86,8 +87,10 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                 ? `${new Date().getFullYear() - new Date(e.birth).getFullYear()}`
                 : "-"
               const grade = e.finalGrade || "-"
-              const kitchenGrade = String(e.kitchenGrade || "").trim() || "-"
-              const serviceGrade = String(e.serviceGrade || "").trim() || "-"
+              const managerGrade = String(e.managerGrade || "").trim()
+              const isMgrRow = isManagerRoleBadge(e.role || "")
+              const mgrEvalDisplay =
+                managerGrade && managerGrade !== "-" ? managerGrade : "-"
               const resignStr = String(e.resign || "").trim()
               const resignDate = resignStr ? resignStr.slice(0, 10) : ""
               const todayStr = new Date().toISOString().slice(0, 10)
@@ -100,19 +103,21 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                 >
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.store}</td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(grade)}`}>
-                      {grade}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(kitchenGrade)}`}>
-                      {kitchenGrade}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(serviceGrade)}`}>
-                      {serviceGrade}
-                    </span>
+                    <div className="flex flex-wrap items-center justify-center gap-1">
+                      <span
+                        className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(grade)}`}
+                      >
+                        {grade}
+                      </span>
+                      {isMgrRow ? (
+                        <span
+                          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(mgrEvalDisplay)}`}
+                          title={t("eval_type_manager_emp")}
+                        >
+                          {mgrEvalDisplay}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-center font-bold text-card-foreground">
                     {formatEmployeeDisplayName(e.name, e.nameTitle)}
@@ -122,7 +127,7 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                   </td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{displayLabelShort(e.nick) || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.nation || "-"}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground">{age}{age !== "-" ? ageSuffix : ""}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground tabular-nums">{age}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${roleBadgeStyle(e.role)}`}>
                       {displayLabelShort(e.role)}

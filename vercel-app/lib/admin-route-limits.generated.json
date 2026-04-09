@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-09T07:16:34.592Z",
-  "entryCount": 710,
+  "generatedAt": "2026-04-09T10:56:54.997Z",
+  "entryCount": 716,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -400,6 +400,27 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "deleteEvaluationItem"
+    },
+    {
+      "path": "app/api/deleteEvaluationResult/route.ts",
+      "line": 50,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteEvaluationResult"
+    },
+    {
+      "path": "app/api/deleteEvaluationResult/route.ts",
+      "line": 72,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteEvaluationResult"
+    },
+    {
+      "path": "app/api/deleteEvaluationResult/route.ts",
+      "line": 105,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "deleteEvaluationResult"
     },
     {
       "path": "app/api/deleteExpenseAccrualsWithoutStore/route.ts",
@@ -907,35 +928,42 @@
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 157,
+      "line": 165,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 158,
+      "line": 166,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 252,
+      "line": 278,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 313,
+      "line": 336,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getAttendanceRecordsAdmin"
+    },
+    {
+      "path": "app/api/getAttendanceRecordsAdmin/route.ts",
+      "line": 397,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 314,
+      "line": 398,
       "kind": "maxRows",
       "value": 2000000,
       "apiLabel": "getAttendanceRecordsAdmin"
@@ -1852,70 +1880,56 @@
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 795,
+      "line": 814,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 796,
+      "line": 815,
       "kind": "maxRows",
       "value": 40000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 817,
+      "line": 836,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 818,
+      "line": 837,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 842,
+      "line": 862,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 843,
+      "line": 863,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 868,
+      "line": 889,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 869,
-      "kind": "maxRows",
-      "value": 120000,
-      "apiLabel": "getPayrollCalc"
-    },
-    {
-      "path": "app/api/getPayrollCalc/route.ts",
-      "line": 891,
-      "kind": "pageSize",
-      "value": 2500,
-      "apiLabel": "getPayrollCalc"
-    },
-    {
-      "path": "app/api/getPayrollCalc/route.ts",
-      "line": 892,
+      "line": 890,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
@@ -1923,15 +1937,36 @@
     {
       "path": "app/api/getPayrollCalc/route.ts",
       "line": 912,
+      "kind": "pageSize",
+      "value": 2500,
+      "apiLabel": "getPayrollCalc"
+    },
+    {
+      "path": "app/api/getPayrollCalc/route.ts",
+      "line": 913,
+      "kind": "maxRows",
+      "value": 120000,
+      "apiLabel": "getPayrollCalc"
+    },
+    {
+      "path": "app/api/getPayrollCalc/route.ts",
+      "line": 933,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 927,
+      "line": 948,
       "kind": "limit",
       "value": 1000,
+      "apiLabel": "getPayrollCalc"
+    },
+    {
+      "path": "app/api/getPayrollCalc/route.ts",
+      "line": 981,
+      "kind": "limit",
+      "value": 5000,
       "apiLabel": "getPayrollCalc"
     },
     {
@@ -3189,7 +3224,14 @@
     },
     {
       "path": "app/api/processAttendanceApproval/route.ts",
-      "line": 28,
+      "line": 36,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "processAttendanceApproval"
+    },
+    {
+      "path": "app/api/processAttendanceApproval/route.ts",
+      "line": 162,
       "kind": "limit",
       "value": 1,
       "apiLabel": "processAttendanceApproval"
@@ -3553,21 +3595,21 @@
     },
     {
       "path": "app/api/saveEvaluationResult/route.ts",
-      "line": 62,
+      "line": 87,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveEvaluationResult"
     },
     {
       "path": "app/api/saveEvaluationResult/route.ts",
-      "line": 119,
+      "line": 158,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveEvaluationResult"
     },
     {
       "path": "app/api/saveEvaluationResult/route.ts",
-      "line": 142,
+      "line": 181,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveEvaluationResult"
@@ -3882,70 +3924,70 @@
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 100,
+      "line": 123,
       "kind": "limit",
       "value": 1,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 116,
+      "line": 139,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 140,
+      "line": 163,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 148,
+      "line": 171,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 177,
+      "line": 200,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 282,
+      "line": 315,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 384,
+      "line": 417,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 396,
+      "line": 429,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 410,
+      "line": 443,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 466,
+      "line": 499,
       "kind": "limit",
       "value": 50,
       "apiLabel": "submitAttendance"

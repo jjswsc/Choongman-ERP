@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   ATTENDANCE_LOG_ADMIN_GRID_COLS,
   ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
@@ -75,14 +75,22 @@ export interface AttendanceDailyRow {
   plannedWorkHrs: number
   diffMin: number
   lateMin: number
+  lateBeforeMin?: number
+  lateAfterMin?: number
   earlyMin?: number
+  earlyBeforeMin?: number
+  earlyAfterMin?: number
   otMin: number
+  otBeforeMin?: number
+  otAfterMin?: number
   status: string
   approval: string
   /** @deprecated use pendingInId/pendingOutId */
   pendingId: number | null
   pendingInId: number | null
   pendingOutId: number | null
+  /** 출근 로그 id (승인 여부 무관, 지각 조정 반영 시 사용) */
+  inLogId?: number | null
   /** 퇴근 로그 id (승인 여부 무관, 조정 반영 시 사용) */
   outLogId: number | null
   inStatus?: string
@@ -240,6 +248,82 @@ export async function GET(request: NextRequest) {
       attRows = await fetchAttGrid(parts.join('&'))
     }
 
+    // 조정 이력(원본 보존): 최초 before + 최신 after를 log_id/metric 별로 구성
+    const firstBeforeByMetricKey: Record<string, number> = {}
+    const latestAfterByMetricKey: Record<string, number> = {}
+    const attLogIds = Array.from(
+      new Set(
+        (attRows || [])
+          .map((r) => (r.id != null && Number.isFinite(Number(r.id)) ? Math.floor(Number(r.id)) : 0))
+          .filter((n) => n > 0)
+      )
+    )
+    if (attLogIds.length > 0) {
+      const chunkSize = 180
+      type AdjRow = {
+        attendance_log_id?: number | null
+        metric?: string | null
+        before_value?: number | null
+        after_value?: number | null
+        changed_at?: string | null
+      }
+      const adjRowsAll: AdjRow[] = []
+      for (let i = 0; i < attLogIds.length; i += chunkSize) {
+        const chunk = attLogIds.slice(i, i + chunkSize)
+        const filter = `attendance_log_id=in.(${chunk.join(',')})`
+        try {
+          const rows = (await supabaseSelectFilter('attendance_log_adjustments', filter, {
+            select: 'attendance_log_id,metric,before_value,after_value,changed_at',
+            order: 'changed_at.asc',
+            limit: 5000,
+          })) as AdjRow[]
+          adjRowsAll.push(...(rows || []))
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          // 운영 전환 중(테이블 미생성)에는 조용히 폴백
+          if (!/attendance_log_adjustments|42P01|relation/i.test(msg)) throw e
+          break
+        }
+      }
+      for (const a of adjRowsAll) {
+        const lid =
+          a.attendance_log_id != null && Number.isFinite(Number(a.attendance_log_id))
+            ? Math.floor(Number(a.attendance_log_id))
+            : 0
+        const metric = String(a.metric || '').trim()
+        if (lid <= 0 || !['late_min', 'early_min', 'ot_min'].includes(metric)) continue
+        const b =
+          a.before_value != null && Number.isFinite(Number(a.before_value))
+            ? Math.max(0, Math.min(9999, Math.round(Number(a.before_value))))
+            : null
+        const af =
+          a.after_value != null && Number.isFinite(Number(a.after_value))
+            ? Math.max(0, Math.min(9999, Math.round(Number(a.after_value))))
+            : null
+        const k = `${lid}|${metric}`
+        if (b != null && firstBeforeByMetricKey[k] == null) firstBeforeByMetricKey[k] = b
+        if (af != null) latestAfterByMetricKey[k] = af
+      }
+    }
+    const hasMetricAdjustment = (
+      logId: number | null | undefined,
+      metric: 'late_min' | 'early_min' | 'ot_min'
+    ) => {
+      if (!logId || logId <= 0) return false
+      const k = `${logId}|${metric}`
+      return firstBeforeByMetricKey[k] != null || latestAfterByMetricKey[k] != null
+    }
+    const metricBefore = (logId: number | null | undefined, metric: 'late_min' | 'early_min' | 'ot_min', fallback: number) => {
+      if (!logId || logId <= 0) return fallback
+      const k = `${logId}|${metric}`
+      return firstBeforeByMetricKey[k] != null ? Number(firstBeforeByMetricKey[k]) : fallback
+    }
+    const metricAfter = (logId: number | null | undefined, metric: 'late_min' | 'early_min' | 'ot_min', fallback: number) => {
+      if (!logId || logId <= 0) return fallback
+      const k = `${logId}|${metric}`
+      return latestAfterByMetricKey[k] != null ? Number(latestAfterByMetricKey[k]) : fallback
+    }
+
     /** 파트타임/시급 식별 + 직원코드 맵 + 그리드 표시명(Mr./Ms. + name) */
     const partTimeKeys = new Set<string>()
     const codeByStoreName: Record<string, string> = {}
@@ -346,6 +430,8 @@ export async function GET(request: NextRequest) {
         status: string
         approval: string
         inId: number | null
+        /** 당일 출근 로그 id (지각 분 조정·표시용, 승인 여부와 무관) */
+        inLogId: number | null
         outId: number | null
         outLogId: number | null
         outApproved: string
@@ -385,6 +471,7 @@ export async function GET(request: NextRequest) {
           status: '',
           approval: '대기',
           inId: null,
+          inLogId: null,
           outId: null,
           outLogId: null,
           outApproved: '',
@@ -402,6 +489,7 @@ export async function GET(request: NextRequest) {
         if (!rec.inTime || logAt < (rec.inTime || '')) {
           rec.inTime = logAt
           rec.lateMin = Number(r.late_min) || 0
+          rec.inLogId = r.id != null ? Number(r.id) : null
           if (needsInApproval) {
             rec.inId = r.id ?? null
             rec.inStatus = st || ''
@@ -409,7 +497,7 @@ export async function GET(request: NextRequest) {
         }
       } else if (type === '퇴근') {
         const bangkokHour = getBangkokHour(logAt)
-        const isOvernightOut = bangkokHour < 7
+        const isOvernightOut = bangkokHour <= 7
         const prevDayKey = eid > 0 ? `${addDay(rowDate, -1)}|${rowStore}|#${eid}` : `${addDay(rowDate, -1)}|${rowStore}|${name}`
         const prevRec = byKey[prevDayKey]
 
@@ -456,6 +544,7 @@ export async function GET(request: NextRequest) {
       let outIdForRow = rec.outId
       let outLogIdForRow = rec.outLogId
       const inIdForRow = rec.inId
+      const inLogIdForRow = rec.inLogId
       const inStatusForRow = rec.inStatus || ''
 
       if (!outTimeForRow) {
@@ -516,34 +605,34 @@ export async function GET(request: NextRequest) {
       const approvedOut = outAppr === '승인완료' || outAppr === '승인'
       const statusStr = String(statusForRow || '').trim()
       const computedEarlyMin = plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0
-      /** 퇴근 승인 후 DB early_min(NULL이면 자동 산정분). NOT NULL DEFAULT 0 스키마면 과거 데이터가 면제로 보일 수 있음 */
+      const hasEarlyAdjustment = hasMetricAdjustment(outLogIdForRow ?? null, 'early_min')
+      const hasEarlyOverride =
+        (earlyMinDb != null && Number.isFinite(earlyMinDb) && Number(earlyMinDb) > 0) || hasEarlyAdjustment
+      /** 퇴근 승인 후 DB early_min은 "조정값"이 있을 때만 우선 적용(기본 0 오인 방지). */
       const useDbEarly =
         approvedOut &&
         statusStr.includes('정상(승인)') &&
         plannedWorkMin > 0 &&
         diffMin < 0 &&
+        hasEarlyOverride &&
         earlyMinDb != null &&
         Number.isFinite(earlyMinDb)
       const displayEarlyMin = useDbEarly
         ? Math.min(Math.max(0, Math.round(earlyMinDb as number)), computedEarlyMin)
         : computedEarlyMin
 
-      // 실제 근무시간이 0이면 지각 의미 없음. 스케줄 대비 순증 근무(diff>0)면 지각 분 숨김(급여 지각 공제와 동일)
+      // 실제 근무시간이 0이면 지각 의미 없음. 늦게 퇴근해 diff>0이어도 출근 지각 분은 별도 유지(OT와 상쇄하지 않음)
       const rawLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
-      const effectiveLateMin = plannedWorkMin > 0 && diffMin > 0 ? 0 : rawLateMin
+      const effectiveLateMin = rawLateMin
       // 연장: 차이가 음수(조퇴)면 OT 없음. 그 외는 DB 조정값 또는 스케줄 차이(급여 집계와 동일)
-      const effectiveOtMin =
+      const effectiveOtMinRaw =
         actualWorkMin <= 0 || plannedWorkMin <= 0 || diffMin < 0
           ? 0
           : otMinForRow != null
             ? otMinForRow
             : Math.max(0, diffMin)
-      const displayOtMin =
-        diffMin < 0
-          ? 0
-          : otMinForRow != null
-            ? effectiveOtMin
-            : otMinutesForPayroll(Math.max(0, diffMin))
+      // 급여 기준과 동일: OT 30분 미만은 0분으로 표시/반영
+      const displayOtMin = diffMin < 0 ? 0 : otMinutesForPayroll(Math.max(0, effectiveOtMinRaw))
 
       if (pendingOnly && !isPending) continue
 
@@ -570,6 +659,15 @@ export async function GET(request: NextRequest) {
       const inStr = toTimeStr(inTimeForRow)
       const outStr = outTimeForRow ? toTimeStr(outTimeForRow) : '-'
       const sameMinute = outTimeForRow && inStr === outStr
+      const lateBeforeMin = metricBefore(inLogIdForRow ?? null, 'late_min', effectiveLateMin)
+      const lateAfterMin = metricAfter(inLogIdForRow ?? null, 'late_min', effectiveLateMin)
+      const earlyBeforeMin = metricBefore(outLogIdForRow ?? null, 'early_min', displayEarlyMin)
+      const earlyAfterMin = metricAfter(outLogIdForRow ?? null, 'early_min', displayEarlyMin)
+      // OT 전(before): 실제(원시) 분, OT 후(after): 급여 기준(30분 미만 0)으로 표시
+      const otBeforeRaw = metricBefore(outLogIdForRow ?? null, 'ot_min', effectiveOtMinRaw)
+      const otAfterRaw = metricAfter(outLogIdForRow ?? null, 'ot_min', effectiveOtMinRaw)
+      const otBeforeMin = Math.max(0, Math.round(otBeforeRaw))
+      const otAfterMin = otMinutesForPayroll(Math.max(0, otAfterRaw))
       result.push({
         date: dateForRow,
         store: rec.store,
@@ -594,13 +692,20 @@ export async function GET(request: NextRequest) {
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,
         lateMin: effectiveLateMin,
+        lateBeforeMin,
+        lateAfterMin,
         earlyMin: displayEarlyMin,
+        earlyBeforeMin,
+        earlyAfterMin,
         otMin: displayOtMin,
+        otBeforeMin,
+        otAfterMin,
         status: displayStatus,
         approval: approval || '대기',
         pendingId: outIdForRow ?? inIdForRow,
         pendingInId: inIdForRow,
         pendingOutId: outIdForRow,
+        inLogId: inLogIdForRow ?? null,
         outLogId: outLogIdForRow ?? null,
         inStatus: inStatusForRow,
         isPartTime,

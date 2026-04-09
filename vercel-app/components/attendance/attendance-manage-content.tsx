@@ -3,7 +3,7 @@ import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { Clock, Search } from "lucide-react"
+import { Check, Clock, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -76,6 +76,40 @@ function statusLabel(s: string | undefined, t: (key: string) => string): string 
   if (!raw) return "-"
   const key = statusToKey(raw)
   return key ? t(key) : raw
+}
+
+type LateApproveCtx = { optionalInLogId?: number | null; optLateMinutes?: number | null }
+
+function readLateAdjustFromForm(
+  form: HTMLFormElement | null | undefined,
+  inLogKey: number | null
+): LateApproveCtx | undefined {
+  if (!form || inLogKey == null || inLogKey <= 0) return undefined
+  const el = form.elements.namedItem(`adj_late_${inLogKey}`) as HTMLInputElement | null
+  const raw = el?.value?.trim()
+  if (raw === undefined || raw === "") return undefined
+  const n = parseInt(raw, 10)
+  if (isNaN(n) || n < 0 || n > 9999) return undefined
+  return { optionalInLogId: inLogKey, optLateMinutes: n }
+}
+
+/** 퇴근 로그 조정: 조퇴(early)·OT 분 — `adj_early_*` / `adj_ot_*` */
+function readEarlyOtFromForm(
+  form: HTMLFormElement | null | undefined,
+  adjustKey: string | number,
+  defaults: { early: number; ot: number }
+): { early: number; ot: number } {
+  const ke = String(adjustKey)
+  const eEl = form?.elements.namedItem(`adj_early_${ke}`) as HTMLInputElement | null
+  const oEl = form?.elements.namedItem(`adj_ot_${ke}`) as HTMLInputElement | null
+  const eRaw = eEl?.value?.trim()
+  const oRaw = oEl?.value?.trim()
+  const eNum = eRaw !== undefined && eRaw !== "" ? parseInt(eRaw, 10) : NaN
+  const oNum = oRaw !== undefined && oRaw !== "" ? parseInt(oRaw, 10) : NaN
+  return {
+    early: !isNaN(eNum) && eNum >= 0 ? Math.min(9999, eNum) : defaults.early,
+    ot: !isNaN(oNum) && oNum >= 0 ? Math.min(9999, oNum) : defaults.ot,
+  }
 }
 
 /** 근태 기록/승인: 긴 목록은 이 박스 안에서 세로·가로 스크롤 (헤더 행 sticky) */
@@ -300,13 +334,26 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     }
   }
 
-  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null, skipReload?: boolean) => {
+  const handleApprove = async (
+    id: number,
+    optOtMinutes?: number | null,
+    waiveLate?: boolean,
+    optEarlyMinutes?: number | null,
+    skipReload?: boolean,
+    lateCtx?: LateApproveCtx
+  ) => {
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
       optOtMinutes: optOtMinutes != null ? optOtMinutes : undefined,
       optEarlyMinutes: optEarlyMinutes != null ? optEarlyMinutes : undefined,
       waiveLate,
+      ...(lateCtx?.optLateMinutes != null && !Number.isNaN(Number(lateCtx.optLateMinutes))
+        ? { optLateMinutes: Number(lateCtx.optLateMinutes) }
+        : {}),
+      ...(lateCtx?.optionalInLogId != null && lateCtx.optionalInLogId > 0
+        ? { optionalInLogId: lateCtx.optionalInLogId }
+        : {}),
       userStore: auth?.store,
       userRole: auth?.role,
     })
@@ -396,17 +443,19 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                 <p className="text-xs text-muted-foreground mt-1">{t("att_help_approval_out")}</p>
               </section>
               <section>
-                <h3 className="text-sm font-medium mb-1">{t("att_adjust_label")}</h3>
-                <p className="text-xs text-muted-foreground">{t("att_help_adjust")}</p>
+                <h3 className="text-sm font-medium mb-1">
+                  {t("att_adjust_late")} / {t("att_adjust_early")} / {t("att_adjust_ot")}
+                </h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_adjust_split")}</p>
               </section>
               <section>
                 <h3 className="text-sm font-medium mb-1">{t("att_ot_label")} (O.T)</h3>
                 <p className="text-xs text-muted-foreground">{t("att_help_ot")}</p>
               </section>
               <section>
-                <h3 className="text-sm font-medium mb-1">{t("att_col_diff")} / {t("att_late_extra")}</h3>
+                <h3 className="text-sm font-medium mb-1">{t("att_col_diff")}</h3>
                 <p className="text-xs text-muted-foreground">{t("att_help_diff")}</p>
-                <p className="text-xs text-muted-foreground mt-1">{t("att_help_late_ot")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("att_help_diff_types")}</p>
               </section>
               <section>
                 <h3 className="text-sm font-medium mb-1">{t("att_col_status")}</h3>
@@ -518,7 +567,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
                       {allowEdit && (
-                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">
+                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[60px]">
                           {t("att_btn_emergency_approve")}
                         </th>
                       )}
@@ -569,20 +618,26 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-2 py-2.5 text-center font-semibold">{t("emp_label_employee_code")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_actual_hrs")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold min-w-[3rem]">{t("att_late_extra")}</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_actual_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                       {allowEdit && (
-                        <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20">
-                          {t("att_adjust_label")}
-                        </th>
+                        <>
+                          <th className="px-2 py-2.5 text-center font-semibold min-w-[4rem] w-16">
+                            {t("att_adjust_late")} <span className="text-[10px] text-muted-foreground">(M)</span>
+                          </th>
+                          <th className="px-2 py-2.5 text-center font-semibold min-w-[4rem] w-16">
+                            {t("att_adjust_early")} <span className="text-[10px] text-muted-foreground">(M)</span>
+                          </th>
+                          <th className="px-2 py-2.5 text-center font-semibold min-w-[4rem] w-16">
+                            {t("att_adjust_ot")} <span className="text-[10px] text-muted-foreground">(M)</span>
+                          </th>
+                        </>
                       )}
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
                       {allowEdit && (
-                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">
-                          {t("att_approve_btn")}
+                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[48px]">
+                          <Check className="mx-auto h-4 w-4 text-primary" aria-label={t("att_save_btn")} />
                         </th>
                       )}
                     </tr>
@@ -596,6 +651,25 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       const hasPending = hasNewPending || hasLegacyPending
                       const isPending = hasPending
                       const hasPendingOut = pendingOut != null || (hasLegacyPending && row.pendingId != null)
+                      const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
+                      const defaultEarly =
+                        row.plannedWorkHrs > 0 && row.diffMin < 0
+                          ? (row.earlyMin ?? Math.abs(row.diffMin))
+                          : 0
+                      const defaultOt =
+                        row.plannedWorkHrs > 0 && row.diffMin > 0
+                          ? isOvertimeRow
+                            ? (row.otMin ?? row.diffMin)
+                            : row.diffMin >= 30
+                              ? (row.otMin ?? row.diffMin)
+                              : 0
+                          : 0
+                      const lateBefore = Math.max(0, Math.round(row.lateBeforeMin ?? row.lateMin ?? 0))
+                      const lateAfter = Math.max(0, Math.round(row.lateAfterMin ?? row.lateMin ?? 0))
+                      const earlyBefore = Math.max(0, Math.round(row.earlyBeforeMin ?? defaultEarly))
+                      const earlyAfter = Math.max(0, Math.round(row.earlyAfterMin ?? defaultEarly))
+                      const otBefore = Math.max(0, Math.round(row.otBeforeMin ?? defaultOt))
+                      const otAfter = Math.max(0, Math.round(row.otAfterMin ?? defaultOt))
                       return (
                         <tr
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
@@ -614,80 +688,169 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
                           <td className="px-3 py-2.5 text-center">{row.actualWorkHrs}</td>
                           <td className="px-3 py-2.5 text-center">{row.plannedWorkHrs}</td>
-                          <td className="px-3 py-2.5 text-center">
-                            {row.plannedWorkHrs === 0 ? "-" : (
-                              <span className={row.diffMin < 0 ? "text-amber-600" : undefined}>
-                                {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin}`}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-2 py-2.5 text-center">
-                            {(() => {
-                              if (row.plannedWorkHrs === 0) return <span className="text-muted-foreground">-</span>
-                              if (row.diffMin < 0) return <span className="font-medium text-amber-600">{row.earlyMin ?? Math.abs(row.diffMin)}</span>
-                              if (row.diffMin > 0) return <span className="font-medium text-blue-600">{row.otMin ?? row.diffMin}</span>
-                              if (row.lateMin > 0) return <span className="font-medium text-red-600">{row.lateMin}</span>
-                              return <span className="text-muted-foreground">-</span>
-                            })()}
-                          </td>
                           {allowEdit ? (
-                            <td className="px-2 py-2.5 text-center min-w-[5rem]">
-                              {(() => {
-                                const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
-                                const statusStr = String(row.status || "")
-                                const showAdjustInput =
-                                  (!isNormal &&
-                                    ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
-                                      row.lateMin > 0 ||
-                                      (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
-                                  (row.status && String(row.status).includes("정상(승인)")) ||
-                                  (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
-                                const adjustKey =
-                                  hasPendingOut && (pendingOut != null || row.pendingId != null)
-                                    ? (pendingOut ?? row.pendingId)!
-                                    : row.outLogId != null
-                                      ? row.outLogId
-                                      : `${row.date}-${row.store}-${row.name}`
-                                const isOvertimeCell = row.diffMin > 0 && (row.otMin ?? 0) >= 30
-                                const defaultVal = String(
-                                  row.plannedWorkHrs > 0 && row.diffMin < 0
-                                    ? (row.earlyMin ?? Math.abs(row.diffMin))
-                                    : row.plannedWorkHrs > 0 && row.diffMin > 0
-                                      ? (isOvertimeCell ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
-                                      : row.lateMin > 0
-                                        ? Math.max(1, row.lateMin)
-                                        : 0
-                                )
-                                const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
-                                return showAdjustInput ? (
-                                  <Input
-                                    key={String(adjustKey)}
-                                    name={`adj_${adjustKey}`}
-                                    type="number"
-                                    min={isLateOrPendingIn ? 1 : 0}
-                                    max={999}
-                                    placeholder={isLateOrPendingIn ? "1" : "0"}
-                                    defaultValue={defaultVal}
-                                    data-adjust-key={String(adjustKey)}
-                                    className="h-7 min-w-[4rem] w-16 text-xs tabular-nums text-center mx-auto"
-                                  />
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">-</span>
-                                )
-                              })()}
-                            </td>
+                            <>
+                              <td className="px-2 py-2.5 text-center min-w-[4rem]">
+                                {(() => {
+                                  const isNormal =
+                                    row.status === "정상" ||
+                                    (row.status && String(row.status).includes("정상(승인)"))
+                                  const statusStr = String(row.status || "")
+                                  const showAdjustInput =
+                                    (!isNormal &&
+                                      ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
+                                        row.lateMin > 0 ||
+                                        (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
+                                    (row.status && String(row.status).includes("정상(승인)")) ||
+                                    (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                                  const inLogKey = row.inLogId ?? pendingIn ?? null
+                                  const showLateInput =
+                                    showAdjustInput &&
+                                    row.plannedWorkHrs > 0 &&
+                                    inLogKey != null &&
+                                    (row.lateMin > 0 || pendingIn != null)
+                                  const lateDefault = String(lateAfter)
+                                  return showLateInput ? (
+                                    <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                                      <span className="text-xs font-medium text-muted-foreground tabular-nums">{lateBefore}→</span>
+                                      <Input
+                                        key={`late-${inLogKey}`}
+                                        name={`adj_late_${inLogKey}`}
+                                        type="number"
+                                        min={0}
+                                        max={999}
+                                        placeholder="0"
+                                        defaultValue={lateDefault}
+                                        className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-red-600 tabular-nums text-center mx-auto"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums">
+                                      <span className="text-muted-foreground">{lateBefore}</span>
+                                      <span className="text-xs text-muted-foreground">→</span>
+                                      <span className="text-red-600">{lateAfter}</span>
+                                    </span>
+                                  )
+                                })()}
+                              </td>
+                              <td className="px-2 py-2.5 text-center min-w-[4rem]">
+                                {(() => {
+                                  const isNormal =
+                                    row.status === "정상" ||
+                                    (row.status && String(row.status).includes("정상(승인)"))
+                                  const statusStr = String(row.status || "")
+                                  const showAdjustInput =
+                                    (!isNormal &&
+                                      ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
+                                        row.lateMin > 0 ||
+                                        (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
+                                    (row.status && String(row.status).includes("정상(승인)")) ||
+                                    (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                                  const adjustKey =
+                                    hasPendingOut && (pendingOut != null || row.pendingId != null)
+                                      ? (pendingOut ?? row.pendingId)!
+                                      : row.outLogId != null
+                                        ? row.outLogId
+                                        : `${row.date}-${row.store}-${row.name}`
+                                  const isPureLate =
+                                    row.lateMin > 0 &&
+                                    row.diffMin === 0 &&
+                                    (row.earlyMin ?? 0) === 0 &&
+                                    (row.otMin ?? 0) < 30
+                                  const showOutPair = showAdjustInput && !isPureLate
+                                  return showOutPair ? (
+                                    <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                                      <span className="text-xs font-medium text-muted-foreground tabular-nums">{earlyBefore}→</span>
+                                      <Input
+                                        key={`early-${adjustKey}`}
+                                        name={`adj_early_${adjustKey}`}
+                                        type="number"
+                                        min={0}
+                                        max={999}
+                                        placeholder="0"
+                                        defaultValue={String(earlyAfter)}
+                                        className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-amber-600 tabular-nums text-center mx-auto"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums">
+                                      <span className="text-muted-foreground">{earlyBefore}</span>
+                                      <span className="text-xs text-muted-foreground">→</span>
+                                      <span className="text-amber-600">{earlyAfter}</span>
+                                    </span>
+                                  )
+                                })()}
+                              </td>
+                              <td className="px-2 py-2.5 text-center min-w-[4rem]">
+                                {(() => {
+                                  const isNormal =
+                                    row.status === "정상" ||
+                                    (row.status && String(row.status).includes("정상(승인)"))
+                                  const statusStr = String(row.status || "")
+                                  const showAdjustInput =
+                                    (!isNormal &&
+                                      ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
+                                        row.lateMin > 0 ||
+                                        (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
+                                    (row.status && String(row.status).includes("정상(승인)")) ||
+                                    (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                                  const adjustKey =
+                                    hasPendingOut && (pendingOut != null || row.pendingId != null)
+                                      ? (pendingOut ?? row.pendingId)!
+                                      : row.outLogId != null
+                                        ? row.outLogId
+                                        : `${row.date}-${row.store}-${row.name}`
+                                  const isPureLate =
+                                    row.lateMin > 0 &&
+                                    row.diffMin === 0 &&
+                                    (row.earlyMin ?? 0) === 0 &&
+                                    (row.otMin ?? 0) < 30
+                                  const showOutPair = showAdjustInput && !isPureLate
+                                  return showOutPair ? (
+                                    <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                                      <span className="text-xs font-medium text-muted-foreground tabular-nums">{otBefore}→</span>
+                                      <Input
+                                        key={`ot-${adjustKey}`}
+                                        name={`adj_ot_${adjustKey}`}
+                                        type="number"
+                                        min={0}
+                                        max={999}
+                                        placeholder="0"
+                                        defaultValue={String(otAfter)}
+                                        data-adjust-key={String(adjustKey)}
+                                        className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-blue-600 tabular-nums text-center mx-auto"
+                                      />
+                                    </div>
+                                  ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
+                                      title={t("att_force_out_hint")}
+                                      onClick={() => handleApproveNoClockOut(row)}
+                                    >
+                                      {t("att_approve_forced_out")}
+                                    </Button>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums">
+                                      <span className="text-muted-foreground">{otBefore}</span>
+                                      <span className="text-xs text-muted-foreground">→</span>
+                                      <span className="text-blue-600">{otAfter}</span>
+                                    </span>
+                                  )
+                                })()}
+                              </td>
+                            </>
                           ) : null}
                           <td className="px-3 py-2.5 text-center">
                             {pendingIn != null && allowEdit ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="outline" size="sm" className={cn(
-                                    "h-6 px-2 text-[10px] font-medium",
-                                    row.status === "퇴근미기록"
-                                      ? "text-red-600 border-red-300 hover:bg-red-50"
-                                      : "text-amber-600 border-amber-300 hover:bg-amber-50"
+                                    "h-6 px-2 text-[10px] font-medium text-muted-foreground border-border hover:bg-muted"
                                   )}>
-                                    {statusLabel(row.inStatus?.includes("위치미확인") ? "위치미확인" : row.status, t)}
+                                    {t("att_btn_process")}
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="center">
@@ -716,14 +879,15 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           </td>
                           <td className="px-2 py-2.5">
                             {!allowEdit ? (
-                              <span className="flex justify-center text-[10px] text-muted-foreground">-</span>
+                              <span className="flex justify-center text-[10px] text-muted-foreground"></span>
                             ) : hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                               <div className="flex items-center gap-1 justify-center">
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="default"
-                                  className="h-6 px-2 text-[10px]"
+                                  className="h-6 w-6 p-0"
+                                  title={t("att_save_btn")}
                                   onClick={async (e) => {
                                     e.preventDefault()
                                     const outId = pendingOut ?? row.pendingId!
@@ -732,34 +896,20 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                       : `${row.date}-${row.store}-${row.name}`
                                     const keyForInput = String(pendingOut ?? row.pendingId ?? row.outLogId ?? adjustKey)
                                     const form = (e.currentTarget as HTMLButtonElement).form
-                                    const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
-                                    const fromInput = input?.value?.trim()
-                                    const defaultVal =
-                                      row.plannedWorkHrs > 0 && row.diffMin < 0
-                                        ? (row.earlyMin ?? Math.abs(row.diffMin))
-                                        : row.plannedWorkHrs > 0 && row.diffMin > 0
-                                          ? row.diffMin >= 30 ? row.diffMin : 0
-                                          : row.lateMin > 0
-                                            ? Math.max(1, row.lateMin)
-                                            : 0
-                                    const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
-                                    const n = parseInt(otVal, 10)
-                                    const num = !isNaN(n) && n >= 0 ? n : undefined
-                                    if (row.diffMin < 0) {
-                                      handleApprove(outId, undefined, undefined, num ?? 0)
-                                    } else if (row.diffMin > 0 || row.otMin >= 30) {
-                                      if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
-                                        await handleApprove(pendingIn, undefined, true, undefined, true)
-                                      }
-                                      handleApprove(outId, num ?? undefined, undefined)
-                                    } else {
-                                      handleApprove(outId, undefined, undefined)
+                                    const { early, ot } = readEarlyOtFromForm(form, keyForInput, {
+                                      early: defaultEarly,
+                                      ot: defaultOt,
+                                    })
+                                    const inKey = row.inLogId ?? pendingIn
+                                    const lateCtx = readLateAdjustFromForm(form, inKey)
+                                    if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
+                                      await handleApprove(pendingIn, undefined, true, undefined, true)
                                     }
+                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
                                   }}
                                 >
-                                  {t("att_btn_approve")}
+                                  <Check className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                               </div>
                             ) : !hasPendingOut &&
                               row.outLogId != null &&
@@ -775,49 +925,26 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                   type="button"
                                   size="sm"
                                   variant="default"
-                                  className="h-6 px-2 text-[10px]"
+                                  className="h-6 w-6 p-0"
+                                  title={t("att_save_btn")}
                                   onClick={async (e) => {
                                     e.preventDefault()
                                     const outId = row.outLogId!
                                     const keyForInput = String(outId)
                                     const form = (e.currentTarget as HTMLButtonElement).form
-                                    const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
-                                    const fromInput = input?.value?.trim()
-                                    const defaultVal =
-                                      row.plannedWorkHrs > 0 && row.diffMin < 0
-                                        ? (row.earlyMin ?? Math.abs(row.diffMin))
-                                        : row.plannedWorkHrs > 0 && row.diffMin > 0
-                                          ? row.diffMin >= 30
-                                            ? row.diffMin
-                                            : 0
-                                          : row.lateMin > 0
-                                            ? Math.max(1, row.lateMin)
-                                            : 0
-                                    const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
-                                    const n = parseInt(otVal, 10)
-                                    const num = !isNaN(n) && n >= 0 ? n : undefined
-                                    if (row.diffMin < 0) {
-                                      handleApprove(outId, undefined, undefined, num ?? 0)
-                                    } else if (row.diffMin > 0 || row.otMin >= 30) {
-                                      if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
-                                        await handleApprove(pendingIn, undefined, true, undefined, true)
-                                      }
-                                      handleApprove(outId, num ?? undefined, undefined)
-                                    } else {
-                                      handleApprove(outId, undefined, undefined)
+                                    const { early, ot } = readEarlyOtFromForm(form, keyForInput, {
+                                      early: defaultEarly,
+                                      ot: defaultOt,
+                                    })
+                                    const inKey = row.inLogId ?? pendingIn
+                                    const lateCtx = readLateAdjustFromForm(form, inKey)
+                                    if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
+                                      await handleApprove(pendingIn, undefined, true, undefined, true)
                                     }
+                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
                                   }}
                                 >
-                                  {t("att_btn_approve")}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-[10px]"
-                                  onClick={() => handleReject(row.outLogId!)}
-                                >
-                                  {t("att_btn_reject")}
+                                  <Check className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
                             ) : !hasPendingOut &&
@@ -834,50 +961,41 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="h-6 px-2 text-[10px]"
+                                className="h-6 w-6 p-0"
+                                title={t("att_save_btn")}
                                 onClick={(e) => {
                                   e.preventDefault()
                                   const outId = row.outLogId!
                                   const form = (e.currentTarget as HTMLButtonElement).form
-                                  const input = form?.elements.namedItem(`adj_${outId}`) as HTMLInputElement | null
-                                  const fromInput = input?.value?.trim()
-                                  const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
-                                  const defaultVal =
-                                    row.plannedWorkHrs > 0 && row.diffMin < 0
-                                      ? (row.earlyMin ?? Math.abs(row.diffMin))
-                                      : row.plannedWorkHrs > 0 && row.diffMin > 0
-                                        ? (isOvertimeRow ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
-                                        : row.lateMin > 0
-                                          ? Math.max(1, row.lateMin)
-                                          : 0
-                                  const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
-                                  const n = parseInt(otVal, 10)
-                                  const num = !isNaN(n) && n >= 0 ? n : 0
-                                  // 사용자가 0을 입력한 경우 절대 덮어쓰지 않음. 기존 noUserInput 시 currentOvertime으로 덮어쓰던 로직 제거.
-                                  const isLateOnly = row.lateMin > 0 && row.diffMin === 0 && (row.earlyMin ?? 0) === 0 && (row.otMin ?? 0) < 30
-                                  if (isLateOnly) {
-                                    handleApprove(outId, undefined, undefined)
-                                  } else if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
-                                    handleApprove(outId, undefined, undefined, num)
+                                  const { early, ot } = readEarlyOtFromForm(form, outId, {
+                                    early: defaultEarly,
+                                    ot: defaultOt,
+                                  })
+                                  const inKey = row.inLogId ?? pendingIn
+                                  const lateCtx = readLateAdjustFromForm(form, inKey)
+                                  const isLateOnly =
+                                    row.lateMin > 0 &&
+                                    row.diffMin === 0 &&
+                                    (row.earlyMin ?? 0) === 0 &&
+                                    (row.otMin ?? 0) < 30
+                                  if (isLateOnly && inKey) {
+                                    const onlyLate = readLateAdjustFromForm(form, inKey)
+                                    if (onlyLate?.optLateMinutes != null) {
+                                      handleApprove(inKey, undefined, undefined, undefined, false, {
+                                        optLateMinutes: onlyLate.optLateMinutes,
+                                      })
+                                    } else {
+                                      handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    }
                                   } else {
-                                    handleApprove(outId, num, undefined)
+                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
                                   }
                                 }}
                               >
-                                {t("att_apply_adjust")}
-                              </Button>
-                            ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-[10px] text-amber-600 border-amber-300 hover:bg-amber-50"
-                              onClick={() => handleApproveNoClockOut(row)}
-                            >
-                                {t("att_approve_forced_out")}
+                                <Check className="h-3.5 w-3.5" />
                               </Button>
                             ) : (
-                              <span className="text-[10px] text-muted-foreground">-</span>
+                              <span className="text-[10px] text-muted-foreground"></span>
                             )}
                           </td>
                         </tr>

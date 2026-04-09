@@ -1,9 +1,16 @@
 "use client"
 
 import * as React from "react"
+import { Trash2 } from "lucide-react"
+import { appAlert, appConfirm } from "@/lib/app-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getEvaluationDistinctStores, getEvaluationHistory, translateTexts } from "@/lib/api-client"
+import {
+  deleteEvaluationResult,
+  getEvaluationDistinctStores,
+  getEvaluationHistory,
+  translateTexts,
+} from "@/lib/api-client"
 import { bangkokDateYmd, bangkokFirstOfMonthMonthsAgo } from "@/lib/bangkok-date"
 import {
   Dialog,
@@ -67,6 +74,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
   const [evaluatorOptions, setEvaluatorOptions] = React.useState<string[]>([])
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
   const [storesFromEvalDb, setStoresFromEvalDb] = React.useState<string[]>([])
+  const [deletingId, setDeletingId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -138,6 +146,32 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
   const openDetail = (row: EvalHistoryRow) => {
     setDetailRow(row)
     setDetailOpen(true)
+  }
+
+  const handleDelete = async (r: EvalHistoryRow) => {
+    if (
+      !(await appConfirm(
+        t("eval_confirm_delete") || t("msg_delete_confirm_check_item") || "삭제하시겠습니까?"
+      ))
+    )
+      return
+    setDeletingId(r.id)
+    try {
+      await deleteEvaluationResult({ id: r.id })
+      if (detailRow?.id === r.id) {
+        setDetailOpen(false)
+        setDetailRow(null)
+      }
+      await appAlert(t("msg_delete_ok") || "삭제되었습니다.")
+      await loadHistory()
+    } catch (e) {
+      console.error(e)
+      await appAlert(
+        e instanceof Error ? e.message : t("msg_delete_fail") || "삭제 실패"
+      )
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   React.useEffect(() => {
@@ -395,8 +429,8 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                 <th className="px-3 py-2.5 text-center font-semibold">
                   {t("eval_list_th_memo")}
                 </th>
-                <th className="w-[80px] px-3 py-2.5 text-center font-semibold">
-                  {t("eval_list_btn_view")}
+                <th className="min-w-[120px] px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                  {t("eval_list_btn_view")} / {t("delete")}
                 </th>
               </tr>
             </thead>
@@ -449,13 +483,26 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                         {memoShort}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => openDetail(r)}
-                          className="rounded border border-primary bg-transparent px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
-                        >
-                          {t("eval_list_btn_view")}
-                        </button>
+                        <div className="flex flex-wrap items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openDetail(r)}
+                            disabled={deletingId === r.id}
+                            className="rounded border border-primary bg-transparent px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+                          >
+                            {t("eval_list_btn_view")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(r)}
+                            disabled={deletingId === r.id || loading}
+                            className="inline-flex items-center justify-center rounded border border-destructive/60 bg-transparent p-1.5 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                            title={t("delete")}
+                            aria-label={t("delete")}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

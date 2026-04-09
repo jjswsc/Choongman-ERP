@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import {
   supabaseSelectFilter,
   supabaseInsert,
@@ -6,24 +6,50 @@ import {
   supabaseUpdate,
 } from '@/lib/supabase-server'
 
-import { isAccountingRole } from '@/lib/permissions'
+import {
+  isAccountingRole,
+  isFranchiseeRole,
+  isManagerRole,
+  isOfficeRole,
+} from '@/lib/permissions'
+import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import type { JwtPayload } from '@/lib/jwt-auth'
 import { normalizeEvalItemType } from '@/lib/eval-item-type'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 import { EVAL_RESULTS_ORDER } from '@/lib/evaluation-postgrest-filters'
 
-const OFFICE_ROLES = ['director', 'ceo', 'hr', 'officer']
-
-function isOfficeRole(role: string): boolean {
-  const r = String(role || '').toLowerCase().trim()
-  return OFFICE_ROLES.some((x) => r.includes(x)) || isAccountingRole(role)
+/** Staff 등 일반 권한은 제외 (userCanAccessEmployeeStore 단독 사용 시 매장 일치만으로 통과할 수 있음) */
+function roleMaySaveEvaluation(auth: JwtPayload): boolean {
+  return (
+    isOfficeRole(auth.role) ||
+    isAccountingRole(auth.role) ||
+    isManagerRole(auth.role) ||
+    isFranchiseeRole(auth.role)
+  )
 }
 
-/** 평가 결과 저장 (신규 또는 수정). 오피스 직원 이상만 등록/수정 가능 */
-export async function POST(req: Request) {
+function canSaveEvaluationForStore(
+  auth: JwtPayload,
+  targetStore: string
+): boolean {
+  if (!roleMaySaveEvaluation(auth)) return false
+  const jwtRole = String(auth.role || '')
+  const jwtStore = String(auth.store || '')
+  return userCanAccessEmployeeStore(jwtRole, jwtStore, targetStore, { allowedStores: auth.allowedStores })
+}
+
+/** 평가 결과 저장 (신규 또는 수정). JWT 기준 본사·회계 또는 해당 매장 매니저/가맹점주 */
+export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(req)
+    if (!auth) {
+      return NextResponse.json({ error: '인증이 필요합니다. 다시 로그인해 주세요.' }, { status: 401, headers })
+    }
+
     const body = await req.json()
     const {
       type = 'kitchen',
@@ -35,12 +61,7 @@ export async function POST(req: Request) {
       finalGrade,
       memo,
       jsonData,
-      userRole = '',
     } = body
-
-    if (!isOfficeRole(userRole)) {
-      return NextResponse.json({ error: '직원 평가 등록/수정은 오피스 직원 이상만 가능합니다.' }, { status: 403, headers })
-    }
 
     const dateStr = date && typeof date === 'string' ? date.slice(0, 10) : ''
     if (!dateStr || dateStr.length < 10) {
@@ -55,14 +76,25 @@ export async function POST(req: Request) {
     const memoTrim = String(memo || '').trim()
     const jsonStr = typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData || {})
 
+    if (!storeTrim) {
+      return NextResponse.json({ error: '매장을 지정해 주세요.' }, { status: 400, headers })
+    }
+
     if (id && String(id).trim()) {
       const existing = (await supabaseSelectFilter(
         'evaluation_results',
         `id=eq.${encodeURIComponent(String(id))}`,
-        { limit: 1 }
-      )) as { id?: string }[] | null
+        { limit: 1, select: 'id,store_name' }
+      )) as { id?: string; store_name?: string }[] | null
 
       if (existing && existing.length > 0) {
+        const prevStore = String(existing[0].store_name || '').trim()
+        if (prevStore && !canSaveEvaluationForStore(auth, prevStore)) {
+          return NextResponse.json({ error: '해당 평가를 수정할 권한이 없습니다.' }, { status: 403, headers })
+        }
+        if (!canSaveEvaluationForStore(auth, storeTrim)) {
+          return NextResponse.json({ error: '해당 매장에 대한 권한이 없습니다.' }, { status: 403, headers })
+        }
         await supabaseUpdateByFilter('evaluation_results', `id=eq.${encodeURIComponent(String(id))}`, {
           eval_date: dateStr,
           store_name: storeTrim,
@@ -75,6 +107,13 @@ export async function POST(req: Request) {
         await updateEmployeeGrade(storeTrim, empTrim)
         return NextResponse.json('UPDATED', { headers })
       }
+    }
+
+    if (!canSaveEvaluationForStore(auth, storeTrim)) {
+      return NextResponse.json(
+        { error: '직원 평가 등록은 본사·회계 또는 해당 매장 매니저/가맹점주만 가능합니다.' },
+        { status: 403, headers }
+      )
     }
 
     const newId =

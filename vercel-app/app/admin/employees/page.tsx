@@ -147,6 +147,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     riskAllowance: e.riskAllowance ?? 0,
     attendanceAllowance: e.attendanceAllowance ?? 500,
     grade: e.grade || "",
+    managerGradeDisplay: "",
     photo: e.photo || "",
     extraStores: Array.isArray((e as AdminEmployeeItem).extraStores)
       ? [...((e as AdminEmployeeItem).extraStores as string[])]
@@ -186,7 +187,12 @@ export default function EmployeesPage() {
   const adminRowToForm = React.useCallback(
     (e: AdminEmployeeItem): EmployeeFormData => {
       const f = toFormData(e)
-      return { ...f, store: resolveStoreKey(f.store) }
+      const mgr = String((e as EmployeeTableRow).managerGrade ?? "").trim()
+      return {
+        ...f,
+        store: resolveStoreKey(f.store),
+        managerGradeDisplay: mgr && mgr !== "-" ? mgr : "-",
+      }
     },
     [resolveStoreKey]
   )
@@ -249,23 +255,17 @@ export default function EmployeesPage() {
             }
           }
           let latestAny = ""
-          let kitchen = ""
-          let service = ""
           let manager = ""
           for (const k of gradeKeys) {
             const hit = gradesRes?.[k]
             if (!hit) continue
             if (!latestAny && hit.grade && String(hit.grade).trim()) latestAny = String(hit.grade).trim()
-            if (!kitchen && hit.kitchenGrade && String(hit.kitchenGrade).trim()) kitchen = String(hit.kitchenGrade).trim()
-            if (!service && hit.serviceGrade && String(hit.serviceGrade).trim()) service = String(hit.serviceGrade).trim()
             if (!manager && hit.managerGrade && String(hit.managerGrade).trim()) manager = String(hit.managerGrade).trim()
-            if (latestAny && kitchen && service && manager) break
+            if (latestAny && manager) break
           }
           return {
             ...e,
             finalGrade: fromSheet || latestAny || "-",
-            kitchenGrade: kitchen || "-",
-            serviceGrade: service || "-",
             managerGrade: manager || "-",
           }
         })
@@ -415,8 +415,9 @@ export default function EmployeesPage() {
     if (!form.name) return
     setSaving(true)
     try {
+      const { managerGradeDisplay: _mgrDisp, ...employeePayload } = form
       const res = await saveAdminEmployee({
-        d: form,
+        d: employeePayload,
         userStore,
         userRole,
         userName: auth?.user || userStore,
@@ -445,6 +446,8 @@ export default function EmployeesPage() {
   const isManagerOrFranchisee = isManager || isFranchiseeRole(userRole)
   const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
   const showEvalAnalyticsTab = isOffice || isManagerOrFranchisee
+  /** 매장 매니저·가맹점도 분석 탭에서 미평가 행 클릭 시 직원 평가 탭으로 이동 가능 */
+  const showEmployeeEvalTab = isOffice || isManagerOrFranchisee
   const evalAnalyticsCanPickAllStores = isOffice
 
   const handleNew = () => {
@@ -486,11 +489,11 @@ export default function EmployeesPage() {
     return storesForFilter
   }, [auth?.allowedStores, userRole, isManager, userStore, storesForFilter])
 
-  // 직원 평가 탭은 allEmployees를 쓰는데, 목록 탭 '조회' 없이 오면 비어 있음 → 본사·회계는 백그라운드로 전체 로드
+  // 직원 평가 탭은 allEmployees를 쓰는데, 목록 탭 '조회' 없이 오면 비어 있음 → 본사·회계·매장관리자는 백그라운드 로드
   React.useEffect(() => {
-    if (!isOffice) return
+    if (!showEmployeeEvalTab) return
     void loadEmployeeList({ updateDisplay: false })
-  }, [isOffice, loadEmployeeList])
+  }, [showEmployeeEvalTab, loadEmployeeList])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -521,7 +524,7 @@ export default function EmployeesPage() {
                   <UsersRound className={adminTabsIconCn} aria-hidden />
                   {t("tab_hr_headcount")}
                 </TabsTrigger>
-                {isOffice && (
+                {showEmployeeEvalTab && (
                   <TabsTrigger value="eval" className={adminTabsTriggerCn}>
                     <ClipboardPenLine className={adminTabsIconCn} aria-hidden />
                     {t("tab_hr_eval")}
@@ -624,7 +627,7 @@ export default function EmployeesPage() {
             <EmployeeHeadcountTab userStore={userStore} userRole={userRole} isManager={isManagerOrFranchisee} />
           </TabsContent>
 
-          {isOffice && (
+          {showEmployeeEvalTab && (
             <TabsContent value="eval" className={adminTabsContentCn}>
               <EmployeeEvalTab
                 stores={storesForForm}
@@ -642,7 +645,7 @@ export default function EmployeesPage() {
                 canPickAllStores={evalAnalyticsCanPickAllStores}
                 canUseAiSummary={isOffice}
                 onOpenEvalForUnevaluated={
-                  isOffice
+                  showEmployeeEvalTab
                     ? (row) => {
                         setEvalJumpPayload({
                           key: Date.now(),

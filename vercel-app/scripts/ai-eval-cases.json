@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ops-korean-structure",
+    "query": "오늘 매출이 지난주 평균보다 12% 낮습니다. 바로 실행할 개선안 3개를 제안해 주세요.",
+    "mustInclude": [
+      "\\[판단\\]",
+      "\\[근거\\]",
+      "\\[실행\\]"
+    ],
+    "mustNotInclude": [
+      "I cannot",
+      "As an AI language model"
+    ],
+    "minLength": 80
+  },
+  {
+    "id": "bangkok-time-policy",
+    "query": "근태 마감 기준 시간을 설명해 주세요. 시간대는 무엇을 기준으로 봐야 하나요?",
+    "mustInclude": [
+      "방콕|Bangkok|Asia/Bangkok",
+      "UTC\\+7|UTC7|UTC\\s*\\+\\s*7"
+    ],
+    "mustNotInclude": [
+      "KST만",
+      "로컬 PC 시간만"
+    ],
+    "minLength": 60
+  },
+  {
+    "id": "insufficient-evidence-guardrail",
+    "query": "어제 우리 매장 정확한 폐기율 숫자를 알려줘. 데이터 근거가 없으면 모른다고 말해줘.",
+    "mustInclude": [
+      "근거|데이터",
+      "없|부족|확인 필요"
+    ],
+    "mustNotInclude": [
+      "100%",
+      "확실합니다"
+    ],
+    "minLength": 50
+  }
+]

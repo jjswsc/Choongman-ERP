@@ -44,12 +44,6 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function daysAgoStr(days: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().slice(0, 10)
-}
-
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
   const s = url.trim()
@@ -419,12 +413,72 @@ export function OrderTab() {
     setReceiveSubmitting(true)
     const modal = receiveModal
     try {
-      const dataUrls: string[] = []
-      for (const file of receivePhotoFiles) {
-        const dataUrl = await compressImageForUpload(file)
-        if (dataUrl?.startsWith("data:image")) dataUrls.push(dataUrl)
+      const compressWithTimeout = async (file: File, timeoutMs = 15000): Promise<string> => {
+        return await new Promise<string>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("compress timeout")), timeoutMs)
+          compressImageForUpload(file)
+            .then((dataUrl) => {
+              clearTimeout(timer)
+              resolve(dataUrl)
+            })
+            .catch((e) => {
+              clearTimeout(timer)
+              reject(e)
+            })
+        })
       }
-      if (!dataUrls.length) {
+      const fetchJsonWithTimeout = async (url: string, init: RequestInit, timeoutMs = 15000) => {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+        try {
+          const res = await fetch(url, { ...init, signal: ctrl.signal })
+          const json = await res.json().catch(() => ({}))
+          return { res, json }
+        } finally {
+          clearTimeout(timer)
+        }
+      }
+      const dataUrlToBlob = (dataUrl: string): Blob => {
+        const [meta, b64 = ""] = dataUrl.split(",")
+        const mime = /data:([^;]+);base64/.exec(meta || "")?.[1] || "image/jpeg"
+        const bytes = atob(b64)
+        const arr = new Uint8Array(bytes.length)
+        for (let i = 0; i < bytes.length; i += 1) arr[i] = bytes.charCodeAt(i)
+        return new Blob([arr], { type: mime })
+      }
+      const uploadedImageUrls: string[] = []
+      for (const file of receivePhotoFiles) {
+        try {
+          const dataUrl = await compressWithTimeout(file)
+          if (!dataUrl?.startsWith("data:image")) continue
+          const blob = dataUrlToBlob(dataUrl)
+          const storeForUpload = String(effectiveStore || auth?.store || "").trim()
+          if (!storeForUpload) continue
+          const presign = await fetchJsonWithTimeout(
+            "/api/uploadStoreRepairPhoto/presign",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                store: storeForUpload,
+                fileName: (file.name || "receive.jpg").replace(/\.[^.]+$/, "") + ".jpg",
+                contentType: "image/jpeg",
+                fileSize: blob.size,
+              }),
+            },
+            15000
+          )
+          const p = presign.json as { success?: boolean; signedUrl?: string; publicUrl?: string; message?: string }
+          if (!presign.res.ok || !p?.success || !p?.signedUrl || !p?.publicUrl) continue
+          const { putFileToSupabaseSignedUploadUrl } = await import("@/lib/storage-client-upload")
+          const putRes = await putFileToSupabaseSignedUploadUrl(p.signedUrl, blob, { upsert: false })
+          if (!putRes.ok) continue
+          uploadedImageUrls.push(String(p.publicUrl))
+        } catch {
+          // 개별 파일 실패는 무시하고 나머지 파일 진행
+        }
+      }
+      if (!uploadedImageUrls.length) {
         await appAlert(t("orderFail"))
         setReceiveSubmitting(false)
         return
@@ -450,7 +504,7 @@ export function OrderTab() {
         }
         const res = await processOrderReceive({
             orderRowId: modal.orderId,
-            imageUrls: dataUrls,
+            imageUrls: uploadedImageUrls,
             isPartialReceive: isPartial,
             inspectedIndices: isPartial ? inspectedIndices : undefined,
             receivedQtys: receivedQtysMap,

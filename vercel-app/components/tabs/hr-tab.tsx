@@ -33,7 +33,7 @@ function getAttendanceDateRange() {
   const now = new Date()
   const today = todayStrBangkok()
   const bangkokHour = parseInt(now.toLocaleString("en-US", { timeZone: ATTENDANCE_TZ, hour: "2-digit", hour12: false }), 10)
-  if (bangkokHour >= 0 && bangkokHour < 6) {
+  if (bangkokHour >= 0 && bangkokHour <= 7) {
     return { startDate: daysAgoStrBangkok(1), endDate: today }
   }
   return { startDate: today, endDate: today }
@@ -523,11 +523,12 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                     <th className="px-2 py-2 text-center font-semibold">{t("label_date")}</th>
                     <th className="px-2 py-2 text-center font-semibold">{t("att_col_in")}</th>
                     <th className="px-2 py-2 text-center font-semibold">{t("att_col_out")}</th>
-                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_break_min")}</th>
-                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_actual_hrs")}</th>
-                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_planned_hrs")}</th>
-                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_diff")}</th>
-                    <th className="px-2 py-2 text-center font-semibold">{t("att_late_extra")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_break_min")} (M)</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_actual_hrs")} (H)</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_planned_hrs")} (H)</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_adjust_late")} (M)</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_adjust_early")} (M)</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_adjust_ot")} (M)</th>
                     <th className="px-2 py-2 text-center font-semibold">{t("att_col_status")}</th>
                   </tr>
                 </thead>
@@ -545,11 +546,22 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                         <td className="px-2 py-2 text-center">{row.breakMin}</td>
                         <td className="px-2 py-2 text-center">{row.actualWorkHrs}</td>
                         <td className="px-2 py-2 text-center">{row.plannedWorkHrs}</td>
-                        <td className="px-2 py-2 text-center">{row.diffMin}</td>
-                        <td className="px-2 py-2 text-center">
-                          {row.lateMin > 0 && <span className="text-amber-600">{t("att_late_label")} {row.lateMin}{t("att_min_unit")} </span>}
-                          {row.otMin > 0 && <span className="text-blue-600">{t("att_ot_label")} {row.otMin}{t("att_min_unit")}</span>}
-                          {row.lateMin === 0 && row.otMin === 0 && "-"}
+                        <td className="px-2 py-2 text-center tabular-nums">
+                          {row.lateMin > 0 ? <span className="text-red-600 font-medium">{row.lateMin}</span> : "-"}
+                        </td>
+                        <td className="px-2 py-2 text-center tabular-nums">
+                          {(row.earlyMin ?? 0) > 0 || row.diffMin < 0 ? (
+                            <span className="text-amber-600 font-medium">{row.earlyMin ?? (row.diffMin < 0 ? Math.abs(row.diffMin) : 0)}</span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-center tabular-nums">
+                          {row.otMin > 0 || row.diffMin > 0 ? (
+                            <span className="text-blue-600 font-medium">{row.otMin ?? (row.diffMin > 0 ? row.diffMin : 0)}</span>
+                          ) : (
+                            "-"
+                          )}
                         </td>
                         <td className="px-2 py-2 text-center">
                           <span className={cn(

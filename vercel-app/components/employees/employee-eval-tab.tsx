@@ -30,29 +30,25 @@ import { getEvaluationDistinctStores } from "@/lib/api-client"
 
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
-/** 직원 목록 필터: 평가 유형에 맞는 직무(Kitchen/Service/Officer·Director 등)만 */
-const EVAL_JOB_FILTER_MATCH = "__match_type__"
-const EVAL_JOB_FILTER_ALL = "__all__"
-
 function normJobKey(j: string) {
   return String(j || "")
     .trim()
     .toLowerCase()
 }
 
-function jobsForEvalType(evalType: "kitchen" | "service" | "manager"): Set<string> {
-  // 매니저는 주방/서비스 평가를 모두 받는다.
-  if (evalType === "kitchen") return new Set(["kitchen", "officer", "director", "manager"])
-  if (evalType === "service") return new Set(["service", "officer", "director", "manager"])
-  return new Set(["officer", "director", "manager"])
-}
-
-function employeeJobMatchesEvalType(job: string, evalType: "kitchen" | "service" | "manager"): boolean {
-  const j = normJobKey(job)
-  if (!j) return false
-  for (const a of jobsForEvalType(evalType)) {
-    if (j === a) return true
+/** 평가 유형별 대상: 주방/서비스는 job, 매니저 평가는 권한(role)만 사용(직무와 혼동하지 않음) */
+function employeeMatchesEvalType(
+  e: AdminEmployeeItem,
+  evalType: "kitchen" | "service" | "manager"
+): boolean {
+  if (evalType === "manager") {
+    return String(e.role || "")
+      .trim()
+      .toLowerCase() === "manager"
   }
+  const j = normJobKey(e.job || "")
+  if (evalType === "kitchen") return j === "kitchen"
+  if (evalType === "service") return j === "service"
   return false
 }
 
@@ -62,6 +58,20 @@ function evalTypeFromJobLabel(job: string): "kitchen" | "service" | "manager" {
   if (j === "kitchen") return "kitchen"
   if (j === "service") return "service"
   return "manager"
+}
+
+/** 평가 유형 선택: 모두(목록만 합침) | 주방 | 서비스 | 매니저 — 「모두」일 때 저장·항목은 직원 기준으로 결정 */
+export type EvalScope = "all" | "kitchen" | "service" | "manager"
+
+function deriveEvalTypeFromEmployee(e: AdminEmployeeItem): "kitchen" | "service" | "manager" {
+  const r = String(e.role || "")
+    .trim()
+    .toLowerCase()
+  if (r === "manager") return "manager"
+  const j = normJobKey(e.job || "")
+  if (j === "kitchen") return "kitchen"
+  if (j === "service") return "service"
+  return "kitchen"
 }
 
 export type EmployeeEvalJumpTarget = {
@@ -147,9 +157,8 @@ export function EmployeeEvalTab({
   const evaluatorName = auth?.user || auth?.store || ""
 
   const [evalStore, setEvalStore] = React.useState("")
-  const [evalJobFilter, setEvalJobFilter] = React.useState(EVAL_JOB_FILTER_MATCH)
   const [evalEmployee, setEvalEmployee] = React.useState("")
-  const [evalType, setEvalType] = React.useState<"kitchen" | "service" | "manager">("kitchen")
+  const [evalScope, setEvalScope] = React.useState<EvalScope>("all")
   const [evalDate, setEvalDate] = React.useState(
     () => new Date().toISOString().slice(0, 10)
   )
@@ -225,8 +234,7 @@ export function EmployeeEvalTab({
     const jobForType = String(match?.job || jump.job || "").trim()
     const nextType = evalTypeFromJobLabel(jobForType)
     setEvalStore(pickedStore)
-    setEvalType(nextType)
-    setEvalJobFilter(EVAL_JOB_FILTER_MATCH)
+    setEvalScope(nextType)
     if (match) {
       const nameForSelect = String(match.name || "").trim() ? String(match.name) : "__unnamed__"
       setEvalEmployee(nameForSelect)
@@ -261,25 +269,21 @@ export function EmployeeEvalTab({
     })
   }, [employees, evalStore])
 
-  const storeJobOptions = React.useMemo(() => {
-    const set = new Set<string>()
-    for (const e of employeesAtStore) {
-      const j = String(e.job || "").trim()
-      if (j) set.add(j)
-    }
-    return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
-  }, [employeesAtStore])
-
   const employeeList = React.useMemo(() => {
-    let list = employeesAtStore
-    if (evalJobFilter === EVAL_JOB_FILTER_MATCH) {
-      list = list.filter((e) => employeeJobMatchesEvalType(e.job || "", evalType))
-    } else if (evalJobFilter !== EVAL_JOB_FILTER_ALL) {
-      const want = normJobKey(evalJobFilter)
-      list = list.filter((e) => normJobKey(e.job || "") === want)
+    if (evalScope === "all") {
+      return employeesAtStore.filter(
+        (e) =>
+          employeeMatchesEvalType(e, "kitchen") ||
+          employeeMatchesEvalType(e, "service") ||
+          employeeMatchesEvalType(e, "manager")
+      )
     }
-    return list
-  }, [employeesAtStore, evalJobFilter, evalType])
+    return employeesAtStore.filter((e) => employeeMatchesEvalType(e, evalScope))
+  }, [employeesAtStore, evalScope])
+
+  React.useEffect(() => {
+    setEvalEmployee("")
+  }, [evalScope])
 
   React.useEffect(() => {
     if (!evalEmployee) return
@@ -292,10 +296,16 @@ export function EmployeeEvalTab({
     [employeeList, evalEmployee]
   )
 
+  const effectiveEvalType = React.useMemo((): "kitchen" | "service" | "manager" => {
+    if (evalScope !== "all") return evalScope
+    if (selectedEmp) return deriveEvalTypeFromEmployee(selectedEmp)
+    return "kitchen"
+  }, [evalScope, selectedEmp])
+
   const loadForm = React.useCallback(async () => {
     setLoading(true)
     try {
-      const items = await getEvaluationItems({ type: evalType, activeOnly: true })
+      const items = await getEvaluationItems({ type: effectiveEvalType, activeOnly: true })
       if (!items || items.length === 0) {
         setSections([])
         setLoading(false)
@@ -318,9 +328,9 @@ export function EmployeeEvalTab({
         bySection[sec].push(it)
       }
       const order =
-        evalType === "service"
+        effectiveEvalType === "service"
           ? ["서비스"]
-          : evalType === "manager"
+          : effectiveEvalType === "manager"
             ? ["매니저"]
             : ["메뉴숙련", "원가정확도", "위생", "태도"]
       const secs: EvalSection[] = order
@@ -361,7 +371,7 @@ export function EmployeeEvalTab({
     } finally {
       setLoading(false)
     }
-  }, [evalType])
+  }, [effectiveEvalType])
 
   React.useEffect(() => {
     if (sections.length === 0) {
@@ -533,9 +543,9 @@ export function EmployeeEvalTab({
         manager: [],
       }
       const fallbackPayloadKey =
-        evalType === "service"
+        effectiveEvalType === "service"
           ? "service"
-          : evalType === "manager"
+          : effectiveEvalType === "manager"
             ? "manager"
             : "attitude"
       for (const s of sections) {
@@ -571,7 +581,7 @@ export function EmployeeEvalTab({
         }))
 
       await saveEvaluationResult({
-        type: evalType,
+        type: effectiveEvalType,
         id: evalId || undefined,
         date: evalDate,
         store: evalStore,
@@ -657,9 +667,9 @@ export function EmployeeEvalTab({
   }
 
   const sectionTitles: Record<string, string> =
-    evalType === "service"
+    effectiveEvalType === "service"
       ? { 서비스: t("eval_section_service") }
-      : evalType === "manager"
+      : effectiveEvalType === "manager"
         ? {
             매니저: t("eval_section_manager"),
             Manager: t("eval_section_manager"),
@@ -745,7 +755,6 @@ export function EmployeeEvalTab({
               onValueChange={(v) => {
                 setEvalStore(v === "__none__" ? "" : v)
                 setEvalEmployee("")
-                setEvalJobFilter(EVAL_JOB_FILTER_MATCH)
               }}
             >
               <SelectTrigger className="h-8 w-[140px] text-xs">
@@ -763,26 +772,20 @@ export function EmployeeEvalTab({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold">
-              {t("eval_job_filter")}
+              {t("eval_list_type")}
             </label>
             <Select
-              value={evalJobFilter}
-              onValueChange={(v) => {
-                setEvalJobFilter(v)
-                setEvalEmployee("")
-              }}
+              value={evalScope}
+              onValueChange={(v) => setEvalScope(v as EvalScope)}
             >
-              <SelectTrigger className="h-8 w-[min(200px,28vw)] text-xs">
+              <SelectTrigger className="h-8 w-[min(168px,36vw)] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={EVAL_JOB_FILTER_MATCH}>{t("eval_job_filter_match_type")}</SelectItem>
-                <SelectItem value={EVAL_JOB_FILTER_ALL}>{t("eval_job_filter_all")}</SelectItem>
-                {storeJobOptions.map((j) => (
-                  <SelectItem key={j} value={j}>
-                    {j}
-                  </SelectItem>
-                ))}
+                <SelectItem value="all">{t("eval_list_type_all")}</SelectItem>
+                <SelectItem value="kitchen">{t("eval_type_kitchen_emp")}</SelectItem>
+                <SelectItem value="service">{t("eval_type_service_emp")}</SelectItem>
+                <SelectItem value="manager">{t("eval_type_manager_emp")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -796,7 +799,7 @@ export function EmployeeEvalTab({
                 setEvalEmployee(v === "__none__" ? "" : v)
               }
             >
-              <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectTrigger className="h-8 w-[min(180px,40vw)] text-xs">
                 <SelectValue placeholder={t("eval_store_first")} />
               </SelectTrigger>
               <SelectContent>
@@ -808,24 +811,6 @@ export function EmployeeEvalTab({
                     {formatEmployeeDisplayName(e.name, e.nameTitle)}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold">
-              {t("eval_list_type")}
-            </label>
-            <Select
-              value={evalType}
-              onValueChange={(v) => setEvalType(v as "kitchen" | "service" | "manager")}
-            >
-              <SelectTrigger className="h-8 w-[150px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="kitchen">{t("eval_type_kitchen_emp")}</SelectItem>
-                <SelectItem value="service">{t("eval_type_service_emp")}</SelectItem>
-                <SelectItem value="manager">{t("eval_type_manager_emp")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -864,7 +849,7 @@ export function EmployeeEvalTab({
             type="button"
             size="sm"
             onClick={loadForm}
-            disabled={loading}
+            disabled={loading || (evalScope === "all" && !evalEmployee)}
             className="h-8"
           >
             {loading ? (

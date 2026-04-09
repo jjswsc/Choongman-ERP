@@ -31,58 +31,106 @@ export function displayLabelShort(val: string | null | undefined): string {
   return s.replace(/\s*\(Part-Time\)\s*/gi, ' (P/T)')
 }
 
-/** 모바일 사진 업로드 전 압축 (base64 크기 제한 회피). HEIC/일부 포맷 실패 시 FileReader fallback */
+/** 모바일 사진 업로드 전 압축 (base64 크기 제한 회피). 일부 기기에서 무한 로딩 방지를 위해 단계별 timeout 적용 */
 export function compressImageForUpload(file: File, maxWidth = 1024, quality = 0.65): Promise<string> {
-  const tryCompress = (): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const img = new Image()
-      const url = URL.createObjectURL(file)
-      img.onload = () => {
-        URL.revokeObjectURL(url)
-        const canvas = document.createElement('canvas')
-        let w = img.width
-        let h = img.height
-        if (w > maxWidth || h > maxWidth) {
-          if (w > h) {
-            h = Math.round((h * maxWidth) / w)
-            w = maxWidth
-          } else {
-            w = Math.round((w * maxWidth) / h)
-            h = maxWidth
-          }
-        }
-        canvas.width = w
-        canvas.height = h
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          reject(new Error('Canvas not supported'))
-          return
-        }
-        ctx.drawImage(img, 0, 0, w, h)
-        const dataUrl = canvas.toDataURL('image/jpeg', quality)
-        resolve(dataUrl)
-      }
-      img.onerror = () => {
-        URL.revokeObjectURL(url)
-        reject(new Error('Image load failed'))
-      }
-      img.src = url
+  const timeoutMs = 12000
+  const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms)
+      promise
+        .then((v) => {
+          clearTimeout(timer)
+          resolve(v)
+        })
+        .catch((e) => {
+          clearTimeout(timer)
+          reject(e)
+        })
     })
 
-  return tryCompress().catch((err) => {
-    // 모바일 HEIC/일부 포맷에서 Image 로드 실패 시 FileReader로 fallback (압축 없이, 2MB 제한)
-    if (file.size > 2 * 1024 * 1024) {
-      return Promise.reject(new Error('Image too large or unsupported format (max 2MB for HEIC)'))
-    }
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = reader.result
-        if (typeof result === 'string' && result.startsWith('data:')) resolve(result)
-        else reject(err)
+  const drawCompressed = (source: CanvasImageSource, width: number, height: number): string => {
+    const canvas = document.createElement('canvas')
+    let w = width
+    let h = height
+    if (w > maxWidth || h > maxWidth) {
+      if (w > h) {
+        h = Math.round((h * maxWidth) / w)
+        w = maxWidth
+      } else {
+        w = Math.round((w * maxWidth) / h)
+        h = maxWidth
       }
-      reader.onerror = () => reject(err)
-      reader.readAsDataURL(file)
-    })
-  })
+    }
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas not supported')
+    ctx.drawImage(source, 0, 0, w, h)
+    return canvas.toDataURL('image/jpeg', quality)
+  }
+
+  const tryCompressByImageTag = (): Promise<string> =>
+    withTimeout(
+      new Promise((resolve, reject) => {
+        const img = new Image()
+        const url = URL.createObjectURL(file)
+        img.onload = () => {
+          try {
+            const dataUrl = drawCompressed(img, img.width, img.height)
+            resolve(dataUrl)
+          } catch (e) {
+            reject(e)
+          } finally {
+            URL.revokeObjectURL(url)
+          }
+        }
+        img.onerror = () => {
+          URL.revokeObjectURL(url)
+          reject(new Error('Image load failed'))
+        }
+        img.src = url
+      }),
+      timeoutMs,
+      'image-compress'
+    )
+
+  const tryCompressByBitmap = async (): Promise<string> => {
+    if (typeof createImageBitmap !== 'function') {
+      throw new Error('createImageBitmap not supported')
+    }
+    const bmp = await withTimeout(createImageBitmap(file), timeoutMs, 'bitmap-decode')
+    try {
+      return drawCompressed(bmp, bmp.width, bmp.height)
+    } finally {
+      try {
+        bmp.close()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const fallbackReadAsDataUrl = (): Promise<string> => {
+    if (file.size > 5 * 1024 * 1024) {
+      return Promise.reject(new Error('Image too large (max 5MB for fallback)'))
+    }
+    return withTimeout(
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result
+          if (typeof result === 'string' && result.startsWith('data:')) resolve(result)
+          else reject(new Error('FileReader failed'))
+        }
+        reader.onerror = () => reject(new Error('FileReader error'))
+        reader.readAsDataURL(file)
+      }),
+      timeoutMs,
+      'file-reader'
+    )
+  }
+
+  return tryCompressByImageTag()
+    .catch(() => tryCompressByBitmap())
+    .catch(() => fallbackReadAsDataUrl())
 }

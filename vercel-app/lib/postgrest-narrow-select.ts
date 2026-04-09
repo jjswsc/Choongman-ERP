@@ -24,11 +24,11 @@ export const ORDERS_MY_HISTORY_COLS =
 
 /** 급여·근태 집계(행 단위 처리) */
 export const ATTENDANCE_LOG_PAYROLL_COLS =
-  'log_at,store_name,name,employee_id,employee_code,log_type,late_min,early_min,ot_min,break_min,status,approved'
+  'id,log_at,store_name,name,employee_id,employee_code,log_type,late_min,early_min,ot_min,break_min,status,approved'
 
 /** attendance_logs.employee_code 미배포 DB용 */
 export const ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE =
-  'log_at,store_name,name,employee_id,log_type,late_min,early_min,ot_min,break_min,status,approved'
+  'id,log_at,store_name,name,employee_id,log_type,late_min,early_min,ot_min,break_min,status,approved'
 
 /** 관리자 근태표(일별 집계) */
 export const ATTENDANCE_LOG_ADMIN_GRID_COLS =

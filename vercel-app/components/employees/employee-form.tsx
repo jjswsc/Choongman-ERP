@@ -30,6 +30,16 @@ const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
+function gradeBadgeStyle(g: string): string {
+  const v = String(g || "-").trim().toUpperCase()
+  if (v === "A" || v === "S") return "bg-[#1B5E20] text-white"
+  if (v === "B") return "bg-[#0D47A1] text-white"
+  if (v === "C") return "bg-[#F57F17] text-[#1a1a1a]"
+  if (v === "D") return "bg-[#BF360C] text-white"
+  if (v === "F" || v === "E") return "bg-[#3E2723] text-white"
+  return "bg-gray-500 text-white"
+}
+
 export const EMP_NAME_TITLE_OPTIONS = EMPLOYEE_NAME_TITLE_CANONICAL
 
 export interface EmployeeFormData {
@@ -64,6 +74,8 @@ export interface EmployeeFormData {
   riskAllowance: number
   attendanceAllowance: number
   grade: string
+  /** 매니저 평가 등급(표시 전용·저장 payload에서 제외) */
+  managerGradeDisplay: string
   photo: string
   /** 가맹점주 추가 매장 (대표 store 제외) */
   extraStores: string[]
@@ -99,6 +111,7 @@ const emptyForm: EmployeeFormData = {
   riskAllowance: 0,
   attendanceAllowance: 500,
   grade: "",
+  managerGradeDisplay: "",
   photo: "",
   extraStores: [],
 }
@@ -411,23 +424,6 @@ export function EmployeeForm({
             placeholder="Password"
           />
         </div>
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_label_role")}</label>
-          <Select
-            value={roleSelectValue}
-            onValueChange={(v) => update("role", v)}
-            disabled={roleDisabled}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roleOptionsForSelect.map((r) => (
-                <SelectItem key={r} value={r}>{r}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
         {showFranchiseeExtras && (
           <div className="col-span-2 space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
             <label className="text-xs font-semibold block">{t("emp_franchisee_extra_stores")}</label>
@@ -446,19 +442,85 @@ export function EmployeeForm({
             </div>
           </div>
         )}
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_grade")}</label>
-          <Select value={form.grade || "__none__"} onValueChange={(v) => update("grade", v === "__none__" ? "" : v)}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="-" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">-</SelectItem>
-              {GRADE_OPTIONS.filter(Boolean).map((g) => (
-                <SelectItem key={g} value={g}>{g}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="col-span-2 min-w-0">
+          <div className="flex flex-nowrap items-end gap-2 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
+            {roleLower === "manager" ? (
+              <>
+                <div className="w-[4.25rem] shrink-0">
+                  <label className="text-xs font-semibold block mb-1 whitespace-nowrap">{t("emp_grade")}</label>
+                  <Select
+                    value={form.grade || "__none__"}
+                    onValueChange={(v) => update("grade", v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-8 text-xs px-2">
+                      <SelectValue placeholder="-" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">-</SelectItem>
+                      {GRADE_OPTIONS.filter(Boolean).map((g) => (
+                        <SelectItem key={g} value={g}>
+                          {g}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-[4.25rem] shrink-0">
+                  <label
+                    className="mb-1 block max-w-[4.25rem] truncate text-[10px] font-medium leading-tight text-muted-foreground"
+                    title={t("eval_type_manager_emp")}
+                  >
+                    {t("eval_type_manager_emp")}
+                  </label>
+                  <div
+                    className={`flex h-8 items-center justify-center rounded-md px-1 text-[11px] font-semibold ${gradeBadgeStyle(form.managerGradeDisplay)}`}
+                    title={t("eval_type_manager_emp")}
+                  >
+                    {String(form.managerGradeDisplay || "").trim() || "-"}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="w-[4.25rem] shrink-0">
+                <label className="text-xs font-semibold block mb-1 whitespace-nowrap">{t("emp_grade")}</label>
+                <Select
+                  value={form.grade || "__none__"}
+                  onValueChange={(v) => update("grade", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-xs px-2">
+                    <SelectValue placeholder="-" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">-</SelectItem>
+                    {GRADE_OPTIONS.filter(Boolean).map((g) => (
+                      <SelectItem key={g} value={g}>
+                        {g}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <label className="text-xs font-semibold block mb-1 whitespace-nowrap">{t("emp_label_role")}</label>
+              <Select
+                value={roleSelectValue}
+                onValueChange={(v) => update("role", v)}
+                disabled={roleDisabled}
+              >
+                <SelectTrigger className="h-8 w-full min-w-0 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptionsForSelect.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
           </div>
           </AccordionContent>
