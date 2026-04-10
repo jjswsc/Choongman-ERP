@@ -60,6 +60,12 @@ export async function POST(request: NextRequest) {
       employeeIdRaw != null && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
+    const optEarlyRaw = body?.optEarlyMinutes ?? body?.earlyMinutes
+    let optEarlyMinutes = 0
+    if (optEarlyRaw != null && optEarlyRaw !== '') {
+      const n = Number(optEarlyRaw)
+      if (Number.isFinite(n) && n >= 0) optEarlyMinutes = Math.min(24 * 60, Math.floor(n))
+    }
 
     if (!dateStr || dateStr.length < 10 || !storeName || !empName) {
       return NextResponse.json(
@@ -157,7 +163,11 @@ export async function POST(request: NextRequest) {
 
     // 퇴근 시각 = 출근 시각 + 계획 근무시간 + 휴게 → 실제 근무가 계획과 일치
     const inMs = new Date(inTimeIso).getTime()
-    const outMs = inMs + (plannedWorkMin + breakMin) * 60 * 1000
+    const originalOutMs = inMs + (plannedWorkMin + breakMin) * 60 * 1000
+    /** 조퇴(분): 계획 퇴근 시각보다 일찍 나간 만큼 — 관리자 입력 시 퇴근 시각을 앞당김 */
+    const maxEarlyMin = Math.max(0, Math.floor((originalOutMs - inMs) / (60 * 1000)) - 1)
+    const effectiveEarlyMin = Math.min(optEarlyMinutes, maxEarlyMin)
+    const outMs = originalOutMs - effectiveEarlyMin * 60 * 1000
     const outDate = new Date(outMs)
 
     if (hasOut && outLog?.id != null && /강제퇴근\(승인\)/.test(String(outLog.status || ''))) {
@@ -165,7 +175,7 @@ export async function POST(request: NextRequest) {
         log_at: outDate.toISOString(),
         break_min: breakMin,
         late_min: 0,
-        early_min: 0,
+        early_min: effectiveEarlyMin,
         ot_min: 0,
       })
     } else {
@@ -178,7 +188,7 @@ export async function POST(request: NextRequest) {
         lng: '',
         planned_time: planOut,
         late_min: 0,
-        early_min: 0,
+        early_min: effectiveEarlyMin,
         ot_min: 0,
         break_min: breakMin,
         reason: '',

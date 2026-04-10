@@ -19,6 +19,13 @@
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts",
+        "filter": ["**/*.ps1"]
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",

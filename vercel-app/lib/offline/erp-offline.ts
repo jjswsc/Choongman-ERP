@@ -3,7 +3,7 @@
  * 온라인 시 API 호출 후 캐시 저장, 오프라인/API 실패 시 캐시 사용
  */
 
-import { isOnline, shouldPreferOfflineCache } from './network'
+import { isOnline, reportNetworkSuccess, runReachabilityProbe, shouldPreferOfflineCache } from './network'
 import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } from './cache'
 import { apiFetch } from '../api/fetch'
 
@@ -544,77 +544,56 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
     usedMaster: false,
     _source: 'fallback',
   }
-  const online = isOnline()
   sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:entry", "getLoginDataWithCache entered", {
-    online,
+    online: isOnline(),
   })
-  if (online) {
-    try {
-      const res = await apiFetch('/api/getLoginData')
-      const data = (await res.json()) as {
-        users?: Record<string, string[]>
-        vendors?: string[]
-        companies?: string[]
-        storeCompanies?: Record<string, string>
-        storeLabels?: Record<string, string>
-        legacyToCanonical?: Record<string, string>
-        usedMaster?: boolean
-        error?: string
-      }
-      if (!res.ok && data?.error) throw new Error(data.error)
-      if (!res.ok) throw new Error('매장 목록을 불러오지 못했습니다.')
-      const result: LoginDataResult = {
-        users: data.users ?? {},
-        vendors: data.vendors ?? [],
-        companies: data.companies ?? [],
-        storeCompanies: data.storeCompanies ?? {},
-        storeLabels: data.storeLabels ?? {},
-        legacyToCanonical: data.legacyToCanonical ?? {},
-        usedMaster: data.usedMaster ?? false,
-        _source: 'api',
-      }
-      sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiSuccess", "login data from api", {
-        storeCount: Object.keys(result.users || {}).length,
-      })
-      await setErpCache(key, {
-        users: result.users,
-        vendors: result.vendors,
-        companies: result.companies,
-        storeCompanies: result.storeCompanies,
-        storeLabels: result.storeLabels,
-        legacyToCanonical: result.legacyToCanonical,
-        usedMaster: result.usedMaster,
-      })
-      return result
-    } catch {
-      const cached = await getFromErpCache<{
-        users: Record<string, string[]>
-        vendors: string[]
-        companies?: string[]
-        storeCompanies?: Record<string, string>
-        storeLabels?: Record<string, string>
-        legacyToCanonical?: Record<string, string>
-        usedMaster?: boolean
-      }>(key)
-      if (cached && Object.keys(cached.users || {}).length > 0) {
-        sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiCatchCacheHit", "api failed, using cached login data", {
-          storeCount: Object.keys(cached.users || {}).length,
-        })
-        return {
-          users: cached.users,
-          vendors: cached.vendors ?? [],
-          companies: cached.companies ?? [],
-          storeCompanies: cached.storeCompanies ?? {},
-          storeLabels: cached.storeLabels ?? {},
-          legacyToCanonical: cached.legacyToCanonical ?? {},
-          usedMaster: cached.usedMaster ?? false,
-          _source: 'cache',
-        }
-      }
-      sendOfflineDebugLog("H3", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiCatchFallback", "api failed, fallback login data", {})
-      return fallback
-    }
+
+  if (typeof window !== "undefined" && !isOnline()) {
+    await runReachabilityProbe()
   }
+
+  try {
+    const res = await apiFetch('/api/getLoginData')
+    const data = (await res.json()) as {
+      users?: Record<string, string[]>
+      vendors?: string[]
+      companies?: string[]
+      storeCompanies?: Record<string, string>
+      storeLabels?: Record<string, string>
+      legacyToCanonical?: Record<string, string>
+      usedMaster?: boolean
+      error?: string
+    }
+    if (!res.ok && data?.error) throw new Error(data.error)
+    if (!res.ok) throw new Error('매장 목록을 불러오지 못했습니다.')
+    const result: LoginDataResult = {
+      users: data.users ?? {},
+      vendors: data.vendors ?? [],
+      companies: data.companies ?? [],
+      storeCompanies: data.storeCompanies ?? {},
+      storeLabels: data.storeLabels ?? {},
+      legacyToCanonical: data.legacyToCanonical ?? {},
+      usedMaster: data.usedMaster ?? false,
+      _source: 'api',
+    }
+    sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiSuccess", "login data from api", {
+      storeCount: Object.keys(result.users || {}).length,
+    })
+    reportNetworkSuccess()
+    await setErpCache(key, {
+      users: result.users,
+      vendors: result.vendors,
+      companies: result.companies,
+      storeCompanies: result.storeCompanies,
+      storeLabels: result.storeLabels,
+      legacyToCanonical: result.legacyToCanonical,
+      usedMaster: result.usedMaster,
+    })
+    return result
+  } catch {
+    /* API 실패 또는 navigator·프로브 오탐으로 온라인 분기에 못 들어갔던 경우 — 캐시로 폴백 */
+  }
+
   const cached = await getFromErpCache<{
     users: Record<string, string[]>
     vendors: string[]
@@ -625,9 +604,10 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
     usedMaster?: boolean
   }>(key)
   if (cached && Object.keys(cached.users || {}).length > 0) {
-    sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:offlineCacheHit", "offline mode with cache", {
+    sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:cacheHit", "using cached login data", {
       storeCount: Object.keys(cached.users || {}).length,
     })
+    reportNetworkSuccess()
     return {
       users: cached.users,
       vendors: cached.vendors ?? [],
@@ -639,7 +619,7 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       _source: 'cache',
     }
   }
-  sendOfflineDebugLog("H3", "lib/offline/erp-offline.ts:getLoginDataWithCache:offlineFallback", "offline mode fallback login data", {})
+  sendOfflineDebugLog("H3", "lib/offline/erp-offline.ts:getLoginDataWithCache:fallback", "no login data from api or cache", {})
   return fallback
 }
 

@@ -8,7 +8,17 @@ import {
  * 두 작업을 한 롤에 이어 붙임(Zywell Zy808 등). 영수증 파이프라인 정리 후 이 시간만큼
  * 지연한 뒤 주방전을 시작한다.
  */
-export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS = 1800
+export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS = 4000
+
+/**
+ * 주방전이 여러 장일 때 장·장 사이 간격(동일 드라이버 스풀 합침 완화).
+ */
+export const POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS = 1200
+
+/**
+ * 주방 자동 인쇄 직후 고객용 영수증 자동 인쇄 전(모달 경로). 주방 컷·스풀 안정화.
+ */
+export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS = 1000
 
 export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   /**

@@ -413,17 +413,30 @@ export async function processOrderReceive(params: {
   inspectedIndices?: number[]
   receivedQtys?: Record<number, number>
 }) {
-  const res = await apiFetchWithOffline('/api/processOrderReceive', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  const data = await res.json().catch(() => ({ success: false, message: '응답 파싱 실패' }))
-  if (!res.ok) {
-    return { success: false, message: data?.message || `요청 실패 (${res.status})` }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 90000)
+  try {
+    const res = await apiFetchWithOffline('/api/processOrderReceive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({ success: false, message: '응답 파싱 실패' }))
+    if (!res.ok) {
+      return { success: false, message: data?.message || `요청 실패 (${res.status})` }
+    }
+    if (data?.success) invalidateAppDataCache()
+    return data as { success: boolean; message?: string }
+  } catch (e) {
+    const isAbort = e instanceof Error && e.name === 'AbortError'
+    if (isAbort) {
+      return { success: false, message: '요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.' }
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
   }
-  if (data?.success) invalidateAppDataCache()
-  return data as { success: boolean; message?: string }
 }
 
 export interface AdminOrderItem {
@@ -1028,6 +1041,8 @@ export async function approveNoClockOut(params: {
   store: string
   name: string
   employeeId?: number
+  /** 강제 퇴근 생성 시 조퇴(분). 미입력·0이면 계획 퇴근 시각 기준 */
+  optEarlyMinutes?: number
   userStore?: string
   userRole?: string
 }) {

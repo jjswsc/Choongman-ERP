@@ -99,9 +99,15 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 시간표
   "매장과 기준 월요일이 필요합니다.": "att_schedule_store_required",
 
-  // 출퇴근
+  // 출퇴근 (submitAttendance)
   "위치 확인 대기 중입니다.": "attGpsPendingSaved",
   "❌ 위치 확인 실패! GPS를 켜고 매장 근처에서 다시 시도해 주세요. (현재 위치를 확인할 수 없습니다)": "attLocationVerifyFail",
+  "직원 정보를 확인할 수 없습니다. 다시 로그인 후 시도해 주세요.": "attErrEmployeeNotFound",
+  "미종료 근무가 있습니다. 먼저 퇴근을 기록한 뒤 새 출근을 진행해 주세요.": "attErrUnfinishedShift",
+  "출근을 먼저 기록해 주세요. 오늘 출근 기록이 없으면 휴식·재개·퇴근을 기록할 수 없습니다.": "attErrClockInFirst",
+  "출근 후 퇴근 전 근무 세션에서만 휴식·재개를 기록할 수 있습니다.": "attErrBreakOnlyInWorkSession",
+  "이미 휴식 중입니다. 휴식종료를 먼저 기록해 주세요.": "attErrAlreadyOnBreak",
+  "휴식시작 기록이 있어야 휴식종료를 기록할 수 있습니다.": "attErrNeedBreakStartForEnd",
 
   // 회계/통장/지출 관리
   "본사 권한만 등록할 수 있습니다.": "officeRoleOnly",
@@ -129,6 +135,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // 매장 수리 사진 Storage
   "수리 사진 저장소가 설정되지 않았습니다.": "repair_photo_storage_not_configured",
+
+  // 주문 수령 / 공통 API 타임아웃 (클라이언트)
+  "요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.": "apiRequestTimeout",
 }
 
 /**
@@ -177,9 +186,15 @@ export function translateApiMessage(
   // 방문/출퇴근: 위치 부적합 (30m/100m 등 거리 초과)
   const locMatch = trimmed.match(/^❌ 위치 부적합! 매장 근처\(\d+m 이내\)가 아닙니다\. \(현재 거리: (\d+)m\)$/)
   if (locMatch) return t("attLocationTooFar").replace("{m}", locMatch[1]!)
-  // 출근: 매장 GPS 미등록
-  const gpsNotRegMatch = trimmed.match(/^❌ (.+) 매장의 위치\(GPS\)가 등록되지 않아 출근 기록이 불가합니다\. 관리자에게 문의해 주세요\.$/)
-  if (gpsNotRegMatch) return t("attStoreGpsNotRegistered").replace("{store}", gpsNotRegMatch[1]!)
+  // 출퇴근: 매장 GPS 미등록 (구문·현행 API 둘 다)
+  const gpsNotRegNew = trimmed.match(
+    /^❌ (.+)의 위치\(GPS\)가 등록되지 않아 출퇴근 기록이 불가합니다\. 관리자에게 문의해 주세요\.$/
+  )
+  const gpsNotRegOld = trimmed.match(
+    /^❌ (.+) 매장의 위치\(GPS\)가 등록되지 않아 출근 기록이 불가합니다\. 관리자에게 문의해 주세요\.$/
+  )
+  if (gpsNotRegNew || gpsNotRegOld)
+    return t("attStoreGpsNotRegistered").replace("{store}", (gpsNotRegNew || gpsNotRegOld)![1]!)
   // 방문: 서버 오류
   if (trimmed.startsWith("❌ 서버 저장 오류:"))
     return t("visitServerError") + ": " + trimmed.slice("❌ 서버 저장 오류:".length)
@@ -189,11 +204,34 @@ export function translateApiMessage(
   // 시간표: "매장명 주간 시간표가 저장되었습니다!"
   if (/ .+ 주간 시간표가 저장되었습니다!$/.test(trimmed))
     return t("att_schedule_saved")
-  // 출퇴근: "✅ 출근 완료! (정상)" 등
+  // 출퇴근: 오늘 이미 [유형] 중복
+  const dupAttendance = trimmed.match(
+    /^오늘 이미 \[(출근|퇴근|휴식시작|휴식종료)\] 기록이 있습니다\. 하루에 한 번만 기록할 수 있습니다\.$/
+  )
+  if (dupAttendance) {
+    const typeToKey: Record<string, string> = {
+      출근: "attDupTypeIn",
+      퇴근: "attDupTypeOut",
+      휴식시작: "attDupTypeBreakStart",
+      휴식종료: "attDupTypeBreakEnd",
+    }
+    const tk = typeToKey[dupAttendance[1] || ""]
+    if (tk) return t("attErrDuplicateTypeToday").replace("{type}", t(tk))
+  }
+  // submitAttendance 예외 메시지
+  if (trimmed.startsWith("❌ 오류: ")) return t("attApiErrorPrefix") + trimmed.slice("❌ 오류: ".length)
+  // 출퇴근: "✅ 출근 완료! (정상)" 등 (휴식종료 시 휴게초과·휴게정상 포함)
   const attMatch = trimmed.match(/^✅ (출근|퇴근|휴식시작|휴식종료) 완료! \((.+)\)$/)
   if (attMatch) {
     const typeKey: Record<string, string> = { 출근: "attInComplete", 퇴근: "attOutComplete", 휴식시작: "attBreakComplete", 휴식종료: "attResumeComplete" }
-    const statusKey: Record<string, string> = { 정상: "statusNormal", 지각: "statusLate", 조퇴: "statusEarly", 연장: "statusOvertime" }
+    const statusKey: Record<string, string> = {
+      정상: "statusNormal",
+      지각: "statusLate",
+      조퇴: "statusEarly",
+      연장: "statusOvertime",
+      휴게초과: "att_status_break_over",
+      휴게정상: "att_status_break_ok",
+    }
     const typeT = t(typeKey[attMatch[1]] || "msg_done")
     const statusT = t(statusKey[attMatch[2]] || attMatch[2])
     return `✅ ${typeT}! (${statusT})`

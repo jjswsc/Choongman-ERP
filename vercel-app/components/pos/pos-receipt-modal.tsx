@@ -24,7 +24,12 @@ import {
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
-import { printPosHtmlDocument, type PrintPosHtmlDocumentOptions } from '@/lib/pos-print-html'
+import {
+  printPosHtmlDocument,
+  POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS,
+  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  type PrintPosHtmlDocumentOptions,
+} from '@/lib/pos-print-html'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -429,7 +434,7 @@ export function PosReceiptModal({
         })
         await printInIframe(html, slip.label, preferSystemPrintDialog)
         if (idx + 1 < slips.length) {
-          await new Promise((resolve) => setTimeout(resolve, 220))
+          await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
           await printOne(idx + 1)
         }
       }
@@ -464,18 +469,24 @@ export function PosReceiptModal({
     if (autoPrintedKeyRef.current === key) return
     autoPrintedKeyRef.current = key
 
-    const timers: ReturnType<typeof setTimeout>[] = []
-    if (autoKitchenSlip) {
-      timers.push(setTimeout(() => {
-        void handlePrintKitchenSlipRef.current(false)
-      }, 180))
-    }
-    if (autoReceipt) {
-      timers.push(setTimeout(() => {
-        void handlePrintReceiptRef.current(false)
-      }, autoKitchenSlip ? 780 : 180))
-    }
-    return () => timers.forEach((id) => clearTimeout(id))
+    const id = window.setTimeout(() => {
+      void (async () => {
+        try {
+          if (autoKitchenSlip) {
+            await handlePrintKitchenSlipRef.current(false)
+            if (autoReceipt) {
+              await new Promise((r) => setTimeout(r, POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS))
+              await handlePrintReceiptRef.current(false)
+            }
+          } else if (autoReceipt) {
+            await handlePrintReceiptRef.current(false)
+          }
+        } catch {
+          /* 인쇄 취소 등 */
+        }
+      })()
+    }, 180)
+    return () => window.clearTimeout(id)
   }, [
     receiptData,
     autoPrintReceiptOnOrder,

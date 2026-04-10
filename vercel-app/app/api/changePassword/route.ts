@@ -7,6 +7,7 @@ import {
   fetchErpStoresMaster,
   pickBestEmployeeStoreMatch,
 } from '@/lib/erp-store-master'
+import { normalizeCompanyName } from '@/lib/tenant-context'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -18,17 +19,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const validated = parseOr400(changePasswordSchema, body, headers)
     if (validated.errorResponse) return validated.errorResponse
-    const { store, name, oldPw, newPw } = validated.parsed
+    const { company, store, name, oldPw, newPw } = validated.parsed
+    const companyInput = normalizeCompanyName(company)
 
     const nameFilter = `name=eq.${encodeURIComponent(name)}`
     const byName = (await supabaseSelectFilter('employees', nameFilter, { limit: 120 })) as {
       id?: string | number
+      company?: string | null
       store?: string
       name?: string
       password?: string
     }[]
     const masters = await fetchErpStoresMaster()
-    const matched = employeeRowsMatchingSubmittedStore(byName || [], store, masters)
+    const byCompany = companyInput
+      ? (byName || []).filter((r) => normalizeCompanyName(r.company) === companyInput)
+      : byName || []
+    const scopedRows = byCompany.length > 0 ? byCompany : byName || []
+    const matched = employeeRowsMatchingSubmittedStore(scopedRows, store, masters)
     const row = pickBestEmployeeStoreMatch(matched, store)
     if (!row) {
       return NextResponse.json({ success: false, message: '일치하는 계정을 찾을 수 없습니다.' }, { headers })

@@ -1,7 +1,7 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
 
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Check, UserCog, Search, Palmtree } from "lucide-react"
+import { CheckCircle2, Save, UserCog, Search, Palmtree } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
@@ -102,6 +102,54 @@ function readEarlyOtFromForm(
   }
 }
 
+function readForcedEarlyFromForm(
+  form: HTMLFormElement | null | undefined,
+  row: AttendanceDailyRow,
+  rowIndex: number
+): number | undefined {
+  if (!form) return undefined
+  const forcedKey = row.inLogId != null && row.inLogId > 0 ? `in_${row.inLogId}` : `row_${rowIndex}`
+  const el = form.elements.namedItem(`forced_early_${forcedKey}`) as HTMLInputElement | null
+  const raw = el?.value?.trim()
+  if (raw === undefined || raw === "") return undefined
+  const n = parseInt(raw, 10)
+  if (isNaN(n) || n < 0 || n > 9999) return undefined
+  return n
+}
+
+function adjustRowKey(row: AttendanceDailyRow, index: number): string {
+  return `${row.date}|${row.store}|${row.name}|${row.employeeId ?? 0}|${index}`
+}
+
+function AttAdjustApplyButton({
+  saved,
+  titleApply,
+  titleApplied,
+  onClick,
+}: {
+  saved: boolean
+  titleApply: string
+  titleApplied: string
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      className={cn(
+        "h-7 w-7 shrink-0 p-0",
+        saved
+          ? "border-0 bg-sky-600 text-white shadow-sm hover:bg-sky-700"
+          : "border border-border bg-muted text-muted-foreground hover:bg-muted/80"
+      )}
+      title={saved ? titleApplied : titleApply}
+      onClick={onClick}
+    >
+      {saved ? <CheckCircle2 className="h-4 w-4" strokeWidth={2.25} /> : <Save className="h-4 w-4" strokeWidth={2.25} />}
+    </Button>
+  )
+}
+
 export function AdminTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -118,6 +166,7 @@ export function AdminTab() {
   const [attLoading, setAttLoading] = useState(false)
   const [attHasSearched, setAttHasSearched] = useState(false)
   const [, setOtMinutesByRow] = useState<Record<number | string, string>>({})
+  const [adjustSavedKeys, setAdjustSavedKeys] = useState<Set<string>>(() => new Set())
 
   const { stores: storeList } = useStoreList()
   const isOffice = auth?.role && ["director", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
@@ -168,6 +217,10 @@ export function AdminTab() {
       .finally(() => setAttLoading(false))
   }, [auth, attStores.length, isOffice, attStart, attEnd, attStoreFilter])
 
+  useEffect(() => {
+    setAdjustSavedKeys(new Set())
+  }, [attStart, attEnd, attStoreFilter, attStatusFilter])
+
   const uniqueStatuses = [...new Set(recordList.map((r) => r.status).filter(Boolean))].sort() as string[]
   const displayRecordList =
     attStatusFilter === "all"
@@ -185,8 +238,8 @@ export function AdminTab() {
     optEarlyMinutes?: number | null,
     skipReload?: boolean,
     lateCtx?: LateApproveCtx
-  ) => {
-    if (!auth) return
+  ): Promise<boolean> => {
+    if (!auth) return false
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
@@ -205,9 +258,10 @@ export function AdminTab() {
     if (res.success) {
       setOtMinutesByRow((p) => { const next = { ...p }; delete next[id]; return next })
       if (!skipReload) loadAttendance()
-    } else {
-      await appAlert(translateApiMessage(res.message) || t("processFail"))
+      return true
     }
+    await appAlert(translateApiMessage(res.message) || t("processFail"))
+    return false
   }
 
   const handleReject = async (id: number) => {
@@ -222,18 +276,28 @@ export function AdminTab() {
     else await appAlert(translateApiMessage(res.message) || t("processFail"))
   }
 
-  const handleApproveNoClockOut = async (row: AttendanceDailyRow) => {
-    if (!auth) return
+  const handleApproveNoClockOut = async (
+    row: AttendanceDailyRow,
+    rowIndex: number,
+    form?: HTMLFormElement | null
+  ): Promise<boolean> => {
+    if (!auth) return false
+    const optEarly = readForcedEarlyFromForm(form ?? null, row, rowIndex)
     const res = await approveNoClockOut({
       date: row.date,
       store: row.store,
       name: row.name,
       ...(row.employeeId != null && row.employeeId > 0 ? { employeeId: row.employeeId } : {}),
+      ...(optEarly != null ? { optEarlyMinutes: optEarly } : {}),
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
-    if (res.success) loadAttendance()
-    else await appAlert(translateApiMessage(res.message) || t("processFail"))
+    if (res.success) {
+      loadAttendance()
+      return true
+    }
+    await appAlert(translateApiMessage(res.message) || t("processFail"))
+    return false
   }
 
   const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
@@ -370,7 +434,27 @@ export function AdminTab() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border bg-card -mx-1">
-              <form id="att-adjust-form" onSubmit={(e) => e.preventDefault()} className="contents">
+              <form
+                id="att-adjust-form"
+                onSubmit={(e) => e.preventDefault()}
+                onInput={(e) => {
+                  const el = e.target as HTMLElement
+                  if (el.tagName !== "INPUT") return
+                  const inp = el as HTMLInputElement
+                  const n = inp.name || ""
+                  if (!n.startsWith("adj_") && !n.startsWith("forced_early_")) return
+                  const tr = inp.closest("tr[data-att-adjust-row]")
+                  const rk = tr?.getAttribute("data-att-adjust-row")
+                  if (!rk) return
+                  setAdjustSavedKeys((prev) => {
+                    if (!prev.has(rk)) return prev
+                    const next = new Set(prev)
+                    next.delete(rk)
+                    return next
+                  })
+                }}
+                className="contents"
+              >
               <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -386,8 +470,9 @@ export function AdminTab() {
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3.5rem]">{t("att_adjust_early")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3.5rem]">{t("att_adjust_ot")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_status")}</th>
-                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[48px]">
-                      <Check className="mx-auto h-4 w-4 text-primary" aria-label={t("att_save_btn")} />
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[48px]" title={t("att_adjust_col_hint")}>
+                      <Save className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden />
+                      <span className="sr-only">{t("att_adjust_col_hint")}</span>
                     </th>
                   </tr>
                 </thead>
@@ -410,15 +495,20 @@ export function AdminTab() {
                             ? (row.otMin ?? row.diffMin)
                             : 0
                         : 0
+                    const isMissingClockOut =
+                      row.status === "퇴근미기록" ||
+                      !row.outTimeStr ||
+                      row.outTimeStr === "-"
                     const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
                     const statusStr = String(row.status || "")
                     const showAdjustInput =
-                      (!isNormal &&
+                      ((!isNormal &&
                         ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
                           row.lateMin > 0 ||
                           (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
-                      (row.status && String(row.status).includes("정상(승인)")) ||
-                      (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                        (row.status && String(row.status).includes("정상(승인)")) ||
+                        (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))) &&
+                      !isMissingClockOut
                     const adjustKey = hasPendingOut && (pendingOut != null || row.pendingId != null)
                       ? (pendingOut ?? row.pendingId)!
                       : row.outLogId != null
@@ -443,8 +533,14 @@ export function AdminTab() {
                     const earlyAfter = Math.max(0, Math.round(row.earlyAfterMin ?? defaultEarly))
                     const otBefore = Math.max(0, Math.round(row.otBeforeMin ?? defaultOt))
                     const otAfter = Math.max(0, Math.round(row.otAfterMin ?? defaultOt))
+                    const rk = adjustRowKey(row, i)
+                    const applySaved = adjustSavedKeys.has(rk)
                     return (
-                      <tr key={`r-${row.date}-${row.store}-${row.name}-${i}`} className="border-b last:border-b-0">
+                      <tr
+                        key={`r-${row.date}-${row.store}-${row.name}-${i}`}
+                        data-att-adjust-row={rk}
+                        className="border-b last:border-b-0"
+                      >
                         <td className="px-2 py-2 text-center">{row.date}</td>
                         <td className="px-2 py-2 text-center font-medium">{row.name}</td>
                         <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">{row.employeeCode || "-"}</td>
@@ -477,7 +573,22 @@ export function AdminTab() {
                           )}
                         </td>
                         <td className="px-2 py-2 text-center">
-                          {showOutInput ? (
+                          {isMissingClockOut ? (
+                            <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                              <span className="text-[10px] text-muted-foreground text-center leading-tight px-0.5">
+                                {t("att_adjust_early")}
+                              </span>
+                              <Input
+                                name={`forced_early_${row.inLogId != null && row.inLogId > 0 ? `in_${row.inLogId}` : `row_${i}`}`}
+                                type="number"
+                                min={0}
+                                max={999}
+                                placeholder="0"
+                                defaultValue={String(Math.max(0, Math.round(earlyAfter)))}
+                                className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-amber-600 text-center tabular-nums mx-auto"
+                              />
+                            </div>
+                          ) : showOutInput ? (
                             <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
                               <span className="text-xs font-medium text-muted-foreground tabular-nums">{earlyBefore}→</span>
                               <Input
@@ -522,7 +633,13 @@ export function AdminTab() {
                               variant="outline"
                               className="h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
                               title={t("att_force_out_hint")}
-                              onClick={() => handleApproveNoClockOut(row)}
+                              onClick={(e) =>
+                                handleApproveNoClockOut(
+                                  row,
+                                  i,
+                                  (e.currentTarget as HTMLButtonElement).closest("form")
+                                )
+                              }
                             >
                               {t("att_approve_forced_out")}
                             </Button>
@@ -566,14 +683,28 @@ export function AdminTab() {
                           )}
                         </td>
                         <td className="px-2 py-2">
-                          {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
+                          {isMissingClockOut ? (
                             <div className="flex items-center gap-1 justify-center flex-wrap">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="default"
-                                className="h-6 w-6 p-0"
-                                title={t("att_save_btn")}
+                              <AttAdjustApplyButton
+                                saved={applySaved}
+                                titleApply={t("att_save_apply_hint")}
+                                titleApplied={t("att_adjust_applied_hint")}
+                                onClick={async (e) => {
+                                  const ok = await handleApproveNoClockOut(
+                                    row,
+                                    i,
+                                    (e.currentTarget as HTMLButtonElement).closest("form")
+                                  )
+                                  if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
+                                }}
+                              />
+                            </div>
+                          ) : hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
+                            <div className="flex items-center gap-1 justify-center flex-wrap">
+                              <AttAdjustApplyButton
+                                saved={applySaved}
+                                titleApply={t("att_save_apply_hint")}
+                                titleApplied={t("att_adjust_applied_hint")}
                                 onClick={async (e) => {
                                   e.preventDefault()
                                   const outId = pendingOut ?? row.pendingId!
@@ -586,13 +717,13 @@ export function AdminTab() {
                                   const inKey = row.inLogId ?? pendingIn
                                   const lateCtx = readLateAdjustFromForm(form, inKey)
                                   if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
-                                    await handleApprove(pendingIn, undefined, true, undefined, true)
+                                    const okIn = await handleApprove(pendingIn, undefined, true, undefined, true)
+                                    if (!okIn) return
                                   }
-                                  handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                  const ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                  if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
                                 }}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
+                              />
                             </div>
                           ) : !hasPendingOut &&
                             row.outLogId != null &&
@@ -604,12 +735,10 @@ export function AdminTab() {
                               (row.diffMin > 0 && (row.otMin ?? 0) >= 30) ||
                               String(row.status || "").includes("조퇴")) ? (
                             <div className="flex items-center gap-1 justify-center flex-wrap">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="default"
-                                className="h-6 w-6 p-0"
-                                title={t("att_save_btn")}
+                              <AttAdjustApplyButton
+                                saved={applySaved}
+                                titleApply={t("att_save_apply_hint")}
+                                titleApplied={t("att_adjust_applied_hint")}
                                 onClick={async (e) => {
                                   e.preventDefault()
                                   const outId = row.outLogId!
@@ -622,13 +751,13 @@ export function AdminTab() {
                                   const inKey = row.inLogId ?? pendingIn
                                   const lateCtx = readLateAdjustFromForm(form, inKey)
                                   if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
-                                    await handleApprove(pendingIn, undefined, true, undefined, true)
+                                    const okIn = await handleApprove(pendingIn, undefined, true, undefined, true)
+                                    if (!okIn) return
                                   }
-                                  handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                  const ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                  if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
                                 }}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
+                              />
                             </div>
                           ) : !hasPendingOut &&
                             row.outLogId != null &&
@@ -640,13 +769,11 @@ export function AdminTab() {
                               (row.status && String(row.status).includes("강제퇴근(승인)")) ||
                               (row.status && String(row.status).includes("정상(승인)")) ||
                               String(row.status || "").includes("조퇴")) ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-6 w-6 p-0"
-                              title={t("att_save_btn")}
-                                onClick={(e) => {
+                            <AttAdjustApplyButton
+                              saved={applySaved}
+                              titleApply={t("att_save_apply_hint")}
+                              titleApplied={t("att_adjust_applied_hint")}
+                              onClick={async (e) => {
                                 e.preventDefault()
                                 const outId = row.outLogId!
                                 const form = (e.currentTarget as HTMLButtonElement).form
@@ -661,22 +788,22 @@ export function AdminTab() {
                                   row.diffMin === 0 &&
                                   (row.earlyMin ?? 0) === 0 &&
                                   (row.otMin ?? 0) < 30
+                                let ok = false
                                 if (isLateOnly && inKey) {
                                   const onlyLate = readLateAdjustFromForm(form, inKey)
                                   if (onlyLate?.optLateMinutes != null) {
-                                    handleApprove(inKey, undefined, undefined, undefined, false, {
+                                    ok = await handleApprove(inKey, undefined, undefined, undefined, false, {
                                       optLateMinutes: onlyLate.optLateMinutes,
                                     })
                                   } else {
-                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
                                   }
                                 } else {
-                                  handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                  ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
                                 }
+                                if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
                               }}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </Button>
+                            />
                           ) : (
                             <span className="text-[10px] text-muted-foreground"></span>
                           )}

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-10T02:20:51.170Z",
+  "generatedAt": "2026-04-10T09:47:38.000Z",
   "entryCount": 716,
   "entries": [
     {
@@ -179,21 +179,21 @@
     },
     {
       "path": "app/api/approveNoClockOut/route.ts",
-      "line": 88,
+      "line": 94,
       "kind": "limit",
       "value": 200,
       "apiLabel": "approveNoClockOut"
     },
     {
       "path": "app/api/approveNoClockOut/route.ts",
-      "line": 98,
+      "line": 104,
       "kind": "limit",
       "value": 200,
       "apiLabel": "approveNoClockOut"
     },
     {
       "path": "app/api/approveNoClockOut/route.ts",
-      "line": 129,
+      "line": 135,
       "kind": "limit",
       "value": 500,
       "apiLabel": "approveNoClockOut"
@@ -263,7 +263,7 @@
     },
     {
       "path": "app/api/changePassword/route.ts",
-      "line": 24,
+      "line": 26,
       "kind": "limit",
       "value": 120,
       "apiLabel": "changePassword"
@@ -1579,7 +1579,7 @@
     },
     {
       "path": "app/api/getLoginData/route.ts",
-      "line": 49,
+      "line": 59,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getLoginData"
@@ -2874,21 +2874,21 @@
     },
     {
       "path": "app/api/loginCheck/route.ts",
-      "line": 46,
+      "line": 49,
       "kind": "limit",
       "value": 120,
       "apiLabel": "loginCheck"
     },
     {
       "path": "app/api/loginCheck/route.ts",
-      "line": 52,
+      "line": 55,
       "kind": "limit",
       "value": 120,
       "apiLabel": "loginCheck"
     },
     {
       "path": "app/api/loginCheck/route.ts",
-      "line": 57,
+      "line": 60,
       "kind": "limit",
       "value": 120,
       "apiLabel": "loginCheck"
@@ -4204,14 +4204,14 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 286,
+      "line": 290,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1067,
+      "line": 1080,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
@@ -4267,93 +4267,79 @@
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 176,
+      "line": 178,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 239,
+      "line": 241,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 250,
+      "line": 252,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 254,
+      "line": 256,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 348,
+      "line": 350,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 400,
+      "line": 402,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 508,
+      "line": 510,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 570,
+      "line": 584,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 683,
+      "line": 697,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 685,
+      "line": 699,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 865,
+      "line": 880,
       "kind": "limit",
       "value": 50000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 980,
-      "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 991,
-      "kind": "limit",
-      "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
@@ -4365,56 +4351,70 @@
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1083,
+      "line": 1006,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1091,
+      "line": 1010,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1094,
+      "line": 1098,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1110,
+      "line": 1106,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports"
+    },
+    {
+      "path": "lib/accounting-reports.ts",
+      "line": 1109,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports"
+    },
+    {
+      "path": "lib/accounting-reports.ts",
+      "line": 1125,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1116,
+      "line": 1131,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1136,
+      "line": 1151,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1147,
+      "line": 1162,
       "kind": "limit",
       "value": 50000,
       "apiLabel": "lib:accounting-reports"
     },
     {
       "path": "lib/accounting-reports.ts",
-      "line": 1189,
+      "line": 1204,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports"

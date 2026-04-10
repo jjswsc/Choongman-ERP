@@ -3,7 +3,7 @@ import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { Check, Clock, Search } from "lucide-react"
+import { CheckCircle2, Clock, Save, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -93,6 +93,27 @@ function readLateAdjustFromForm(
   return { optionalInLogId: inLogKey, optLateMinutes: n }
 }
 
+/** 강제 퇴근 시 조퇴(분) 입력 — `forced_early_in_*` / `forced_early_row_*` */
+/** 근태 행별 조정 저장 UI 상태 키 (승인 후 파란 표시용) */
+function adjustRowKey(row: AttendanceDailyRow, index: number): string {
+  return `${row.date}|${row.store}|${row.name}|${row.employeeId ?? 0}|${index}`
+}
+
+function readForcedEarlyFromForm(
+  form: HTMLFormElement | null | undefined,
+  row: AttendanceDailyRow,
+  rowIndex: number
+): number | undefined {
+  if (!form) return undefined
+  const forcedKey = row.inLogId != null && row.inLogId > 0 ? `in_${row.inLogId}` : `row_${rowIndex}`
+  const el = form.elements.namedItem(`forced_early_${forcedKey}`) as HTMLInputElement | null
+  const raw = el?.value?.trim()
+  if (raw === undefined || raw === '') return undefined
+  const n = parseInt(raw, 10)
+  if (isNaN(n) || n < 0 || n > 9999) return undefined
+  return n
+}
+
 /** 퇴근 로그 조정: 조퇴(early)·OT 분 — `adj_early_*` / `adj_ot_*` */
 function readEarlyOtFromForm(
   form: HTMLFormElement | null | undefined,
@@ -110,6 +131,35 @@ function readEarlyOtFromForm(
     early: !isNaN(eNum) && eNum >= 0 ? Math.min(9999, eNum) : defaults.early,
     ot: !isNaN(oNum) && oNum >= 0 ? Math.min(9999, oNum) : defaults.ot,
   }
+}
+
+function AttAdjustApplyButton({
+  saved,
+  titleApply,
+  titleApplied,
+  onClick,
+}: {
+  saved: boolean
+  titleApply: string
+  titleApplied: string
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      className={cn(
+        "h-7 w-7 shrink-0 p-0",
+        saved
+          ? "border-0 bg-sky-600 text-white shadow-sm hover:bg-sky-700"
+          : "border border-border bg-muted text-muted-foreground hover:bg-muted/80"
+      )}
+      title={saved ? titleApplied : titleApply}
+      onClick={onClick}
+    >
+      {saved ? <CheckCircle2 className="h-4 w-4" strokeWidth={2.25} /> : <Save className="h-4 w-4" strokeWidth={2.25} />}
+    </Button>
+  )
 }
 
 /** 근태 기록/승인: 긴 목록은 이 박스 안에서 세로·가로 스크롤 (헤더 행 sticky) */
@@ -149,6 +199,8 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
   const [, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
+  /** 조정값 반영 완료한 행 — 숫자 변경 시 해제 → 회색(다시 반영) */
+  const [adjustSavedKeys, setAdjustSavedKeys] = React.useState<Set<string>>(() => new Set())
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -282,6 +334,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     }
   }, [startDate, endDate, storeFilter, employeeFilter, statusFilter, auth?.store, auth?.role])
 
+  React.useEffect(() => {
+    setAdjustSavedKeys(new Set())
+  }, [startDate, endDate, storeFilter, employeeFilter, statusFilter])
+
   const uniqueStatuses = React.useMemo(
     () => [...new Set(list.map((r) => r.status).filter(Boolean))].sort(),
     [list]
@@ -341,7 +397,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     optEarlyMinutes?: number | null,
     skipReload?: boolean,
     lateCtx?: LateApproveCtx
-  ) => {
+  ): Promise<boolean> => {
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
@@ -364,7 +420,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
         return next
       })
       if (!skipReload) loadRecords()
-    } else await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
+      return true
+    }
+    await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    return false
   }
 
   const handleReject = async (id: number) => {
@@ -378,17 +437,27 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     else await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
-  const handleApproveNoClockOut = async (row: AttendanceDailyRow) => {
+  const handleApproveNoClockOut = async (
+    row: AttendanceDailyRow,
+    rowIndex: number,
+    form?: HTMLFormElement | null
+  ): Promise<boolean> => {
+    const optEarly = readForcedEarlyFromForm(form ?? null, row, rowIndex)
     const res = await approveNoClockOut({
       date: row.date,
       store: row.store,
       name: row.name,
       ...(row.employeeId != null && row.employeeId > 0 ? { employeeId: row.employeeId } : {}),
+      ...(optEarly != null ? { optEarlyMinutes: optEarly } : {}),
       userStore: auth?.store,
       userRole: auth?.role,
     })
-    if (res.success) loadRecords()
-    else await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    if (res.success) {
+      loadRecords()
+      return true
+    }
+    await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    return false
   }
 
   return (
@@ -608,7 +677,27 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                 </div>
               ) : (
                 <div className={attStatusTableScrollCn}>
-                <form id="att-adjust-form" onSubmit={(e) => e.preventDefault()} className="contents">
+                <form
+                  id="att-adjust-form"
+                  onSubmit={(e) => e.preventDefault()}
+                  onInput={(e) => {
+                    const el = e.target as HTMLElement
+                    if (el.tagName !== "INPUT") return
+                    const inp = el as HTMLInputElement
+                    const n = inp.name || ""
+                    if (!n.startsWith("adj_") && !n.startsWith("forced_early_")) return
+                    const tr = inp.closest("tr[data-att-adjust-row]")
+                    const rk = tr?.getAttribute("data-att-adjust-row")
+                    if (!rk) return
+                    setAdjustSavedKeys((prev) => {
+                      if (!prev.has(rk)) return prev
+                      const next = new Set(prev)
+                      next.delete(rk)
+                      return next
+                    })
+                  }}
+                  className="contents"
+                >
                 <table className={attStatusTableCn}>
                   <thead>
                     <tr className="border-b bg-muted/50">
@@ -636,8 +725,12 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       )}
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
                       {allowEdit && (
-                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[48px]">
-                          <Check className="mx-auto h-4 w-4 text-primary" aria-label={t("att_save_btn")} />
+                        <th
+                          className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[48px]"
+                          title={t("att_adjust_col_hint")}
+                        >
+                          <Save className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden />
+                          <span className="sr-only">{t("att_adjust_col_hint")}</span>
                         </th>
                       )}
                     </tr>
@@ -670,10 +763,18 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       const earlyAfter = Math.max(0, Math.round(row.earlyAfterMin ?? defaultEarly))
                       const otBefore = Math.max(0, Math.round(row.otBeforeMin ?? defaultOt))
                       const otAfter = Math.max(0, Math.round(row.otAfterMin ?? defaultOt))
+                      /** 퇴근 로그 없음: 조퇴/OT 입력은 퇴근 승인용이라 표시하면 저장 버튼과 안 맞음 */
+                      const isMissingClockOut =
+                        row.status === "퇴근미기록" ||
+                        !row.outTimeStr ||
+                        row.outTimeStr === "-"
+                      const rk = adjustRowKey(row, i)
+                      const applySaved = adjustSavedKeys.has(rk)
                       return (
                         <tr
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
                           id={getFocusRowId(row)}
+                          data-att-adjust-row={rk}
                           className={cn(
                             row.plannedWorkHrs === 0 && !row.isPartTime && "bg-red-100 dark:bg-red-950/40",
                             isFocusedRow(row) && "ring-2 ring-amber-400/80 ring-inset bg-amber-50/70 dark:bg-amber-950/20"
@@ -697,12 +798,13 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                     (row.status && String(row.status).includes("정상(승인)"))
                                   const statusStr = String(row.status || "")
                                   const showAdjustInput =
-                                    (!isNormal &&
+                                    ((!isNormal &&
                                       ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
                                         row.lateMin > 0 ||
                                         (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
-                                    (row.status && String(row.status).includes("정상(승인)")) ||
-                                    (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                                      (row.status && String(row.status).includes("정상(승인)")) ||
+                                      (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))) &&
+                                    !isMissingClockOut
                                   const inLogKey = row.inLogId ?? pendingIn ?? null
                                   const showLateInput =
                                     showAdjustInput &&
@@ -735,17 +837,39 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                               </td>
                               <td className="px-2 py-2.5 text-center min-w-[4rem]">
                                 {(() => {
+                                  if (isMissingClockOut && allowEdit) {
+                                    const forcedKey =
+                                      row.inLogId != null && row.inLogId > 0 ? `in_${row.inLogId}` : `row_${i}`
+                                    const defEarly = Math.max(0, Math.round(earlyAfter))
+                                    return (
+                                      <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
+                                        <span className="text-[10px] text-muted-foreground text-center leading-tight px-0.5">
+                                          {t("att_adjust_early")}
+                                        </span>
+                                        <Input
+                                          name={`forced_early_${forcedKey}`}
+                                          type="number"
+                                          min={0}
+                                          max={999}
+                                          placeholder="0"
+                                          defaultValue={String(defEarly)}
+                                          className="h-8 min-w-[3.5rem] w-16 text-base font-semibold text-amber-600 tabular-nums text-center mx-auto"
+                                        />
+                                      </div>
+                                    )
+                                  }
                                   const isNormal =
                                     row.status === "정상" ||
                                     (row.status && String(row.status).includes("정상(승인)"))
                                   const statusStr = String(row.status || "")
                                   const showAdjustInput =
-                                    (!isNormal &&
+                                    ((!isNormal &&
                                       ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
                                         row.lateMin > 0 ||
                                         (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
-                                    (row.status && String(row.status).includes("정상(승인)")) ||
-                                    (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                                      (row.status && String(row.status).includes("정상(승인)")) ||
+                                      (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))) &&
+                                    !isMissingClockOut
                                   const adjustKey =
                                     hasPendingOut && (pendingOut != null || row.pendingId != null)
                                       ? (pendingOut ?? row.pendingId)!
@@ -788,12 +912,13 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                     (row.status && String(row.status).includes("정상(승인)"))
                                   const statusStr = String(row.status || "")
                                   const showAdjustInput =
-                                    (!isNormal &&
+                                    ((!isNormal &&
                                       ((row.plannedWorkHrs > 0 && row.diffMin !== 0) ||
                                         row.lateMin > 0 ||
                                         (row.status && String(row.status).includes("강제퇴근(승인)")))) ||
-                                    (row.status && String(row.status).includes("정상(승인)")) ||
-                                    (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))
+                                      (row.status && String(row.status).includes("정상(승인)")) ||
+                                      (row.plannedWorkHrs > 0 && statusStr.includes("조퇴"))) &&
+                                    !isMissingClockOut
                                   const adjustKey =
                                     hasPendingOut && (pendingOut != null || row.pendingId != null)
                                       ? (pendingOut ?? row.pendingId)!
@@ -828,7 +953,13 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                       variant="outline"
                                       className="h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
                                       title={t("att_force_out_hint")}
-                                      onClick={() => handleApproveNoClockOut(row)}
+                                      onClick={(e) =>
+                                        handleApproveNoClockOut(
+                                          row,
+                                          i,
+                                          (e.currentTarget as HTMLButtonElement).closest("form")
+                                        )
+                                      }
                                     >
                                       {t("att_approve_forced_out")}
                                     </Button>
@@ -880,14 +1011,28 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           <td className="px-2 py-2.5">
                             {!allowEdit ? (
                               <span className="flex justify-center text-[10px] text-muted-foreground"></span>
+                            ) : isMissingClockOut ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <AttAdjustApplyButton
+                                  saved={applySaved}
+                                  titleApply={t("att_save_apply_hint")}
+                                  titleApplied={t("att_adjust_applied_hint")}
+                                  onClick={async (e) => {
+                                    const ok = await handleApproveNoClockOut(
+                                      row,
+                                      i,
+                                      (e.currentTarget as HTMLButtonElement).closest("form")
+                                    )
+                                    if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
+                                  }}
+                                />
+                              </div>
                             ) : hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                               <div className="flex items-center gap-1 justify-center">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="default"
-                                  className="h-6 w-6 p-0"
-                                  title={t("att_save_btn")}
+                                <AttAdjustApplyButton
+                                  saved={applySaved}
+                                  titleApply={t("att_save_apply_hint")}
+                                  titleApplied={t("att_adjust_applied_hint")}
                                   onClick={async (e) => {
                                     e.preventDefault()
                                     const outId = pendingOut ?? row.pendingId!
@@ -903,13 +1048,13 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                     const inKey = row.inLogId ?? pendingIn
                                     const lateCtx = readLateAdjustFromForm(form, inKey)
                                     if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
-                                      await handleApprove(pendingIn, undefined, true, undefined, true)
+                                      const okIn = await handleApprove(pendingIn, undefined, true, undefined, true)
+                                      if (!okIn) return
                                     }
-                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    const ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
                                   }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                </Button>
+                                />
                               </div>
                             ) : !hasPendingOut &&
                               row.outLogId != null &&
@@ -921,12 +1066,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                 (row.diffMin > 0 && (row.otMin ?? 0) >= 30) ||
                                 String(row.status || "").includes("조퇴")) ? (
                               <div className="flex items-center gap-1 justify-center">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="default"
-                                  className="h-6 w-6 p-0"
-                                  title={t("att_save_btn")}
+                                <AttAdjustApplyButton
+                                  saved={applySaved}
+                                  titleApply={t("att_save_apply_hint")}
+                                  titleApplied={t("att_adjust_applied_hint")}
                                   onClick={async (e) => {
                                     e.preventDefault()
                                     const outId = row.outLogId!
@@ -939,13 +1082,13 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                     const inKey = row.inLogId ?? pendingIn
                                     const lateCtx = readLateAdjustFromForm(form, inKey)
                                     if ((ot ?? 0) === 0 && row.lateMin > 0 && pendingIn != null && (row.diffMin > 0 || row.otMin >= 30)) {
-                                      await handleApprove(pendingIn, undefined, true, undefined, true)
+                                      const okIn = await handleApprove(pendingIn, undefined, true, undefined, true)
+                                      if (!okIn) return
                                     }
-                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    const ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
                                   }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                </Button>
+                                />
                               </div>
                             ) : !hasPendingOut &&
                               row.outLogId != null &&
@@ -957,13 +1100,11 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                 (row.status && String(row.status).includes("강제퇴근(승인)")) ||
                                 (row.status && String(row.status).includes("정상(승인)")) ||
                                 String(row.status || "").includes("조퇴")) ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-6 w-6 p-0"
-                                title={t("att_save_btn")}
-                                onClick={(e) => {
+                              <AttAdjustApplyButton
+                                saved={applySaved}
+                                titleApply={t("att_save_apply_hint")}
+                                titleApplied={t("att_adjust_applied_hint")}
+                                onClick={async (e) => {
                                   e.preventDefault()
                                   const outId = row.outLogId!
                                   const form = (e.currentTarget as HTMLButtonElement).form
@@ -978,22 +1119,22 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                                     row.diffMin === 0 &&
                                     (row.earlyMin ?? 0) === 0 &&
                                     (row.otMin ?? 0) < 30
+                                  let ok = false
                                   if (isLateOnly && inKey) {
                                     const onlyLate = readLateAdjustFromForm(form, inKey)
                                     if (onlyLate?.optLateMinutes != null) {
-                                      handleApprove(inKey, undefined, undefined, undefined, false, {
+                                      ok = await handleApprove(inKey, undefined, undefined, undefined, false, {
                                         optLateMinutes: onlyLate.optLateMinutes,
                                       })
                                     } else {
-                                      handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                      ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
                                     }
                                   } else {
-                                    handleApprove(outId, ot, undefined, early, false, lateCtx)
+                                    ok = await handleApprove(outId, ot, undefined, early, false, lateCtx)
                                   }
+                                  if (ok) setAdjustSavedKeys((p) => new Set(p).add(rk))
                                 }}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
+                              />
                             ) : (
                               <span className="text-[10px] text-muted-foreground"></span>
                             )}

@@ -67,7 +67,7 @@ import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/po
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
-import { printPosHtmlDocument } from "@/lib/pos-print-html"
+import { printPosHtmlDocument, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS } from "@/lib/pos-print-html"
 import {
   RECEIPT_AMOUNT_COL_MM,
   RECEIPT_CONTENT_NUDGE_LEFT_MM,
@@ -973,7 +973,7 @@ export default function PosOrderPage() {
         })
         await printInIframe(html, slip.label)
         if (idx + 1 < slips.length) {
-          await new Promise((resolve) => setTimeout(resolve, 220))
+          await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
           await printOne(idx + 1)
         }
       }

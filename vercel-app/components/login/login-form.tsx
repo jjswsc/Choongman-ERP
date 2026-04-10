@@ -51,13 +51,33 @@ const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
     "Cannot connect to the network. You may be offline or the server may be unreachable.",
   msg_login_offline_connect_detail:
     "If this browser has no saved prior session (or site data was cleared), you cannot sign in with PIN while offline. Connect to the internet and sign in once. Wi-Fi can look connected even when the server is unreachable.",
+  /** getLoginData 실패 직후 /api/online-probe 성공 — 서버는 닿는데 목록 API만 지연·오류 */
+  msg_login_list_fetch_title: "Could not load the store list",
+  msg_login_list_fetch_soft_fail:
+    "The app server responded, but the store list did not load (timeout or temporary error). Tap Retry. If this continues, the login service may be busy — try again in a moment.",
+  /** 목록은 받은 뒤 loginCheck 네트워크 실패 — 오프라인 PIN 안내는 부적절 */
+  msg_login_submit_network_title: "Login could not be verified",
+  msg_login_submit_network_soft:
+    "The login request did not complete. Check the connection and try again. If the store list loaded above, the server is reachable — a retry often works.",
 }
 
-function pickLoginStr(tMsg: (k: string) => string, key: string): string {
+/** 번역 DB 없을 때 한국어 보조 (pickLoginStr이 영어만 있을 때 ko 사용자용) */
+const LOGIN_I18N_FALLBACK_KO: Partial<Record<string, string>> = {
+  msg_login_list_fetch_title: "매장 목록을 불러오지 못했습니다",
+  msg_login_list_fetch_soft_fail:
+    "앱 서버에는 닿았으나 매장 목록을 가져오지 못했습니다(시간 초과 또는 일시 오류). 「다시 시도」를 눌러 주세요. 계속되면 잠시 후 다시 시도하거나 관리자에게 문의하세요.",
+  msg_login_submit_network_title: "로그인을 확인할 수 없습니다",
+  msg_login_submit_network_soft:
+    "로그인 확인 요청이 완료되지 않았습니다. 연결을 확인한 뒤 다시 시도해 주세요. 위에서 매장 목록이 보였다면 서버는 닿는 경우가 많아 재시도로 해결됩니다.",
+}
+
+function pickLoginStr(tMsg: (k: string) => string, key: string, lang?: string): string {
   const raw = tMsg(key)
   const fb = LOGIN_I18N_FALLBACK_EN[key]
+  const fbKo = lang === "ko" ? LOGIN_I18N_FALLBACK_KO[key] : undefined
+  if (lang === "ko" && fbKo && (!raw || raw === key)) return fbKo
   if (fb && (!raw || raw === key)) return fb
-  return raw || fb || key
+  return raw || fbKo || fb || key
 }
 
 /** loginCheck API catch 등 — DB/네트워크 실패 시 내려오는 메시지 */
@@ -122,6 +142,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [user, setUser] = useState("")
   const [pw, setPw] = useState("")
   const [loading, setLoading] = useState(true)
+  /** getLoginData 출처 — 매장 0개여도 API 성공이면 '오프라인' 배너로 오인하지 않음 */
+  const [loginDataSource, setLoginDataSource] = useState<"api" | "cache" | "fallback" | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   /** 연결·서버 도달 실패 등 — 에러 칸 아래에 오프라인 CTA를 같이 띄움 */
@@ -136,6 +158,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [pwChanging, setPwChanging] = useState(false)
   const [pwError, setPwError] = useState("")
   const [loadError, setLoadError] = useState<string | null>(null)
+  /** getLoginData 실패 직후 /api/online-probe 성공 여부 — 서버 도달 vs 완전 오프라인 구분 */
+  const [loginListProbeOk, setLoginListProbeOk] = useState<boolean | null>(null)
   const [browserOnline, setBrowserOnline] = useState(true)
   const [hybridPosShell, setHybridPosShell] = useState(false)
   const initialNoticeShownRef = useRef(false)
@@ -238,24 +262,19 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   const fetchLoginData = useCallback(() => {
     setLoadError(null)
+    setLoginListProbeOk(null)
     setLoading(true)
     sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:start", "fetchLoginData started", {
       browserOnlineNow: typeof navigator !== "undefined" ? navigator.onLine : null,
       effectiveOnline: isBrowserOnline(),
     })
-    /** navigator.onLine 거짓 false 대비: 짧은 프로브 후에도 오프라인이면 즉시 종료 */
+    /** navigator.onLine 거짓 false 대비 프로브. 조기 종료하지 않음 — getLoginDataWithCache가 API를 직접 시도해 오탐을 복구함 */
     const run = async () => {
       if (typeof navigator !== "undefined" && !isBrowserOnline()) {
         await runReachabilityProbe()
       }
-      if (!isBrowserOnline()) {
-        setLoginData({})
-        setLoginStoreLabels({})
-        setLoadError(null)
-        setLoading(false)
-        return
-      }
-      const timeoutMs = 6000
+      const hybrid = isCmPosHybridShell()
+      const timeoutMs = hybrid ? 20_000 : 6000
       const withTimeout = Promise.race([
         getLoginData(),
         new Promise<never>((_, reject) =>
@@ -281,8 +300,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           if (prev && companyList.includes(prev)) return prev
           return companyList[0] || ""
         })
-        if (d._source === 'fallback') {
-          setLoadError('SERVER_ERROR')
+        const src = d._source ?? "fallback"
+        setLoginDataSource(src)
+        if (src === "api" || src === "cache") {
+          setBrowserOnline(true)
+          setLoginListProbeOk(true)
+        }
+        if (d._source === "fallback") {
+          setLoadError("SERVER_ERROR")
+          const probeOk = await runReachabilityProbe()
+          setLoginListProbeOk(probeOk)
         } else {
           setLoadError(null)
         }
@@ -292,9 +319,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         sendLoginDebugLog("H3", "components/login/login-form.tsx:fetchLoginData:catch", "fetchLoginData rejected", {
           error: msg,
         })
+        const probeOk = await runReachabilityProbe()
+        setLoginListProbeOk(probeOk)
         setLoadError(
-          msg.includes('연결') || msg.includes('시간 초과') || msg.includes('fetch') || msg.includes('Failed')
-            ? 'SERVER_ERROR'
+          msg.includes("연결") || msg.includes("시간 초과") || msg.includes("fetch") || msg.includes("Failed")
+            ? "SERVER_ERROR"
             : msg
         )
         setLoginData({})
@@ -302,6 +331,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         setLoginStoreCompanies({})
         setCompanies([])
         setCompany("")
+        setLoginDataSource("fallback")
         setLoading(false)
       }
     }
@@ -364,14 +394,18 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
     setSubmitting(true)
     clearFormError()
-    if (typeof navigator !== "undefined" && !isBrowserOnline()) {
-      await runReachabilityProbe()
-    }
-    if (!isBrowserOnline()) {
-      setError(pickLoginStr(tMsg, "msg_login_network_error"))
-      setErrorIsConnectivity(true)
-      setSubmitting(false)
-      return
+    const loginListReady =
+      (loginDataSource === "api" || loginDataSource === "cache") && stores.length > 0
+    if (!loginListReady) {
+      if (typeof navigator !== "undefined" && !isBrowserOnline()) {
+        await runReachabilityProbe()
+      }
+      if (!isBrowserOnline()) {
+        setError(pickLoginStr(tMsg, "msg_login_network_error", lang))
+        setErrorIsConnectivity(true)
+        setSubmitting(false)
+        return
+      }
     }
     try {
       const res = await loginCheck({
@@ -399,7 +433,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       } else {
         const apiMsg = res.message || ""
         if (isLoginCheckBackendFailureMessage(apiMsg)) {
-          setError(pickLoginStr(tMsg, "msg_login_network_error"))
+          setError(pickLoginStr(tMsg, "msg_login_network_error", lang))
           setErrorIsConnectivity(true)
         } else {
           setErrorIsConnectivity(false)
@@ -418,7 +452,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         msg.includes("network") ||
         msg.includes("연결")
       if (isNetErr) {
-        setError(pickLoginStr(tMsg, "msg_login_network_error"))
+        setError(pickLoginStr(tMsg, "msg_login_network_error", lang))
         setErrorIsConnectivity(true)
       } else {
         setErrorIsConnectivity(false)
@@ -450,7 +484,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setPwChanging(true)
     setPwError("")
     try {
-      const res = await changePassword({ store, name: user, oldPw: pwOld, newPw: pwNew })
+      const res = await changePassword({ company: company || undefined, store, name: user, oldPw: pwOld, newPw: pwNew })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, tMsg) || tMsg("pw_success"))
         setPwModalOpen(false)
@@ -490,8 +524,21 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setUser("")
   }, [filteredStores, store])
   const noStores = !loading && stores.length === 0
-  const serverListDegraded = Boolean(loadError) || noStores
+  /** 매장 목록이 비어 있어도 서버/캐시에서 정상 조회면 연결 문제로 보지 않음 */
+  const serverListDegraded =
+    Boolean(loadError) || (noStores && loginDataSource === "fallback")
   const listLoadedOk = !loading && stores.length > 0
+  /**
+   * Windows Electron 등에서 navigator.onLine 만 거짓이고 /api/getLoginData 는 성공한 경우 —
+   * 매장 목록이 있거나(api/cache 성공) 서버에서 빈 목록을 준 경우에도 연결 실패 배너를 띄우지 않음.
+   */
+  const listFromServerOk = loginDataSource === "api" || loginDataSource === "cache"
+  const showServerUnreachableBanner =
+    !offlineResume &&
+    (serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk))
+  /** 동일 출처 프로브 성공 + 목록 API만 실패 — 긴 PIN·오프라인 안내 대신 짧은 안내 */
+  const useSoftListFailureCopy = Boolean(showServerUnreachableBanner && loginListProbeOk === true)
+  const useSoftSubmitNetworkCopy = Boolean(errorIsConnectivity && loginListProbeOk === true)
   /**
    * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷 있고, 브라우저가 오프라인이며, 매장 목록도 못 받은 경우.
    * (일부 환경에서 navigator.onLine 이 거짓 false → 목록은 실제로 받아졌으면 폼을 보여 줌)
@@ -751,12 +798,20 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </div>
           ) : (
           <form onSubmit={handleSubmit}>
-            {(!browserOnline || serverListDegraded) && !offlineResume ? (
+            {showServerUnreachableBanner ? (
               <div className="mb-3 space-y-2">
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
-                  <p className="font-medium">{t.serverError}</p>
+                  <p className="font-medium">
+                    {useSoftListFailureCopy
+                      ? pickLoginStr(tMsg, "msg_login_list_fetch_title", lang)
+                      : t.serverError}
+                  </p>
                   <p className="mt-2 text-xs leading-relaxed text-amber-100/90">
-                    {pickLoginStr(tMsg, "msg_login_offline_connect_detail")}
+                    {pickLoginStr(
+                      tMsg,
+                      useSoftListFailureCopy ? "msg_login_list_fetch_soft_fail" : "msg_login_offline_connect_detail",
+                      lang
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-2">
@@ -782,7 +837,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <p className="text-xs leading-relaxed text-emerald-100/95">
                   {pickLoginStr(
                     tMsg,
-                    browserOnline ? "msg_login_offline_banner_hint_online" : "msg_login_offline_banner_hint"
+                    browserOnline ? "msg_login_offline_banner_hint_online" : "msg_login_offline_banner_hint",
+                    lang
                   )}
                 </p>
                 <p className="mt-2 text-sm font-medium text-emerald-50">
@@ -883,9 +939,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 </button>
               ) : errorIsConnectivity ? (
                 <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
-                  <p className="font-medium">{t.serverError}</p>
+                  <p className="font-medium">
+                    {useSoftSubmitNetworkCopy
+                      ? pickLoginStr(tMsg, "msg_login_submit_network_title", lang)
+                      : t.serverError}
+                  </p>
                   <p className="mt-2 text-xs leading-relaxed text-amber-100/90">
-                    {pickLoginStr(tMsg, "msg_login_offline_connect_detail")}
+                    {pickLoginStr(
+                      tMsg,
+                      useSoftSubmitNetworkCopy ? "msg_login_submit_network_soft" : "msg_login_offline_connect_detail",
+                      lang
+                    )}
                   </p>
                 </div>
               ) : (

@@ -18,7 +18,7 @@ const _log = (msg: string, data?: Record<string, unknown>) => {
         timestamp: Date.now(),
       }) + '\n'
     )
-  } catch (_) {}
+  } catch {}
 }
 // #endregion
 

@@ -11,6 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Plus, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -102,18 +109,21 @@ export function StockAdjustDialog({
     }
   }
 
-  if (!open) return null
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={() => onOpenChange(false)}
-    >
-      <div
-        className="w-full max-w-md rounded-xl border bg-card p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-md gap-0 p-5 sm:max-w-md"
+        hideCloseButton
+        onPointerDownOutside={(e) => {
+          if (submitting) e.preventDefault()
+        }}
+        onEscapeKeyDown={(e) => {
+          if (submitting) e.preventDefault()
+        }}
       >
-        <h3 className="mb-4 text-sm font-bold">{t("stockAdjustTitle")}</h3>
+        <DialogHeader className="space-y-0 pb-4 text-left">
+          <DialogTitle className="text-sm font-bold">{t("stockAdjustTitle")}</DialogTitle>
+        </DialogHeader>
         {item && (
           <div className="space-y-4">
             <div className="text-sm">
@@ -133,25 +143,23 @@ export function StockAdjustDialog({
                   {t("itemsAdd") || "추가"}
                 </Button>
               </div>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+              <div className="max-h-[200px] space-y-2 overflow-y-auto">
                 {rows.map((row, idx) => {
                   const opt = parseUnitKey(row.unitKey, unitOptions)
                   return (
-                    <div key={idx} className="flex gap-2 items-center flex-nowrap">
+                    <div key={idx} className="flex flex-nowrap items-center gap-2">
                       {unitOptions.length > 0 && (
-                        <Select
-                          value={row.unitKey}
-                          onValueChange={(v) => setRow(idx, { unitKey: v })}
-                        >
-                          <SelectTrigger className="w-[140px] min-w-[140px] shrink-0 text-sm h-9 overflow-hidden text-left">
+                        <Select value={row.unitKey} onValueChange={(v) => setRow(idx, { unitKey: v })}>
+                          <SelectTrigger className="h-9 w-[140px] min-w-[140px] shrink-0 overflow-hidden text-left text-sm">
                             <SelectValue placeholder={t("stockAdjustUnit") || "단위"} />
                           </SelectTrigger>
                           <SelectContent>
                             {unitOptions.map((o) => {
                               const val = o.kind === "spec" ? "spec" : `${o.unit}::${o.totalQuantity}`
-                              const label = o.kind === "spec"
-                                ? (t("stockAdjustUnitSpec") || "규격 (1개)")
-                                : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit") || "규격"})`
+                              const label =
+                                o.kind === "spec"
+                                  ? (t("stockAdjustUnitSpec") || "규격 (1개)")
+                                  : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit") || "규격"})`
                               return (
                                 <SelectItem key={val} value={val}>
                                   {label}
@@ -167,7 +175,7 @@ export function StockAdjustDialog({
                         placeholder={t("stockAdjustDiffPh") || "+10 또는 -5"}
                         value={row.qty}
                         onChange={(e) => setRow(idx, { qty: e.target.value })}
-                        className="text-sm w-28 min-w-[7rem] h-9 shrink-0"
+                        className="h-9 w-28 min-w-[7rem] shrink-0 text-sm"
                       />
                       <Button
                         type="button"
@@ -183,12 +191,12 @@ export function StockAdjustDialog({
                   )
                 })}
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {t("stockAdjustHint")}
-              </p>
+              <p className="text-[11px] text-muted-foreground">{t("stockAdjustHint")}</p>
               {rows.length >= 2 && (
                 <p className="text-xs font-medium text-foreground">
-                  {t("stockAdjustTotalLabel") || "합계"}: <span className="tabular-nums font-semibold text-primary">{Math.round(totalSpecQty * 1e4) / 1e4}</span> {t("specUnit") || "규격"}
+                  {t("stockAdjustTotalLabel") || "합계"}:{" "}
+                  <span className="font-semibold tabular-nums text-primary">{Math.round(totalSpecQty * 1e4) / 1e4}</span>{" "}
+                  {t("specUnit") || "규격"}
                 </p>
               )}
             </div>
@@ -203,15 +211,15 @@ export function StockAdjustDialog({
             </div>
           </div>
         )}
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <DialogFooter className="mt-5 flex-row justify-end gap-2 sm:justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={submitting}>
             {t("cancel")}
           </Button>
-          <Button size="sm" onClick={handleConfirm} disabled={submitting}>
+          <Button type="button" size="sm" onClick={() => void handleConfirm()} disabled={submitting}>
             {submitting ? t("loading") : t("stockAdjustConfirm")}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -58,7 +58,11 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { formatPosReceiptOrderNoDisplay } from '@/lib/pos-delivery-platform'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
-import { printPosHtmlDocument, POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS } from '@/lib/pos-print-html'
+import {
+  printPosHtmlDocument,
+  POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
+  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+} from '@/lib/pos-print-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
@@ -961,7 +965,8 @@ export default function PosTerminalPage() {
                   void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                 },
                 onAfterCleanup: () => {
-                  if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                  if (idx + 1 < slips.length)
+                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
                 },
               })
             }
@@ -1222,7 +1227,8 @@ export default function PosTerminalPage() {
                       void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                     },
                     onAfterCleanup: () => {
-                      if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                      if (idx + 1 < slips.length)
+                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
                     },
                   })
                 }
@@ -2052,7 +2058,8 @@ export default function PosTerminalPage() {
                             void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                           },
                           onAfterCleanup: () => {
-                            if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                            if (idx + 1 < slips.length)
+                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
                           },
                         })
                       }

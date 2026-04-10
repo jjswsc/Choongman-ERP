@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFile } = require("child_process");
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut, screen } = require("electron");
 
 /** package.json build.appId 와 동일 — 작업 표시줄·점프 목록이 Electron 기본 아이콘으로 남는 현상 완화 */
@@ -9,6 +10,9 @@ if (process.platform === "win32") {
 }
 
 const DEFAULT_POS_URL = "https://choongman-erp.vercel.app/pos/login";
+
+/** 무인쇄 HTML 작업 직후 다음 invoke 전까지 — Windows 스풀·Zywell 등이 컷/배출을 끝내도록 */
+const POST_HTML_PRINT_SPOOL_FLUSH_MS = 750;
 const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6 hours
 const AUTO_UPDATE_ENABLED = String(process.env.WINDOWS_POS_AUTO_UPDATE || "1") !== "0";
 
@@ -83,6 +87,16 @@ const DEFAULT_PRINT_DEVICE =
       runtimeConfig.print?.deviceName ??
       ""
   ).trim();
+/**
+ * HTML 무인쇄 직후 WinSpool RAW로 ESC/POS 절단 전송(Zywell 등 GDI만으로는 컷 없음).
+ * 끄기: runtime-config.json `"printEscPosCutAfterHtml": false` 또는 환경 변수 WINDOWS_POS_PRINT_ESC_POS_CUT=0
+ */
+const PRINT_ESC_POS_CUT_AFTER_HTML = readConfigBool(
+  process.env.WINDOWS_POS_PRINT_ESC_POS_CUT !== undefined && process.env.WINDOWS_POS_PRINT_ESC_POS_CUT !== ""
+    ? process.env.WINDOWS_POS_PRINT_ESC_POS_CUT
+    : runtimeConfig.printEscPosCutAfterHtml ?? runtimeConfig.print?.escPosCutAfterHtml,
+  true
+);
 const THERMAL_PAGE_WIDTH_80MM = 80000;
 const THERMAL_PAGE_HEIGHT_600MM = 600000;
 
@@ -184,6 +198,10 @@ function debugLog(hypothesisId, location, message, data) {
 }
 
 let mainWindow = null;
+/** POS 메인 URL 로드 실패 시 재시도(did-fail-load 일시 오류·리다이렉트 완화) */
+let posMainLoadFailAttempts = 0;
+let posMainLoadRetryTimer = null;
+const POS_MAIN_LOAD_MAX_ATTEMPTS = 5;
 let customerDisplayWindow = null;
 let isCheckingUpdate = false;
 let customerDisplayConfig = {
@@ -330,6 +348,62 @@ function senderAllowedOrigin(sender) {
   } catch {
     return false;
   }
+}
+
+/** 로컬 offline.html 또는 허용 origin — 복구용 IPC(cm-pos-reload-pos-url)만 허용 */
+function senderAllowedForTrustedShell(sender) {
+  if (!sender) return false;
+  try {
+    const url = String(sender.getURL() || "");
+    if (ALLOWED_ORIGIN && url.startsWith(ALLOWED_ORIGIN)) return true;
+    if (url.startsWith("file:") && url.includes("offline.html")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function clearPosMainLoadRetryTimer() {
+  if (posMainLoadRetryTimer) {
+    try {
+      clearTimeout(posMainLoadRetryTimer);
+    } catch {
+      /* ignore */
+    }
+    posMainLoadRetryTimer = null;
+  }
+}
+
+function loadOfflineFallbackPage() {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    void mainWindow.loadFile(path.join(__dirname, "offline.html"));
+  } catch (e) {
+    console.error("[cm-pos] loadFile offline failed", e);
+  }
+}
+
+function schedulePosMainUrlRetryFromFailure() {
+  clearPosMainLoadRetryTimer();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (posMainLoadFailAttempts >= POS_MAIN_LOAD_MAX_ATTEMPTS) {
+    posMainLoadFailAttempts = 0;
+    loadOfflineFallbackPage();
+    return;
+  }
+  posMainLoadFailAttempts += 1;
+  const delay = Math.min(350 + posMainLoadFailAttempts * 450, 4000);
+  posMainLoadRetryTimer = setTimeout(() => {
+    posMainLoadRetryTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      void mainWindow.loadURL(POS_URL, {
+        extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
+      });
+    } catch (e) {
+      console.error("[cm-pos] loadURL retry error", e);
+    }
+  }, delay);
 }
 
 async function fetchUpdatePayload() {
@@ -738,6 +812,44 @@ async function resolvePrintDeviceNameForJob() {
   }
 }
 
+function getEscPosCutScriptPath() {
+  const name = "send-thermal-escpos-cut.ps1";
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "scripts", name);
+  }
+  return path.join(__dirname, "scripts", name);
+}
+
+/** HTML 인쇄 후 RAW ESC/POS로 용지 절단 — 실패해도 인쇄 성공은 유지 */
+function sendEscPosCutForPrinter(printerName) {
+  return new Promise((resolve) => {
+    const name = String(printerName || "").trim();
+    if (!name) {
+      resolve({ ok: false, reason: "no_printer" });
+      return;
+    }
+    const script = getEscPosCutScriptPath();
+    if (!fs.existsSync(script)) {
+      console.warn("[cm-pos] ESC/POS cut script missing:", script);
+      resolve({ ok: false, reason: "no_script" });
+      return;
+    }
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PrinterName", name],
+      { windowsHide: true, timeout: 15000, maxBuffer: 256 * 1024 },
+      (err, _stdout, stderr) => {
+        if (err) {
+          console.warn("[cm-pos] ESC/POS cut failed:", err.message, stderr ? String(stderr) : "");
+          resolve({ ok: false, reason: String(err.message || err) });
+          return;
+        }
+        resolve({ ok: true });
+      }
+    );
+  });
+}
+
 /**
  * 메뉴/이미지 이상 시 복구용:
  * - 로그인 세션은 유지하기 위해 cookies/localStorage는 건드리지 않음
@@ -876,8 +988,29 @@ function createWindow() {
     },
   });
 
-  mainWindow.webContents.on("did-fail-load", () => {
-    mainWindow.loadFile(path.join(__dirname, "offline.html"));
+  mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (isMainFrame === false) return;
+    const urlStr = typeof validatedURL === "string" ? validatedURL : "";
+    if (urlStr.startsWith("file:")) return;
+    try {
+      console.error("[cm-pos] did-fail-load", errorCode, errorDescription, urlStr);
+    } catch {
+      /* ignore */
+    }
+    schedulePosMainUrlRetryFromFailure();
+  });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    try {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const u = mainWindow.webContents.getURL() || "";
+      if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) {
+        posMainLoadFailAttempts = 0;
+        clearPosMainLoadRetryTimer();
+      }
+    } catch {
+      /* ignore */
+    }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -936,6 +1069,25 @@ if (!gotLock) {
       debugNdjsonTryPaths: getDebugNdjsonLogCandidates(),
     });
     // #endregion
+
+    ipcMain.handle("cm-pos-reload-pos-url", async (event) => {
+      if (!senderAllowedForTrustedShell(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return { ok: false, reason: "no_window" };
+      }
+      posMainLoadFailAttempts = 0;
+      clearPosMainLoadRetryTimer();
+      try {
+        await mainWindow.loadURL(POS_URL, {
+          extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
+        });
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, reason: String(e && e.message ? e.message : e) };
+      }
+    });
 
     ipcMain.handle("cm-pos-get-version", (event) => {
       if (!senderAllowedOrigin(event.sender)) return null;
@@ -1056,9 +1208,21 @@ if (!gotLock) {
         senderUrl: String(event.sender?.getURL?.() || ""),
       });
       // #endregion
-      return printHtmlDocumentInHiddenWindow(html, {
+      const result = await printHtmlDocumentInHiddenWindow(html, {
         preferDialog: Boolean(payload?.preferDialog),
       });
+      if (result.ok && !Boolean(payload?.preferDialog)) {
+        await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS));
+        if (PRINT_ESC_POS_CUT_AFTER_HTML) {
+          try {
+            const device = await resolvePrintDeviceNameForJob();
+            await sendEscPosCutForPrinter(device);
+          } catch (e) {
+            console.warn("[cm-pos] ESC/POS cut:", e && e.message ? e.message : e);
+          }
+        }
+      }
+      return result;
     });
 
     ipcMain.handle("cm-pos-reset-cache-reload", async (event) => {

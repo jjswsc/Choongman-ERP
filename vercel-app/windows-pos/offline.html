@@ -48,7 +48,39 @@
       <h1>네트워크 연결을 확인해주세요.</h1>
       <p>서버 접속이 불안정합니다. 인터넷 연결 후 다시 시도하세요.</p>
       <p>오프라인 중 저장된 주문은 연결 복구 후 자동 동기화됩니다.</p>
-      <button onclick="window.location.reload()">다시 시도</button>
+      <p id="retryHint" class="hint" style="display: none; font-size: 13px; color: #9ca3af">
+        다시 시도 후에도 같으면 앱을 완전히 종료한 뒤 실행하거나, 브라우저에서 같은 주소로 열리는지 확인해 주세요.
+      </p>
+      <button id="retryBtn" type="button">다시 시도</button>
     </div>
+    <script>
+      async function retryLoadPos() {
+        var btn = document.getElementById("retryBtn");
+        var hint = document.getElementById("retryHint");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "연결 중…";
+        }
+        try {
+          if (window.cmPosShell && typeof window.cmPosShell.reloadPosUrl === "function") {
+            var r = await window.cmPosShell.reloadPosUrl();
+            if (r && r.ok) return;
+            if (hint) hint.style.display = "block";
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "다시 시도";
+            }
+            return;
+          }
+        } catch (e) {}
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "다시 시도";
+        }
+        window.location.reload();
+      }
+      var rb = document.getElementById("retryBtn");
+      if (rb) rb.addEventListener("click", function () { void retryLoadPos(); });
+    </script>
   </body>
 </html>

@@ -17,7 +17,10 @@ const SUPABASE_RETRY_MAX = 3
 const SUPABASE_RETRY_BASE_MS = 800
 
 /** 디버그용 — 매 Supabase 요청마다 디스크 쓰기하면 로컬·다건 조회 시 병목·타임아웃 유발 */
-const _log = (_msg: string, _data?: Record<string, unknown>) => {}
+const _log = (msg: string, data?: Record<string, unknown>) => {
+  void msg
+  void data
+}
 
 function httpsRequest(
   urlStr: string,
