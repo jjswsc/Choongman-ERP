@@ -5,6 +5,8 @@
 import * as jose from 'jose'
 
 export interface JwtPayload {
+  tenantId?: string
+  company?: string
   store: string
   name: string
   role: string
@@ -44,6 +46,12 @@ export async function signToken(payload: JwtPayload): Promise<string> {
     name: payload.name,
     role: payload.role,
   }
+  if (payload.tenantId != null && String(payload.tenantId).trim() !== '') {
+    body.tenantId = String(payload.tenantId).trim()
+  }
+  if (payload.company != null && String(payload.company).trim() !== '') {
+    body.company = String(payload.company).trim()
+  }
   if (payload.employeeId != null && Number.isFinite(Number(payload.employeeId))) {
     body.employeeId = Math.floor(Number(payload.employeeId))
   }
@@ -75,6 +83,8 @@ export async function verifyToken(token: string): Promise<JwtPayload | null> {
     const eidNum = eid != null && Number.isFinite(Number(eid)) ? Math.floor(Number(eid)) : undefined
     const ecode = payload.employeeCode != null ? String(payload.employeeCode).trim() : ''
     return {
+      ...(payload.tenantId ? { tenantId: String(payload.tenantId) } : {}),
+      ...(payload.company ? { company: String(payload.company) } : {}),
       store: String(payload.store || ''),
       name: String(payload.name || ''),
       role: String(payload.role || ''),

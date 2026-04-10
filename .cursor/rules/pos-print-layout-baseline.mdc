@@ -23,6 +23,7 @@ alwaysApply: true
 | 항목 | 확정 값 |
 |------|---------|
 | 안쪽 여백 | 왼 **5mm**, 오른 **15mm** (`RECEIPT_INNER_INSET_*`) |
+| 본문 하단 여백(롤 피드) | **6mm** (`RECEIPT_TRAILING_BOTTOM_MM`) — 절단·드라이버에 따라 마지막 줄과 칼날 겹침 완화 |
 | `.receipt-content` 좌 당김 | **-2mm** (`RECEIPT_CONTENT_NUDGE_LEFT_MM`) |
 | 금액 그리드 | `minmax(0,1fr) **16mm**`, `column-gap **3px**` (`RECEIPT_AMOUNT_COL_MM`, `RECEIPT_GRID_COL_GAP_PX`) |
 | 금액 글자 | 일반 행 우측 span **10px**, 합계 **11px** (`.receipt-row.receipt-total` 및 `.receipt-total .receipt-row`) |

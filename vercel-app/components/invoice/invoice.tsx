@@ -35,6 +35,7 @@ export interface InvoiceData {
   dueDate: string
   referenceNo: string
   issueDate: string
+  shipTo?: string
   poNumber?: string
   paymentTerms?: string
   shippingMethod?: string
@@ -137,6 +138,11 @@ export function Invoice({
                 <span className="opacity-70">Due Date:</span>
                 <span className="font-semibold">{data.dueDate}</span>
               </div>
+              <div className="flex items-center justify-end gap-2">
+                <FileText className="h-4 w-4 opacity-70" />
+                <span className="opacity-70">Reference:</span>
+                <span className="font-semibold">{data.referenceNo || "-"}</span>
+              </div>
               {data.poNumber && (
                 <div className="flex items-center justify-end gap-2">
                   <FileText className="h-4 w-4 opacity-70" />
@@ -217,6 +223,20 @@ export function Invoice({
                     <span>{data.client.email}</span>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="invoice-section px-8 pb-4">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-[#1e4d8c] font-semibold">
+              <Truck className="h-5 w-5" />
+              <span>SHIP TO</span>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg p-4 print:border-slate-300">
+              <div className="text-sm text-muted-foreground">
+                {data.shipTo?.trim() || "-"}
               </div>
             </div>
           </div>

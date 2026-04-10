@@ -74,6 +74,7 @@ import {
   RECEIPT_GRID_COL_GAP_PX,
   RECEIPT_INNER_INSET_LEFT_MM,
   RECEIPT_INNER_INSET_RIGHT_MM,
+  RECEIPT_TRAILING_BOTTOM_MM,
 } from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
@@ -892,7 +893,7 @@ export default function PosOrderPage() {
           <title>${t("posReceipt") || "영수증"}</title>
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: 1mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; break-inside: avoid; page-break-inside: avoid; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
             .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }

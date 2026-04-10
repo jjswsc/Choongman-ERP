@@ -523,6 +523,8 @@ export async function getMyUsageHistoryWithCache(params: {
 export interface LoginDataResult {
   users: Record<string, string[]>
   vendors: string[]
+  companies?: string[]
+  storeCompanies?: Record<string, string>
   storeLabels?: Record<string, string>
   legacyToCanonical?: Record<string, string>
   usedMaster?: boolean
@@ -535,6 +537,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
   const fallback: LoginDataResult = {
     users: {},
     vendors: [],
+    companies: [],
+    storeCompanies: {},
     storeLabels: {},
     legacyToCanonical: {},
     usedMaster: false,
@@ -550,6 +554,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       const data = (await res.json()) as {
         users?: Record<string, string[]>
         vendors?: string[]
+        companies?: string[]
+        storeCompanies?: Record<string, string>
         storeLabels?: Record<string, string>
         legacyToCanonical?: Record<string, string>
         usedMaster?: boolean
@@ -560,6 +566,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       const result: LoginDataResult = {
         users: data.users ?? {},
         vendors: data.vendors ?? [],
+        companies: data.companies ?? [],
+        storeCompanies: data.storeCompanies ?? {},
         storeLabels: data.storeLabels ?? {},
         legacyToCanonical: data.legacyToCanonical ?? {},
         usedMaster: data.usedMaster ?? false,
@@ -571,6 +579,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       await setErpCache(key, {
         users: result.users,
         vendors: result.vendors,
+        companies: result.companies,
+        storeCompanies: result.storeCompanies,
         storeLabels: result.storeLabels,
         legacyToCanonical: result.legacyToCanonical,
         usedMaster: result.usedMaster,
@@ -580,6 +590,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       const cached = await getFromErpCache<{
         users: Record<string, string[]>
         vendors: string[]
+        companies?: string[]
+        storeCompanies?: Record<string, string>
         storeLabels?: Record<string, string>
         legacyToCanonical?: Record<string, string>
         usedMaster?: boolean
@@ -591,6 +603,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
         return {
           users: cached.users,
           vendors: cached.vendors ?? [],
+          companies: cached.companies ?? [],
+          storeCompanies: cached.storeCompanies ?? {},
           storeLabels: cached.storeLabels ?? {},
           legacyToCanonical: cached.legacyToCanonical ?? {},
           usedMaster: cached.usedMaster ?? false,
@@ -604,6 +618,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
   const cached = await getFromErpCache<{
     users: Record<string, string[]>
     vendors: string[]
+    companies?: string[]
+    storeCompanies?: Record<string, string>
     storeLabels?: Record<string, string>
     legacyToCanonical?: Record<string, string>
     usedMaster?: boolean
@@ -615,6 +631,8 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
     return {
       users: cached.users,
       vendors: cached.vendors ?? [],
+      companies: cached.companies ?? [],
+      storeCompanies: cached.storeCompanies ?? {},
       storeLabels: cached.storeLabels ?? {},
       legacyToCanonical: cached.legacyToCanonical ?? {},
       usedMaster: cached.usedMaster ?? false,

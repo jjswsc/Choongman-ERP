@@ -47,6 +47,7 @@ export function parseOr400<T>(
 
 /** store, name (필수) */
 export const loginSchema = z.object({
+  company: z.string().trim().optional(),
   store: z.string().trim().min(1, '매장을 선택해 주세요.'),
   name: z.string().trim().min(1, '이름을 선택해 주세요.'),
   pw: z.string().min(1, '비밀번호를 입력해 주세요.'),
@@ -57,6 +58,7 @@ export type LoginInput = z.infer<typeof loginSchema>
 
 /** 비밀번호 변경 */
 export const changePasswordSchema = z.object({
+  company: z.string().trim().optional(),
   store: z.string().trim().min(1, '매장이 필요합니다.'),
   name: z.string().trim().min(1, '이름이 필요합니다.'),
   oldPw: z.string().min(1, '현재 비밀번호를 입력해 주세요.'),

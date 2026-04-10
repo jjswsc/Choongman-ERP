@@ -30,6 +30,7 @@ import type { LangCode } from "@/lib/lang-context"
 import { isFranchiseeRole } from "@/lib/permissions"
 import { useAutoTranslate } from "@/lib/auto-translate"
 import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
+import { getAppBrandConfig } from "@/lib/app-brand"
 
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ko", label: "한국어" },
@@ -52,6 +53,7 @@ export function ErpHeader() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { enabled: autoTranslateEnabled, setEnabled: setAutoTranslateEnabled } = useAutoTranslate()
+  const brand = useMemo(() => getAppBrandConfig(), [])
   const franchiseeSwitchStores = useMemo(() => {
     if (!auth || !isFranchiseeRole(auth.role || "")) return null
     const a = auth.allowedStores
@@ -127,7 +129,7 @@ export function ErpHeader() {
         <Link
           href="/"
           className="flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-          title={t("goToMobile") || "모바일"}
+          title={`${brand.appName} · ${t("goToMobile") || "모바일"}`}
         >
           <Smartphone className="h-4 w-4" />
         </Link>

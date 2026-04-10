@@ -28,6 +28,7 @@ function resolveLoginPathFromLocation(): string {
   if (typeof window === 'undefined') return '/login'
   const p = window.location.pathname || '/'
   if (p.startsWith('/admin')) return '/admin/login'
+  if (p.startsWith('/saas-admin')) return '/saas-admin/login'
   if (p.startsWith('/pos')) return '/pos/login'
   return '/login'
 }

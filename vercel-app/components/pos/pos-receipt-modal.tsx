@@ -12,6 +12,7 @@ import {
   RECEIPT_GRID_COL_GAP_PX,
   RECEIPT_INNER_INSET_LEFT_MM,
   RECEIPT_INNER_INSET_RIGHT_MM,
+  RECEIPT_TRAILING_BOTTOM_MM,
 } from '@/lib/pos-receipt-layout'
 import type { PosMenu } from '@/lib/api-client'
 import { useLang } from '@/lib/lang-context'
@@ -23,7 +24,16 @@ import {
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
-import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { printPosHtmlDocument, type PrintPosHtmlDocumentOptions } from '@/lib/pos-print-html'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
 
 export type ReceiptModalData = {
@@ -134,7 +144,6 @@ export function PosReceiptModal({
   receiptBizOwner = '',
   receiptBizAddress = '',
   receiptBizPhone = '',
-  receiptDesignStyle = 'badge',
   receiptLogoSize = 'md',
   receiptShowTitle = true,
   receiptShowPaidStamp = true,
@@ -161,19 +170,25 @@ export function PosReceiptModal({
     return value && value !== key ? value : fallback
   }
 
-  const printInIframe = (fullHtml: string, title: string) =>
+  const printInIframe = (
+    fullHtml: string,
+    title: string,
+    preferSystemPrintDialog = false
+  ) =>
     new Promise<void>((resolve, reject) => {
-      printPosHtmlDocument(fullHtml, {
+      const opts: PrintPosHtmlDocumentOptions = {
         title,
         printDelayMs: 0,
         fallbackCleanupMs: 120_000,
         focusIframeBeforePrint: false,
+        preferSystemPrintDialog,
         onPrintUnavailable: () => reject(new Error(t('posPrintBlocked') || '인쇄를 시작할 수 없습니다.')),
         onAfterCleanup: () => resolve(),
-      })
+      }
+      printPosHtmlDocument(fullHtml, opts)
     })
 
-  const handlePrintReceipt = async () => {
+  const handlePrintReceipt = async (preferSystemPrintDialog = false) => {
     if (!receiptData) return
     const esc = (value: string) => escapeHtml(String(value || ''))
     const tableForPrint = receiptData.tableName
@@ -311,7 +326,7 @@ export function PosReceiptModal({
           <title>${t('posReceipt') || '영수증'}</title>
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: 1mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; -webkit-print-color-adjust: economy; print-color-adjust: economy; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; -webkit-print-color-adjust: economy; print-color-adjust: economy; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; color: #000; break-inside: avoid; page-break-inside: avoid; }
             .receipt-brand-wrap { text-align: center; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
@@ -356,13 +371,13 @@ export function PosReceiptModal({
       </html>
     `
     try {
-      await printInIframe(fullHtml, t('posReceipt') || '영수증')
+      await printInIframe(fullHtml, t('posReceipt') || '영수증', preferSystemPrintDialog)
     } catch {
       await appAlert(t('posPrintBlocked') || '팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정을 확인해 주세요.')
     }
   }
 
-  const handlePrintKitchenSlip = async () => {
+  const handlePrintKitchenSlip = async (preferSystemPrintDialog = false) => {
     if (!receiptData || !receiptData.storeCode) return
     try {
       const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
@@ -412,7 +427,7 @@ export function PosReceiptModal({
           design: slipDesign,
           printColorAdjust: 'economy',
         })
-        await printInIframe(html, slip.label)
+        await printInIframe(html, slip.label, preferSystemPrintDialog)
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, 220))
           await printOne(idx + 1)
@@ -423,6 +438,11 @@ export function PosReceiptModal({
       await appAlert(String(e))
     }
   }
+
+  const handlePrintReceiptRef = useRef(handlePrintReceipt)
+  const handlePrintKitchenSlipRef = useRef(handlePrintKitchenSlip)
+  handlePrintReceiptRef.current = handlePrintReceipt
+  handlePrintKitchenSlipRef.current = handlePrintKitchenSlip
 
   useEffect(() => {
     if (!receiptData) return
@@ -447,12 +467,12 @@ export function PosReceiptModal({
     const timers: ReturnType<typeof setTimeout>[] = []
     if (autoKitchenSlip) {
       timers.push(setTimeout(() => {
-        void handlePrintKitchenSlip()
+        void handlePrintKitchenSlipRef.current(false)
       }, 180))
     }
     if (autoReceipt) {
       timers.push(setTimeout(() => {
-        void handlePrintReceipt()
+        void handlePrintReceiptRef.current(false)
       }, autoKitchenSlip ? 780 : 180))
     }
     return () => timers.forEach((id) => clearTimeout(id))
@@ -462,40 +482,82 @@ export function PosReceiptModal({
     autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnPayment,
     autoPrintKitchenSlipOnOrder,
-    handlePrintReceipt,
-    handlePrintKitchenSlip,
   ])
 
-  /** 자동 인쇄가 스케줄되지 않으면 receipt 상태만 정리 (POS 터미널은 영수증 미리보기 창 없음) */
+  /** 보조 POS 등 suppress 시 즉시 닫기 (수동 인쇄 UI 없음) */
   useEffect(() => {
-    if (!receiptData) return
-    if (receiptData.suppressReceiptModalAutoPrint) {
-      const id = requestAnimationFrame(() => onOpenChange(false))
-      return () => cancelAnimationFrame(id)
-    }
-    const ctx = receiptData.receiptAutoPrintContext
-    const autoReceipt =
-      ctx === 'payment'
-        ? autoPrintReceiptOnPayment
-        : ctx === 'add_order'
-          ? autoPrintReceiptOnAddOrder
-          : ctx === 'order'
-            ? autoPrintReceiptOnOrder
-            : false
-    const autoKitchenSlip =
-      autoPrintKitchenSlipOnOrder && (ctx === 'order' || ctx === 'add_order')
-    if (autoReceipt || autoKitchenSlip) return
+    if (!receiptData?.suppressReceiptModalAutoPrint) return
     const id = requestAnimationFrame(() => onOpenChange(false))
     return () => cancelAnimationFrame(id)
-  }, [
-    receiptData,
-    autoPrintReceiptOnOrder,
-    autoPrintReceiptOnAddOrder,
-    autoPrintReceiptOnPayment,
-    autoPrintKitchenSlipOnOrder,
-    onOpenChange,
-  ])
+  }, [receiptData?.suppressReceiptModalAutoPrint, receiptData, onOpenChange])
 
-  // POS: 주문/결제 후 브라우저 인쇄(팝업)만 사용하고 앱 내 「주문 완료」다이얼로그는 띄우지 않음
+  if (!receiptData) return null
+  if (receiptData.suppressReceiptModalAutoPrint) return null
+
+  const ctxManual = receiptData.receiptAutoPrintContext
+  const autoReceiptManual =
+    ctxManual === 'payment'
+      ? autoPrintReceiptOnPayment
+      : ctxManual === 'add_order'
+        ? autoPrintReceiptOnAddOrder
+        : ctxManual === 'order'
+          ? autoPrintReceiptOnOrder
+          : false
+  const autoKitchenSlipManual =
+    autoPrintKitchenSlipOnOrder && (ctxManual === 'order' || ctxManual === 'add_order')
+  const showManualPrintDialog = !autoReceiptManual && !autoKitchenSlipManual
+  const showKitchenButton =
+    (ctxManual === 'order' || ctxManual === 'add_order') && receiptData.items.length > 0
+
+  if (showManualPrintDialog) {
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onOpenChange(false)
+        }}
+      >
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{tr('posPrintManualTitle', '인쇄')}</DialogTitle>
+            <DialogDescription>
+              {tr(
+                'posPrintManualHint',
+                '인쇄할 항목을 선택하세요. 다음 화면에서 프린터와 미리보기를 지정할 수 있습니다.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              onClick={() => void handlePrintReceipt(true)}
+            >
+              {tr('posPrintReceiptOnly', '영수증 인쇄')}
+            </Button>
+            {showKitchenButton && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => void handlePrintKitchenSlip(true)}
+              >
+                {tr('posPrintKitchenOnly', '주방 주문서 인쇄')}
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => onOpenChange(false)}
+            >
+              {tr('posPrintClose', '닫기')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return null
 }

@@ -73,6 +73,15 @@ function bangkokTodayStr() {
   return new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)
 }
 
+function buildTaxInvoiceDocNo(issueDate: string, refText: string): string {
+  const dateDigits = String(issueDate || "").replace(/\D/g, "")
+  const safeDate = dateDigits.length >= 8 ? dateDigits.slice(0, 8) : bangkokTodayStr().replace(/\D/g, "")
+  const yyyymm = safeDate.slice(0, 6)
+  const refDigits = String(refText || "").replace(/\D/g, "")
+  const suffix = (refDigits.slice(-3) || "1").padStart(3, "0")
+  return `IV.${yyyymm}XX-${suffix}`
+}
+
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -156,12 +165,8 @@ export function ReceivablePayableTab() {
         const { company, clients } = invoiceDataRes
         const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
         const client = resolveInvoiceClientForTarget(outletStoreName, company, clients)
-        const docNo =
-          (row.invoice_no || "").trim() ||
-          (row.trans_date != null && row.ref_id != null
-            ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}`
-            : `IV-ORDER-${orderId}`)
-        const dateStr = (row.trans_date || "").slice(0, 10) || new Date().toISOString().slice(0, 10)
+        const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
+        const docNo = buildTaxInvoiceDocNo(dateStr, (row.invoice_no || "").trim() || String(row.ref_id || orderId || ""))
         const data: InvoiceData = buildThaiSalesInvoiceData({
           documentType: "Tax Invoice/Receipt",
           documentNo: docNo,

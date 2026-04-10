@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
       }))
       const summary =
         items.length > 0
-          ? (items[0].name || '') + (items.length > 1 ? ` 외 ${items.length - 1}건` : '')
+          ? (items[0].name || '') + (items.length > 1 ? ` +${items.length - 1} more` : '')
           : '내용 없음'
       const dateVal = o.order_date
       const dateStr = dateVal ? String(dateVal).substring(0, 16).replace('T', ' ') : ''

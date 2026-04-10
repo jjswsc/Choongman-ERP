@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
       })
       const summary =
         cart.length > 0
-          ? (cart[0].name || '') + (cart.length > 1 ? ` 외 ${cart.length - 1}건` : '')
+          ? (cart[0].name || '') + (cart.length > 1 ? ` +${cart.length - 1} more` : '')
           : 'Items'
       const orderDate = o.order_date ? new Date(o.order_date) : new Date()
       let deliveryDatesByOutbound: Record<string, string> | undefined
@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
         const total = items.reduce((s, i) => s + (i.price ?? 0) * (i.qty ?? 0), 0)
         const summary =
           items.length > 0
-            ? (items[0].name || '') + (items.length > 1 ? ` 외 ${items.length - 1}건` : '')
+            ? (items[0].name || '') + (items.length > 1 ? ` +${items.length - 1} more` : '')
             : '강제출고'
         const deliveryDate =
           first.delivery_status && /^\d{4}-\d{2}-\d{2}/.test(String(first.delivery_status))

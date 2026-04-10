@@ -3,6 +3,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 export interface AuthState {
+  company?: string
+  tenantId?: string
   store: string
   user: string
   role: string
@@ -22,6 +24,7 @@ function resolveLoginPathByCurrentRoute(): string {
   if (typeof window === 'undefined') return '/login'
   const p = window.location.pathname || '/'
   if (p.startsWith('/admin')) return '/admin/login'
+  if (p.startsWith('/saas-admin')) return '/saas-admin/login'
   if (p.startsWith('/pos')) return '/pos/login'
   return '/login'
 }
@@ -29,7 +32,7 @@ function resolveLoginPathByCurrentRoute(): string {
 /** 로그인 화면에서는 스냅샷을 전역 auth로 올리지 않음 — 올리면 폼이 즉시 리다이렉트되어 로그아웃이 무효화됨. 오프라인 진입은 LoginForm의 offlineResume·CTA로 처리 */
 function isAuthLoginPathname(pathname: string): boolean {
   const p = (pathname || '/').replace(/\/+$/, '') || '/'
-  return p === '/login' || p === '/admin/login' || p === '/pos/login'
+  return p === '/login' || p === '/admin/login' || p === '/saas-admin/login' || p === '/pos/login'
 }
 
 function loadAuth(): AuthState | null {
@@ -84,6 +87,10 @@ function loadAuth(): AuthState | null {
         if (codeStr) employeeCode = String(codeStr).trim() || undefined
       } catch {}
       return {
+        ...(sessionStorage.getItem('cm_company') ? { company: sessionStorage.getItem('cm_company') || undefined } : {}),
+        ...(sessionStorage.getItem('cm_tenant_id')
+          ? { tenantId: sessionStorage.getItem('cm_tenant_id') || undefined }
+          : {}),
         store,
         user,
         role,
@@ -109,6 +116,8 @@ export function loadOfflineResumeAuth(): AuthState | null {
     const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
     if (!raw) return null
     const o = JSON.parse(raw) as {
+      company?: string
+      tenantId?: string
       store?: string
       user?: string
       role?: string
@@ -131,6 +140,8 @@ export function loadOfflineResumeAuth(): AuthState | null {
     const snapEid = o.employeeId != null && Number.isFinite(Number(o.employeeId)) ? Math.floor(Number(o.employeeId)) : 0
     const snapCode = o.employeeCode != null ? String(o.employeeCode).trim() : ''
     return {
+      ...(o.company ? { company: String(o.company).trim() } : {}),
+      ...(o.tenantId ? { tenantId: String(o.tenantId).trim() } : {}),
       store,
       user,
       role: String(o.role || '').trim(),
@@ -149,6 +160,10 @@ function saveAuth(auth: AuthState) {
     sessionStorage.setItem('cm_store', auth.store)
     sessionStorage.setItem('cm_user', auth.user)
     sessionStorage.setItem('cm_role', auth.role)
+    if (auth.company) sessionStorage.setItem('cm_company', auth.company)
+    else sessionStorage.removeItem('cm_company')
+    if (auth.tenantId) sessionStorage.setItem('cm_tenant_id', auth.tenantId)
+    else sessionStorage.removeItem('cm_tenant_id')
     if (auth.employeeId != null && auth.employeeId > 0) {
       sessionStorage.setItem('cm_employee_id', String(auth.employeeId))
     } else {
@@ -176,6 +191,8 @@ function saveAuth(auth: AuthState) {
         store: auth.store,
         user: auth.user,
         role: auth.role,
+        ...(auth.company ? { company: auth.company } : {}),
+        ...(auth.tenantId ? { tenantId: auth.tenantId } : {}),
         ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
         ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
         ...(auth.allowedStores && auth.allowedStores.length > 0 ? { allowedStores: auth.allowedStores } : {}),
@@ -190,6 +207,8 @@ function clearAuth() {
     sessionStorage.removeItem('cm_store')
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
+    sessionStorage.removeItem('cm_company')
+    sessionStorage.removeItem('cm_tenant_id')
     sessionStorage.removeItem('cm_token')
     try {
       localStorage.removeItem('cm_token')

@@ -130,6 +130,11 @@ export function canAccessAdmin(role: string): boolean {
   )
 }
 
+/** SaaS 관리자 접근 가능 (내부 admin과 분리: POS 전용 역할은 제외) */
+export function canAccessSaasAdmin(role: string): boolean {
+  return isOfficeRole(role) || isManagerRole(role) || isFranchiseeRole(role) || isAccountingRole(role)
+}
+
 /** AI 센터 접근 가능 (관리자 계열 + 회계, POS 전용 역할 제외) */
 export function canAccessAiCenter(role: string): boolean {
   return (

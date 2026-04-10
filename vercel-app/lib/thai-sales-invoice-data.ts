@@ -50,6 +50,10 @@ export function buildThaiSalesInvoiceData(params: {
   const rawCompanyName = company?.companyName || "S&J Global Co., Ltd"
   const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
   const stampBase = typeof window !== "undefined" && window.location?.origin ? window.location.origin : ""
+  const rawClientName = (client as { companyName?: string }).companyName || "-"
+  const cleanedClientName = rawClientName.replace(/แฟรนไชส์/g, "").replace(/\s{2,}/g, " ").trim()
+  const isRbFoodSupply = /r\s*&\s*b\s*food\s*supply/i.test(cleanedClientName)
+  const clientTaxId = isRbFoodSupply ? "0107561000374" : ((client as InvoiceDataClient)?.taxId || "-")
 
   return {
     documentType,
@@ -57,6 +61,7 @@ export function buildThaiSalesInvoiceData(params: {
     dueDate,
     referenceNo,
     issueDate,
+    shipTo: (invSettings.ship_to ?? "-") || "-",
     paymentTerms: (params.paymentTerms ?? invSettings.payment_terms) || "Net 30 Days",
     shippingMethod: (params.shippingMethod ?? invSettings.shipping_method) || "Company Delivery",
     seller: {
@@ -68,9 +73,9 @@ export function buildThaiSalesInvoiceData(params: {
       website: invSettings.seller_website || undefined,
     },
     client: {
-      name: (client as { companyName?: string }).companyName || "-",
+      name: cleanedClientName || "-",
       address: (client as InvoiceDataClient)?.address || "-",
-      taxId: (client as InvoiceDataClient)?.taxId || "-",
+      taxId: clientTaxId,
       phone: (client as InvoiceDataClient)?.phone || "-",
     },
     items: lines.map((it, idx) => {

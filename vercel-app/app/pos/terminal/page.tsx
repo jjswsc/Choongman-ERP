@@ -58,7 +58,7 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { formatPosReceiptOrderNoDisplay } from '@/lib/pos-delivery-platform'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
-import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { printPosHtmlDocument, POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS } from '@/lib/pos-print-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
@@ -602,8 +602,8 @@ export default function PosTerminalPage() {
     }
   }, [customerDisplayOrderTotal, pricingAdjustments])
   const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
-  /** lg 미만: 태블릿 가로(1024~1279)도 하단 고정 카트·터치 밀도 large와 맞춤 */
-  const isNarrowViewport = useMediaQuery('(max-width: 1279px)')
+  /** 1023px 이하(세로 태블릿/모바일)에서만 하단 카트로 전환 */
+  const isNarrowViewport = useMediaQuery('(max-width: 1023px)')
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
@@ -734,7 +734,9 @@ export default function PosTerminalPage() {
     /** 주문 후 인쇄: 이 콜백을 넘기면 새 창 대신 HTML만 넘겨서 같은 페이지 iframe 모달로 보여줌 (팝업 차단 무관, iframe 안에서 인쇄 버튼 클릭 시 인쇄 화면 표시) */
     onShowInModal?: (html: string) => void,
     /** true면 주문 직인쇄: 숨김 iframe에 쓰고 print() (별도 브라우저 창 없음). 결제 등은 false */
-    directPrint?: boolean
+    directPrint?: boolean,
+    /** directPrint 일 때만: 영수증 인쇄 정리 후 호출(연속 인쇄 합침 방지용으로 내부에서 추가 지연) */
+    onAfterDirectPrint?: () => void
   ) {
     const esc = (value: string) =>
       value
@@ -839,6 +841,13 @@ export default function PosTerminalPage() {
       onPrintUnavailable: () => {
         void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
       },
+      ...(directPrint && typeof onAfterDirectPrint === 'function'
+        ? {
+            onAfterCleanup: () => {
+              window.setTimeout(onAfterDirectPrint, POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS)
+            },
+          }
+        : {}),
     })
   }
 
@@ -889,26 +898,18 @@ export default function PosTerminalPage() {
       const subtotal = Number(row.subtotal ?? 0)
       const discountAmt = Number(row.discount_amt ?? 0)
       const total = Number(row.total ?? 0)
-      if (autoPrintReceiptOnOrder) {
-        printReceiptNow(
-          {
-            orderNo,
-            storeCode,
-            orderType,
-            tableName,
-            memo,
-            items,
-            subtotal,
-            discountAmt,
-            total,
-          },
-          undefined,
-          false,
-          undefined,
-          true
-        )
+      const receiptPayloadRealtime = {
+        orderNo,
+        storeCode,
+        orderType,
+        tableName,
+        memo,
+        items,
+        subtotal,
+        discountAmt,
+        total,
       }
-      if (autoPrintKitchenSlipOnOrder) {
+      const runKitchenFromRealtimeOrderInsert = () => {
         getPosPrinterSettings({ storeCode })
           .then((settings) => {
             const orderTypeLabels: Record<string, string> = {
@@ -964,9 +965,16 @@ export default function PosTerminalPage() {
                 },
               })
             }
-            setTimeout(() => printOne(0), autoPrintReceiptOnOrder ? 600 : 180)
+            setTimeout(() => printOne(0), 0)
           })
           .catch((e) => console.error('Kitchen slip print:', e))
+      }
+      if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+        printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
+      } else if (autoPrintReceiptOnOrder) {
+        printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
+      } else if (autoPrintKitchenSlipOnOrder) {
+        setTimeout(runKitchenFromRealtimeOrderInsert, 180)
       }
       if (autoPrintReceiptOnPayment) {
         const st = String(row.status ?? '').toLowerCase()
@@ -1149,86 +1157,87 @@ export default function PosTerminalPage() {
           if (items.length === 0) continue
           seenOrderIdsRef.current.add(oid)
           lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
-          if (autoPrintReceiptOnOrder && items.length > 0) {
-            printReceiptNow(
-              {
-                orderNo: order.orderNo ?? '',
-                storeCode: order.storeCode ?? currentStoreId,
-                orderType: order.orderType ?? 'dine_in',
-                tableName: order.tableName,
-                memo: order.memo,
-                items,
-                subtotal: order.subtotal ?? 0,
-                discountAmt: order.discountAmt ?? 0,
-                total: order.total ?? 0,
-              },
-              undefined,
-              false,
-              undefined,
-              true
-            )
+          const receiptPayloadPoll = {
+            orderNo: order.orderNo ?? '',
+            storeCode: order.storeCode ?? currentStoreId,
+            orderType: order.orderType ?? 'dine_in',
+            tableName: order.tableName,
+            memo: order.memo,
+            items,
+            subtotal: order.subtotal ?? 0,
+            discountAmt: order.discountAmt ?? 0,
+            total: order.total ?? 0,
           }
-          if (autoPrintKitchenSlipOnOrder && items.length > 0) {
-            try {
-              const settings = await getPosPrinterSettings({ storeCode: order.storeCode ?? currentStoreId })
-              const orderTypeLabels: Record<string, string> = {
-                dine_in: t('posOrderTypeDineIn') ?? '매장',
-                takeout: t('posOrderTypeTakeout') ?? '포장',
-                delivery: t('posOrderTypeDelivery') ?? '배달',
-              }
-              const kLabels = {
-                unified: t('posKitchenOrder') || '주방 주문서',
-                kitchen1: `${t('posKitchen1') || '주방 1'}`,
-                kitchen2: `${t('posKitchen2') || '주방 2'}`,
-                kitchen3: `${t('posKitchen3') || '주방 3'}`,
-              }
-              const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
-              if (!slips.length) continue
-              const slipDesign = resolveKitchenSlipDesign(settings)
-              const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
-              const memoLine = kitchenMemo.trim()
-                ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
-                : ''
-              const printOne = (idx: number) => {
-                if (idx >= slips.length) return
-                const slip = slips[idx]
-                const tablePart = order.tableName
-                  ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+          const runKitchenForPolledOrder = () => {
+            void (async () => {
+              try {
+                const settings = await getPosPrinterSettings({ storeCode: order.storeCode ?? currentStoreId })
+                const orderTypeLabels: Record<string, string> = {
+                  dine_in: t('posOrderTypeDineIn') ?? '매장',
+                  takeout: t('posOrderTypeTakeout') ?? '포장',
+                  delivery: t('posOrderTypeDelivery') ?? '배달',
+                }
+                const kLabels = {
+                  unified: t('posKitchenOrder') || '주방 주문서',
+                  kitchen1: `${t('posKitchen1') || '주방 1'}`,
+                  kitchen2: `${t('posKitchen2') || '주방 2'}`,
+                  kitchen3: `${t('posKitchen3') || '주방 3'}`,
+                }
+                const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+                if (!slips.length) return
+                const slipDesign = resolveKitchenSlipDesign(settings)
+                const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
+                const memoLine = kitchenMemo.trim()
+                  ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
                   : ''
-                const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
-                const html = buildKitchenSlipDocumentHtml({
-                  label: slip.label,
-                  orderNo: order.orderNo ?? '',
-                  storeCode: order.storeCode ?? '',
-                  orderTypeLabel,
-                  tablePart,
-                  dateStr: formatPosDateTimeMedium(new Date(), lang),
-                  items: slip.items.map((it) => ({
-                    name: translatePosMenuLineForReceipt(it.name, t),
-                    qty: it.qty,
-                    note: it.note,
-                  })),
-                  memoLine: memoLine || null,
-                  escapeHtml,
-                  design: slipDesign,
-                  printColorAdjust: 'exact',
-                })
-                printPosHtmlDocument(html, {
-                  title: slip.label,
-                  printDelayMs: 0,
-                  focusIframeBeforePrint: false,
-                  onPrintUnavailable: () => {
-                    void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
-                  },
-                  onAfterCleanup: () => {
-                    if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
-                  },
-                })
+                const printOne = (idx: number) => {
+                  if (idx >= slips.length) return
+                  const slip = slips[idx]
+                  const tablePart = order.tableName
+                    ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+                    : ''
+                  const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                  const html = buildKitchenSlipDocumentHtml({
+                    label: slip.label,
+                    orderNo: order.orderNo ?? '',
+                    storeCode: order.storeCode ?? '',
+                    orderTypeLabel,
+                    tablePart,
+                    dateStr: formatPosDateTimeMedium(new Date(), lang),
+                    items: slip.items.map((it) => ({
+                      name: translatePosMenuLineForReceipt(it.name, t),
+                      qty: it.qty,
+                      note: it.note,
+                    })),
+                    memoLine: memoLine || null,
+                    escapeHtml,
+                    design: slipDesign,
+                    printColorAdjust: 'exact',
+                  })
+                  printPosHtmlDocument(html, {
+                    title: slip.label,
+                    printDelayMs: 0,
+                    focusIframeBeforePrint: false,
+                    onPrintUnavailable: () => {
+                      void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                    },
+                    onAfterCleanup: () => {
+                      if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                    },
+                  })
+                }
+                setTimeout(() => printOne(0), 0)
+              } catch (e) {
+                console.error('Kitchen slip print:', e)
               }
-              setTimeout(() => printOne(0), autoPrintReceiptOnOrder ? 600 : 180)
-            } catch (e) {
-              console.error('Kitchen slip print:', e)
-            }
+            })()
+          }
+          if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+            printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
+          } else if (autoPrintReceiptOnOrder) {
+            printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
+          } else if (autoPrintKitchenSlipOnOrder) {
+            setTimeout(runKitchenForPolledOrder, 180)
           }
         }
         await runPaymentReceiptScan()
@@ -1946,40 +1955,32 @@ export default function PosTerminalPage() {
                   cardPaymentAmount: 0,
                   adjustments: pricingAdjustments,
                 })
-                if (isMainPosDevice && shouldAutoPrintReceipt && !skipLocalAutoPrint) {
-                  void printReceiptNow(
-                    {
-                      orderNo: savedOrderNo,
-                      storeCode: currentStoreId,
-                      orderType: t('posOrderTypeDineIn') || '매장',
-                      tableName: payload.tableName,
-                      memo: payload.memo,
-                      items: receiptPrintItems,
-                      subtotal: mergeSubtotal,
-                      discountAmt,
-                      total: pricing.finalTotal,
-                      vatFeeAmt: pricing.vatFeeAmt,
-                      vatFeeMode: pricing.vatFeeMode,
-                      serviceFeeAmt: pricing.serviceFeeAmt,
-                      serviceFeeMode: pricing.serviceFeeMode,
-                      cardFeeAmt: pricing.cardFeeAmt,
-                      cardFeeMode: pricing.cardFeeMode,
-                      otherFeeAmt: pricing.otherFeeAmt,
-                      otherFeeMode: pricing.otherFeeMode,
-                    },
-                    null,
-                    false,
-                    undefined,
-                    true
-                  )
+                const orderNoStr = savedOrderNo
+                const kitchenCartLines =
+                  isAddOrder && existingOrder
+                    ? filterKitchenCartLinesForDineInAdd(payload.items, existingOrder.items)
+                    : payload.items
+                const receiptPayloadSubmit = {
+                  orderNo: savedOrderNo,
+                  storeCode: currentStoreId,
+                  orderType: t('posOrderTypeDineIn') || '매장',
+                  tableName: payload.tableName,
+                  memo: payload.memo,
+                  items: receiptPrintItems,
+                  subtotal: mergeSubtotal,
+                  discountAmt,
+                  total: pricing.finalTotal,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
                 }
-                if (isMainPosDevice && autoPrintKitchenSlipOnOrder && !skipLocalAutoPrint && payload.items.length > 0) {
-                  const orderNoStr = savedOrderNo
-                  const kitchenCartLines =
-                    isAddOrder && existingOrder
-                      ? filterKitchenCartLinesForDineInAdd(payload.items, existingOrder.items)
-                      : payload.items
-                  if (kitchenCartLines.length > 0) {
+                const runKitchenAfterDineInSubmit = () => {
+                  if (kitchenCartLines.length === 0) return
                   const itemsForKitchen = kitchenCartLines.map((i) => ({
                     id: i.id,
                     name: i.name,
@@ -2055,10 +2056,31 @@ export default function PosTerminalPage() {
                           },
                         })
                       }
-                      setTimeout(() => printOne(0), shouldAutoPrintReceipt ? 600 : 180)
+                      setTimeout(() => printOne(0), 0)
                     })
                     .catch((e) => console.error('Kitchen slip print:', e))
+                }
+                if (isMainPosDevice && shouldAutoPrintReceipt && !skipLocalAutoPrint) {
+                  if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
+                    void printReceiptNow(
+                      receiptPayloadSubmit,
+                      null,
+                      false,
+                      undefined,
+                      true,
+                      runKitchenAfterDineInSubmit
+                    )
+                  } else {
+                    void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                   }
+                } else if (
+                  isMainPosDevice &&
+                  autoPrintKitchenSlipOnOrder &&
+                  !skipLocalAutoPrint &&
+                  payload.items.length > 0 &&
+                  kitchenCartLines.length > 0
+                ) {
+                  setTimeout(runKitchenAfterDineInSubmit, 180)
                 }
                 if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
                 setServingTableId(null)

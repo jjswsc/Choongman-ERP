@@ -37,6 +37,7 @@ import {
   runReachabilityProbe,
   REACHABILITY_EVENT,
 } from "@/lib/offline/network"
+import { getAppBrandConfig } from "@/lib/app-brand"
 
 function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
   // #region agent log
@@ -94,6 +95,10 @@ function computeErpLandingPath(pathname: string, isAdminPage: boolean, redirectT
     if (redirectTo.startsWith("/admin")) return redirectTo
     return "/admin"
   }
+  if (p === "/saas-admin/login") {
+    if (redirectTo.startsWith("/saas-admin")) return redirectTo
+    return "/saas-admin"
+  }
   return "/admin"
 }
 
@@ -110,6 +115,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const { auth, setAuth } = useAuth()
   const [loginData, setLoginData] = useState<Record<string, string[]>>({})
   const [loginStoreLabels, setLoginStoreLabels] = useState<Record<string, string>>({})
+  const [loginStoreCompanies, setLoginStoreCompanies] = useState<Record<string, string>>({})
+  const [companies, setCompanies] = useState<string[]>([])
+  const [company, setCompany] = useState("")
   const [store, setStore] = useState("")
   const [user, setUser] = useState("")
   const [pw, setPw] = useState("")
@@ -136,6 +144,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [loginApp, setLoginApp] = useState<LoginApp>(() =>
     deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo)
   )
+  const brand = useMemo(() => getAppBrandConfig(), [])
 
   useLayoutEffect(() => {
     if (loginAppPrefHydratedRef.current) return
@@ -261,6 +270,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         })
         setLoginData(d.users || {})
         setLoginStoreLabels(d.storeLabels || {})
+        const companyMap = d.storeCompanies || {}
+        setLoginStoreCompanies(companyMap)
+        const companyListRaw = Array.isArray(d.companies) ? d.companies : Object.values(companyMap)
+        const companyList = Array.from(
+          new Set(companyListRaw.map((x) => String(x || "").trim()).filter(Boolean))
+        ).sort((a, b) => a.localeCompare(b))
+        setCompanies(companyList)
+        setCompany((prev) => {
+          if (prev && companyList.includes(prev)) return prev
+          return companyList[0] || ""
+        })
         if (d._source === 'fallback') {
           setLoadError('SERVER_ERROR')
         } else {
@@ -279,6 +299,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         )
         setLoginData({})
         setLoginStoreLabels({})
+        setLoginStoreCompanies({})
+        setCompanies([])
+        setCompany("")
         setLoading(false)
       }
     }
@@ -320,6 +343,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setStore(s)
     setUser("")
   }
+  const handleCompanyChange = (c: string) => {
+    setCompany(c)
+    setStore("")
+    setUser("")
+  }
 
   const handleLangChange = (l: string) => {
     if (isLangCode(l)) setLang(l)
@@ -346,9 +374,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       return
     }
     try {
-      const res = await loginCheck({ store: effectiveStore, name: effectiveUser, pw, isAdminPage: effectiveIsAdminPage })
+      const res = await loginCheck({
+        company: company || undefined,
+        store: effectiveStore,
+        name: effectiveUser,
+        pw,
+        isAdminPage: effectiveIsAdminPage,
+      })
       if (res.success && res.storeName && res.userName) {
         setAuth({
+          ...(res.companyName ? { company: res.companyName } : {}),
+          ...(res.tenantId ? { tenantId: res.tenantId } : {}),
           store: res.storeName,
           user: res.userName,
           role: res.role || "",
@@ -440,7 +476,19 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (!isOfficeStore(a) && isOfficeStore(b)) return 1
     return a.localeCompare(b)
   })
+  const filteredStores = company
+    ? stores.filter((s) => {
+        const tagged = String(loginStoreCompanies[s] || "").trim()
+        return !tagged || tagged === company
+      })
+    : stores
   const users = store ? (loginData[store] || []) : []
+  useEffect(() => {
+    if (!store) return
+    if (filteredStores.includes(store)) return
+    setStore("")
+    setUser("")
+  }, [filteredStores, store])
   const noStores = !loading && stores.length === 0
   const serverListDegraded = Boolean(loadError) || noStores
   const listLoadedOk = !loading && stores.length > 0
@@ -459,6 +507,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const labels = {
     ko: {
       selectStore: "매장 선택",
+      selectCompany: "회사 선택",
       selectName: "이름 선택",
       pinPlaceholder: "비밀번호 (PIN)",
       login: "로그인",
@@ -485,6 +534,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     },
     en: {
       selectStore: "Select Store",
+      selectCompany: "Select Company",
       selectName: "Select Name",
       pinPlaceholder: "Password (PIN)",
       login: "Login",
@@ -511,6 +561,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     },
     th: {
       selectStore: "เลือกสาขา",
+      selectCompany: "เลือกบริษัท",
       selectName: "เลือกชื่อ",
       pinPlaceholder: "รหัสผ่าน (PIN)",
       login: "เข้าสู่ระบบ",
@@ -537,6 +588,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     },
     mm: {
       selectStore: "ဆိုင်ရွေးပါ",
+      selectCompany: "ကုမ္ပဏီရွေးပါ",
       selectName: "အမည်ရွေးပါ",
       pinPlaceholder: "လျှို့ဝှက်နံပါတ် (PIN)",
       login: "ဝင်ရောက်မည်",
@@ -563,6 +615,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     },
     la: {
       selectStore: "ເລືອກສາຂາ",
+      selectCompany: "ເລືອກບໍລິສັດ",
       selectName: "ເລືອກຊື່",
       pinPlaceholder: "ລະຫັດ (PIN)",
       login: "ເຂົ້າສູ່ລະບົບ",
@@ -609,14 +662,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           <div className="logo-section">
             <Image
               src="/img/logo.png"
-              alt="Choongman Chicken"
+              alt={brand.logoAlt}
               className="logo"
               width={120}
               height={120}
               priority
               unoptimized
             />
-            <p className="erp-text">CM ERP SYSTEM</p>
+            <p className="erp-text">{brand.loginTitle}</p>
           </div>
 
           {normalizeLoginPathname(pathname) === "/login" ? (
@@ -766,12 +819,25 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               </SelectContent>
             </Select>
 
+            <Select value={company} onValueChange={handleCompanyChange} disabled={companies.length === 0}>
+              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
+                <SelectValue placeholder={`${t.selectCompany}...`} />
+              </SelectTrigger>
+              <SelectContent className="login-select-content">
+                {companies.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Select value={store} onValueChange={handleStoreChange}>
               <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
                 <SelectValue placeholder={`${t.selectStore}...`} />
               </SelectTrigger>
               <SelectContent className="login-select-content">
-                {stores.map((s) => (
+                {filteredStores.map((s) => (
                   <SelectItem key={s} value={s}>
                     {labelForStore(loginStoreLabels, s)}
                   </SelectItem>

@@ -4,6 +4,7 @@ import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore } from '@/lib/permissions'
+import { deriveTenantIdFromCompany, normalizeCompanyName } from '@/lib/tenant-context'
 import {
   buildAllowedStoresForToken,
   getFranchiseeMultiStoreSettings,
@@ -26,11 +27,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const validated = parseOr400(loginSchema, { ...body, isAdminPage: body.isAdminPage !== false }, headers)
     if (validated.errorResponse) return validated.errorResponse
-    const { store, name, pw, isAdminPage } = validated.parsed
+    const { company, store, name, pw, isAdminPage } = validated.parsed
+    const companyInput = normalizeCompanyName(company)
 
     type EmpLoginRow = {
       id?: number
       employee_code?: string | null
+      company?: string | null
       store?: string
       name?: string
       password?: string
@@ -44,13 +47,13 @@ export async function POST(req: NextRequest) {
     try {
       byName = (await supabaseSelectFilter('employees', nameFilter, {
         limit: 120,
-        select: 'id,employee_code,store,name,password,role,job,resign_date,extra_stores',
+          select: 'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores',
       })) as EmpLoginRow[]
     } catch {
       try {
         byName = (await supabaseSelectFilter('employees', nameFilter, {
           limit: 120,
-          select: 'store,name,password,role,job,resign_date,extra_stores',
+          select: 'company,store,name,password,role,job,resign_date,extra_stores',
         })) as EmpLoginRow[]
       } catch {
         byName = (await supabaseSelectFilter('employees', nameFilter, {
@@ -60,7 +63,11 @@ export async function POST(req: NextRequest) {
       }
     }
     const masters = await fetchErpStoresMaster()
-    const matched = employeeRowsMatchingSubmittedStore(byName || [], store, masters)
+    const byCompany = companyInput
+      ? (byName || []).filter((r) => normalizeCompanyName(r.company) === companyInput)
+      : byName || []
+    const scopedRows = byCompany.length > 0 ? byCompany : byName || []
+    const matched = employeeRowsMatchingSubmittedStore(scopedRows, store, masters)
     const row = pickBestEmployeeStoreMatch(matched, store)
     if (!row) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
@@ -97,6 +104,8 @@ export async function POST(req: NextRequest) {
     }
 
     const userName = String(row.name || '').trim()
+    const companyName = normalizeCompanyName(row.company) || companyInput
+    const tenantId = deriveTenantIdFromCompany(companyName)
     const multiSettings = await getFranchiseeMultiStoreSettings()
     const extraParsed = parseExtraStoresColumn(row.extra_stores)
     const allowedStores = buildAllowedStoresForToken(storeName, extraParsed, multiSettings, finalRole)
@@ -105,6 +114,8 @@ export async function POST(req: NextRequest) {
     const tokenPayload: Parameters<typeof signToken>[0] = { store: storeName, name: userName, role: finalRole }
     if (empIdRaw > 0) tokenPayload.employeeId = empIdRaw
     if (empCodeRaw) tokenPayload.employeeCode = empCodeRaw
+    if (companyName) tokenPayload.company = companyName
+    if (tenantId) tokenPayload.tenantId = tenantId
     if (finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0) {
       tokenPayload.allowedStores = allowedStores
     }
@@ -119,6 +130,8 @@ export async function POST(req: NextRequest) {
         userName,
         role: finalRole,
         token,
+        ...(companyName ? { companyName } : {}),
+        ...(tenantId ? { tenantId } : {}),
         ...(empIdRaw > 0 ? { employeeId: empIdRaw } : {}),
         ...(empCodeRaw ? { employeeCode: empCodeRaw } : {}),
         ...(finalRole === 'franchisee' && multiSettings.enabled && allowedStores.length > 0

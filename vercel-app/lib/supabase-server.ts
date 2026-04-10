@@ -10,6 +10,8 @@
  */
 
 import https from 'node:https'
+import { resolveSupabaseProjectConfig } from '@/lib/supabase-project-resolver'
+import type { TenantContext } from '@/lib/tenant-context'
 
 const SUPABASE_RETRY_MAX = 3
 const SUPABASE_RETRY_BASE_MS = 800
@@ -155,17 +157,17 @@ export async function supabaseFetch(
 
 let warnedMissingServiceRole = false
 
-function getConfig() {
-  const url = (process.env.SUPABASE_URL || '').trim()
+function getConfig(scope?: TenantContext) {
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
   const anonKey = (process.env.SUPABASE_ANON_KEY || '').trim()
   const key = serviceKey || anonKey
-  if (!url || !key) {
+  if (!key || !process.env.SUPABASE_URL) {
     throw new Error(
       'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY(권장) 또는 SUPABASE_ANON_KEY가 필요합니다. ' +
         '보안을 위해 service_role 키 사용을 권장합니다.'
     )
   }
+  const resolved = resolveSupabaseProjectConfig(scope?.tenantId)
   if (!serviceKey && anonKey && !warnedMissingServiceRole) {
     warnedMissingServiceRole = true
     console.warn(
@@ -173,8 +175,35 @@ function getConfig() {
         'RLS가 켜진 테이블(sauces, sauce_ingredients 등)은 0건·거부로 보일 수 있습니다. 서버(Vercel)에 service_role 키를 설정하세요.'
     )
   }
-  const base = url.replace(/\/$/, '').replace(/^http:\/\//, 'https://')
-  return { url: base, key }
+  return { url: resolved.url, key: resolved.key, projectId: resolved.projectId }
+}
+
+export type TenantScopedFilterOptions = {
+  tenantId?: string
+  company?: string
+  tenantColumn?: string
+  companyColumn?: string
+}
+
+/**
+ * 테넌트 경계가 필요한 API에서 필터를 만들 때 사용.
+ * 현재 스키마 전환기라 tenant_id 또는 company 컬럼을 선택적으로 함께 지원한다.
+ */
+export function buildTenantFilter(options: TenantScopedFilterOptions): string {
+  const tenantColumn = options.tenantColumn || 'tenant_id'
+  const companyColumn = options.companyColumn || 'company'
+  const tenantId = String(options.tenantId || '').trim()
+  const company = String(options.company || '').trim()
+  if (tenantId) return `${tenantColumn}=eq.${encodeURIComponent(tenantId)}`
+  if (company) return `${companyColumn}=eq.${encodeURIComponent(company)}`
+  return ''
+}
+
+export function appendTenantFilter(baseFilter: string, options: TenantScopedFilterOptions): string {
+  const tenantFilter = buildTenantFilter(options)
+  if (!tenantFilter) return baseFilter
+  if (!baseFilter) return tenantFilter
+  return `${baseFilter}&${tenantFilter}`
 }
 
 /**

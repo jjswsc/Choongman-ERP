@@ -25,6 +25,8 @@ const _log = (msg: string, data?: Record<string, unknown>) => {
 type LoginDataPayload = {
   users: Record<string, string[]>
   vendors: string[]
+  companies: string[]
+  storeCompanies: Record<string, string>
   storeLabels: Record<string, string>
   legacyToCanonical: Record<string, string>
   usedMaster: boolean
@@ -37,8 +39,16 @@ const CACHE_TTL_MS = 5 * 60 * 1000
 async function getLoginDataHandler(): Promise<LoginDataPayload> {
   const empList = (await supabaseSelect('employees', {
     order: 'id.asc',
-    select: 'store,name,nick,job,role,resign_date',
-  })) as { store?: string; name?: string; nick?: string; job?: string; role?: string; resign_date?: string | null }[] | null
+    select: 'company,store,name,nick,job,role,resign_date',
+  })) as {
+    company?: string | null
+    store?: string
+    name?: string
+    nick?: string
+    job?: string
+    role?: string
+    resign_date?: string | null
+  }[] | null
 
   const masters = await fetchErpStoresMaster()
   const built = buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true })
@@ -61,9 +71,22 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
     if (n) vendorList.push(n)
   }
 
+  const companies = Array.from(
+    new Set((empList || []).map((r) => String(r.company || '').trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b))
+  const storeCompanies: Record<string, string> = {}
+  for (const row of empList || []) {
+    const s = String(row.store || '').trim()
+    const c = String(row.company || '').trim()
+    if (!s || !c || storeCompanies[s]) continue
+    storeCompanies[s] = c
+  }
+
   return {
     users: built.users,
     vendors: vendorList,
+    companies,
+    storeCompanies,
     storeLabels: built.storeLabels,
     legacyToCanonical: built.legacyToCanonical,
     usedMaster: built.usedMaster,
@@ -89,7 +112,16 @@ export async function GET() {
       'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
     console.error('getLoginData:', msg)
     return NextResponse.json(
-      { users: {}, vendors: [], storeLabels: {}, legacyToCanonical: {}, usedMaster: false, error: msg },
+      {
+        users: {},
+        vendors: [],
+        companies: [],
+        storeCompanies: {},
+        storeLabels: {},
+        legacyToCanonical: {},
+        usedMaster: false,
+        error: msg,
+      },
       { status: 503, headers }
     )
   }
@@ -129,7 +161,16 @@ export async function GET() {
     // #endregion
     console.error('getLoginData:', e)
     return NextResponse.json(
-      { users: {}, vendors: [], storeLabels: {}, legacyToCanonical: {}, usedMaster: false, error: msg },
+      {
+        users: {},
+        vendors: [],
+        companies: [],
+        storeCompanies: {},
+        storeLabels: {},
+        legacyToCanonical: {},
+        usedMaster: false,
+        error: msg,
+      },
       { status: 503, headers }
     )
   }

@@ -75,7 +75,7 @@ function lineSyncErrorHint(errors?: string[]): string {
   const list = Array.isArray(errors) ? errors.map((x) => String(x || "").trim()).filter(Boolean) : []
   if (!list.length) return ""
   const preview = list.slice(0, 3).join(" · ")
-  const more = list.length > 3 ? ` 외 ${list.length - 3}건` : ""
+  const more = list.length > 3 ? ` +${list.length - 3} more` : ""
   return ` (${preview}${more})`
 }
 

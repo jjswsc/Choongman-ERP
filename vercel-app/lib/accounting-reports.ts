@@ -52,6 +52,8 @@ export type IncomeStatementReport = {
   }[]
   /** 매장: 본사 발주 + 직접입고 거래처별. 본사: 입고 거래처별 */
   purchaseByVendor?: IncomeStatementLineDetail[]
+  /** 본사: 출고(배송완료) 발주의 주문 매장(store_name)별 매출 */
+  salesByCustomer?: IncomeStatementLineDetail[]
   diagnostics?: {
     warnings: string[]
     limits: Record<string, { fetched: number; limit: number; total?: number }>
@@ -522,17 +524,29 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const expenseBySubjectMap = new Map<number | null, number>()
   let ordersPurchaseSubtotal = 0
   let purchaseByVendor: IncomeStatementLineDetail[] = []
+  let salesByCustomer: IncomeStatementLineDetail[] = []
 
   if (isHQ) {
     const outboundFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       `&or=(delivery_status.eq.${encodeURIComponent('배송완료')},delivery_status.eq.${encodeURIComponent('일부배송완료')})`
     const outboundOrders = (await supabaseSelectFilter('orders', outboundFilter, {
-      select: 'total',
+      select: 'total,store_name',
       limit: BASE_LIMIT,
-    })) as { total?: number }[] | null
-    for (const o of outboundOrders || []) sales += Number(o.total) || 0
+    })) as { total?: number; store_name?: string }[] | null
+    const salesByStoreMap: Record<string, number> = {}
+    for (const o of outboundOrders || []) {
+      const amt = Number(o.total) || 0
+      sales += amt
+      const raw = String(o.store_name || '').trim()
+      const k = raw || '__pl_sales_customer_unknown__'
+      salesByStoreMap[k] = (salesByStoreMap[k] || 0) + amt
+    }
     limits.orders_outbound = { fetched: outboundOrders?.length || 0, limit: BASE_LIMIT }
+    salesByCustomer = Object.entries(salesByStoreMap)
+      .filter(([, v]) => v > 0)
+      .map(([key, amount]) => ({ key, amount }))
+      .sort((a, b) => b.amount - a.amount)
 
     const inboundByVendorHq = await getDirectInboundPurchasesByVendor('입고등록', startStr, endStr, itemCostMap, false)
     const bankPayByVendorHq = await fetchBankPurchasePaymentsByVendor({
@@ -788,6 +802,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     },
     expenseByAccountSubject,
     purchaseByVendor,
+    salesByCustomer,
     diagnostics:
       input.includeDebug || purchaseInboundBankOverlapVendorKeys.length > 0
         ? {

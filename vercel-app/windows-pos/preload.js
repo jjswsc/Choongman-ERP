@@ -11,10 +11,13 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   getPrintConfig: () => ipcRenderer.invoke("cm-pos-get-print-config"),
   printWithDialog: () => ipcRenderer.invoke("cm-pos-print-dialog"),
   quickPrint: () => ipcRenderer.invoke("cm-pos-quick-print"),
-  printHtml: (html) => {
+  printHtml: (html, opts) => {
     const htmlLength = typeof html === "string" ? html.length : 0;
     ipcRenderer.send("cm-pos-shell-print-html-invoke", { htmlLength });
-    return ipcRenderer.invoke("cm-pos-print-html", { html });
+    return ipcRenderer.invoke("cm-pos-print-html", {
+      html,
+      preferDialog: Boolean(opts && opts.preferDialog),
+    });
   },
   /** App 메뉴의 Reset cache + reload 와 동일(확인 대화상자는 메인 프로세스) */
   resetCacheAndReload: () => ipcRenderer.invoke("cm-pos-reset-cache-reload"),

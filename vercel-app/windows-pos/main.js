@@ -552,8 +552,11 @@ function printWebContentsPromise(wc, options) {
   });
 }
 
-/** 영수증·주방전 HTML: 렌더러 iframe.print()는 Electron에서 무시되는 경우가 많아 메인에서 숨은 창으로 인쇄 */
-async function printHtmlDocumentInHiddenWindow(htmlString) {
+/** 영수증·주방전 HTML: 렌더러 iframe.print()는 Electron에서 무시되는 경우가 많아 메인에서 숨은 창으로 인쇄
+ * @param {{ preferDialog?: boolean }} [options] preferDialog true면 무인쇄·열전사 최적화를 건너뛰고 시스템 인쇄 대화상자만 사용(프린터 선택·미리보기)
+ */
+async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
+  const preferDialog = Boolean(options && options.preferDialog);
   const tmpRoot = app.getPath("temp");
   const tmpPath = path.join(
     tmpRoot,
@@ -590,6 +593,20 @@ async function printHtmlDocumentInHiddenWindow(htmlString) {
     }
     await printWindow.loadFile(tmpPath);
     await new Promise((r) => setTimeout(r, PRINT_HTML_SETTLE_MS));
+
+    if (preferDialog) {
+      const printStage = "dialog_only";
+      const r = await printWebContentsPromise(printWindow.webContents, getDialogPrintOptions());
+      debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:preferDialog", "print_dialog_only", {
+        ok: Boolean(r.success),
+        reason: String(r.failureReason || ""),
+      });
+      return {
+        ok: r.success,
+        reason: r.failureReason || (r.success ? "" : "print_failed"),
+        printStage,
+      };
+    }
 
     let printStage = "thermal";
     /** 1) 80mm 커스텀 용지 무인쇄 → 2) 드라이버 기본 용지 무인쇄(무인쇄 유지) → 3) 대화상자 */
@@ -1039,7 +1056,9 @@ if (!gotLock) {
         senderUrl: String(event.sender?.getURL?.() || ""),
       });
       // #endregion
-      return printHtmlDocumentInHiddenWindow(html);
+      return printHtmlDocumentInHiddenWindow(html, {
+        preferDialog: Boolean(payload?.preferDialog),
+      });
     });
 
     ipcMain.handle("cm-pos-reset-cache-reload", async (event) => {

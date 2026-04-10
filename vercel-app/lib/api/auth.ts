@@ -14,6 +14,7 @@ export async function getLoginData() {
 }
 
 export async function loginCheck(params: {
+  company?: string
   store: string
   name: string
   pw: string
@@ -27,6 +28,8 @@ export async function loginCheck(params: {
   return res.json() as Promise<{
     success: boolean
     message?: string
+    companyName?: string
+    tenantId?: string
     storeName?: string
     userName?: string
     role?: string
@@ -38,6 +41,7 @@ export async function loginCheck(params: {
 }
 
 export async function changePassword(params: {
+  company?: string
   store: string
   name: string
   oldPw: string

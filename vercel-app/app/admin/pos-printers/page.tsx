@@ -65,6 +65,7 @@ import {
   RECEIPT_GRID_COL_GAP_PX,
   RECEIPT_INNER_INSET_LEFT_MM,
   RECEIPT_INNER_INSET_RIGHT_MM,
+  RECEIPT_TRAILING_BOTTOM_MM,
 } from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { PosDualMonitorSettingsContent } from "@/components/pos/pos-dual-monitor-settings-content"
@@ -112,10 +113,8 @@ function ToggleRow({
   onChange: (v: boolean) => void
   t: (k: string) => string
 }) {
-  const yesText = t("yes")
-  const noText = t("no")
-  const yesLabel = yesText && yesText !== "yes" ? yesText : "예"
-  const noLabel = noText && noText !== "no" ? noText : "아니오"
+  const yesLabel = t("yes")
+  const noLabel = t("no")
   return (
     <div className="flex items-center justify-between rounded-lg border p-3">
       <span className="text-sm font-medium">{label}</span>
@@ -224,7 +223,7 @@ export default function PosPrintersPage() {
 
   const [storeCode, setStoreCode] = React.useState("")
   const [kitchenMode, setKitchenMode] = React.useState<1 | 2 | 3>(1)
-  const [mainDeviceTokensPreview, setMainDeviceTokensPreview] = React.useState<string[]>([])
+  const [, setMainDeviceTokensPreview] = React.useState<string[]>([])
   /** 영수증 미리보기용 (DB 값, 메뉴 관리 최종가격 탭에서 수정) */
   const [receiptPreviewDelivery, setReceiptPreviewDelivery] = React.useState(0)
   const [receiptPreviewPackaging, setReceiptPreviewPackaging] = React.useState(0)
@@ -872,7 +871,7 @@ export default function PosPrintersPage() {
           <title>${escapeHtml(t("posReceipt") || "영수증")}</title>
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: 1mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; }
             .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
