@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterEmployeesByNameForLogin } from '@/lib/employees-compat'
 import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
@@ -42,26 +42,7 @@ export async function POST(req: NextRequest) {
       resign_date?: string | null
       extra_stores?: unknown
     }
-    const nameFilter = `name=eq.${encodeURIComponent(name)}`
-    let byName: EmpLoginRow[]
-    try {
-      byName = (await supabaseSelectFilter('employees', nameFilter, {
-        limit: 120,
-          select: 'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores',
-      })) as EmpLoginRow[]
-    } catch {
-      try {
-        byName = (await supabaseSelectFilter('employees', nameFilter, {
-          limit: 120,
-          select: 'company,store,name,password,role,job,resign_date,extra_stores',
-        })) as EmpLoginRow[]
-      } catch {
-        byName = (await supabaseSelectFilter('employees', nameFilter, {
-          limit: 120,
-          select: 'store,name,password,role,job,resign_date',
-        })) as EmpLoginRow[]
-      }
-    }
+    const byName = (await supabaseSelectFilterEmployeesByNameForLogin(name)) as EmpLoginRow[]
     const masters = await fetchErpStoresMaster()
     const byCompany = companyInput
       ? (byName || []).filter((r) => normalizeCompanyName(r.company) === companyInput)
@@ -87,7 +68,12 @@ export async function POST(req: NextRequest) {
 
     const storeName = String(row.store || '').trim()
     const empIsOfficeStore = isOfficeStore(storeName)
-    const rawRole = String((row.role || row.job || '')).toLowerCase().replace(/\./g, '')
+    /** 권한(role)과 직무(job)를 함께 본다. 예: role=Staff·job=Officer(Logistics) 처럼 role만 보면 officer를 놓침 */
+    const rawRole = `${String(row.role || '').trim()} ${String(row.job || '').trim()}`
+      .toLowerCase()
+      .replace(/\./g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
     let finalRole = 'staff'
     if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
     else if (rawRole === 'hr' || rawRole.includes('인사') || /\bhr\b/.test(rawRole)) finalRole = 'hr'

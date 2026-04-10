@@ -89,11 +89,21 @@ export function canManageReceivablePayableAllStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
 }
 
+/** 물류(창고/배송) 담당 역할인지 — 미수금 동기화·품목 발주 일시중지 등 */
+export function isLogisticsStaffRole(role: string): boolean {
+  const r = String(role || "").toLowerCase().trim()
+  return r.includes("logistic") || r.includes("물류")
+}
+
+/** 품목 `order_disabled`(매장 발주 일시중지) 토글 — 본사(Office) 또는 물류 */
+export function canToggleItemOrderDisabled(role: string): boolean {
+  return isOfficeRole(role) || isLogisticsStaffRole(role)
+}
+
 /** 주문 미수금을 출고(본사 정산) 규칙에 맞게 재동기화 (직접정산·지두방 반영) */
 export function canSyncOrderReceivable(role: string): boolean {
   if (canManageReceivablePayableAllStores(role)) return true
-  const r = String(role || "").toLowerCase().trim()
-  return r.includes("logistic") || r.includes("물류")
+  return isLogisticsStaffRole(role)
 }
 
 /** Order 미수금 일괄 재동기화 (본사·회계만) */
@@ -118,13 +128,14 @@ export function canUpdateReceivableReceiveCheck(
   return Boolean(us && sn && us === sn)
 }
 
-/** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + 회계직원 + POS 직원) */
+/** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + 회계직원 + 물류 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
   return (
     isOfficeRole(role) ||
     isManagerRole(role) ||
     isFranchiseeRole(role) ||
     isAccountingRole(role) ||
+    isLogisticsStaffRole(role) ||
     isPosOrderOnlyRole(role) ||
     isPosSettlementOnlyRole(role)
   )

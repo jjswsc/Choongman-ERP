@@ -26,7 +26,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
 import { compareByCode } from "@/lib/sort-utils"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { canToggleItemOrderDisabled } from "@/lib/permissions"
 
 export type Product = AdminItem
 
@@ -58,7 +58,7 @@ export default function ItemsPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { auth } = useAuth()
-  const canToggleOrderPaused = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
+  const canToggleOrderPaused = React.useMemo(() => canToggleItemOrderDisabled(auth?.role || ""), [auth?.role])
   const [products, setProducts] = React.useState<Product[]>([])
   const [allCategories, setAllCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)

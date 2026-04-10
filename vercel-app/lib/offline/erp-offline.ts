@@ -7,12 +7,6 @@ import { isOnline, reportNetworkSuccess, runReachabilityProbe, shouldPreferOffli
 import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } from './cache'
 import { apiFetch } from '../api/fetch'
 
-function sendOfflineDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'631010'},body:JSON.stringify({sessionId:'631010',runId:'initial',hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{})
-  // #endregion
-}
-
 const CACHE_KEYS = {
   STORE_LIST: 'erp:storeList',
   VENDORS_PURCHASE: 'erp:vendorsPurchase',
@@ -544,9 +538,6 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
     usedMaster: false,
     _source: 'fallback',
   }
-  sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:entry", "getLoginDataWithCache entered", {
-    online: isOnline(),
-  })
 
   if (typeof window !== "undefined" && !isOnline()) {
     await runReachabilityProbe()
@@ -576,9 +567,6 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       usedMaster: data.usedMaster ?? false,
       _source: 'api',
     }
-    sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:apiSuccess", "login data from api", {
-      storeCount: Object.keys(result.users || {}).length,
-    })
     reportNetworkSuccess()
     await setErpCache(key, {
       users: result.users,
@@ -604,9 +592,6 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
     usedMaster?: boolean
   }>(key)
   if (cached && Object.keys(cached.users || {}).length > 0) {
-    sendOfflineDebugLog("H2", "lib/offline/erp-offline.ts:getLoginDataWithCache:cacheHit", "using cached login data", {
-      storeCount: Object.keys(cached.users || {}).length,
-    })
     reportNetworkSuccess()
     return {
       users: cached.users,
@@ -619,7 +604,6 @@ export async function getLoginDataWithCache(): Promise<LoginDataResult> {
       _source: 'cache',
     }
   }
-  sendOfflineDebugLog("H3", "lib/offline/erp-offline.ts:getLoginDataWithCache:fallback", "no login data from api or cache", {})
   return fallback
 }
 

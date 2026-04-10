@@ -26,11 +26,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
-import {
-  copyWindowsInstallerUrl,
-  WINDOWS_ERP_SETUP_PATH,
-  WINDOWS_POS_SETUP_PATH,
-} from "@/lib/windows-installer-copy"
+import { copyWindowsInstallerUrl, WINDOWS_POS_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { labelForStore } from "@/lib/store-list-keys"
 import {
   isBrowserOnline,
@@ -38,12 +34,6 @@ import {
   REACHABILITY_EVENT,
 } from "@/lib/offline/network"
 import { getAppBrandConfig } from "@/lib/app-brand"
-
-function sendLoginDebugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-  // #region agent log
-  fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'631010'},body:JSON.stringify({sessionId:'631010',runId:'initial',hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{})
-  // #endregion
-}
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
@@ -172,7 +162,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   useLayoutEffect(() => {
     if (loginAppPrefHydratedRef.current) return
-    if (normalizeLoginPathname(pathname) !== "/login") return
+    const p = normalizeLoginPathname(pathname)
+    if (p !== "/login" && p !== "/admin/login") return
     loginAppPrefHydratedRef.current = true
     try {
       const w = localStorage.getItem("cm_login_app_pref")
@@ -184,7 +175,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   useEffect(() => {
     const p = normalizeLoginPathname(pathname)
-    if (p === "/login") return
+    if (p === "/login" || p === "/admin/login") return
     setLoginApp(deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo))
   }, [pathname, isAdminPage, redirectTo])
 
@@ -210,12 +201,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   const effectiveIsAdminPage = loginApp === "erp"
 
-  const windowsInstallerPath = effectiveIsAdminPage ? WINDOWS_ERP_SETUP_PATH : WINDOWS_POS_SETUP_PATH
-  const windowsInstallerLabel =
-    (effectiveIsAdminPage ? tMsg("erpWindowsDownload") : tMsg("posWindowsDownload")) ||
-    (effectiveIsAdminPage ? "윈도우 ERP 설치파일 받기" : "윈도우 POS 설치파일 받기")
-  /** 하이브리드 POS 앱 안에서는 "윈도우 POS 받기"만 숨김 — ERP 로그인 화면의 ERP 받기는 유지 */
-  const showWindowsInstallerButton = effectiveIsAdminPage || !hybridPosShell
+  /** ERP·모바일: 숨김. POS 웹만 윈도우 설치 안내(하이브리드 셸 안에서는 숨김) */
+  const showWindowsInstallerButton = loginApp === "pos" && !hybridPosShell
+  const windowsInstallerPath = WINDOWS_POS_SETUP_PATH
+  const windowsInstallerLabel = tMsg("posWindowsDownload") || "윈도우 POS 설치파일 받기"
   const handleWindowsInstallerCopy = useCallback(async () => {
     const r = await copyWindowsInstallerUrl(windowsInstallerPath)
     if (r.ok) await appAlert(tMsg("windowsInstallerCopyHint") || "")
@@ -264,29 +253,37 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setLoadError(null)
     setLoginListProbeOk(null)
     setLoading(true)
-    sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:start", "fetchLoginData started", {
-      browserOnlineNow: typeof navigator !== "undefined" ? navigator.onLine : null,
-      effectiveOnline: isBrowserOnline(),
-    })
     /** navigator.onLine 거짓 false 대비 프로브. 조기 종료하지 않음 — getLoginDataWithCache가 API를 직접 시도해 오탐을 복구함 */
     const run = async () => {
       if (typeof navigator !== "undefined" && !isBrowserOnline()) {
         await runReachabilityProbe()
       }
-      const hybrid = isCmPosHybridShell()
-      const timeoutMs = hybrid ? 20_000 : 6000
-      const withTimeout = Promise.race([
-        getLoginData(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
-        ),
-      ])
+      /** Supabase 다구간 + 느린 망 — 짧은 타임아웃은 오탐이 잦음 */
+      const timeoutMs = 60_000
+      const fetchOnce = () =>
+        Promise.race([
+          getLoginData(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
+          ),
+        ])
+      /** API 실패 시 getLoginData는 throw 대신 _source:fallback 을 줄 수 있음 → 1회 재시도 */
+      const loadWithRetry = async () => {
+        let last: Awaited<ReturnType<typeof getLoginData>> | undefined
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const d = await fetchOnce()
+            last = d
+            if (d._source !== "fallback") return d
+          } catch (e) {
+            if (attempt === 0) continue
+            throw e
+          }
+        }
+        return last!
+      }
       try {
-        const d = await withTimeout
-        sendLoginDebugLog("H2", "components/login/login-form.tsx:fetchLoginData:then", "fetchLoginData resolved", {
-          source: d?._source ?? null,
-          storeCount: Object.keys(d?.users || {}).length,
-        })
+        const d = await loadWithRetry()
         setLoginData(d.users || {})
         setLoginStoreLabels(d.storeLabels || {})
         const companyMap = d.storeCompanies || {}
@@ -316,9 +313,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         setLoading(false)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        sendLoginDebugLog("H3", "components/login/login-form.tsx:fetchLoginData:catch", "fetchLoginData rejected", {
-          error: msg,
-        })
         const probeOk = await runReachabilityProbe()
         setLoginListProbeOk(probeOk)
         setLoadError(
@@ -339,22 +333,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [])
 
   useEffect(() => {
-    sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authGate", "login effect entered", {
-      hasAuth: Boolean(auth),
-      redirectTo: effectiveRedirectTo,
-    })
     if (auth) {
-      sendLoginDebugLog("H1", "components/login/login-form.tsx:useEffect:authRedirect", "auth exists, redirecting", {
-        redirectTo: effectiveRedirectTo,
-      })
       replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
       return
     }
     /** HMR/라우트 전환 직후 unmount 레이스를 피하려고 취소 가능한 매크로태스크로 지연 */
     const timer = window.setTimeout(() => {
-      sendLoginDebugLog("H4", "components/login/login-form.tsx:useEffect:setTimeout", "setTimeout executed fetchLoginData", {
-        delayMs: 0,
-      })
       fetchLoginData()
     }, 0)
     return () => {
@@ -516,6 +500,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         return !tagged || tagged === company
       })
     : stores
+  /** 목록은 왔는데 회사 태그 불일치로 매장 0개만 되는 경우 — 목록 API 실패와 구분해 선택만 해제 */
+  useEffect(() => {
+    if (loading || !company) return
+    if (stores.length === 0 || filteredStores.length > 0) return
+    setCompany("")
+  }, [loading, company, stores.length, filteredStores.length])
   const users = store ? (loginData[store] || []) : []
   useEffect(() => {
     if (!store) return
@@ -570,7 +560,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "다시 시도",
       refresh: "새로고침",
       connectingToServer: "서버에 연결 중...",
-      loginAppHint: "로그인 후 이동",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "모바일",
@@ -597,7 +586,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "Retry",
       refresh: "Refresh",
       connectingToServer: "Connecting to server...",
-      loginAppHint: "After login, open",
       loginAppErp: "ERP (Admin)",
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
@@ -624,7 +612,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ลองอีกครั้ง",
       refresh: "รีเฟรช",
       connectingToServer: "กำลังเชื่อมต่อเซิร์ฟเวอร์...",
-      loginAppHint: "หลังล็อกอินไปที่",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "มือถือ",
@@ -651,7 +638,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ပြန်ကြိုးစားမည်",
       refresh: "ပြန်စမည်",
       connectingToServer: "ဆာဗာနှင့် ချိတ်ဆက်နေသည်...",
-      loginAppHint: "ဝင်ပြီးနောက် ဖွင့်မည်",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "မိုဘိုင်း",
@@ -678,7 +664,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       retry: "ລອງໃໝ່",
       refresh: "ໂຫຼດໃໝ່",
       connectingToServer: "ກຳລັງເຊື່ອມຕໍ່ເຊີບເວີ...",
-      loginAppHint: "ຫຼັງເຂົ້າໄປທີ່",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "ມືຖື",
@@ -719,21 +704,19 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             <p className="erp-text">{brand.loginTitle}</p>
           </div>
 
-          {normalizeLoginPathname(pathname) === "/login" ? (
+          {normalizeLoginPathname(pathname) === "/login" ||
+          normalizeLoginPathname(pathname) === "/admin/login" ? (
             <div className="mb-4 w-full max-w-sm px-0.5">
-              <p className="mb-2 text-center text-[11px] font-medium tracking-wide text-white/65">
-                {t.loginAppHint}
-              </p>
               <div
                 className="flex gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-white/10"
                 role="group"
-                aria-label={t.loginAppHint}
+                aria-label={`${t.loginAppMobile}, ${t.loginAppPos}, ${t.loginAppErp}`}
               >
                 {(
                   [
-                    { key: "erp" as const, label: t.loginAppErp },
-                    { key: "pos" as const, label: t.loginAppPos },
                     { key: "mobile" as const, label: t.loginAppMobile },
+                    { key: "pos" as const, label: t.loginAppPos },
+                    { key: "erp" as const, label: t.loginAppErp },
                   ] as const
                 ).map(({ key, label }) => (
                   <button

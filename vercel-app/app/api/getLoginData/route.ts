@@ -1,26 +1,7 @@
 import { NextResponse } from 'next/server'
-import { appendFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectEmployeesForLoginList } from '@/lib/employees-compat'
 import { buildStoreListFromEmployees, fetchErpStoresMaster } from '@/lib/erp-store-master'
-
-// #region agent log
-const _log = (msg: string, data?: Record<string, unknown>) => {
-  try {
-    const logPath = join(process.cwd(), '..', 'debug-e3767f.log')
-    appendFileSync(
-      logPath,
-      JSON.stringify({
-        sessionId: 'e3767f',
-        location: 'getLoginData/route.ts',
-        message: msg,
-        data: data ?? {},
-        timestamp: Date.now(),
-      }) + '\n'
-    )
-  } catch {}
-}
-// #endregion
 
 type LoginDataPayload = {
   users: Record<string, string[]>
@@ -37,10 +18,7 @@ let _loginDataCache: { data: LoginDataPayload; until: number } | null = null
 const CACHE_TTL_MS = 5 * 60 * 1000
 
 async function getLoginDataHandler(): Promise<LoginDataPayload> {
-  const empList = (await supabaseSelect('employees', {
-    order: 'id.asc',
-    select: 'company,store,name,nick,job,role,resign_date',
-  })) as {
+  const empList = (await supabaseSelectEmployeesForLoginList()) as {
     company?: string | null
     store?: string
     name?: string
@@ -50,14 +28,17 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
     resign_date?: string | null
   }[] | null
 
-  const masters = await fetchErpStoresMaster()
-  const built = buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true })
+  /** 매장 마스터·거래처는 직원 목록과 독립 → 병렬로 왕복 1회 절감 (직원 조회는 반드시 선행) */
+  const [masters, vendorRows] = await Promise.all([
+    fetchErpStoresMaster(),
+    supabaseSelect('vendors', {
+      select: 'name,gps_name,type',
+      order: 'id.asc',
+      limit: 10000,
+    }) as Promise<{ name?: string; gps_name?: string; type?: string }[] | null>,
+  ])
 
-  const vendorRows = (await supabaseSelect('vendors', {
-    select: 'name,gps_name,type',
-    order: 'id.asc',
-    limit: 10000,
-  })) as { name?: string; gps_name?: string; type?: string }[] | null
+  const built = buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true })
 
   const vendorList: string[] = []
   const vRows = vendorRows || []
@@ -94,9 +75,6 @@ async function getLoginDataHandler(): Promise<LoginDataPayload> {
 }
 
 export async function GET() {
-  // #region agent log
-  _log('GET entry', { hypothesisId: 'H1' })
-  // #endregion
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -104,9 +82,6 @@ export async function GET() {
 
   const url = (process.env.SUPABASE_URL || '').trim()
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-  // #region agent log
-  _log('env check', { hasUrl: !!url, hasKey: !!key, hypothesisId: 'H4' })
-  // #endregion
   if (!url || !key) {
     const msg =
       'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
@@ -129,36 +104,14 @@ export async function GET() {
   try {
     const now = Date.now()
     if (_loginDataCache && _loginDataCache.until > now) {
-      // #region agent log
-      _log('cache hit', { hypothesisId: 'H5' })
-      // #endregion
       return NextResponse.json(_loginDataCache.data, { headers })
     }
-    // #region agent log
-    _log('before getLoginDataHandler', { hypothesisId: 'H2' })
-    // #endregion
     const data = await getLoginDataHandler()
     _loginDataCache = { data, until: now + CACHE_TTL_MS }
-    // #region agent log
-    _log('getLoginDataHandler success', {
-      userCount: Object.keys(data.users ?? {}).length,
-      vendorCount: (data.vendors ?? []).length,
-      hypothesisId: 'H5',
-    })
-    // #endregion
     return NextResponse.json(data, { headers })
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e))
     const msg = err.message
-    // #region agent log
-    _log('getLoginDataHandler error', {
-      message: msg,
-      cause: err.cause ? String(err.cause) : undefined,
-      causeCode: (err.cause as { code?: string })?.code,
-      name: err.name,
-      hypothesisId: 'H2',
-    })
-    // #endregion
     console.error('getLoginData:', e)
     return NextResponse.json(
       {

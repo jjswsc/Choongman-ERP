@@ -20,7 +20,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { isManagerOrFranchiseeRole, isOfficeRole, canToggleItemOrderDisabled } from "@/lib/permissions"
 import {
   useStoreList,
   getAppData,
@@ -71,8 +71,11 @@ export default function StockPage() {
     return isOfficeRole(auth?.role || "") || (isManager && !!userStore)
   }, [auth?.role, isManager, userStore])
 
-  /** 발주 일시중지 토글: 매장 직원 오클릭 방지 — 본사(Office) 권한만 */
-  const canToggleOrderPaused = React.useMemo(() => isOfficeRole(auth?.role || ""), [auth?.role])
+  /** 발주 일시중지 토글 — 본사(Office) 또는 물류 */
+  const canToggleOrderPaused = React.useMemo(
+    () => canToggleItemOrderDisabled(auth?.role || ""),
+    [auth?.role]
+  )
 
   const storesForFilter = React.useMemo(() => {
     if (isManager && userStore) return [userStore]

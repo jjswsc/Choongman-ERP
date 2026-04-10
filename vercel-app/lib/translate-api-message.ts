@@ -138,6 +138,11 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // 주문 수령 / 공통 API 타임아웃 (클라이언트)
   "요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.": "apiRequestTimeout",
+
+  // verify-auth / 공통 API
+  "인증이 필요합니다. 다시 로그인해 주세요.": "msg_auth_required_relogin",
+  "본사 권한이 필요합니다.": "msg_office_permission_required",
+  "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
 }
 
 /**
