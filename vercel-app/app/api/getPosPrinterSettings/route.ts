@@ -156,6 +156,8 @@ export async function GET(request: NextRequest) {
     customerDisplayQrPayload: '',
     customerDisplayShowOrderSummary: true,
     customerDisplayShowOrderTotal: true,
+    customerDisplayIdleMediaType: 'none' as const,
+    customerDisplayIdleMediaUrl: '',
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -251,6 +253,8 @@ export async function GET(request: NextRequest) {
       customer_display_qr_payload?: string
       customer_display_show_order_summary?: boolean
       customer_display_show_order_total?: boolean
+      customer_display_idle_media_type?: string
+      customer_display_idle_media_url?: string
     }[] | null
 
     const raw = rows?.[0]
@@ -398,6 +402,12 @@ export async function GET(request: NextRequest) {
       customerDisplayQrPayload: String(raw?.customer_display_qr_payload ?? '').trim(),
       customerDisplayShowOrderSummary: raw?.customer_display_show_order_summary !== false,
       customerDisplayShowOrderTotal: raw?.customer_display_show_order_total !== false,
+      customerDisplayIdleMediaType: (() => {
+        const t = String(raw?.customer_display_idle_media_type || 'none').toLowerCase()
+        if (t === 'image' || t === 'video') return t
+        return 'none' as const
+      })(),
+      customerDisplayIdleMediaUrl: String(raw?.customer_display_idle_media_url ?? '').trim(),
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)

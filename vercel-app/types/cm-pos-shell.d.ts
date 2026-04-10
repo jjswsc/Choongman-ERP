@@ -58,6 +58,8 @@ declare global {
         }
         showOrderSummary?: boolean
         showOrderTotal?: boolean
+        idleMediaType?: "none" | "image" | "video"
+        idleMediaUrl?: string
       }) => Promise<{ ok: boolean; reason?: string }>
       onCustomerDisplayState?: (
         handler: (payload: {
@@ -88,6 +90,8 @@ declare global {
           }
           showOrderSummary?: boolean
           showOrderTotal?: boolean
+          idleMediaType?: "none" | "image" | "video"
+          idleMediaUrl?: string
         }) => void
       ) => () => void
     }

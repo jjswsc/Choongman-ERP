@@ -28,6 +28,9 @@ export type PosCustomerDisplayPayload = {
   }
   showOrderSummary?: boolean
   showOrderTotal?: boolean
+  /** 평상시 배경 (터미널이 설정에서 로드해 브로드캐스트) */
+  idleMediaType?: "none" | "image" | "video"
+  idleMediaUrl?: string
 }
 
 const CHANNEL_NAME = "cm-pos-customer-display"

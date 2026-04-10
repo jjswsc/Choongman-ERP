@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getPosPrinterSettings, savePosPrinterSettings, type PosPrinterSettings } from "@/lib/api-client"
+import {
+  getPosPrinterSettings,
+  savePosPrinterSettings,
+  uploadCustomerDisplayMedia,
+  type PosPrinterSettings,
+} from "@/lib/api-client"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -68,6 +73,9 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
   const [qrPayload, setQrPayload] = React.useState("")
   const [showOrderSummary, setShowOrderSummary] = React.useState(true)
   const [showOrderTotal, setShowOrderTotal] = React.useState(true)
+  const [idleMediaType, setIdleMediaType] = React.useState<"none" | "image" | "video">("none")
+  const [idleMediaUrl, setIdleMediaUrl] = React.useState("")
+  const [uploadingMedia, setUploadingMedia] = React.useState(false)
 
   const load = React.useCallback(async () => {
     const sc = String(storeCode || "").trim()
@@ -85,6 +93,9 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
       setQrPayload(String(s.customerDisplayQrPayload ?? "").trim())
       setShowOrderSummary(s.customerDisplayShowOrderSummary !== false)
       setShowOrderTotal(s.customerDisplayShowOrderTotal !== false)
+      const mt = String(s.customerDisplayIdleMediaType || "none").toLowerCase()
+      setIdleMediaType(mt === "image" ? "image" : mt === "video" ? "video" : "none")
+      setIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? "").trim())
     } finally {
       setLoading(false)
     }
@@ -114,6 +125,8 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
         customerDisplayQrPayload: qrPayload.trim(),
         customerDisplayShowOrderSummary: showOrderSummary,
         customerDisplayShowOrderTotal: showOrderTotal,
+        customerDisplayIdleMediaType: idleMediaType,
+        customerDisplayIdleMediaUrl: idleMediaUrl.trim(),
       }
       const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
       if (!res.success) {
@@ -125,7 +138,45 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
     } finally {
       setSaving(false)
     }
-  }, [defaultState, enabled, idleMessage, load, paymentMessage, qrPayload, showOrderSummary, showOrderTotal, storeCode, theme, tr])
+  }, [
+    defaultState,
+    enabled,
+    idleMediaType,
+    idleMediaUrl,
+    idleMessage,
+    load,
+    paymentMessage,
+    qrPayload,
+    showOrderSummary,
+    showOrderTotal,
+    storeCode,
+    theme,
+    tr,
+  ])
+
+  const onPickMediaFile = React.useCallback(
+    async (file: File | null) => {
+      const sc = String(storeCode || "").trim()
+      if (!file || !sc) return
+      if (idleMediaType === "none") {
+        await appAlert(tr("posCustomerIdleMediaPickType", "먼저 사진 또는 동영상을 선택해 주세요."))
+        return
+      }
+      setUploadingMedia(true)
+      try {
+        const res = await uploadCustomerDisplayMedia({ storeCode: sc, file })
+        if (!res.success || !res.url) {
+          await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+          return
+        }
+        setIdleMediaUrl(res.url)
+        await appAlert(tr("posCustomerIdleMediaUploaded", "미디어가 업로드되었습니다. 저장을 눌러 반영하세요."))
+      } finally {
+        setUploadingMedia(false)
+      }
+    },
+    [idleMediaType, storeCode, tr]
+  )
 
   if (!String(storeCode || "").trim()) {
     return <p className="text-sm text-muted-foreground">{tr("store", "매장")} {tr("required", "필수")}</p>
@@ -170,6 +221,71 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
             <SelectItem value="qr">{tr("posCustomerStateQr", "QR 화면")}</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div>
+        <label className="text-sm font-medium">{tr("posCustomerIdleMedia", "평상시 배경 미디어")}</label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {tr(
+            "posCustomerIdleMediaHint",
+            "평상시 안내 화면 뒤에 표시할 사진 또는 동영상입니다. (이미지 4MB 이하, 동영상 50MB 이하 MP4/WebM)"
+          )}
+        </p>
+        <Select
+          value={idleMediaType}
+          onValueChange={(v) => setIdleMediaType(v as "none" | "image" | "video")}
+        >
+          <SelectTrigger className="mt-2 h-10 w-full max-w-md">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">{tr("posCustomerIdleMediaNone", "사용 안 함")}</SelectItem>
+            <SelectItem value="image">{tr("posCustomerIdleMediaImage", "사진")}</SelectItem>
+            <SelectItem value="video">{tr("posCustomerIdleMediaVideo", "동영상")}</SelectItem>
+          </SelectContent>
+        </Select>
+        {idleMediaType !== "none" ? (
+          <div className="mt-3 space-y-2">
+            <Input
+              type="file"
+              accept={idleMediaType === "video" ? "video/mp4,video/webm" : "image/jpeg,image/png,image/gif,image/webp"}
+              className="cursor-pointer"
+              disabled={uploadingMedia}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                void onPickMediaFile(f ?? null)
+                e.target.value = ""
+              }}
+            />
+            <Input
+              value={idleMediaUrl}
+              onChange={(e) => setIdleMediaUrl(e.target.value)}
+              className="h-10"
+              placeholder={tr("posCustomerIdleMediaUrlPh", "또는 공개 URL 직접 입력")}
+              disabled={uploadingMedia}
+            />
+            {idleMediaUrl ? (
+              <div className="overflow-hidden rounded-md border bg-muted/30 p-2">
+                {idleMediaType === "video" ? (
+                  <video src={idleMediaUrl} className="mx-auto max-h-40 w-full object-contain" controls muted />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={idleMediaUrl} alt="" className="mx-auto max-h-40 w-full object-contain" />
+                )}
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIdleMediaUrl("")
+              }}
+              disabled={uploadingMedia}
+            >
+              {tr("posCustomerIdleMediaClear", "미디어 지우기")}
+            </Button>
+          </div>
+        ) : null}
       </div>
       <div>
         <label className="text-sm font-medium">{tr("posCustomerIdleMessage", "평상시 문구")}</label>

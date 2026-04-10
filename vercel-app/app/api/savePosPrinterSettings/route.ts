@@ -155,6 +155,10 @@ export async function POST(req: NextRequest) {
     const customerDisplayQrPayload = String(body?.customerDisplayQrPayload ?? '').trim()
     const customerDisplayShowOrderSummary = body?.customerDisplayShowOrderSummary !== false
     const customerDisplayShowOrderTotal = body?.customerDisplayShowOrderTotal !== false
+    const rawIdleMediaType = String(body?.customerDisplayIdleMediaType || 'none').toLowerCase()
+    const customerDisplayIdleMediaType =
+      rawIdleMediaType === 'image' ? 'image' : rawIdleMediaType === 'video' ? 'video' : 'none'
+    const customerDisplayIdleMediaUrl = String(body?.customerDisplayIdleMediaUrl ?? '').trim().slice(0, 2048)
     const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
     const receiptPrintLangRaw = String(body?.receiptPrintLang ?? '').trim()
     const receiptPrintLang = receiptPrintLangRaw && validPrintLangs.includes(receiptPrintLangRaw) ? receiptPrintLangRaw : ''
@@ -254,6 +258,8 @@ export async function POST(req: NextRequest) {
       customer_display_qr_payload: customerDisplayQrPayload,
       customer_display_show_order_summary: customerDisplayShowOrderSummary,
       customer_display_show_order_total: customerDisplayShowOrderTotal,
+      customer_display_idle_media_type: customerDisplayIdleMediaType,
+      customer_display_idle_media_url: customerDisplayIdleMediaUrl,
       updated_at: new Date().toISOString(),
       ...(routeMenuPatch !== undefined ? { kitchen_route_by_menu: routeMenuPatch } : {}),
       ...(routeCatPatch !== undefined ? { kitchen_route_by_category: routeCatPatch } : {}),

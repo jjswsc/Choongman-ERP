@@ -132,6 +132,12 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     customerDisplayQrPayload: String(s.customerDisplayQrPayload ?? "").trim(),
     customerDisplayShowOrderSummary: s.customerDisplayShowOrderSummary !== false,
     customerDisplayShowOrderTotal: s.customerDisplayShowOrderTotal !== false,
+    customerDisplayIdleMediaType: ((): 'none' | 'image' | 'video' => {
+      const t = String(s.customerDisplayIdleMediaType || 'none').toLowerCase()
+      if (t === 'image' || t === 'video') return t
+      return 'none'
+    })(),
+    customerDisplayIdleMediaUrl: String(s.customerDisplayIdleMediaUrl ?? '').trim(),
     kitchenRouteByMenu: normalizeKitchenRouteMapInput(s.kitchenRouteByMenu),
     kitchenRouteByCategory: normalizeKitchenRouteMapInput(s.kitchenRouteByCategory),
     kitchenRouteByCategoryMain: normalizeKitchenRouteMapInput(s.kitchenRouteByCategoryMain),

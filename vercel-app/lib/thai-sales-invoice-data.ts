@@ -13,7 +13,7 @@ export type ThaiSalesInvoiceLineInput = {
 
 /**
  * 태국 7% VAT 인보이스 HTML용 데이터 (출고 인쇄·미수금 Tax Invoice 공통).
- * documentType은 인쇄물 제목(영문 "Invoice" / "Tax Invoice" 등)으로 넘긴다.
+ * documentType은 인쇄물 제목(영문 "Invoice" / "Tax Invoice/Receipt" 등)으로 넘긴다.
  */
 export function buildThaiSalesInvoiceData(params: {
   documentType: string

@@ -92,7 +92,7 @@ export default function PoPrintPage() {
     return {
       poTitle: acct
         ? taxMode
-          ? t("poAccountingPrintTitleTaxInvoice") || "TAX INVOICE"
+          ? t("poAccountingPrintTitleTaxInvoice") || "TAX INVOICE/RECEIPT"
           : t("poAccountingPrintTitleInvoice") || "INVOICE"
         : t("poTitle") || "PURCHASE ORDER",
       poNo: acct ? t("poAccountingInvoiceNoLabel") || "Invoice No." : t("poNo") || "PO No",
@@ -124,7 +124,7 @@ export default function PoPrintPage() {
       poFormatBadgeExternal: t("poFormatBadgeExternal") || "External format",
       poHeaderBadge: acct
         ? taxMode
-          ? t("poAccountingPrintBadgeTaxInvoice") || "Tax Invoice"
+          ? t("poAccountingPrintBadgeTaxInvoice") || "Tax Invoice/Receipt"
           : approved
             ? t("poAccountingPrintBadgeApproved") || "Approved"
             : t("poAccountingPrintBadgeDraft") || "Draft"

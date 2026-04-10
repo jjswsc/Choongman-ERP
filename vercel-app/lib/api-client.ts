@@ -4764,6 +4764,58 @@ export async function uploadPosMenuImage(params: { file: File }) {
   }
 }
 
+/** 고객화면 평상시 배경 이미지·동영상 (pos-menu-images 버킷, customer-display/ 경로) */
+export async function uploadCustomerDisplayMedia(params: { storeCode: string; file: File }) {
+  const file = params.file
+  const storeCode = String(params.storeCode || '').trim()
+  const pres = await apiFetchWithOffline('/api/uploadCustomerDisplayMedia/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode,
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+    }),
+  })
+  const rawPres = await pres.text()
+  let pjson: { success?: boolean; message?: string; signedUrl?: string; publicUrl?: string }
+  try {
+    pjson = JSON.parse(rawPres) as typeof pjson
+  } catch {
+    const tooLarge =
+      pres.status === 413 ||
+      /413|payload too large|entity too large|request entity too large/i.test(rawPres)
+    return {
+      success: false,
+      message: tooLarge ? POS_MENU_UPLOAD_TOO_LARGE : undefined,
+      url: undefined,
+    }
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return {
+      success: false,
+      message: pjson.message,
+      url: undefined,
+    }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return {
+      success: false,
+      message: t || `Storage 업로드 실패 (${putRes.status})`,
+      url: undefined,
+    }
+  }
+  return {
+    success: true,
+    message: '업로드되었습니다.',
+    url: pjson.publicUrl,
+  }
+}
+
 export async function deletePosMenu(params: { id: string }) {
   const res = await apiFetchWithOffline('/api/deletePosMenu', {
     method: 'POST',
@@ -6101,6 +6153,9 @@ export interface PosPrinterSettings {
   customerDisplayQrPayload?: string
   customerDisplayShowOrderSummary?: boolean
   customerDisplayShowOrderTotal?: boolean
+  /** 평상시 고객화면 배경: 없음 / 이미지 / 동영상 */
+  customerDisplayIdleMediaType?: 'none' | 'image' | 'video'
+  customerDisplayIdleMediaUrl?: string
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -6201,6 +6256,8 @@ export async function savePosPrinterSettings(params: {
   customerDisplayQrPayload?: string
   customerDisplayShowOrderSummary?: boolean
   customerDisplayShowOrderTotal?: boolean
+  customerDisplayIdleMediaType?: 'none' | 'image' | 'video'
+  customerDisplayIdleMediaUrl?: string
 }) {
   const res = await apiFetchWithOffline('/api/savePosPrinterSettings', {
     method: 'POST',

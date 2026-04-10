@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-09T10:56:54.997Z",
+  "generatedAt": "2026-04-10T02:20:51.170Z",
   "entryCount": 716,
   "entries": [
     {
@@ -2230,7 +2230,7 @@
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 168,
+      "line": 170,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
@@ -4204,14 +4204,14 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 284,
+      "line": 286,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1053,
+      "line": 1067,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"

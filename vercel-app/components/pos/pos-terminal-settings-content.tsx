@@ -27,6 +27,10 @@ import {
 import { isOfficeRole } from '@/lib/permissions'
 import { formatPosDateTimeShort } from '@/lib/pos-datetime-locale'
 import { ClipboardCopy, Monitor, Smartphone, RefreshCw, UserX } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+/** 마지막 접속 시각이 이 이내면 "최근 접속" 탭 (나머지는 과거 이력) */
+const DEVICE_RECENT_LAST_SEEN_MS = 7 * 24 * 60 * 60 * 1000
 
 export function PosTerminalSettingsContent() {
   const { auth } = useAuth()
@@ -43,6 +47,7 @@ export function PosTerminalSettingsContent() {
   const [savingLabelToken, setSavingLabelToken] = React.useState<string | null>(null)
   const [labelDrafts, setLabelDrafts] = React.useState<Record<string, string>>({})
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [deviceListTab, setDeviceListTab] = React.useState<'recent' | 'history'>('recent')
 
   const canSearchAll = isOfficeRole(auth?.role || '')
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ''
@@ -154,6 +159,24 @@ export function PosTerminalSettingsContent() {
     }
   }
 
+  const { recentDevices, historyDevices } = React.useMemo(() => {
+    const cutoff = Date.now() - DEVICE_RECENT_LAST_SEEN_MS
+    const recent: PosDeviceItem[] = []
+    const history: PosDeviceItem[] = []
+    for (const d of devices) {
+      const ts = new Date(d.lastSeenAt).getTime()
+      if (Number.isNaN(ts)) {
+        history.push(d)
+        continue
+      }
+      if (ts >= cutoff) recent.push(d)
+      else history.push(d)
+    }
+    return { recentDevices: recent, historyDevices: history }
+  }, [devices])
+
+  const recentDays = Math.round(DEVICE_RECENT_LAST_SEEN_MS / (24 * 60 * 60 * 1000))
+
   const handleSetMain = async (deviceToken: string) => {
     if (!effectiveStore) return
     if (!(await appConfirm(t('posTerminalSetMainConfirm') || '이 기기를 메인 포스로 지정하시겠습니까?'))) return
@@ -215,6 +238,145 @@ export function PosTerminalSettingsContent() {
         }
       })
       .finally(() => setActionToken(null))
+  }
+
+  function renderDeviceRows(list: PosDeviceItem[]) {
+    return list.map((d) => (
+      <tr key={d.deviceToken} className="border-b border-border/50 align-top">
+        <td className="py-2 pr-2">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+            <Input
+              className="h-8 max-w-[11rem] text-xs"
+              value={labelDrafts[d.deviceToken] ?? ''}
+              onChange={(e) =>
+                setLabelDrafts((prev) => ({ ...prev, [d.deviceToken]: e.target.value }))
+              }
+              placeholder={t('posTerminalDeviceDisplayNamePh') || '예: 카운터 1'}
+              maxLength={80}
+              disabled={!!savingLabelToken || !!actionToken}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-8 shrink-0"
+              disabled={
+                !!actionToken ||
+                !!savingLabelToken ||
+                (labelDrafts[d.deviceToken] ?? '') === (d.displayLabel ?? '')
+              }
+              onClick={() => handleSaveDeviceLabel(d.deviceToken)}
+            >
+              {savingLabelToken === d.deviceToken ? '…' : t('posTerminalSaveDeviceLabel') || '이름 저장'}
+            </Button>
+          </div>
+        </td>
+        <td className="py-2 pr-2 text-xs text-muted-foreground max-w-[220px]">
+          {d.clientHint ? (
+            <span className="line-clamp-3 break-words" title={d.clientHint}>
+              {d.clientHint}
+            </span>
+          ) : (
+            <span className="opacity-60">—</span>
+          )}
+        </td>
+        <td className="py-2 pr-2">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="font-mono text-xs" title={d.deviceToken}>
+              {maskToken(d.deviceToken)}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-1.5"
+              onClick={() => handleCopyDeviceId(d.deviceToken)}
+              title={t('posTerminalCopyDeviceId') || '전체 ID 복사'}
+            >
+              <ClipboardCopy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </td>
+        <td className="py-2 pr-2">
+          {d.isMain ? (
+            <span className="inline-flex items-center gap-1 text-primary">
+              <Smartphone className="h-3.5 w-3.5" />
+              {t('posTerminalRoleMain') || '메인'}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">{t('posTerminalRoleOrder') || '주문'}</span>
+          )}
+        </td>
+        <td className="py-2 pr-2 text-muted-foreground whitespace-nowrap">
+          {formatLastSeen(d.lastSeenAt)}
+        </td>
+        <td className="py-2 text-right">
+          <div className="flex justify-end gap-1 flex-wrap">
+            {d.isMain ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!actionToken}
+                onClick={() => handleClearOneMain(d.deviceToken)}
+              >
+                {t('posTerminalUnsetMain') || '메인 해제'}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!actionToken}
+                onClick={() => handleSetMain(d.deviceToken)}
+              >
+                {t('posTerminalSetMain') || '메인으로 지정'}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!!actionToken}
+              onClick={() => handleRevoke(d.deviceToken)}
+              className="text-destructive hover:text-destructive"
+            >
+              <UserX className="h-3.5 w-3.5" />
+              {t('posTerminalRevoke') || '접속 해제'}
+            </Button>
+          </div>
+        </td>
+      </tr>
+    ))
+  }
+
+  function renderDeviceTable(list: PosDeviceItem[]) {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse min-w-[720px]">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-[200px]">
+                {t('posTerminalDeviceDisplayName') || '표시 이름'}
+              </th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground min-w-[160px]">
+                {t('posTerminalDeviceClientHint') || '단말 정보'}
+              </th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground">
+                {t('posTerminalStatusMainDeviceId') || '기기 ID'}
+              </th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground whitespace-nowrap">
+                {t('posTerminalDeviceListRole') || '구분'}
+              </th>
+              <th className="text-left py-2 pr-2 font-medium text-muted-foreground whitespace-nowrap">
+                {t('posTerminalDeviceListLastSeen') || '마지막 접속'}
+              </th>
+              <th className="text-right py-2 font-medium text-muted-foreground">
+                {t('posTerminalDeviceListActions') || '작업'}
+              </th>
+            </tr>
+          </thead>
+          <tbody>{renderDeviceRows(list)}</tbody>
+        </table>
+      </div>
+    )
   }
 
   return (
@@ -340,140 +502,55 @@ export function PosTerminalSettingsContent() {
               {t('posTerminalDeviceListNameHint') ||
                 '표시 이름은 매장에서만 저장되며, 단말 정보는 기기가 터미널에 접속할 때 자동으로 갱신됩니다.'}
             </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse min-w-[720px]">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 pr-2 font-medium text-muted-foreground w-[200px]">
-                      {t('posTerminalDeviceDisplayName') || '표시 이름'}
-                    </th>
-                    <th className="text-left py-2 pr-2 font-medium text-muted-foreground min-w-[160px]">
-                      {t('posTerminalDeviceClientHint') || '단말 정보'}
-                    </th>
-                    <th className="text-left py-2 pr-2 font-medium text-muted-foreground">
-                      {t('posTerminalStatusMainDeviceId') || '기기 ID'}
-                    </th>
-                    <th className="text-left py-2 pr-2 font-medium text-muted-foreground whitespace-nowrap">
-                      {t('posTerminalDeviceListRole') || '구분'}
-                    </th>
-                    <th className="text-left py-2 pr-2 font-medium text-muted-foreground whitespace-nowrap">
-                      {t('posTerminalDeviceListLastSeen') || '마지막 접속'}
-                    </th>
-                    <th className="text-right py-2 font-medium text-muted-foreground">
-                      {t('posTerminalDeviceListActions') || '작업'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {devices.map((d) => (
-                    <tr key={d.deviceToken} className="border-b border-border/50 align-top">
-                      <td className="py-2 pr-2">
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
-                          <Input
-                            className="h-8 max-w-[11rem] text-xs"
-                            value={labelDrafts[d.deviceToken] ?? ''}
-                            onChange={(e) =>
-                              setLabelDrafts((prev) => ({ ...prev, [d.deviceToken]: e.target.value }))
-                            }
-                            placeholder={t('posTerminalDeviceDisplayNamePh') || '예: 카운터 1'}
-                            maxLength={80}
-                            disabled={!!savingLabelToken || !!actionToken}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 shrink-0"
-                            disabled={
-                              !!actionToken ||
-                              !!savingLabelToken ||
-                              (labelDrafts[d.deviceToken] ?? '') === (d.displayLabel ?? '')
-                            }
-                            onClick={() => handleSaveDeviceLabel(d.deviceToken)}
-                          >
-                            {savingLabelToken === d.deviceToken ? '…' : t('posTerminalSaveDeviceLabel') || '이름 저장'}
-                          </Button>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-2 text-xs text-muted-foreground max-w-[220px]">
-                        {d.clientHint ? (
-                          <span className="line-clamp-3 break-words" title={d.clientHint}>
-                            {d.clientHint}
-                          </span>
-                        ) : (
-                          <span className="opacity-60">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-2">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="font-mono text-xs" title={d.deviceToken}>
-                            {maskToken(d.deviceToken)}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-1.5"
-                            onClick={() => handleCopyDeviceId(d.deviceToken)}
-                            title={t('posTerminalCopyDeviceId') || '전체 ID 복사'}
-                          >
-                            <ClipboardCopy className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-2">
-                        {d.isMain ? (
-                          <span className="inline-flex items-center gap-1 text-primary">
-                            <Smartphone className="h-3.5 w-3.5" />
-                            {t('posTerminalRoleMain') || '메인'}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {t('posTerminalRoleOrder') || '주문'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-2 text-muted-foreground whitespace-nowrap">
-                        {formatLastSeen(d.lastSeenAt)}
-                      </td>
-                      <td className="py-2 text-right">
-                        <div className="flex justify-end gap-1 flex-wrap">
-                          {d.isMain ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={!!actionToken}
-                              onClick={() => handleClearOneMain(d.deviceToken)}
-                            >
-                              {t('posTerminalUnsetMain') || '메인 해제'}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={!!actionToken}
-                              onClick={() => handleSetMain(d.deviceToken)}
-                            >
-                              {t('posTerminalSetMain') || '메인으로 지정'}
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={!!actionToken}
-                            onClick={() => handleRevoke(d.deviceToken)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <UserX className="h-3.5 w-3.5" />
-                            {t('posTerminalRevoke') || '접속 해제'}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Tabs
+              value={deviceListTab}
+              onValueChange={(v) => {
+                if (v === 'recent' || v === 'history') setDeviceListTab(v)
+              }}
+              className="w-full"
+            >
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="recent" className="text-xs sm:text-sm">
+                  {t('posTerminalDeviceTabRecent') || '최근 접속'}{' '}
+                  <span className="text-muted-foreground">({recentDevices.length})</span>
+                </TabsTrigger>
+                <TabsTrigger value="history" className="text-xs sm:text-sm">
+                  {t('posTerminalDeviceTabHistory') || '과거 이력'}{' '}
+                  <span className="text-muted-foreground">({historyDevices.length})</span>
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="recent" className="mt-3 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {(t('posTerminalDeviceRecentHint') || '마지막 접속이 {{days}}일 이내인 기기(하트비트 기준)입니다.').replace(
+                    '{{days}}',
+                    String(recentDays)
+                  )}
+                </p>
+                {recentDevices.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t('posTerminalDeviceRecentEmpty') ||
+                      '최근 기간에 접속 기록이 있는 기기가 없습니다. 과거 이력 탭을 확인하거나 터미널을 연 기기가 있는지 확인하세요.'}
+                  </p>
+                ) : (
+                  renderDeviceTable(recentDevices)
+                )}
+              </TabsContent>
+              <TabsContent value="history" className="mt-3 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {(t('posTerminalDeviceHistoryHint') || '{{days}}일보다 오래 전에 마지막 접속이 있었던 기기입니다.').replace(
+                    '{{days}}',
+                    String(recentDays)
+                  )}
+                </p>
+                {historyDevices.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t('posTerminalDeviceHistoryEmpty') || '과거 이력에 해당하는 기기가 없습니다.'}
+                  </p>
+                ) : (
+                  renderDeviceTable(historyDevices)
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </div>

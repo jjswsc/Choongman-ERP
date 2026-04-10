@@ -709,6 +709,8 @@ export default function PosPrintersPage() {
           "customerDisplayTheme",
           "customerDisplayDefaultState",
           "customerDisplayIdleMessage",
+          "customerDisplayIdleMediaType",
+          "customerDisplayIdleMediaUrl",
           "customerDisplayPaymentMessage",
           "customerDisplayQrPayload",
           "customerDisplayShowOrderSummary",

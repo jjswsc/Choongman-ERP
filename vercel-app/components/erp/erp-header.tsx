@@ -70,6 +70,11 @@ export function ErpHeader() {
   }, [t])
   const autoTranslateLabel = lang === "ko" ? "자동번역" : "Auto translate"
 
+  const aiCenterPrefillQ = useMemo(() => {
+    const path = pathname || "/admin"
+    return t("aiCenterHeaderPrefill").replace(/\{\{path\}\}/g, path)
+  }, [pathname, t])
+
   // ERP 내 이동 시 이전/현재 경로 저장 (뒤로가기용)
   useEffect(() => {
     if (typeof window === "undefined" || !pathname || isLoginPage) return
@@ -191,9 +196,9 @@ export function ErpHeader() {
         <Separator orientation="vertical" className="mx-1 h-5" />
         {/* Search */}
         <Button variant="ghost" size="icon" asChild className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Link href={`/admin/ai-center?intent=qa&q=${encodeURIComponent(`${pathname || "/admin"} 화면 관련 질문`)}`}>
+          <Link href={`/admin/ai-center?intent=qa&q=${encodeURIComponent(aiCenterPrefillQ)}`}>
             <Bot className="h-4 w-4" />
-            <span className="sr-only">AI 센터</span>
+            <span className="sr-only">{t("aiCenter")}</span>
           </Link>
         </Button>
         <Button

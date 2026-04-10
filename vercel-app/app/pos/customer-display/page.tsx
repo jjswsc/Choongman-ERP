@@ -25,6 +25,8 @@ export default function PosCustomerDisplayPage() {
   const [paymentMessage, setPaymentMessage] = React.useState("")
   const [showOrderSummary, setShowOrderSummary] = React.useState(true)
   const [showOrderTotal, setShowOrderTotal] = React.useState(true)
+  const [settingsIdleMediaType, setSettingsIdleMediaType] = React.useState<"none" | "image" | "video">("none")
+  const [settingsIdleMediaUrl, setSettingsIdleMediaUrl] = React.useState("")
 
   React.useEffect(() => {
     if (!storeCode) return
@@ -36,6 +38,9 @@ export default function PosCustomerDisplayPage() {
       setPaymentMessage(String(s.customerDisplayPaymentMessage ?? "").trim())
       setShowOrderSummary(s.customerDisplayShowOrderSummary !== false)
       setShowOrderTotal(s.customerDisplayShowOrderTotal !== false)
+      const mt = String(s.customerDisplayIdleMediaType || "none").toLowerCase()
+      setSettingsIdleMediaType(mt === "image" ? "image" : mt === "video" ? "video" : "none")
+      setSettingsIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? "").trim())
     })
     return () => {
       alive = false
@@ -59,6 +64,17 @@ export default function PosCustomerDisplayPage() {
   }, [storeCode])
 
   const current = state?.kind || "idle"
+  const resolvedIdleMedia = React.useMemo(() => {
+    const mtRaw = state?.idleMediaType ?? settingsIdleMediaType
+    const mt = mtRaw === "image" || mtRaw === "video" ? mtRaw : "none"
+    const url = String(state?.idleMediaUrl ?? settingsIdleMediaUrl ?? "").trim()
+    return { type: mt, url }
+  }, [state?.idleMediaType, state?.idleMediaUrl, settingsIdleMediaType, settingsIdleMediaUrl])
+  const showIdleBackdrop =
+    current === "idle" &&
+    (resolvedIdleMedia.type === "image" || resolvedIdleMedia.type === "video") &&
+    Boolean(resolvedIdleMedia.url)
+
   const formatFeeLabel = React.useCallback(
     (base: string, rate?: number, mode?: "included" | "separate") => {
       const r = Math.max(0, Number(rate || 0))
@@ -88,11 +104,35 @@ export default function PosCustomerDisplayPage() {
         </div>
 
         {current === "idle" ? (
-          <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <p className="text-4xl font-semibold">
-              {state?.message || idleMessage || (t("posCustomerIdleDefault") || "환영합니다")}
-            </p>
-            <p className="mt-3 text-lg opacity-80">{t("posCustomerIdleSub") || "주문을 시작해 주세요."}</p>
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl">
+            {showIdleBackdrop ? (
+              <>
+                {resolvedIdleMedia.type === "video" ? (
+                  <video
+                    src={resolvedIdleMedia.url}
+                    className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-50"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={resolvedIdleMedia.url}
+                    alt=""
+                    className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-50"
+                  />
+                )}
+                <div className="absolute inset-0 bg-black/35" aria-hidden />
+              </>
+            ) : null}
+            <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 text-center">
+              <p className="text-4xl font-semibold drop-shadow">
+                {state?.message || idleMessage || (t("posCustomerIdleDefault") || "환영합니다")}
+              </p>
+              <p className="mt-3 text-lg opacity-90 drop-shadow">{t("posCustomerIdleSub") || "주문을 시작해 주세요."}</p>
+            </div>
           </div>
         ) : null}
 

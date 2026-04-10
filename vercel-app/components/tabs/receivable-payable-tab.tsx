@@ -163,7 +163,7 @@ export function ReceivablePayableTab() {
             : `IV-ORDER-${orderId}`)
         const dateStr = (row.trans_date || "").slice(0, 10) || new Date().toISOString().slice(0, 10)
         const data: InvoiceData = buildThaiSalesInvoiceData({
-          documentType: "Tax Invoice",
+          documentType: "Tax Invoice/Receipt",
           documentNo: docNo,
           issueDate: dateStr,
           dueDate: dateStr,
@@ -1157,8 +1157,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             size="sm"
                                             className="h-8 w-8 p-0 shrink-0"
                                             disabled={taxInvoiceLoadingKey != null}
-                                            title={tt("recTaxInvoicePrintTitle", "Tax Invoice 인쇄")}
-                                            aria-label={tt("recTaxInvoicePrintTitle", "Tax Invoice 인쇄")}
+                                            title={tt("recTaxInvoicePrintTitle", "Tax Invoice/Receipt 인쇄")}
+                                            aria-label={tt("recTaxInvoicePrintTitle", "Tax Invoice/Receipt 인쇄")}
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               void handleTaxInvoicePrint(row, item.storeName || "")

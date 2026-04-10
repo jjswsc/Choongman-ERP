@@ -223,6 +223,8 @@ export default function PosTerminalPage() {
   const [customerDisplayQrPayload, setCustomerDisplayQrPayload] = useState('')
   const [customerDisplayShowOrderSummary, setCustomerDisplayShowOrderSummary] = useState(true)
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
+  const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
+  const [customerDisplayIdleMediaUrl, setCustomerDisplayIdleMediaUrl] = useState('')
   /** 기존 주문 결제 시 영수증 orderNo (pendingPayRequest/pendingTakeoutPayRequest에 있던 값) */
   const [pendingReceiptOrderNo, setPendingReceiptOrderNo] = useState<string | null>(null)
   const [todaySales, setTodaySales] = useState<{
@@ -392,6 +394,9 @@ export default function PosTerminalPage() {
         setCustomerDisplayQrPayload(String(s.customerDisplayQrPayload ?? '').trim())
         setCustomerDisplayShowOrderSummary(s.customerDisplayShowOrderSummary !== false)
         setCustomerDisplayShowOrderTotal(s.customerDisplayShowOrderTotal !== false)
+        const imt = String(s.customerDisplayIdleMediaType || 'none').toLowerCase()
+        setCustomerDisplayIdleMediaType(imt === 'image' ? 'image' : imt === 'video' ? 'video' : 'none')
+        setCustomerDisplayIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? '').trim())
       })
       .catch(() => {
         setCookingRules({
@@ -454,6 +459,8 @@ export default function PosTerminalPage() {
         setCustomerDisplayQrPayload('')
         setCustomerDisplayShowOrderSummary(true)
         setCustomerDisplayShowOrderTotal(true)
+        setCustomerDisplayIdleMediaType('none')
+        setCustomerDisplayIdleMediaUrl('')
       })
     getPosMenus()
       .then(applyPosMenusList)
@@ -629,6 +636,11 @@ export default function PosTerminalPage() {
       updatedAt: new Date().toISOString(),
       showOrderSummary: customerDisplayShowOrderSummary,
       showOrderTotal: customerDisplayShowOrderTotal,
+      idleMediaType: customerDisplayIdleMediaType,
+      idleMediaUrl:
+        customerDisplayIdleMediaType !== 'none' && customerDisplayIdleMediaUrl.trim()
+          ? customerDisplayIdleMediaUrl.trim()
+          : undefined,
     }
     const payload: PosCustomerDisplayPayload =
       hasPendingPaymentFlow
@@ -679,6 +691,8 @@ export default function PosTerminalPage() {
     customerDisplayDefaultState,
     customerDisplayQrPayload,
     customerDisplayIdleMessage,
+    customerDisplayIdleMediaType,
+    customerDisplayIdleMediaUrl,
     t,
   ])
 
