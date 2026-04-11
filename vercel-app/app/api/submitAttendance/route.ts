@@ -5,6 +5,8 @@ import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 import {
   attendanceStoreIlikeFragment,
   attendanceStoreNamePostgrestFilter,
+  getOpenBreakStartMs,
+  hasUnclosedClockWorkSession,
 } from '@/lib/attendance-utils'
 const TZ = 'Asia/Bangkok'
 
@@ -73,29 +75,6 @@ function safeMinutes(val: number): number {
   const n = Number(val)
   if (typeof n !== 'number' || isNaN(n) || !isFinite(n)) return 0
   return Math.floor(n)
-}
-
-function findLatestUnclosedStart(
-  logs: { log_at?: string; log_type?: string }[] | null | undefined,
-  startType: '출근' | '휴식시작',
-  endType: '퇴근' | '휴식종료'
-): { log_at?: string; log_type?: string } | null {
-  let endCount = 0
-  for (const r of logs || []) {
-    const t = String(r.log_type || '').trim()
-    if (t === endType) {
-      endCount += 1
-      continue
-    }
-    if (t === startType) {
-      if (endCount > 0) {
-        endCount -= 1
-      } else {
-        return r
-      }
-    }
-  }
-  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -224,8 +203,7 @@ export async function POST(request: NextRequest) {
             { headers }
           )
         }
-        const openShiftStart = findLatestUnclosedStart(logs, '출근', '퇴근')
-        if (openShiftStart) {
+        if (hasUnclosedClockWorkSession(logs)) {
           return NextResponse.json(
             {
               success: false,
@@ -499,9 +477,9 @@ export async function POST(request: NextRequest) {
         limit: 50,
         select: 'log_at,log_type',
       })) as { log_at?: string; log_type?: string }[]
-      const openBreakStart = findLatestUnclosedStart(allLogs, '휴식시작', '휴식종료')
-      if (openBreakStart?.log_at) {
-        const actualStart = new Date(openBreakStart.log_at)
+      const openBreakMs = getOpenBreakStartMs(allLogs)
+      if (openBreakMs != null) {
+        const actualStart = new Date(openBreakMs)
         breakMin = isNaN(actualStart.getTime())
           ? 0
           : safeMinutes(

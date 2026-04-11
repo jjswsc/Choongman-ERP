@@ -6,6 +6,40 @@ import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 export const ATTENDANCE_TZ = 'Asia/Bangkok'
 
+type AttendanceLogLite = { log_at?: string; log_type?: string }
+
+/**
+ * 출근·퇴근만으로 미종료 근무 여부.
+ * `attendance_logs`를 `log_at.desc`로 가져와도 올바름(기존: 최신순 배열에 스택 순회 시 오탐 가능).
+ */
+export function hasUnclosedClockWorkSession(logs: AttendanceLogLite[] | null | undefined): boolean {
+  let maxIn = 0
+  let maxOut = 0
+  for (const r of logs || []) {
+    const t = String(r.log_type || '').trim()
+    const tm = r.log_at ? new Date(r.log_at).getTime() : NaN
+    if (!Number.isFinite(tm)) continue
+    if (t === '출근') maxIn = Math.max(maxIn, tm)
+    else if (t === '퇴근') maxOut = Math.max(maxOut, tm)
+  }
+  return maxIn > maxOut
+}
+
+/** 미종료 휴식이면 최신 휴식시작 시각(ms), 없으면 null */
+export function getOpenBreakStartMs(logs: AttendanceLogLite[] | null | undefined): number | null {
+  let maxBs = 0
+  let maxBe = 0
+  for (const r of logs || []) {
+    const t = String(r.log_type || '').trim()
+    const tm = r.log_at ? new Date(r.log_at).getTime() : NaN
+    if (!Number.isFinite(tm)) continue
+    if (t === '휴식시작') maxBs = Math.max(maxBs, tm)
+    else if (t === '휴식종료') maxBe = Math.max(maxBe, tm)
+  }
+  if (maxBs <= maxBe) return null
+  return maxBs
+}
+
 /**
  * PostgREST `store_name=ilike` 값(인코딩 전): *부분일치* — "Union Mall" ↔ "CM Union Mall" 등.
  * submitAttendance·모바일 근태와 동일 취지.
