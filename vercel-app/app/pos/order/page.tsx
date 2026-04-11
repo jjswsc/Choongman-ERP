@@ -1168,8 +1168,8 @@ export default function PosOrderPage() {
         </div>
       </div>
 
-      {/* 장바구니: 1024 이하 260px, 이상 320px (Oll star 15dlscl 최적화) */}
-      <div className="flex w-[260px] min-[1025px]:w-80 shrink-0 flex-col border-l border-slate-200 bg-white shadow-lg">
+      {/* 장바구니: 1024 이하 240px, 이상 288px (태블릿 가로 여백 확보) */}
+      <div className="flex w-[240px] min-[1025px]:w-72 shrink-0 flex-col border-l border-slate-200 bg-white shadow-lg">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
           <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800">
             <ShoppingCart className="h-4 w-4" />

@@ -1,8 +1,8 @@
--- SaaS 전용 신규 Supabase 프로젝트 초기 스키마 (빈 프로젝트용)
+-- SaaS 기본 스키마 (코어 테이블)
 -- 실행 순서:
--- 1) 이 파일(saas_base_schema.sql)
--- 2) saas_tenant_bootstrap.sql
--- 3) 필요 운영 SQL/정책
+-- 1) saas_base_schema.sql                (코어 테이블/인덱스/트리거)
+-- 2) saas_tenant_bootstrap.sql           (기존 DB 보강 + 선택 시드)
+-- 3) saas_admin_control_plane.sql        (요금제/정책/디바이스/RLS)
 
 create table if not exists public.tenants (
   id text primary key,
@@ -21,15 +21,13 @@ create table if not exists public.erp_stores (
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists uq_erp_stores_tenant_store_name
-  on public.erp_stores (coalesce(tenant_id, ''), store_name);
-
 create table if not exists public.employees (
   id bigserial primary key,
   tenant_id text,
   company text,
   store text not null,
   name text not null,
+  nick text,
   password text not null,
   role text,
   job text,
@@ -40,11 +38,6 @@ create table if not exists public.employees (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_employees_tenant_id on public.employees (tenant_id);
-create index if not exists idx_employees_store on public.employees (store);
-create index if not exists idx_employees_name on public.employees (name);
-create index if not exists idx_employees_company on public.employees (company);
-
 create table if not exists public.vendors (
   id bigserial primary key,
   tenant_id text,
@@ -53,8 +46,6 @@ create table if not exists public.vendors (
   type text,
   created_at timestamptz not null default now()
 );
-
-create index if not exists idx_vendors_tenant_id on public.vendors (tenant_id);
 
 create table if not exists public.pos_orders (
   id bigserial primary key,
@@ -68,11 +59,27 @@ create table if not exists public.pos_orders (
   updated_at timestamptz not null default now()
 );
 
+-- 기존 스키마 호환
+alter table if exists public.employees add column if not exists tenant_id text;
+alter table if exists public.employees add column if not exists company text;
+alter table if exists public.employees add column if not exists nick text;
+alter table if exists public.erp_stores add column if not exists tenant_id text;
+alter table if exists public.vendors add column if not exists tenant_id text;
+alter table if exists public.pos_orders add column if not exists tenant_id text;
+
+create unique index if not exists uq_erp_stores_tenant_store_name
+  on public.erp_stores (coalesce(tenant_id, ''), store_name);
+
+create index if not exists idx_employees_tenant_id on public.employees (tenant_id);
+create index if not exists idx_employees_store on public.employees (store);
+create index if not exists idx_employees_name on public.employees (name);
+create index if not exists idx_employees_company on public.employees (company);
+create index if not exists idx_erp_stores_tenant_id on public.erp_stores (tenant_id);
+create index if not exists idx_vendors_tenant_id on public.vendors (tenant_id);
 create index if not exists idx_pos_orders_tenant_id on public.pos_orders (tenant_id);
 create index if not exists idx_pos_orders_store_name on public.pos_orders (store_name);
 create index if not exists idx_pos_orders_created_at on public.pos_orders (created_at desc);
 
--- updated_at 자동 갱신 트리거
 create or replace function public.set_row_updated_at()
 returns trigger
 language plpgsql

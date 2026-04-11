@@ -1,5 +1,8 @@
--- SaaS 멀티테넌트 1차 부트스트랩
--- 적용 전 백업/스테이징 검증 필수
+-- SaaS tenant bootstrap (기존 DB 전환 + 선택 시드)
+-- 전제: saas_base_schema.sql 실행 후 사용
+-- 목적:
+-- 1) 기존 DB에 tenant 컬럼/인덱스 누락 시 보강
+-- 2) 최소 1개 테넌트/본사 매장/관리자 계정 샘플 생성(선택)
 
 create table if not exists public.tenants (
   id text primary key,
@@ -14,6 +17,7 @@ alter table if exists public.employees add column if not exists company text;
 alter table if exists public.erp_stores add column if not exists tenant_id text;
 alter table if exists public.vendors add column if not exists tenant_id text;
 alter table if exists public.pos_orders add column if not exists tenant_id text;
+alter table if exists public.employees add column if not exists nick text;
 
 do $$
 begin
@@ -31,7 +35,70 @@ begin
   end if;
 end $$;
 
--- RLS가 이미 활성화된 테이블은 tenant_id/company 조건으로 정책을 좁혀야 한다.
--- 예시:
--- create policy employees_tenant_isolation on public.employees
--- for select using (tenant_id = current_setting('request.jwt.claim.tenantId', true));
+-- ---------------------------------------------------------
+-- 선택 시드(필요 시 값만 바꿔서 실행)
+-- ---------------------------------------------------------
+with cfg as (
+  select
+    'omnifoodtech-demo'::text as tenant_id,
+    'OmniFoodTech'::text as company_name,
+    '본사'::text as store_name,
+    'admin'::text as admin_name,
+    '1234'::text as admin_password
+)
+insert into public.tenants (id, company_name, supabase_project_id, is_active)
+select tenant_id, company_name, 'default', true
+from cfg
+on conflict (id) do update
+set
+  company_name = excluded.company_name,
+  is_active = excluded.is_active;
+
+with cfg as (
+  select
+    'omnifoodtech-demo'::text as tenant_id,
+    '본사'::text as store_name
+)
+insert into public.erp_stores (tenant_id, store_name, store_code, is_active)
+select tenant_id, store_name, 'HQ', true
+from cfg
+on conflict ((coalesce(tenant_id, '')), store_name) do update
+set
+  is_active = excluded.is_active;
+
+with cfg as (
+  select
+    'omnifoodtech-demo'::text as tenant_id,
+    'OmniFoodTech'::text as company_name,
+    '본사'::text as store_name,
+    'admin'::text as admin_name
+)
+delete from public.employees e
+using cfg
+where coalesce(e.tenant_id, '') = cfg.tenant_id
+  and coalesce(e.company, '') = cfg.company_name
+  and e.store = cfg.store_name
+  and e.name = cfg.admin_name;
+
+with cfg as (
+  select
+    'omnifoodtech-demo'::text as tenant_id,
+    'OmniFoodTech'::text as company_name,
+    '본사'::text as store_name,
+    'admin'::text as admin_name,
+    '1234'::text as admin_password
+)
+insert into public.employees
+  (tenant_id, company, store, name, password, role, job)
+select
+  tenant_id,
+  company_name,
+  store_name,
+  admin_name,
+  admin_password,
+  'officer',
+  'officer'
+from cfg;
+
+-- 다음 단계:
+-- saas_admin_control_plane.sql 실행

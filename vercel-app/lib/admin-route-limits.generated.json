@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-10T09:47:38.000Z",
-  "entryCount": 716,
+  "generatedAt": "2026-04-11T12:17:40.787Z",
+  "entryCount": 726,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -1579,7 +1579,7 @@
     },
     {
       "path": "app/api/getLoginData/route.ts",
-      "line": 59,
+      "line": 37,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getLoginData"
@@ -2467,6 +2467,83 @@
       "apiLabel": "getReceivablePayableSummary"
     },
     {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 246,
+      "kind": "limit",
+      "value": 300,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 253,
+      "kind": "limit",
+      "value": 400,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 254,
+      "kind": "limit",
+      "value": 100,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 255,
+      "kind": "limit",
+      "value": 100,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 256,
+      "kind": "limit",
+      "value": 400,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 257,
+      "kind": "limit",
+      "value": 400,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 258,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 259,
+      "kind": "limit",
+      "value": 4000,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 260,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 261,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
+      "path": "app/api/getSaasTenantSettings/route.ts",
+      "line": 262,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getSaasTenantSettings"
+    },
+    {
       "path": "app/api/getSentNotices/route.ts",
       "line": 81,
       "kind": "limit",
@@ -2671,14 +2748,28 @@
     },
     {
       "path": "app/api/getTodaySchedule/route.ts",
-      "line": 51,
+      "line": 44,
       "kind": "limit",
       "value": 100,
       "apiLabel": "getTodaySchedule"
     },
     {
       "path": "app/api/getTodaySchedule/route.ts",
-      "line": 54,
+      "line": 47,
+      "kind": "limit",
+      "value": 100,
+      "apiLabel": "getTodaySchedule"
+    },
+    {
+      "path": "app/api/getTodaySchedule/route.ts",
+      "line": 58,
+      "kind": "limit",
+      "value": 100,
+      "apiLabel": "getTodaySchedule"
+    },
+    {
+      "path": "app/api/getTodaySchedule/route.ts",
+      "line": 61,
       "kind": "limit",
       "value": 100,
       "apiLabel": "getTodaySchedule"
@@ -2687,26 +2778,12 @@
       "path": "app/api/getTodaySchedule/route.ts",
       "line": 65,
       "kind": "limit",
-      "value": 100,
-      "apiLabel": "getTodaySchedule"
-    },
-    {
-      "path": "app/api/getTodaySchedule/route.ts",
-      "line": 68,
-      "kind": "limit",
-      "value": 100,
-      "apiLabel": "getTodaySchedule"
-    },
-    {
-      "path": "app/api/getTodaySchedule/route.ts",
-      "line": 72,
-      "kind": "limit",
       "value": 500,
       "apiLabel": "getTodaySchedule"
     },
     {
       "path": "app/api/getTodaySchedule/route.ts",
-      "line": 99,
+      "line": 92,
       "kind": "limit",
       "value": 100,
       "apiLabel": "getTodaySchedule"
@@ -2755,6 +2832,13 @@
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
+      "line": 120,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getWeeklySchedule"
+    },
+    {
+      "path": "app/api/getWeeklySchedule/route.ts",
       "line": 123,
       "kind": "limit",
       "value": 500,
@@ -2762,21 +2846,14 @@
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 126,
-      "kind": "limit",
-      "value": 500,
-      "apiLabel": "getWeeklySchedule"
-    },
-    {
-      "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 141,
+      "line": 138,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getWeeklySchedule"
     },
     {
       "path": "app/api/getWeeklySchedule/route.ts",
-      "line": 219,
+      "line": 231,
       "kind": "limit",
       "value": 200,
       "apiLabel": "getWeeklySchedule"
@@ -2871,27 +2948,6 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "linkpos/pay"
-    },
-    {
-      "path": "app/api/loginCheck/route.ts",
-      "line": 49,
-      "kind": "limit",
-      "value": 120,
-      "apiLabel": "loginCheck"
-    },
-    {
-      "path": "app/api/loginCheck/route.ts",
-      "line": 55,
-      "kind": "limit",
-      "value": 120,
-      "apiLabel": "loginCheck"
-    },
-    {
-      "path": "app/api/loginCheck/route.ts",
-      "line": 60,
-      "kind": "limit",
-      "value": 120,
-      "apiLabel": "loginCheck"
     },
     {
       "path": "app/api/marketingAds/route.ts",
@@ -3924,70 +3980,70 @@
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 123,
+      "line": 102,
       "kind": "limit",
       "value": 1,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 139,
+      "line": 118,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 163,
+      "line": 142,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 171,
+      "line": 150,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 200,
+      "line": 179,
       "kind": "limit",
       "value": 100,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 315,
+      "line": 293,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 417,
+      "line": 395,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 429,
+      "line": 407,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 443,
+      "line": 421,
       "kind": "limit",
       "value": 5,
       "apiLabel": "submitAttendance"
     },
     {
       "path": "app/api/submitAttendance/route.ts",
-      "line": 499,
+      "line": 477,
       "kind": "limit",
       "value": 50,
       "apiLabel": "submitAttendance"
@@ -4502,6 +4558,20 @@
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:direct-settlement-server"
+    },
+    {
+      "path": "lib/employees-compat.ts",
+      "line": 77,
+      "kind": "limit",
+      "value": 120,
+      "apiLabel": "lib:employees-compat"
+    },
+    {
+      "path": "lib/employees-compat.ts",
+      "line": 83,
+      "kind": "limit",
+      "value": 120,
+      "apiLabel": "lib:employees-compat"
     },
     {
       "path": "lib/erp-store-master.ts",

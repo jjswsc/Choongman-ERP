@@ -607,7 +607,7 @@ export default function PosTerminalPage() {
   }, [customerDisplayOrderTotal, pricingAdjustments])
   const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
   /** 1023px 이하(세로 태블릿/모바일)에서만 하단 카트로 전환 */
-  const isNarrowViewport = useMediaQuery('(max-width: 1023px)')
+  const isNarrowViewport = useMediaQuery('(max-width: 920px)')
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
@@ -2888,7 +2888,7 @@ export default function PosTerminalPage() {
                 'flex-shrink-0 overflow-hidden flex flex-col border-border bg-card',
                 isNarrowViewport
                   ? 'border-t min-h-[180px] max-h-[50vh]'
-                  : 'w-80 border-l min-h-0'
+                  : 'w-72 border-l min-h-0'
               )}
             >
               {panelContent}

@@ -32,7 +32,7 @@ export function POSMainGrid({
         "grid min-h-0 min-w-0 flex-1 grid-cols-1 items-stretch gap-2 px-2 pb-2 pt-2 min-[768px]:grid-cols-2 min-[768px]:gap-3 min-[768px]:px-3 min-[768px]:pb-3 min-[768px]:pt-3",
         "min-[1025px]:gap-4 min-[1025px]:px-4 min-[1025px]:pb-4 min-[1025px]:pt-4",
         /* overflow-x-hidden 은 떠 있는 라벨·세로 클리핑 이슈 유발 → 세로 스크롤만 */
-        "overflow-y-auto overflow-x-visible"
+        "overflow-y-auto overflow-x-visible overscroll-y-contain [-webkit-overflow-scrolling:touch] touch-pan-y"
       )}
     >
       {orderTiles.length > 0 && (

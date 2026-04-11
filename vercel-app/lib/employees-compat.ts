@@ -12,6 +12,15 @@ export function isMissingEmployeesCompanyColumn(err: unknown): boolean {
 const EMPLOYEES_LOGIN_LIST_WITH_COMPANY =
   'company,store,name,nick,job,role,resign_date' as const
 const EMPLOYEES_LOGIN_LIST_NO_COMPANY = 'store,name,nick,job,role,resign_date' as const
+/** nick 없는 SaaS 최소 스키마용 */
+const EMPLOYEES_LOGIN_LIST_WITH_COMPANY_NO_NICK =
+  'company,store,name,job,role,resign_date' as const
+const EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK = 'store,name,job,role,resign_date' as const
+
+function isMissingEmployeesNickColumn(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err)
+  return /42703|column\s+employees\.nick|\.nick\s+does not exist|nick.*does not exist/i.test(m)
+}
 
 export async function supabaseSelectEmployeesForLoginList(): Promise<unknown> {
   try {
@@ -21,10 +30,36 @@ export async function supabaseSelectEmployeesForLoginList(): Promise<unknown> {
     })
   } catch (e) {
     if (isMissingEmployeesCompanyColumn(e)) {
-      return await supabaseSelect('employees', {
-        order: 'id.asc',
-        select: EMPLOYEES_LOGIN_LIST_NO_COMPANY,
-      })
+      try {
+        return await supabaseSelect('employees', {
+          order: 'id.asc',
+          select: EMPLOYEES_LOGIN_LIST_NO_COMPANY,
+        })
+      } catch (e2) {
+        if (isMissingEmployeesNickColumn(e2)) {
+          return await supabaseSelect('employees', {
+            order: 'id.asc',
+            select: EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK,
+          })
+        }
+        throw e2
+      }
+    }
+    if (isMissingEmployeesNickColumn(e)) {
+      try {
+        return await supabaseSelect('employees', {
+          order: 'id.asc',
+          select: EMPLOYEES_LOGIN_LIST_WITH_COMPANY_NO_NICK,
+        })
+      } catch (e2) {
+        if (isMissingEmployeesCompanyColumn(e2)) {
+          return await supabaseSelect('employees', {
+            order: 'id.asc',
+            select: EMPLOYEES_LOGIN_LIST_NO_COMPANY_NO_NICK,
+          })
+        }
+        throw e2
+      }
     }
     throw e
   }

@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { canonicalAreaFromText, primaryAreaForDisplay } from '@/lib/schedule-area'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-function parseAreaFromMemo(memo: string | null | undefined): string {
-  const m = String(memo || '').trim().toLowerCase()
-  if (m.indexOf('kitchen') !== -1 || m.indexOf('주방') !== -1) return 'Kitchen'
-  if (m.indexOf('office') !== -1 || m.indexOf('오피스') !== -1) return 'Office'
-  if (m.indexOf('service') !== -1 || m.indexOf('서비스') !== -1) return 'Service'
-  return 'Service'
 }
 
 function formatTime(v: string | null | undefined): string {
@@ -105,7 +98,7 @@ export async function GET(request: NextRequest) {
       const key = `${dateStr}|${storeVal}|${nameVal}`
       if (scheduleKeySet.has(key)) continue
       const type = String(lr.type || '').trim() || '휴가'
-      const area = parseAreaFromMemo(storeNameToJob[storeVal + '|' + nameVal] || '')
+      const area = canonicalAreaFromText(storeNameToJob[storeVal + '|' + nameVal] || '')
       leaveMerged.push({
         date: dateStr,
         store: storeVal,
@@ -122,11 +115,13 @@ export async function GET(request: NextRequest) {
     }
 
     const list = (scheduleRows || []).map((r) => {
-      const area = parseAreaFromMemo(r.memo)
+      const st = String(r.store_name || '').trim()
+      const nm = String(r.name || '').trim()
+      const area = primaryAreaForDisplay(r.memo, storeNameToJob[st + '|' + nm])
       return {
         date: toDateStr(r.schedule_date),
-        store: String(r.store_name || '').trim(),
-        name: String(r.name || '').trim(),
+        store: st,
+        name: nm,
         nick: nameToNick[String(r.name || '').trim()] || String(r.name || '').trim(),
         pIn: formatTime(r.plan_in) || '09:00',
         pOut: formatTime(r.plan_out) || '18:00',

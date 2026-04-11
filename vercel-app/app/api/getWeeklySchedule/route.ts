@@ -9,20 +9,17 @@ import {
 } from '@/lib/employee-display-name'
 import { parseExtraStoresColumn } from '@/lib/franchisee-multi-store'
 import { storeMatches } from '@/lib/admin-employee-store-access'
+import {
+  canonicalAreaFromText,
+  memoMatchesAreaFilter,
+  primaryAreaForDisplay,
+} from '@/lib/schedule-area'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-function parseAreaFromMemo(memo: string | null | undefined): string {
-  const m = String(memo || '').trim().toLowerCase()
-  if (m.indexOf('kitchen') !== -1 || m.indexOf('주방') !== -1) return 'Kitchen'
-  if (m.indexOf('office') !== -1 || m.indexOf('오피스') !== -1) return 'Office'
-  if (m.indexOf('service') !== -1 || m.indexOf('서비스') !== -1) return 'Service'
-  return 'Service'
 }
 
 function formatTime(v: string | null | undefined): string {
@@ -159,6 +156,21 @@ export async function GET(request: NextRequest) {
       return v
     }
 
+    const findEmpForScheduleRow = (slotStore: string, slotName: string, employeeId: unknown): EmpRow | undefined => {
+      const eid = employeeId != null && Number.isFinite(Number(employeeId)) ? Math.floor(Number(employeeId)) : 0
+      if (eid > 0) {
+        const hit = (empList || []).find((e) => e.id != null && Math.floor(Number(e.id)) === eid)
+        if (hit) return hit
+      }
+      const roster = getStaffAtStore(slotStore)
+      const match = findStaffForScheduleSlotName(roster, String(slotName || '').trim())
+      if (!match) return undefined
+      return (empList || []).find((e) => {
+        const lite = toStaffLite(e)
+        return lite.name === match.name && lite.nick === match.nick
+      })
+    }
+
     const resolveScheduleDisplayNick = (slotStore: string, slotName: string, slotEmployeeId: unknown): string => {
       const nm = String(slotName || '').trim()
       if (!nm) return ''
@@ -236,8 +248,8 @@ export async function GET(request: NextRequest) {
       if (!isAll && !matchedEmp) continue
 
       const area = matchedEmp
-        ? parseAreaFromMemo(matchedEmp.job || '')
-        : parseAreaFromMemo(storeNameToJob[leaveStoreStr + '|' + name] || '')
+        ? canonicalAreaFromText(matchedEmp.job || '')
+        : canonicalAreaFromText(storeNameToJob[leaveStoreStr + '|' + name] || '')
       const nickOut = resolveScheduleDisplayNick(leaveStoreStr, name, matchedEmp?.id ?? null)
 
       leaveMerged.push({
@@ -255,10 +267,26 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    let list = (scheduleRows || []).map((r) => {
-      const area = parseAreaFromMemo(r.memo)
+    type RowWithMemo = {
+      date: string
+      store: string
+      name: string
+      nick: string
+      pIn: string
+      pOut: string
+      pBS: string
+      pBE: string
+      area: string
+      plan_in_prev_day: boolean
+      leaveType?: string
+      memo?: string | null
+    }
+
+    let list: RowWithMemo[] = (scheduleRows || []).map((r) => {
       const st = String(r.store_name || '').trim()
       const nm = String(r.name || '').trim()
+      const matched = findEmpForScheduleRow(st, nm, r.employee_id)
+      const area = primaryAreaForDisplay(r.memo, matched?.job)
       return {
         date: toDateStr(r.schedule_date),
         store: st,
@@ -270,14 +298,25 @@ export async function GET(request: NextRequest) {
         pBE: formatTime(r.break_end),
         area,
         plan_in_prev_day: !!r.plan_in_prev_day,
+        memo: r.memo,
       }
     })
 
     list = [...list, ...leaveMerged]
 
     if (areaFilter && areaFilter.toLowerCase() !== 'all' && areaFilter !== '전체') {
-      list = list.filter((r) => (r.area || 'Service') === areaFilter)
+      list = list.filter((r) => {
+        const lt = r.leaveType
+        if (lt) return (r.area || 'Service') === areaFilter
+        return memoMatchesAreaFilter(r.memo, areaFilter)
+      })
     }
+
+    list = list.map((row) => {
+      const rest = { ...row }
+      delete rest.memo
+      return rest
+    })
 
     list.sort((a, b) => {
       if (a.date !== b.date) return a.date < b.date ? -1 : 1
