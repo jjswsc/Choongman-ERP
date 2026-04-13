@@ -8681,6 +8681,7 @@ export async function updateStoreRepairTicket(rowOrId: string | number, data: Re
 
 /** 오프라인 큐 미사용 — 파일은 Supabase로 직접 PUT */
 export async function uploadStoreRepairPhoto(store: string, file: File) {
+  const { guessStoreRepairUploadContentType } = await import('@/lib/store-repair-media')
   const { apiFetch } = await import('./api/fetch')
   const pres = await apiFetch('/api/uploadStoreRepairPhoto/presign', {
     method: 'POST',
@@ -8688,7 +8689,7 @@ export async function uploadStoreRepairPhoto(store: string, file: File) {
     body: JSON.stringify({
       store,
       fileName: file.name,
-      contentType: file.type || 'application/octet-stream',
+      contentType: guessStoreRepairUploadContentType(file),
       fileSize: file.size,
     }),
   })
@@ -8701,8 +8702,11 @@ export async function uploadStoreRepairPhoto(store: string, file: File) {
   if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
     return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
   }
+  const ct = guessStoreRepairUploadContentType(file)
+  const body =
+    file.type === ct ? file : new File([file], file.name || 'upload', { type: ct, lastModified: file.lastModified })
   const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
-  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, body, { upsert: false })
   if (!putRes.ok) {
     const t = await putRes.text().catch(() => '')
     return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }

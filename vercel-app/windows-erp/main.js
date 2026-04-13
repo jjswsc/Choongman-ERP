@@ -2,7 +2,22 @@ const fs = require("fs");
 const path = require("path");
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut } = require("electron");
 
-const DEFAULT_ERP_URL = "https://choongman-erp.vercel.app/admin/login";
+function requireDeployPublicOrigin() {
+  const candidates = [
+    path.join(__dirname, "lib", "deploy-public-origin.cjs"),
+    path.join(__dirname, "..", "lib", "deploy-public-origin.cjs"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return require(p);
+  }
+  return {
+    resolveDeployPublicOrigin: () => "https://choongman-erp.vercel.app",
+  };
+}
+const { resolveDeployPublicOrigin } = requireDeployPublicOrigin();
+const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
+
+const DEFAULT_ERP_URL = `${DEPLOY_ORIGIN}/admin/login`;
 const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6 hours
 const AUTO_UPDATE_ENABLED = String(process.env.WINDOWS_ERP_AUTO_UPDATE || "1") !== "0";
 

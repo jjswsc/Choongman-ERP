@@ -30,7 +30,7 @@ import type { LangCode } from "@/lib/lang-context"
 import { isFranchiseeRole } from "@/lib/permissions"
 import { useAutoTranslate } from "@/lib/auto-translate"
 import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
-import { getAppBrandConfig } from "@/lib/app-brand"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ko", label: "한국어" },
@@ -53,7 +53,7 @@ export function ErpHeader() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { enabled: autoTranslateEnabled, setEnabled: setAutoTranslateEnabled } = useAutoTranslate()
-  const brand = useMemo(() => getAppBrandConfig(), [])
+  const brand = useAppBrandConfig()
   const franchiseeSwitchStores = useMemo(() => {
     if (!auth || !isFranchiseeRole(auth.role || "")) return null
     const a = auth.allowedStores

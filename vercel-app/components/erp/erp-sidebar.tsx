@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import {
   isManagerRole,
   isFranchiseeRole,
@@ -218,6 +219,7 @@ export function ErpSidebar() {
   const isManager = isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
+  const brand = useAppBrandConfig()
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
 
@@ -264,8 +266,8 @@ export function ErpSidebar() {
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
           <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-transparent">
             <Image
-              src="/img/logo.png"
-              alt="CHOONGMAN CHICKEN"
+              src={brand.logoSymbolSrc}
+              alt={brand.logoAlt}
               width={36}
               height={36}
               className="object-contain"
@@ -285,10 +287,10 @@ export function ErpSidebar() {
           </div>
           <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
             <h1 className="font-orbitron text-sm font-bold text-white tracking-wide leading-tight drop-shadow-sm">
-              CHOONGMAN
+              {brand.key === "omnifoodtech" ? "OMNIFOODTECH" : "CHOONGMAN"}
             </h1>
             <p className="font-orbitron text-[11px] font-semibold text-white leading-tight drop-shadow-sm">
-              ERP SYSTEM
+              {brand.key === "omnifoodtech" ? "AI ERP PLATFORM" : "ERP SYSTEM"}
             </p>
           </div>
           <SidebarTrigger className="ml-auto h-8 w-8 shrink-0 rounded-md text-white/80 hover:bg-sidebar-accent hover:text-white md:hidden" />

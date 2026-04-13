@@ -23,7 +23,11 @@
       "main.js",
       "preload.js",
       "offline.html",
-      "runtime-config.json"
+      "runtime-config.json",
+      {
+        "from": "../lib/deploy-public-origin.cjs",
+        "to": "lib/deploy-public-origin.cjs"
+      }
     ],
     "win": {
       "target": [

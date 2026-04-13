@@ -15,6 +15,21 @@
 
 ---
 
+## 단일 배포 Origin (`DEPLOY_PUBLIC_ORIGIN`)
+
+웹(Vercel)·Android(Capacitor 원격 URL)·Windows(Electron 기본 URL)가 **같은 프로덕션 호스트**를 바라보게 하려면 환경 변수 **`DEPLOY_PUBLIC_ORIGIN`**(또는 `NEXT_PUBLIC_DEPLOY_PUBLIC_ORIGIN`)을 **한 곳의 값**으로 맞춥니다. 구현은 `lib/deploy-public-origin.cjs`가 단일 소스이며, `capacitor.config.ts`·`windows-pos/main.js`·`windows-erp/main.js`가 이를 참조합니다.
+
+| 단계 | 할 일 |
+|------|--------|
+| Vercel | 해당 프로젝트 **Environment Variables**에 `DEPLOY_PUBLIC_ORIGIN=https://(이 프로젝트의 공식 도메인)` 저장 후 재배포 |
+| Android | `npm run mobile:android:build` **전에** 같은 값을 셸에 export (또는 `.env.local`). `npx cap sync android`가 `capacitor.config.ts`를 읽을 때 적용됨 |
+| Windows | `electron-builder` 실행 전 동일 변수 설정. `runtime-config.json`에 URL이 있으면 기존처럼 **그 값이 우선** (매장별 오버라이드 유지) |
+| 확인 | `npm run deploy:public-origin` → 현재 해석된 Origin 한 줄 출력 |
+
+**판매용 프로젝트**는 `DEPLOY_PUBLIC_ORIGIN`을 `https://www.omnifoodtech.com` 등 **그 프로젝트에 연결된 공식 도메인**으로 두면, 웹 배포와 단말 기본 URL이 자동으로 일치합니다.
+
+---
+
 ## 경로만 보면 (같은 Next 앱 `vercel-app` 라우트)
 
 배포마다 호스트만 다르고 **경로 구조는 동일**합니다.

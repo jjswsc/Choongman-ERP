@@ -4,12 +4,27 @@ const os = require("os");
 const { execFile } = require("child_process");
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut, screen } = require("electron");
 
+function requireDeployPublicOrigin() {
+  const candidates = [
+    path.join(__dirname, "lib", "deploy-public-origin.cjs"),
+    path.join(__dirname, "..", "lib", "deploy-public-origin.cjs"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return require(p);
+  }
+  return {
+    resolveDeployPublicOrigin: () => "https://choongman-erp.vercel.app",
+  };
+}
+const { resolveDeployPublicOrigin } = requireDeployPublicOrigin();
+const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
+
 /** package.json build.appId 와 동일 — 작업 표시줄·점프 목록이 Electron 기본 아이콘으로 남는 현상 완화 */
 if (process.platform === "win32") {
   app.setAppUserModelId("com.choongman.erp.pos.windows");
 }
 
-const DEFAULT_POS_URL = "https://choongman-erp.vercel.app/pos/login";
+const DEFAULT_POS_URL = `${DEPLOY_ORIGIN}/pos/login`;
 
 /** 무인쇄 HTML 작업 직후 다음 invoke 전까지 — Windows 스풀·Zywell 등이 컷/배출을 끝내도록 */
 const POST_HTML_PRINT_SPOOL_FLUSH_MS = 750;
@@ -220,7 +235,7 @@ function getCustomerDisplayUrl() {
     url.hash = "";
     return url.toString();
   } catch {
-    return `${ALLOWED_ORIGIN || "https://choongman-erp.vercel.app"}/pos/customer-display`;
+    return `${ALLOWED_ORIGIN || DEPLOY_ORIGIN}/pos/customer-display`;
   }
 }
 

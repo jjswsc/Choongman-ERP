@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OmniFoodTech | AI 기반 ERP·POS 통합 플랫폼</title>
   <meta name="description" content="매장·본사·POS·ERP를 하나로 연결하고, AI로 예측·자동화·운영 의사결정을 강화하는 OmniFoodTech SaaS." />
+  <link rel="icon" type="image/svg+xml" href="./omnifoodtech-icon.svg" />
+  <link rel="apple-touch-icon" href="./omnifoodtech-icon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
@@ -49,8 +51,16 @@
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     }
     .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.72rem;
       font-weight: 700; font-size: 1.1rem; letter-spacing: -0.02em;
       color: var(--text); text-decoration: none;
+    }
+    .logo img {
+      width: 184px;
+      height: auto;
+      display: block;
     }
     .logo span { color: var(--accent); }
     .top-actions {
@@ -288,6 +298,9 @@
     }
     @media (max-width: 820px) { .nav-links { display: none; } }
     @media (max-width: 740px) {
+      .logo img {
+        width: 150px;
+      }
       .top-actions {
         width: 100%;
         justify-content: flex-end;
@@ -304,7 +317,9 @@
   <div class="glow" aria-hidden="true"></div>
   <header>
     <div class="nav-inner">
-      <a class="logo" href="/">Omni<span>Food</span>Tech</a>
+      <a class="logo" href="/" aria-label="OmniFoodTech">
+        <img src="./omnifoodtech-logo.svg" alt="OmniFoodTech" />
+      </a>
       <nav class="nav-links" aria-label="주요 메뉴">
         <a href="#strengths" data-i18n="nav_strengths">핵심 강점</a>
         <a href="#ai" data-i18n="nav_ai">AI 연계</a>

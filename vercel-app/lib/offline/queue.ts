@@ -4,6 +4,9 @@
 
 import { getDB, STORES } from './db'
 
+/** `sync.ts`와 동일 — 이 횟수 이상 실패 시 더 이상 자동 전송하지 않음 */
+export const OFFLINE_QUEUE_MAX_RETRIES = 8
+
 export interface PendingRequest {
   id: string
   api: string
@@ -48,6 +51,31 @@ export async function getPendingCount(): Promise<number> {
     req.onerror = () => reject(req.error)
     req.onsuccess = () => resolve(req.result)
   })
+}
+
+/** 배너·동기화용: 아직 전송 재시도 가능한 건 / 한도 초과로 스킵되는 건 */
+export async function getOfflineQueueCounts(): Promise<{ retriable: number; dead: number }> {
+  const all = await getAllPending()
+  let retriable = 0
+  let dead = 0
+  for (const item of all) {
+    if (item.retryCount >= OFFLINE_QUEUE_MAX_RETRIES) dead += 1
+    else retriable += 1
+  }
+  return { retriable, dead }
+}
+
+/** 재시도 한도 초과 항목만 로컬 큐에서 제거 (서버 미반영 데이터는 복구되지 않음) */
+export async function removeDeadLetterFromQueue(): Promise<number> {
+  const all = await getAllPending()
+  let removed = 0
+  for (const item of all) {
+    if (item.retryCount >= OFFLINE_QUEUE_MAX_RETRIES) {
+      await removeFromQueue(item.id)
+      removed += 1
+    }
+  }
+  return removed
 }
 
 export async function getAllPending(): Promise<PendingRequest[]> {

@@ -7,7 +7,8 @@ import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { SwPreregister } from "@/components/sw-preregister"
-import { getAppBrandConfig } from "@/lib/app-brand"
+import { AppBrandProvider } from "@/components/app-brand-provider"
+import { getServerAppBrandConfig } from "@/lib/app-brand-server"
 
 import "./globals.css"
 
@@ -26,16 +27,17 @@ const orbitron = Orbitron({
   weight: ["400", "500", "600", "700"],
 })
 
-const brand = getAppBrandConfig()
-
-export const metadata: Metadata = {
-  title: brand.appName,
-  description: `${brand.appName} 출고/운영 관리 시스템`,
-  manifest: "/manifest.json",
-  icons: {
-    icon: "/icon-192.png",
-    apple: "/icon-512.png",
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = await getServerAppBrandConfig()
+  return {
+    title: brand.appName,
+    description: `${brand.appName} 출고/운영 관리 시스템`,
+    manifest: brand.manifestPath,
+    icons: {
+      icon: brand.iconPath,
+      apple: brand.iconPath,
+    },
+  }
 }
 
 export const viewport: Viewport = {
@@ -46,22 +48,25 @@ export const viewport: Viewport = {
   userScalable: false,
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const brand = await getServerAppBrandConfig()
   return (
     <html lang="ko">
       <body className={`${pretendard.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased`}>
-        <ErrorBoundary>
-          <AuthProvider>
-            <SwPreregister />
-            <LangProvider>
-              <AppMessageProvider>{children}</AppMessageProvider>
-            </LangProvider>
-          </AuthProvider>
-        </ErrorBoundary>
+        <AppBrandProvider value={brand}>
+          <ErrorBoundary>
+            <AuthProvider>
+              <SwPreregister />
+              <LangProvider>
+                <AppMessageProvider>{children}</AppMessageProvider>
+              </LangProvider>
+            </AuthProvider>
+          </ErrorBoundary>
+        </AppBrandProvider>
       </body>
     </html>
   )

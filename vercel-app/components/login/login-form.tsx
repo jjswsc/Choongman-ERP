@@ -33,7 +33,7 @@ import {
   runReachabilityProbe,
   REACHABILITY_EVENT,
 } from "@/lib/offline/network"
-import { getAppBrandConfig } from "@/lib/app-brand"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
@@ -158,7 +158,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [loginApp, setLoginApp] = useState<LoginApp>(() =>
     deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo)
   )
-  const brand = useMemo(() => getAppBrandConfig(), [])
+  const brand = useAppBrandConfig()
 
   useLayoutEffect(() => {
     if (loginAppPrefHydratedRef.current) return
@@ -693,7 +693,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         <div className="glass-card">
           <div className="logo-section">
             <Image
-              src="/img/logo.png"
+              src={brand.logoSrc}
               alt={brand.logoAlt}
               className="logo"
               width={120}

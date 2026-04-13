@@ -7,8 +7,11 @@ export {
   addToQueue,
   getPendingCount,
   getAllPending,
+  getOfflineQueueCounts,
+  removeDeadLetterFromQueue,
   removeFromQueue,
   updateQueueItem,
+  OFFLINE_QUEUE_MAX_RETRIES,
   type PendingRequest,
 } from './queue'
 export { isOnline, useOnlineStatus } from './network'

@@ -1,8 +1,10 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 const SAAS_NAV = [
   { href: "/saas-admin", label: "대시보드" },
@@ -13,11 +15,22 @@ const SAAS_NAV = [
 
 export function SaasSidebar() {
   const pathname = usePathname()
+  const brand = useAppBrandConfig()
   return (
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>OmniFoodTech SaaS</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex items-center gap-2">
+            <Image
+              src={brand.logoSymbolSrc}
+              alt={brand.logoAlt}
+              width={14}
+              height={14}
+              className="h-3.5 w-3.5 object-contain"
+              unoptimized
+            />
+            {brand.headerTitle}
+          </SidebarGroupLabel>
           <SidebarMenu>
             {SAAS_NAV.map((item) => {
               const active = pathname === item.href

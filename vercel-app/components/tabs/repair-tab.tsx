@@ -26,6 +26,7 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useTranslatedTextMap, useDebouncedTranslatedText } from "@/lib/use-ui-translate"
 import { ImageIcon, Save, X } from "lucide-react"
+import { StoreRepairMediaThumb } from "@/components/store-repair-media-thumb"
 
 const CATEGORIES: { v: string; k: string }[] = [
   { v: "시설", k: "repair_cat_facility" },
@@ -210,8 +211,7 @@ export function RepairTab() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
-              capture="environment"
+              accept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -234,8 +234,7 @@ export function RepairTab() {
                     >
                       <X className="h-3 w-3" />
                     </button>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt="" className="h-full w-full object-cover" />
+                    <StoreRepairMediaThumb url={url} className="h-full w-full object-cover" />
                   </div>
                 ))}
               </div>

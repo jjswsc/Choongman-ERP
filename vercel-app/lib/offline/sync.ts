@@ -8,7 +8,12 @@ import {
   reportNetworkFailure,
   reportNetworkSuccess,
 } from './network'
-import { getAllPending, removeFromQueue, updateQueueItem } from './queue'
+import {
+  getAllPending,
+  removeFromQueue,
+  updateQueueItem,
+  OFFLINE_QUEUE_MAX_RETRIES,
+} from './queue'
 import { registerQueuedSavePosOrderSyncedServerId } from './pos-queued-sync-print-suppress'
 
 export type SyncResult = { synced: number; failed: number }
@@ -22,7 +27,6 @@ export type SyncSnapshot = {
 
 const listeners = new Set<SyncListener>()
 const snapshotListeners = new Set<(snapshot: SyncSnapshot) => void>()
-const MAX_RETRY_COUNT = 8
 const RETRY_BASE_MS = 2_000
 const RETRY_MAX_MS = 5 * 60_000
 const SNAPSHOT_KEY = 'cm_offline_sync_snapshot_v1'
@@ -146,7 +150,7 @@ export async function syncPending(): Promise<SyncResult> {
   let failed = 0
 
   for (const item of pending) {
-    if (item.retryCount >= MAX_RETRY_COUNT) {
+    if (item.retryCount >= OFFLINE_QUEUE_MAX_RETRIES) {
       continue
     }
     const now = Date.now()

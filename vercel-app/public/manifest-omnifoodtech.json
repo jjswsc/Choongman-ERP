@@ -1,0 +1,20 @@
+{
+  "id": "/?source=pwa",
+  "name": "OmniFoodTech ERP",
+  "short_name": "OmniFoodTech",
+  "description": "OmniFoodTech AI ERP/POS operations platform",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111c34",
+  "theme_color": "#111c34",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/omnifoodtech-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

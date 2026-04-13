@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 180" fill="none">
+  <defs>
+    <linearGradient id="omniLogoBg" x1="24" y1="18" x2="188" y2="166" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220" />
+      <stop offset="1" stop-color="#111C34" />
+    </linearGradient>
+    <linearGradient id="omniLogoAccent" x1="50" y1="20" x2="196" y2="170" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8" />
+      <stop offset="0.55" stop-color="#8B5CF6" />
+      <stop offset="1" stop-color="#FB7185" />
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="168" height="164" rx="38" fill="url(#omniLogoBg)" />
+  <circle cx="92" cy="90" r="52" stroke="url(#omniLogoAccent)" stroke-width="8" opacity="0.9" />
+  <path d="M64 105V75L92 58L120 75V105L92 122L64 105Z" stroke="url(#omniLogoAccent)" stroke-width="7" />
+  <circle cx="92" cy="90" r="11" fill="url(#omniLogoAccent)" />
+  <text x="212" y="82" fill="#E6EDF8" font-size="52" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="700" letter-spacing="2">OMNIFOODTECH</text>
+  <text x="214" y="122" fill="#8CA0BC" font-size="24" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="600" letter-spacing="4">AI OPERATIONS PLATFORM</text>
+</svg>

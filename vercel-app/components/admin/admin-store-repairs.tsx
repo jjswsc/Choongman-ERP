@@ -46,6 +46,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { StoreRepairMediaThumb } from "@/components/store-repair-media-thumb"
+import { isStoreRepairVideoUrl } from "@/lib/store-repair-media"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { StoreRepairsProcessTab } from "@/components/admin/store-repairs-process-tab"
 import { useTranslatedTextMap, useDebouncedTranslatedText } from "@/lib/use-ui-translate"
@@ -760,7 +762,7 @@ export function AdminStoreRepairs() {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp"
                     multiple
                     className="hidden"
                     onChange={(e) => {
@@ -782,8 +784,7 @@ export function AdminStoreRepairs() {
                           <X className="h-3 w-3" />
                         </button>
                         <button type="button" onClick={() => setPhotoPreview(url)} className="block h-full w-full">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={url} alt="" className="h-full w-full object-cover" />
+                          <StoreRepairMediaThumb url={url} className="h-full w-full object-cover" />
                         </button>
                       </div>
                     ))}
@@ -918,7 +919,7 @@ export function AdminStoreRepairs() {
                 <input
                   ref={fileRefDialog}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp"
                   multiple
                   className="hidden"
                   onChange={(e) => {
@@ -945,8 +946,7 @@ export function AdminStoreRepairs() {
                         <X className="h-3 w-3" />
                       </button>
                       <button type="button" onClick={() => setPhotoPreview(url)} className="block h-full w-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <StoreRepairMediaThumb url={url} className="h-full w-full object-cover" />
                       </button>
                     </div>
                   ))}
@@ -968,7 +968,12 @@ export function AdminStoreRepairs() {
           <DialogHeader>
             <DialogTitle>{t("photo")}</DialogTitle>
           </DialogHeader>
-          {photoPreview && <ImageViewerWithRotate src={photoPreview} alt="" />}
+          {photoPreview &&
+            (isStoreRepairVideoUrl(photoPreview) ? (
+              <video src={photoPreview} controls className="max-h-[70vh] w-full rounded-md" playsInline />
+            ) : (
+              <ImageViewerWithRotate src={photoPreview} alt="" />
+            ))}
         </DialogContent>
       </Dialog>
     </div>

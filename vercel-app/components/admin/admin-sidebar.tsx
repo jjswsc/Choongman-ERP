@@ -6,6 +6,7 @@ import { LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 const menuItems = [
   { href: "/admin", label: "대시보드" },
@@ -51,15 +52,16 @@ const menuItems = [
 export function AdminSidebar() {
   const pathname = usePathname()
   const { logout } = useAuth()
+  const brand = useAppBrandConfig()
 
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-black/40 bg-[#0a0a0a]">
       {/* Logo / Title */}
       <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
-          <img src="/img/logo.png" alt="CHOONGMAN CHICKEN" className="h-full w-full object-contain" />
+          <img src={brand.logoSymbolSrc} alt={brand.logoAlt} className="h-full w-full object-contain" />
         </div>
-        <span className="truncate font-bold text-white">충만치킨 ERP</span>
+        <span className="truncate font-bold text-white">{brand.headerTitle}</span>
       </div>
 
       {/* Menu */}
