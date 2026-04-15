@@ -8,7 +8,7 @@ import { ErpHeader } from "@/components/erp/erp-header"
 import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
-import { useLang } from "@/lib/lang-context"
+import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   isManagerRole,
@@ -61,9 +61,16 @@ export default function AdminLayout({
   const router = useRouter()
   const pathname = usePathname()
   const { auth, initialized, setAuth } = useAuth()
-  const { lang } = useLang()
+  const { lang, setLang } = useLang()
   const t = useT(lang)
   const isLoginPage = isAdminLoginPath(pathname)
+
+  useEffect(() => {
+    const p = normalizePathname(pathname)
+    if (!p.startsWith("/admin")) return
+    const n = normalizeAdminUiLang(lang)
+    if (n !== lang) setLang(n)
+  }, [pathname, lang, setLang])
 
   // 미로그인: 로그인 URL이 아니면 즉시 이동 (pathname null 대비로 window 경로도 함께 판별)
   useLayoutEffect(() => {

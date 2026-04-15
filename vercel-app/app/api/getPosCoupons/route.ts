@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
 /** POS 쿠폰 목록 조회 */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {

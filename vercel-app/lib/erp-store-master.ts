@@ -18,7 +18,39 @@ export async function fetchErpStoresMaster(): Promise<ErpStoreMasterRow[]> {
     })) as ErpStoreMasterRow[] | null
     return (rows || []).filter((r) => r.is_active !== false)
   } catch {
-    return []
+    try {
+      // SaaS 전환 스키마(tenant_id/store_name/store_code) 호환
+      const rows = (await supabaseSelect('erp_stores', {
+        select: 'tenant_id,store_name,store_code,is_active',
+        order: 'store_name.asc',
+        limit: 1000,
+      })) as {
+        tenant_id?: string | null
+        store_name?: string | null
+        store_code?: string | null
+        is_active?: boolean | null
+      }[] | null
+      const mapped = (rows || [])
+        .filter((r) => r.is_active !== false)
+        .map((r, idx) => {
+          const tenant = String(r.tenant_id || '').trim()
+          const storeName = String(r.store_name || '').trim()
+          const rawCode = String(r.store_code || '').trim()
+          const fallbackCode = `${tenant || 'tenant'}:${storeName || `store_${idx + 1}`}`
+          const uniqueLabel = `${tenant || 'tenant'} / ${storeName || rawCode || fallbackCode}`
+          return {
+            store_code: rawCode || fallbackCode,
+            // SaaS 다중 테넌트에서 "본사" 같은 동일 명칭 충돌을 피하기 위해 고유 라벨 사용
+            display_name: uniqueLabel,
+            aliases: [],
+            sort_order: idx,
+            is_active: r.is_active !== false,
+          } as ErpStoreMasterRow
+        })
+      return mapped
+    } catch {
+      return []
+    }
   }
 }
 

@@ -1,7 +1,6 @@
 import {
   getSupabaseDataLimitDiagnostics,
   supabaseCountTable,
-  supabaseSelectPageCap,
   SUPABASE_SELECT_ALL_PAGES_DEFAULT_MAX_ROWS,
 } from '@/lib/supabase-server'
 import generatedRaw from './admin-route-limits.generated.json'

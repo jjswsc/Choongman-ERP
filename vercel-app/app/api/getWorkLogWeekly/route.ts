@@ -4,11 +4,6 @@ import {
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
 
-function toDateStr(v: string | Date | null): string {
-  if (!v) return ''
-  return typeof v === 'string' ? v.slice(0, 10) : String(v).slice(0, 10)
-}
-
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

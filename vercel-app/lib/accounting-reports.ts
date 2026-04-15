@@ -1,9 +1,17 @@
-import { supabaseCountFilter, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  supabaseCountFilter,
+  supabaseSelect,
+  supabaseSelectFilter,
+} from '@/lib/supabase-server'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 
 const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 const BASE_LIMIT = 20000
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
 
 export type IncomeScopeInput = {
   yearMonth?: string
@@ -59,6 +67,14 @@ export type IncomeStatementReport = {
     limits: Record<string, { fetched: number; limit: number; total?: number }>
     /** 직접 입고·통장 매입지급에 동시에 잡힌 거래처 키 — 이중 집계 가능성 안내 */
     purchaseInboundBankOverlapVendorKeys?: string[]
+    /** 매장만: 본사 창고 출고 금액 vs 승인 발주 합계(참고) — 직납 등으로 차이 날 수 있음 */
+    purchaseHqOutboundBasis?: {
+      outboundTotal: number
+      approvedOrdersTotal: number
+      diff: number
+    }
+    /** 매장만: vendors.type=본사 등으로 통장 매입지급을 매입 합계에서 제외한 금액(출고·발주와 이중 방지) */
+    purchaseExcludedHqBankPayments?: { key: string; amount: number; label?: string }[]
   }
 }
 
@@ -154,7 +170,7 @@ function buildPosStoreCodeFilterFragment(storeFilter: string): string {
 }
 
 /** 손익·통장 행 등 JS 측 매장 매칭 (변형 허용) */
-function storeMatchesIncomeFilter(storeValue: string, filter: string): boolean {
+export function storeMatchesIncomeFilter(storeValue: string, filter: string): boolean {
   const a = String(storeValue || '').trim().toLowerCase()
   if (!filter || filter.trim().toLowerCase() === 'all') return true
   if (!a) return false
@@ -222,6 +238,77 @@ function mergeVendorAmountMap(target: Record<string, number>, add: Record<string
     if (amt <= 0) continue
     target[k] = (target[k] || 0) + amt
   }
+}
+
+/** 본사(Head Office) 법인 등 — 통장 매입지급을 손익 매입에서 제외할 거래처 코드(소문자) */
+async function loadHqVendorCodeNormSet(): Promise<Set<string>> {
+  const out = new Set<string>()
+  try {
+    const rows = (await supabaseSelect('vendors', { select: 'code,type', limit: 20000 })) as
+      | { code?: string; type?: string }[]
+      | null
+    for (const r of rows || []) {
+      const t = String(r.type || '').trim().toLowerCase()
+      if (t === '본사' || t === 'head office' || t === 'hq') {
+        const c = String(r.code || '').trim().toLowerCase()
+        if (c) out.add(c)
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return out
+}
+
+/**
+ * 본사 창고에서 매장으로 나간 출고(Outbound / ForceOutbound) 금액 합계 — 손익 매입의 본사 라인 기준.
+ * 단가: invoice_unit_price → 품목 cost.
+ */
+async function sumHqOutboundPurchaseFromOffice(
+  storeFilter: string | null,
+  startStr: string,
+  endStr: string,
+  itemCostMap: Record<string, number>
+): Promise<number> {
+  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
+  let filter =
+    `log_type=in.(Outbound,ForceOutbound)` +
+    `&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}` +
+    `&${buildStoreFieldOrIlikeFragment('location', '본사')}`
+  if (storeFilter && storeFilter !== 'All') {
+    filter += `&${buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)}`
+  }
+  const rows = (await supabaseSelectFilter('stock_logs', filter, {
+    select: 'item_code,qty,invoice_unit_price',
+    limit: BASE_LIMIT,
+  })) as { item_code?: string; qty?: number; invoice_unit_price?: number | null }[] | null
+  let total = 0
+  for (const r of rows || []) {
+    const qty = Math.abs(Number(r.qty) || 0)
+    if (!qty) continue
+    const code = String(r.item_code || '').trim()
+    const unit =
+      r.invoice_unit_price != null && !isNaN(Number(r.invoice_unit_price))
+        ? Number(r.invoice_unit_price)
+        : (itemCostMap[code] ?? 0)
+    total += qty * unit
+  }
+  return total
+}
+
+function buildHqOutboundFromOfficeFilter(
+  storeFilter: string | null,
+  dayStartUtcIso: string,
+  nextDayStartUtcIso: string
+): string {
+  let filter =
+    `log_type=in.(Outbound,ForceOutbound)` +
+    `&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}` +
+    `&${buildStoreFieldOrIlikeFragment('location', '본사')}`
+  if (storeFilter && storeFilter !== 'All') {
+    filter += `&${buildStoreFieldOrIlikeFragment('vendor_target', storeFilter)}`
+  }
+  return filter
 }
 
 /**
@@ -525,6 +612,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let ordersPurchaseSubtotal = 0
   let purchaseByVendor: IncomeStatementLineDetail[] = []
   let salesByCustomer: IncomeStatementLineDetail[] = []
+  let purchaseHqOutboundBasis:
+    | { outboundTotal: number; approvedOrdersTotal: number; diff: number }
+    | undefined = undefined
+  let purchaseExcludedHqBankPayments: { key: string; amount: number; label?: string }[] | undefined = undefined
+  const excludedHqBankPaymentsRaw: { key: string; amount: number }[] = []
 
   if (isHQ) {
     const outboundFilter =
@@ -646,30 +738,70 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
-    const orders = (await supabaseSelectFilter('orders', orderFilter, {
-      select: 'total',
-      limit: BASE_LIMIT,
-    })) as { total?: number }[] | null
-    for (const o of orders || []) ordersPurchaseSubtotal += Number(o.total) || 0
+    const [orders, hqVendorCodes, hqOutboundPurchaseSubtotal] = await Promise.all([
+      supabaseSelectFilter('orders', orderFilter, {
+        select: 'total',
+        limit: BASE_LIMIT,
+      }) as Promise<{ total?: number }[] | null>,
+      loadHqVendorCodeNormSet(),
+      sumHqOutboundPurchaseFromOffice(
+        storeFilter === 'All' ? null : storeFilter,
+        startStr,
+        endStr,
+        itemCostMap
+      ),
+    ])
+    let ordersApprovedSubtotal = 0
+    for (const o of orders || []) ordersApprovedSubtotal += Number(o.total) || 0
     limits.orders_purchase = { fetched: orders?.length || 0, limit: BASE_LIMIT }
+    try {
+      const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
+      const obFilter = buildHqOutboundFromOfficeFilter(
+        storeFilter === 'All' ? null : storeFilter,
+        dayStartUtcIso,
+        nextDayStartUtcIso
+      )
+      const obCount = await supabaseCountFilter('stock_logs', obFilter)
+      limits.hq_outbound = { fetched: obCount, limit: BASE_LIMIT }
+    } catch {
+      limits.hq_outbound = { fetched: 0, limit: BASE_LIMIT }
+    }
+
+    ordersPurchaseSubtotal = hqOutboundPurchaseSubtotal
+    purchaseHqOutboundBasis = {
+      outboundTotal: hqOutboundPurchaseSubtotal,
+      approvedOrdersTotal: ordersApprovedSubtotal,
+      diff: round2(hqOutboundPurchaseSubtotal - ordersApprovedSubtotal),
+    }
 
     const inboundByVendorStore =
       storeFilter !== 'All'
         ? await getDirectInboundPurchasesByVendor(storeFilter, startStr, endStr, itemCostMap, false)
         : await getDirectInboundPurchasesByVendor(null, startStr, endStr, itemCostMap, true)
-    const bankPayByVendorStore = await fetchBankPurchasePaymentsByVendor({
+    const bankPayByVendorRaw = await fetchBankPurchasePaymentsByVendor({
       isHQ: false,
       storeFilter,
       startStr,
       endStr,
     })
+    const bankPayByVendorStore: Record<string, number> = {}
+    for (const [k, v] of Object.entries(bankPayByVendorRaw)) {
+      const amt = Number(v) || 0
+      if (amt <= 0) continue
+      const norm = String(k).trim().toLowerCase()
+      if (hqVendorCodes.has(norm)) {
+        excludedHqBankPaymentsRaw.push({ key: k, amount: amt })
+        continue
+      }
+      bankPayByVendorStore[k] = amt
+    }
     const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStore }
     mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
     purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
       inboundByVendorStore,
       bankPayByVendorStore
     )
-    /** 본사·물류 발주(orders) + 거래처별(직접입고 + 통장 매입지급) — 펼침 합계와 매입 총액 일치 */
+    /** 본사 창고 출고 + 거래처별(직접입고 + 통장 매입지급, 본사 법인 제외) — 펼침 합계와 매입 총액 일치 */
     const purchaseVendorDetailTotal = Object.values(purchaseVendorMapStore).reduce((a, b) => a + b, 0)
     purchases += ordersPurchaseSubtotal + purchaseVendorDetailTotal
 
@@ -779,6 +911,13 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
   const vendorNormToName = await loadVendorCodeNormToNameMap()
   purchaseByVendor = enrichPurchaseByVendorLabels(purchaseByVendor, vendorNormToName)
+  if (excludedHqBankPaymentsRaw.length > 0) {
+    purchaseExcludedHqBankPayments = excludedHqBankPaymentsRaw.map(({ key, amount }) => ({
+      key,
+      amount: round2(amount),
+      label: vendorNormToName[key.toLowerCase()],
+    }))
+  }
 
   return {
     yearMonth,
@@ -804,13 +943,18 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     purchaseByVendor,
     salesByCustomer,
     diagnostics:
-      input.includeDebug || purchaseInboundBankOverlapVendorKeys.length > 0
+      input.includeDebug ||
+      purchaseInboundBankOverlapVendorKeys.length > 0 ||
+      purchaseHqOutboundBasis != null ||
+      (purchaseExcludedHqBankPayments?.length ?? 0) > 0
         ? {
             warnings: input.includeDebug ? warnings : [],
             limits: input.includeDebug ? limits : {},
             ...(purchaseInboundBankOverlapVendorKeys.length > 0
               ? { purchaseInboundBankOverlapVendorKeys }
               : {}),
+            ...(purchaseHqOutboundBasis ? { purchaseHqOutboundBasis } : {}),
+            ...(purchaseExcludedHqBankPayments?.length ? { purchaseExcludedHqBankPayments } : {}),
           }
         : undefined,
   }
@@ -839,6 +983,9 @@ export type IncomeStatementPurchaseDrillBankRow = {
   memo: string | null
   note: string | null
   store: string | null
+  /** 본사 발주와 연결 시 ref_type=Order 등 */
+  refType: string | null
+  refId: number | null
 }
 
 export type IncomeStatementPurchaseDrillOrderRow = {
@@ -850,14 +997,30 @@ export type IncomeStatementPurchaseDrillOrderRow = {
   status: string | null
 }
 
+/** 본사 창고→매장 출고 줄 — 손익 매입 본사 라인 상세 */
+export type IncomeStatementPurchaseDrillHqOutboundRow = {
+  kind: 'hq_outbound'
+  id: number
+  logDate: string
+  logType: string | null
+  itemCode: string
+  targetStore: string | null
+  qty: number
+  unitPrice: number
+  lineAmount: number
+}
+
 export type IncomeStatementPurchaseDrillDownResult = {
   vendorKey: string
   yearMonth: string
   startStr: string
   endStr: string
   storeFilter: string
-  /** 본사·물류 발주(승인) 줄 — 매장 손익에서만 */
+  /** 본사 출고(매입) 줄 — 매장 손익에서만 */
   isHqOrders: boolean
+  /** 집계 기준: 본사 창고 출고 행 */
+  hqOutbounds: IncomeStatementPurchaseDrillHqOutboundRow[]
+  /** 참고: 동일 기간 승인 발주(금액은 출고 집계와 다를 수 있음) */
   hqOrders: IncomeStatementPurchaseDrillOrderRow[]
   inbound: IncomeStatementPurchaseDrillInboundRow[]
   bankPayments: IncomeStatementPurchaseDrillBankRow[]
@@ -900,6 +1063,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
     endStr,
     storeFilter,
     isHqOrders: false,
+    hqOutbounds: [],
     hqOrders: [],
     inbound: [],
     bankPayments: [],
@@ -909,6 +1073,53 @@ export async function computeIncomeStatementPurchaseDrillDown(
 
   if (vendorKey === '__pl_hq_orders__') {
     if (isHQ) return { ...empty, isHqOrders: true }
+    const itemCostMap = await loadItemCostMapForDrill()
+    const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
+    const obFilter = buildHqOutboundFromOfficeFilter(
+      storeFilter === 'All' ? null : storeFilter,
+      dayStartUtcIso,
+      nextDayStartUtcIso
+    )
+    const obRaw = (await supabaseSelectFilter('stock_logs', obFilter, {
+      select: 'id,log_date,log_type,vendor_target,item_code,qty,invoice_unit_price',
+      limit: BASE_LIMIT,
+      order: 'log_date.desc',
+    })) as {
+      id?: number
+      log_date?: string
+      log_type?: string
+      vendor_target?: string
+      item_code?: string
+      qty?: number
+      invoice_unit_price?: number | null
+    }[] | null
+    const hqOutbounds: IncomeStatementPurchaseDrillHqOutboundRow[] = []
+    for (const r of obRaw || []) {
+      const qty = Math.abs(Number(r.qty) || 0)
+      const code = String(r.item_code || '').trim()
+      const unit =
+        r.invoice_unit_price != null && !isNaN(Number(r.invoice_unit_price))
+          ? Number(r.invoice_unit_price)
+          : (itemCostMap[code] ?? 0)
+      const lineAmount = round2(qty * unit)
+      if (!qty && !lineAmount) continue
+      const id = Number(r.id)
+      if (!id) continue
+      hqOutbounds.push({
+        kind: 'hq_outbound',
+        id,
+        logDate: String(r.log_date || '').slice(0, 10),
+        logType: r.log_type != null ? String(r.log_type) : null,
+        itemCode: code,
+        targetStore: r.vendor_target != null ? String(r.vendor_target).trim() || null : null,
+        qty,
+        unitPrice: unit,
+        lineAmount,
+      })
+    }
+    const obTruncated = hqOutbounds.length > PURCHASE_DRILL_LIMIT
+    const hqOutboundsSlice = obTruncated ? hqOutbounds.slice(0, PURCHASE_DRILL_LIMIT) : hqOutbounds
+
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
@@ -919,23 +1130,26 @@ export async function computeIncomeStatementPurchaseDrillDown(
     })) as { id?: number; order_date?: string; total?: number; store_name?: string; status?: string }[] | null
     const hqOrders: IncomeStatementPurchaseDrillOrderRow[] = []
     for (const o of orders || []) {
-      const id = Number(o.id)
-      if (!id) continue
+      const oid = Number(o.id)
+      if (!oid) continue
       hqOrders.push({
         kind: 'hq_order',
-        id,
+        id: oid,
         orderDate: String(o.order_date || '').slice(0, 10),
         total: Number(o.total) || 0,
         storeName: o.store_name != null ? String(o.store_name) : null,
         status: o.status != null ? String(o.status) : null,
       })
     }
-    const truncated = hqOrders.length > PURCHASE_DRILL_LIMIT
+    const ordTruncated = hqOrders.length > PURCHASE_DRILL_LIMIT
+    const hqOrdersSlice = ordTruncated ? hqOrders.slice(0, PURCHASE_DRILL_LIMIT) : hqOrders
+
     return {
       ...empty,
       isHqOrders: true,
-      hqOrders: truncated ? hqOrders.slice(0, PURCHASE_DRILL_LIMIT) : hqOrders,
-      truncated: { ...empty.truncated, orders: truncated },
+      hqOutbounds: hqOutboundsSlice,
+      hqOrders: hqOrdersSlice,
+      truncated: { ...empty.truncated, orders: obTruncated || ordTruncated },
     }
   }
 
@@ -1025,12 +1239,14 @@ export async function computeIncomeStatementPurchaseDrillDown(
       memo?: string | null
       note?: string | null
       store?: string | null
+      ref_type?: string | null
+      ref_id?: number | null
     }[] | null
     try {
       btRows = (await supabaseSelectFilter(
         'bank_transactions',
         `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
-        { select: 'id,trans_date,amount,vendor_code,memo,note,store', limit: BASE_LIMIT, order: 'trans_date.desc' }
+        { select: 'id,trans_date,amount,vendor_code,memo,note,store,ref_type,ref_id', limit: BASE_LIMIT, order: 'trans_date.desc' }
       )) as typeof btRows
     } catch {
       btRows = null
@@ -1047,6 +1263,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
       if (!drillVendorMatchesBankRow(vendorKey, r.vendor_code)) continue
       const id = Number(r.id)
       if (!id) continue
+      const rid = r.ref_id != null && !isNaN(Number(r.ref_id)) ? Number(r.ref_id) : null
       bankAcc.push({
         kind: 'bank',
         id,
@@ -1056,6 +1273,8 @@ export async function computeIncomeStatementPurchaseDrillDown(
         memo: r.memo != null ? String(r.memo) : null,
         note: r.note != null ? String(r.note) : null,
         store: r.store != null ? String(r.store) : null,
+        refType: r.ref_type != null ? String(r.ref_type).trim() || null : null,
+        refId: rid,
       })
     }
   }
@@ -1069,6 +1288,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
     endStr,
     storeFilter,
     isHqOrders: false,
+    hqOutbounds: [],
     hqOrders: [],
     inbound,
     bankPayments,

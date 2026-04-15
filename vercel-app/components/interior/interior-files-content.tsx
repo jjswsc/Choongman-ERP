@@ -27,10 +27,15 @@ import {
   type InteriorProjectFile,
 } from "@/lib/api-client"
 
-const FILE_TYPES = [
-  { value: "drawing", label: "도면" },
-  { value: "quote", label: "견적서" },
+const FILE_TYPES: { value: string; labelKey: string }[] = [
+  { value: "drawing", labelKey: "interiorFileKindDrawing" },
+  { value: "quote", labelKey: "interiorFileKindQuote" },
 ]
+
+function fileTypeLabel(t: (k: string) => string, stored?: string | null) {
+  const row = FILE_TYPES.find((x) => x.value === stored)
+  return row ? t(row.labelKey) : stored || "—"
+}
 
 interface InteriorFilesContentProps {
   projectId: string
@@ -70,9 +75,9 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
       })
       if (res.success) {
         loadData()
-        await appAlert(t("msg_saved") || "업로드되었습니다.")
+        await appAlert(t("interiorFileUploaded"))
       } else {
-        await appAlert(res.message || "업로드 실패")
+        await appAlert(res.message || t("msg_upload_fail"))
       }
     } catch (err) {
       await appAlert(String(err))
@@ -83,14 +88,14 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
   }
 
   const handleDelete = async (id: number) => {
-    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item"))) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorFile({ id })
       if (res.success) {
         loadData()
       } else {
-        await appAlert(res.message || "삭제 실패")
+        await appAlert(res.message || t("msg_delete_fail"))
       }
     } catch (err) {
       await appAlert(String(err))
@@ -115,7 +120,7 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
             </SelectTrigger>
             <SelectContent>
               {FILE_TYPES.map((ft) => (
-                <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
+                <SelectItem key={ft.value} value={ft.value}>{t(ft.labelKey)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -133,31 +138,31 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
             className="gap-1.5"
           >
             <Upload className="h-4 w-4" />
-            {uploading ? (t("loading") || "업로드 중...") : (t("interiorUpload") || "업로드")}
+            {uploading ? t("interiorUploadingShort") : t("interiorUpload")}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          PDF, PNG, JPG, DOC, XLS 등 (최대 50MB)
+          {t("interiorFilesFormatHint")}
         </p>
       </div>
 
       <div className="rounded-lg border bg-card">
         {loading ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            {t("loading") || "불러오는 중..."}
+            {t("loading")}
           </div>
         ) : list.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            {t("msg_click_query") || "파일을 업로드해 주세요."}
+            {t("interiorFilesEmpty")}
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-20">{t("interiorFileType") || "구분"}</TableHead>
-                <TableHead>{t("interiorFileName") || "파일명"}</TableHead>
-                <TableHead className="w-20">{t("interiorFileSize") || "크기"}</TableHead>
-                <TableHead className="w-40">{t("interiorUploadedAt") || "업로드일"}</TableHead>
+                <TableHead className="w-20">{t("interiorFileType")}</TableHead>
+                <TableHead>{t("interiorFileName")}</TableHead>
+                <TableHead className="w-20">{t("interiorFileSize")}</TableHead>
+                <TableHead className="w-40">{t("interiorUploadedAt")}</TableHead>
                 <TableHead className="w-32"></TableHead>
               </TableRow>
             </TableHeader>
@@ -166,7 +171,7 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
                 <TableRow key={item.id}>
                   <TableCell>
                     <span className="text-xs rounded px-2 py-0.5 bg-muted">
-                      {FILE_TYPES.find((ft) => ft.value === item.fileType)?.label || item.fileType}
+                      {fileTypeLabel(t, item.fileType)}
                     </span>
                   </TableCell>
                   <TableCell className="font-medium">{item.fileName}</TableCell>
@@ -187,7 +192,7 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
                         >
                           <a href={item.filePath} target="_blank" rel="noopener noreferrer">
                             <Download className="h-3.5 w-3.5" />
-                            {t("interiorDownload") || "다운로드"}
+                            {t("interiorDownload")}
                           </a>
                         </Button>
                       )}

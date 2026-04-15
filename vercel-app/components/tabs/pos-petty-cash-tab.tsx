@@ -17,7 +17,6 @@ import { useAuth } from '@/lib/auth-context'
 import { useStoreList } from '@/lib/api-client'
 import {
   getPettyCashList,
-  getPettyCashOptions,
   translateTexts,
   type PettyCashItem,
 } from '@/lib/api-client'

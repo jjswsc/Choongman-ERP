@@ -277,6 +277,7 @@ export default function PosPrintersPage() {
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
   const [receiptBizName, setReceiptBizName] = React.useState("")
   const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
+  const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
   const [receiptBizOwner, setReceiptBizOwner] = React.useState("")
   const [receiptBizAddress, setReceiptBizAddress] = React.useState("")
   const [receiptBizPhone, setReceiptBizPhone] = React.useState("")
@@ -433,6 +434,7 @@ export default function PosPrintersPage() {
     setAutoPrintKitchenSlipOnOrder(Boolean(settings.autoPrintKitchenSlipOnOrder))
     setReceiptBizName(String(settings.receiptBizName || ""))
     setReceiptBizTaxId(String(settings.receiptBizTaxId || ""))
+    setReceiptBizAbn(String(settings.receiptBizAbn || ""))
     setReceiptBizOwner(String(settings.receiptBizOwner || ""))
     setReceiptBizAddress(String(settings.receiptBizAddress || ""))
     setReceiptBizPhone(String(settings.receiptBizPhone || ""))
@@ -540,6 +542,7 @@ export default function PosPrintersPage() {
         autoPrintKitchenSlipOnOrder,
         receiptBizName,
         receiptBizTaxId,
+        receiptBizAbn,
         receiptBizOwner,
         receiptBizAddress,
         receiptBizPhone,
@@ -690,6 +693,7 @@ export default function PosPrintersPage() {
         copyKeys([
           "receiptBizName",
           "receiptBizTaxId",
+          "receiptBizAbn",
           "receiptBizOwner",
           "receiptBizAddress",
           "receiptBizPhone",
@@ -925,6 +929,7 @@ export default function PosPrintersPage() {
           ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ""}
           ${receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
           ${receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "Tax ID"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
+          ${receiptBizAbn ? `<div class="biz-line">ABN: ${escapeHtml(receiptBizAbn)}</div>` : ""}
           ${receiptBizOwner ? `<div class="biz-line">${escapeHtml(tr("posOwner", "대표"))}: ${escapeHtml(receiptBizOwner)}</div>` : ""}
           ${receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
           ${receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "TEL"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
@@ -955,7 +960,7 @@ export default function PosPrintersPage() {
         </body>
       </html>
     `
-  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizOwner, receiptBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t])
+  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, receiptMembershipQrImageUrl, receiptMembershipQrLinkUrl, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t])
 
   const buildKitchenSlipHtmlForSlip = React.useCallback(
     (slip: { label: string; items: { name: string; qty: number; note?: string }[] }) => {
@@ -1614,6 +1619,10 @@ export default function PosPrintersPage() {
                     <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizTaxIdPh", "예: 0105566137147")} />
                   </div>
                   <div>
+                    <label className="text-xs text-muted-foreground">{tr("posBizAbnLabel", "ABN")}</label>
+                    <Input value={receiptBizAbn} onChange={(e) => setReceiptBizAbn(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizAbnPh", "예: 12 345 678 901")} />
+                  </div>
+                  <div>
                     <label className="text-xs text-muted-foreground">{tr("posBizOwnerLabel", "대표자명")}</label>
                     <Input value={receiptBizOwner} onChange={(e) => setReceiptBizOwner(e.target.value)} className="mt-1 h-9" placeholder={tr("posBizOwnerPh", "예: 홍길동")} />
                   </div>
@@ -1837,10 +1846,11 @@ export default function PosPrintersPage() {
                     <div className="my-1 flex items-center justify-between"><span>{t("posOrderType") || "Order Type"}</span><span>{previewData.orderType}</span></div>
                   </div>
                   <div className="my-2 border-t border-dashed border-black" />
-                  {(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) && (
+                  {(receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) && (
                     <div className="space-y-0.5 text-black">
                       {receiptBizName && <div className="font-semibold">{receiptBizName}</div>}
                       {receiptBizTaxId && <div>{tr("posTaxIdLabel", "Tax ID")}: {receiptBizTaxId}</div>}
+                      {receiptBizAbn && <div>ABN: {receiptBizAbn}</div>}
                       {receiptBizOwner && <div>{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
                       {receiptBizAddress && <div>{receiptBizAddress}</div>}
                       {receiptBizPhone && <div>{tr("posTelLabel", "TEL")}: {receiptBizPhone}</div>}

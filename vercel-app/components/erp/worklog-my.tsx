@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -55,7 +54,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const [dateStr, setDateStr] = React.useState(() => getBangkokTodayDateString())
   const [selectedStaff, setSelectedStaff] = React.useState(userName)
   const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
-  const [data, setData] = React.useState<WorkLogData | null>(null)
+  const [_data, setData] = React.useState<WorkLogData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [localFinish, setLocalFinish] = React.useState<WorkLogItem[]>([])
@@ -159,19 +158,6 @@ export function WorklogMy({ userName }: WorklogMyProps) {
 
   const getTransContent = (content: string) => (content?.trim() && contentTransMap[content.trim()]) || content || t("workLogNoContent")
 
-  const updateProgress = (
-    list: WorkLogItem[],
-    setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
-    id: string,
-    progress: number
-  ) => {
-    setList((prev) =>
-      prev.map((it) =>
-        it.id === id ? { ...it, progress, status: progress >= 100 ? "Finish" : it.status } : it
-      )
-    )
-  }
-
   const addNewContinue = () => {
     setLocalContinue((prev) => [
       ...prev,
@@ -204,18 +190,6 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       ...toMove.map((it) => ({ ...it, status: "Today", progress: 0 })),
     ])
     setSelectedContinueIds(new Set())
-  }
-
-  const removeItem = (
-    list: WorkLogItem[],
-    setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
-    id: string
-  ) => {
-    if (!id) {
-      setList((prev) => prev.filter((_, i) => prev.length - 1 !== i))
-      return
-    }
-    setList((prev) => prev.filter((it) => it.id !== id))
   }
 
   const updateContent = (
@@ -322,7 +296,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         const r = res as { messageKey?: string; message?: string }
         await appAlert(r.messageKey ? t(r.messageKey) : (translateApiMessage(r.message, t) || t("workLogSaveFail")))
       }
-    } catch (e) {
+    } catch (_e) {
       await appAlert(t("workLogSaveError"))
     } finally {
       setSaving(false)
@@ -347,7 +321,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         const r = res as { messageKey?: string; message?: string }
         await appAlert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${translateApiMessage(r.message, t)}` : t(r.messageKey || "workLogCloseFail"))
       }
-    } catch (e) {
+    } catch (_e) {
       await appAlert(t("workLogCloseError"))
     } finally {
       setSaving(false)

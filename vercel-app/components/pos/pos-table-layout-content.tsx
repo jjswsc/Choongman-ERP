@@ -40,6 +40,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 
 const FLOOR_W = 720
 const FLOOR_H = 480
@@ -253,19 +254,6 @@ export function PosTableLayoutContent() {
   }
 
   const snapToGrid = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE
-
-  const handleMoveTable = (id: string, dx: number, dy: number) => {
-    setLayout((prev) =>
-      prev.map((t) => {
-        if (t.id !== id) return t
-        let nx = snapToGrid(t.x + dx)
-        let ny = snapToGrid(t.y + dy)
-        nx = Math.max(0, Math.min(FLOOR_W - t.w, nx))
-        ny = Math.max(0, Math.min(FLOOR_H - t.h, ny))
-        return { ...t, x: nx, y: ny }
-      })
-    )
-  }
 
   const handleUpdateName = (id: string, name: string) => {
     setLayout((prev) =>
@@ -711,59 +699,63 @@ export function PosTableLayoutContent() {
 
   return (
     <div className="space-y-4">
-      {/* 상단: 매장, 새로고침, 저장 */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={storeCode} onValueChange={setStoreCode} disabled={!canSearchAll}>
-            <SelectTrigger className="h-10 w-40">
-              <SelectValue placeholder={t("store") || "매장"} />
-            </SelectTrigger>
-            <SelectContent>
-              {(canSearchAll ? stores : auth?.store ? [auth.store] : stores).map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" onClick={loadLayout} disabled={loading}>
-            {t("posRefresh") || "새로고침"}
-          </Button>
-          {canSearchAll && stores.length >= 2 && (
-            <>
-              <Select value={copyFromStoreCode} onValueChange={setCopyFromStoreCode}>
-                <SelectTrigger className="h-10 w-40" title={t("posTableLayoutCopyFromHint") || ""}>
-                  <SelectValue placeholder={t("posTableLayoutCopyFrom") || "다른 매장에서 복사"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {stores
-                    .filter((s) => s !== storeCode)
-                    .map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 gap-1.5"
-                onClick={handleCopyFromStore}
-                disabled={copyLoading || !copyFromStoreCode || copyFromStoreCode === storeCode}
-                title={t("posTableLayoutCopyFromHint") || ""}
-              >
-                <ClipboardCopy className="h-4 w-4" />
-                {copyLoading ? "…" : t("posTableLayoutCopyBtn")}
-              </Button>
-            </>
-          )}
-        </div>
-        <Button size="sm" className="h-10 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} disabled={saving || !storeCode}>
-          <Save className="h-4 w-4" />
-          {saving ? "..." : t("itemsBtnSave") || "저장"}
-        </Button>
-      </div>
+      {/* 상단: 매장, 새로고침, 다른 매장 복사, 저장 (POS 설정 공통 툴바) */}
+      <PosScreenConfigActionBar
+        left={
+          <>
+            <Select value={storeCode} onValueChange={setStoreCode} disabled={!canSearchAll}>
+              <SelectTrigger className="h-10 w-40">
+                <SelectValue placeholder={t("store") || "매장"} />
+              </SelectTrigger>
+              <SelectContent>
+                {(canSearchAll ? stores : auth?.store ? [auth.store] : stores).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadLayout} disabled={loading}>
+              {t("posRefresh") || "새로고침"}
+            </Button>
+            {canSearchAll && stores.length >= 2 && (
+              <>
+                <Select value={copyFromStoreCode} onValueChange={setCopyFromStoreCode}>
+                  <SelectTrigger className="h-10 w-40" title={t("posTableLayoutCopyFromHint") || ""}>
+                    <SelectValue placeholder={t("posTableLayoutCopyFrom") || "다른 매장에서 복사"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores
+                      .filter((s) => s !== storeCode)
+                      .map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1.5"
+                  onClick={handleCopyFromStore}
+                  disabled={copyLoading || !copyFromStoreCode || copyFromStoreCode === storeCode}
+                  title={t("posTableLayoutCopyFromHint") || ""}
+                >
+                  <ClipboardCopy className="h-4 w-4" />
+                  {copyLoading ? "…" : t("posTableLayoutCopyBtn")}
+                </Button>
+              </>
+            )}
+          </>
+        }
+        right={
+          <PosScreenConfigEmeraldSaveButton onClick={handleSave} disabled={saving || !storeCode}>
+            <Save className="h-4 w-4" />
+            {saving ? "..." : t("itemsBtnSave") || "저장"}
+          </PosScreenConfigEmeraldSaveButton>
+        }
+      />
 
       {loading && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">

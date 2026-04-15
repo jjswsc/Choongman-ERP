@@ -465,14 +465,14 @@ export default function OutboundPage() {
       return
     }
     const filterLabel = whData.filterBy === "delivery" ? t("outWhFilterDelivery") : t("outWhFilterOrder")
-    const title = `${t("outTabByWarehouse")} [${filterLabel}] (${whData.period.start} ~ ${whData.period.end})`
+    const _title = `${t("outTabByWarehouse")} [${filterLabel}] (${whData.period.start} ~ ${whData.period.end})`
     const colCheck = t("store_check")
     const colCode = t("outColCode")
     const colItem = t("outColItem")
     const colSpec = t("spec")
     const colQty = t("outColQty")
     const colDeliveryDate = t("orderColDeliveryDate")
-    const colStore = t("outColStore")
+    const _colStore = t("outColStore")
     const whLabel = t("outWhWarehouseCol")
     const packingListTitle = t("outWhPackingList")
     const periodLabel = t("outWhPeriod")

@@ -172,7 +172,6 @@ export async function GET(request: NextRequest) {
       }
 
       for (const p of pending) {
-        const ongoing = true
         if (
           attendanceBusinessDateStrBangkok(p.startMs) === businessToday &&
           segmentOverlapsAttendanceBusinessDay(p.startMs, null, true, winStart, winEndEx, nowMs)

@@ -240,7 +240,7 @@ export function AdminPayrollRecords() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- URL 동기화 시 같은 탭에서 effect 재실행·이중 조회 방지
+     
   }, [auth?.store, fetchPayrollRecords, isManager, t, userStore])
 
   const handleToggleRow = (idx: number) => {

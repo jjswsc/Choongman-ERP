@@ -5,7 +5,7 @@ import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { compressImageForUpload } from "@/lib/utils"
-import { Image, Upload, Download } from "lucide-react"
+import { Image as ImageIcon, Upload, Download } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -553,7 +553,7 @@ export function EmployeeForm({
                         className="h-7 px-2 text-[10px]"
                         onClick={() => window.open(form.idCardPhoto, "_blank")}
                       >
-                        <Image className="h-3 w-3 mr-1" />
+                        <ImageIcon className="h-3 w-3 mr-1" aria-hidden />
                         {t("emp_id_card_view")}
                       </Button>
                       <Button

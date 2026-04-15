@@ -180,7 +180,6 @@ export function MarketingIntegratedCalendarPanel({
   const [month, setMonth] = React.useState(() => getBangkokDateStr().slice(0, 7))
   const [campaignFilter, setCampaignFilter] = React.useState("")
   const [storeFilter, setStoreFilter] = React.useState("")
-  const [promoFilter, setPromoFilter] = React.useState("")
   const [layers, setLayers] = React.useState<Set<CalendarLayerId>>(
     () => new Set(["campaign", "promo", "ad", "influencer", "material", "collab"])
   )
@@ -260,17 +259,6 @@ export function MarketingIntegratedCalendarPanel({
     () => eventsByDateForMonth(filteredEvents, month, sortLocale),
     [filteredEvents, month, sortLocale]
   )
-
-  const promoOptions = React.useMemo(() => {
-    const map = new Map<string, string>()
-    for (const e of rawEvents) {
-      if (e.promoId && e.layer === "promo") {
-        const label = e.shortLabel || e.label
-        if (!map.has(e.promoId)) map.set(e.promoId, label)
-      }
-    }
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], "ko"))
-  }, [rawEvents])
 
   const { startPad, daysInMonth } = getBangkokMonthGridMeta(month)
   const todayBangkok = getBangkokDateStr()

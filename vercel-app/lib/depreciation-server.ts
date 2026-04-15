@@ -38,7 +38,6 @@ export async function getDepreciableAssetsForMonth(yearMonth: string): Promise<
   (FixedAsset & { monthly_amount: number; already_posted: boolean })[]
 > {
   const [y, m] = yearMonth.split('-').map(Number)
-  const firstDay = `${yearMonth}-01`
   const lastDay = new Date(y, m, 0).getDate()
   const lastDayStr = `${yearMonth}-${String(lastDay).padStart(2, '0')}`
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpsert } from '@/lib/supabase-server'
-import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { assertCanWriteAccountingCompliance } from '@/lib/accounting-auth'
 import { normalizeResponsibilities, type ThaiFilingResponsibility, type ThaiFilingType } from '@/lib/thai-filing-scope'
+import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
     const userRole = String(body.userRole || '').trim()
-    assertCanManageAccountingCompliance(userRole)
+    assertCanWriteAccountingCompliance(userRole)
 
     const raw = body.responsibilities as Record<string, unknown> | undefined
     const responsibilities = normalizeResponsibilities(raw)
@@ -28,10 +29,32 @@ export async function POST(request: NextRequest) {
       'id'
     )
 
+    await writeAccountingComplianceAudit({
+      actionType: 'accounting_filing_preferences_save',
+      userRole,
+      actor: null,
+      decision: 'allow',
+      reasonCode: 'UPDATED',
+      targetType: 'accounting_filing_preferences',
+      targetId: '1',
+    })
+
     return NextResponse.json({ success: true, responsibilities }, { headers })
   } catch (e) {
     if (e instanceof Error && e.message === 'ACCOUNTING_FORBIDDEN') {
-      return NextResponse.json({ success: false, error: 'FORBIDDEN' }, { status: 403, headers })
+      try {
+        const body = await request.json().catch(() => ({}))
+        await writeAccountingComplianceAudit({
+          actionType: 'accounting_filing_preferences_save',
+          userRole: String(body.userRole || '').trim(),
+          actor: null,
+          decision: 'deny',
+          reasonCode: 'FORBIDDEN_WRITE',
+          targetType: 'accounting_filing_preferences',
+          targetId: '1',
+        })
+      } catch {}
+      return NextResponse.json({ success: false, error: 'FORBIDDEN_WRITE' }, { status: 403, headers })
     }
     console.error('saveAccountingFilingPreferences:', e)
     return NextResponse.json(

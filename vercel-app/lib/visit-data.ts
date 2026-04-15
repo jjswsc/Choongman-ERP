@@ -69,7 +69,7 @@ export function formatMinutesWithT(
   return m > 0 ? `${h}${hourUnit} ${m}${minUnit}` : `${h}${hourUnit}`
 }
 
-export function aggregateBy<T extends string>(
+export function aggregateBy(
   records: VisitRecord[],
   key: keyof VisitRecord
 ): { name: string; totalMin: number; visits: number }[] {

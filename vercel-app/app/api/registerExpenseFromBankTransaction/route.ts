@@ -62,8 +62,6 @@ export async function POST(request: NextRequest) {
       if (!accrualId) {
         return NextResponse.json({ success: false, message: '연결된 지출 정보를 찾을 수 없습니다.' }, { status: 404, headers })
       }
-      const amount = Math.abs(Number(bankRow.amount || 0))
-      const expenseDate = String(bankRow.trans_date || '').slice(0, 10)
       await supabaseUpdate('expense_accruals', accrualId, {
         payee_code: payeeCode,
         payee_name: payeeName || payeeCode,

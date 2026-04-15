@@ -4,18 +4,22 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 
-const SAAS_NAV = [
-  { href: "/saas-admin", label: "대시보드" },
-  { href: "/saas-admin/customers", label: "고객사" },
-  { href: "/saas-admin/stores", label: "매장" },
-  { href: "/saas-admin/users", label: "사용자" },
+const SAAS_NAV_KEYS = [
+  { href: "/saas-admin", titleKey: "saasAdminNavDashboard" as const },
+  { href: "/saas-admin/customers", titleKey: "saasAdminNavCustomers" as const },
+  { href: "/saas-admin/stores", titleKey: "saasAdminNavStores" as const },
+  { href: "/saas-admin/users", titleKey: "saasAdminNavUsers" as const },
 ]
 
 export function SaasSidebar() {
   const pathname = usePathname()
   const brand = useAppBrandConfig()
+  const { lang } = useLang()
+  const t = useT(lang)
   return (
     <Sidebar>
       <SidebarContent>
@@ -32,12 +36,13 @@ export function SaasSidebar() {
             {brand.headerTitle}
           </SidebarGroupLabel>
           <SidebarMenu>
-            {SAAS_NAV.map((item) => {
+            {SAAS_NAV_KEYS.map((item) => {
               const active = pathname === item.href
+              const label = t(item.titleKey)
               return (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
-                    <Link href={item.href}>{item.label}</Link>
+                  <SidebarMenuButton asChild isActive={active} tooltip={label}>
+                    <Link href={item.href}>{label}</Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Tooltip, type TooltipProps } from "recharts"
+import { Tooltip } from "recharts"
 import { cn } from "@/lib/utils"
 
 export type ChartConfig = Record<
@@ -19,14 +19,6 @@ type ChartContextProps = {
 }
 
 const ChartContext = React.createContext<ChartContextProps | null>(null)
-
-function useChart() {
-  const context = React.useContext(ChartContext)
-  if (!context) {
-    throw new Error("useChart must be used within a <ChartContainer />")
-  }
-  return context
-}
 
 const ChartContainer = React.forwardRef<
   HTMLDivElement,

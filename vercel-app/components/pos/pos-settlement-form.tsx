@@ -190,7 +190,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     }>
   >([])
 
-  const [cashActual, setCashActual] = React.useState<string>('')
+  const [, setCashActual] = React.useState<string>('')
   const [cashAmt, setCashAmt] = React.useState<string>('')
   const [cardAmt, setCardAmt] = React.useState<string>('')
   const [qrAmt, setQrAmt] = React.useState<string>('')

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,8 +16,10 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import dynamic from "next/dynamic"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
+import { bangkokTodayYmd } from "@/lib/bangkok-date"
+import { isNoticeReadStatus } from "@/lib/notice-read-status"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
-import { Megaphone, Bell, Search, FileText } from "lucide-react"
+import { Megaphone, Bell, Search, FileText, RefreshCw } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
@@ -27,20 +29,6 @@ const PushNotificationSetup = dynamic(
   () => import("@/components/push-notification-setup").then((m) => ({ default: m.PushNotificationSetup })),
   { ssr: false }
 )
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function daysAgoStr(days: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().slice(0, 10)
-}
-
-function isRead(status: string) {
-  return /^(확인|Read|확인함)$/.test(String(status || '').trim())
-}
 
 export function HomeTab() {
   const { auth } = useAuth()
@@ -54,12 +42,26 @@ export function HomeTab() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread') // 첫화면: 미확인 기본
-  const [dateFrom, setDateFrom] = useState(todayStr)
-  const [dateTo, setDateTo] = useState(todayStr)
+  const [dateFrom, setDateFrom] = useState(() => bangkokTodayYmd())
+  const [dateTo, setDateTo] = useState(() => bangkokTodayYmd())
+  const [unreadTotal, setUnreadTotal] = useState<number | null>(null)
   const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [confirmingId, setConfirmingId] = useState<number | null>(null)
 
   const statusParam = statusFilter === 'Unread' ? 'unread' : statusFilter === 'Read' ? 'read' : 'all'
+
+  const refreshUnreadCount = useCallback(() => {
+    if (!auth?.store || !auth?.user) return
+    void getMyNotices({
+      store: auth.store,
+      name: auth.user,
+      page: 1,
+      pageSize: 1,
+      status: "unread",
+    })
+      .then((res) => setUnreadTotal(res.total))
+      .catch(() => setUnreadTotal(null))
+  }, [auth?.store, auth?.user])
 
   const fetchNotices = useCallback(
     (page: number) => {
@@ -96,6 +98,10 @@ export function HomeTab() {
   }, [auth?.store, auth?.user, noticePage, fetchNotices])
 
   useEffect(() => {
+    refreshUnreadCount()
+  }, [refreshUnreadCount])
+
+  useEffect(() => {
     const texts = [...new Set(notices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
     if (texts.length === 0) {
       setTransMap({})
@@ -128,6 +134,7 @@ export function HomeTab() {
             prev.map((n) => (n.id === noticeId ? { ...n, status: '확인' } : n))
           )
           setExpandedId(null)
+          refreshUnreadCount()
         }
       } catch {
         // ignore
@@ -135,7 +142,7 @@ export function HomeTab() {
         setConfirmingId(null)
       }
     },
-    [auth?.store, auth?.user]
+    [auth?.store, auth?.user, refreshUnreadCount]
   )
 
   return (
@@ -160,7 +167,14 @@ export function HomeTab() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
             <Megaphone className="h-3.5 w-3.5 text-primary" />
           </div>
-          <CardTitle className="text-base font-semibold">{t('noticeBoard')}</CardTitle>
+          <CardTitle className="text-base font-semibold">
+            {t("noticeBoard")}
+            {unreadTotal != null && unreadTotal > 0 ? (
+              <span className="ml-1.5 rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-semibold text-destructive">
+                {unreadTotal}
+              </span>
+            ) : null}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
@@ -189,10 +203,25 @@ export function HomeTab() {
                 onClick={() => {
                   setNoticePage(1)
                   fetchNotices(1)
+                  refreshUnreadCount()
                 }}
                 title={t('search')}
               >
                 <Search className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-9 w-9 shrink-0"
+                type="button"
+                onClick={() => {
+                  setNoticePage(1)
+                  fetchNotices(1)
+                  refreshUnreadCount()
+                }}
+                title={t("homeNoticesRefresh")}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
               </Button>
             </div>
             {/* 2행: 날짜 검색창 */}
@@ -246,10 +275,10 @@ export function HomeTab() {
                     >
                       <div
                         className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                          n.status === "New" || !isRead(n.status) ? "bg-destructive/10" : "bg-primary/10"
+                          n.status === "New" || !isNoticeReadStatus(n.status) ? "bg-destructive/10" : "bg-primary/10"
                         }`}
                       >
-                        <Bell className={`h-3 w-3 ${n.status === "New" || !isRead(n.status) ? "text-destructive" : "text-primary"}`} />
+                        <Bell className={`h-3 w-3 ${n.status === "New" || !isNoticeReadStatus(n.status) ? "text-destructive" : "text-primary"}`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{getTrans(n.title)}</p>
@@ -260,7 +289,7 @@ export function HomeTab() {
                     {isExpanded && (
                       <div className="border-t border-border/60 bg-muted/20 px-3 py-3">
                         <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
-                          {n.content ? getTrans(n.content) : "(내용 없음)"}
+                          {n.content ? getTrans(n.content) : t("noticeEmptyContent")}
                         </p>
                         {Array.isArray(n.attachments) && n.attachments.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -279,7 +308,7 @@ export function HomeTab() {
                                 >
                                   <img
                                     src={url}
-                                    alt={att?.name || "첨부"}
+                                    alt={att?.name || t("noticeAttachment")}
                                     className="max-h-40 w-auto object-contain"
                                     onError={(e) => { e.currentTarget.style.display = "none" }}
                                   />
@@ -293,13 +322,13 @@ export function HomeTab() {
                                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted"
                                 >
                                   <FileText className="h-3.5 w-3.5" />
-                                  {att?.name || "첨부파일"}
+                                  {att?.name || t("noticeAttachmentFile")}
                                 </a>
                               )
                             })}
                           </div>
                         )}
-                        {!isRead(n.status) && (
+                        {!isNoticeReadStatus(n.status) && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Button
                               size="sm"

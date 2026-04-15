@@ -137,7 +137,6 @@ export async function POST(request: NextRequest) {
       const key = `${dateStr}|${store}|${name}`
       const area = String(s.remark || s.memo || '').trim() || ''
       if (seen.has(key)) {
-        const firstArea = seen.get(key) || ''
         if (!duplicates.some((d) => d.name === name && d.date === dateStr)) {
           duplicates.push({ name, date: dateStr })
         }

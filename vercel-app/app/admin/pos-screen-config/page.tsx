@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone } from "lucide-react"
+import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone, Save } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
@@ -20,22 +20,54 @@ import { PosPaymentSettingsContent } from "@/components/pos/pos-payment-settings
 import { PosTerminalMenuScreen } from "@/components/pos/pos-terminal-menu-screen"
 import { PosMenuBoardManagementContent } from "@/components/pos/pos-menu-board-management-content"
 import { PosTerminalSettingsContent } from "@/components/pos/pos-terminal-settings-content"
-import { PosCustomerDisplayContentSettings } from "@/components/pos/pos-customer-display-content-settings"
+import {
+  PosCustomerDisplayContentSettings,
+  type PosCustomerDisplayContentSettingsHandle,
+} from "@/components/pos/pos-customer-display-content-settings"
+import { PosScreenConfigStoreAndCopyRow } from "@/components/pos/pos-screen-config-store-and-copy-row"
+import { PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { useStoreList } from "@/lib/api-client"
+import { isOfficeRole } from "@/lib/permissions"
 
 
 export default function PosScreenConfigPage() {
   const searchParams = useSearchParams()
   const { auth } = useAuth()
+  const { stores } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
+  const tr = React.useCallback(
+    (key: string, fallback: string) => {
+      const v = t(key)
+      return v && v !== key ? v : fallback
+    },
+    [t]
+  )
+  const canPickStore = isOfficeRole(auth?.role || "")
+  const [pickedStore, setPickedStore] = React.useState("")
+  const effectiveStoreForMenuAndDisplay = String(
+    canPickStore && pickedStore ? pickedStore : auth?.store || ""
+  ).trim()
+
+  React.useEffect(() => {
+    if (canPickStore && stores.length && !pickedStore) {
+      setPickedStore(stores[0])
+    } else if (!canPickStore && auth?.store) {
+      setPickedStore(auth.store)
+    }
+  }, [canPickStore, stores, auth?.store, pickedStore])
+
   const tabParam = searchParams.get("tab") || "tables"
   const [activeTab, setActiveTab] = React.useState(
     ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "dual-monitor"].includes(tabParam) ? tabParam : "tables"
   )
   const [menusSubTab, setMenusSubTab] = React.useState<"menu-screen" | "menu-board">("menu-screen")
+  const [menuConfigReloadNonce, setMenuConfigReloadNonce] = React.useState(0)
+  const customerDisplayRef = React.useRef<PosCustomerDisplayContentSettingsHandle>(null)
+  const [customerToolbarSaving, setCustomerToolbarSaving] = React.useState(false)
 
   React.useEffect(() => {
     const tab = searchParams.get("tab")
@@ -45,7 +77,7 @@ export default function PosScreenConfigPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
+        <div className="mb-4 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Monitor className="h-5 w-5 text-primary" />
           </div>
@@ -104,8 +136,8 @@ export default function PosScreenConfigPage() {
           </TabsContent>
 
           <TabsContent value="menus" className={adminTabsContentFlushCn}>
-            <div className="rounded-xl border bg-card p-3 min-h-[640px]">
-              <Tabs value={menusSubTab} onValueChange={(v) => setMenusSubTab(v as "menu-screen" | "menu-board")} className="space-y-3">
+            <div className="min-h-[640px] rounded-xl border bg-card p-6">
+              <Tabs value={menusSubTab} onValueChange={(v) => setMenusSubTab(v as "menu-screen" | "menu-board")} className="space-y-4">
                 <div className={adminTabsBarCn}>
                   <div className={adminTabsScrollCn}>
                     <TabsList className={adminTabsListRowCn}>
@@ -118,14 +150,27 @@ export default function PosScreenConfigPage() {
                     </TabsList>
                   </div>
                 </div>
-                <TabsContent value="menu-screen" className="mt-0 flex flex-col min-h-0 overflow-hidden">
+                <TabsContent value="menu-screen" className="mt-0 flex min-h-0 flex-col gap-4 overflow-hidden">
+                  <PosScreenConfigStoreAndCopyRow
+                    canPickStore={canPickStore}
+                    stores={stores}
+                    pickedStore={pickedStore}
+                    onPickedStoreChange={setPickedStore}
+                    readOnlyStoreCode={auth?.store}
+                    effectiveStore={effectiveStoreForMenuAndDisplay}
+                    showCopy
+                    copyVariant="menu"
+                    tr={tr}
+                    onRefresh={() => setMenuConfigReloadNonce((n) => n + 1)}
+                  />
                   <div
-                    className="flex flex-col overflow-hidden rounded-b-lg border border-border min-h-[560px]"
-                    style={{ height: 'calc(100vh - 11rem)' }}
+                    className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-lg border border-border"
+                    style={{ height: "calc(100vh - 16rem)" }}
                   >
                     <PosTerminalMenuScreen
                       mode="admin-config"
-                      storeCode={auth?.store || null}
+                      storeCode={effectiveStoreForMenuAndDisplay || null}
+                      configReloadNonce={menuConfigReloadNonce}
                       selectedTableName={t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
                       onBack={() => setActiveTab("tables")}
                       backButtonLabel={t("posScreenConfigTabTables") || "테이블 구성"}
@@ -133,8 +178,19 @@ export default function PosScreenConfigPage() {
                     />
                   </div>
                 </TabsContent>
-                <TabsContent value="menu-board" className="mt-0">
-                  <PosMenuBoardManagementContent storeCode={auth?.store || null} />
+                <TabsContent value="menu-board" className="mt-0 space-y-4">
+                  <PosScreenConfigStoreAndCopyRow
+                    canPickStore={canPickStore}
+                    stores={stores}
+                    pickedStore={pickedStore}
+                    onPickedStoreChange={setPickedStore}
+                    readOnlyStoreCode={auth?.store}
+                    effectiveStore={effectiveStoreForMenuAndDisplay}
+                    showCopy={false}
+                    copyVariant="menu"
+                    tr={tr}
+                  />
+                  <PosMenuBoardManagementContent storeCode={effectiveStoreForMenuAndDisplay || null} />
                 </TabsContent>
               </Tabs>
             </div>
@@ -183,11 +239,48 @@ export default function PosScreenConfigPage() {
 
           <TabsContent value="dual-monitor" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">
-              <h3 className="text-sm font-bold mb-2">{t("posDualMonitorTab") || "듀얼 모니터"}</h3>
-              <p className="text-sm text-muted-foreground mb-4">
+              <h3 className="mb-2 text-sm font-bold">{t("posDualMonitorTab") || "듀얼 모니터"}</h3>
+              <p className="mb-4 text-sm text-muted-foreground">
                 {t("posDualMonitorTabDesc") || "고객용 화면의 평상시/주문중/결제중/QR 표시 콘텐츠를 설정합니다."}
               </p>
-              <PosCustomerDisplayContentSettings storeCode={auth?.store || null} />
+              <div className="space-y-4">
+                <PosScreenConfigStoreAndCopyRow
+                  canPickStore={canPickStore}
+                  stores={stores}
+                  pickedStore={pickedStore}
+                  onPickedStoreChange={setPickedStore}
+                  readOnlyStoreCode={auth?.store}
+                  effectiveStore={effectiveStoreForMenuAndDisplay}
+                  showCopy
+                  copyVariant="display"
+                  tr={tr}
+                  onRefresh={() => void customerDisplayRef.current?.reload()}
+                  refreshLoading={false}
+                  rightSlot={
+                    <PosScreenConfigEmeraldSaveButton
+                      disabled={!effectiveStoreForMenuAndDisplay || customerToolbarSaving}
+                      onClick={() => {
+                        void (async () => {
+                          setCustomerToolbarSaving(true)
+                          try {
+                            await customerDisplayRef.current?.save()
+                          } finally {
+                            setCustomerToolbarSaving(false)
+                          }
+                        })()
+                      }}
+                    >
+                      <Save className="h-4 w-4" />
+                      {customerToolbarSaving ? "..." : t("itemsBtnSave") || "저장"}
+                    </PosScreenConfigEmeraldSaveButton>
+                  }
+                />
+                <PosCustomerDisplayContentSettings
+                  ref={customerDisplayRef}
+                  toolbarMode="embedded"
+                  storeCode={effectiveStoreForMenuAndDisplay || null}
+                />
+              </div>
             </div>
           </TabsContent>
         </Tabs>

@@ -6,7 +6,7 @@
  * - 매장 0개(전체): 응답 행에 등장한 store_code 기준으로 분해
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
@@ -36,15 +36,33 @@ export async function GET(request: NextRequest) {
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
-
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: FETCH_LIMIT,
-      select:
-        'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,guest_count,store_code,status,order_type',
-    })) as PeriodOrderRow[]
+    let rows: PeriodOrderRow[] = []
+    let usedRpc = false
+    try {
+      const rpcRows = (await supabaseRpc<PeriodOrderRow[]>('get_pos_sales_period_rows', {
+        p_start_utc: startISO,
+        p_end_utc_exclusive: endISOExclusive,
+        p_store_codes: stores.length > 0 ? stores : null,
+        p_limit: FETCH_LIMIT,
+      })) as PeriodOrderRow[]
+      if (Array.isArray(rpcRows)) {
+        rows = rpcRows
+        usedRpc = true
+      }
+    } catch {
+      usedRpc = false
+    }
+    if (!usedRpc) {
+      rows = (await supabaseSelectFilter('pos_orders', filter, {
+        limit: FETCH_LIMIT,
+        select:
+          'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,guest_count,store_code,status,order_type',
+      })) as PeriodOrderRow[]
+    }
 
     const truncated = rows.length >= FETCH_LIMIT
     if (truncated) headers.set('X-Sales-Truncated', '1')
+    headers.set('X-Pos-Sales-Source', usedRpc ? 'rpc' : 'select')
 
     if (splitByStore) {
       const series: Record<string, ReturnType<typeof aggregatePosSalesByPeriod>> = {}

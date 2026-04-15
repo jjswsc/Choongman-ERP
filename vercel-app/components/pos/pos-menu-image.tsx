@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element -- POS 메뉴 썸네일은 네이티브 img가 가장 단순·안정적 */
+ 
 "use client"
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react"

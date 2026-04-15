@@ -177,7 +177,7 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
         m[code] = Number(rows![i].total_qty ?? 0)
       }
       return m
-    } catch (rpcErr) {
+    } catch (_rpcErr) {
       // RPC 미배포 시 fallback: 기존 select 방식 (limit 50000)
       const locFilter =
         patterns.length === 1

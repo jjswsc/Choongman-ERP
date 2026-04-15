@@ -1,4 +1,5 @@
 import { supabaseSelectFilter, supabaseInsertMany, supabaseInsert } from '@/lib/supabase-server'
+import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 
 async function deductMenuIngredients(
   menuId: string,
@@ -111,7 +112,7 @@ export async function processPosStockDeduction(orderId: number): Promise<{ succe
   }
 
   const usageByItem: Record<string, number> = {}
-  const now = new Date().toISOString().slice(0, 19)
+  const now = getBangkokDateTimeString()
 
   for (const it of items) {
     const cartQty = Math.max(0, Number(it.qty ?? 1))
@@ -167,4 +168,72 @@ export async function processPosStockDeduction(orderId: number): Promise<{ succe
   }
 
   return { success: true, deductedCount: rows.length }
+}
+
+/** POS 주문 취소/환불 시 이전 차감분을 되돌린다. (이미 되돌림이 있으면 중복 실행 방지) */
+export async function reversePosStockDeduction(orderId: number): Promise<{ success: boolean; revertedCount: number }> {
+  const safeId = Math.floor(Number(orderId) || 0)
+  if (safeId <= 0) return { success: false, revertedCount: 0 }
+  const sourceSpec = `POS-${safeId}`
+  const reverseSpec = `POS-REV-${safeId}`
+
+  try {
+    const existingReverse = (await supabaseSelectFilter(
+      'stock_logs',
+      `spec=eq.${encodeURIComponent(reverseSpec)}`,
+      { limit: 1, select: 'id' }
+    )) as { id?: number }[] | null
+    if (existingReverse?.length) {
+      return { success: true, revertedCount: 0 }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const originalRows = (await supabaseSelectFilter(
+    'stock_logs',
+    `spec=eq.${encodeURIComponent(sourceSpec)}&log_type=eq.POS`,
+    {
+      limit: 5000,
+      select: 'location,item_code,item_name,qty,vendor_target',
+    }
+  )) as {
+    location?: string
+    item_code?: string
+    item_name?: string
+    qty?: number
+    vendor_target?: string
+  }[] | null
+
+  const reverseRows = (originalRows || [])
+    .map((row) => {
+      const location = String(row.location ?? '').trim()
+      const itemCode = String(row.item_code ?? '').trim()
+      const qty = Number(row.qty ?? 0)
+      if (!location || !itemCode || !Number.isFinite(qty) || qty >= 0) return null
+      return {
+        location,
+        item_code: itemCode,
+        item_name: String(row.item_name ?? itemCode).trim() || itemCode,
+        spec: reverseSpec,
+        qty: Math.abs(qty),
+        log_date: getBangkokDateTimeString(),
+        vendor_target: String(row.vendor_target ?? 'Store').trim() || 'Store',
+        log_type: 'POS_REVERSAL',
+      }
+    })
+    .filter((row): row is {
+      location: string
+      item_code: string
+      item_name: string
+      spec: string
+      qty: number
+      log_date: string
+      vendor_target: string
+      log_type: string
+    } => Boolean(row))
+
+  if (!reverseRows.length) return { success: true, revertedCount: 0 }
+  await supabaseInsertMany('stock_logs', reverseRows)
+  return { success: true, revertedCount: reverseRows.length }
 }

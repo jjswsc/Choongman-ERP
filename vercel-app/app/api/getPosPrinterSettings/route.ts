@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parseKitchenRouteMapDb } from '@/lib/pos-kitchen-slip-routing'
+import { requireAuth } from '@/lib/verify-auth'
+import { canAccessPosPrinters, isOfficeRole } from '@/lib/permissions'
 
 type VendorBizInfo = {
   name?: string
@@ -14,6 +16,7 @@ type VendorBizInfo = {
 async function getStoreReceiptBizFallback(storeCode: string): Promise<{
   receiptBizName: string
   receiptBizTaxId: string
+  receiptBizAbn: string
   receiptBizOwner: string
   receiptBizAddress: string
   receiptBizPhone: string
@@ -23,6 +26,7 @@ async function getStoreReceiptBizFallback(storeCode: string): Promise<{
     return {
       receiptBizName: '',
       receiptBizTaxId: '',
+      receiptBizAbn: '',
       receiptBizOwner: '',
       receiptBizAddress: '',
       receiptBizPhone: '',
@@ -58,6 +62,7 @@ async function getStoreReceiptBizFallback(storeCode: string): Promise<{
   return {
     receiptBizName: String(row?.name || '').trim(),
     receiptBizTaxId: String(row?.tax_id || '').trim(),
+    receiptBizAbn: '',
     receiptBizOwner: String(row?.ceo || '').trim(),
     receiptBizAddress: String(row?.addr || '').trim(),
     receiptBizPhone: String(row?.phone || '').trim(),
@@ -69,7 +74,20 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
-  const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const authResult = await requireAuth(request, 'manager')
+  if (!authResult.auth) {
+    return NextResponse.json({ success: false, message: '인증이 필요합니다.' }, { status: 401, headers })
+  }
+  if (!canAccessPosPrinters(authResult.auth.role || '')) {
+    return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
+  }
+  const requestedStoreCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const authStore = String(authResult.auth.store || '').trim()
+  const office = isOfficeRole(authResult.auth.role || '')
+  const storeCode = office ? requestedStoreCode : requestedStoreCode || authStore
+  if (!office && storeCode && authStore && storeCode !== authStore) {
+    return NextResponse.json({ success: false, message: '다른 매장 설정에는 접근할 수 없습니다.' }, { status: 403, headers })
+  }
 
   const defaultRes = {
     kitchenMode: 1,
@@ -109,6 +127,7 @@ export async function GET(request: NextRequest) {
     autoPrintKitchenSlipOnOrder: false,
     receiptBizName: '',
     receiptBizTaxId: '',
+    receiptBizAbn: '',
     receiptBizOwner: '',
     receiptBizAddress: '',
     receiptBizPhone: '',
@@ -206,6 +225,7 @@ export async function GET(request: NextRequest) {
       auto_print_kitchen_slip_on_order?: boolean
       receipt_biz_name?: string
       receipt_biz_tax_id?: string
+      receipt_biz_abn?: string
       receipt_biz_owner?: string
       receipt_biz_address?: string
       receipt_biz_phone?: string
@@ -331,6 +351,7 @@ export async function GET(request: NextRequest) {
       autoPrintKitchenSlipOnOrder: Boolean(raw?.auto_print_kitchen_slip_on_order),
       receiptBizName: String(raw?.receipt_biz_name || '').trim() || fallback.receiptBizName,
       receiptBizTaxId: String(raw?.receipt_biz_tax_id || '').trim() || fallback.receiptBizTaxId,
+      receiptBizAbn: String(raw?.receipt_biz_abn || '').trim() || fallback.receiptBizAbn,
       receiptBizOwner: String(raw?.receipt_biz_owner || '').trim() || fallback.receiptBizOwner,
       receiptBizAddress: String(raw?.receipt_biz_address || '').trim() || fallback.receiptBizAddress,
       receiptBizPhone: String(raw?.receipt_biz_phone || '').trim() || fallback.receiptBizPhone,

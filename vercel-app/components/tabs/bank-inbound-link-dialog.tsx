@@ -54,7 +54,7 @@ export function BankInboundLinkDialog({
   const [vendorCode, setVendorCode] = React.useState("")
   const [vendorSearch, setVendorSearch] = React.useState("")
   const [batches, setBatches] = React.useState<InboundBatchForLink[]>([])
-  const [existingLinks, setExistingLinks] = React.useState<{ inboundBatchId?: number; amount: number }[]>([])
+  const [, setExistingLinks] = React.useState<{ inboundBatchId?: number; amount: number }[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [amounts, setAmounts] = React.useState<Record<number, number>>({})

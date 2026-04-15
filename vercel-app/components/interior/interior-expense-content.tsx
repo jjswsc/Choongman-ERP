@@ -43,8 +43,31 @@ import {
   type InteriorDirectPurchase,
 } from "@/lib/api-client"
 
-const EXPENSE_CATEGORIES = ["견적", "인테리어", "M&E", "주방", "에어컨", "기타"]
-const DIRECT_CATEGORIES = ["M&E", "Interior", "Kitchen", "Air condition"]
+const EXPENSE_CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: "견적", labelKey: "interiorExpenseCatQuote" },
+  { value: "인테리어", labelKey: "interiorExpenseCatInterior" },
+  { value: "M&E", labelKey: "interiorExpenseCatMe" },
+  { value: "주방", labelKey: "interiorExpenseCatKitchen" },
+  { value: "에어컨", labelKey: "interiorExpenseCatAc" },
+  { value: "기타", labelKey: "interiorExpenseCatOther" },
+]
+
+const DIRECT_CATEGORY_OPTIONS: { value: string; labelKey: string }[] = [
+  { value: "M&E", labelKey: "interiorExpenseCatMe" },
+  { value: "Interior", labelKey: "interiorExpenseCatInterior" },
+  { value: "Kitchen", labelKey: "interiorExpenseCatKitchen" },
+  { value: "Air condition", labelKey: "interiorDirCatAirCondition" },
+]
+
+function expenseCategoryLabel(t: (k: string) => string, stored?: string | null) {
+  const row = EXPENSE_CATEGORY_OPTIONS.find((x) => x.value === stored)
+  return row ? t(row.labelKey) : stored || "—"
+}
+
+function directCategoryLabel(t: (k: string) => string, stored?: string | null) {
+  const row = DIRECT_CATEGORY_OPTIONS.find((x) => x.value === stored)
+  return row ? t(row.labelKey) : stored || "—"
+}
 
 interface InteriorExpenseContentProps {
   projectId: string
@@ -95,7 +118,7 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
 
   const handleSave = async () => {
     if (!editing || !editing.description?.trim()) {
-      await appAlert(t("interiorDescriptionRequired") || "설명을 입력하세요.")
+      await appAlert(t("interiorDescriptionRequired"))
       return
     }
     const balance = (editing.quote ?? 0) - (editing.paid ?? 0)
@@ -109,9 +132,9 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
       if (res.success) {
         setEditing(null)
         loadData()
-        await appAlert(t("msg_saved") || "저장되었습니다.")
+        await appAlert(t("msg_saved"))
       } else {
-        await appAlert(res.message || "저장 실패")
+        await appAlert(res.message || t("msg_save_fail"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -122,16 +145,16 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
     if (!paymentItem?.id) return
     const amt = Number(paymentAmount) || 0
     if (amt <= 0) {
-      await appAlert(t("interiorPaymentAmountRequired") || "결제 금액을 입력하세요.")
+      await appAlert(t("interiorPaymentAmountRequired"))
       return
     }
     const balance = (paymentItem.quote ?? 0) - (paymentItem.paid ?? 0)
     if (amt > balance) {
-      await appAlert(t("interiorPaymentExceedsBalance") || "잔액을 초과할 수 없습니다.")
+      await appAlert(t("interiorPaymentExceedsBalance"))
       return
     }
     if (!paymentAccountId) {
-      await appAlert(t("interiorPaymentAccountRequired") || "계좌를 선택하세요.")
+      await appAlert(t("interiorPaymentAccountRequired"))
       return
     }
     setPaying(true)
@@ -148,9 +171,9 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
         setPaymentAmount("")
         setPaymentMemo("")
         loadData()
-        await appAlert(t("msg_saved") || "결제가 등록되었습니다.")
+        await appAlert(t("interiorPaymentRegistered"))
       } else {
-        await appAlert(res.message || "결제 등록 실패")
+        await appAlert(res.message || t("interiorPaymentRegisterFail"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -160,7 +183,7 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
   }
 
   const handleDelete = async (id: number) => {
-    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item"))) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorExpenseItem({ id })
@@ -168,7 +191,7 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
         loadData()
         if (editing?.id === id) setEditing(null)
       } else {
-        await appAlert(res.message || "삭제 실패")
+        await appAlert(res.message || t("msg_delete_fail"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -191,11 +214,11 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <span className="text-sm text-muted-foreground">
-          {t("interiorQuote") || "견적"} 합계: ฿{totals.quoteTotal.toLocaleString()} | {t("interiorPaid") || "결제"}: ฿{totals.paidTotal.toLocaleString()} | {t("interiorBalance") || "잔액"}: ฿{totals.balanceTotal.toLocaleString()}
+          {t("interiorQuote")} {t("interiorTotalWord")}: ฿{totals.quoteTotal.toLocaleString()} | {t("interiorPaid")}: ฿{totals.paidTotal.toLocaleString()} | {t("interiorBalance")}: ฿{totals.balanceTotal.toLocaleString()}
         </span>
         <Button size="sm" onClick={handleAdd} className="gap-1.5">
           <Plus className="h-4 w-4" />
-          {t("add") || "추가"}
+          {t("add")}
         </Button>
       </div>
 
@@ -203,61 +226,61 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
         <div className="rounded-lg border bg-card p-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorCategory") || "구분"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorCategory")}</label>
               <Select value={editing.category || "기타"} onValueChange={(v) => setEditing({ ...editing, category: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {EXPENSE_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  {EXPENSE_CATEGORY_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{t(c.labelKey)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground">{t("interiorDescription") || "설명"}</label>
-              <Input value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} placeholder="예: 인테리어 공사비" />
+              <label className="text-xs text-muted-foreground">{t("interiorDescription")}</label>
+              <Input value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} placeholder={t("interiorExpenseDescPh")} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorVendor") || "거래처"}</label>
-              <Input value={editing.vendorCode || ""} onChange={(e) => setEditing({ ...editing, vendorCode: e.target.value })} placeholder="코드" />
+              <label className="text-xs text-muted-foreground">{t("interiorVendor")}</label>
+              <Input value={editing.vendorCode || ""} onChange={(e) => setEditing({ ...editing, vendorCode: e.target.value })} placeholder={t("interiorVendorCodePh")} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorQuote") || "견적"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorQuote")}</label>
               <Input type="number" value={editing.quote ?? ""} onChange={(e) => setEditing({ ...editing, quote: Number(e.target.value) || 0 })} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorPaid") || "결제"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorPaid")}</label>
               <Input type="number" value={editing.paid ?? ""} onChange={(e) => setEditing({ ...editing, paid: Number(e.target.value) || 0 })} />
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave}>{t("save") || "저장"}</Button>
-            <Button size="sm" variant="outline" onClick={() => setEditing(null)}>{t("cancel") || "취소"}</Button>
+            <Button size="sm" onClick={handleSave}>{t("save")}</Button>
+            <Button size="sm" variant="outline" onClick={() => setEditing(null)}>{t("cancel")}</Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">{t("loading") || "불러오는 중..."}</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">{t("loading")}</div>
       ) : list.length === 0 ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">{t("msg_click_query") || "비용 항목을 추가해 주세요."}</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">{t("interiorExpenseEmpty")}</div>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-20">{t("interiorCategory") || "구분"}</TableHead>
-              <TableHead>{t("interiorDescription") || "설명"}</TableHead>
-              <TableHead className="w-24">{t("interiorVendor") || "거래처"}</TableHead>
-              <TableHead className="w-24 text-right">{t("interiorQuote") || "견적"}</TableHead>
-              <TableHead className="w-24 text-right">{t("interiorPaid") || "결제"}</TableHead>
-              <TableHead className="w-24 text-right">{t("interiorBalance") || "잔액"}</TableHead>
+              <TableHead className="w-20">{t("interiorCategory")}</TableHead>
+              <TableHead>{t("interiorDescription")}</TableHead>
+              <TableHead className="w-24">{t("interiorVendor")}</TableHead>
+              <TableHead className="w-24 text-right">{t("interiorQuote")}</TableHead>
+              <TableHead className="w-24 text-right">{t("interiorPaid")}</TableHead>
+              <TableHead className="w-24 text-right">{t("interiorBalance")}</TableHead>
               <TableHead className="w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {list.map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="text-xs">{item.category}</TableCell>
+                <TableCell className="text-xs">{expenseCategoryLabel(t, item.category)}</TableCell>
                 <TableCell>{item.description}</TableCell>
                 <TableCell className="font-mono text-xs">{item.vendorCode || "—"}</TableCell>
                 <TableCell className="text-right font-mono">฿{(item.quote ?? 0).toLocaleString()}</TableCell>
@@ -268,7 +291,7 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
                     {(item.quote ?? 0) - (item.paid ?? 0) > 0 && (
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-primary" onClick={() => { setPaymentItem(item); setPaymentAmount(String((item.quote ?? 0) - (item.paid ?? 0))) }}>
                         <CreditCard className="h-3.5 w-3.5" />
-                        {t("interiorPay") || "결제"}
+                        {t("interiorPay")}
                       </Button>
                     )}
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditing(item)}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -283,17 +306,17 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
 
       {paymentItem && (
         <div className="rounded-lg border bg-card p-4 space-y-3">
-          <h3 className="text-sm font-medium">{t("interiorPay") || "결제"} — {paymentItem.description}</h3>
-          <p className="text-xs text-muted-foreground">{t("interiorBalance") || "잔액"}: ฿{((paymentItem.quote ?? 0) - (paymentItem.paid ?? 0)).toLocaleString()}</p>
+          <h3 className="text-sm font-medium">{t("interiorPay")} — {paymentItem.description}</h3>
+          <p className="text-xs text-muted-foreground">{t("interiorBalance")}: ฿{((paymentItem.quote ?? 0) - (paymentItem.paid ?? 0)).toLocaleString()}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorPaymentAmount") || "결제 금액"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorPaymentAmount")}</label>
               <Input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorPaymentAccount") || "계좌"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorPaymentAccount")}</label>
               <Select value={paymentAccountId} onValueChange={setPaymentAccountId}>
-                <SelectTrigger><SelectValue placeholder={t("interiorSelectAccount") || "계좌 선택"} /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("interiorSelectAccount")} /></SelectTrigger>
                 <SelectContent>
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={String(a.id)}>{a.name || `#${a.id}`}</SelectItem>
@@ -302,17 +325,17 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
               </Select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("dateFrom") || "결제일"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorPaymentDateLabel")}</label>
               <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorMemo") || "메모"}</label>
-              <Input value={paymentMemo} onChange={(e) => setPaymentMemo(e.target.value)} placeholder={t("interiorMemoOptional") || "선택"} />
+              <label className="text-xs text-muted-foreground">{t("interiorMemo")}</label>
+              <Input value={paymentMemo} onChange={(e) => setPaymentMemo(e.target.value)} placeholder={t("interiorMemoOptional")} />
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handlePay} disabled={paying}>{paying ? (t("loading") || "처리 중...") : (t("interiorPay") || "결제")}</Button>
-            <Button size="sm" variant="outline" onClick={() => { setPaymentItem(null); setPaymentAmount(""); setPaymentMemo(""); }}>{t("cancel") || "취소"}</Button>
+            <Button size="sm" onClick={handlePay} disabled={paying}>{paying ? t("interiorProcessing") : t("interiorPay")}</Button>
+            <Button size="sm" variant="outline" onClick={() => { setPaymentItem(null); setPaymentAmount(""); setPaymentMemo(""); }}>{t("cancel")}</Button>
           </div>
         </div>
       )}
@@ -356,7 +379,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
 
   const handleSave = async () => {
     if (!editing || !editing.description?.trim()) {
-      await appAlert(t("interiorDescriptionRequired") || "품목명을 입력하세요.")
+      await appAlert(t("interiorPurchaseItemNameRequired"))
       return
     }
     const sumAmount = recalcSum(editing.qty ?? 1, editing.price ?? 0)
@@ -370,9 +393,9 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
       if (res.success) {
         setEditing(null)
         loadData()
-        await appAlert(t("msg_saved") || "저장되었습니다.")
+        await appAlert(t("msg_saved"))
       } else {
-        await appAlert(res.message || "저장 실패")
+        await appAlert(res.message || t("msg_save_fail"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -380,7 +403,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
   }
 
   const handleDelete = async (id: number) => {
-    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item"))) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorDirectPurchase({ id })
@@ -388,7 +411,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
         loadData()
         if (editing?.id === id) setEditing(null)
       } else {
-        await appAlert(res.message || "삭제 실패")
+        await appAlert(res.message || t("msg_delete_fail"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -402,7 +425,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
       <div className="flex justify-end">
         <Button size="sm" onClick={handleAdd} className="gap-1.5">
           <Plus className="h-4 w-4" />
-          {t("add") || "추가"}
+          {t("add")}
         </Button>
       </div>
 
@@ -410,66 +433,66 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
         <div className="rounded-lg border bg-card p-4 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorCategory") || "구분"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorCategory")}</label>
               <Select value={editing.category || "M&E"} onValueChange={(v) => setEditing({ ...editing, category: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {DIRECT_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  {DIRECT_CATEGORY_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{t(c.labelKey)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground">{t("posMenuName") || "품목명"}</label>
+              <label className="text-xs text-muted-foreground">{t("posMenuName")}</label>
               <Input value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("qty") || "수량"}</label>
+              <label className="text-xs text-muted-foreground">{t("qty")}</label>
               <Input type="number" min={0.01} value={editing.qty ?? ""} onChange={(e) => setEditing({ ...editing, qty: Number(e.target.value) || 1 })} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("unit") || "단위"}</label>
+              <label className="text-xs text-muted-foreground">{t("unit")}</label>
               <Input value={editing.unit || "set"} onChange={(e) => setEditing({ ...editing, unit: e.target.value })} placeholder="set" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("price") || "단가"}</label>
+              <label className="text-xs text-muted-foreground">{t("price")}</label>
               <Input type="number" value={editing.price ?? ""} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) || 0 })} />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t("interiorSupplier") || "공급업체"}</label>
+              <label className="text-xs text-muted-foreground">{t("interiorSupplier")}</label>
               <Input value={editing.supplierCode || ""} onChange={(e) => setEditing({ ...editing, supplierCode: e.target.value })} />
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave}>{t("save") || "저장"}</Button>
-            <Button size="sm" variant="outline" onClick={() => setEditing(null)}>{t("cancel") || "취소"}</Button>
+            <Button size="sm" onClick={handleSave}>{t("save")}</Button>
+            <Button size="sm" variant="outline" onClick={() => setEditing(null)}>{t("cancel")}</Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">{t("loading") || "불러오는 중..."}</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">{t("loading")}</div>
       ) : list.length === 0 ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">{t("msg_click_query") || "직매입 품목을 추가해 주세요."}</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">{t("interiorDirectPurchaseEmpty")}</div>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-20">{t("interiorCategory") || "구분"}</TableHead>
-              <TableHead>{t("posMenuName") || "품목명"}</TableHead>
-              <TableHead className="w-16 text-right">{t("qty") || "수량"}</TableHead>
-              <TableHead className="w-16">{t("unit") || "단위"}</TableHead>
-              <TableHead className="w-24 text-right">{t("price") || "단가"}</TableHead>
-              <TableHead className="w-24 text-right">{t("interiorSumAmount") || "금액"}</TableHead>
-              <TableHead className="w-20">{t("status") || "상태"}</TableHead>
+              <TableHead className="w-20">{t("interiorCategory")}</TableHead>
+              <TableHead>{t("posMenuName")}</TableHead>
+              <TableHead className="w-16 text-right">{t("qty")}</TableHead>
+              <TableHead className="w-16">{t("unit")}</TableHead>
+              <TableHead className="w-24 text-right">{t("price")}</TableHead>
+              <TableHead className="w-24 text-right">{t("interiorSumAmount")}</TableHead>
+              <TableHead className="w-20">{t("status")}</TableHead>
               <TableHead className="w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {list.map((item) => (
               <TableRow key={item.id}>
-                <TableCell className="text-xs">{item.category}</TableCell>
+                <TableCell className="text-xs">{directCategoryLabel(t, item.category)}</TableCell>
                 <TableCell>{item.description}</TableCell>
                 <TableCell className="text-right font-mono">{item.qty ?? 1}</TableCell>
                 <TableCell className="text-xs">{item.unit || "set"}</TableCell>
@@ -499,11 +522,11 @@ export function InteriorExpenseContent({ projectId, t }: InteriorExpenseContentP
           <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="expense" className={adminTabsTriggerCn}>
               <Banknote className={adminTabsIconCn} aria-hidden />
-              {t("interiorExpenseTab") || "비용"}
+              {t("interiorExpenseTab")}
             </TabsTrigger>
             <TabsTrigger value="direct" className={adminTabsTriggerCn}>
               <Package className={adminTabsIconCn} aria-hidden />
-              {t("interiorDirectPurchase") || "직매입"}
+              {t("interiorDirectPurchase")}
             </TabsTrigger>
           </TabsList>
         </div>

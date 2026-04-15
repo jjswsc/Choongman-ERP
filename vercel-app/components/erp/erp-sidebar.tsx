@@ -41,6 +41,11 @@ import {
   GitBranch,
   Handshake,
   Bot,
+  Calendar,
+  HandCoins,
+  LayoutPanelTop,
+  PackageSearch,
+  UtensilsCrossed,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -49,6 +54,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { getInteriorDashboardSummary, type InteriorDashboardTotals } from "@/lib/api-client"
 import {
   isManagerRole,
   isFranchiseeRole,
@@ -112,6 +118,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
       { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
       { titleKey: "adminMarketingMaterials", icon: Package, href: "/admin/marketing/materials" },
+      { titleKey: "adminProductCatalog", icon: LayoutGrid, href: "/admin/product-catalog" },
       { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
       { titleKey: "adminMarketingReport", icon: FileText, href: "/admin/marketing/report" },
       { titleKey: "adminMarketingIntegrations", icon: Settings2, href: "/admin/marketing/integrations" },
@@ -180,13 +187,36 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionInterior",
     items: [
       { titleKey: "adminInteriorProjects", icon: LayoutGrid, href: "/admin/interior" },
-      { titleKey: "adminInteriorEstimates", icon: FileText, href: "/admin/interior-estimates" },
-      { titleKey: "adminInteriorExpense", icon: Wallet, href: "/admin/interior-expense" },
+      { titleKey: "interiorSchedule", icon: Calendar, href: "/admin/interior/schedule" },
+      { titleKey: "interiorVendorTracks", icon: HandCoins, href: "/admin/interior/vendors" },
+      { titleKey: "interiorHubSpecs", icon: PackageSearch, href: "/admin/interior/specs" },
+      { titleKey: "interiorHubDrawings", icon: LayoutPanelTop, href: "/admin/interior/drawings" },
+      { titleKey: "interiorKitchen", icon: UtensilsCrossed, href: "/admin/interior/kitchen" },
+      { titleKey: "interiorHubCosts", icon: Wallet, href: "/admin/interior/costs" },
     ],
   },
 ]
 
 const SIDEBAR_SECTIONS_STORAGE_KEY = "erp_sidebar_expanded_sections_v1"
+
+function interiorNavBadge(
+  href: string,
+  totals: InteriorDashboardTotals
+): { n: number; variant: "default" | "destructive" | "warning" } | null {
+  if (href === "/admin/interior" && totals.projectsWithAnyAlert > 0) {
+    return { n: totals.projectsWithAnyAlert, variant: "destructive" }
+  }
+  if (href === "/admin/interior/schedule" && totals.scheduleOverdueCount > 0) {
+    return { n: totals.scheduleOverdueCount, variant: "warning" }
+  }
+  if (href === "/admin/interior/vendors" && totals.vendorDelayedCount > 0) {
+    return { n: totals.vendorDelayedCount, variant: "warning" }
+  }
+  if (href === "/admin/interior/costs" && totals.overBudgetProjectCount > 0) {
+    return { n: totals.overBudgetProjectCount, variant: "destructive" }
+  }
+  return null
+}
 
 function buildCollapsedSections(): Record<string, boolean> {
   return Object.fromEntries(menuSections.map((s) => [s.titleKey, false])) as Record<string, boolean>
@@ -222,6 +252,21 @@ export function ErpSidebar() {
   const brand = useAppBrandConfig()
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
+  const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    getInteriorDashboardSummary()
+      .then((s) => {
+        if (!cancelled && s?.totals) setInteriorDashTotals(s.totals)
+      })
+      .catch(() => {
+        if (!cancelled) setInteriorDashTotals(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     try {
@@ -241,6 +286,21 @@ export function ErpSidebar() {
       /* ignore */
     }
   }, [])
+
+  /** 인테리어 화면에 있을 때 사이드바 인테리어 섹션을 펼쳐 하위 항목이 보이게 함 */
+  React.useEffect(() => {
+    if (!pathname.startsWith("/admin/interior")) return
+    setExpandedSections((prev) => {
+      if (prev.adminSectionInterior === true) return prev
+      const next = { ...prev, adminSectionInterior: true }
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [pathname])
 
   const toggleSection = (titleKey: string) => {
     setExpandedSections((prev) => {
@@ -354,7 +414,14 @@ export function ErpSidebar() {
                           const check = POS_MENU_ACCESS[item.href]
                           return check ? check(auth?.role || "") : false
                         })
-                        .map((item) => (
+                        .map((item) => {
+                        const interiorExtra =
+                          section.titleKey === "adminSectionInterior" && interiorDashTotals
+                            ? interiorNavBadge(item.href, interiorDashTotals)
+                            : null
+                        const badgeVal = interiorExtra?.n ?? item.badge
+                        const badgeVariantEff = interiorExtra?.variant ?? item.badgeVariant
+                        return (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -369,22 +436,22 @@ export function ErpSidebar() {
                           <span className="truncate flex-1 group-data-[collapsible=icon]:hidden">
                             {t(item.titleKey)}
                           </span>
-                          {item.badge !== undefined && Number(item.badge) > 0 && (
+                          {badgeVal !== undefined && Number(badgeVal) > 0 && (
                             <span
                               className={cn(
                                 "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold group-data-[collapsible=icon]:hidden",
-                                item.badgeVariant === "destructive"
+                                badgeVariantEff === "destructive"
                                   ? "bg-destructive text-destructive-foreground"
-                                  : item.badgeVariant === "warning"
+                                  : badgeVariantEff === "warning"
                                   ? "bg-warning text-warning-foreground"
                                   : "bg-primary text-primary-foreground"
                               )}
                             >
-                              {item.badge}
+                              {badgeVal}
                             </span>
                           )}
                         </Link>
-                      ))}
+                      )})}
                     </div>
                   )}
                 </div>

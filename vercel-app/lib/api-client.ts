@@ -1863,6 +1863,12 @@ export interface IncomeStatementData {
     limits: Record<string, { fetched: number; limit: number; total?: number }>
     /** 직접 입고 + 통장 매입지급에 동시에 잡힌 거래처 키(코드) */
     purchaseInboundBankOverlapVendorKeys?: string[]
+    purchaseHqOutboundBasis?: {
+      outboundTotal: number
+      approvedOrdersTotal: number
+      diff: number
+    }
+    purchaseExcludedHqBankPayments?: { key: string; amount: number; label?: string }[]
   }
   expenseByAccountSubject?: {
     accountSubjectId: number | null
@@ -1919,6 +1925,8 @@ export type IncomeStatementPurchaseDrillBankRow = {
   memo: string | null
   note: string | null
   store: string | null
+  refType: string | null
+  refId: number | null
 }
 
 export type IncomeStatementPurchaseDrillOrderRow = {
@@ -1930,6 +1938,18 @@ export type IncomeStatementPurchaseDrillOrderRow = {
   status: string | null
 }
 
+export type IncomeStatementPurchaseDrillHqOutboundRow = {
+  kind: 'hq_outbound'
+  id: number
+  logDate: string
+  logType: string | null
+  itemCode: string
+  targetStore: string | null
+  qty: number
+  unitPrice: number
+  lineAmount: number
+}
+
 export type IncomeStatementPurchaseDrillDown = {
   vendorKey: string
   yearMonth: string
@@ -1937,6 +1957,7 @@ export type IncomeStatementPurchaseDrillDown = {
   endStr: string
   storeFilter: string
   isHqOrders: boolean
+  hqOutbounds: IncomeStatementPurchaseDrillHqOutboundRow[]
   hqOrders: IncomeStatementPurchaseDrillOrderRow[]
   inbound: IncomeStatementPurchaseDrillInboundRow[]
   bankPayments: IncomeStatementPurchaseDrillBankRow[]
@@ -2092,14 +2113,23 @@ export async function saveAccountingFilingPreferences(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; responsibilities?: Record<string, ThaiFilingResponsibility> }>
+  return res.json() as Promise<{ success: boolean; responsibilities?: Record<string, ThaiFilingResponsibility>; error?: string }>
 }
 
 export async function getAccountingPeriods(params: { userRole: string }) {
   const q = new URLSearchParams({ userRole: params.userRole })
   const res = await apiFetchWithOffline(`/api/getAccountingPeriods?${q}`)
   return res.json() as Promise<{
-    periods: { yearMonth: string; isClosed: boolean; closedAt: string | null; closedBy: string | null }[]
+    periods: {
+      yearMonth: string
+      isClosed: boolean
+      closedAt: string | null
+      closedBy: string | null
+      unlockedAt?: string | null
+      unlockedBy?: string | null
+      unlockReason?: string | null
+      unlockApprovedBy?: string | null
+    }[]
   }>
 }
 
@@ -2108,13 +2138,15 @@ export async function setAccountingPeriodClosed(params: {
   yearMonth: string
   closed: boolean
   closedBy?: string | null
+  unlockReason?: string | null
+  unlockApprovedBy?: string | null
 }) {
   const res = await apiFetchWithOffline('/api/setAccountingPeriodClosed', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean }>
+  return res.json() as Promise<{ success: boolean; error?: string }>
 }
 
 export type TrialBalanceRow = {
@@ -2145,8 +2177,58 @@ export async function getTrialBalance(params: {
   }>
 }
 
-export async function getVatLedger(params: { userRole: string; taxMonth: string; storeFilter?: string }) {
+export async function getAccountingReconciliation(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+  userStore?: string
+  profitLossAccountCode?: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    storeFilter: params.storeFilter || 'All',
+    profitLossAccountCode: params.profitLossAccountCode || '3120',
+  })
+  if (params.userStore) q.set('userStore', params.userStore)
+  const res = await apiFetchWithOffline(`/api/getAccountingReconciliation?${q}`)
+  return res.json() as Promise<{
+    yearMonth: string
+    storeFilter: string
+    profitLossAccountCode: string
+    summary: {
+      tbRevenue: number
+      tbExpense: number
+      tbNetIncome: number
+      tbDiff: number
+      incomeNetProfit: number
+      bsCurrentPeriodProfit: number
+      closingPreviewNetIncome: number
+      netDiff: number
+      bsDiff: number
+      closingDiff: number
+    }
+    mismatch: {
+      trialUnbalanced: boolean
+      tbVsIncome: boolean
+      tbVsBalanceSheet: boolean
+      tbVsClosingPreview: boolean
+    }
+  }>
+}
+
+export async function getVatLedger(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+}) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
   return res.json() as Promise<{ entries: Record<string, unknown>[] }>
@@ -2167,15 +2249,21 @@ export async function deleteVatLedgerEntry(params: { userRole: string; id: numbe
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean }>
+  return res.json() as Promise<{ success: boolean; error?: string }>
 }
 
 export async function getWithholdingTaxLedger(params: {
   userRole: string
   taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/withholdingTaxLedger?${q}`)
   return res.json() as Promise<{ entries: Record<string, unknown>[] }>
@@ -2196,11 +2284,21 @@ export async function deleteWithholdingTaxLedgerEntry(params: { userRole: string
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean }>
+  return res.json() as Promise<{ success: boolean; error?: string }>
 }
 
-export function getExportVatLedgerCsvUrl(params: { userRole: string; taxMonth: string; storeFilter?: string }) {
+export function getExportVatLedgerCsvUrl(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+}) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportVatLedgerCsv?${q}`
@@ -2211,14 +2309,155 @@ export function getExportVatLedgerCsvUrl(params: { userRole: string; taxMonth: s
 export function getExportWithholdingTaxLedgerCsvUrl(params: {
   userRole: string
   taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportWithholdingTaxLedgerCsv?${q}`
   }
   return `/api/exportWithholdingTaxLedgerCsv?${q}`
+}
+
+export function getExportPnd1RdPrepTxtUrl(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+  filingForm?: 'pnd1' | 'pnd1a' | 'all'
+  payerTaxId?: string
+  payerBranchNo?: string
+  payerName?: string
+  includeHeader?: boolean
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.filingForm) q.set('filingForm', params.filingForm)
+  if (params.payerTaxId) q.set('payerTaxId', params.payerTaxId)
+  if (params.payerBranchNo) q.set('payerBranchNo', params.payerBranchNo)
+  if (params.payerName) q.set('payerName', params.payerName)
+  if (params.includeHeader) q.set('includeHeader', '1')
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportPnd1RdPrepTxt?${q}`
+  }
+  return `/api/exportPnd1RdPrepTxt?${q}`
+}
+
+export type ValidatePnd1RdPrepResult = {
+  period: {
+    periodType: 'monthly' | 'half_year' | 'annual'
+    periodKey: string
+    startMonth: string
+    endMonth: string
+    months: string[]
+  }
+  filingForm: 'pnd1' | 'pnd1a' | 'all'
+  totalRows: number
+  validRows: number
+  warningCounts: {
+    missingPayeeName: number
+    missingPayeeTaxId: number
+    invalidPayeeTaxIdLength: number
+    missingPaymentDate: number
+    invalidPaymentDate: number
+    missingIncomeType: number
+    nonPositiveWithheldAmount: number
+  }
+  sampleWarnings: string[]
+  issues: {
+    lineNo: number
+    rowId: number | null
+    code:
+      | 'missing_payee_name'
+      | 'missing_payee_tax_id'
+      | 'invalid_payee_tax_id_length'
+      | 'missing_payment_date'
+      | 'invalid_payment_date'
+      | 'missing_income_type'
+      | 'non_positive_withheld_amount'
+    message: string
+    payeeName: string
+    certificateNo: string
+  }[]
+}
+
+export async function validatePnd1RdPrep(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  filingStatus?: 'all' | 'draft' | 'submitted'
+  storeFilter?: string
+  filingForm?: 'pnd1' | 'pnd1a' | 'all'
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.filingStatus) q.set('filingStatus', params.filingStatus)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.filingForm) q.set('filingForm', params.filingForm)
+  const res = await apiFetchWithOffline(`/api/validatePnd1RdPrep?${q}`)
+  return res.json() as Promise<ValidatePnd1RdPrepResult>
+}
+
+export type Kt20kSettings = {
+  companyTaxId: string
+  companyName: string
+  ssoOfficeProvince: string
+  ssoOfficePhone: string
+  businessCode5: string
+  fundRatePercent: string
+  updatedBy?: string
+  updatedAt?: string
+}
+
+export async function getKt20kSettings(params: { userRole: string; year: number }) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    year: String(params.year),
+  })
+  const res = await apiFetchWithOffline(`/api/getKt20kSettings?${q}`)
+  return res.json() as Promise<{ success: boolean; year: number; settings: Kt20kSettings }>
+}
+
+export async function saveKt20kSettings(params: {
+  userRole: string
+  year: number
+  companyTaxId: string
+  companyName: string
+  ssoOfficeProvince: string
+  ssoOfficePhone: string
+  businessCode5: string
+  fundRatePercent: string
+  updatedBy?: string
+}) {
+  const res = await apiFetch('/api/saveKt20kSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; error?: string }>
+}
+
+export function getExportKt20kCsvUrl(params: { userRole: string; year: number; storeFilter?: string }) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    year: String(params.year),
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (typeof window !== 'undefined') return `${window.location.origin}/api/exportKt20kCsv?${q}`
+  return `/api/exportKt20kCsv?${q}`
 }
 
 export type ThaiTaxFilingSummary = {
@@ -2407,6 +2646,8 @@ export function getExportCorporateTaxPackageCsvUrl(params: {
 export type AccountingWorkflowStatusRow = {
   id?: number
   year_month: string
+  period_type?: 'monthly' | 'half_year' | 'annual'
+  period_key?: string
   filing_type: string
   status: 'todo' | 'in_progress' | 'review' | 'done'
   note?: string | null
@@ -2416,20 +2657,275 @@ export type AccountingWorkflowStatusRow = {
   store_scope?: string | null
 }
 
-export async function getAccountingWorkflowStatus(params: {
+export type IncomeExpenseClosingPreview = {
+  yearMonth: string
+  storeFilter: string
+  profitLossAccountCode: string
+  profitLossAccountName: string
+  revenueTotal: number
+  expenseTotal: number
+  netIncome: number
+  lineCount: number
+  lines: {
+    accountCode: string
+    accountName: string | null
+    side: 'debit' | 'credit'
+    amount: number
+  }[]
+}
+
+export type IncomeExpenseClosingHistoryItem = {
+  id?: number
+  store_scope?: string | null
+  status?: string | null
+  created_at?: string | null
+  created_by?: string | null
+  memo?: string | null
+  journal_entry_id?: number | null
+  revenue_total?: number | null
+  expense_total?: number | null
+  net_income?: number | null
+  line_count?: number | null
+  payload?: unknown
+}
+
+export type AccountingComplianceAuditLog = {
+  id?: number
+  action_type?: string | null
+  user_role?: string | null
+  actor?: string | null
+  decision?: 'allow' | 'deny' | 'error' | null
+  reason_code?: string | null
+  year_month?: string | null
+  period_type?: 'monthly' | 'half_year' | 'annual' | null
+  period_key?: string | null
+  store_scope?: string | null
+  filing_type?: string | null
+  target_type?: string | null
+  target_id?: string | null
+  payload?: unknown
+  created_at?: string | null
+}
+
+export async function getIncomeExpenseClosingPreview(params: {
+  userRole: string
+  userStore?: string
+  yearMonth: string
+  storeFilter?: string
+  profitLossAccountCode?: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    storeFilter: params.storeFilter || 'All',
+    profitLossAccountCode: params.profitLossAccountCode || '3120',
+  })
+  if (params.userStore) q.set('userStore', params.userStore)
+  const res = await apiFetchWithOffline(`/api/getIncomeExpenseClosingPreview?${q}`)
+  return res.json() as Promise<{
+    preview: IncomeExpenseClosingPreview
+    closed?: { id?: number; entry_no?: string | null; posted_at?: string | null; posted_by?: string | null } | null
+    draft?:
+      | {
+          id?: number
+          status?: string | null
+          memo?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          payload?: IncomeExpenseClosingPreview | null
+        }
+      | null
+    history?: IncomeExpenseClosingHistoryItem[]
+  }>
+}
+
+export function getExportIncomeExpenseClosingAuditCsvUrl(params: {
   userRole: string
   yearMonth: string
   storeFilter?: string
 }) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    storeFilter: params.storeFilter || 'All',
+  })
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportIncomeExpenseClosingAuditCsv?${q}`
+  }
+  return `/api/exportIncomeExpenseClosingAuditCsv?${q}`
+}
+
+export async function getAccountingComplianceAuditLogs(params: {
+  userRole: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  decision?: 'allow' | 'deny' | 'error' | 'all'
+  actionKeyword?: string
+  storeFilter?: string
+  limit?: number
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.decision && params.decision !== 'all') q.set('decision', params.decision)
+  if (params.actionKeyword) q.set('actionKeyword', params.actionKeyword)
+  if (params.limit != null && Number.isFinite(params.limit)) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline(`/api/getAccountingComplianceAuditLogs?${q}`)
+  return res.json() as Promise<{ success: boolean; rows: AccountingComplianceAuditLog[]; fallbackUsed?: boolean; error?: string }>
+}
+
+export async function getAccountingComplianceAuditTrend(params: {
+  userRole: string
+  yearMonth: string
+  months?: number
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  decision?: 'allow' | 'deny' | 'error' | 'all'
+  actionKeyword?: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    months: String(params.months ?? 3),
+  })
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.decision && params.decision !== 'all') q.set('decision', params.decision)
+  if (params.actionKeyword) q.set('actionKeyword', params.actionKeyword)
+  const res = await apiFetchWithOffline(`/api/getAccountingComplianceAuditTrend?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    rows: {
+      year_month?: string | null
+      total?: number | null
+      allow_count?: number | null
+      deny_count?: number | null
+      error_count?: number | null
+      deny_rate?: number | null
+      error_rate?: number | null
+    }[]
+    fallbackUsed?: boolean
+    error?: string
+  }>
+}
+
+export async function getAccountingWorkflowReminders(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    storeFilter: params.storeFilter || 'All',
+  })
+  const res = await apiFetchWithOffline(`/api/getAccountingWorkflowReminders?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    bangkokToday?: string
+    rows: {
+      filingType: string
+      filingLabelKo: string
+      periodType: 'monthly' | 'half_year' | 'annual'
+      yearMonth: string
+      dueDateBangkok: string
+      daysToDue: number
+      severity: 'info' | 'warn' | 'critical'
+      status: string
+      messageKo: string
+    }[]
+    summary?: { critical: number; warn: number; info: number }
+    error?: string
+  }>
+}
+
+export function getExportAccountingComplianceAuditCsvUrl(params: {
+  userRole: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  decision?: 'allow' | 'deny' | 'error' | 'all'
+  actionKeyword?: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.decision && params.decision !== 'all') q.set('decision', params.decision)
+  if (params.actionKeyword) q.set('actionKeyword', params.actionKeyword)
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportAccountingComplianceAuditCsv?${q}`
+  }
+  return `/api/exportAccountingComplianceAuditCsv?${q}`
+}
+
+export async function saveIncomeExpenseClosingDraft(params: {
+  userRole: string
+  userStore?: string
+  createdBy?: string | null
+  yearMonth: string
+  storeFilter?: string
+  profitLossAccountCode?: string
+  memo?: string
+}) {
+  const res = await apiFetchWithOffline('/api/saveIncomeExpenseClosingDraft', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    error?: string
+    id?: number
+    warning?: string
+    preview?: IncomeExpenseClosingPreview
+  }>
+}
+
+export async function postIncomeExpenseClosing(params: {
+  userRole: string
+  userStore?: string
+  postedBy?: string | null
+  yearMonth: string
+  storeFilter?: string
+  profitLossAccountCode?: string
+  forceReset?: boolean
+  autoLockPeriod?: boolean
+  memo?: string
+}) {
+  const res = await apiFetchWithOffline('/api/postIncomeExpenseClosing', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    error?: string
+    journalEntryId?: number
+    entryNo?: string
+    preview?: IncomeExpenseClosingPreview
+    autoLocked?: boolean
+  }>
+}
+
+export async function getAccountingWorkflowStatus(params: {
+  userRole: string
+  yearMonth: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
+}) {
   const q = new URLSearchParams({ userRole: params.userRole, yearMonth: params.yearMonth })
+  if (params.periodType) q.set('periodType', params.periodType)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getAccountingWorkflowStatus?${q}`)
-  return res.json() as Promise<{ rows: AccountingWorkflowStatusRow[] }>
+  return res.json() as Promise<{ rows: AccountingWorkflowStatusRow[]; fallbackUsed?: boolean }>
 }
 
 export async function saveAccountingWorkflowStatus(params: {
   userRole: string
   yearMonth: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
   filingType: string
   status: 'todo' | 'in_progress' | 'review' | 'done'
   note?: string | null
@@ -2442,7 +2938,7 @@ export async function saveAccountingWorkflowStatus(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
+  return res.json() as Promise<{ success: boolean; id?: number; error?: string; fallbackUsed?: boolean }>
 }
 
 // ─── 감가상각·고정자산 ───
@@ -2606,6 +3102,8 @@ export async function registerExpenseFromBankTransaction(params: {
 export async function registerPurchaseFromBankTransaction(params: {
   bankTransactionId: number
   vendorCode: string
+  /** 본사 발주(orders.id)와 연결 — ref_type=Order */
+  linkedOrderId?: number
   userName?: string
   userRole?: string
   updateExisting?: boolean
@@ -3597,6 +4095,24 @@ export async function deleteInteriorProject(params: { id: number }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export type InteriorDashboardTotals = {
+  activeProjectCount: number
+  scheduleOverdueCount: number
+  vendorDelayedCount: number
+  overBudgetProjectCount: number
+  projectsWithAnyAlert: number
+}
+
+export type InteriorDashboardSummary = {
+  generatedAt: string
+  totals: InteriorDashboardTotals
+}
+
+export async function getInteriorDashboardSummary() {
+  const res = await apiFetchWithOffline('/api/getInteriorDashboardSummary')
+  return res.json() as Promise<InteriorDashboardSummary>
+}
+
 export interface InteriorScheduleItem {
   id?: number
   projectId?: number
@@ -3625,6 +4141,228 @@ export async function saveInteriorScheduleItem(params: Partial<InteriorScheduleI
 
 export async function deleteInteriorScheduleItem(params: { id: number }) {
   const res = await apiFetchWithOffline('/api/deleteInteriorScheduleItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorWorkPackage {
+  id?: number
+  legacyId?: number
+  isLegacy?: boolean
+  projectId?: number
+  partType?: string
+  title?: string
+  description?: string
+  startDate?: string | null
+  endDate?: string | null
+  status?: 'planned' | 'in_progress' | 'blocked' | 'done' | 'cancelled' | string
+  progressPct?: number
+  color?: string
+  sortOrder?: number
+}
+
+export async function getInteriorWorkPackages(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetchWithOffline(`/api/getInteriorWorkPackages?${q}`)
+  return res.json() as Promise<InteriorWorkPackage[]>
+}
+
+export async function saveInteriorWorkPackage(
+  params: Partial<InteriorWorkPackage> & { projectId: number; title: string }
+) {
+  const res = await apiFetchWithOffline('/api/saveInteriorWorkPackage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorWorkPackage(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deleteInteriorWorkPackage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorVendorTrack {
+  id?: number
+  projectId?: number
+  vendorName?: string
+  vendorCode?: string
+  workPackageId?: number | null
+  paymentDueDate?: string | null
+  paymentPaidDate?: string | null
+  materialEtaDate?: string | null
+  materialReceivedDate?: string | null
+  workCompletedDate?: string | null
+  status?: 'planned' | 'ordered' | 'paid' | 'received' | 'done' | 'delayed' | 'cancelled' | string
+  amount?: number
+  note?: string
+  sortOrder?: number
+}
+
+export async function getInteriorVendorTracks(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetchWithOffline(`/api/getInteriorVendorTracks?${q}`)
+  return res.json() as Promise<InteriorVendorTrack[]>
+}
+
+export async function saveInteriorVendorTrack(
+  params: Partial<InteriorVendorTrack> & { projectId: number; vendorName: string }
+) {
+  const res = await apiFetchWithOffline('/api/saveInteriorVendorTrack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorVendorTrack(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deleteInteriorVendorTrack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorLayoutItem {
+  id?: number
+  projectId?: number
+  zone?: 'kitchen' | 'hall' | string
+  floor?: string
+  x?: number
+  y?: number
+  w?: number
+  h?: number
+  rotation?: number
+  itemName?: string
+  qty?: number
+  status?: 'planned' | 'ordered' | 'installed' | 'done' | 'blocked' | string
+  materialSpecId?: number | null
+  note?: string
+  sortOrder?: number
+}
+
+export interface InteriorLayoutEditorPrefs {
+  duplicateOffsetX?: number
+  duplicateOffsetY?: number
+  snapEnabled?: boolean
+  snapStep?: number
+  nudgeSmall?: number
+  nudgeMedium?: number
+  nudgeLarge?: number
+  updatedAt?: string | null
+}
+
+export async function getInteriorLayoutItems(params: { projectId: string | number; zone?: string }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  if (params.zone) q.set('zone', String(params.zone))
+  const res = await apiFetchWithOffline(`/api/getInteriorLayoutItems?${q}`)
+  return res.json() as Promise<InteriorLayoutItem[]>
+}
+
+export async function saveInteriorLayoutItem(
+  params: Partial<InteriorLayoutItem> & { projectId: number; itemName: string }
+) {
+  const res = await apiFetchWithOffline('/api/saveInteriorLayoutItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorLayoutItem(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deleteInteriorLayoutItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getInteriorLayoutEditorPrefs(params: {
+  projectId: string | number
+  zone: string
+  userStore: string
+  userName: string
+  employeeId?: number
+}) {
+  const q = new URLSearchParams({
+    projectId: String(params.projectId),
+    zone: String(params.zone),
+    userStore: String(params.userStore),
+    userName: String(params.userName),
+  })
+  if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
+  const res = await apiFetchWithOffline(`/api/getInteriorLayoutEditorPrefs?${q}`)
+  return res.json() as Promise<InteriorLayoutEditorPrefs>
+}
+
+export async function saveInteriorLayoutEditorPrefs(params: {
+  projectId: number
+  zone: string
+  userStore: string
+  userName: string
+  employeeId?: number
+  duplicateOffsetX: number
+  duplicateOffsetY: number
+  snapEnabled?: boolean
+  snapStep?: number
+  nudgeSmall?: number
+  nudgeMedium?: number
+  nudgeLarge?: number
+}) {
+  const res = await apiFetchWithOffline('/api/saveInteriorLayoutEditorPrefs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorMaterialSpec {
+  id?: number
+  projectId?: number
+  materialCode?: string
+  materialName?: string
+  spec?: string
+  supplier?: string
+  unit?: string
+  unitCost?: number
+  imageUrl?: string
+  location?: string
+  note?: string
+  sortOrder?: number
+}
+
+export async function getInteriorMaterialSpecs(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetchWithOffline(`/api/getInteriorMaterialSpecs?${q}`)
+  return res.json() as Promise<InteriorMaterialSpec[]>
+}
+
+export async function saveInteriorMaterialSpec(
+  params: Partial<InteriorMaterialSpec> & { projectId: number; materialName: string }
+) {
+  const res = await apiFetchWithOffline('/api/saveInteriorMaterialSpec', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorMaterialSpec(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deleteInteriorMaterialSpec', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -6121,6 +6859,7 @@ export interface PosPrinterSettings {
   autoPrintKitchenSlipOnOrder?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
+  receiptBizAbn?: string
   receiptBizOwner?: string
   receiptBizAddress?: string
   receiptBizPhone?: string
@@ -6231,6 +6970,7 @@ export async function savePosPrinterSettings(params: {
   autoPrintKitchenSlipOnOrder?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
+  receiptBizAbn?: string
   receiptBizOwner?: string
   receiptBizAddress?: string
   receiptBizPhone?: string
@@ -6724,6 +7464,34 @@ export async function getPosTodaySales(params?: {
     completedCash: number
     pendingCount: number
   }>(cacheKey, url, fallback)
+}
+
+export async function getPosReversalJournals(params: {
+  startStr: string
+  endStr: string
+  storeCode?: string
+}) {
+  const q = new URLSearchParams()
+  q.set('startStr', params.startStr)
+  q.set('endStr', params.endStr)
+  if (params.storeCode) q.set('storeCode', params.storeCode)
+  const res = await apiFetchWithOffline('/api/getPosReversalJournals?' + q.toString())
+  const data = (await res.json()) as {
+    success?: boolean
+    rows?: {
+      id: number
+      accountingDate: string
+      posOrderId: number
+      storeCode: string
+      memo: string
+      postedAt: string
+    }[]
+    message?: string
+  }
+  if (!res.ok || data.success === false) {
+    throw new Error(data.message || `HTTP ${res.status}`)
+  }
+  return Array.isArray(data.rows) ? data.rows : []
 }
 
 export async function getPosOrders(params?: {
@@ -8712,6 +9480,98 @@ export async function uploadStoreRepairPhoto(store: string, file: File) {
     return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
   }
   return { success: true, url: pjson.publicUrl, message: undefined }
+}
+
+/** SSO 제출 증빙 파일 업로드 (브라우저 -> Supabase Storage 직접 PUT) */
+export async function uploadSsoEvidenceFile(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+  file: File
+}) {
+  const { apiFetch } = await import('./api/fetch')
+  const pres = await apiFetch('/api/uploadSsoEvidence/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userRole: params.userRole,
+      yearMonth: params.yearMonth,
+      storeFilter: params.storeFilter || '',
+      fileName: params.file.name,
+      contentType: params.file.type || 'application/octet-stream',
+      fileSize: params.file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, params.file, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
+  }
+  return { success: true, url: pjson.publicUrl, message: undefined }
+}
+
+/** E-Tax Time Stamp 증빙 파일 업로드 (브라우저 -> Supabase Storage 직접 PUT) */
+export async function uploadEtaxEvidenceFile(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+  file: File
+}) {
+  const { apiFetch } = await import('./api/fetch')
+  const pres = await apiFetch('/api/uploadEtaxEvidence/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userRole: params.userRole,
+      yearMonth: params.yearMonth,
+      storeFilter: params.storeFilter || '',
+      fileName: params.file.name,
+      contentType: params.file.type || 'application/octet-stream',
+      fileSize: params.file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, params.file, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
+  }
+  return { success: true, url: pjson.publicUrl, message: undefined }
+}
+
+export function getExportEtaxTimestampAuditCsvUrl(params: {
+  userRole: string
+  yearMonth: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    storeFilter: params.storeFilter || 'All',
+  })
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportEtaxTimestampAuditCsv?${q}`
+  }
+  return `/api/exportEtaxTimestampAuditCsv?${q}`
 }
 
 export interface StoreRepairProgressLog {

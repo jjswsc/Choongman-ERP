@@ -67,7 +67,6 @@ import { buildMarketingCampaignHubLinkSetsFromRows } from "@/lib/marketing-campa
 import {
   applyMarketingCampaignListFilters,
   marketingCampaignListFiltersActive,
-  emptyMarketingCampaignHubLinkSets,
   type CampaignListSearchScope,
 } from "@/lib/marketing-campaign-list-query"
 import { apiFetchWithOffline } from "@/lib/api/fetch-offline"

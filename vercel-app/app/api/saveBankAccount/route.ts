@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 
 /** 통장(계좌) 추가 또는 기초잔액 수정 */
 export async function POST(request: NextRequest) {

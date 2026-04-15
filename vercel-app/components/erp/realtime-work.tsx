@@ -106,7 +106,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const [storeList, setStoreList] = React.useState<string[]>([])
+  const [, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
   const storeFilterFinal = storeFilterProp || storeFilter
   const [date, setDate] = React.useState(todayStr)
@@ -205,9 +205,6 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     const inB = parseTimeToDecimal(pB.pIn) ?? 0
     return inA - inB
   })
-
-  const multiArea = new Set(filteredSchedule.map((r) => r.area || "Service")).size > 1
-  const showArea = areaFilter === "all" && multiArea
 
   const areaLabel = (ar: string) => {
     if (ar === "Service") return t("scheduleAreaService") || "서비스"

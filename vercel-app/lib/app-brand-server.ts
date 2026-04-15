@@ -1,4 +1,3 @@
-import { cache } from "react"
 import { headers } from "next/headers"
 import {
   getAppBrandConfigForKey,
@@ -34,7 +33,7 @@ async function resolveBrandKey(): Promise<AppBrandKey> {
   return "choongman"
 }
 
-export const getServerAppBrandConfig = cache(async (): Promise<AppBrandConfig> => {
+export async function getServerAppBrandConfig(): Promise<AppBrandConfig> {
   const key = await resolveBrandKey()
   return getAppBrandConfigForKey(key)
-})
+}

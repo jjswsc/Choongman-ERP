@@ -520,7 +520,6 @@ export function AdminTab() {
                       (row.earlyMin ?? 0) === 0 &&
                       (row.otMin ?? 0) < 30
                     const inLogKey = row.inLogId ?? pendingIn ?? null
-                    const lateDefault = String(row.lateMin > 0 ? Math.max(1, row.lateMin) : 0)
                     const showLateInput =
                       showAdjustInput &&
                       row.plannedWorkHrs > 0 &&

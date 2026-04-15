@@ -27,11 +27,33 @@ const orbitron = Orbitron({
   weight: ["400", "500", "600", "700"],
 })
 
+function appMetadataBase(): URL | undefined {
+  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  if (raw) {
+    try {
+      return new URL(raw)
+    } catch {
+      /* ignore */
+    }
+  }
+  const v = process.env.VERCEL_URL?.trim()
+  if (v) {
+    try {
+      return new URL(`https://${v}`)
+    } catch {
+      /* ignore */
+    }
+  }
+  return undefined
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const brand = await getServerAppBrandConfig()
+  const base = appMetadataBase()
   return {
+    metadataBase: base,
     title: brand.appName,
-    description: `${brand.appName} 출고/운영 관리 시스템`,
+    description: brand.metadataDescription,
     manifest: brand.manifestPath,
     icons: {
       icon: brand.iconPath,

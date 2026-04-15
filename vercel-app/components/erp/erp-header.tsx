@@ -24,24 +24,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/lib/auth-context"
-import { useLang } from "@/lib/lang-context"
+import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { isFranchiseeRole } from "@/lib/permissions"
 import { useAutoTranslate } from "@/lib/auto-translate"
 import { copyWindowsInstallerUrl, WINDOWS_ERP_SETUP_PATH } from "@/lib/windows-installer-copy"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
-
-const LANG_OPTIONS: { value: LangCode; label: string }[] = [
-  { value: "ko", label: "한국어" },
-  { value: "en", label: "English" },
-  { value: "th", label: "ไทย" },
-  { value: "mm", label: "မြန်မာ" },
-  { value: "la", label: "ລາວ" },
-  { value: "kh", label: "ខ្មែរ" },
-  { value: "vi", label: "Tiếng Việt" },
-  { value: "ms", label: "Bahasa Melayu" },
-]
 
 const ERP_HISTORY_KEY_CURR = "erp_back_curr"
 const ERP_HISTORY_KEY_PREV = "erp_back_prev"
@@ -70,7 +59,7 @@ export function ErpHeader() {
     if (r.ok) await appAlert(t("windowsInstallerCopyHint") || "")
     else await appAlert((t("windowsInstallerCopyFail") || "") + r.url)
   }, [t])
-  const autoTranslateLabel = lang === "ko" ? "자동번역" : "Auto translate"
+  const autoTranslateLabel = t("header_auto_translate")
 
   const aiCenterPrefillQ = useMemo(() => {
     const path = pathname || "/admin"
@@ -188,7 +177,7 @@ export function ErpHeader() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {LANG_OPTIONS.map((o) => (
+            {ADMIN_UI_LANG_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
               </SelectItem>
@@ -209,7 +198,7 @@ export function ErpHeader() {
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
         >
           <Search className="h-4 w-4" />
-          <span className="sr-only">검색</span>
+          <span className="sr-only">{t("search")}</span>
         </Button>
 
         {/* Notifications */}
@@ -219,7 +208,7 @@ export function ErpHeader() {
           className="relative h-8 w-8 text-muted-foreground hover:text-foreground"
         >
           <Bell className="h-4 w-4" />
-          <span className="sr-only">알림</span>
+          <span className="sr-only">{t("header_notifications")}</span>
         </Button>
 
         <Separator orientation="vertical" className="mx-1 h-5" />
@@ -236,7 +225,7 @@ export function ErpHeader() {
               </div>
               <div className="hidden flex-col items-start md:flex">
                 <span className="text-xs font-semibold text-foreground">
-                  {auth?.user ?? "관리자"}
+                  {auth?.user ?? t("adminFallbackUser")}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
                   {auth?.store ?? "—"}

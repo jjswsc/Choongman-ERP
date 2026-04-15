@@ -175,9 +175,6 @@ export default function VendorsPage() {
         typeFilter === "all" ||
         (typeFilter === "purchase" && (v.type === "purchase" || v.type === "both")) ||
         (typeFilter === "sales" && (v.type === "sales" || v.type === "both"))
-      const displayName = (v.type === "sales" || v.type === "both") && (v.gps_name?.trim() || v.sales_outlet?.trim())
-        ? v.gps_name || v.sales_outlet || v.name
-        : v.name
       const matchTerm =
         !searchTerm ||
         v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

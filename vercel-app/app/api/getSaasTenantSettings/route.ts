@@ -111,6 +111,7 @@ type AuditLogRow = {
   actor_role?: string | null
   changed_at?: string | null
   summary?: string | null
+  payload_json?: unknown
 }
 
 type StagePriceOverrideRow = {
@@ -320,6 +321,11 @@ export async function GET(req: NextRequest) {
       if (!key) continue
       const prev = auditMap.get(key) || []
       if (prev.length >= 20) continue
+      const payload = row.payload_json
+      const employeeId =
+        payload && typeof payload === "object" && "employeeId" in (payload as Record<string, unknown>)
+          ? Number((payload as Record<string, unknown>).employeeId || 0)
+          : 0
       prev.push({
         id: Number(row.id || 0),
         action: String(row.action || "tenant.settings.updated"),
@@ -327,6 +333,7 @@ export async function GET(req: NextRequest) {
         actorRole: String(row.actor_role || "-"),
         changedAt: String(row.changed_at || ""),
         summary: String(row.summary || ""),
+        employeeId: Number.isFinite(employeeId) && employeeId > 0 ? employeeId : null,
       })
       auditMap.set(key, prev)
     }

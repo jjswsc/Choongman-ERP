@@ -34,6 +34,7 @@ import {
   FINANCIAL_COMPARE_MAX_MONTHS,
   incomeStatementCogs,
 } from "@/lib/financial-statements-compare"
+import { isMaterialHqOutboundOrderDiff } from "@/lib/income-statement-hq-diff"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
 import {
@@ -55,9 +56,10 @@ import {
   sanitizeFilenamePart,
   type IncomeStatementXlsxRow,
 } from "@/lib/income-statement-export"
+import { formatBahtInteger as formatBath, roundFinancialAmount } from "@/lib/financial-amount-format"
 
 function purchaseVendorRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
-  if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사·물류 발주'
+  if (row.key === '__pl_hq_orders__') return t('pL_purchaseHqOrders') || '본사 창고 출고(매입)'
   if (row.key === '__pl_vendor_unknown__') return t('pL_vendorUnknown') || '거래처 미지정'
   const n = String(row.label || '').trim()
   return n || row.key
@@ -261,7 +263,6 @@ function IncomePurchaseDrillDialog({
   purchaseDrillData: IncomeStatementPurchaseDrillDown | null
   t: (k: string) => string
 }) {
-  const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
   return (
     <Dialog
       open={open}
@@ -306,6 +307,13 @@ function IncomePurchaseDrillDialog({
             )}
             <div className="flex flex-wrap gap-3 text-xs">
               <Link
+                href="/admin/outbound"
+                className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t("pL_purchaseDrillLinkOutbound")}
+              </Link>
+              <Link
                 href="/admin/orders"
                 className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
               >
@@ -328,10 +336,48 @@ function IncomePurchaseDrillDialog({
               </Link>
             </div>
 
-            {purchaseDrillData.isHqOrders && purchaseDrillData.hqOrders.length > 0 && (
+            {purchaseDrillData.isHqOrders && (purchaseDrillData.hqOutbounds?.length || 0) > 0 && (
               <div>
                 <p className="text-xs font-semibold text-muted-foreground mb-1">
-                  {t("pL_purchaseDrillHqOrders")}
+                  {t("pL_purchaseDrillHqOutbound")}
+                </p>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStatus")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillColItem")}</th>
+                        <th className="text-right p-2">{t("pL_purchaseDrillColQty")}</th>
+                        <th className="text-right p-2">{t("pL_purchaseDrillColUnitCost")}</th>
+                        <th className="text-right p-2">{t("pL_colAmount")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseDrillData.hqOutbounds!.map((r) => (
+                        <tr key={r.id} className="border-b border-border/60">
+                          <td className="p-2 font-mono">{r.id}</td>
+                          <td className="p-2 whitespace-nowrap">{r.logDate}</td>
+                          <td className="p-2">{r.logType || "—"}</td>
+                          <td className="p-2 max-w-[120px] truncate">{r.targetStore || "—"}</td>
+                          <td className="p-2 font-mono">{r.itemCode}</td>
+                          <td className="p-2 text-right font-mono">{r.qty}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.unitPrice)}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.lineAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {purchaseDrillData.isHqOrders && (purchaseDrillData.hqOrders?.length || 0) > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">
+                  {t("pL_purchaseDrillHqOrdersRef")}
                 </p>
                 <div className="rounded-md border overflow-x-auto">
                   <table className="w-full text-xs">
@@ -345,7 +391,7 @@ function IncomePurchaseDrillDialog({
                       </tr>
                     </thead>
                     <tbody>
-                      {purchaseDrillData.hqOrders.map((r) => (
+                      {purchaseDrillData.hqOrders!.map((r) => (
                         <tr key={r.id} className="border-b border-border/60">
                           <td className="p-2 font-mono">{r.id}</td>
                           <td className="p-2 whitespace-nowrap">{r.orderDate}</td>
@@ -406,6 +452,7 @@ function IncomePurchaseDrillDialog({
                         <th className="text-left p-2">{t("pL_purchaseDrillColId")}</th>
                         <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
                         <th className="text-right p-2">{t("pL_colAmount")}</th>
+                        <th className="text-left p-2">{t("pL_purchaseDrillBankOrderRef")}</th>
                         <th className="text-left p-2">{t("pL_purchaseDrillColMemo")}</th>
                         <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
                       </tr>
@@ -416,6 +463,19 @@ function IncomePurchaseDrillDialog({
                           <td className="p-2 font-mono">{r.id}</td>
                           <td className="p-2 whitespace-nowrap">{r.transDate}</td>
                           <td className="p-2 text-right font-mono">{formatBath(r.amount)}</td>
+                          <td className="p-2 font-mono whitespace-nowrap">
+                            {String(r.refType || "").toLowerCase() === "order" && r.refId ? (
+                              <Link
+                                href="/admin/orders"
+                                className="text-primary underline underline-offset-2 hover:text-primary/90"
+                                title={t("pL_purchaseDrillBankOrderRefHint")}
+                              >
+                                #{r.refId}
+                              </Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                           <td className="p-2 max-w-[200px] truncate" title={r.memo || r.note || ""}>
                             {r.memo || r.note || "—"}
                           </td>
@@ -429,7 +489,8 @@ function IncomePurchaseDrillDialog({
             )}
 
             {!(
-              (purchaseDrillData.isHqOrders && purchaseDrillData.hqOrders.length > 0) ||
+              (purchaseDrillData.isHqOrders && (purchaseDrillData.hqOutbounds?.length || 0) > 0) ||
+              (purchaseDrillData.isHqOrders && (purchaseDrillData.hqOrders?.length || 0) > 0) ||
               purchaseDrillData.inbound.length > 0 ||
               purchaseDrillData.bankPayments.length > 0
             ) && (
@@ -495,7 +556,6 @@ function IncomePlDetailTableContent({
 }) {
   const { lang } = useLang()
   const t = useT(lang)
-  const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
 
   const [purchaseDrillOpen, setPurchaseDrillOpen] = React.useState(false)
   const [purchaseDrillLoading, setPurchaseDrillLoading] = React.useState(false)
@@ -554,6 +614,52 @@ function IncomePlDetailTableContent({
                 </li>
               )
             })}
+          </ul>
+        </div>
+      )}
+      {data.diagnostics?.purchaseHqOutboundBasis && (
+        <div
+          className={`mb-2 rounded border px-3 py-2 text-xs ${
+            isMaterialHqOutboundOrderDiff(data.diagnostics.purchaseHqOutboundBasis)
+              ? "border-amber-400 bg-amber-50 text-amber-950"
+              : "border-sky-300 bg-sky-50 text-sky-950"
+          }`}
+        >
+          <p className="mb-1.5 leading-relaxed font-medium">{t("pL_diagHqOutboundBasis")}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 font-mono text-[11px]">
+            <div>
+              <span className="text-muted-foreground">{t("pL_purchaseDrillHqOutbound")}: </span>
+              {formatBath(data.diagnostics.purchaseHqOutboundBasis.outboundTotal)}
+            </div>
+            <div>
+              <span className="text-muted-foreground">{t("pL_purchaseDrillHqOrdersRef")}: </span>
+              {formatBath(data.diagnostics.purchaseHqOutboundBasis.approvedOrdersTotal)}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Δ: </span>
+              <span
+                className={
+                  isMaterialHqOutboundOrderDiff(data.diagnostics.purchaseHqOutboundBasis) ? "font-semibold" : ""
+                }
+              >
+                {formatBath(data.diagnostics.purchaseHqOutboundBasis.diff)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+      {(data.diagnostics?.purchaseExcludedHqBankPayments?.length || 0) > 0 && (
+        <div className="mb-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-xs text-violet-950">
+          <p className="mb-1 font-medium">{t("pL_diagExcludedHqBankTitle")}</p>
+          <p className="mb-1.5 leading-relaxed text-[11px] opacity-90">{t("pL_diagExcludedHqBankHint")}</p>
+          <ul className="list-disc pl-4 space-y-0.5 font-mono text-[11px]">
+            {data.diagnostics!.purchaseExcludedHqBankPayments!.map((row) => (
+              <li key={row.key}>
+                {row.key}
+                {row.label ? <span className="font-sans not-italic"> — {row.label}</span> : null}:{" "}
+                {formatBath(row.amount)}
+              </li>
+            ))}
           </ul>
         </div>
       )}
@@ -1134,6 +1240,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     [compareIncomeRows]
   )
 
+  const compareYearHqOutboundDiagnostics = React.useMemo(
+    () => incomeYearCompare.filter((y) => y.purchaseHqOutboundBasis != null),
+    [incomeYearCompare]
+  )
+
   const showIncomeCompareTable =
     isRangeCompare && !loading && compareIncomeRows.length > 0
 
@@ -1196,6 +1307,40 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     return [...s].sort()
   }, [compareIncomeRows])
 
+  /** 기간 내 월별 — 본사 출고 vs 승인 발주 진단 */
+  const compareMonthHqOutboundDiagnostics = React.useMemo(() => {
+    return compareIncomeRows
+      .filter(({ data }) => !data.error && data.diagnostics?.purchaseHqOutboundBasis != null)
+      .map(({ ym, data }) => ({
+        ym,
+        basis: data.diagnostics!.purchaseHqOutboundBasis!,
+      }))
+  }, [compareIncomeRows])
+
+  /** 기간 전체 — 본사 유형 통장 매입지급 제외액을 거래처별 합산 */
+  const compareMergedExcludedHqBank = React.useMemo(() => {
+    const byKey = new Map<string, { amount: number; label?: string }>()
+    for (const { data } of compareIncomeRows) {
+      if (data.error) continue
+      for (const row of data.diagnostics?.purchaseExcludedHqBankPayments || []) {
+        const prev = byKey.get(row.key)
+        byKey.set(row.key, {
+          amount: (prev?.amount ?? 0) + row.amount,
+          label: row.label || prev?.label,
+        })
+      }
+    }
+    return [...byKey.entries()]
+      .map(([key, v]) => ({ key, amount: v.amount, label: v.label }))
+      .sort((a, b) => b.amount - a.amount)
+  }, [compareIncomeRows])
+
+  const compareMonthHqOutboundAnyMaterial = React.useMemo(
+    () =>
+      compareMonthHqOutboundDiagnostics.some(({ basis }) => isMaterialHqOutboundOrderDiff(basis)),
+    [compareMonthHqOutboundDiagnostics]
+  )
+
   const compareMergedWarnings = React.useMemo(() => {
     const lines = new Set<string>()
     for (const { data } of compareIncomeRows) {
@@ -1233,8 +1378,6 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     : isManager && managerStore
       ? [managerStore]
       : []
-
-  const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
 
   const view = React.useMemo(() => {
     if (!data) return null
@@ -1280,54 +1423,55 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   const buildXlsxRows = React.useCallback((): IncomeStatementXlsxRow[] => {
     if (!data || !view) return []
+    const q = roundFinancialAmount
     const rows: IncomeStatementXlsxRow[] = []
-    rows.push({ label: t("pL_sales"), amount: view.sales, pct: "100.0%" })
+    rows.push({ label: t("pL_sales"), amount: q(view.sales), pct: "100.0%" })
     if ((data.salesByCustomer?.length || 0) > 0) {
       for (const row of data.salesByCustomer!) {
         rows.push({
           label: `      ${salesCustomerRowLabel(row, t)}`,
-          amount: row.amount,
+          amount: q(row.amount),
           pct: view.pct(row.amount),
         })
       }
     }
     rows.push({
       label: `  + ${t("pL_beginningInv")}`,
-      amount: view.beginningInventory,
+      amount: q(view.beginningInventory),
       pct: view.pct(view.beginningInventory),
     })
     rows.push({
       label: `  + ${t("pL_purchases")}`,
-      amount: data.purchases,
+      amount: q(data.purchases),
       pct: view.pct(data.purchases),
     })
     if ((data.purchaseByVendor?.length || 0) > 0) {
       for (const row of data.purchaseByVendor!) {
         rows.push({
           label: `      ${purchaseVendorRowLabel(row, t)}`,
-          amount: row.amount,
+          amount: q(row.amount),
           pct: view.pct(row.amount),
         })
       }
     }
     rows.push({
       label: `  - ${t("pL_endingInv")}`,
-      amount: data.endingInventory ?? 0,
+      amount: q(data.endingInventory ?? 0),
       pct: view.pct(-(data.endingInventory ?? 0)),
     })
     rows.push({
       label: `= ${t("pL_cogs")}`,
-      amount: view.cogs,
+      amount: q(view.cogs),
       pct: view.pct(view.cogs),
     })
     rows.push({
       label: t("pL_grossProfit"),
-      amount: view.grossProfit,
+      amount: q(view.grossProfit),
       pct: view.pct(view.grossProfit),
     })
     rows.push({
       label: `- ${t("pL_expenses")}`,
-      amount: data.expenses,
+      amount: q(data.expenses),
       pct: view.pct(data.expenses),
     })
     if ((data.expenseByAccountSubject?.length || 0) > 0) {
@@ -1343,29 +1487,29 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
               }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")
         rows.push({
           label: `      ${label}`,
-          amount: row.amount,
+          amount: q(row.amount),
           pct: view.pct(row.amount),
         })
       }
     }
     rows.push({
       label: `    - ${t("pL_expenseSourcePetty") || "현금시재(패티캐시)"}`,
-      amount: data.expenseBreakdown?.pettyCash ?? 0,
+      amount: q(data.expenseBreakdown?.pettyCash ?? 0),
       pct: view.pct(data.expenseBreakdown?.pettyCash ?? 0),
     })
     rows.push({
       label: `    - ${t("pL_expenseSourceBank") || "통장 출금"}`,
-      amount: data.expenseBreakdown?.bankWithdraw ?? 0,
+      amount: q(data.expenseBreakdown?.bankWithdraw ?? 0),
       pct: view.pct(data.expenseBreakdown?.bankWithdraw ?? 0),
     })
     rows.push({
       label: `    - ${t("pL_expenseSourceFixed") || "고정비"}`,
-      amount: data.expenseBreakdown?.fixedExpenses ?? 0,
+      amount: q(data.expenseBreakdown?.fixedExpenses ?? 0),
       pct: view.pct(data.expenseBreakdown?.fixedExpenses ?? 0),
     })
     rows.push({
       label: t("pL_netProfit"),
-      amount: view.netProfit,
+      amount: q(view.netProfit),
       pct: view.pct(view.netProfit),
     })
     return rows
@@ -1619,6 +1763,148 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                 </li>
                               )
                             })}
+                          </ul>
+                        </div>
+                      )}
+                      {compareGranularity === "month" && compareMonthHqOutboundDiagnostics.length > 0 && (
+                        <div
+                          className={`rounded border px-3 py-2 text-xs overflow-x-auto ${
+                            compareMonthHqOutboundAnyMaterial
+                              ? "border-amber-400 bg-amber-50 text-amber-950"
+                              : "border-sky-300 bg-sky-50 text-sky-950"
+                          }`}
+                        >
+                          <p className="mb-2 font-medium leading-relaxed">{t("pL_diagHqOutboundBasis")}</p>
+                          <table className="w-full text-[11px] border-collapse min-w-[280px]">
+                            <thead>
+                              <tr className="border-b border-sky-200/80">
+                                <th className="text-left p-1.5 font-medium text-muted-foreground w-[100px]">
+                                  {t("pL_colItem")}
+                                </th>
+                                {compareMonthHqOutboundDiagnostics.map(({ ym }) => (
+                                  <th key={ym} className="text-right p-1.5 font-mono whitespace-nowrap">
+                                    {ym}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td className="p-1.5 text-muted-foreground">{t("pL_purchaseDrillHqOutbound")}</td>
+                                {compareMonthHqOutboundDiagnostics.map(({ ym, basis }) => (
+                                  <td key={`o-${ym}`} className="text-right p-1.5 font-mono">
+                                    {formatBath(basis.outboundTotal)}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr>
+                                <td className="p-1.5 text-muted-foreground">{t("pL_purchaseDrillHqOrdersRef")}</td>
+                                {compareMonthHqOutboundDiagnostics.map(({ ym, basis }) => (
+                                  <td key={`a-${ym}`} className="text-right p-1.5 font-mono">
+                                    {formatBath(basis.approvedOrdersTotal)}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="border-t border-sky-200/60">
+                                <td className="p-1.5 font-medium">Δ</td>
+                                {compareMonthHqOutboundDiagnostics.map(({ ym, basis }) => (
+                                  <td
+                                    key={`d-${ym}`}
+                                    className={`text-right p-1.5 font-mono font-medium ${
+                                      isMaterialHqOutboundOrderDiff(basis) ? "bg-amber-200/80" : ""
+                                    }`}
+                                  >
+                                    {formatBath(basis.diff)}
+                                  </td>
+                                ))}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {compareGranularity === "year" && compareYearHqOutboundDiagnostics.length > 0 && (
+                        <div
+                          className={`rounded border px-3 py-2 text-xs overflow-x-auto ${
+                            compareYearHqOutboundDiagnostics.some(({ purchaseHqOutboundBasis: b }) =>
+                              b ? isMaterialHqOutboundOrderDiff(b) : false
+                            )
+                              ? "border-amber-400 bg-amber-50 text-amber-950"
+                              : "border-sky-300 bg-sky-50 text-sky-950"
+                          }`}
+                        >
+                          <p className="mb-2 font-medium leading-relaxed">{t("pL_diagHqOutboundYearAgg")}</p>
+                          <table className="w-full text-[11px] border-collapse min-w-[200px]">
+                            <thead>
+                              <tr className="border-b border-sky-200/80">
+                                <th className="text-left p-1.5 font-medium text-muted-foreground w-[100px]">
+                                  {t("pL_colItem")}
+                                </th>
+                                {compareYearHqOutboundDiagnostics.map(({ year }) => (
+                                  <th key={year} className="text-right p-1.5 font-mono whitespace-nowrap">
+                                    {year}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td className="p-1.5 text-muted-foreground">{t("pL_purchaseDrillHqOutbound")}</td>
+                                {compareYearHqOutboundDiagnostics.map(({ year, purchaseHqOutboundBasis }) => (
+                                  <td key={`yo-${year}`} className="text-right p-1.5 font-mono">
+                                    {formatBath(purchaseHqOutboundBasis!.outboundTotal)}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr>
+                                <td className="p-1.5 text-muted-foreground">{t("pL_purchaseDrillHqOrdersRef")}</td>
+                                {compareYearHqOutboundDiagnostics.map(({ year, purchaseHqOutboundBasis }) => (
+                                  <td key={`ya-${year}`} className="text-right p-1.5 font-mono">
+                                    {formatBath(purchaseHqOutboundBasis!.approvedOrdersTotal)}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="border-t border-sky-200/60">
+                                <td className="p-1.5 font-medium">Δ</td>
+                                {compareYearHqOutboundDiagnostics.map(({ year, purchaseHqOutboundBasis }) => {
+                                  const b = purchaseHqOutboundBasis!
+                                  return (
+                                    <td
+                                      key={`yd-${year}`}
+                                      className={`text-right p-1.5 font-mono font-medium ${
+                                        isMaterialHqOutboundOrderDiff(b) ? "bg-amber-200/80" : ""
+                                      }`}
+                                    >
+                                      {formatBath(b.diff)}
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            </tbody>
+                          </table>
+                          <p className="mt-2 text-[11px] text-muted-foreground leading-relaxed">
+                            {t("pL_diagHqCompareYearAggNote")}
+                          </p>
+                        </div>
+                      )}
+                      {compareGranularity === "year" &&
+                        compareMonthHqOutboundDiagnostics.length > 0 &&
+                        compareYearHqOutboundDiagnostics.length === 0 && (
+                        <p className="text-xs text-sky-900 bg-sky-50 border border-sky-200 rounded px-3 py-2">
+                          {t("pL_diagHqCompareYearOnlyHint")}
+                        </p>
+                      )}
+                      {compareMergedExcludedHqBank.length > 0 && (
+                        <div className="rounded border border-violet-300 bg-violet-50 px-3 py-2 text-xs text-violet-950">
+                          <p className="mb-1 font-medium">{t("pL_diagExcludedHqBankTitle")}</p>
+                          <p className="mb-1.5 leading-relaxed text-[11px] opacity-90">{t("pL_diagExcludedHqBankHint")}</p>
+                          <ul className="list-disc pl-4 space-y-0.5 font-mono text-[11px]">
+                            {compareMergedExcludedHqBank.map((row) => (
+                              <li key={row.key}>
+                                {row.key}
+                                {row.label ? <span className="font-sans not-italic"> — {row.label}</span> : null}:{" "}
+                                {formatBath(row.amount)}
+                              </li>
+                            ))}
                           </ul>
                         </div>
                       )}

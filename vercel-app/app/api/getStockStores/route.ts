@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       .filter(Boolean)
       .sort()
     return NextResponse.json(list, { headers })
-  } catch (rpcErr) {
+  } catch (_rpcErr) {
     // RPC 미배포 시 fallback: 기존 select 방식
     const logs = (await supabaseSelect('stock_logs', { limit: 50000, select: 'location' })) as { location?: string }[] | null
     const fromLogs = new Set<string>()

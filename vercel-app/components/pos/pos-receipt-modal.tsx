@@ -110,6 +110,7 @@ interface PosReceiptModalProps {
   autoPrintKitchenSlipOnOrder?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
+  receiptBizAbn?: string
   receiptBizOwner?: string
   receiptBizAddress?: string
   receiptBizPhone?: string
@@ -146,6 +147,7 @@ export function PosReceiptModal({
   autoPrintKitchenSlipOnOrder = false,
   receiptBizName = '',
   receiptBizTaxId = '',
+  receiptBizAbn = '',
   receiptBizOwner = '',
   receiptBizAddress = '',
   receiptBizPhone = '',
@@ -276,13 +278,14 @@ export function PosReceiptModal({
           <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderType', 'Order Type'))}</span><span class="receipt-meta-value">${esc(orderTypeLabels[receiptData.orderType] || receiptData.orderType)}</span></div>
         </div>
         <div class="receipt-divider"></div>
-        ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted receipt-biz-wrap">' : ''}
+        ${(receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted receipt-biz-wrap">' : ''}
         ${receiptBizName ? `<div class="receipt-biz" style="color:#000;font-weight:600">${esc(receiptBizName)}</div>` : ''}
         ${receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(receiptBizTaxId)}</div>` : ''}
+        ${receiptBizAbn ? `<div class="receipt-biz">ABN: ${esc(receiptBizAbn)}</div>` : ''}
         ${receiptBizOwner ? `<div class="receipt-biz">${esc(tr('posOwner', '대표'))}: ${esc(receiptBizOwner)}</div>` : ''}
         ${receiptBizAddress ? `<div class="receipt-biz">${esc(receiptBizAddress)}</div>` : ''}
         ${receiptBizPhone ? `<div class="receipt-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(receiptBizPhone)}</div>` : ''}
-        ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '</div>' : ''}
+        ${(receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '</div>' : ''}
         ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>

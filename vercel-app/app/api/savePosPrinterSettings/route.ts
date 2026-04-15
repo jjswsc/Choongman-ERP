@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpsertMerge } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
 import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
+import { requireAuth } from '@/lib/verify-auth'
+import { canAccessPosPrinters, isOfficeRole } from '@/lib/permissions'
 
 /** JSON 본문에서 true/false 문자열 등도 안전하게 해석 (지연 배지 등) */
 function parseBoolParam(v: unknown, defaultVal: boolean): boolean {
@@ -49,8 +51,18 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(req, 'manager')
+    if (!authResult.auth) {
+      return NextResponse.json({ success: false, message: '인증이 필요합니다.' }, { status: 401, headers })
+    }
+    if (!canAccessPosPrinters(authResult.auth.role || '')) {
+      return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
+    }
     const body = await req.json()
-    const storeCode = String(body?.storeCode ?? '').trim()
+    const requestedStoreCode = String(body?.storeCode ?? '').trim()
+    const authStore = String(authResult.auth.store || '').trim()
+    const office = isOfficeRole(authResult.auth.role || '')
+    const storeCode = office ? requestedStoreCode : requestedStoreCode || authStore
     const kitchenMode = Math.min(3, Math.max(1, Number(body?.kitchenMode) || 1))
     const kitchen1Categories = Array.isArray(body?.kitchen1Categories)
       ? body.kitchen1Categories.filter((c: unknown) => typeof c === 'string')
@@ -103,6 +115,7 @@ export async function POST(req: NextRequest) {
     const autoPrintKitchenSlipOnOrder = Boolean(body?.autoPrintKitchenSlipOnOrder)
     const receiptBizName = String(body?.receiptBizName ?? '').trim()
     const receiptBizTaxId = String(body?.receiptBizTaxId ?? '').trim()
+    const receiptBizAbn = String(body?.receiptBizAbn ?? '').trim()
     const receiptBizOwner = String(body?.receiptBizOwner ?? '').trim()
     const receiptBizAddress = String(body?.receiptBizAddress ?? '').trim()
     const receiptBizPhone = String(body?.receiptBizPhone ?? '').trim()
@@ -177,6 +190,15 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
     }
+    if (!office && authStore && storeCode !== authStore) {
+      return NextResponse.json({ success: false, message: '다른 매장 설정을 수정할 수 없습니다.' }, { status: 403, headers })
+    }
+    const previousRows = (await supabaseSelectFilter(
+      'pos_printer_settings',
+      `store_code=eq.${encodeURIComponent(storeCode)}`,
+      { limit: 1 }
+    )) as Record<string, unknown>[] | null
+    const previous = previousRows?.[0] || {}
 
     const patch = {
       kitchen_mode: kitchenMode,
@@ -216,6 +238,7 @@ export async function POST(req: NextRequest) {
       auto_print_kitchen_slip_on_order: autoPrintKitchenSlipOnOrder,
       receipt_biz_name: receiptBizName,
       receipt_biz_tax_id: receiptBizTaxId,
+      receipt_biz_abn: receiptBizAbn,
       receipt_biz_owner: receiptBizOwner,
       receipt_biz_address: receiptBizAddress,
       receipt_biz_phone: receiptBizPhone,
@@ -267,6 +290,27 @@ export async function POST(req: NextRequest) {
     }
 
     await upsertWithMissingColumnFallback(storeCode, patch)
+    try {
+      const changedKeys = Object.keys(patch).filter((key) => {
+        if (key === 'updated_at') return false
+        const prevVal = previous[key]
+        const nextVal = patch[key as keyof typeof patch]
+        return JSON.stringify(prevVal ?? null) !== JSON.stringify(nextVal ?? null)
+      })
+      if (changedKeys.length > 0) {
+        await supabaseInsert('pos_printer_settings_audit_logs', {
+          store_code: storeCode,
+          changed_at: new Date().toISOString(),
+          changed_by: String(authResult.auth.name || '').trim() || null,
+          changed_role: String(authResult.auth.role || '').trim() || null,
+          changed_keys_json: JSON.stringify(changedKeys),
+          before_json: JSON.stringify(previous),
+          after_json: JSON.stringify(patch),
+        })
+      }
+    } catch (auditErr) {
+      console.warn('savePosPrinterSettings audit skipped:', auditErr)
+    }
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

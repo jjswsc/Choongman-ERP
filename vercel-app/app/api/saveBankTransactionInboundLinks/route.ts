@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
 
 /** 통장 출금 입고 연동 저장 - 기존 링크 삭제 후 새로 저장 */
 export async function POST(request: NextRequest) {

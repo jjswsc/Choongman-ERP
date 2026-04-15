@@ -73,6 +73,12 @@ export function isFranchiseeRole(role: string): boolean {
   return r.includes(FRANCHISEE_ROLE)
 }
 
+/** 모바일 「매출 통합(/store-sales)」 — 로그인한 모든 직원 허용 */
+export function canViewMobileStoreSales(role: string): boolean {
+  void role
+  return true
+}
+
 /** 매장 관리자급인지 (매니저 또는 가맹점주) */
 export function isManagerOrFranchiseeRole(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role)

@@ -23,6 +23,8 @@ import {
 } from '@/lib/api-client'
 import { isOfficeRole } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
+import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from '@/components/pos/pos-screen-config-action-bar'
+import { PosScreenConfigCopyInline } from '@/components/pos/pos-screen-config-copy-blocks'
 
 const ACCENT_COLORS = [
   { value: 'lime', label: 'Lime (Grab)' },
@@ -44,7 +46,6 @@ export function PosDeliveryAppsContent() {
   const [includeDisabled, setIncludeDisabled] = React.useState(true)
 
   const canSearchAll = isOfficeRole(auth?.role || '')
-  const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ''
 
   const loadData = React.useCallback(() => {
     setLoading(true)
@@ -142,36 +143,77 @@ export function PosDeliveryAppsContent() {
     }
   }
 
+  const tr = (key: string, fallback: string) => t(key) || fallback
+  const deliveryCopyTarget = canSearchAll ? (storeCode?.trim() || '') : String(auth?.store || '').trim()
+  const showStoreCopy =
+    Boolean(deliveryCopyTarget) && stores.filter((s) => s && s !== deliveryCopyTarget).length > 0
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        {canSearchAll && (
-          <Select value={storeCode || '__global__'} onValueChange={(v) => setStoreCode(v === '__global__' ? '' : v)}>
-            <SelectTrigger className="h-10 w-40">
-              <SelectValue placeholder={t('store') || '매장'} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__global__">{t('posDeliveryAppsGlobal') || '전역'}</SelectItem>
-              {stores.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="space-y-2">
+        <PosScreenConfigActionBar
+          left={
+            <>
+              {canSearchAll && (
+                <Select value={storeCode || '__global__'} onValueChange={(v) => setStoreCode(v === '__global__' ? '' : v)}>
+                  <SelectTrigger className="h-10 w-40">
+                    <SelectValue placeholder={t('store') || '매장'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__global__">{t('posDeliveryAppsGlobal') || '전역'}</SelectItem>
+                    {stores.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
+                <RotateCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+                {t('posRefresh') || '새로고침'}
+              </Button>
+              <label className="flex items-center gap-2 text-sm shrink-0">
+                <input
+                  type="checkbox"
+                  checked={includeDisabled}
+                  onChange={(e) => setIncludeDisabled(e.target.checked)}
+                />
+                {t('posDeliveryAppsIncludeDisabled') || '비활성 포함'}
+              </label>
+              {showStoreCopy ? (
+                <PosScreenConfigCopyInline
+                  variant="delivery"
+                  targetStoreCode={deliveryCopyTarget}
+                  stores={stores}
+                  tr={tr}
+                  onCopySuccess={() => void loadData()}
+                />
+              ) : null}
+            </>
+          }
+          right={
+            <PosScreenConfigEmeraldSaveButton onClick={handleSave} disabled={saving}>
+              <Save className="h-4 w-4" />
+              {saving ? '...' : t('itemsBtnSave') || '저장'}
+            </PosScreenConfigEmeraldSaveButton>
+          }
+        />
+        {canSearchAll && !storeCode?.trim() ? (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {tr(
+              'posDeliveryGlobalRowHint',
+              '전역 배달앱 목록을 편집 중입니다. 매장별로 다른 매장에서 복사하려면 위에서 매장을 먼저 선택하세요.'
+            )}
+          </p>
+        ) : (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {tr(
+              'posScreenConfigStoreRowHint',
+              '선택한 매장에만 저장됩니다. 다른 매장과 동일하게 맞추려면 원본 매장을 고른 뒤 복사를 누르세요.'
+            )}
+          </p>
         )}
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={includeDisabled}
-            onChange={(e) => setIncludeDisabled(e.target.checked)}
-          />
-          {t('posDeliveryAppsIncludeDisabled') || '비활성 포함'}
-        </label>
-        <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
-          <RotateCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          {t('posRefresh') || '새로고침'}
-        </Button>
       </div>
 
       <div className="rounded-xl border bg-card p-4 space-y-4">
@@ -293,11 +335,6 @@ export function PosDeliveryAppsContent() {
         <p className="text-xs text-muted-foreground">
           {t('posDeliveryAppsGuide') || '인식 키워드: 주문 라벨(customerName, orderNo, memo)에 포함되면 해당 배달앱으로 인식됩니다. Dine out: 테이블 결제 시 "배달앱 결제" 옵션에 표시됩니다.'}
         </p>
-
-        <Button className="w-full" onClick={handleSave} disabled={saving}>
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? '...' : t('itemsBtnSave') || '저장'}
-        </Button>
       </div>
     </div>
   )

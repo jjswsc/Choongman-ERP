@@ -2,7 +2,6 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import Link from "next/link"
 import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator, ClipboardList, Download, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,12 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1095,7 +1088,7 @@ export default function PosMenusPage() {
       try {
         list = await getPosMenus()
         setMenus(list || [])
-      } catch (e) {
+      } catch (_e) {
         await appAlert(t("posChickenBatchNoMenus") || "메뉴 목록을 불러올 수 없습니다.")
         return
       }

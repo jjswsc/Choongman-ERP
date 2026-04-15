@@ -178,7 +178,7 @@ export function AiCenterClient() {
     setReason(t("aiCenterDefaultReason"))
     setPayloadText(prettyJson(defaultPayloads[actionType]))
     // 언어(번역) 변경 시에만 샘플·사유를 로케일에 맞게 다시 채움. actionType 변경은 onChangeActionType에서 처리.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- actionType은 의도적으로 제외
+     
   }, [defaultPayloads])
 
   const onPropose = async () => {

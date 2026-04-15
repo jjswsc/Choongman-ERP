@@ -24,7 +24,7 @@ import {
   type StoreRepairTicketItem,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { useTranslatedTextMap, useDebouncedTranslatedText } from "@/lib/use-ui-translate"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { ImageIcon, Save, X } from "lucide-react"
 import { StoreRepairMediaThumb } from "@/components/store-repair-media-thumb"
 
@@ -80,7 +80,6 @@ export function RepairTab() {
 
   const recentTitles = useMemo(() => recent.map((r) => r.title || ""), [recent])
   const translateTitle = useTranslatedTextMap(recentTitles, lang)
-  const titleTrans = useDebouncedTranslatedText(title, lang)
 
   const loadRecent = useCallback(async () => {
     if (!store) return

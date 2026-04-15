@@ -18,12 +18,6 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function daysAgoStr(days: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().slice(0, 10)
-}
-
 function isRead(status: string) {
   return /^(확인|Read|확인함)$/.test(String(status || "").trim())
 }

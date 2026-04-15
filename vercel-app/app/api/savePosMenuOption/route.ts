@@ -133,8 +133,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await doSave(rowFull)
-    } catch (err1) {
-      const errStr = String(err1)
+    } catch (_err1) {
       const rowWithoutNew = { ...rowFull }
       delete rowWithoutNew.option_step_values
       delete rowWithoutNew.price_modifier_packaging
@@ -148,7 +147,7 @@ export async function POST(req: NextRequest) {
       if (priceModifierDelivery != null) (rowWithoutNew as Record<string, unknown>).price_modifier_delivery = priceModifierDelivery
       try {
         await doSave(rowWithoutNew)
-      } catch (err2) {
+      } catch (_err2) {
         await doSave(rowMinimal)
       }
     }

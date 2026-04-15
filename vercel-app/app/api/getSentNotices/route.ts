@@ -21,8 +21,6 @@ export async function GET(request: NextRequest) {
   const sender = String(searchParams.get('sender') || '').trim()
   const startStr = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = (searchParams.get('userRole') || '').toLowerCase()
   const searchType = String(searchParams.get('searchType') || 'all').toLowerCase() as 'all' | 'notice' | 'order'
   const keyword = String(searchParams.get('keyword') || searchParams.get('q') || '').trim().toLowerCase()
   const { page, pageSize } = parseListPagination(searchParams, null, 15)

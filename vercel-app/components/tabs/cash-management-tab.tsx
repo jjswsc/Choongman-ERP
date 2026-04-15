@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
 import { useStoreList } from '@/lib/api-client'
-import { getTillList, addTillTransaction, getPettyCashOptions, getPosTodaySales, translateTexts, type TillItem } from '@/lib/api-client'
+import { getTillList, getPosTodaySales, translateTexts, type TillItem } from '@/lib/api-client'
 import { getPettyCashOptionsWithCache } from '@/lib/offline/cash-offline'
 import { getTillListWithCache } from '@/lib/offline/till-offline'
 import { addTillTransactionWithOffline } from '@/lib/offline/till-offline'

@@ -118,7 +118,7 @@ export function AdminPurchaseOrderHistory() {
       .then((rows) => setList(Array.isArray(rows) ? rows : []))
       .catch(() => setList([]))
       .finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 최초 마운트 시점의 기본 기간만 사용
+     
   }, [])
 
   const load = React.useCallback(() => {

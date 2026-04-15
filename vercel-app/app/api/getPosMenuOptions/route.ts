@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
 
 /** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
 export async function GET(request: NextRequest) {

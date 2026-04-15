@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useAuth } from "@/lib/auth-context"
+import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
 import { canAccessSaasAdmin } from "@/lib/permissions"
 import { SaasSidebar } from "@/components/saas/saas-sidebar"
 import { SaasHeader } from "@/components/saas/saas-header"
@@ -12,7 +13,13 @@ export default function SaasAdminLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const { auth, initialized } = useAuth()
+  const { lang, setLang } = useLang()
   const isLoginPage = pathname === "/saas-admin/login"
+
+  useEffect(() => {
+    const n = normalizeAdminUiLang(lang)
+    if (n !== lang) setLang(n)
+  }, [lang, setLang])
 
   useEffect(() => {
     if (!initialized || isLoginPage) return

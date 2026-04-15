@@ -150,6 +150,36 @@ function normalizeStoreCodes(values: string[]): string[] {
   )
 }
 
+function parseYmdDate(value: string): Date {
+  const [y, m, d] = value.split("-").map((x) => parseInt(x, 10))
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+
+function formatYmdDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+function addDaysYmd(value: string, delta: number): string {
+  const d = parseYmdDate(value)
+  d.setDate(d.getDate() + delta)
+  return formatYmdDate(d)
+}
+
+function diffDaysInclusive(startStr: string, endStr: string): number {
+  const start = parseYmdDate(startStr).getTime()
+  const end = parseYmdDate(endStr).getTime()
+  const raw = Math.floor((end - start) / 86400000) + 1
+  return Number.isFinite(raw) && raw > 0 ? raw : 1
+}
+
+function csvEscape(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
+  return value
+}
+
 type AnalyticsView =
   | "period"
   | "delivery"
@@ -183,53 +213,85 @@ type SalesSubMenuConfig = {
 
 const SALES_IA: SalesSubMenuConfig[] = [
   {
-    id: "sales-explorer",
+    id: "sales-analysis",
     labelKey: "salesManagementSubmenuQuickSales",
-    fallbackLabel: "매출 탐색",
+    fallbackLabel: "실적 분석",
     topics: [
-      { id: "explore-period", labelKey: "salesTopicExplorePeriod", hintKey: "salesTopicExplorePeriodHint", view: "period" },
-      { id: "explore-channel", labelKey: "salesTopicExploreChannel", hintKey: "salesTopicExploreChannelHint", view: "channel" },
-      { id: "explore-payment", labelKey: "salesTopicExplorePayment", hintKey: "salesTopicExplorePaymentHint", view: "payment" },
-      { id: "explore-menu", labelKey: "salesTopicExploreMenu", hintKey: "salesTopicExploreMenuHint", view: "menu" },
-      { id: "explore-delivery", labelKey: "salesTopicExploreDelivery", hintKey: "salesTopicExploreDeliveryHint", view: "delivery" },
+      { id: "analysis-period", labelKey: "salesTopicExplorePeriod", hintKey: "salesTopicExplorePeriodHint", view: "period" },
+      { id: "analysis-channel", labelKey: "salesTopicExploreChannel", hintKey: "salesTopicExploreChannelHint", view: "channel" },
+      { id: "analysis-payment", labelKey: "salesTopicExplorePayment", hintKey: "salesTopicExplorePaymentHint", view: "payment" },
+      { id: "analysis-menu", labelKey: "salesTopicExploreMenu", hintKey: "salesTopicExploreMenuHint", view: "menu" },
+      { id: "analysis-delivery", labelKey: "salesTopicExploreDelivery", hintKey: "salesTopicExploreDeliveryHint", view: "delivery" },
     ],
   },
   {
-    id: "sales-pivot",
+    id: "sales-compare",
     labelKey: "salesManagementSubmenuAggregateInfo",
-    fallbackLabel: "집계 정보",
+    fallbackLabel: "매장 비교",
     topics: [
-      { id: "pivot-store-summary", labelKey: "salesTopicPivotStoreSummary", hintKey: "salesTopicPivotStoreSummaryHint", view: "store" },
+      { id: "compare-store-summary", labelKey: "salesTopicPivotStoreSummary", hintKey: "salesTopicPivotStoreSummaryHint", view: "store" },
       {
-        id: "pivot-store-by-period",
+        id: "compare-store-by-period",
         labelKey: "salesTopicPivotStoreByPeriod",
         hintKey: "salesTopicPivotStoreByPeriodHint",
         view: "store-period",
       },
-      { id: "pivot-store-category", labelKey: "salesTopicPivotStoreCategory", hintKey: "salesTopicPivotStoreCategoryHint", view: "store-category" },
-      { id: "pivot-store-channel", labelKey: "salesTopicPivotStoreChannel", hintKey: "salesTopicPivotStoreChannelHint", view: "channel" },
-      { id: "pivot-store-item", labelKey: "salesTopicPivotStoreItem", hintKey: "salesTopicPivotStoreItemHint", view: "menu" },
-      { id: "pivot-time-item", labelKey: "salesTopicPivotTimeItem", hintKey: "salesTopicPivotTimeItemHint", view: "period" },
-      { id: "pivot-delivery-store", labelKey: "salesTopicPivotDeliveryStore", hintKey: "salesTopicPivotDeliveryStoreHint", view: "delivery" },
-      { id: "pivot-payment", labelKey: "salesTopicPivotPayment", hintKey: "salesTopicPivotPaymentHint", view: "payment" },
+      { id: "compare-store-category", labelKey: "salesTopicPivotStoreCategory", hintKey: "salesTopicPivotStoreCategoryHint", view: "store-category" },
     ],
   },
   {
-    id: "sales-compare-forecast",
+    id: "sales-forecast-report",
     labelKey: "salesManagementTabForecast",
-    fallbackLabel: "비교·예측",
+    fallbackLabel: "예측·리포트",
     topics: [
-      { id: "compare-month-year", labelKey: "salesTopicCompareMonthYear", hintKey: "salesTopicCompareMonthYearHint", view: "period" },
-      { id: "compare-month-mom", labelKey: "salesTopicCompareMonthMom", hintKey: "salesTopicCompareMonthMomHint", view: "period" },
-      { id: "forecast-monthly", labelKey: "salesTopicForecastMonthly", hintKey: "salesTopicForecastMonthlyHint", view: "period" },
-      { id: "overview-report", labelKey: "salesTopicOverviewReport", hintKey: "salesTopicOverviewReportHint", view: "channel" },
+      { id: "report-month-year", labelKey: "salesTopicCompareMonthYear", hintKey: "salesTopicCompareMonthYearHint", view: "period" },
+      { id: "report-month-mom", labelKey: "salesTopicCompareMonthMom", hintKey: "salesTopicCompareMonthMomHint", view: "period" },
+      { id: "report-forecast-monthly", labelKey: "salesTopicForecastMonthly", hintKey: "salesTopicForecastMonthlyHint", view: "period" },
+      { id: "report-overview", labelKey: "salesTopicOverviewReport", hintKey: "salesTopicOverviewReportHint", view: "channel" },
     ],
   },
 ]
 
+type SalesFilterPreset = {
+  id: string
+  name: string
+  startStr: string
+  endStr: string
+  stores: string[]
+  periodGroup: PeriodGroupValue
+  orderTypesKey: string
+  activeSubMenuId: string
+  selectedTopicId: string
+  menuSearch: string
+  menuSearchAnd: boolean
+  compareStores: boolean
+}
+
+const SALES_FILTER_PRESET_STORAGE_KEY = "cm-sales-filter-presets-v1"
+
 export interface SalesManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
   offlineAware?: boolean
+}
+
+function resolveDefaultSalesLanding(pathname: string): {
+  menuId: string
+  topicId: string
+  periodGroup: PeriodGroupValue
+} {
+  const p = String(pathname || "")
+  if (p.startsWith("/admin/")) {
+    return {
+      menuId: "sales-compare",
+      topicId: "compare-store-summary",
+      periodGroup: "month",
+    }
+  }
+  return {
+    menuId: "sales-analysis",
+    topicId: "analysis-period",
+    periodGroup: "day",
+  }
 }
 
 export function SalesManagementTab(props: SalesManagementTabProps = {}) {
@@ -241,6 +303,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const searchParams = useSearchParams()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const defaultLanding = React.useMemo(() => resolveDefaultSalesLanding(pathname), [pathname])
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
   const monthStart = React.useMemo(() => {
     const d = new Date()
@@ -254,7 +317,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [loading, setLoading] = React.useState(false)
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
   const [fetchedAnalyticsKey, setFetchedAnalyticsKey] = React.useState("")
-  const [periodGroup, setPeriodGroup] = React.useState<PeriodGroupValue>("day")
+  const [periodGroup, setPeriodGroup] = React.useState<PeriodGroupValue>(defaultLanding.periodGroup)
   const [menuSearch, setMenuSearch] = React.useState("")
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
@@ -268,9 +331,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const storePickerListId = React.useId()
   const storePickerBtnId = React.useId()
 
-  const [activeSubMenuId, setActiveSubMenuId] = React.useState<string>(SALES_IA[0].id)
+  const [activeSubMenuId, setActiveSubMenuId] = React.useState<string>(defaultLanding.menuId)
   const [selectedTopicBySubMenu, setSelectedTopicBySubMenu] = React.useState<Record<string, string>>(() =>
-    Object.fromEntries(SALES_IA.map((menu) => [menu.id, menu.topics[0]?.id ?? ""]))
+    Object.fromEntries(
+      SALES_IA.map((menu) => [
+        menu.id,
+        menu.id === defaultLanding.menuId ? defaultLanding.topicId : menu.topics[0]?.id ?? "",
+      ])
+    )
   )
 
   const [periodData, setPeriodData] = React.useState<
@@ -321,6 +389,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       salesPerOrder?: number
     }[]
   >([])
+  const [savedPresets, setSavedPresets] = React.useState<SalesFilterPreset[]>([])
+  const [summaryCards, setSummaryCards] = React.useState<{
+    current: number
+    prevRange: number
+    prevWeek: number
+  }>({ current: 0, prevRange: 0, prevWeek: 0 })
 
   const tr = React.useCallback(
     (key: string, fallback: string) => {
@@ -329,6 +403,27 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     },
     [t]
   )
+
+  React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SALES_FILTER_PRESET_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as SalesFilterPreset[]
+      if (!Array.isArray(parsed)) return
+      setSavedPresets(parsed.filter((p) => p && typeof p.id === "string" && typeof p.name === "string"))
+    } catch {
+      setSavedPresets([])
+    }
+  }, [])
+
+  const persistPresets = React.useCallback((next: SalesFilterPreset[]) => {
+    setSavedPresets(next)
+    try {
+      window.localStorage.setItem(SALES_FILTER_PRESET_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const [posStoreNameLookup, setPosStoreNameLookup] = React.useState<Map<string, string>>(() => new Map())
   React.useEffect(() => {
@@ -421,6 +516,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const selectedTopicId = selectedTopicBySubMenu[currentSubMenu.id] ?? currentSubMenu.topics[0].id
   const selectedTopic = currentSubMenu.topics.find((topic) => topic.id === selectedTopicId) ?? currentSubMenu.topics[0]
   const selectedView = selectedTopic?.view ?? null
+  const needsPeriodGroup = selectedView === "period" || selectedView === "store-period"
 
   const storesForCompareChart = React.useMemo(
     () => selectedStoresParam ?? [],
@@ -551,6 +647,103 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const showSalesResults = fetchedAnalyticsKey !== "" && fetchedAnalyticsKey === analyticsParamKey
 
+  const totalsSummary = React.useMemo(() => {
+    const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
+    const vat = periodChartRows.reduce((a, x) => a + Number(x.vat ?? 0), 0)
+    const discount = periodChartRows.reduce((a, x) => a + Number(x.discount ?? 0), 0)
+    const total = periodChartRows.reduce((a, x) => a + Number(x.total ?? x.sales ?? 0), 0)
+    return { subtotal, vat, discount, total, gross: subtotal + vat }
+  }, [periodChartRows])
+
+  const insightTopMenus = React.useMemo(
+    () => [...menuData].sort((a, b) => b.sales - a.sales).slice(0, 3),
+    [menuData]
+  )
+  const insightBottomMenus = React.useMemo(
+    () => [...menuData].filter((m) => m.sales > 0).sort((a, b) => a.sales - b.sales).slice(0, 3),
+    [menuData]
+  )
+  const insightTopChannels = React.useMemo(
+    () => [...channelChartRows].sort((a, b) => b.sales - a.sales).slice(0, 3),
+    [channelChartRows]
+  )
+
+  const exportCurrentCsv = React.useCallback(() => {
+    if (!showSalesResults || selectedView == null) return
+    let headers: string[] = []
+    let rows: string[][] = []
+    if (selectedView === "period") {
+      headers = ["기간", "주문건수", "손님수(홀)", "공급가액", "세금", "할인", "매출액"]
+      rows = periodChartRows.map((r) => [
+        String(r.axisLabel),
+        String(r.count ?? 0),
+        String(r.hallGuestSum ?? 0),
+        String(r.subtotal ?? 0),
+        String(r.vat ?? 0),
+        String(r.discount ?? 0),
+        String(r.total ?? 0),
+      ])
+    } else if (selectedView === "store-period") {
+      headers = ["매장", "기간", "주문건수", "손님수(홀)", "공급가액", "세금", "할인", "매출액"]
+      rows = storeByPeriodFlatRows.map((r) => [
+        r.storeDisplay,
+        String(r.axisLabel),
+        String(r.count ?? 0),
+        String(r.hallGuestSum ?? 0),
+        String(r.subtotal ?? 0),
+        String(r.vat ?? 0),
+        String(r.discount ?? 0),
+        String(r.total ?? 0),
+      ])
+    } else if (selectedView === "channel") {
+      headers = ["채널", "매출액"]
+      rows = channelChartRows.map((r) => [r.axisLabel, String(r.sales)])
+    } else if (selectedView === "payment") {
+      headers = ["결제수단", "매출액"]
+      rows = paymentChartRows.map((r) => [r.axisLabel, String(r.sales)])
+    } else if (selectedView === "menu") {
+      headers = ["메뉴", "수량", "매출액"]
+      rows = menuData.map((r) => [r.name, String(r.qty), String(r.sales)])
+    } else if (selectedView === "store" || selectedView === "store-category") {
+      headers = ["매장", "주문건수", "손님수(홀)", "공급가액", "세금", "할인", "매출액"]
+      rows = storeChartRows.map((r) => [
+        r.storeDisplayName,
+        String(r.count ?? 0),
+        String(r.guestSum ?? 0),
+        String(r.subtotal ?? 0),
+        String(r.vat ?? 0),
+        String(r.discount ?? 0),
+        String(r.total ?? 0),
+      ])
+    } else if (selectedView === "delivery") {
+      headers = ["채널", "매출액", "비중(%)"]
+      rows = deliveryPieRows.map((r) => [String(r.axisLabel), String(r.sales), String((r.pct ?? 0).toFixed(2))])
+    }
+    if (rows.length === 0) return
+    const csv = [headers, ...rows]
+      .map((line) => line.map((cell) => csvEscape(String(cell ?? ""))).join(","))
+      .join("\n")
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `sales-report-${selectedView}-${startStr}-${endStr}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [
+    showSalesResults,
+    selectedView,
+    periodChartRows,
+    storeByPeriodFlatRows,
+    channelChartRows,
+    paymentChartRows,
+    menuData,
+    storeChartRows,
+    deliveryPieRows,
+    startStr,
+    endStr,
+  ])
+
   React.useEffect(() => {
     setPeriodData([])
     setPeriodSplitSeries(null)
@@ -560,6 +753,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setMenuData([])
     setPaymentData([])
     setStoreData([])
+    setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
   }, [analyticsParamKey])
 
@@ -582,9 +776,95 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     compare?: boolean
   }>({})
 
+  const saveCurrentPreset = React.useCallback(() => {
+    const name = window.prompt(tr("salesPresetPrompt", "프리셋 이름을 입력하세요."), "")
+    const trimmed = String(name || "").trim()
+    if (!trimmed) return
+    const currentTopic = selectedTopic?.id ?? ""
+    const preset: SalesFilterPreset = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmed,
+      startStr,
+      endStr,
+      stores: selectedStores,
+      periodGroup,
+      orderTypesKey,
+      activeSubMenuId,
+      selectedTopicId: currentTopic,
+      menuSearch,
+      menuSearchAnd,
+      compareStores,
+    }
+    persistPresets([preset, ...savedPresets.filter((p) => p.name !== trimmed)].slice(0, 20))
+  }, [
+    tr,
+    selectedTopic?.id,
+    startStr,
+    endStr,
+    selectedStores,
+    periodGroup,
+    orderTypesKey,
+    activeSubMenuId,
+    menuSearch,
+    menuSearchAnd,
+    compareStores,
+    persistPresets,
+    savedPresets,
+  ])
+
+  const applyPreset = React.useCallback((preset: SalesFilterPreset) => {
+    userSelectedRef.current = {
+      subMenu: preset.activeSubMenuId,
+      topic: preset.selectedTopicId,
+      storesKey: normalizeStoreCodes(preset.stores).join(","),
+      periodGroup: preset.periodGroup,
+      dateRange: `${preset.startStr}~${preset.endStr}`,
+      orderTypesKey: preset.orderTypesKey,
+      compare: preset.compareStores,
+    }
+    setStartStr(preset.startStr)
+    setEndStr(preset.endStr)
+    setSelectedStores(normalizeStoreCodes(preset.stores))
+    setPeriodGroup(preset.periodGroup)
+    setOrderTypesKey(normalizeOrderTypesQueryString(preset.orderTypesKey))
+    setMenuSearch(preset.menuSearch || "")
+    setMenuSearchAnd(Boolean(preset.menuSearchAnd))
+    setCompareStores(Boolean(preset.compareStores))
+    if (SALES_IA.some((menu) => menu.id === preset.activeSubMenuId)) {
+      setActiveSubMenuId(preset.activeSubMenuId)
+      setSelectedTopicBySubMenu((prev) => ({
+        ...prev,
+        [preset.activeSubMenuId]: preset.selectedTopicId,
+      }))
+    }
+  }, [])
+
+  const removePreset = React.useCallback((id: string) => {
+    persistPresets(savedPresets.filter((p) => p.id !== id))
+  }, [persistPresets, savedPresets])
+
   React.useEffect(() => {
     if ((selectedStoresParam?.length ?? 0) < 2 && compareStores) setCompareStores(false)
   }, [selectedStoresParam, compareStores])
+
+  React.useEffect(() => {
+    const qMenu = searchParams.get("menu")
+    const qTopic = searchParams.get("topic")
+    const qGroup = searchParams.get("group")
+    if (qMenu || qTopic || qGroup) return
+    if (activeSubMenuId !== defaultLanding.menuId) {
+      userSelectedRef.current.subMenu = defaultLanding.menuId
+      setActiveSubMenuId(defaultLanding.menuId)
+    }
+    if (periodGroup !== defaultLanding.periodGroup) {
+      userSelectedRef.current.periodGroup = defaultLanding.periodGroup
+      setPeriodGroup(defaultLanding.periodGroup)
+    }
+    setSelectedTopicBySubMenu((prev) => {
+      if (prev[defaultLanding.menuId] === defaultLanding.topicId) return prev
+      return { ...prev, [defaultLanding.menuId]: defaultLanding.topicId }
+    })
+  }, [searchParams, defaultLanding, activeSubMenuId, periodGroup])
 
   React.useEffect(() => {
     const qMenu = searchParams.get("menu")
@@ -760,6 +1040,19 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
   }, [canSearchAll, auth?.store, selectedStoresKey])
 
+  const sumPeriodTotal = React.useCallback(
+    (res: Awaited<ReturnType<typeof getPosSalesByPeriod>>) => {
+      if (res.kind === "split") {
+        return Object.values(res.series).reduce(
+          (acc, rows) => acc + rows.reduce((s, row) => s + Number(row.total ?? row.sales ?? 0), 0),
+          0
+        )
+      }
+      return res.rows.reduce((acc, row) => acc + Number(row.total ?? row.sales ?? 0), 0)
+    },
+    []
+  )
+
   /** API 응답 race 방지: 최신 요청 ID와 일치할 때만 setState */
   const loadIdRef = React.useRef(0)
 
@@ -767,6 +1060,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (!startStr || !endStr) return
     const keySnapshot = analyticsParamKey
     const id = ++loadIdRef.current
+    const dateSpan = diffDaysInclusive(startStr, endStr)
+    const prevStart = addDaysYmd(startStr, -dateSpan)
+    const prevEnd = addDaysYmd(endStr, -dateSpan)
+    const weekStart = addDaysYmd(startStr, -7)
+    const weekEnd = addDaysYmd(endStr, -7)
     const needSplit =
       (compareStores && (selectedStoresParam?.length ?? 0) >= 2 && selectedView === "period") ||
       selectedView === "store-period"
@@ -782,6 +1080,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gPayment = guarded(setPaymentData)
     const gStore = guarded(setStoreData)
     const gMenu = guarded(setMenuData)
+    const gSummary = guarded(setSummaryCards)
     setLoading(true)
     Promise.all([
       periodRun({
@@ -852,6 +1151,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       })
         .then(gMenu)
         .catch(() => gMenu([])),
+      Promise.all([
+        periodRun({
+          startStr,
+          endStr,
+          groupBy: "day",
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        }),
+        periodRun({
+          startStr: prevStart,
+          endStr: prevEnd,
+          groupBy: "day",
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        }),
+        periodRun({
+          startStr: weekStart,
+          endStr: weekEnd,
+          groupBy: "day",
+          stores: selectedStoresParam,
+          orderTypes: orderTypesParam,
+        }),
+      ])
+        .then(([currentRes, prevRes, weekRes]) => {
+          gSummary({
+            current: sumPeriodTotal(currentRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+            prevRange: sumPeriodTotal(prevRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+            prevWeek: sumPeriodTotal(weekRes as Awaited<ReturnType<typeof getPosSalesByPeriod>>),
+          })
+        })
+        .catch(() => gSummary({ current: 0, prevRange: 0, prevWeek: 0 })),
     ]).finally(() => {
       if (loadIdRef.current === id) {
         setLoading(false)
@@ -870,6 +1200,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     offlineAware,
     menuSearch,
     menuSearchAnd,
+    sumPeriodTotal,
   ])
 
   const online = useOnlineStatus()
@@ -1055,7 +1386,50 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <Button size="sm" onClick={loadAllAnalytics} disabled={!hasData || loading}>
               {tr("salesQuery", "조회")}
             </Button>
+            <Button size="sm" variant="outline" onClick={saveCurrentPreset}>
+              {tr("salesPresetSave", "현재 조건 저장")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={exportCurrentCsv}
+              disabled={!showSalesResults}
+            >
+              {tr("salesExportCsv", "CSV 내보내기")}
+            </Button>
           </div>
+
+          {savedPresets.length > 0 ? (
+            <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+              <div className="mb-2 text-sm font-medium">
+                {tr("salesPresetTitle", "저장된 조건")}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {savedPresets.map((preset) => (
+                  <div key={preset.id} className="inline-flex items-center gap-1 rounded-md border bg-background p-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      onClick={() => applyPreset(preset)}
+                    >
+                      {preset.name}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                      onClick={() => removePreset(preset.id)}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mb-3 flex flex-wrap gap-2">
             {SALES_IA.map((menu) => (
@@ -1086,10 +1460,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   variant={topic.id === selectedTopic.id ? "default" : "outline"}
                   onClick={() => {
                     userSelectedRef.current.topic = topic.id
-                    if (topic.id === "pivot-time-item" && topic.view === "period") {
-                      userSelectedRef.current.periodGroup = "hour"
-                      setPeriodGroup("hour")
-                    }
                     setSelectedTopicBySubMenu((prev) => ({
                       ...prev,
                       [currentSubMenu.id]: topic.id,
@@ -1140,7 +1510,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   })}
                 </div>
               </div>
-              {selectedView !== null ? (
+              {needsPeriodGroup ? (
                 <>
                   <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1167,6 +1537,79 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               ) : null}
             </div>
           </div>
+
+          {showSalesResults ? (
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.current)}</p>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevRange", "직전 동일기간")}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.prevRange)}</p>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">{tr("salesSummaryPrevWeek", "전주 동기간")}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.prevWeek)}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {showSalesResults ? (
+            <div className="mb-3 grid grid-cols-1 gap-2 xl:grid-cols-3">
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(totalsSummary.gross)}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
+                <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.discount)}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
+                <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(totalsSummary.total)}</p>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopMenu", "TOP 메뉴")}</p>
+                {insightTopMenus.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {insightTopMenus.map((row) => (
+                      <li key={`top-${row.name}`} className="flex items-center justify-between gap-2">
+                        <span className="truncate">{row.name}</span>
+                        <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mb-2 mt-3 text-xs text-muted-foreground">{tr("salesInsightBottomMenu", "LOW 메뉴")}</p>
+                {insightBottomMenus.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {insightBottomMenus.map((row) => (
+                      <li key={`low-${row.name}`} className="flex items-center justify-between gap-2">
+                        <span className="truncate">{row.name}</span>
+                        <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopChannel", "TOP 채널")}</p>
+                {insightTopChannels.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+                ) : (
+                  <ul className="space-y-1 text-sm">
+                    {insightTopChannels.map((row) => (
+                      <li key={`ch-${row.channelKey}`} className="flex items-center justify-between gap-2">
+                        <span className="truncate">{row.axisLabel}</span>
+                        <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
             {selectedView === "period" && (

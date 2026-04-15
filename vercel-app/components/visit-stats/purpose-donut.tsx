@@ -59,7 +59,7 @@ export function PurposeDonut({ data }: PurposeDonutProps) {
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value, name) => (
+                    formatter={(value, _name) => (
                       <span className="text-foreground font-medium">
                         {formatMinutesWithT(Number(value), t)}
                       </span>

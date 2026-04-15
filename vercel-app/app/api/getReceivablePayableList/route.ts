@@ -69,7 +69,6 @@ export async function GET(request: NextRequest) {
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const vendorFilter = searchParams.get('vendorFilter') || searchParams.get('vendor') || ''
-  const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()

@@ -292,7 +292,6 @@ export default function EmployeesPage() {
   )
 
   /** 급여 관리 등에서 ?employeeId= 또는 ?employeeCode=&store=&name= 로 진입 시 목록 조회 후 수정 폼 오픈 */
-  const payrollOpenQueryKey = searchParams.toString()
   React.useEffect(() => {
     const employeeId = searchParams.get("employeeId")?.trim()
     const employeeCode = searchParams.get("employeeCode")?.trim()
@@ -335,7 +334,7 @@ export default function EmployeesPage() {
         router.replace("/admin/employees", { scroll: false })
       }
     })
-  }, [payrollOpenQueryKey, loadEmployeeList, router, adminRowToForm])
+  }, [searchParams, loadEmployeeList, router, adminRowToForm])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions
@@ -415,7 +414,8 @@ export default function EmployeesPage() {
     if (!form.name) return
     setSaving(true)
     try {
-      const { managerGradeDisplay: _mgrDisp, ...employeePayload } = form
+      const { managerGradeDisplay, ...employeePayload } = form
+      void managerGradeDisplay
       const res = await saveAdminEmployee({
         d: employeePayload,
         userStore,

@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.balance - a.balance)
     const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
     return NextResponse.json({ type: 'receivable', list, totalAmount }, { headers })
-  } catch (rpcErr) {
+  } catch (_rpcErr) {
     try {
       // RPC 미배포 시 fallback: 기존 select + JS 집계
       const pParts: string[] = []

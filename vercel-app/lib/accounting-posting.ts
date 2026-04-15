@@ -416,21 +416,129 @@ export async function postPosOrderJournal(params: {
   posOrderId?: number
   salesDate: string
   total: number
+  vatAmount?: number
+  paymentCash?: number
+  paymentCard?: number
+  paymentQr?: number
+  paymentOther?: number
+  paymentDeliveryApp?: number
   storeName?: string
   memo?: string
 }) {
   const amount = Math.abs(Number(params.total) || 0)
   if (amount <= 0) return null
+  const vatAmountRaw = Math.abs(Number(params.vatAmount) || 0)
+  const vatAmount = Math.min(vatAmountRaw, amount)
+  const revenueAmount = Math.max(0, amount - vatAmount)
+  const paymentCash = Math.max(0, Number(params.paymentCash) || 0)
+  const paymentCard = Math.max(0, Number(params.paymentCard) || 0)
+  const paymentQr = Math.max(0, Number(params.paymentQr) || 0)
+  const paymentOther = Math.max(0, Number(params.paymentOther) || 0)
+  const paymentDeliveryApp = Math.max(0, Number(params.paymentDeliveryApp) || 0)
+  const paymentKnownTotal = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+  const receivableLike = accountLine('1130', { nameKo: '결제대기자산' })
+  const lines: JournalLineInput[] = []
+
+  if (paymentKnownTotal > 0) {
+    const denom = paymentKnownTotal || 1
+    const cardLikeRaw = paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    const cardLike = Math.round((amount * cardLikeRaw * 100) / denom) / 100
+    const cashAmt = Math.max(0, Math.round((amount - cardLike) * 100) / 100)
+    if (cashAmt > 0) {
+      lines.push({ ...GL.cash(), side: 'debit', amount: cashAmt })
+    }
+    if (cardLike > 0) {
+      lines.push({
+        ...receivableLike,
+        side: 'debit',
+        amount: cardLike,
+        memo: '카드/QR/배달앱 정산 예정',
+      })
+    }
+  } else {
+    lines.push({ ...GL.cash(), side: 'debit', amount })
+  }
+
+  if (revenueAmount > 0) {
+    lines.push({ ...GL.revenue(), side: 'credit', amount: revenueAmount })
+  }
+  if (vatAmount > 0) {
+    lines.push({ ...accountLine('2180'), side: 'credit', amount: vatAmount })
+  }
+
   return postJournalEntry({
     accountingDate: params.salesDate,
     sourceType: 'pos_order',
     sourceId: params.posOrderId || null,
     storeName: params.storeName || null,
     memo: params.memo || 'POS 매출 자동분개',
-    lines: [
-      { ...GL.cash(), side: 'debit', amount },
-      { ...GL.revenue(), side: 'credit', amount },
-    ],
+    lines,
+  })
+}
+
+export async function postPosOrderReversalJournal(params: {
+  posOrderId: number
+  salesDate: string
+  storeName?: string
+  memo?: string
+}) {
+  const orderId = Math.floor(Number(params.posOrderId) || 0)
+  if (orderId <= 0) return null
+  const sourceRows = (await supabaseSelectFilter(
+    'journal_entries',
+    `source_type=eq.${encodeURIComponent('pos_order')}&source_id=eq.${orderId}`,
+    {
+      select: 'id',
+      limit: 1,
+      order: 'id.desc',
+    }
+  )) as { id?: number }[] | null
+  const sourceEntryId = Math.floor(Number(sourceRows?.[0]?.id) || 0)
+  if (sourceEntryId <= 0) return null
+
+  const srcLines = (await supabaseSelectFilter(
+    'journal_lines',
+    `journal_entry_id=eq.${sourceEntryId}`,
+    {
+      select: 'account_code,account_name,side,amount,account_subject_id',
+      limit: 200,
+      order: 'line_no.asc',
+    }
+  )) as {
+    account_code?: string
+    account_name?: string
+    side?: 'debit' | 'credit'
+    amount?: number
+    account_subject_id?: number | null
+  }[] | null
+
+  const reverseLines = (srcLines || [])
+    .map((line) => {
+      const code = String(line.account_code ?? '').trim()
+      const name = String(line.account_name ?? code).trim() || code
+      const amount = Math.abs(Number(line.amount) || 0)
+      const sideRaw = String(line.side || '').toLowerCase()
+      if (!code || amount <= 0 || (sideRaw !== 'debit' && sideRaw !== 'credit')) return null
+      const reversedSide: 'debit' | 'credit' = sideRaw === 'debit' ? 'credit' : 'debit'
+      const sid = line.account_subject_id != null ? Number(line.account_subject_id) : NaN
+      return {
+        accountCode: code,
+        accountName: name,
+        side: reversedSide,
+        amount,
+        ...(Number.isFinite(sid) && sid > 0 ? { accountSubjectId: sid } : {}),
+      }
+    })
+    .filter((line) => line != null) as JournalLineInput[]
+
+  if (reverseLines.length < 2) return null
+  return postJournalEntry({
+    accountingDate: params.salesDate,
+    sourceType: 'pos_order_reversal',
+    sourceId: orderId,
+    storeName: params.storeName || null,
+    memo: params.memo || 'POS 주문 취소/환불 역분개',
+    lines: reverseLines,
   })
 }
 

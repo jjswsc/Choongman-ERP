@@ -38,10 +38,10 @@ export function CostSummary({
   deliveryPercent,
   onDeliveryPercentChange,
   miseIncludedInFood = false,
-  editablePrice = false,
-  onPriceChange,
-  basePriceHall,
-  basePriceDelivery,
+  editablePrice: _editablePrice = false,
+  onPriceChange: _onPriceChange,
+  basePriceHall: _basePriceHall,
+  basePriceDelivery: _basePriceDelivery,
 }: CostSummaryProps) {
   const { lang } = useLang()
   const t = useT(lang)

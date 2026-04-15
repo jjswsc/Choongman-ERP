@@ -33,12 +33,6 @@ function scheduleTimeOnly(v: string | null | undefined): string {
   return s.length >= 5 && s.charAt(2) === ":" ? s.substring(0, 5) : s
 }
 
-const zoneStyle: Record<string, string> = {
-  Service: "bg-[hsl(215,80%,50%)] text-[hsl(0,0%,100%)]",
-  Kitchen: "bg-[hsl(152,60%,42%)] text-[hsl(0,0%,100%)]",
-  Office: "bg-muted text-muted-foreground",
-}
-
 interface WeeklyScheduleProps {
   storeFilter?: string
   storeList?: string[]
@@ -201,7 +195,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     t("scheduleSun") || "일",
   ]
   const daysFull = dayStrs.map((s) => {
-    const [y, m, d] = s.split("-")
+    const [, m, d] = s.split("-")
     return `${parseInt(m, 10)}/${parseInt(d, 10)}`
   })
   const weekRangeStr = dayStrs.length >= 2

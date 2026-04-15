@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { ORDERS_MY_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
-import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 
 export interface OrderHistoryItem {

@@ -86,6 +86,7 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     autoPrintKitchenSlipOnOrder: Boolean(s.autoPrintKitchenSlipOnOrder),
     receiptBizName: String(s.receiptBizName ?? "").trim(),
     receiptBizTaxId: String(s.receiptBizTaxId ?? "").trim(),
+    receiptBizAbn: String(s.receiptBizAbn ?? "").trim(),
     receiptBizOwner: String(s.receiptBizOwner ?? "").trim(),
     receiptBizAddress: String(s.receiptBizAddress ?? "").trim(),
     receiptBizPhone: String(s.receiptBizPhone ?? "").trim(),

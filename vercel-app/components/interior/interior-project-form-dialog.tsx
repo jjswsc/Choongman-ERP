@@ -30,9 +30,9 @@ interface InteriorProjectFormDialogProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: "active", label: "진행중" },
-  { value: "completed", label: "완료" },
-  { value: "hold", label: "보류" },
+  { value: "active", labelKey: "interiorProjStatusActive" },
+  { value: "completed", labelKey: "interiorProjStatusCompleted" },
+  { value: "hold", labelKey: "interiorProjStatusHold" },
 ]
 
 export function InteriorProjectFormDialog({
@@ -69,7 +69,7 @@ export function InteriorProjectFormDialog({
     const trimmedCode = code.trim()
     const trimmedName = name.trim()
     if (!trimmedCode || !trimmedName) {
-      await appAlert(t("msg_save_fail_detail") || "코드와 프로젝트명을 입력하세요.")
+      await appAlert(t("msg_save_fail_detail"))
       return
     }
     setSaving(true)
@@ -97,12 +97,12 @@ export function InteriorProjectFormDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {isEdit ? (t("edit") || "수정") : (t("add") || "추가")} — {t("interiorProject") || "인테리어 프로젝트"}
+            {isEdit ? t("edit") : t("add")} — {t("interiorProject")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label className="text-xs">{t("posMenuCode") || "코드"}</Label>
+            <Label className="text-xs">{t("posMenuCode")}</Label>
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -112,7 +112,7 @@ export function InteriorProjectFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">{t("posMenuName") || "프로젝트명"}</Label>
+            <Label className="text-xs">{t("posMenuName")}</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -120,15 +120,15 @@ export function InteriorProjectFormDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">{t("interiorLocation") || "위치"}</Label>
+            <Label className="text-xs">{t("interiorLocation")}</Label>
             <Input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="주소/위치"
+              placeholder={t("interiorLocationPh")}
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">{t("status") || "상태"}</Label>
+            <Label className="text-xs">{t("status")}</Label>
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger>
                 <SelectValue />
@@ -136,14 +136,14 @@ export function InteriorProjectFormDialog({
               <SelectContent>
                 {STATUS_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                    {t(o.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">{t("interiorBudget") || "예산 총액"}</Label>
+            <Label className="text-xs">{t("interiorBudget")}</Label>
             <Input
               type="number"
               value={budgetTotal}
@@ -153,7 +153,7 @@ export function InteriorProjectFormDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-xs">{t("dateFrom") || "시작일"}</Label>
+              <Label className="text-xs">{t("dateFrom")}</Label>
               <Input
                 type="date"
                 value={startDate}
@@ -161,7 +161,7 @@ export function InteriorProjectFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs">{t("dateTo") || "종료일"}</Label>
+              <Label className="text-xs">{t("dateTo")}</Label>
               <Input
                 type="date"
                 value={endDate}
@@ -172,10 +172,10 @@ export function InteriorProjectFormDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("cancel") || "취소"}
+            {t("cancel")}
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "..." : (t("itemsBtnSave") || "저장")}
+            {saving ? "..." : t("itemsBtnSave")}
           </Button>
         </DialogFooter>
       </DialogContent>

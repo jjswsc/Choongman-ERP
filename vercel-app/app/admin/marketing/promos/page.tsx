@@ -52,7 +52,7 @@ export default function MarketingPromosPage() {
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [workspaceCampaignId, setWorkspaceCampaignId] = React.useState('')
   const [menus, setMenus] = React.useState<PosMenu[]>([])
-  const [allCategories, setAllCategories] = React.useState<string[]>([])
+  const [_allCategories, setAllCategories] = React.useState<string[]>([])
   const [allMainCategories, setAllMainCategories] = React.useState<string[]>([])
   const [categoriesConfig, setCategoriesConfig] = React.useState<PosMenuCategoriesConfig | null>(null)
   const [campaignPromos, setCampaignPromos] = React.useState<PosPromo[]>([])

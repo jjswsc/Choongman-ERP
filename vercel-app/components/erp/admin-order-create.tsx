@@ -77,7 +77,6 @@ export function AdminOrderCreate() {
   const { lang } = useLang()
   const t = useT(lang)
   const isManager = isManagerRole(auth?.role || "")
-  const isHQ = auth?.role === "director" || auth?.role === "officer"
 
   const [stores, setStores] = React.useState<string[]>([])
   const [storeSelect, setStoreSelect] = React.useState("")

@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
     })) as { id?: number; opening_balance?: number; opening_balance_date?: string }[]
     const account = accountRows?.[0]
     const openingBalance = Number(account?.opening_balance) ?? 0
-    const openingDate = account?.opening_balance_date ? String(account.opening_balance_date).slice(0, 10) : '1900-01-01'
 
     if (!startStr || !endStr) {
       return NextResponse.json({

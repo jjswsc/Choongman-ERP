@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
     const expenseDate = body.expenseDate ?? body.expense_date
     const vendorCode = body.vendorCode ?? body.vendor_code
     const storeName = body.storeName ?? body.store_name
+    const refType = body.refType ?? body.ref_type
+    const refId = body.refId ?? body.ref_id
 
     if (!bankTxId || isNaN(bankTxId)) {
       return NextResponse.json({ success: false, message: '통장 거래 ID가 필요합니다.' }, { status: 400, headers })
@@ -115,6 +117,14 @@ export async function POST(request: NextRequest) {
     }
     if (finalCategory === 'receivable_receive' && storeName !== undefined) {
       patch.store_name = finalStoreName
+    }
+    if (refType !== undefined) {
+      const rt = String(refType || '').trim()
+      patch.ref_type = rt || null
+    }
+    if (refId !== undefined) {
+      const rid = refId != null && refId !== '' && !isNaN(Number(refId)) ? Number(refId) : null
+      patch.ref_id = rid != null && rid > 0 ? rid : null
     }
 
     if (Object.keys(patch).length === 0) {

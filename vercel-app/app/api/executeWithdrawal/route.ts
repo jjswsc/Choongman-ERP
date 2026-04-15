@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const userRole = String(body.userRole || body.user_role || '').toLowerCase()
     const userName = String(body.userName || body.user_name || '').trim()
-    const userStore = String(body.userStore || body.user_store || '').trim()
+    const _userStore = String(body.userStore || body.user_store || '').trim()
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
 
     if (!isOffice) {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const transferToAccountNo = String(body.transferToAccountNo || body.transfer_to_account_no || '').trim()
     const transferBankAccountNo = String(body.transferBankAccountNo || body.transfer_bank_account_no || '').trim()
     const transferBankRecipientName = String(body.transferBankRecipientName || body.transfer_bank_recipient_name || '').trim()
-    const transferToType = String(body.transferToType || body.transfer_to_type || 'bank').toLowerCase()
+    const _transferToType = String(body.transferToType || body.transfer_to_type || 'bank').toLowerCase()
     const transferToPettyStore = String(body.transferToPettyStore || body.transfer_to_petty_store || '').trim()
     const transferToCardAccountId = body.transferToCardAccountId ?? body.transfer_to_card_account_id
     const assetName = String(body.assetName || body.asset_name || '').trim()

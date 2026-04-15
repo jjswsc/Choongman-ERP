@@ -20,6 +20,17 @@ function lastNYearMonths(n: number): string[] {
   return out
 }
 
+type AccountingPeriodRow = {
+  year_month?: string
+  is_closed?: boolean
+  closed_at?: string | null
+  closed_by?: string | null
+  unlocked_at?: string | null
+  unlocked_by?: string | null
+  unlock_reason?: string | null
+  unlock_approved_by?: string | null
+}
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -37,13 +48,44 @@ export async function GET(request: NextRequest) {
 
   try {
     const months = lastNYearMonths(36)
-    const rows = (await supabaseSelect('accounting_periods', {
-      select: 'year_month,is_closed,closed_at,closed_by',
-      limit: 500,
-      order: 'year_month.desc',
-    })) as { year_month?: string; is_closed?: boolean; closed_at?: string | null; closed_by?: string | null }[] | null
+    let rows: AccountingPeriodRow[] | null = null
+    try {
+      rows = (await supabaseSelect('accounting_periods', {
+        select: 'year_month,is_closed,closed_at,closed_by,unlocked_at,unlocked_by,unlock_reason,unlock_approved_by',
+        limit: 500,
+        order: 'year_month.desc',
+      })) as AccountingPeriodRow[] | null
+    } catch (e) {
+      const msg = String(e || '').toLowerCase()
+      if (
+        msg.includes('unlocked_at') ||
+        msg.includes('unlocked_by') ||
+        msg.includes('unlock_reason') ||
+        msg.includes('unlock_approved_by') ||
+        msg.includes('42703')
+      ) {
+        rows = (await supabaseSelect('accounting_periods', {
+          select: 'year_month,is_closed,closed_at,closed_by',
+          limit: 500,
+          order: 'year_month.desc',
+        })) as AccountingPeriodRow[] | null
+      } else {
+        throw e
+      }
+    }
 
-    const byMonth: Record<string, { is_closed: boolean; closed_at: string | null; closed_by: string | null }> = {}
+    const byMonth: Record<
+      string,
+      {
+        is_closed: boolean
+        closed_at: string | null
+        closed_by: string | null
+        unlocked_at: string | null
+        unlocked_by: string | null
+        unlock_reason: string | null
+        unlock_approved_by: string | null
+      }
+    > = {}
     for (const r of rows || []) {
       const ym = String(r.year_month || '').slice(0, 7)
       if (!ym) continue
@@ -51,6 +93,10 @@ export async function GET(request: NextRequest) {
         is_closed: Boolean(r.is_closed),
         closed_at: r.closed_at != null ? String(r.closed_at) : null,
         closed_by: r.closed_by != null ? String(r.closed_by) : null,
+        unlocked_at: r.unlocked_at != null ? String(r.unlocked_at) : null,
+        unlocked_by: r.unlocked_by != null ? String(r.unlocked_by) : null,
+        unlock_reason: r.unlock_reason != null ? String(r.unlock_reason) : null,
+        unlock_approved_by: r.unlock_approved_by != null ? String(r.unlock_approved_by) : null,
       }
     }
 
@@ -59,6 +105,10 @@ export async function GET(request: NextRequest) {
       isClosed: byMonth[yearMonth]?.is_closed ?? false,
       closedAt: byMonth[yearMonth]?.closed_at ?? null,
       closedBy: byMonth[yearMonth]?.closed_by ?? null,
+      unlockedAt: byMonth[yearMonth]?.unlocked_at ?? null,
+      unlockedBy: byMonth[yearMonth]?.unlocked_by ?? null,
+      unlockReason: byMonth[yearMonth]?.unlock_reason ?? null,
+      unlockApprovedBy: byMonth[yearMonth]?.unlock_approved_by ?? null,
     }))
 
     return NextResponse.json({ periods: list }, { headers })
@@ -72,6 +122,10 @@ export async function GET(request: NextRequest) {
           isClosed: false,
           closedAt: null,
           closedBy: null,
+          unlockedAt: null,
+          unlockedBy: null,
+          unlockReason: null,
+          unlockApprovedBy: null,
         })),
       },
       { headers }

@@ -25,33 +25,10 @@ export interface DeliveryOrderPanelProps {
   t?: (key: string) => string
 }
 
-function getDeliveryPlatformAndOrderNo(order: Order, deliveryApps?: PosDeliveryApp[]): { platform: string; orderNo: string } {
-  const text = [order.customerName ?? '', order.orderNo ?? '', order.memo ?? ''].filter(Boolean).join(' ')
-  const raw = text.toLowerCase()
-  let platform = ''
-  if (deliveryApps?.length) {
-    for (const app of deliveryApps) {
-      const keywords = app.matchKeywords || []
-      if (keywords.some((k) => raw.includes(String(k).toLowerCase()))) {
-        platform = app.name
-        break
-      }
-    }
-  }
-  if (!platform) {
-    if (raw.includes('grab') || raw.includes('그랩')) platform = 'Grab'
-    else if (raw.includes('lineman') || raw.includes('line man') || raw.includes('라인맨')) platform = 'Line Man'
-    else if (raw.includes('shopee') || raw.includes('쇼피')) platform = 'Shopee'
-  }
-  const hashMatch = text.match(/#\s*([A-Za-z0-9-]+)/)
-  const orderNo = hashMatch?.[1] ?? order.orderNo ?? ''
-  return { platform, orderNo }
-}
-
 export function DeliveryOrderPanel({
   orderLabel,
   order,
-  deliveryApps = [],
+  deliveryApps: _deliveryApps = [],
   onPackaged,
   onPay,
   onCancel,

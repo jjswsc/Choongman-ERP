@@ -2,7 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet, CalendarDays } from "lucide-react"
+import { RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet, CalendarDays } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -44,7 +44,6 @@ function get30MinIntervals(start: string, end: string): string[] {
   return result
 }
 
-const AREAS = ["Service", "Kitchen", "Office"] as const
 const DAY_LABELS = ["att_mon", "att_tue", "att_wed", "att_thu", "att_fri", "att_sat", "att_sun"] as const
 interface StaffItem {
   name: string
@@ -54,9 +53,9 @@ interface StaffItem {
 }
 
 export function AdminScheduleEdit({
-  stores,
+  stores: _stores,
   storeFilter,
-  onStoreChange,
+  onStoreChange: _onStoreChange,
   staffByStore,
 }: {
   stores: string[]
@@ -139,19 +138,6 @@ export function AdminScheduleEdit({
 
   const getSlotNames = (day: number, area: string, time: string): string[] =>
     slotData[getSlotKey(day, area, time)] || []
-
-  const setSlotNames = (day: number, area: string, time: string, names: string[]) => {
-    const key = getSlotKey(day, area, time)
-    if (names.length === 0) {
-      setSlotData((p) => {
-        const next = { ...p }
-        delete next[key]
-        return next
-      })
-    } else {
-      setSlotData((p) => ({ ...p, [key]: names }))
-    }
-  }
 
   const loadSaved = async () => {
     if (!store || !monday) {
@@ -1077,7 +1063,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                                 >
                                   {names.map((n) => {
                                     const isLeave = n.startsWith("LEAVE_")
-                                    const [leaveType, leaveName] = isLeave ? [n.split("_")[1] || "휴가", n.split("_").slice(2).join("_")] : [null, ""]
+                                    const [, leaveName] = isLeave ? [n.split("_")[1] || "휴가", n.split("_").slice(2).join("_")] : [null, ""]
                                     const displayName = n.startsWith("BRK_")
                                       ? "R"
                                       : isLeave

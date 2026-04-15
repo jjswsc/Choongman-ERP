@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { appAlert } from "@/lib/app-message"
 import { apiFetch } from "@/lib/api/fetch"
@@ -125,6 +126,23 @@ function diffDaysFromTodayBangkok(ymd: string): number | null {
   return Math.floor(ms / 86_400_000)
 }
 
+type AuditPeriodFilter = "all" | "today" | "7d" | "30d"
+
+function matchesAuditPeriod(changedAt: string, period: AuditPeriodFilter): boolean {
+  if (period === "all") return true
+  const dt = new Date(String(changedAt || "").trim())
+  if (Number.isNaN(dt.getTime())) return false
+  const eventYmd = dt.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+  const eventDate = parseYmd(eventYmd)
+  const today = parseYmd(bangkokYmd())
+  if (!eventDate || !today) return false
+  const days = Math.floor((today.getTime() - eventDate.getTime()) / 86_400_000)
+  if (days < 0) return false
+  if (period === "today") return days === 0
+  if (period === "7d") return days < 7
+  return days < 30
+}
+
 function normalizeTenantRows(rows: TenantItem[]): TenantItem[] {
   return rows.map((row) => ({
     ...row,
@@ -173,6 +191,15 @@ export default function SaasCustomersPage() {
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
   const [bulkPendingStatus, setBulkPendingStatus] = useState<TenantItem["status"] | null>(null)
 
+  const [bootStoreName, setBootStoreName] = useState("")
+  const [bootStoreCode, setBootStoreCode] = useState("")
+  const [bootAdminName, setBootAdminName] = useState("")
+  const [bootPw, setBootPw] = useState("")
+  const [bootPw2, setBootPw2] = useState("")
+  const [auditFilter, setAuditFilter] = useState<"all" | "employee_only">("all")
+  const [auditActorQuery, setAuditActorQuery] = useState("")
+  const [auditPeriod, setAuditPeriod] = useState<AuditPeriodFilter>("all")
+
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) ?? tenants[0] ?? fallbackTenant,
     [selectedTenantId, tenants, fallbackTenant]
@@ -211,6 +238,21 @@ export default function SaasCustomersPage() {
     const totalOrders = tenants.reduce((acc, x) => acc + x.usage.monthlyOrders, 0)
     return { active, trial, grace, suspended, highRisk, totalOrders }
   }, [tenants])
+
+  const filteredAuditTrail = useMemo(() => {
+    const rows = selectedTenant.auditTrail || []
+    const base =
+      auditFilter === "employee_only"
+        ? rows.filter((row) => String(row.action || "").trim().toLowerCase() === "employee.updated")
+        : rows
+    const byPeriod = base.filter((row) => matchesAuditPeriod(String(row.changedAt || ""), auditPeriod))
+    const q = auditActorQuery.trim().toLowerCase()
+    if (!q) return byPeriod
+    return byPeriod.filter((row) => {
+      const actor = `${row.actorName || ""} ${row.actorRole || ""}`.toLowerCase()
+      return actor.includes(q)
+    })
+  }, [auditActorQuery, auditFilter, auditPeriod, selectedTenant.auditTrail])
 
   const updateTenant = (updater: (tenant: TenantItem) => TenantItem) => {
     setTenants((prev) => prev.map((tenant) => (tenant.id === selectedTenant.id ? updater(tenant) : tenant)))
@@ -255,6 +297,12 @@ export default function SaasCustomersPage() {
       setSelectedTenantId(filteredTenants[0]!.id)
     }
   }, [filteredTenants, selectedTenantId])
+
+  useEffect(() => {
+    setAuditFilter("all")
+    setAuditPeriod("all")
+    setAuditActorQuery("")
+  }, [selectedTenantId])
 
   useEffect(() => {
     const allowed = new Set(filteredTenants.map((x) => x.id))
@@ -349,6 +397,58 @@ export default function SaasCustomersPage() {
       setSelectedTenantId(id)
     } catch (error) {
       await appAlert(`고객사 생성 실패: ${String(error)}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const bootstrapTenantLogin = async () => {
+    const tenantId = selectedTenant.id
+    const storeName = bootStoreName.trim()
+    const adminName = bootAdminName.trim()
+    const pw = bootPw.trim()
+    const pw2 = bootPw2.trim()
+    if (!storeName || !adminName || !pw) {
+      await appAlert("첫 매장명, 관리자 표시 이름, 비밀번호를 모두 입력해 주세요.")
+      return
+    }
+    if (pw.length < 4) {
+      await appAlert("비밀번호는 4자 이상으로 입력해 주세요.")
+      return
+    }
+    if (pw !== pw2) {
+      await appAlert("비밀번호 확인이 일치하지 않습니다.")
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await apiFetch("/api/saasBootstrapTenantLogin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          storeName,
+          storeCode: bootStoreCode.trim() || undefined,
+          adminName,
+          password: pw,
+        }),
+      })
+      const json = (await res.json()) as { success?: boolean; message?: string; code?: string; companyName?: string }
+      if (!res.ok || json.success !== true) {
+        await appAlert(json.message || "초기 계정 생성에 실패했습니다.")
+        return
+      }
+      await appAlert(
+        `로그인 안내: 회사「${json.companyName || selectedTenant.companyName}」·매장「${storeName}」·이름「${adminName}」로 /login 또는 /admin/login 에서 로그인할 수 있습니다.`
+      )
+      setBootStoreName("")
+      setBootStoreCode("")
+      setBootAdminName("")
+      setBootPw("")
+      setBootPw2("")
+      await loadTenants()
+    } catch (error) {
+      await appAlert(`오류: ${String(error)}`)
     } finally {
       setLoading(false)
     }
@@ -467,8 +567,62 @@ export default function SaasCustomersPage() {
     URL.revokeObjectURL(url)
   }
 
+  const exportAuditCsv = () => {
+    const headers = [
+      "tenant_id",
+      "company_name",
+      "employee_id",
+      "changed_at_bangkok",
+      "action",
+      "actor_name",
+      "actor_role",
+      "summary",
+    ]
+    const lines = [headers.join(",")]
+    for (const row of filteredAuditTrail) {
+      lines.push(
+        [
+          selectedTenant.id,
+          selectedTenant.companyName,
+          row.employeeId || "",
+          formatBangkokDateTime(row.changedAt),
+          row.action,
+          row.actorName,
+          row.actorRole,
+          row.summary || "",
+        ]
+          .map((v) => escapeCsv(v))
+          .join(",")
+      )
+    }
+    const safeTenant = String(selectedTenant.id || "tenant").replace(/[^a-z0-9_-]/gi, "_")
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `saas_audit_${safeTenant}_${bangkokYmd()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const setTenantStatus = (status: TenantItem["status"]) => {
     updateTenant((tenant) => ({ ...tenant, status }))
+  }
+
+  const selectedTenantLoginHref = useMemo(() => {
+    const p = new URLSearchParams()
+    p.set("redirect", "/admin")
+    if (selectedTenant.companyName) p.set("company", selectedTenant.companyName)
+    return `/admin/login?${p.toString()}`
+  }, [selectedTenant.companyName])
+
+  const employeeAuditLink = (employeeId: number): string => {
+    const p = new URLSearchParams()
+    if (selectedTenant.companyName) p.set("company", selectedTenant.companyName)
+    p.set("employeeId", String(employeeId))
+    return `/admin/employees?${p.toString()}`
   }
 
   return (
@@ -681,7 +835,15 @@ export default function SaasCustomersPage() {
                 <CardTitle className="text-lg">{selectedTenant.companyName}</CardTitle>
                 <CardDescription>테넌트 ID: {selectedTenant.id}</CardDescription>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1">
+                <Button asChild size="sm" variant="secondary">
+                  <Link href={selectedTenantLoginHref}>회사 로그인 바로가기</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={selectedTenantLoginHref} target="_blank" rel="noopener noreferrer">
+                    로그인 새 탭
+                  </Link>
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => setTenantStatus("active")}>
                   정상
                 </Button>
@@ -703,6 +865,7 @@ export default function SaasCustomersPage() {
                 <TabsTrigger value="usage">실사용량</TabsTrigger>
                 <TabsTrigger value="billing">과금이력</TabsTrigger>
                 <TabsTrigger value="audit">변경이력</TabsTrigger>
+                <TabsTrigger value="bootstrap">초기 로그인</TabsTrigger>
               </TabsList>
 
               <TabsContent value="plan" className="space-y-4 pt-2">
@@ -1141,6 +1304,70 @@ export default function SaasCustomersPage() {
                 </div>
               </TabsContent>
 
+              <TabsContent value="bootstrap" className="space-y-4 pt-2">
+                <p className="text-sm text-muted-foreground">
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">tenants</code>에 등록된 고객사명과 동일한{" "}
+                  <strong>회사명</strong>으로 로그인할 수 있게, 첫 매장(
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">erp_stores</code>)과 초기 관리자(
+                  <code className="rounded bg-muted px-1 py-0.5 text-xs">employees</code>)를 만듭니다. 이미 해당 테넌트에 직원이 있으면
+                  생성할 수 없습니다.
+                </p>
+                <div className="rounded-md border border-dashed p-4 space-y-3">
+                  <p className="text-sm font-medium">선택 고객사: {selectedTenant.companyName}</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>첫 매장명</Label>
+                      <Input
+                        value={bootStoreName}
+                        onChange={(e) => setBootStoreName(e.target.value)}
+                        placeholder='예: 본사, HQ'
+                        autoComplete="off"
+                      />
+                      <p className="text-xs text-muted-foreground">로그인 화면의 「매장」에 그대로 입력합니다.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>매장 코드 (선택)</Label>
+                      <Input
+                        value={bootStoreCode}
+                        onChange={(e) => setBootStoreCode(e.target.value)}
+                        placeholder="비우면 자동 생성"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>관리자 표시 이름</Label>
+                      <Input
+                        value={bootAdminName}
+                        onChange={(e) => setBootAdminName(e.target.value)}
+                        placeholder="로그인 이름과 동일"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>비밀번호</Label>
+                      <Input
+                        type="password"
+                        value={bootPw}
+                        onChange={(e) => setBootPw(e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>비밀번호 확인</Label>
+                      <Input
+                        type="password"
+                        value={bootPw2}
+                        onChange={(e) => setBootPw2(e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                  </div>
+                  <Button type="button" onClick={() => void bootstrapTenantLogin()} disabled={loading}>
+                    첫 매장·초기 관리자 생성
+                  </Button>
+                </div>
+              </TabsContent>
+
               <TabsContent value="usage" className="space-y-4 pt-2">
                 <div className="grid gap-4 md:grid-cols-2">
                   <Card>
@@ -1242,7 +1469,72 @@ export default function SaasCustomersPage() {
               </TabsContent>
 
               <TabsContent value="audit" className="space-y-3 pt-2">
-                <p className="text-sm text-muted-foreground">누가 어떤 설정을 바꿨는지 감사 로그를 확인합니다.</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">누가 어떤 설정을 바꿨는지 감사 로그를 확인합니다.</p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={auditFilter === "all" ? "default" : "outline"}
+                      onClick={() => setAuditFilter("all")}
+                    >
+                      전체
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={auditFilter === "employee_only" ? "default" : "outline"}
+                      onClick={() => setAuditFilter("employee_only")}
+                    >
+                      직원 변경만
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={exportAuditCsv} disabled={filteredAuditTrail.length === 0}>
+                      CSV 내보내기
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={auditPeriod === "all" ? "default" : "outline"}
+                    onClick={() => setAuditPeriod("all")}
+                  >
+                    기간 전체
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={auditPeriod === "today" ? "default" : "outline"}
+                    onClick={() => setAuditPeriod("today")}
+                  >
+                    오늘
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={auditPeriod === "7d" ? "default" : "outline"}
+                    onClick={() => setAuditPeriod("7d")}
+                  >
+                    최근 7일
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={auditPeriod === "30d" ? "default" : "outline"}
+                    onClick={() => setAuditPeriod("30d")}
+                  >
+                    최근 30일
+                  </Button>
+                </div>
+                <div className="max-w-sm space-y-1">
+                  <Label>작업자 검색</Label>
+                  <Input
+                    value={auditActorQuery}
+                    onChange={(e) => setAuditActorQuery(e.target.value)}
+                    placeholder="작업자 이름/역할 검색"
+                  />
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1253,21 +1545,30 @@ export default function SaasCustomersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedTenant.auditTrail.length === 0 ? (
+                    {filteredAuditTrail.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center text-muted-foreground">
-                          변경 이력이 없습니다.
+                          {auditFilter === "employee_only" ? "직원 변경 이력이 없습니다." : "변경 이력이 없습니다."}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      selectedTenant.auditTrail.map((row) => (
+                      filteredAuditTrail.map((row) => (
                         <TableRow key={row.id}>
                           <TableCell>{formatBangkokDateTime(row.changedAt)}</TableCell>
                           <TableCell>{row.action}</TableCell>
                           <TableCell>
                             {row.actorName} ({row.actorRole})
                           </TableCell>
-                          <TableCell>{row.summary || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span>{row.summary || "-"}</span>
+                              {row.employeeId ? (
+                                <Button asChild type="button" size="sm" variant="outline" className="h-6 px-2 text-xs">
+                                  <Link href={employeeAuditLink(row.employeeId)}>직원#{row.employeeId}</Link>
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

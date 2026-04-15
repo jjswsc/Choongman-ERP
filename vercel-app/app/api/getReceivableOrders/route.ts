@@ -4,7 +4,7 @@
  * - 매장별 주문, 금액, 수령상태(Paid/Wait to pay)
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()

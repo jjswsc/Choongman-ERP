@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseUpdate } from '@/lib/supabase-server'
 
 /** POST: 모든 배합 원가 재계산 및 cost_per_unit 캐시 업데이트 */
 export async function POST() {

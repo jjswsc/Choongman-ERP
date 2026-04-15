@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
     const retryOfLocalTxId = String(body?.retryOfLocalTxId ?? '').trim().slice(0, 20)
     const retryOfAttemptIdRaw = Number(body?.retryOfAttemptId ?? 0)
     const retryOfAttemptId = Number.isFinite(retryOfAttemptIdRaw) && retryOfAttemptIdRaw > 0 ? retryOfAttemptIdRaw : null
-    const storeCode = String(body?.storeCode ?? '').trim()
     const requestedAt = new Date().toISOString()
 
     if (amount <= 0) {

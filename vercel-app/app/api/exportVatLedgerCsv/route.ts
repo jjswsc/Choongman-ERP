@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { buildMonthInFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { vatLedgerToCsv, type VatLedgerRow } from '@/lib/vat-ledger-csv'
+
+function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
+  const raw = String(v || '').trim().toLowerCase()
+  if (raw === 'draft' || raw === 'submitted') return raw
+  return ''
+}
+
+function normalizeLedgerFilingStatus(v: unknown): 'draft' | 'submitted' {
+  return parseFilingStatus(v) === 'submitted' ? 'submitted' : 'draft'
+}
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -10,6 +21,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const userRole = String(searchParams.get('userRole') || '').trim()
   const taxMonth = String(searchParams.get('taxMonth') || '').trim().slice(0, 7)
+  const yearMonth = String(searchParams.get('yearMonth') || taxMonth).trim().slice(0, 7)
+  const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
+  const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
+  const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
   const storeFilter = String(searchParams.get('storeFilter') || '').trim()
 
   try {
@@ -21,25 +36,31 @@ export async function GET(request: NextRequest) {
     throw e
   }
 
-  if (!/^\d{4}-\d{2}$/.test(taxMonth)) {
-    return NextResponse.json({ error: 'INVALID_TAX_MONTH' }, { status: 400, headers })
+  if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
+    return NextResponse.json({ error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })
   }
 
   try {
-    const filter = appendStoreNameFilter(`tax_month=eq.${encodeURIComponent(taxMonth)}`, storeFilter)
+    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const monthIn = buildMonthInFilter(period.months)
+    const filter = appendStoreNameFilter(`tax_month=in.(${monthIn})`, storeFilter)
     const rows = (await supabaseSelectFilter('vat_ledger_entries', filter, {
       select: '*',
-      limit: 5000,
+      limit: 20000,
       order: 'doc_date.asc,id.asc',
     })) as VatLedgerRow[] | null
+    const filteredRows =
+      filingStatus === ''
+        ? rows || []
+        : (rows || []).filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
 
-    const csv = vatLedgerToCsv(rows || [])
+    const csv = vatLedgerToCsv(filteredRows)
     const out = new NextResponse(csv, {
       status: 200,
       headers: {
         ...Object.fromEntries(headers.entries()),
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="vat-ledger-${taxMonth}.csv"`,
+        'Content-Disposition': `attachment; filename="vat-ledger-${period.periodKey}.csv"`,
       },
     })
     return out

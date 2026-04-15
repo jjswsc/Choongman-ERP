@@ -42,7 +42,6 @@ import { Printer, FileSpreadsheet, Search, ArrowRightCircle, ChevronDown, Packag
 import { useOrderCreate } from "@/lib/order-create-context"
 
 const HQ_STORES = ["본사", "Office", "오피스", "본점"]
-const inputClass = "h-9 rounded-md border border-input bg-background px-3 text-sm w-full min-w-0"
 const filterClass = "h-9 rounded-md border border-input bg-background px-2 text-sm shrink-0"
 
 /** 풀네임이 올 경우 첫 이름만 표시 (닉네임 칸 공간 절약) */

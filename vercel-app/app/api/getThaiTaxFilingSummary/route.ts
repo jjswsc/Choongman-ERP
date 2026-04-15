@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildMonthInFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 
@@ -18,6 +18,28 @@ type WhtRow = {
   wht_amount?: number
   payee_tax_id?: string | null
   certificate_no?: string | null
+}
+
+type RpcSummaryRow = {
+  vat_output_net?: number | null
+  vat_output_vat?: number | null
+  vat_input_net?: number | null
+  vat_input_vat?: number | null
+  vat_payable_vat?: number | null
+  vat_missing_tax_id_count?: number | null
+  vat_missing_invoice_count?: number | null
+  vat_row_count?: number | null
+  wht_total_gross?: number | null
+  wht_total_withheld?: number | null
+  wht_missing_tax_id_count?: number | null
+  wht_missing_certificate_count?: number | null
+  wht_row_count?: number | null
+  wht_by_form?: Record<string, { gross?: number; withheld?: number; rows?: number }> | null
+}
+
+function isMissingTaxSummaryRpcError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('get_thai_tax_filing_summary_agg') || msg.includes('42883')
 }
 
 export async function GET(request: NextRequest) {
@@ -41,6 +63,51 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    try {
+      const rpcRows = await supabaseRpc<RpcSummaryRow[]>('get_thai_tax_filing_summary_agg', {
+        p_tax_months: period.months,
+        p_store_name: storeFilter || 'All',
+      })
+      const one = rpcRows?.[0] || {}
+      const byForm = one.wht_by_form && typeof one.wht_by_form === 'object' ? one.wht_by_form : {}
+      const normalizedByForm: Record<string, { gross: number; withheld: number; rows: number }> = {}
+      Object.entries(byForm).forEach(([k, v]) => {
+        normalizedByForm[String(k)] = {
+          gross: Number(v?.gross || 0),
+          withheld: Number(v?.withheld || 0),
+          rows: Number(v?.rows || 0),
+        }
+      })
+      return NextResponse.json(
+        {
+          period,
+          vat: {
+            outputNet: Number(one.vat_output_net || 0),
+            outputVat: Number(one.vat_output_vat || 0),
+            inputNet: Number(one.vat_input_net || 0),
+            inputVat: Number(one.vat_input_vat || 0),
+            payableVat: Number(one.vat_payable_vat || 0),
+            missingTaxIdCount: Number(one.vat_missing_tax_id_count || 0),
+            missingInvoiceCount: Number(one.vat_missing_invoice_count || 0),
+            rowCount: Number(one.vat_row_count || 0),
+          },
+          wht: {
+            totalGross: Number(one.wht_total_gross || 0),
+            totalWithheld: Number(one.wht_total_withheld || 0),
+            missingTaxIdCount: Number(one.wht_missing_tax_id_count || 0),
+            missingCertificateCount: Number(one.wht_missing_certificate_count || 0),
+            rowCount: Number(one.wht_row_count || 0),
+            byForm: normalizedByForm,
+          },
+          fallbackUsed: false,
+        },
+        { headers }
+      )
+    } catch (rpcError) {
+      if (!isMissingTaxSummaryRpcError(rpcError)) throw rpcError
+      console.warn('getThaiTaxFilingSummary rpc fallback: missing function')
+    }
+
     const monthList = buildMonthInFilter(period.months)
     const monthBase = `tax_month=in.(${monthList})`
     const vatFilter = appendStoreNameFilter(monthBase, storeFilter)
@@ -113,6 +180,7 @@ export async function GET(request: NextRequest) {
         period,
         vat,
         wht,
+        fallbackUsed: true,
       },
       { headers }
     )

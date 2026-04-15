@@ -2,7 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import { Bell, Clock3, Copy, RotateCw, Save } from "lucide-react"
+import { Bell, Clock3, Copy, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -17,7 +17,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosPrinterSettings, savePosPrinterSettings, useStoreList } from "@/lib/api-client"
 import { isOfficeRole } from "@/lib/permissions"
-import { cn } from "@/lib/utils"
+import { PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
+import { PosScreenConfigStoreAndCopyRow } from "@/components/pos/pos-screen-config-store-and-copy-row"
 
 export function PosCookingRulesContent() {
   const { auth } = useAuth()
@@ -46,7 +47,6 @@ export function PosCookingRulesContent() {
   const [delayBadgeEnabled, setDelayBadgeEnabled] = React.useState(true)
   const [delaySoundEnabled, setDelaySoundEnabled] = React.useState(false)
   const [delayAlertOverMin, setDelayAlertOverMin] = React.useState("0")
-  const [copySourceStore, setCopySourceStore] = React.useState("")
   const [copyTargetStore, setCopyTargetStore] = React.useState("")
   const [copying, setCopying] = React.useState(false)
 
@@ -92,9 +92,8 @@ export function PosCookingRulesContent() {
   }, [loadData])
 
   React.useEffect(() => {
-    if (!copySourceStore && stores.length > 0) setCopySourceStore(stores[0])
     if (!copyTargetStore && stores.length > 0) setCopyTargetStore(stores[0])
-  }, [stores, copySourceStore, copyTargetStore])
+  }, [stores, copyTargetStore])
 
   const handleSave = async () => {
     if (!effectiveStore) return
@@ -144,31 +143,6 @@ export function PosCookingRulesContent() {
     const delayOver = Math.max(0, Number(delayAlertOverMin) || 0)
     return { fresh, warning, warnDiff, urgentDiff, delayOver }
   }, [freshMax, warningMax, recipeWarnDiff, recipeUrgentDiff, delayAlertOverMin])
-
-  const applySettingsToForm = (settings: Awaited<ReturnType<typeof getPosPrinterSettings>>) => {
-    setFreshMax(String(settings.cookingFreshMaxMin ?? 10))
-    setWarningMax(String(settings.cookingWarningMaxMin ?? 15))
-    setRuleMode(settings.cookingRuleMode === "recipe_diff" ? "recipe_diff" : "elapsed")
-    setRecipeWarnDiff(String(settings.cookingRecipeWarningDiffMin ?? 0))
-    setRecipeUrgentDiff(String(settings.cookingRecipeUrgentDiffMin ?? 5))
-    setDelayBadgeEnabled(settings.cookingDelayBadgeEnabled === false ? false : true)
-    setDelaySoundEnabled(Boolean(settings.cookingDelaySoundEnabled))
-    setDelayAlertOverMin(String(settings.cookingDelayAlertOverMin ?? 0))
-  }
-
-  const handleCopyFromStore = async () => {
-    if (!copySourceStore) return
-    setCopying(true)
-    try {
-      const s = await getPosPrinterSettings({ storeCode: copySourceStore })
-      applySettingsToForm(s)
-      await appAlert(t("posCookingCopyLoadedHint") || "선택한 매장 설정을 불러왔습니다. 저장 버튼을 눌러 현재 매장에 반영하세요.")
-    } catch (e) {
-      await appAlert(String(e))
-    } finally {
-      setCopying(false)
-    }
-  }
 
   const handleCopyToStore = async () => {
     if (!copyTargetStore) return
@@ -226,26 +200,36 @@ export function PosCookingRulesContent() {
     }
   }, [parseRuleValues, ruleMode])
 
+  const tr = (key: string, fallback: string) => t(key) || fallback
+  const code = String(effectiveStore || "").trim()
+  const showCopy =
+    Boolean(code) && stores.filter((s) => s && s !== code).length > 0
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={storeCode} onValueChange={setStoreCode}>
-          <SelectTrigger className="h-10 w-40">
-            <SelectValue placeholder={t("store") || "매장"} />
-          </SelectTrigger>
-          <SelectContent>
-            {stores.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
-          <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          {t("posRefresh") || "새로고침"}
-        </Button>
-      </div>
+      <PosScreenConfigStoreAndCopyRow
+        canPickStore={canSearchAll}
+        stores={stores}
+        pickedStore={storeCode}
+        onPickedStoreChange={setStoreCode}
+        readOnlyStoreCode={canSearchAll ? null : auth?.store ?? null}
+        effectiveStore={effectiveStore}
+        showCopy={showCopy}
+        copyVariant="cooking"
+        tr={tr}
+        onRefresh={() => void loadData()}
+        refreshLoading={loading}
+        onCopySuccess={() => void loadData()}
+        rightSlot={
+          <PosScreenConfigEmeraldSaveButton
+            onClick={handleSave}
+            disabled={saving || !effectiveStore || loading || !baseSettings}
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "..." : t("itemsBtnSave") || "저장"}
+          </PosScreenConfigEmeraldSaveButton>
+        }
+      />
 
       <div className="rounded-xl border bg-card p-4 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -329,46 +313,24 @@ export function PosCookingRulesContent() {
             <Copy className="h-4 w-4" />
             {t("posCookingCopyTitle") || "매장 간 설정 복사"}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">{t("posCookingCopyLoadFromStore") || "다른 매장 설정 가져오기"}</label>
-              <div className="flex gap-2">
-                <Select value={copySourceStore} onValueChange={setCopySourceStore}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder={t("posCookingStorePlaceholder") || "매장 선택"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((s) => (
-                      <SelectItem key={`src-${s}`} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" className="h-9" onClick={handleCopyFromStore} disabled={copying || !copySourceStore}>
-                  {t("posCookingCopyLoadButton") || "불러오기"}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">{t("posCookingCopySaveToStore") || "현재 설정 다른 매장에 복사"}</label>
-              <div className="flex gap-2">
-                <Select value={copyTargetStore} onValueChange={setCopyTargetStore}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder={t("posCookingStorePlaceholder") || "매장 선택"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((s) => (
-                      <SelectItem key={`dst-${s}`} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" className="h-9" onClick={handleCopyToStore} disabled={copying || !copyTargetStore}>
-                  {t("posCookingCopySaveButton") || "복사 저장"}
-                </Button>
-              </div>
+          <div className="space-y-1 max-w-md">
+            <label className="text-sm font-medium">{t("posCookingCopySaveToStore") || "현재 설정 다른 매장에 복사"}</label>
+            <div className="flex gap-2">
+              <Select value={copyTargetStore} onValueChange={setCopyTargetStore}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={t("posCookingStorePlaceholder") || "매장 선택"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={`dst-${s}`} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" className="h-9" onClick={handleCopyToStore} disabled={copying || !copyTargetStore}>
+                {t("posCookingCopySaveButton") || "복사 저장"}
+              </Button>
             </div>
           </div>
         </div>
@@ -376,15 +338,6 @@ export function PosCookingRulesContent() {
         <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
           {t("posCookingGuide") || "메뉴별 기준시간은 POS 메뉴의 `조리시간(분)` 값을 사용합니다. 미설정 메뉴는 경과시간 기준으로 판단됩니다."}
         </div>
-
-        <Button
-          className="w-full"
-          onClick={handleSave}
-          disabled={saving || !effectiveStore || loading || !baseSettings}
-        >
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? "..." : t("itemsBtnSave") || "저장"}
-        </Button>
       </div>
     </div>
   )

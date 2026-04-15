@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
 /** 카드 계정 목록 조회 */

@@ -74,6 +74,15 @@ function readConfigBool(value, defaultValue) {
   return defaultValue;
 }
 
+function readConfigInt(value, defaultValue, minValue, maxValue) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return defaultValue;
+  const i = Math.trunc(n);
+  const lo = Number.isFinite(minValue) ? minValue : i;
+  const hi = Number.isFinite(maxValue) ? maxValue : i;
+  return Math.min(hi, Math.max(lo, i));
+}
+
 const POS_URL = process.env.WINDOWS_POS_URL || runtimeConfig.posUrl || DEFAULT_POS_URL;
 const ALLOWED_ORIGIN = process.env.WINDOWS_POS_ALLOWED_ORIGIN || runtimeConfig.allowedOrigin || toOrigin(POS_URL);
 const isKiosk = String(process.env.WINDOWS_POS_KIOSK || runtimeConfig.kiosk || "1") !== "0";
@@ -112,6 +121,15 @@ const PRINT_ESC_POS_CUT_AFTER_HTML = readConfigBool(
     : runtimeConfig.printEscPosCutAfterHtml ?? runtimeConfig.print?.escPosCutAfterHtml,
   true
 );
+const PRINT_HTML_DEBUG_ENABLED = readConfigBool(
+  process.env.CM_POS_DEBUG_LOG_ENABLED !== undefined && process.env.CM_POS_DEBUG_LOG_ENABLED !== ""
+    ? process.env.CM_POS_DEBUG_LOG_ENABLED
+    : runtimeConfig.printDebugLogEnabled,
+  false
+);
+const PRINT_HTML_INGEST_URL = String(
+  process.env.CM_POS_DEBUG_LOG_INGEST_URL ?? runtimeConfig.printDebugLogIngestUrl ?? ""
+).trim();
 const THERMAL_PAGE_WIDTH_80MM = 80000;
 const THERMAL_PAGE_HEIGHT_600MM = 600000;
 
@@ -122,7 +140,24 @@ const THERMAL_PAGE_HEIGHT_600MM = 600000;
 const PRINT_HTML_OFFSCREEN_WIDTH = Math.round((80 / 25.4) * 96);
 const PRINT_HTML_OFFSCREEN_HEIGHT = 4096;
 /** loadFile 직후 너무 빨리 print 하면 Windows에서 무인쇄가 실패·곧바로 대화상자로 떨어지는 경우가 있음 */
-const PRINT_HTML_SETTLE_MS = 550;
+const PRINT_HTML_SETTLE_MS = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_HTML_SETTLE_MS || runtimeConfig.printHtmlSettleMs || 550,
+  550,
+  150,
+  5000
+);
+const POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS || runtimeConfig.postHtmlPrintSpoolFlushMs || POST_HTML_PRINT_SPOOL_FLUSH_MS,
+  POST_HTML_PRINT_SPOOL_FLUSH_MS,
+  0,
+  10000
+);
+const PRINT_HTML_SILENT_RETRY_COUNT = readConfigInt(
+  process.env.WINDOWS_POS_PRINT_HTML_RETRY || runtimeConfig.printHtmlSilentRetryCount || 1,
+  1,
+  0,
+  3
+);
 
 /**
  * dev: repo 루트(c:\\CM_ERP\\…) — 패키징 앱은 __dirname이 asar/설치 경로라 여기엔 못 쓰는 경우가 많음.
@@ -157,9 +192,10 @@ function getDebugNdjsonLogCandidates() {
 }
 
 function debugLog(hypothesisId, location, message, data) {
+  if (!PRINT_HTML_DEBUG_ENABLED) return;
   const payload = {
-    sessionId: "0dfc7e",
-    runId: "run1-pre-fix",
+    sessionId: `${Date.now()}-${process.pid}`,
+    runId: `windows-pos-${app.getVersion()}`,
     hypothesisId,
     location,
     message,
@@ -180,10 +216,10 @@ function debugLog(hypothesisId, location, message, data) {
     /* ignore */
   }
   try {
-    if (typeof fetch === "function") {
-      fetch("http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab", {
+    if (PRINT_HTML_INGEST_URL && typeof fetch === "function") {
+      fetch(PRINT_HTML_INGEST_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0dfc7e" },
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": payload.sessionId },
         body: JSON.stringify(payload),
       }).catch(() => {});
     }
@@ -191,14 +227,15 @@ function debugLog(hypothesisId, location, message, data) {
     /* ignore */
   }
   try {
+    if (!PRINT_HTML_INGEST_URL) return;
     const { request } = require("http");
     const req = request(
-      "http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab",
+      PRINT_HTML_INGEST_URL,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Debug-Session-Id": "0dfc7e",
+          "X-Debug-Session-Id": payload.sessionId,
         },
       },
       () => {}
@@ -653,7 +690,20 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
   );
   let printWindow;
   try {
-    const resolvedDevice = await resolvePrintDeviceNameForJob();
+    const warnings = [];
+    let resolvedDevice = await resolvePrintDeviceNameForJob();
+    if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        const printers = await mainWindow.webContents.getPrintersAsync();
+        const matched = printers.some((p) => String(p.name || "").trim() === resolvedDevice);
+        if (!matched) {
+          warnings.push(`configured device not found: ${resolvedDevice}`);
+          resolvedDevice = "";
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     // #region agent log
     debugLog("H4_layout_shrink", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:start", "print_html_start", {
       htmlLength: String(htmlString || "").length,
@@ -694,6 +744,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         ok: r.success,
         reason: r.failureReason || (r.success ? "" : "print_failed"),
         printStage,
+        warnings,
       };
     }
 
@@ -714,6 +765,12 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
     });
     // #endregion
     let r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
+    let thermalAttempts = 1;
+    while (!r.success && thermalAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
+      thermalAttempts += 1;
+      await new Promise((x) => setTimeout(x, 120 * thermalAttempts));
+      r = await printWebContentsPromise(printWindow.webContents, thermalOpts);
+    }
     // #region agent log
     debugLog("H3_thermal_fail", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_result", "thermal_result", {
       success: Boolean(r.success),
@@ -725,6 +782,12 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       const driverDefaultOpts = getHtmlSilentDriverDefaultPrintOptions();
       if (resolvedDevice) driverDefaultOpts.deviceName = resolvedDevice;
       r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
+      let driverAttempts = 1;
+      while (!r.success && driverAttempts <= PRINT_HTML_SILENT_RETRY_COUNT) {
+        driverAttempts += 1;
+        await new Promise((x) => setTimeout(x, 120 * driverAttempts));
+        r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
+      }
       // #region agent log
       debugLog("H2_device_or_driver", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:driver_default_result", "driver_default_result", {
         success: Boolean(r.success),
@@ -743,6 +806,9 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       });
       // #endregion
       r = await printWebContentsPromise(printWindow.webContents, getDialogPrintOptions());
+      if (!DEFAULT_PRINT_DEVICE) {
+        warnings.push("print dialog fallback used without explicit thermal device");
+      }
     }
     // #region agent log
     debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:final", "print_html_final", {
@@ -755,6 +821,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       ok: r.success,
       reason: r.failureReason || (r.success ? "" : "print_failed"),
       printStage,
+      warnings,
     };
   } catch (e) {
     return { ok: false, reason: String(e && e.message ? e.message : e) };
@@ -1227,7 +1294,7 @@ if (!gotLock) {
         preferDialog: Boolean(payload?.preferDialog),
       });
       if (result.ok && !Boolean(payload?.preferDialog)) {
-        await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS));
+        await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED));
         if (PRINT_ESC_POS_CUT_AFTER_HTML) {
           try {
             const device = await resolvePrintDeviceNameForJob();

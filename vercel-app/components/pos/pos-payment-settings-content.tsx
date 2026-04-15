@@ -2,7 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
-import { CreditCard, RotateCw, Save, Plus, Trash2 } from 'lucide-react'
+import { CreditCard, Save, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -24,6 +24,8 @@ import {
 } from '@/lib/api-client'
 import { isOfficeRole } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
+import { PosScreenConfigEmeraldSaveButton } from '@/components/pos/pos-screen-config-action-bar'
+import { PosScreenConfigStoreAndCopyRow } from '@/components/pos/pos-screen-config-store-and-copy-row'
 
 function isSyntheticPaymentMethodId(id: string | undefined): boolean {
   return Boolean(id?.startsWith('syn:'))
@@ -165,26 +167,32 @@ export function PosPaymentSettingsContent() {
     }
   }
 
+  const tr = (key: string, fallback: string) => t(key) || fallback
+  const code = String(effectiveStore || '').trim()
+  const showCopy = Boolean(code) && stores.filter((s) => s && s !== code).length > 0
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={storeCode} onValueChange={setStoreCode}>
-          <SelectTrigger className="h-10 w-40">
-            <SelectValue placeholder={t('store') || '매장'} />
-          </SelectTrigger>
-          <SelectContent>
-            {stores.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
-          <RotateCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          {t('posRefresh') || '새로고침'}
-        </Button>
-      </div>
+      <PosScreenConfigStoreAndCopyRow
+        canPickStore={canSearchAll}
+        stores={stores}
+        pickedStore={storeCode}
+        onPickedStoreChange={setStoreCode}
+        readOnlyStoreCode={canSearchAll ? null : auth?.store ?? null}
+        effectiveStore={effectiveStore}
+        showCopy={showCopy}
+        copyVariant="payment"
+        tr={tr}
+        onRefresh={() => void loadData()}
+        refreshLoading={loading}
+        onCopySuccess={() => void loadData()}
+        rightSlot={
+          <PosScreenConfigEmeraldSaveButton onClick={handleSave} disabled={saving || !effectiveStore}>
+            <Save className="h-4 w-4" />
+            {saving ? '...' : t('itemsBtnSave') || '저장'}
+          </PosScreenConfigEmeraldSaveButton>
+        }
+      />
 
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-semibold mb-4">
@@ -312,10 +320,6 @@ export function PosPaymentSettingsContent() {
                 <Button variant="outline" onClick={handleNew} className="gap-1.5">
                   <Plus className="h-4 w-4" />
                   {t('posPaymentMethodNew') || '신규'}
-                </Button>
-                <Button onClick={handleSave} disabled={saving || !effectiveStore} className="gap-1.5">
-                  <Save className="h-4 w-4" />
-                  {saving ? '...' : t('itemsBtnSave') || '저장'}
                 </Button>
                 {selected && !isSyntheticPaymentMethodId(selected.id) && (
                   <Button

@@ -78,6 +78,8 @@ export interface PosTerminalMenuScreenProps {
   deliveryAppCode?: string | null
   /** 하단 화면 구성바 표시 */
   showConfigBar?: boolean
+  /** 관리자 설정 화면에서 상단 새로고침 시 증가 → 메뉴·화면구성 재로드 */
+  configReloadNonce?: number
   /** 터치 UI 밀도 (모바일: large) */
   touchMode?: 'default' | 'large'
   /**
@@ -107,6 +109,7 @@ export function PosTerminalMenuScreen({
   containMenuHeight = false,
   className,
   hideTableContextBar = false,
+  configReloadNonce = 0,
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -209,7 +212,7 @@ export function PosTerminalMenuScreen({
   React.useEffect(() => {
     setLoading(true)
     loadMenuData().finally(() => setLoading(false))
-  }, [loadMenuData])
+  }, [loadMenuData, configReloadNonce])
 
   React.useEffect(() => {
     setConfigLoading(true)
@@ -217,7 +220,7 @@ export function PosTerminalMenuScreen({
       .then((cfg) => setScreenConfig(normalizePosMenuScreenConfig(cfg, storeCode || null)))
       .catch(() => setScreenConfig(normalizePosMenuScreenConfig(null, storeCode || null)))
       .finally(() => setConfigLoading(false))
-  }, [storeCode])
+  }, [storeCode, configReloadNonce])
 
   const optionsByMenuId = React.useMemo(() => {
     const sellKey = orderType === 'dine-in' ? 'sellHall' : orderType === 'delivery' ? 'sellDelivery' : 'sellPackaging'

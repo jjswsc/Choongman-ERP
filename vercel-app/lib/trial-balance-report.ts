@@ -1,5 +1,5 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
+import { normalizeIncomeScope, storeMatchesIncomeFilter, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
 
 export type TrialBalanceRow = {
@@ -23,10 +23,7 @@ export type TrialBalanceReport = {
 }
 
 function storeMatch(entryStore: string | null | undefined, filter: string): boolean {
-  if (filter === 'All') return true
-  const a = String(entryStore || '').trim().toLowerCase()
-  const b = filter.trim().toLowerCase()
-  return a === b
+  return storeMatchesIncomeFilter(String(entryStore || ''), filter)
 }
 
 /**

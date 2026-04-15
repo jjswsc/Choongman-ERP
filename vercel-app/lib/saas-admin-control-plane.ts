@@ -76,6 +76,7 @@ export type AuditLogItem = {
   actorRole: string
   changedAt: string
   summary: string
+  employeeId?: number | null
 }
 
 export type TenantItem = {

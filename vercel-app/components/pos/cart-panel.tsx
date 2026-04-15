@@ -53,7 +53,6 @@ import {
   Receipt,
   Building2,
   User,
-  Check,
   X,
   Pencil,
   LayoutGrid,
@@ -342,6 +341,8 @@ interface CartPanelProps {
   setCartItems?: Dispatch<SetStateAction<OrderItem[]>>
   /** 협업 할인: 장바구니 줄·메뉴 대분류 매칭용 */
   posMenus?: PosMenu[]
+  /** 터미널 고객 모니터: 결제 모달이 열려 있을 때 수단별 입력 금액 브로드캐스트 */
+  onCustomerDisplayPaymentDraftChange?: (draft: CartPanelPaymentPayload | null) => void
 }
 
 type CartItem = OrderItem
@@ -476,10 +477,10 @@ function PosPaymentModalAmountCard({
 }
 
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
-  stores,
+  stores: _stores,
   currentStoreId,
   selectedTable,
-  onStoreChange,
+  onStoreChange: _onStoreChange,
   t: tProp,
   lockOrderType,
   orderType: orderTypeProp,
@@ -501,6 +502,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   cartItems: cartItemsProp,
   setCartItems: setCartItemsProp,
   posMenus,
+  onCustomerDisplayPaymentDraftChange,
 }, ref) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -559,7 +561,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [memberKeyword, setMemberKeyword] = useState('')
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
   const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string }>>({})
-  const [recentMemberIds, setRecentMemberIds] = useState<string[]>([])
+  const [, setRecentMemberIds] = useState<string[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [guestCount, setGuestCount] = useState(0)
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
@@ -802,6 +804,37 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
     (parseFloat(payDeliveryApp) || 0)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
+
+  const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
+    if (!showPaymentModal) return null
+    const payDel = parseFloat(payDeliveryApp) || 0
+    const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
+      payDel > 0
+        ? { paymentDeliveryApp: payDel, deliveryPaymentChannel }
+        : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
+    const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
+    return {
+      paymentCash: parseFloat(payCash) || 0,
+      paymentCard: parseFloat(payCard) || 0,
+      paymentQr: parseFloat(payPromptPay) || 0,
+      paymentOther: paymentOtherSum,
+      ...deliveryPayPart,
+    }
+  }, [
+    showPaymentModal,
+    payCash,
+    payCard,
+    payPromptPay,
+    payDeliveryApp,
+    deliveryPaymentChannel,
+    useAdminPaymentLines,
+    adminConfiguredWalletSum,
+    legacyWalletPaymentSum,
+  ])
+
+  useEffect(() => {
+    onCustomerDisplayPaymentDraftChange?.(customerDisplayPaymentDraft)
+  }, [customerDisplayPaymentDraft, onCustomerDisplayPaymentDraftChange])
   /** 더치 패널을 열지 않아도: 합계 미달·일부 결제 진행 중이면 수단 탭이 더치 방식(1인분/잔액)으로 동작 */
   const splitFlowForInputs =
     showSplit || splitPaidSteps > 0 || (total > 0 && !paymentSumMatch)

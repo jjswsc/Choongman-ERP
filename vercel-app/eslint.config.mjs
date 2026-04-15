@@ -48,7 +48,24 @@ const eslintConfig = defineConfig([
       "**/*.mjs",
       "**/*.cjs",
     ],
-    rules: reactHooksCompilerRulesOff,
+    rules: {
+      ...reactHooksCompilerRulesOff,
+      /** 레거시 훅 의존성 배열 — 대규모 리팩터 전까지 비활성화(신규 코드는 수동 검토 권장) */
+      "react-hooks/exhaustive-deps": "off",
+      /** 동적·blob·외부 URL·열전사 미리보기 등 next/image가 부적합한 화면이 많음 */
+      "@next/next/no-img-element": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          args: "after-used",
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrors: "all",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
 ]);
 

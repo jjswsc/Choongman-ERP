@@ -21,17 +21,6 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function firstDayOfMonth(d?: Date): string {
-  const x = d || new Date()
-  return x.toISOString().slice(0, 7) + "-01"
-}
-
-function lastDayOfMonth(d?: Date): string {
-  const x = d || new Date()
-  const last = new Date(x.getFullYear(), x.getMonth() + 1, 0)
-  return last.toISOString().slice(0, 10)
-}
-
 export function AdminLeaveStats() {
   const { auth } = useAuth()
   const { lang } = useLang()

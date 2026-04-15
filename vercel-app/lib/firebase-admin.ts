@@ -4,7 +4,7 @@
  * 수신자별 lang에 맞게 자동 번역 후 발송
  */
 import * as admin from 'firebase-admin'
-import { supabaseSelect, supabaseSelectFilter, supabaseDeleteByFilter } from './supabase-server'
+import { supabaseSelect, supabaseDeleteByFilter } from './supabase-server'
 import { translateTextsServer } from './translate-server'
 
 let initialized = false

@@ -78,8 +78,6 @@ export default function InboundPage() {
   const [items, setItems] = React.useState<AdminItem[]>([])
   const [vendors, setVendors] = React.useState<AdminVendor[]>([])
   const [itemsForVendor, setItemsForVendor] = React.useState<AdminItem[]>([])
-  const [itemsForVendorLoading, setItemsForVendorLoading] = React.useState(false)
-  const [loading, setLoading] = React.useState(true)
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyList, setHistoryList] = React.useState<InboundHistoryItem[]>([])
 
@@ -184,7 +182,6 @@ export default function InboundPage() {
       setItemsForVendor([])
       return
     }
-    setItemsForVendorLoading(true)
     getItemsByVendor(v.code, v.name)
       .then((list) => {
         const mapped: AdminItem[] = (list || []).map((it) => ({
@@ -205,7 +202,6 @@ export default function InboundPage() {
         setItemsForVendor(mapped)
       })
       .catch(() => setItemsForVendor([]))
-      .finally(() => setItemsForVendorLoading(false))
   }, [inVendor, purchaseVendors])
 
   React.useEffect(() => {
@@ -237,7 +233,6 @@ export default function InboundPage() {
         setItems([])
         setVendors([])
       })
-      .finally(() => setLoading(false))
   }, [])
 
   // 발주서에서 입고 등록 시 해당 PO 품목 pre-fill
@@ -497,7 +492,7 @@ export default function InboundPage() {
         } else {
           await appAlert(translateApiMessage(res.message, t) || res.message)
         }
-      } catch (e) {
+      } catch {
         await appAlert(t("processFail") || "처리 실패")
       }
     },
@@ -519,7 +514,7 @@ export default function InboundPage() {
         })
         if (res.success) fetchHistory()
         else await appAlert(translateApiMessage(res.message, t) || res.message)
-      } catch (e) {
+      } catch {
         await appAlert(t("processFail") || "처리 실패")
       } finally {
         setUpdatingInvoiceId(null)

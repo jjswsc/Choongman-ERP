@@ -4,13 +4,6 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
@@ -28,6 +21,7 @@ import { isOfficeRole } from '@/lib/permissions'
 import { formatPosDateTimeShort } from '@/lib/pos-datetime-locale'
 import { ClipboardCopy, Monitor, Smartphone, RefreshCw, UserX } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PosScreenConfigStoreAndCopyRow } from '@/components/pos/pos-screen-config-store-and-copy-row'
 
 /** 마지막 접속 시각이 이 이내면 "최근 접속" 탭 (나머지는 과거 이력) */
 const DEVICE_RECENT_LAST_SEEN_MS = 7 * 24 * 60 * 60 * 1000
@@ -379,25 +373,25 @@ export function PosTerminalSettingsContent() {
     )
   }
 
+  const tr = (key: string, fallback: string) => t(key) || fallback
+
   return (
     <div className="space-y-4">
-      {canSearchAll && stores.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm font-medium">{t('posSwitchUserStore') || '매장'}</label>
-            <Select value={storeCode || (auth?.store ?? '')} onValueChange={(v) => setStoreCode(v)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder={t('posCookingStorePlaceholder') || '매장 선택'} />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-        </div>
-      )}
+      {canSearchAll && stores.length > 0 ? (
+        <PosScreenConfigStoreAndCopyRow
+          canPickStore={canSearchAll}
+          stores={stores}
+          pickedStore={storeCode || auth?.store || ''}
+          onPickedStoreChange={setStoreCode}
+          readOnlyStoreCode={null}
+          effectiveStore={effectiveStore}
+          showCopy={false}
+          copyVariant="menu"
+          tr={tr}
+          onRefresh={loadData}
+          refreshLoading={loading}
+        />
+      ) : null}
 
       {!effectiveStore && (
         <div

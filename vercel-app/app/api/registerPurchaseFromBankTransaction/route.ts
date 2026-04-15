@@ -22,6 +22,11 @@ export async function POST(request: NextRequest) {
 
     const bankTransactionId = Number(body.bankTransactionId ?? body.bank_transaction_id ?? 0)
     const vendorCode = String(body.vendorCode || body.vendor_code || body.payeeCode || body.payee_code || '').trim()
+    const linkedOrderRaw = body.linkedOrderId ?? body.linked_order_id
+    const linkedOrderId =
+      linkedOrderRaw != null && linkedOrderRaw !== '' && !isNaN(Number(linkedOrderRaw)) && Number(linkedOrderRaw) > 0
+        ? Number(linkedOrderRaw)
+        : null
 
     if (!bankTransactionId || isNaN(bankTransactionId)) {
       return NextResponse.json({ success: false, message: '통장 거래 ID가 필요합니다.' }, { status: 400, headers })
@@ -75,6 +80,7 @@ export async function POST(request: NextRequest) {
       await supabaseUpdate('bank_transactions', bankTransactionId, {
         vendor_code: vendorCode,
         note: `purchase_payment:${vendorCode}`,
+        ...(linkedOrderId != null ? { ref_type: 'Order', ref_id: linkedOrderId } : {}),
       })
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
@@ -92,6 +98,7 @@ export async function POST(request: NextRequest) {
       category: 'purchase_payment',
       vendor_code: vendorCode,
       expense_date: transDate,
+      ...(linkedOrderId != null ? { ref_type: 'Order', ref_id: linkedOrderId } : {}),
     })
 
     try {

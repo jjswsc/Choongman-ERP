@@ -21,6 +21,7 @@ import {
   FINANCIAL_COMPARE_MAX_MONTHS,
   pickBalanceSheetLastMonthPerYear,
 } from "@/lib/financial-statements-compare"
+import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
 
 type BalanceSheetTabProps = {
   /** @deprecated 시작·종료월을 쓰세요 */
@@ -256,8 +257,6 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
     : isManager && managerStore
       ? [managerStore]
       : []
-
-  const formatBaht = (n: number) => `฿${(n || 0).toLocaleString()}`
 
   const storeLabel =
     storeFilter === "All"

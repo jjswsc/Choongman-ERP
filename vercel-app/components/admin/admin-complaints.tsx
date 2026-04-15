@@ -22,7 +22,7 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Save, Image } from "lucide-react"
+import { Search, Save, Image as ImageIcon } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -571,7 +571,7 @@ export function AdminComplaints() {
                             <td className="p-2 text-center">
                               {item.photoUrl ? (
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPhotoPreviewUrl(item.photoUrl || null)} title={t("photo")}>
-                                  <Image className="h-4 w-4" />
+                                  <ImageIcon className="h-4 w-4" aria-hidden />
                                 </Button>
                               ) : (
                                 <span className="text-muted-foreground">-</span>

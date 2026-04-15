@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
   let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
   const isHQ = ['office', '본사', '오피스'].includes(userStore.toLowerCase().trim())
   if (userStore && !isHQ) storeFilter = userStore
   const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || '').trim()

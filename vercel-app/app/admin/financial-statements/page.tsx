@@ -29,6 +29,7 @@ import {
 import { IncomeStatementTab } from "@/components/tabs/income-statement-tab"
 import { BalanceSheetTab } from "@/components/tabs/balance-sheet-tab"
 import { cn } from "@/lib/utils"
+import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
 
 function FinancialSummaryMetricCard({
   label,
@@ -108,8 +109,6 @@ export default function FinancialStatementsPage() {
     const [y, m] = value.split("-").map(Number)
     return { value, label: `${y}년 ${m}월` }
   })
-
-  const formatBaht = (n: number) => `฿${(n || 0).toLocaleString()}`
 
   const loadSummary = React.useCallback(async () => {
     setLoadingSummary(true)

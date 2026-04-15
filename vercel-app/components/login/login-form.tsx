@@ -11,7 +11,8 @@ import {
   type FormEvent,
 } from "react"
 import Image from "next/image"
-import { usePathname, useRouter } from "next/navigation"
+import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Select,
   SelectContent,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-context"
-import { isLangCode, useLang } from "@/lib/lang-context"
+import { isLangCode, useLang, normalizeAdminUiLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
@@ -121,6 +122,7 @@ interface LoginFormProps {
 
 export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFormProps) {
   const pathname = usePathname() || ""
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { auth, setAuth } = useAuth()
   const [loginData, setLoginData] = useState<Record<string, string[]>>({})
@@ -154,6 +156,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [hybridPosShell, setHybridPosShell] = useState(false)
   const initialNoticeShownRef = useRef(false)
   const loginAppPrefHydratedRef = useRef(false)
+  const companyPrefillAppliedRef = useRef(false)
+  const storePrefillAppliedRef = useRef(false)
+  const userPrefillAppliedRef = useRef(false)
+
+  const queryCompany = useMemo(
+    () => String(searchParams?.get("company") || "").trim(),
+    [searchParams]
+  )
+  const queryStore = useMemo(
+    () => String(searchParams?.get("store") || "").trim(),
+    [searchParams]
+  )
+  const queryUser = useMemo(
+    () => String(searchParams?.get("user") || "").trim(),
+    [searchParams]
+  )
 
   const [loginApp, setLoginApp] = useState<LoginApp>(() =>
     deriveLoginAppFromRoute(pathname, isAdminPage, redirectTo)
@@ -200,6 +218,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [loginApp, erpLandingPath])
 
   const effectiveIsAdminPage = loginApp === "erp"
+  const isAdminLoginRoute = pathname === "/admin/login" || pathname === "/saas-admin/login"
+
+  useEffect(() => {
+    if (!isAdminLoginRoute) return
+    const n = normalizeAdminUiLang(lang)
+    if (n !== lang) setLang(n)
+  }, [isAdminLoginRoute, lang, setLang])
 
   /** ERP·모바일: 숨김. POS 웹만 윈도우 설치 안내(하이브리드 셸 안에서는 숨김) */
   const showWindowsInstallerButton = loginApp === "pos" && !hybridPosShell
@@ -352,6 +377,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setError(tMsg(initialNoticeKey))
     setErrorIsConnectivity(false)
   }, [auth, initialNoticeKey, tMsg])
+
+  useEffect(() => {
+    if (companyPrefillAppliedRef.current) return
+    if (!queryCompany) {
+      companyPrefillAppliedRef.current = true
+      return
+    }
+    if (companies.length === 0) return
+    const found = companies.find((x) => String(x || "").trim().toLowerCase() === queryCompany.toLowerCase())
+    if (found) {
+      setCompany(found)
+      setStore("")
+      setUser("")
+    }
+    companyPrefillAppliedRef.current = true
+  }, [companies, queryCompany])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -506,7 +547,33 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     if (stores.length === 0 || filteredStores.length > 0) return
     setCompany("")
   }, [loading, company, stores.length, filteredStores.length])
+  useEffect(() => {
+    if (storePrefillAppliedRef.current) return
+    if (!queryStore) {
+      storePrefillAppliedRef.current = true
+      return
+    }
+    if (filteredStores.length === 0) return
+    const found = filteredStores.find((x) => String(x || "").trim().toLowerCase() === queryStore.toLowerCase())
+    if (found) {
+      setStore(found)
+      setUser("")
+    }
+    storePrefillAppliedRef.current = true
+  }, [filteredStores, queryStore])
   const users = store ? (loginData[store] || []) : []
+  useEffect(() => {
+    if (userPrefillAppliedRef.current) return
+    if (!queryUser) {
+      userPrefillAppliedRef.current = true
+      return
+    }
+    if (!store) return
+    if (users.length === 0) return
+    const found = users.find((x) => String(x || "").trim().toLowerCase() === queryUser.toLowerCase())
+    if (found) setUser(found)
+    userPrefillAppliedRef.current = true
+  }, [queryUser, store, users])
   useEffect(() => {
     if (!store) return
     if (filteredStores.includes(store)) return
@@ -563,6 +630,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "모바일",
+      viewProducts: "제품 안내 보기",
       offlineResumeStore: "매장",
       offlineResumeStaff: "담당자",
       offlineResumeSyncNote:
@@ -589,6 +657,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP (Admin)",
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
+      viewProducts: "Product guide",
       offlineResumeStore: "Store",
       offlineResumeStaff: "Staff",
       offlineResumeSyncNote:
@@ -615,6 +684,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "มือถือ",
+      viewProducts: "ดูข้อมูลสินค้า",
       offlineResumeStore: "สาขา",
       offlineResumeStaff: "พนักงาน",
       offlineResumeSyncNote:
@@ -641,6 +711,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "မိုဘိုင်း",
+      viewProducts: "ထုတ်ကုန်အချက်အလက်ကြည့်ရန်",
       offlineResumeStore: "ဆိုင်",
       offlineResumeStaff: "တာဝန်ခံ",
       offlineResumeSyncNote:
@@ -667,6 +738,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "ມືຖື",
+      viewProducts: "ເບິ່ງຂໍ້ມູນສິນຄ້າ",
       offlineResumeStore: "ສາຂາ",
       offlineResumeStaff: "ຜູ້ຮັບຜິດຊອບ",
       offlineResumeSyncNote:
@@ -705,8 +777,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           </div>
 
           {normalizeLoginPathname(pathname) === "/login" ||
-          normalizeLoginPathname(pathname) === "/admin/login" ? (
-            <div className="mb-4 w-full max-w-sm px-0.5">
+          normalizeLoginPathname(pathname) === "/admin/login" ||
+          normalizeLoginPathname(pathname) === "/saas-admin/login" ? (
+            <div className="mb-4 w-full max-w-sm space-y-2 px-0.5">
               <div
                 className="flex gap-1 rounded-xl bg-black/30 p-1 ring-1 ring-white/10"
                 role="group"
@@ -733,6 +806,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   </button>
                 ))}
               </div>
+              <Link
+                href="/products"
+                className="block w-full rounded-lg bg-gradient-to-b from-orange-500 to-orange-600 px-3 py-2.5 text-center text-xs font-semibold text-white shadow-sm shadow-orange-900/25 transition duration-200 hover:from-orange-400 hover:to-orange-500 hover:shadow-md hover:shadow-orange-900/30"
+              >
+                {t.viewProducts}
+              </Link>
             </div>
           ) : null}
 
@@ -847,14 +926,24 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="login-select-content">
-                <SelectItem value="ko">한국어</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="th">ภาษาไทย</SelectItem>
-                <SelectItem value="mm">မြန်မာ</SelectItem>
-                <SelectItem value="la">ພາສາລາວ</SelectItem>
-                <SelectItem value="kh">ភាសាខ្មែរ</SelectItem>
-                <SelectItem value="vi">Tiếng Việt</SelectItem>
-                <SelectItem value="ms">Bahasa Melayu</SelectItem>
+                {isAdminLoginRoute ? (
+                  <>
+                    <SelectItem value="ko">한국어</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="th">ไทย</SelectItem>
+                  </>
+                ) : (
+                  <>
+                    <SelectItem value="ko">한국어</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="th">ภาษาไทย</SelectItem>
+                    <SelectItem value="mm">မြန်မာ</SelectItem>
+                    <SelectItem value="la">ພາສາລາວ</SelectItem>
+                    <SelectItem value="kh">ភាសាខ្មែរ</SelectItem>
+                    <SelectItem value="vi">Tiếng Việt</SelectItem>
+                    <SelectItem value="ms">Bahasa Melayu</SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
 

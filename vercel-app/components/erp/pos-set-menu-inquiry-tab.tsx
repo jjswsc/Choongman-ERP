@@ -111,7 +111,7 @@ export function PosSetMenuInquiryTab({
   onRefresh,
   onOpenInSetTab,
   filterCampaignId,
-  hideOpenMarketingLink,
+  hideOpenMarketingLink: _hideOpenMarketingLink,
   hideLinkCampaign,
   inquiryMode = "bundle",
 }: PosSetMenuInquiryTabProps) {

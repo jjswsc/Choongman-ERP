@@ -5,7 +5,7 @@ import * as React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Receipt, Search, ChevronDown, Printer } from 'lucide-react'
+import { Search, ChevronDown, Printer } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -66,7 +66,7 @@ export interface ReceiptsManagementTabProps {
   readOnly?: boolean
 }
 
-export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }: ReceiptsManagementTabProps = {}) {
+export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnly = false }: ReceiptsManagementTabProps = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)

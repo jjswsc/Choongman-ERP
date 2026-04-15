@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
-const OFFICE_STORES = ['입고등록', '본사', 'Office', '오피스', '본점']
-
 function isOfficeStore(s: string): boolean {
   const x = String(s || '').trim()
   return x === '본사' || x === 'Office' || x === '오피스' || x === '본점' || x.toLowerCase().includes('office')
@@ -62,7 +60,7 @@ export async function GET(request: NextRequest) {
           if (vn && !matchValues.includes(vn)) matchValues.push(vn)
           if (gn && !matchValues.includes(gn)) matchValues.push(gn)
         }
-      } catch (_) {
+      } catch {
         /* vendors 없으면 code만 사용 */
       }
     } else if (vendorName) {

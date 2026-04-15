@@ -14,8 +14,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const monthStr = String(body?.monthStr || '').trim().slice(0, 7)
     const list = Array.isArray(body?.list) ? body.list : []
-    const userStore = String(body?.userStore || '').trim()
-    const userRole = (String(body?.userRole || '').toLowerCase())
 
     if (!monthStr || monthStr.length < 7) {
       return NextResponse.json(

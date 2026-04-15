@@ -1,6 +1,5 @@
 'use client'
 
-import { appAlert } from '@/lib/app-message'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'

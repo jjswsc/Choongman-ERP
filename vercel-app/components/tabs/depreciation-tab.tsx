@@ -31,7 +31,6 @@ import {
   getFixedAssets,
   saveFixedAsset,
   getDepreciationEntries,
-  runDepreciationPreview,
   runDepreciation,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"

@@ -11,6 +11,7 @@ export type ThaiFilingType =
   | 'cit_ppnd50'
   | 'dbd_annual_fs'
   | 'sso_contribution'
+  | 'etax_timestamp'
 
 export type ThaiFilingDefinition = {
   id: ThaiFilingType
@@ -59,6 +60,13 @@ export const THAI_FILING_DEFINITIONS: ThaiFilingDefinition[] = [
     labelEn: 'Social Security Office contributions',
     frequencyKo: '월별',
   },
+  {
+    id: 'etax_timestamp',
+    labelKo: 'e-Tax Invoice Time Stamp 등록',
+    labelTh: 'ลงทะเบียน e-Tax Invoice by Time Stamp',
+    labelEn: 'e-Tax Invoice by Time Stamp registration',
+    frequencyKo: '최초 등록 후 수시 점검',
+  },
 ]
 
 export const DEFAULT_FILING_RESPONSIBILITIES: Record<ThaiFilingType, ThaiFilingResponsibility> = {
@@ -67,6 +75,7 @@ export const DEFAULT_FILING_RESPONSIBILITIES: Record<ThaiFilingType, ThaiFilingR
   cit_ppnd50: 'tbd',
   dbd_annual_fs: 'tbd',
   sso_contribution: 'tbd',
+  etax_timestamp: 'tbd',
 }
 
 export function normalizeResponsibilities(

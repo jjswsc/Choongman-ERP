@@ -39,7 +39,6 @@ import {
   setMenuPermission,
   getNotificationSettings,
   updateNotificationSettings,
-  type HeadOfficeInfo,
   getAdminDataLimits,
   type AdminDataLimits,
   type AdminTableUsageRow,

@@ -10,7 +10,6 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getPosCoupons,
-  getMarketingCampaigns,
   savePosCoupon,
   deletePosCoupon,
   type PosCoupon,
@@ -27,7 +26,7 @@ export default function PosCouponsPage() {
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [editingId, setEditingId] = React.useState<number | null>(null)
-  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
+  const [campaigns] = React.useState<{ id: string; topic: string }[]>([])
   const [form, setForm] = React.useState({
     code: "",
     name: "",

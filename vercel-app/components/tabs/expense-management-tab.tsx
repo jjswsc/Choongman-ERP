@@ -418,7 +418,6 @@ export function ExpenseManagementTab() {
     } finally {
       setPayingId(null)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
   }, [auth?.role, auth?.user, loadPlans])
 
   const navigateToEditInRegister = React.useCallback(
@@ -462,7 +461,6 @@ export function ExpenseManagementTab() {
     } finally {
       setDeletingPlanId(null)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
   }, [auth?.role, loadPlans])
 
   const handleCleanNoStore = React.useCallback(async () => {
@@ -480,7 +478,6 @@ export function ExpenseManagementTab() {
     } finally {
       setCleaningNoStore(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
   }, [auth?.role, loadPlans])
 
   const handleApproveAllForDay = React.useCallback(async () => {
@@ -510,7 +507,6 @@ export function ExpenseManagementTab() {
     } finally {
       setApprovingAll(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
   }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr])
 
   const handleRejectAllForDay = React.useCallback(async () => {
@@ -540,7 +536,6 @@ export function ExpenseManagementTab() {
     } finally {
       setRejectingAll(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
   }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr])
 
   return (
@@ -1128,7 +1123,7 @@ export function ExpenseManagementTab() {
                 {(attachmentPreview?.urls || []).map((url, i) => (
                   <div key={i} className="rounded-md border border-border/60 p-2">
                     {url.startsWith("data:image/") || /^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- 사용자·관리자 업로드 data URL
+                       
                       <img src={url} alt="" className="max-h-[70vh] w-auto max-w-full rounded mx-auto" />
                     ) : url.startsWith("data:application/pdf") || /\.pdf(\?|$)/i.test(url) ? (
                       <iframe title={`pdf-${i}`} src={url} className="h-[min(70vh,520px)] w-full rounded border-0" />

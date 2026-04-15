@@ -78,6 +78,28 @@ import {
   type PosCustomerDisplayPayload,
 } from '@/lib/pos-customer-display-state'
 
+function buildCustomerDisplayPaymentLines(
+  draft: CartPanelPaymentPayload | null,
+  t: (k: string) => string
+): { label: string; amount: number }[] {
+  if (!draft) return []
+  const lines: { label: string; amount: number }[] = []
+  if (draft.paymentCash > 0) lines.push({ label: t('posPaymentCash') || '현금', amount: draft.paymentCash })
+  if (draft.paymentCard > 0) lines.push({ label: t('posPaymentCard') || '카드', amount: draft.paymentCard })
+  if (draft.paymentQr > 0) lines.push({ label: t('posPaymentQrCode') || 'QR', amount: draft.paymentQr })
+  if (draft.paymentOther > 0) lines.push({ label: t('posPaymentOther') || '기타', amount: draft.paymentOther })
+  if ((draft.paymentDeliveryApp || 0) > 0) {
+    const ch = draft.deliveryPaymentChannel ? String(draft.deliveryPaymentChannel) : ''
+    lines.push({
+      label: ch
+        ? `${t('posPaymentDeliveryApp') || '배달앱'} (${ch})`
+        : t('posPaymentDeliveryApp') || '배달앱',
+      amount: draft.paymentDeliveryApp || 0,
+    })
+  }
+  return lines
+}
+
 /** Supabase Realtime INSERT 페이로드의 id는 number가 아닐 수 있음(bigint 등 → 문자열) */
 function coercePosOrderIdFromRealtime(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return Math.trunc(raw)
@@ -180,6 +202,7 @@ export default function PosTerminalPage() {
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = useState(false)
   const [receiptBizName, setReceiptBizName] = useState('')
   const [receiptBizTaxId, setReceiptBizTaxId] = useState('')
+  const [receiptBizAbn, setReceiptBizAbn] = useState('')
   const [receiptBizOwner, setReceiptBizOwner] = useState('')
   const [receiptBizAddress, setReceiptBizAddress] = useState('')
   const [receiptBizPhone, setReceiptBizPhone] = useState('')
@@ -229,6 +252,9 @@ export default function PosTerminalPage() {
   const [customerDisplayShowOrderTotal, setCustomerDisplayShowOrderTotal] = useState(true)
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
   const [customerDisplayIdleMediaUrl, setCustomerDisplayIdleMediaUrl] = useState('')
+  const [customerDisplayPaymentDraft, setCustomerDisplayPaymentDraft] = useState<CartPanelPaymentPayload | null>(null)
+  /** 결제 완료 직후 고객 모니터에 설정된 QR을 잠시 표시(ms 기준 타임스탬프) */
+  const [postPaymentQrUntil, setPostPaymentQrUntil] = useState(0)
   /** 기존 주문 결제 시 영수증 orderNo (pendingPayRequest/pendingTakeoutPayRequest에 있던 값) */
   const [pendingReceiptOrderNo, setPendingReceiptOrderNo] = useState<string | null>(null)
   const [todaySales, setTodaySales] = useState<{
@@ -334,6 +360,7 @@ export default function PosTerminalPage() {
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
         setReceiptBizName(String(s.receiptBizName || ''))
         setReceiptBizTaxId(String(s.receiptBizTaxId || ''))
+        setReceiptBizAbn(String(s.receiptBizAbn || ''))
         setReceiptBizOwner(String(s.receiptBizOwner || ''))
         setReceiptBizAddress(String(s.receiptBizAddress || ''))
         setReceiptBizPhone(String(s.receiptBizPhone || ''))
@@ -419,6 +446,7 @@ export default function PosTerminalPage() {
         setAutoPrintKitchenSlipOnOrder(false)
         setReceiptBizName('')
         setReceiptBizTaxId('')
+        setReceiptBizAbn('')
         setReceiptBizOwner('')
         setReceiptBizAddress('')
         setReceiptBizPhone('')
@@ -620,6 +648,17 @@ export default function PosTerminalPage() {
     paymentReceiptScanSeededRef.current = false
   }, [currentStoreId])
 
+  const schedulePostPaymentCustomerQr = useCallback(() => {
+    if (!dualMonitorEnabled) return
+    const q = String(customerDisplayQrPayload || '').trim()
+    if (!q) return
+    const until = Date.now() + 16000
+    setPostPaymentQrUntil(until)
+    window.setTimeout(() => {
+      setPostPaymentQrUntil((prev) => (prev === until ? 0 : prev))
+    }, 16000)
+  }, [dualMonitorEnabled, customerDisplayQrPayload])
+
   useEffect(() => {
     if (!currentStoreId) return
     const shell = window.cmPosShell
@@ -634,6 +673,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!currentStoreId || !dualMonitorEnabled) return
+    const brand = receiptLogoImageUrl.trim() || undefined
     const base: PosCustomerDisplayPayload = {
       storeCode: currentStoreId,
       kind: 'idle',
@@ -645,9 +685,20 @@ export default function PosTerminalPage() {
         customerDisplayIdleMediaType !== 'none' && customerDisplayIdleMediaUrl.trim()
           ? customerDisplayIdleMediaUrl.trim()
           : undefined,
+      brandLogoUrl: brand,
     }
-    const payload: PosCustomerDisplayPayload =
-      hasPendingPaymentFlow
+    const now = Date.now()
+    const showPostPayQr = postPaymentQrUntil > now && String(customerDisplayQrPayload || '').trim().length > 0
+
+    const payload: PosCustomerDisplayPayload = showPostPayQr
+      ? {
+          ...base,
+          kind: 'qr',
+          title: t('posCustomerThankYou') || '감사합니다',
+          message: t('posCustomerPostPaymentQrHint') || '아래 QR을 이용해 주세요.',
+          qrPayload: customerDisplayQrPayload,
+        }
+      : hasPendingPaymentFlow
         ? {
             ...base,
             kind: 'payment',
@@ -656,6 +707,7 @@ export default function PosTerminalPage() {
             items: customerDisplayOrderItems,
             totalAmount: customerDisplayBreakdown.total,
             breakdown: customerDisplayBreakdown,
+            paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, t),
           }
         : customerDisplayOrderItems.length > 0
           ? {
@@ -697,6 +749,9 @@ export default function PosTerminalPage() {
     customerDisplayIdleMessage,
     customerDisplayIdleMediaType,
     customerDisplayIdleMediaUrl,
+    receiptLogoImageUrl,
+    postPaymentQrUntil,
+    customerDisplayPaymentDraft,
     t,
   ])
 
@@ -1692,6 +1747,7 @@ export default function PosTerminalPage() {
             takeoutLabel={takeoutLabel}
             pricingAdjustments={pricingAdjustments}
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
+            onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               try {
                 if (existingOrderId != null && payload.payment != null) {
@@ -1756,6 +1812,7 @@ export default function PosTerminalPage() {
                 setDeliveryApp(null)
                 setDeliveryOrderNo('')
                 await refetchStores()
+                if (payload.payment != null) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
               }
@@ -1822,6 +1879,7 @@ export default function PosTerminalPage() {
                 setSelectedTakeoutTargetId(null)
                 setSelectedTakeoutTargetLabel('')
                 await refetchStores()
+                if (payload.payment != null) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
               }
@@ -2246,6 +2304,7 @@ export default function PosTerminalPage() {
                 setServingTableId(null)
                 setSelectedTableId(null)
                 await refetchStores()
+                if (pay) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
               }
@@ -2333,6 +2392,7 @@ export default function PosTerminalPage() {
                   setSelectedTakeoutTargetLabel('')
                 }
                 await refetchStores()
+                if (payload.payment) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)
               }
@@ -2513,7 +2573,6 @@ export default function PosTerminalPage() {
                   onClick={() => {
                     if (selectedDeliveryOrder) {
                       const label = String(selectedDeliveryOrder.customerName || '').trim() || ''
-                      const appId = detectDeliveryApp(label)
                       const no = detectDeliveryOrderNo(label)
                       setDeliveryEditOrderNoValue(no)
                       setDeliveryEditOrderNoOpen(true)
@@ -2917,6 +2976,7 @@ export default function PosTerminalPage() {
         autoPrintKitchenSlipOnOrder={autoPrintKitchenSlipOnOrder}
         receiptBizName={receiptBizName}
         receiptBizTaxId={receiptBizTaxId}
+        receiptBizAbn={receiptBizAbn}
         receiptBizOwner={receiptBizOwner}
         receiptBizAddress={receiptBizAddress}
         receiptBizPhone={receiptBizPhone}

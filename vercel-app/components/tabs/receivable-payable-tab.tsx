@@ -687,7 +687,6 @@ export function ReceivablePayableTab() {
     const typeOrder = isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")
     const typeReceive = isRec ? (t("recTypeReceive") || "수령") : (t("payTypePayment") || "지급")
     const typeOpening = t("recTypeOpening") || "기초이월"
-    const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
     const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")
     const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")
     const header = isRec

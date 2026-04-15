@@ -14,6 +14,12 @@ export type IncomeCompareYearAgg = {
   grossProfit: number
   netProfit: number
   cogs: number
+  /** 매장 손익: 연도 합산 본사 출고 vs 승인 발주 (월 진단 합산) */
+  purchaseHqOutboundBasis?: {
+    outboundTotal: number
+    approvedOrdersTotal: number
+    diff: number
+  }
 }
 
 /** 월별 손익 행의 매출원가(시스템 값; 수동 오버라이드 없음) */
@@ -31,23 +37,66 @@ export function aggregateIncomeStatementByYear(
 ): IncomeCompareYearAgg[] {
   const map = new Map<
     string,
-    { sales: number; purchases: number; expenses: number; grossProfit: number; netProfit: number; cogs: number }
+    {
+      sales: number
+      purchases: number
+      expenses: number
+      grossProfit: number
+      netProfit: number
+      cogs: number
+      hqOb: number
+      hqAp: number
+    }
   >()
   for (const { ym, data } of rows) {
     if (data.error) continue
     const y = ym.slice(0, 4)
-    const cur = map.get(y) ?? { sales: 0, purchases: 0, expenses: 0, grossProfit: 0, netProfit: 0, cogs: 0 }
+    const cur = map.get(y) ?? {
+      sales: 0,
+      purchases: 0,
+      expenses: 0,
+      grossProfit: 0,
+      netProfit: 0,
+      cogs: 0,
+      hqOb: 0,
+      hqAp: 0,
+    }
     cur.sales += Number(data.sales) || 0
     cur.purchases += Number(data.purchases) || 0
     cur.expenses += Number(data.expenses) || 0
     cur.grossProfit += Number(data.grossProfit) || 0
     cur.netProfit += Number(data.netProfit) || 0
     cur.cogs += incomeStatementCogs(data)
+    const b = data.diagnostics?.purchaseHqOutboundBasis
+    if (b) {
+      cur.hqOb += Number(b.outboundTotal) || 0
+      cur.hqAp += Number(b.approvedOrdersTotal) || 0
+    }
     map.set(y, cur)
   }
   return [...map.keys()]
     .sort()
-    .map((year) => ({ year, ...map.get(year)! }))
+    .map((year) => {
+      const x = map.get(year)!
+      const purchaseHqOutboundBasis =
+        x.hqOb > 0 || x.hqAp > 0
+          ? {
+              outboundTotal: x.hqOb,
+              approvedOrdersTotal: x.hqAp,
+              diff: x.hqOb - x.hqAp,
+            }
+          : undefined
+      return {
+        year,
+        sales: x.sales,
+        purchases: x.purchases,
+        expenses: x.expenses,
+        grossProfit: x.grossProfit,
+        netProfit: x.netProfit,
+        cogs: x.cogs,
+        ...(purchaseHqOutboundBasis ? { purchaseHqOutboundBasis } : {}),
+      }
+    })
 }
 
 export type BalanceYearSnap = { year: string; ym: string; data: BalanceSheetData }

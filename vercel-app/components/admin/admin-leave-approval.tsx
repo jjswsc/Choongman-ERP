@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
-import { CalendarCheck, Search, Image } from "lucide-react"
+import { CalendarCheck, Search, Image as ImageIcon } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
@@ -130,16 +130,13 @@ export function AdminLeaveApproval() {
       .then(setLeaveList)
       .catch(() => setLeaveList([]))
       .finally(() => setLeaveLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 급여에서 넘긴 쿼리 문자열이 바뀔 때만 자동 조회
+     
   }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
   const translateLeaveType = (type: string) => translateLeaveTypeFromDb(type, t)
 
   const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
-
-  const leaveStoreSelectValue =
-    leaveStores.length > 0 && leaveStores.includes(leaveStoreFilter) ? leaveStoreFilter : leaveStores[0] ?? "All"
 
   const nameQ = leaveNameFilter.trim().toLowerCase()
   const visibleLeaveList = nameQ
@@ -307,7 +304,7 @@ export function AdminLeaveApproval() {
                       {(item.type.indexOf("병가") !== -1 || item.type.indexOf("ลากิจ") !== -1) ? (
                         item.certificateUrl ? (
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCertPreviewUrl(item.certificateUrl)} title={item.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}>
-                            <Image className="h-4 w-4" />
+                            <ImageIcon className="h-4 w-4" aria-hidden />
                           </Button>
                         ) : (
                           <span className="text-amber-600 text-xs font-medium" title={t("leaveCertPending")}>{t("leaveCertPending")}</span>

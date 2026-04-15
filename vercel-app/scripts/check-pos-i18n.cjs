@@ -57,7 +57,8 @@ function walk(dir, out = []) {
 
 const files = walk(root)
 const used = new Set()
-const keyRe = /t\(\s*["'](pos[A-Za-z0-9_]+)["']\s*\)/g
+// \b so encodeURIComponent('pos_order') does not match ...Componen + t('pos_order')
+const keyRe = /\bt\(\s*["'](pos[A-Za-z0-9_]+)["']\s*\)/g
 for (const f of files) {
   const c = fs.readFileSync(f, "utf8")
   let m

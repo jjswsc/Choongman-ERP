@@ -23,7 +23,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, Settings2, Save, Pencil, FileSpreadsheet } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -148,7 +148,7 @@ export function BankTransactionsTab() {
   const [invoiceLinkRow, setInvoiceLinkRow] = React.useState<(typeof list)[0] | null>(null)
   const [invoiceLinkPOList, setInvoiceLinkPOList] = React.useState<{ id?: number; po_no?: string; vendor_name?: string; total?: number; created_at?: string }[]>([])
   const [invoiceLinkSelectedPO, setInvoiceLinkSelectedPO] = React.useState<string>("")
-  const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
+  const [, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
   const [invoicePhotoPreviewUrl, setInvoicePhotoPreviewUrl] = React.useState<string | null>(null)
   const [memoRules, setMemoRules] = React.useState<BankMemoRule[]>([])
   const [newRuleKeyword, setNewRuleKeyword] = React.useState("")
@@ -188,6 +188,7 @@ export function BankTransactionsTab() {
   const [registerPayeeManual, setRegisterPayeeManual] = React.useState(false)
   const [registerVendorCode, setRegisterVendorCode] = React.useState("")
   const [registerVendorManual, setRegisterVendorManual] = React.useState(false)
+  const [registerPurchaseLinkedOrderId, setRegisterPurchaseLinkedOrderId] = React.useState("")
   const [registerAccountSubjectId, setRegisterAccountSubjectId] = React.useState<string>("")
   const [registerSaving, setRegisterSaving] = React.useState(false)
   const [registerActionRow, setRegisterActionRow] = React.useState<(typeof list)[0] | null>(null)
@@ -2715,7 +2716,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!registerPurchaseRow} onOpenChange={(open) => !open && (setRegisterPurchaseRow(null), setRegisterEditMode(false))}>
+      <Dialog
+        open={!!registerPurchaseRow}
+        onOpenChange={(open) =>
+          !open && (setRegisterPurchaseRow(null), setRegisterEditMode(false), setRegisterPurchaseLinkedOrderId(""))
+        }
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{t("bankRegisterPurchase") || "매입 발생으로 등록"}</DialogTitle>
@@ -2742,6 +2748,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 <Input placeholder={t("vendor") || "거래처 코드"} value={registerVendorCode} onChange={(e) => setRegisterVendorCode(e.target.value)} className="mt-2" />
               )}
             </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">{t("bankRegisterLinkedOrderId")}</label>
+              <Input
+                inputMode="numeric"
+                placeholder={t("bankRegisterLinkedOrderIdPlaceholder")}
+                value={registerPurchaseLinkedOrderId}
+                onChange={(e) => setRegisterPurchaseLinkedOrderId(e.target.value.replace(/\D/g, ""))}
+                className="font-mono"
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setRegisterPurchaseRow(null)}>{t("cancel")}</Button>
@@ -2751,9 +2767,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 if (!registerPurchaseRow?.id) return
                 setRegisterSaving(true)
                 try {
+                  const oid = registerPurchaseLinkedOrderId.trim()
+                  const linkedOrderId = oid ? Number(oid) : undefined
                   const res = await registerPurchaseFromBankTransaction({
                     bankTransactionId: registerPurchaseRow.id,
                     vendorCode: registerVendorCode.trim() || "",
+                    linkedOrderId: linkedOrderId != null && !isNaN(linkedOrderId) && linkedOrderId > 0 ? linkedOrderId : undefined,
                     userName: auth?.user,
                     userRole: auth?.role,
                     updateExisting: registerEditMode,
@@ -2761,6 +2780,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   if (res.success) {
                     setRegisterPurchaseRow(null)
                     setRegisterEditMode(false)
+                    setRegisterPurchaseLinkedOrderId("")
                     loadData()
                     await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
                   } else {

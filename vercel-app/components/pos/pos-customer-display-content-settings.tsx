@@ -53,7 +53,19 @@ function ToggleRow({
   )
 }
 
-export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: string | null | undefined }) {
+export type PosCustomerDisplayContentSettingsHandle = {
+  save: () => Promise<void>
+  reload: () => Promise<void>
+}
+
+export const PosCustomerDisplayContentSettings = React.forwardRef<
+  PosCustomerDisplayContentSettingsHandle,
+  {
+    storeCode: string | null | undefined
+    /** 상단 공통 툴바에 저장·새로고침을 둘 때 본문의 해당 버튼 숨김 */
+    toolbarMode?: "default" | "embedded"
+  }
+>(function PosCustomerDisplayContentSettings({ storeCode, toolbarMode = "default" }, ref) {
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback((key: string, fallback: string) => {
@@ -154,6 +166,17 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
     tr,
   ])
 
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      save: () => handleSave(),
+      reload: () => load(),
+    }),
+    [handleSave, load]
+  )
+
+  const embedded = toolbarMode === "embedded"
+
   const onPickMediaFile = React.useCallback(
     async (file: File | null) => {
       const sc = String(storeCode || "").trim()
@@ -184,12 +207,20 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
-          <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          {tr("posRefresh", "새로고침")}
-        </Button>
-      </div>
+      {!embedded ? (
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void load()} disabled={loading}>
+            <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            {tr("posRefresh", "새로고침")}
+          </Button>
+        </div>
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {tr(
+          "posCustomerDisplayLogoHint",
+          "주문·결제·QR 화면 상단 로고는 POS 프린터 설정 → 영수증 디자인 탭의 로고 이미지와 동일하게 표시됩니다."
+        )}
+      </p>
       <ToggleRow
         label={tr("posDualMonitorEnabled", "듀얼 모니터 고객화면 사용")}
         value={enabled}
@@ -268,7 +299,7 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
                 {idleMediaType === "video" ? (
                   <video src={idleMediaUrl} className="mx-auto max-h-40 w-full object-contain" controls muted />
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img src={idleMediaUrl} alt="" className="mx-auto max-h-40 w-full object-contain" />
                 )}
               </div>
@@ -328,10 +359,14 @@ export function PosCustomerDisplayContentSettings({ storeCode }: { storeCode: st
         yesLabel={yesLabel}
         noLabel={noLabel}
       />
-      <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving || loading}>
-        <Save className="mr-2 h-4 w-4" />
-        {saving ? tr("posPrinterSaving", "저장 중...") : tr("itemsBtnSave", "저장")}
-      </Button>
+      {!embedded ? (
+        <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving || loading}>
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? tr("posPrinterSaving", "저장 중...") : tr("itemsBtnSave", "저장")}
+        </Button>
+      ) : null}
     </div>
   )
-}
+})
+
+PosCustomerDisplayContentSettings.displayName = "PosCustomerDisplayContentSettings"

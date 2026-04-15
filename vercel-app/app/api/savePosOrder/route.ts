@@ -10,7 +10,8 @@ import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipient
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
-import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { resolveBangkokAccountingDate, isPosCompletionStatus } from '@/lib/pos-order-policy'
+import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -56,8 +57,24 @@ function isIdempotencyUniqueViolation(e: unknown): boolean {
   )
 }
 
-async function runCompletionSideEffects(orderId: number, storeCode: string, total: number): Promise<void> {
+async function runCompletionSideEffects(params: {
+  orderId: number
+  orderNo: string
+  storeCode: string
+  total: number
+  subtotal: number
+  vat: number
+  createdAtIso: string
+  paymentCash: number
+  paymentCard: number
+  paymentQr: number
+  paymentOther: number
+  paymentDeliveryApp: number
+  createdBy?: string
+}): Promise<void> {
+  const { orderId, orderNo, storeCode, total, subtotal, vat, createdAtIso, createdBy } = params
   if (!storeCode) return
+  const salesDate = resolveBangkokAccountingDate(createdAtIso)
   try {
     const settings = (await supabaseSelectFilter(
       'pos_printer_settings',
@@ -76,14 +93,35 @@ async function runCompletionSideEffects(orderId: number, storeCode: string, tota
     if (!alreadyPosted) {
       await postPosOrderJournal({
         posOrderId: orderId,
-        salesDate: getBangkokTodayDateString(),
+        salesDate,
         total: Number(total || 0),
+        vatAmount: Number(vat || 0),
+        paymentCash: Number(params.paymentCash || 0),
+        paymentCard: Number(params.paymentCard || 0),
+        paymentQr: Number(params.paymentQr || 0),
+        paymentOther: Number(params.paymentOther || 0),
+        paymentDeliveryApp: Number(params.paymentDeliveryApp || 0),
         storeName: storeCode || undefined,
         memo: 'POS 주문 완료 자동분개',
       })
     }
   } catch (postingErr) {
     console.error('savePosOrder posting:', postingErr)
+  }
+
+  try {
+    await upsertPosVatLedgerDraft({
+      posOrderId: orderId,
+      orderNo,
+      storeCode,
+      createdAtIso,
+      subtotal,
+      total,
+      vatAmount: vat,
+      createdBy,
+    })
+  } catch (vatErr) {
+    console.error('savePosOrder vat draft:', vatErr)
   }
 }
 
@@ -333,8 +371,23 @@ export async function POST(req: NextRequest) {
       console.error('savePosOrder tax recipient upsert:', taxErr)
     }
 
-    if (orderStatus === 'completed' && Number(created?.id) > 0) {
-      await runCompletionSideEffects(Number(created.id), storeCode, total)
+    if (isPosCompletionStatus(orderStatus) && Number(created?.id) > 0) {
+      const createdAtIso = String((created as { created_at?: string } | undefined)?.created_at || new Date().toISOString())
+      await runCompletionSideEffects({
+        orderId: Number(created.id),
+        orderNo,
+        storeCode,
+        total,
+        subtotal,
+        vat,
+        createdAtIso,
+        paymentCash,
+        paymentCard,
+        paymentQr,
+        paymentOther,
+        paymentDeliveryApp,
+        createdBy,
+      })
     }
 
     return NextResponse.json({

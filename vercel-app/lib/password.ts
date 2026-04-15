@@ -6,8 +6,6 @@ import { hash, compare } from 'bcryptjs'
 
 const SALT_ROUNDS = 10
 
-const BCRYPT_PREFIX = '$2'
-
 /** 평문 비밀번호인지 확인 (해시는 $2로 시작) */
 export function isHashed(password: string): boolean {
   const s = String(password || '').trim()

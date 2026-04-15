@@ -301,7 +301,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       .then(setList)
       .catch(() => setList([]))
       .finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 쿼리 문자열 변경 시에만 자동 조회
+     
   }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
 
   const loadRecords = React.useCallback(() => {

@@ -1,74 +1,52 @@
-/** 직원 평가·근태 등 UI 기본 기간용 — 방콕 달력 YYYY-MM-DD */
-const TZ = 'Asia/Bangkok'
+/** 방콕(Asia/Bangkok) 달력 날짜 — 모바일 공지 기간·당일 등 */
+import { addBangkokCalendarDays, getBangkokEndOfDayUtcIso, getBangkokStartOfDayUtcIso } from "./bangkok-time"
 
-export function bangkokDateYmd(d: Date = new Date()): string {
-  return d.toLocaleDateString('en-CA', { timeZone: TZ })
+const TZ = "Asia/Bangkok"
+
+export function bangkokTodayYmd(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: TZ })
 }
 
-/** 오늘 날짜 YYYY-MM-DD (방콕) */
-export function todayBangkokYmd(): string {
-  return bangkokDateYmd(new Date())
-}
+/** @alias bangkokTodayYmd */
+export const todayBangkokYmd = bangkokTodayYmd
+
+/** @alias bangkokTodayYmd */
+export const bangkokDateYmd = bangkokTodayYmd
+
+/** 방콕 기준 오늘 날짜 `YYYY-MM-DD` (POS 프로모·표시용) */
+export const bangkokDateStrISO = bangkokTodayYmd
 
 /**
- * POS·프로모 등: 기본값으로 쓰는 방콕 영업일 문자열 (YYYY-MM-DD).
- * 인자 없으면 현재 시각 기준 방콕 달력.
+ * `endYmd`를 포함해 총 `days`일(포함) 구간의 시작·끝 YYYY-MM-DD.
+ * 예: days=30이면 end에서 29일 전 ~ end.
  */
-export function bangkokDateStrISO(d: Date = new Date()): string {
-  return bangkokDateYmd(d)
-}
-
-/** YYYY-MM-DD를 방콕 자정(+07:00) 기준으로 일 수만큼 이동 */
-function bangkokYmdAddDays(ymd: string, deltaDays: number): string {
-  const s = String(ymd || '').trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return todayBangkokYmd()
-  const t = new Date(`${s}T12:00:00+07:00`).getTime() + deltaDays * 86400000
-  return new Date(t).toLocaleDateString('en-CA', { timeZone: TZ })
-}
-
-/**
- * `endYmd`를 끝으로 하는 달력일 `days`일 구간(양끝 포함).
- * 예: days=30, end=2025-01-30 → start=2025-01-01
- */
-export function bangkokInclusivePeriod(
-  endYmd: string,
-  days: number
-): { startYmd: string; endYmd: string } {
-  const end = /^\d{4}-\d{2}-\d{2}$/.test(String(endYmd).trim()) ? String(endYmd).trim() : todayBangkokYmd()
-  const n = Math.max(1, Math.floor(Number(days) || 1))
-  const startYmd = bangkokYmdAddDays(end, -(n - 1))
+export function bangkokInclusivePeriod(endYmd: string, days: number): { startYmd: string; endYmd: string } {
+  const d = Math.max(1, Math.floor(Number(days) || 1))
+  const end = String(endYmd || "").trim()
+  const startYmd = addBangkokCalendarDays(end, -(d - 1))
   return { startYmd, endYmd: end }
 }
 
-/**
- * 방콕 달력 일자 구간을 DB timestamp 비교용 ISO 문자열로 (해당 일 00:00~23:59:59.999 방콕).
- */
-export function bangkokYmdRangeToIsoBounds(
-  startYmd: string,
-  endYmd: string
-): { gteIso: string; lteIso: string } {
-  const a = /^\d{4}-\d{2}-\d{2}$/.test(String(startYmd).trim()) ? String(startYmd).trim() : todayBangkokYmd()
-  const b = /^\d{4}-\d{2}-\d{2}$/.test(String(endYmd).trim()) ? String(endYmd).trim() : a
-  const gteIso = new Date(`${a}T00:00:00+07:00`).toISOString()
-  const lteIso = new Date(`${b}T23:59:59.999+07:00`).toISOString()
-  return { gteIso, lteIso }
+/** stock_logs 등 타임스탬프 범위: 시작일 0시 ~ 종료일 말(포함) */
+export function bangkokYmdRangeToIsoBounds(startYmd: string, endYmd: string): { gteIso: string; lteIso: string } {
+  const a = String(startYmd || "").trim()
+  const b = String(endYmd || "").trim()
+  return {
+    gteIso: getBangkokStartOfDayUtcIso(a),
+    lteIso: getBangkokEndOfDayUtcIso(b),
+  }
 }
 
-/** 방콕 달력 기준, 현재 월에서 monthsAgo 만큼 이전 달의 1일 (0 = 이번 달 1일) */
-export function bangkokFirstOfMonthMonthsAgo(monthsAgo: number): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-  const y = parseInt(parts.find((p) => p.type === 'year')!.value, 10)
-  const m = parseInt(parts.find((p) => p.type === 'month')!.value, 10)
-  let yy = y
-  let mm = m - monthsAgo
+/** 오늘 방콕 달력 기준 `monthsAgo`개월 전 달의 1일 YYYY-MM-DD */
+export function bangkokFirstOfMonthMonthsAgo(monthsAgo: number, base: Date = new Date()): string {
+  const n = Math.max(0, Math.floor(Number(monthsAgo) || 0))
+  const today = base.toLocaleDateString("en-CA", { timeZone: TZ })
+  let y = Number(today.slice(0, 4))
+  const m = Number(today.slice(5, 7))
+  let mm = m - n
   while (mm < 1) {
     mm += 12
-    yy -= 1
+    y -= 1
   }
-  return `${yy}-${String(mm).padStart(2, '0')}-01`
+  return `${y}-${String(mm).padStart(2, "0")}-01`
 }

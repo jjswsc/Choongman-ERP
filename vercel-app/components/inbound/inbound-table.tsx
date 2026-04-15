@@ -152,7 +152,7 @@ export function InboundTable({
 
 function TableRow({
   row,
-  idx,
+  idx: _idx,
   colCount,
   isExpanded,
   onToggleExpand,

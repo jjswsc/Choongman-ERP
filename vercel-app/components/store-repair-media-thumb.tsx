@@ -12,6 +12,6 @@ export function StoreRepairMediaThumb({ url, className }: Props) {
   if (isStoreRepairVideoUrl(url)) {
     return <video src={url} className={className} muted playsInline preload="metadata" />
   }
-  // eslint-disable-next-line @next/next/no-img-element
+   
   return <img src={url} alt="" className={className} />
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
+import { isNoticeReadStatus } from '@/lib/notice-read-status'
 
 export interface NoticeItem {
   id: number
@@ -14,10 +15,6 @@ export interface NoticeItem {
 }
 
 const DB_FETCH_LIMIT = 100
-
-function isReadStatus(status: string): boolean {
-  return /^(확인|Read|확인함)$/.test(String(status || '').trim())
-}
 
 export interface MyNoticesPageResult {
   items: NoticeItem[]
@@ -157,20 +154,20 @@ async function getMyNoticesHandler(
   if (opts.listMode === 'unread_or_in_range') {
     filtered = built.filter((n) => {
       const d = (n.date || '').slice(0, 10)
-      const unread = !isReadStatus(n.status)
+      const unread = !isNoticeReadStatus(n.status)
       const inRange = rs && re ? d >= rs && d <= re : true
       return unread || inRange
     })
   } else {
     if (df) filtered = filtered.filter((n) => (n.date || '').slice(0, 10) >= df)
     if (dt) filtered = filtered.filter((n) => (n.date || '').slice(0, 10) <= dt)
-    if (opts.status === 'unread') filtered = filtered.filter((n) => !isReadStatus(n.status))
-    else if (opts.status === 'read') filtered = filtered.filter((n) => isReadStatus(n.status))
+    if (opts.status === 'unread') filtered = filtered.filter((n) => !isNoticeReadStatus(n.status))
+    else if (opts.status === 'read') filtered = filtered.filter((n) => isNoticeReadStatus(n.status))
   }
 
   filtered = [...filtered].sort((a, b) => {
-    const aUnread = !isReadStatus(a.status)
-    const bUnread = !isReadStatus(b.status)
+    const aUnread = !isNoticeReadStatus(a.status)
+    const bUnread = !isNoticeReadStatus(b.status)
     if (aUnread && !bUnread) return -1
     if (!aUnread && bUnread) return 1
     return (b.date || '').localeCompare(a.date || '')

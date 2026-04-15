@@ -127,7 +127,7 @@ export default function PosOrderPage() {
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
-  const [categories, setCategories] = React.useState<string[]>([])
+  const [_categories, setCategories] = React.useState<string[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
   const [selectedMainCategory, setSelectedMainCategory] = React.useState<string>("")
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
@@ -139,7 +139,7 @@ export default function PosOrderPage() {
   const [optionPickerBanbanFirst, setOptionPickerBanbanFirst] = React.useState<PosMenu | null>(null)
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
-  const [orderType, setOrderType] = React.useState<OrderType>(() => getInitialOrderType(searchParams))
+  const [orderType] = React.useState<OrderType>(() => getInitialOrderType(searchParams))
   const [storeCode, setStoreCode] = React.useState("")
   const [tableName, setTableName] = React.useState("")
   const [tableOptions, setTableOptions] = React.useState<{ id: string; name: string }[]>([])
@@ -167,6 +167,7 @@ export default function PosOrderPage() {
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
   const [receiptBizName, setReceiptBizName] = React.useState("")
   const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
+  const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
   const [receiptBizOwner, setReceiptBizOwner] = React.useState("")
   const [receiptBizAddress, setReceiptBizAddress] = React.useState("")
   const [receiptBizPhone, setReceiptBizPhone] = React.useState("")
@@ -253,6 +254,7 @@ export default function PosOrderPage() {
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
         setReceiptBizName(String(s.receiptBizName || ""))
         setReceiptBizTaxId(String(s.receiptBizTaxId || ""))
+        setReceiptBizAbn(String(s.receiptBizAbn || ""))
         setReceiptBizOwner(String(s.receiptBizOwner || ""))
         setReceiptBizAddress(String(s.receiptBizAddress || ""))
         setReceiptBizPhone(String(s.receiptBizPhone || ""))
@@ -285,6 +287,7 @@ export default function PosOrderPage() {
         setAutoPrintKitchenSlipOnOrder(false)
         setReceiptBizName("")
         setReceiptBizTaxId("")
+        setReceiptBizAbn("")
         setReceiptBizOwner("")
         setReceiptBizAddress("")
         setReceiptBizPhone("")
@@ -1865,6 +1868,7 @@ export default function PosOrderPage() {
                 </div>
                 {receiptBizName && <div className="receipt-biz">{receiptBizName}</div>}
                 {receiptBizTaxId && <div className="receipt-biz">{tr("posTaxIdLabel", "Tax ID")}: {receiptBizTaxId}</div>}
+                {receiptBizAbn && <div className="receipt-biz">ABN: {receiptBizAbn}</div>}
                 {receiptBizOwner && <div className="receipt-biz">{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
                 {receiptBizAddress && <div className="receipt-biz">{receiptBizAddress}</div>}
                 {receiptBizPhone && <div className="receipt-biz">{tr("posTelLabel", "TEL")}: {receiptBizPhone}</div>}

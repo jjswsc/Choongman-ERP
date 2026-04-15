@@ -18,15 +18,6 @@ import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { cn } from "@/lib/utils"
 
-const FIELD_LABELS: Record<string, string> = {
-  price: "price",
-  price_delivery: "price_delivery",
-  price_modifier: "price_modifier",
-  price_modifier_delivery: "price_modifier_delivery",
-  price_modifier_packaging: "price_modifier_packaging",
-  cost: "cost",
-}
-
 export interface PriceHistoryTabProps {
   /** 조회할 엔티티 타입들 (메뉴 페이지: pos_menu, pos_menu_option / 품목 페이지: item) */
   entityTypes: ("pos_menu" | "pos_menu_option" | "item")[]
@@ -36,7 +27,7 @@ export interface PriceHistoryTabProps {
   title?: string
 }
 
-export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabProps) {
+export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHistoryTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [rows, setRows] = React.useState<PriceHistoryRow[]>([])
@@ -154,27 +145,6 @@ export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabPro
       setRestoring(false)
     }
   }, [restoreDate, loadHistory, t])
-
-  const formatDate = (s: string) => {
-    try {
-      const d = new Date(s)
-      return d.toLocaleString(lang === "ko" ? "ko-KR" : "en-US", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    } catch {
-      return s
-    }
-  }
-
-  const formatField = (fn: string) => {
-    const pascal = fn.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join('')
-    const key = `priceHistoryField${pascal}`
-    return t(key) || FIELD_LABELS[fn] || fn
-  }
 
   const formatValue = (v: number | null) =>
     v != null ? Number(v).toLocaleString(lang === "ko" ? "ko-KR" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : "—"

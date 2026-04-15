@@ -45,7 +45,7 @@ export function VisitTab() {
   const [purposeEtcReason, setPurposeEtcReason] = useState("")
   const [activeVisit, setActiveVisit] = useState<{ storeName: string; purpose?: string } | null>(null)
   const [visitLog, setVisitLog] = useState<TodayVisitItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading] = useState(false)
   const [submitting, setSubmitting] = useState<string | null>(null)
 
   const { stores: storeListRaw } = useStoreList()

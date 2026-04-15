@@ -27,6 +27,7 @@ export default function PosCustomerDisplayPage() {
   const [showOrderTotal, setShowOrderTotal] = React.useState(true)
   const [settingsIdleMediaType, setSettingsIdleMediaType] = React.useState<"none" | "image" | "video">("none")
   const [settingsIdleMediaUrl, setSettingsIdleMediaUrl] = React.useState("")
+  const [receiptLogoUrl, setReceiptLogoUrl] = React.useState("")
 
   React.useEffect(() => {
     if (!storeCode) return
@@ -41,6 +42,7 @@ export default function PosCustomerDisplayPage() {
       const mt = String(s.customerDisplayIdleMediaType || "none").toLowerCase()
       setSettingsIdleMediaType(mt === "image" ? "image" : mt === "video" ? "video" : "none")
       setSettingsIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? "").trim())
+      setReceiptLogoUrl(String(s.receiptLogoImageUrl ?? "").trim())
     })
     return () => {
       alive = false
@@ -70,6 +72,8 @@ export default function PosCustomerDisplayPage() {
     const url = String(state?.idleMediaUrl ?? settingsIdleMediaUrl ?? "").trim()
     return { type: mt, url }
   }, [state?.idleMediaType, state?.idleMediaUrl, settingsIdleMediaType, settingsIdleMediaUrl])
+
+  const resolvedBrandLogo = String(state?.brandLogoUrl ?? receiptLogoUrl ?? "").trim()
   const showIdleBackdrop =
     current === "idle" &&
     (resolvedIdleMedia.type === "image" || resolvedIdleMedia.type === "video") &&
@@ -117,7 +121,7 @@ export default function PosCustomerDisplayPage() {
                     playsInline
                   />
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img
                     src={resolvedIdleMedia.url}
                     alt=""
@@ -138,6 +142,14 @@ export default function PosCustomerDisplayPage() {
 
         {current === "ordering" ? (
           <div className="flex flex-1 flex-col">
+            {resolvedBrandLogo ? (
+               
+              <img
+                src={resolvedBrandLogo}
+                alt=""
+                className="mx-auto mb-4 h-16 max-w-[min(100%,280px)] object-contain"
+              />
+            ) : null}
             <h2 className="mb-3 text-3xl font-semibold">{state?.title || (t("posCustomerOrdering") || "주문 확인")}</h2>
             {showOrderSummary && state?.showOrderSummary !== false ? (
               <div className="flex-1 space-y-2 overflow-auto rounded-xl border border-white/20 p-4">
@@ -163,9 +175,27 @@ export default function PosCustomerDisplayPage() {
 
         {current === "payment" ? (
           <div className="flex flex-1 flex-col">
+            {resolvedBrandLogo ? (
+               
+              <img
+                src={resolvedBrandLogo}
+                alt=""
+                className="mx-auto mb-3 h-16 max-w-[min(100%,280px)] object-contain"
+              />
+            ) : null}
             <h2 className="mb-3 text-3xl font-semibold text-center">
               {state?.message || paymentMessage || (t("posCustomerPayment") || "결제 진행 중")}
             </h2>
+            {Array.isArray(state?.paymentLines) && (state?.paymentLines?.length ?? 0) > 0 ? (
+              <div className="mb-4 space-y-1 rounded-xl border border-white/25 bg-white/10 px-4 py-3 text-lg">
+                {(state?.paymentLines ?? []).map((row, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3">
+                    <span className="text-white/90">{row.label}</span>
+                    <span className="tabular-nums font-semibold">{Number(row.amount || 0).toLocaleString()} ฿</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {showOrderSummary && state?.showOrderSummary !== false && Array.isArray(state?.items) && state.items.length > 0 ? (
               <div className="flex-1 space-y-2 overflow-auto rounded-xl border border-white/20 p-4">
                 {state.items.map((it, idx) => (
@@ -238,7 +268,16 @@ export default function PosCustomerDisplayPage() {
 
         {current === "qr" ? (
           <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <h2 className="mb-4 text-3xl font-semibold">{state?.title || (t("posCustomerQrTitle") || "QR 코드")}</h2>
+            {resolvedBrandLogo ? (
+               
+              <img
+                src={resolvedBrandLogo}
+                alt=""
+                className="mb-4 h-16 max-w-[min(100%,280px)] object-contain"
+              />
+            ) : null}
+            <h2 className="mb-2 text-3xl font-semibold">{state?.title || (t("posCustomerQrTitle") || "QR 코드")}</h2>
+            {state?.message ? <p className="mb-4 max-w-lg text-lg text-white/85">{state.message}</p> : null}
             {String(state?.qrPayload || "").trim() ? (
               <img
                 src={`https://quickchart.io/qr?text=${encodeURIComponent(String(state?.qrPayload || ""))}&size=360&margin=1`}

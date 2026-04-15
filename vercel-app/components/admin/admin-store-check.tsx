@@ -64,7 +64,7 @@ export function AdminStoreCheck() {
   const [stores, setStores] = useState<string[]>([])
   const [storeSelect, setStoreSelect] = useState("")
   const [dateSelect, setDateSelect] = useState(todayStr())
-  const [checkItems, setCheckItems] = useState<ChecklistItem[]>([])
+  const [_checkItems, setCheckItems] = useState<ChecklistItem[]>([])
   const [checkRows, setCheckRows] = useState<CheckRow[]>([])
   const [editId, setEditId] = useState("")
   const [totalMemo, setTotalMemo] = useState("")

@@ -42,7 +42,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
   const startStr = monthStr + '-01'
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
   const endStr = lastDay.toISOString().slice(0, 10)
-  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+  const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
   const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
   type AttRow = {
@@ -275,7 +275,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim()
   let storeFilter = String(searchParams.get('store') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
 
   if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) {
@@ -291,7 +290,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
     function isOfficeStore(s: string) {
       const x = String(s || '').trim()
       return x === '본사' || x === 'Office' || x === '오피스' || x.toLowerCase() === 'office'

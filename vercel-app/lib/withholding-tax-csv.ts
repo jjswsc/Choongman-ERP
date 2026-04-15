@@ -10,6 +10,9 @@ export type WithholdingTaxLedgerRow = {
   wht_amount?: number | string | null
   form_hint?: string | null
   certificate_no?: string | null
+  filing_status?: string | null
+  submitted_at?: string | null
+  submitted_by?: string | null
   memo?: string | null
   store_name?: string | null
 }
@@ -33,6 +36,9 @@ export function withholdingTaxLedgerToCsv(rows: WithholdingTaxLedgerRow[]): stri
     'wht_amount',
     'form_hint',
     'certificate_no',
+    'filing_status',
+    'submitted_at',
+    'submitted_by',
     'memo',
   ]
   const lines = [header.join(',')]
@@ -51,6 +57,9 @@ export function withholdingTaxLedgerToCsv(rows: WithholdingTaxLedgerRow[]): stri
         String(r.wht_amount ?? ''),
         escCell(String(r.form_hint ?? '')),
         escCell(String(r.certificate_no ?? '')),
+        escCell(String(r.filing_status ?? '')),
+        escCell(String(r.submitted_at ?? '')),
+        escCell(String(r.submitted_by ?? '')),
         escCell(String(r.memo ?? '')),
       ].join(',')
     )

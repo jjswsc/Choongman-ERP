@@ -19,3 +19,30 @@ export function assertCanManageAccountingCompliance(role: string): void {
     throw new Error('ACCOUNTING_FORBIDDEN')
   }
 }
+
+/** 회계 컴플라이언스 초안/편집(작성) 가능 */
+export function canWriteAccountingCompliance(role: string): boolean {
+  return canManageAccountingCompliance(role)
+}
+
+/** 마감 확정/잠금 같은 고위험 확정 작업 가능 (본사 + 회계) */
+export function canApproveAccountingCompliance(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role)
+}
+
+/** 잠금 해제 승인 가능 (본사 전용) */
+export function canApproveAccountingPeriodUnlock(role: string): boolean {
+  return isOfficeRole(role)
+}
+
+export function assertCanWriteAccountingCompliance(role: string): void {
+  if (!canWriteAccountingCompliance(role)) throw new Error('ACCOUNTING_FORBIDDEN')
+}
+
+export function assertCanApproveAccountingCompliance(role: string): void {
+  if (!canApproveAccountingCompliance(role)) throw new Error('ACCOUNTING_APPROVAL_FORBIDDEN')
+}
+
+export function assertCanApproveAccountingPeriodUnlock(role: string): void {
+  if (!canApproveAccountingPeriodUnlock(role)) throw new Error('ACCOUNTING_UNLOCK_APPROVAL_FORBIDDEN')
+}

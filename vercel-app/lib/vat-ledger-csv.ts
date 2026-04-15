@@ -10,6 +10,9 @@ export type VatLedgerRow = {
   vat_amount?: number | string | null
   total_amount?: number | string | null
   vat_status?: string | null
+  filing_status?: string | null
+  submitted_at?: string | null
+  submitted_by?: string | null
   memo?: string | null
   store_name?: string | null
 }
@@ -32,6 +35,9 @@ export function vatLedgerToCsv(rows: VatLedgerRow[]): string {
     'vat_amount',
     'total_amount',
     'vat_status',
+    'filing_status',
+    'submitted_at',
+    'submitted_by',
     'memo',
     'store_name',
   ]
@@ -50,6 +56,9 @@ export function vatLedgerToCsv(rows: VatLedgerRow[]): string {
         String(r.vat_amount ?? ''),
         String(r.total_amount ?? ''),
         escCell(String(r.vat_status ?? '')),
+        escCell(String(r.filing_status ?? '')),
+        escCell(String(r.submitted_at ?? '')),
+        escCell(String(r.submitted_by ?? '')),
         escCell(String(r.memo ?? '')),
         escCell(String(r.store_name ?? '')),
       ].join(',')

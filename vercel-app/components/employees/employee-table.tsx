@@ -1,7 +1,6 @@
 "use client"
 
 import { Pencil, Trash2 } from "lucide-react"
-import { useT } from "@/lib/i18n"
 import { displayLabelShort } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import type { AdminEmployeeItem } from "@/lib/api-client"

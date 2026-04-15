@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils"
 import {
   applyMarketingCampaignListFilters,
   emptyMarketingCampaignHubLinkSets,
-  marketingCampaignListFiltersActive,
   type CampaignListSearchScope,
   type MarketingCampaignHubLinkSets,
 } from "@/lib/marketing-campaign-list-query"
@@ -64,7 +63,7 @@ export function MarketingCampaignFinderPanel({
   onRefresh,
   disabled = false,
   toolbarLayout = "default",
-  compactToolbarTitle,
+  compactToolbarTitle: _compactToolbarTitle,
   compactToolbarEnd,
 }: MarketingCampaignFinderPanelProps) {
   const isCompactToolbar = toolbarLayout === "compact"
@@ -211,48 +210,6 @@ export function MarketingCampaignFinderPanel({
   React.useEffect(() => {
     onFilteredCampaignsChange?.(filteredList)
   }, [filteredList, onFilteredCampaignsChange])
-
-  const listFiltersActive = React.useMemo(
-    () =>
-      marketingCampaignListFiltersActive({
-        listSearchScope,
-        listPeriodFrom,
-        listPeriodTo,
-        listDesignFrom,
-        listDesignTo,
-        listCampaignTypeFilter,
-        listStatusDraft,
-        listStatusOngoing,
-        listStatusFinish,
-        listBranchFilter,
-        listHubLinkFilter: effectiveHubLinkFilter,
-        listBudgetMin,
-        listBudgetMax,
-        listKpiMin,
-        listKpiMax,
-        listKpiUnitFilter,
-        listDiscountFilter,
-      }),
-    [
-      listSearchScope,
-      listPeriodFrom,
-      listPeriodTo,
-      listDesignFrom,
-      listDesignTo,
-      listCampaignTypeFilter,
-      listStatusDraft,
-      listStatusOngoing,
-      listStatusFinish,
-      listBranchFilter,
-      effectiveHubLinkFilter,
-      listBudgetMin,
-      listBudgetMax,
-      listKpiMin,
-      listKpiMax,
-      listKpiUnitFilter,
-      listDiscountFilter,
-    ]
-  )
 
   React.useEffect(() => {
     setListHubLinkFilter(String(defaultHubLinkFilter ?? ""))
