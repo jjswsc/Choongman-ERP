@@ -23,6 +23,23 @@ function resolveUrl(input: RequestInfo | URL): string {
   return typeof input === 'string' ? input : input.toString()
 }
 
+/** 오프라인 큐 재전송 — 401 시 토큰 삭제하면 재시도 전에 세션이 날아가 배너가 계속 남음 */
+function isOfflineQueueSyncRequest(init?: RequestInit): boolean {
+  if (!init?.headers) return false
+  const h = init.headers
+  if (typeof Headers !== 'undefined' && h instanceof Headers) {
+    const v = h.get('X-CM-Offline-Queue-Sync') ?? h.get('x-cm-offline-queue-sync')
+    return String(v ?? '').trim() === '1'
+  }
+  if (h && typeof h === 'object' && !Array.isArray(h)) {
+    const o = h as Record<string, string>
+    for (const key of Object.keys(o)) {
+      if (key.toLowerCase() === 'x-cm-offline-queue-sync' && String(o[key]).trim() === '1') return true
+    }
+  }
+  return false
+}
+
 /** 현재 앱 영역에 맞는 로그인 경로 선택 (모바일/관리자/POS) */
 function resolveLoginPathFromLocation(): string {
   if (typeof window === 'undefined') return '/login'
@@ -43,6 +60,10 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   if (res.status === 401 && typeof window !== 'undefined') {
     if (navigator.onLine === false) {
       // 오프라인 시 401 리다이렉트 방지 - 세션이 있으면 캐시된 데이터로 계속 사용 허용
+      return res
+    }
+    // 오프라인 큐 동기화 요청: 토큰 만료여도 여기서 지우면 재시도 불가·배너 영구 대기
+    if (isOfflineQueueSyncRequest(init)) {
       return res
     }
     // Bearer 없음 = 오프라인 복구 세션(cm_store 등만 있음) 등 — 401이 나와도 로그인 화면으로 보내지 않음

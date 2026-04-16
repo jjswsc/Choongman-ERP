@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const fromOfflineQueueSync =
+      String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
     const body = await req.json()
     const id = Number(body?.id)
     const items = Array.isArray(body?.items) ? body.items : []
@@ -70,6 +72,12 @@ export async function POST(req: NextRequest) {
 
     const status = String(existing[0]?.status ?? '')
     if (!EDITABLE_STATUSES.includes(status)) {
+      if (fromOfflineQueueSync) {
+        return NextResponse.json(
+          { success: true, noop: true, message: 'skip_stale_order_update_replay' },
+          { headers }
+        )
+      }
       return NextResponse.json(
         { success: false, message: '대기/결제완료 상태만 수정할 수 있습니다.' },
         { headers }

@@ -206,20 +206,44 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
         continue
       }
 
-      reportNetworkSuccess()
-      if (item.api === '/api/savePosOrder') {
+      /** 일부 API는 HTTP 200 + JSON { success: false } 로 거절 — res.ok 만으로 성공 판단하면 안 됨 */
+      const ct = (res.headers.get('content-type') || '').toLowerCase()
+      let parsedBody: { success?: boolean; message?: string; orderId?: unknown } | null = null
+      if (ct.includes('application/json')) {
         try {
-          const data = (await res.json()) as { orderId?: unknown }
-          const oid = Number(data?.orderId)
-          if (Number.isFinite(oid) && oid > 0) {
-            registerQueuedSavePosOrderSyncedServerId(oid)
+          parsedBody = (await res.json()) as {
+            success?: boolean
+            message?: string
+            orderId?: unknown
           }
         } catch {
-          /* 본문 없음·JSON 아님 무시 */
+          parsedBody = null
         }
       } else {
         try {
           await res.text()
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (parsedBody && typeof parsedBody === 'object' && parsedBody.success === false) {
+        await updateQueueItem(item.id, {
+          lastError: String(parsedBody.message ?? 'success:false').slice(0, 200),
+          retryCount: item.retryCount + 1,
+          lastTriedAt: now,
+        })
+        failed++
+        continue
+      }
+
+      reportNetworkSuccess()
+      if (item.api === '/api/savePosOrder') {
+        try {
+          const oid = Number(parsedBody?.orderId)
+          if (Number.isFinite(oid) && oid > 0) {
+            registerQueuedSavePosOrderSyncedServerId(oid)
+          }
         } catch {
           /* ignore */
         }

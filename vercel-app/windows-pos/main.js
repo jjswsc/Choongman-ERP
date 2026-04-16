@@ -134,6 +134,19 @@ const PRINT_ESC_POS_CUT_AFTER_HTML = readConfigBool(
     : runtimeConfig.printEscPosCutAfterHtml ?? runtimeConfig.print?.escPosCutAfterHtml,
   true
 );
+/**
+ * 영수증(receipt) HTML 직후 RAW ESC/POS 절단 — 기본 false.
+ * 일부 드라이버는 GDI 인쇄 작업 종료 시 이미 피드/절단하는데, 여기서 RAW를 또 보내면 이중 컷·백지 토출이 난다.
+ * 주방(kitchen) 슬립은 아래와 무관하게( PRINT_ESC_POS_CUT_AFTER_HTML 켜져 있으면) RAW 절단 유지.
+ * 켜기: runtime-config `"printEscPosCutAfterReceiptHtml": true` 또는 WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML=1
+ */
+const ESC_POS_CUT_AFTER_RECEIPT_HTML = readConfigBool(
+  process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML !== undefined &&
+    process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML !== ""
+    ? process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML
+    : runtimeConfig.printEscPosCutAfterReceiptHtml ?? runtimeConfig.print?.escPosCutAfterReceiptHtml,
+  false
+);
 const PRINT_HTML_DEBUG_ENABLED = readConfigBool(
   process.env.CM_POS_DEBUG_LOG_ENABLED !== undefined && process.env.CM_POS_DEBUG_LOG_ENABLED !== ""
     ? process.env.CM_POS_DEBUG_LOG_ENABLED
@@ -1393,7 +1406,15 @@ if (!gotLock) {
         deviceName: typeof payload?.deviceName === "string" ? payload.deviceName : "",
       });
       const out = { ...result };
-      if (result.ok && !Boolean(payload?.preferDialog) && PRINT_ESC_POS_CUT_AFTER_HTML) {
+      const printRoleForCut = payload?.printRole === "kitchen" || payload?.printRole === "receipt" ? payload.printRole : "";
+      const skipEscPosRawBecauseReceipt =
+        printRoleForCut === "receipt" && !ESC_POS_CUT_AFTER_RECEIPT_HTML;
+      if (skipEscPosRawBecauseReceipt) {
+        console.warn(
+          "[cm-pos] skip ESC/POS RAW cut after receipt HTML (avoid double-cut with driver). Kitchen slips still use RAW when enabled. Enable: printEscPosCutAfterReceiptHtml or WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML=1"
+        );
+      }
+      if (result.ok && !Boolean(payload?.preferDialog) && PRINT_ESC_POS_CUT_AFTER_HTML && !skipEscPosRawBecauseReceipt) {
         await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED));
         try {
           let device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
