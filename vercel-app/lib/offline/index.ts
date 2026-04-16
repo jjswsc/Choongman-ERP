@@ -15,7 +15,14 @@ export {
   type PendingRequest,
 } from './queue'
 export { isOnline, useOnlineStatus } from './network'
-export { syncPending, onSyncComplete, getSyncSnapshot, onSyncSnapshot, type SyncSnapshot } from './sync'
+export {
+  syncPending,
+  onSyncComplete,
+  getSyncSnapshot,
+  onSyncSnapshot,
+  type SyncSnapshot,
+  type SyncPendingOptions,
+} from './sync'
 export { savePosOrderWithOffline } from './pos-order-sync'
 export { mergeQueuedSavePosOrderByLocalOrderNo } from './merge-queued-save-pos-order'
 export { savePosSettlementWithOffline } from './pos-settlement-sync'

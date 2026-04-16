@@ -895,6 +895,7 @@ export default function PosTerminalPage() {
       title: tPrint('posReceipt') || '영수증',
       printDelayMs: 0,
       fallbackCleanupMs: 120_000,
+      printRole: 'receipt',
       /** 자동(주문 직후) 인쇄: iframe 포커스 생략 → 인쇄창 닫힌 뒤 POS 화면 전환이 덜 튐 */
       focusIframeBeforePrint: !directPrint,
       onPrintUnavailable: () => {
@@ -1016,6 +1017,8 @@ export default function PosTerminalPage() {
                 title: slip.label,
                 printDelayMs: 0,
                 focusIframeBeforePrint: false,
+                printRole: 'kitchen',
+                kitchenStation: slip.station,
                 onPrintUnavailable: () => {
                   void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                 },
@@ -1278,6 +1281,8 @@ export default function PosTerminalPage() {
                     title: slip.label,
                     printDelayMs: 0,
                     focusIframeBeforePrint: false,
+                    printRole: 'kitchen',
+                    kitchenStation: slip.station,
                     onPrintUnavailable: () => {
                       void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                     },
@@ -2112,6 +2117,8 @@ export default function PosTerminalPage() {
                           title: slip.label,
                           printDelayMs: 0,
                           focusIframeBeforePrint: false,
+                          printRole: 'kitchen',
+                          kitchenStation: slip.station,
                           onPrintUnavailable: () => {
                             void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
                           },
@@ -2146,6 +2153,34 @@ export default function PosTerminalPage() {
                   kitchenCartLines.length > 0
                 ) {
                   setTimeout(runKitchenAfterDineInSubmit, 180)
+                } else if (
+                  isMainPosDevice &&
+                  !skipLocalAutoPrint &&
+                  !(isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder) &&
+                  !autoPrintKitchenSlipOnOrder
+                ) {
+                  /** 자동 인쇄(영수증·주방) 모두 꺼진 경우: 수동 인쇄 안내 모달(Windows 인쇄 대화상자로 이어짐) */
+                  setReceiptData({
+                    orderNo: orderNoStr,
+                    items: receiptPrintItems,
+                    subtotal: mergeSubtotal,
+                    discountAmt,
+                    total: pricing.finalTotal,
+                    storeCode: currentStoreId,
+                    orderType: t('posOrderTypeDineIn') || '매장',
+                    tableName: payload.tableName,
+                    memo: payload.memo,
+                    discountReason: payload.discountReason,
+                    vatFeeAmt: pricing.vatFeeAmt,
+                    vatFeeMode: pricing.vatFeeMode,
+                    serviceFeeAmt: pricing.serviceFeeAmt,
+                    serviceFeeMode: pricing.serviceFeeMode,
+                    cardFeeAmt: pricing.cardFeeAmt,
+                    cardFeeMode: pricing.cardFeeMode,
+                    otherFeeAmt: pricing.otherFeeAmt,
+                    otherFeeMode: pricing.otherFeeMode,
+                    receiptAutoPrintContext: isAddOrder ? 'add_order' : 'order',
+                  })
                 }
                 if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
                 setServingTableId(null)

@@ -232,7 +232,7 @@ function ymNow(): string {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`
 }
 
-function emptyVat(taxMonth: string): VatDraft {
+function emptyVat(taxMonth: string, defaultStoreName = ""): VatDraft {
   return {
     doc_date: `${taxMonth}-01`,
     tax_month: taxMonth,
@@ -248,7 +248,7 @@ function emptyVat(taxMonth: string): VatDraft {
     submitted_at: "",
     submitted_by: "",
     memo: "",
-    store_name: "",
+    store_name: defaultStoreName,
   }
 }
 
@@ -905,9 +905,11 @@ export function AdminAccountingCompliance({
         filingStatus: ledgerStatusFilter,
         storeFilter: storeTb,
       })
+      if (data.error) appAlert(t("accCompLoadFail"))
       setVatRows(mapVat(data.entries || []))
     } catch {
       setVatRows([])
+      appAlert(t("accCompLoadFail"))
     } finally {
       setLoading(false)
     }
@@ -1831,7 +1833,13 @@ export function AdminAccountingCompliance({
         submittedAt: row.submitted_at || null,
         submittedBy: row.submitted_by || null,
         memo: row.memo || null,
-        storeName: row.store_name || null,
+        storeName: (() => {
+          const s = row.store_name?.trim()
+          if (s) return s
+          const fb = String(storeTb || "").trim()
+          if (fb && fb !== "All" && fb !== "*") return fb
+          return null
+        })(),
         createdBy: auth?.user,
       })
       if (!res.success) {
@@ -4041,7 +4049,10 @@ export function AdminAccountingCompliance({
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        setVatRows((prev) => [...prev, { ...emptyVat(taxMonth), direction: "output" }])
+                        setVatRows((prev) => [
+                          ...prev,
+                          { ...emptyVat(taxMonth, storeTb !== "All" ? storeTb : ""), direction: "output" },
+                        ])
                       }
                     >
                       <Plus className="h-4 w-4 mr-1" />
@@ -4255,7 +4266,10 @@ export function AdminAccountingCompliance({
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        setVatRows((prev) => [...prev, { ...emptyVat(taxMonth), direction: "input" }])
+                        setVatRows((prev) => [
+                          ...prev,
+                          { ...emptyVat(taxMonth, storeTb !== "All" ? storeTb : ""), direction: "input" },
+                        ])
                       }
                     >
                       <Plus className="h-4 w-4 mr-1" />

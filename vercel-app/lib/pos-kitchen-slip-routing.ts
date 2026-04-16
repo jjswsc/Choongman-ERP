@@ -19,6 +19,13 @@ export type KitchenSlipGroupLabels = {
   kitchen3: string
 }
 
+/** 주방 슬립 한 덩어리 — `station`은 Windows 하이브리드 프린터 매핑용(번역 라벨과 무관) */
+export type KitchenSlipGroupRow<T> = {
+  label: string
+  items: T[]
+  station: KitchenPrinterIndex
+}
+
 export type BuildKitchenSlipGroupsOpts = {
   kitchenMode: number
   /** 레거시: 예전 관리자 화면 체크박스. 비어 있으면 무시 */
@@ -108,7 +115,7 @@ export function buildKitchenSlipGroupOpts(
 export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   items: T[],
   opts: BuildKitchenSlipGroupsOpts
-): { label: string; items: T[] }[] {
+): KitchenSlipGroupRow<T>[] {
   const mode = Math.min(3, Math.max(1, Number(opts.kitchenMode) || 1))
   const k2 = opts.kitchen2Categories || []
   const k3 = opts.kitchen3Categories || []
@@ -168,7 +175,7 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   if (mode === 1) {
     const kept = items.filter((it) => resolveRoute(it) !== 0)
     if (kept.length === 0) return []
-    return [{ label: opts.labels.unified, items: kept }]
+    return [{ label: opts.labels.unified, items: kept, station: 1 }]
   }
 
   const buckets: [T[], T[], T[]] = [[], [], []]
@@ -177,12 +184,17 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     if (r === 0) continue
     buckets[r - 1].push(it)
   }
-  const out: { label: string; items: T[] }[] = []
+  const out: KitchenSlipGroupRow<T>[] = []
   const labelFor = (i: KitchenPrinterIndex) =>
     i === 1 ? opts.labels.kitchen1 : i === 2 ? opts.labels.kitchen2 : opts.labels.kitchen3
   for (let i = 1; i <= mode; i++) {
     const bucket = buckets[i - 1]
-    if (bucket.length) out.push({ label: labelFor(i as KitchenPrinterIndex), items: bucket })
+    if (bucket.length)
+      out.push({
+        label: labelFor(i as KitchenPrinterIndex),
+        items: bucket,
+        station: i as KitchenPrinterIndex,
+      })
   }
   return out
 }

@@ -691,7 +691,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
   let printWindow;
   try {
     const warnings = [];
-    let resolvedDevice = await resolvePrintDeviceNameForJob();
+    let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
     if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
       try {
         const printers = await mainWindow.webContents.getPrintersAsync();
@@ -745,6 +745,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         reason: r.failureReason || (r.success ? "" : "print_failed"),
         printStage,
         warnings,
+        usedDevice: "",
       };
     }
 
@@ -822,9 +823,10 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       reason: r.failureReason || (r.success ? "" : "print_failed"),
       printStage,
       warnings,
+      usedDevice: resolvedDevice || "",
     };
   } catch (e) {
-    return { ok: false, reason: String(e && e.message ? e.message : e) };
+    return { ok: false, reason: String(e && e.message ? e.message : e), usedDevice: "" };
   } finally {
     try {
       if (printWindow && !printWindow.isDestroyed()) printWindow.destroy();
@@ -880,9 +882,41 @@ async function listPrinters() {
   }));
 }
 
+/**
+ * 매 인쇄 시 runtime-config 재읽기 → 매장에서 JSON만 고쳐도 반영(재시작 없이 시도).
+ * - print.deviceName / printDeviceName: 레거시 기본(영수증 후보)
+ * - print.receiptDeviceName: 영수증
+ * - print.kitchen1~3DeviceName: 주방 분할 시 해당 Windows 프린터 이름
+ * - print.kitchenDeviceName: 주방 공통 폴백
+ */
+function resolveThermalDeviceForHtmlPrintSync(opts) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const cfg = readRuntimeConfig();
+  const p = cfg.print || {};
+  const legacyDefault = String(
+    process.env.WINDOWS_POS_PRINT_DEVICE ?? cfg.printDeviceName ?? p.deviceName ?? ""
+  ).trim();
+  const receiptDev = String(p.receiptDeviceName || "").trim() || legacyDefault;
+
+  const explicit = String(o.deviceName || "").trim();
+  if (explicit) return explicit;
+
+  if (o.printRole === "kitchen") {
+    const stRaw = o.kitchenStation != null ? Number(o.kitchenStation) : 1;
+    const st = Math.min(3, Math.max(1, Number.isFinite(stRaw) ? stRaw : 1));
+    const k1 = String(p.kitchen1DeviceName || "").trim();
+    const k2 = String(p.kitchen2DeviceName || "").trim();
+    const k3 = String(p.kitchen3DeviceName || "").trim();
+    const kAny = String(p.kitchenDeviceName || "").trim();
+    const slot = st === 2 ? k2 : st === 3 ? k3 : k1;
+    return slot || kAny || receiptDev;
+  }
+  return receiptDev;
+}
+
 /** runtime-config에 deviceName이 없을 때 Windows 무인쇄가 실패·대화상자로 떨어지는 경우가 많아 OS 기본 프린터를 사용 */
 async function resolvePrintDeviceNameForJob() {
-  const configured = String(DEFAULT_PRINT_DEVICE || "").trim();
+  const configured = resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" });
   if (configured) return configured;
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return "";
@@ -1236,9 +1270,16 @@ if (!gotLock) {
 
     ipcMain.handle("cm-pos-get-print-config", (event) => {
       if (!senderAllowedOrigin(event.sender)) return null;
+      const cfg = readRuntimeConfig();
+      const p = cfg.print || {};
       return {
         silent: DEFAULT_PRINT_SILENT,
         deviceName: DEFAULT_PRINT_DEVICE || null,
+        receiptDeviceName: String(p.receiptDeviceName || "").trim() || DEFAULT_PRINT_DEVICE || null,
+        kitchen1DeviceName: String(p.kitchen1DeviceName || "").trim() || null,
+        kitchen2DeviceName: String(p.kitchen2DeviceName || "").trim() || null,
+        kitchen3DeviceName: String(p.kitchen3DeviceName || "").trim() || null,
+        kitchenDeviceName: String(p.kitchenDeviceName || "").trim() || null,
       };
     });
 
@@ -1290,21 +1331,36 @@ if (!gotLock) {
         senderUrl: String(event.sender?.getURL?.() || ""),
       });
       // #endregion
+      const ks = payload?.kitchenStation;
+      const kitchenStation =
+        ks === 1 || ks === 2 || ks === 3 ? ks : ks != null ? Number(ks) : undefined;
       const result = await printHtmlDocumentInHiddenWindow(html, {
         preferDialog: Boolean(payload?.preferDialog),
+        printRole: payload?.printRole === "kitchen" || payload?.printRole === "receipt" ? payload.printRole : undefined,
+        kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
+        deviceName: typeof payload?.deviceName === "string" ? payload.deviceName : "",
       });
-      if (result.ok && !Boolean(payload?.preferDialog)) {
+      const out = { ...result };
+      if (result.ok && !Boolean(payload?.preferDialog) && PRINT_ESC_POS_CUT_AFTER_HTML) {
         await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED));
-        if (PRINT_ESC_POS_CUT_AFTER_HTML) {
-          try {
-            const device = await resolvePrintDeviceNameForJob();
-            await sendEscPosCutForPrinter(device);
-          } catch (e) {
-            console.warn("[cm-pos] ESC/POS cut:", e && e.message ? e.message : e);
+        try {
+          const device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
+            printRole: payload?.printRole,
+            kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
+          });
+          const cutRes = await sendEscPosCutForPrinter(device);
+          out.cutOk = Boolean(cutRes.ok);
+          if (cutRes.reason) out.cutReason = String(cutRes.reason);
+          if (!cutRes.ok) {
+            console.warn("[cm-pos] ESC/POS cut failed:", cutRes.reason || "");
           }
+        } catch (e) {
+          out.cutOk = false;
+          out.cutReason = String(e && e.message ? e.message : e);
+          console.warn("[cm-pos] ESC/POS cut:", out.cutReason);
         }
       }
-      return result;
+      return out;
     });
 
     ipcMain.handle("cm-pos-reset-cache-reload", async (event) => {

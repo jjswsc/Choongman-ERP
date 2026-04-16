@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
-import { buildMonthInFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 
 type VatRow = {
@@ -108,8 +108,7 @@ export async function GET(request: NextRequest) {
       console.warn('getThaiTaxFilingSummary rpc fallback: missing function')
     }
 
-    const monthList = buildMonthInFilter(period.months)
-    const monthBase = `tax_month=in.(${monthList})`
+    const monthBase = buildTaxMonthPostgrestFilter(period.months)
     const vatFilter = appendStoreNameFilter(monthBase, storeFilter)
     const whtFilter = appendStoreNameFilter(monthBase, storeFilter)
 

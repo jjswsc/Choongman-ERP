@@ -6,6 +6,11 @@
   "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
   "print": {
     "silent": true,
-    "deviceName": ""
+    "deviceName": "",
+    "receiptDeviceName": "",
+    "kitchenDeviceName": "",
+    "kitchen1DeviceName": "",
+    "kitchen2DeviceName": "",
+    "kitchen3DeviceName": ""
   }
 }

@@ -66,9 +66,15 @@ export function getThaiTaxFilingPeriodRange(input: {
   }
 }
 
-export function buildMonthInFilter(months: string[]): string {
+/**
+ * PostgREST `tax_month` 조건 — `in.(YYYY-MM)` 하이픈 토큰 파싱 이슈를 피하기 위해 eq / or 만 사용.
+ * appendStoreNameFilter 등과 `&`로 이어 붙일 수 있음.
+ */
+export function buildTaxMonthPostgrestFilter(months: string[]): string {
   const clean = (months || []).map((m) => String(m || '').slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (!clean.length) throw new Error('INVALID_MONTHS')
-  return clean.map((m) => encodeURIComponent(m)).join(',')
+  if (clean.length === 1) return `tax_month=eq.${encodeURIComponent(clean[0])}`
+  const inner = clean.map((m) => `tax_month.eq.${encodeURIComponent(m)}`).join(',')
+  return `or=(${inner})`
 }
 

@@ -16,9 +16,13 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   printHtml: (html, opts) => {
     const htmlLength = typeof html === "string" ? html.length : 0;
     ipcRenderer.send("cm-pos-shell-print-html-invoke", { htmlLength });
+    const o = opts && typeof opts === "object" ? opts : {};
     return ipcRenderer.invoke("cm-pos-print-html", {
       html,
-      preferDialog: Boolean(opts && opts.preferDialog),
+      preferDialog: Boolean(o.preferDialog),
+      printRole: o.printRole === "kitchen" || o.printRole === "receipt" ? o.printRole : undefined,
+      kitchenStation:
+        o.kitchenStation === 1 || o.kitchenStation === 2 || o.kitchenStation === 3 ? o.kitchenStation : undefined,
     });
   },
   /** App 메뉴의 Reset cache + reload 와 동일(확인 대화상자는 메인 프로세스) */

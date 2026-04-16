@@ -5,6 +5,7 @@ import { navigatePosOfflineAware } from "@/lib/pos-offline-nav"
 import { useRouter, usePathname } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronUp, Home } from "lucide-react"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
+import { PosHybridPrintDiagnosticsButton } from "@/components/pos/pos-hybrid-print-diagnostics"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -116,10 +117,15 @@ function PosShellHeaderRightCluster({
   const hasUtils = shellUpdateAvailable || shellExitFullscreenAvailable
   const hasWin = shellMinimizeAvailable || shellQuitAvailable
   if (!hasUtils && !hasWin) {
-    return <div className="w-16 shrink-0" aria-hidden />
+    return (
+      <div className="flex min-w-0 max-w-[min(100%,520px)] shrink-0 items-center justify-end gap-1">
+        <PosHybridPrintDiagnosticsButton />
+      </div>
+    )
   }
   return (
-    <div className="flex min-w-0 max-w-[min(100%,520px)] shrink-0 items-center justify-end">
+    <div className="flex min-w-0 max-w-[min(100%,520px)] shrink-0 items-center justify-end gap-1">
+      <PosHybridPrintDiagnosticsButton />
       {hasUtils ? (
         <PosShellUtilityButtons
           shellUpdateAvailable={shellUpdateAvailable}

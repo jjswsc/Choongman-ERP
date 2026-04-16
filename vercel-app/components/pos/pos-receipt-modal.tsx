@@ -180,7 +180,8 @@ export function PosReceiptModal({
   const printInIframe = (
     fullHtml: string,
     title: string,
-    preferSystemPrintDialog = false
+    preferSystemPrintDialog = false,
+    thermal?: Pick<PrintPosHtmlDocumentOptions, 'printRole' | 'kitchenStation'>
   ) =>
     new Promise<void>((resolve, reject) => {
       const opts: PrintPosHtmlDocumentOptions = {
@@ -189,6 +190,7 @@ export function PosReceiptModal({
         fallbackCleanupMs: 120_000,
         focusIframeBeforePrint: false,
         preferSystemPrintDialog,
+        ...thermal,
         onPrintUnavailable: () => reject(new Error(t('posPrintBlocked') || '인쇄를 시작할 수 없습니다.')),
         onAfterCleanup: () => resolve(),
       }
@@ -379,7 +381,9 @@ export function PosReceiptModal({
       </html>
     `
     try {
-      await printInIframe(fullHtml, t('posReceipt') || '영수증', preferSystemPrintDialog)
+      await printInIframe(fullHtml, t('posReceipt') || '영수증', preferSystemPrintDialog, {
+        printRole: 'receipt',
+      })
     } catch {
       await appAlert(t('posPrintBlocked') || '팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정을 확인해 주세요.')
     }
@@ -435,7 +439,10 @@ export function PosReceiptModal({
           design: slipDesign,
           printColorAdjust: 'economy',
         })
-        await printInIframe(html, slip.label, preferSystemPrintDialog)
+        await printInIframe(html, slip.label, preferSystemPrintDialog, {
+          printRole: 'kitchen',
+          kitchenStation: slip.station,
+        })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
           await printOne(idx + 1)

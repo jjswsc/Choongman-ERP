@@ -136,11 +136,20 @@ function nextRetryDelayMs(retryCount: number): number {
   return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.max(0, retryCount - 1))
 }
 
-export async function syncPending(): Promise<SyncResult> {
+export type SyncPendingOptions = {
+  /**
+   * true: 재시도 간격(백오프) 무시 — 배너「재시도」클릭 시 즉시 전송 시도.
+   * false/미지정: 자동 동기화와 동일하게 마지막 시도 시각 기준 백오프 적용.
+   */
+  bypassBackoff?: boolean
+}
+
+export async function syncPending(options?: SyncPendingOptions): Promise<SyncResult> {
   if (!isOnline()) return { synced: 0, failed: 0 }
   let pending = await getAllPending()
   if (pending.length === 0) return { synced: 0, failed: 0 }
   const startedAt = Date.now()
+  const bypassBackoff = Boolean(options?.bypassBackoff)
 
   pending = [...pending].sort(
     (a, b) => syncOrder(a) - syncOrder(b) || a.createdAt - b.createdAt
@@ -156,7 +165,7 @@ export async function syncPending(): Promise<SyncResult> {
     const now = Date.now()
     const retryDelay = nextRetryDelayMs(item.retryCount)
     const lastTriedAt = item.lastTriedAt ?? item.createdAt
-    if (retryDelay > 0 && now - lastTriedAt < retryDelay) {
+    if (!bypassBackoff && retryDelay > 0 && now - lastTriedAt < retryDelay) {
       continue
     }
     try {

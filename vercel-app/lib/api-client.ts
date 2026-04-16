@@ -2231,7 +2231,11 @@ export async function getVatLedger(params: {
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
-  return res.json() as Promise<{ entries: Record<string, unknown>[] }>
+  const data = (await res.json()) as { entries?: Record<string, unknown>[]; error?: string }
+  if (!res.ok) {
+    return { entries: [], error: data?.error || `HTTP_${res.status}` }
+  }
+  return { entries: data.entries || [], error: data.error }
 }
 
 export async function saveVatLedgerEntry(params: Record<string, unknown> & { userRole: string }) {

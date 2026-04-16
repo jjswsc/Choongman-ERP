@@ -67,7 +67,11 @@ import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/po
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
-import { printPosHtmlDocument, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS } from "@/lib/pos-print-html"
+import {
+  printPosHtmlDocument,
+  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  type PrintPosHtmlDocumentOptions,
+} from "@/lib/pos-print-html"
 import {
   RECEIPT_AMOUNT_COL_MM,
   RECEIPT_CONTENT_NUDGE_LEFT_MM,
@@ -873,12 +877,17 @@ export default function PosOrderPage() {
     }
   `
   const printInIframe = React.useCallback(
-    (fullHtml: string, title: string) =>
+    (
+      fullHtml: string,
+      title: string,
+      thermal?: Pick<PrintPosHtmlDocumentOptions, "printRole" | "kitchenStation">
+    ) =>
       new Promise<void>((resolve, reject) => {
         printPosHtmlDocument(fullHtml, {
           title,
           printDelayMs: 0,
           fallbackCleanupMs: 120_000,
+          ...thermal,
           onPrintUnavailable: () => reject(new Error(t("posPrintBlocked") || "인쇄를 시작할 수 없습니다.")),
           onAfterCleanup: () => resolve(),
         })
@@ -918,7 +927,7 @@ export default function PosOrderPage() {
       </html>
     `
     try {
-      await printInIframe(fullHtml, t("posReceipt") || "영수증")
+      await printInIframe(fullHtml, t("posReceipt") || "영수증", { printRole: "receipt" })
     } catch {
       await appAlert(t("posPrintBlocked") || "팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정을 확인해 주세요.")
     }
@@ -974,7 +983,10 @@ export default function PosOrderPage() {
           design: slipDesign,
           printColorAdjust: "economy",
         })
-        await printInIframe(html, slip.label)
+        await printInIframe(html, slip.label, {
+          printRole: "kitchen",
+          kitchenStation: slip.station,
+        })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
           await printOne(idx + 1)

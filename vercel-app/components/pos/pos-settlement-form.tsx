@@ -594,6 +594,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       title: t('posSettlementReport') || 'POS 결산 리포트',
       printDelayMs: 0,
       fallbackCleanupMs: 120_000,
+      printRole: 'receipt',
       onPrintUnavailable: () => {
         void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
       },

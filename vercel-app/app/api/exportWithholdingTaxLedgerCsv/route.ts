@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
-import { buildMonthInFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { withholdingTaxLedgerToCsv, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
-    const monthIn = buildMonthInFilter(period.months)
-    const filter = appendStoreNameFilter(`tax_month=in.(${monthIn})`, storeFilter)
+    const monthFilter = buildTaxMonthPostgrestFilter(period.months)
+    const filter = appendStoreNameFilter(monthFilter, storeFilter)
     const rows = (await supabaseSelectFilter('withholding_tax_ledger_entries', filter, {
       select: '*',
       limit: 20000,

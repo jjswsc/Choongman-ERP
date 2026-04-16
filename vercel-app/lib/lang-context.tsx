@@ -4,17 +4,25 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 export type LangCode = 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms'
 
-/** 관리자(ERP / SaaS 제어) UI — 모바일 등과 달리 ko·en·th만 선택 */
-export const ADMIN_UI_LANGS = ['ko', 'en', 'th'] as const
-export type AdminUiLang = (typeof ADMIN_UI_LANGS)[number]
+/** UI·sessionStorage와 동일한 지원 언어 목록 (한곳에서만 정의) */
+export const LANG_CODES: readonly LangCode[] = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
 
-export function isAdminUiLang(s: string): s is AdminUiLang {
-  return (ADMIN_UI_LANGS as readonly string[]).includes(s)
+export function isLangCode(s: string): s is LangCode {
+  return (LANG_CODES as readonly string[]).includes(s)
 }
 
-/** 모바일 등에서 mm 등으로 저장된 경우 관리자 화면에서는 ko로 맞춤 */
+/** 관리자(ERP / SaaS) 로그인·헤더 — POS·모바일과 동일 8개 코드 */
+export const ADMIN_UI_LANGS = LANG_CODES
+
+export type AdminUiLang = LangCode
+
+export function isAdminUiLang(s: string): s is AdminUiLang {
+  return isLangCode(s)
+}
+
+/** 알 수 없는 값만 ko로 (POS에서 mm 등 선택 후 /admin 진입 시 유지) */
 export function normalizeAdminUiLang(lang: string): LangCode {
-  if (isAdminUiLang(lang)) return lang
+  if (isLangCode(lang)) return lang
   return 'ko'
 }
 
@@ -22,14 +30,12 @@ export const ADMIN_UI_LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: 'ko', label: '한국어' },
   { value: 'en', label: 'English' },
   { value: 'th', label: 'ไทย' },
+  { value: 'mm', label: 'မြန်မာ' },
+  { value: 'la', label: 'ລາວ' },
+  { value: 'kh', label: 'ខ្មែរ' },
+  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'ms', label: 'Bahasa Melayu' },
 ]
-
-/** UI·sessionStorage와 동일한 지원 언어 목록 (한곳에서만 정의) */
-export const LANG_CODES: readonly LangCode[] = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
-
-export function isLangCode(s: string): s is LangCode {
-  return (LANG_CODES as readonly string[]).includes(s)
-}
 
 function loadLang(): LangCode {
   if (typeof window === 'undefined') return 'ko'

@@ -74,6 +74,15 @@ const DEFAULT_PRINT_DEVICE =
       ""
   ).trim();
 
+/** Quick print·무인쇄: 매 호출 시 config 재읽기 — receiptDeviceName 우선, 레거시 deviceName 폴백 */
+function resolveErpReceiptDeviceSync() {
+  const cfg = readRuntimeConfig();
+  const p = cfg.print || {};
+  return String(
+    process.env.WINDOWS_ERP_PRINT_DEVICE ?? p.receiptDeviceName ?? cfg.printDeviceName ?? p.deviceName ?? ""
+  ).trim();
+}
+
 let mainWindow = null;
 let isCheckingUpdate = false;
 
@@ -249,8 +258,9 @@ function getQuickPrintOptions() {
     silent: DEFAULT_PRINT_SILENT,
     printBackground: true,
   };
-  if (DEFAULT_PRINT_DEVICE) {
-    options.deviceName = DEFAULT_PRINT_DEVICE;
+  const device = resolveErpReceiptDeviceSync();
+  if (device) {
+    options.deviceName = device;
   }
   return options;
 }
@@ -436,9 +446,16 @@ if (!gotLock) {
 
     ipcMain.handle("cm-erp-get-print-config", (event) => {
       if (!senderAllowedOrigin(event.sender)) return null;
+      const cfg = readRuntimeConfig();
+      const p = cfg.print || {};
       return {
         silent: DEFAULT_PRINT_SILENT,
         deviceName: DEFAULT_PRINT_DEVICE || null,
+        receiptDeviceName: String(p.receiptDeviceName || "").trim() || DEFAULT_PRINT_DEVICE || null,
+        kitchen1DeviceName: String(p.kitchen1DeviceName || "").trim() || null,
+        kitchen2DeviceName: String(p.kitchen2DeviceName || "").trim() || null,
+        kitchen3DeviceName: String(p.kitchen3DeviceName || "").trim() || null,
+        kitchenDeviceName: String(p.kitchenDeviceName || "").trim() || null,
       };
     });
 

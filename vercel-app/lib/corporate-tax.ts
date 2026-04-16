@@ -1,4 +1,4 @@
-import { buildMonthInFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -109,10 +109,13 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
 
   let adjustmentRows: TaxAdjustmentRow[] = []
   try {
-    const monthIn = buildMonthInFilter(period.months)
+    const periodKeyOrParts = [
+      `period_key.eq.${encodeURIComponent(period.periodKey)}`,
+      ...period.months.map((m) => `period_key.eq.${encodeURIComponent(String(m).slice(0, 7))}`),
+    ]
     const raw = (await supabaseSelectFilter(
       'corporate_tax_adjustments',
-      `period_type=eq.${period.periodType}&or=(period_key=eq.${encodeURIComponent(period.periodKey)},period_key=in.(${monthIn}))`,
+      `period_type=eq.${period.periodType}&or=(${periodKeyOrParts.join(',')})`,
       { select: 'adjustment_type,item_name,amount,memo', limit: 10000 }
     )) as TaxAdjustmentRow[] | null
     adjustmentRows = Array.isArray(raw) ? raw : []

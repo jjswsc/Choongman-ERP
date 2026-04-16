@@ -47,7 +47,7 @@ export function SaasHeader() {
       </div>
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
-          <SelectTrigger className="h-8 w-[7rem] text-xs" aria-label={t("saasAdminLanguageSelect")}>
+          <SelectTrigger className="h-8 min-w-[7.5rem] max-w-[10rem] text-xs" aria-label={t("saasAdminLanguageSelect")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

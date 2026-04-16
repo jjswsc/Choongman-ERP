@@ -182,7 +182,7 @@ export function OfflineBanner({
               className="h-7 gap-1 border-amber-600/50 text-amber-700 hover:bg-amber-500/20"
               onClick={() => {
                 setSyncing(true)
-                syncPending()
+                syncPending({ bypassBackoff: true })
                   .then(() => {
                     refreshPending()
                     onSync?.()

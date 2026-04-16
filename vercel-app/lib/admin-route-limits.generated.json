@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-15T07:20:39.579Z",
+  "generatedAt": "2026-04-16T02:03:11.732Z",
   "entryCount": 792,
   "entries": [
     {
@@ -2909,14 +2909,14 @@
     },
     {
       "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 119,
+      "line": 118,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "getThaiTaxFilingSummary"
     },
     {
       "path": "app/api/getThaiTaxFilingSummary/route.ts",
-      "line": 123,
+      "line": 122,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "getThaiTaxFilingSummary"
@@ -4680,7 +4680,7 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1135,
+      "line": 1138,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
@@ -4953,7 +4953,7 @@
     },
     {
       "path": "lib/corporate-tax.ts",
-      "line": 116,
+      "line": 119,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:corporate-tax"

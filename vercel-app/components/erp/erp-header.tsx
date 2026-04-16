@@ -173,7 +173,7 @@ export function ErpHeader() {
         )}
         {/* Language */}
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
-          <SelectTrigger className="h-8 w-[7rem] text-xs">
+          <SelectTrigger className="h-8 min-w-[7.5rem] max-w-[10rem] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

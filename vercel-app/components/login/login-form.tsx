@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-context"
-import { isLangCode, useLang, normalizeAdminUiLang } from "@/lib/lang-context"
+import { isLangCode, useLang, normalizeAdminUiLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
@@ -926,24 +926,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="login-select-content">
-                {isAdminLoginRoute ? (
-                  <>
-                    <SelectItem value="ko">한국어</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="th">ไทย</SelectItem>
-                  </>
-                ) : (
-                  <>
-                    <SelectItem value="ko">한국어</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="th">ภาษาไทย</SelectItem>
-                    <SelectItem value="mm">မြန်မာ</SelectItem>
-                    <SelectItem value="la">ພາສາລາວ</SelectItem>
-                    <SelectItem value="kh">ភាសាខ្មែរ</SelectItem>
-                    <SelectItem value="vi">Tiếng Việt</SelectItem>
-                    <SelectItem value="ms">Bahasa Melayu</SelectItem>
-                  </>
-                )}
+                {ADMIN_UI_LANG_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
