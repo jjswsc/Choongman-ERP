@@ -59,24 +59,7 @@ export async function saveFranchiseeMultiStoreSettings(
   )
 }
 
-/** DB/요청에서 온 extra_stores 원본 → 매장명 배열 */
-export function parseExtraStoresColumn(raw: unknown): string[] {
-  if (raw == null) return []
-  if (Array.isArray(raw)) {
-    return raw.map((x) => String(x || '').trim()).filter(Boolean)
-  }
-  if (typeof raw === 'string') {
-    const s = raw.trim()
-    if (!s) return []
-    try {
-      const p = JSON.parse(s) as unknown
-      if (Array.isArray(p)) return p.map((x) => String(x || '').trim()).filter(Boolean)
-    } catch {
-      return s.split(/[,;]/).map((x) => x.trim()).filter(Boolean)
-    }
-  }
-  return []
-}
+export { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 
 /** JWT에 넣을 허용 매장 목록 (대표 store + extra, 중복 제거) */
 export function buildAllowedStoresForToken(

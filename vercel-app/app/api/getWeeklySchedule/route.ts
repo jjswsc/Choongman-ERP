@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import {
   findStaffForScheduleSlotName,
   formatEmployeeDisplayName,
@@ -7,7 +8,7 @@ import {
   normalizeEmployeeNameFields,
   type StaffRowForScheduleMatch,
 } from '@/lib/employee-display-name'
-import { parseExtraStoresColumn } from '@/lib/franchisee-multi-store'
+import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { storeMatches } from '@/lib/admin-employee-store-access'
 import {
   canonicalAreaFromText,
@@ -119,7 +120,7 @@ export async function GET(request: NextRequest) {
     if (isAll) {
       scheduleRows = (await supabaseSelectFilter('schedules', dateFilter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
     } else {
-      const filter = `${dateFilter}&store_name=ilike.${encodeURIComponent(store)}`
+      const filter = `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
       scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
     }
 

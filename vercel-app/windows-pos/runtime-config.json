@@ -1,6 +1,10 @@
 ﻿{
-    "updateManifestUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
-    "kiosk":  "0",
-    "posUrl":  "https://choongman-erp.vercel.app/pos/login",
-    "allowedOrigin":  "https://choongman-erp.vercel.app"
+    "print":  {
+                  "silent":  true,
+                  "deviceName":  ""
+              },
+    "updateManifestUrl":  "https://www.omnifoodtech.com/downloads/windows-pos/latest.json",
+    "kiosk":  "1",
+    "posUrl":  "https://www.omnifoodtech.com/pos/login",
+    "allowedOrigin":  "https://www.omnifoodtech.com"
 }

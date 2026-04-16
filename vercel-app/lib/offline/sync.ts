@@ -176,6 +176,8 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
           'Content-Type': 'application/json',
           'X-Idempotency-Key': idempotencyKey,
           ...item.headers,
+          /** 큐에 저장된 헤더보다 우선 — 오프라인 재전송만 허용할 noop 구분 */
+          'X-CM-Offline-Queue-Sync': '1',
         },
         body: item.body,
       }
@@ -225,13 +227,13 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
       await removeFromQueue(item.id)
       synced++
     } catch (e) {
+      const errText = String(e && e instanceof Error ? e.message : e)
+      await updateQueueItem(item.id, {
+        lastError: errText,
+        retryCount: item.retryCount + 1,
+        lastTriedAt: Date.now(),
+      })
       if (isNetworkError(e)) {
-        // 네트워크 문제로 다시 실패 - 큐 유지
-        await updateQueueItem(item.id, {
-          lastError: String(e),
-          retryCount: item.retryCount + 1,
-          lastTriedAt: Date.now(),
-        })
         reportNetworkFailure()
       }
       failed++

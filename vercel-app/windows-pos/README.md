@@ -19,6 +19,15 @@ Windows 설치형 하이브리드 POS 셸(Electron)입니다.
 
 운영 시에는 `runtime-config.example.json`을 복사해 값을 채운 뒤 빌드합니다.
 
+## 브랜드 (내부 vs 판매)
+
+| 구분 | `build-windows-pos.ps1` | 아이콘 소스 | 설치·바로가기 표시 이름 |
+|------|---------------------------|-------------|-------------------------|
+| 내부(충만) | `-Brand choongman` 또는 생략 | `assets/brand/choongman-logo.png` | `Choongman POS` (`package.json`) |
+| 판매(OmniFoodTech) | **`-Brand omnifoodtech`** | `public/omnifoodtech-icon.svg` → 래스터 후 ICO | 기본 **`OmniFoodTech POS`** (`-ProductName`으로 변경 가능) |
+
+판매용은 루트에서 `npm install`로 `sharp`가 있어야 SVG→PNG 래스터 스크립트가 동작합니다.
+
 ## 환경변수 (선택)
 
 - `WINDOWS_POS_URL`: POS 접속 URL (예: `https://your-domain.com/pos/login`)

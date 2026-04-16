@@ -1,0 +1,10 @@
+{
+  "appId": "com.omnifoodtech.pos.windows",
+  "extraMetadata": {
+    "name": "omnifoodtech-pos-windows"
+  },
+  "forceCodeSigning": false,
+  "win": {
+    "signAndEditExecutable": false
+  }
+}

@@ -8,7 +8,7 @@ import {
   segmentOverlapsAttendanceBusinessDay,
 } from "@/lib/attendance-utils"
 import { clockOutCountsForPayroll, otMinutesForPayroll } from "@/lib/payroll-utils"
-import { formatReceivableInvoiceNo } from "@/lib/receivable-payable"
+import { formatReceivableInvoiceNo } from "@/lib/receivable-invoice-format"
 
 type ReceivableEvent =
   | { kind: "invoice"; ref: string; amount: number }

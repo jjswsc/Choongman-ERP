@@ -1,3 +1,5 @@
+import "server-only"
+
 /**
  * Supabase REST - 서버 전용 (Next.js API routes)
  *
@@ -7,9 +9,11 @@
  *
  * UND_ERR_HEADERS_TIMEOUT 방지: Node.js fetch(undici) 대신 https 모듈 사용.
  * 일시적 장애 대응: 5xx/429/네트워크 오류 시 최대 2회 재시도 (exponential backoff).
+ *
+ * `node:https`는 Webpack 클라이언트 그래프에서 UnhandledSchemeError를 유발할 수 있어 `https` 사용.
  */
 
-import https from 'node:https'
+import https from "https"
 import { resolveSupabaseProjectConfig } from '@/lib/supabase-project-resolver'
 import type { TenantContext } from '@/lib/tenant-context'
 

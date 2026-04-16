@@ -19,18 +19,6 @@ function requireDeployPublicOrigin() {
 const { resolveDeployPublicOrigin } = requireDeployPublicOrigin();
 const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
 
-/** package.json build.appId 와 동일 — 작업 표시줄·점프 목록이 Electron 기본 아이콘으로 남는 현상 완화 */
-if (process.platform === "win32") {
-  app.setAppUserModelId("com.choongman.erp.pos.windows");
-}
-
-const DEFAULT_POS_URL = `${DEPLOY_ORIGIN}/pos/login`;
-
-/** 무인쇄 HTML 작업 직후 다음 invoke 전까지 — Windows 스풀·Zywell 등이 컷/배출을 끝내도록 */
-const POST_HTML_PRINT_SPOOL_FLUSH_MS = 750;
-const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6 hours
-const AUTO_UPDATE_ENABLED = String(process.env.WINDOWS_POS_AUTO_UPDATE || "1") !== "0";
-
 function readJsonFileIfExists(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
@@ -40,17 +28,20 @@ function readJsonFileIfExists(filePath) {
   }
 }
 
-function readRuntimeConfig() {
-  const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
-  const userPath = path.join(app.getPath("userData"), "runtime-config.json");
-
-  const bundled = readJsonFileIfExists(bundledPath) || {};
-  const user = readJsonFileIfExists(userPath) || {};
-  return {
-    ...bundled,
-    ...user,
-  };
+/** package.json build.appId 와 동일 — 작업 표시줄·점프 목록이 Electron 기본 아이콘으로 남는 현상 완화 */
+if (process.platform === "win32") {
+  const pkgPath = path.join(__dirname, "package.json");
+  const pkg = readJsonFileIfExists(pkgPath);
+  const appId = (pkg && pkg.build && pkg.build.appId) || "com.choongman.erp.pos.windows";
+  app.setAppUserModelId(appId);
 }
+
+const DEFAULT_POS_URL = `${DEPLOY_ORIGIN}/pos/login`;
+
+/** 무인쇄 HTML 작업 직후 다음 invoke 전까지 — Windows 스풀·Zywell 등이 컷/배출을 끝내도록 */
+const POST_HTML_PRINT_SPOOL_FLUSH_MS = 750;
+const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6 hours
+const AUTO_UPDATE_ENABLED = String(process.env.WINDOWS_POS_AUTO_UPDATE || "1") !== "0";
 
 function toOrigin(urlText) {
   try {
@@ -58,6 +49,28 @@ function toOrigin(urlText) {
   } catch {
     return "";
   }
+}
+
+function readRuntimeConfig() {
+  const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
+  const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+
+  const bundled = readJsonFileIfExists(bundledPath) || {};
+  const user = readJsonFileIfExists(userPath) || {};
+  const merged = { ...bundled, ...user };
+  // 설치본(bundled)에 배포 URL이 있으면 항상 우선 — userData 에 남은 예전 내부용 URL 이 덮어쓰지 않게
+  if (bundled.posUrl) {
+    merged.posUrl = bundled.posUrl;
+    if (Object.prototype.hasOwnProperty.call(bundled, "allowedOrigin")) {
+      merged.allowedOrigin = bundled.allowedOrigin;
+    } else {
+      merged.allowedOrigin = toOrigin(bundled.posUrl);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(bundled, "updateManifestUrl")) {
+    merged.updateManifestUrl = bundled.updateManifestUrl;
+  }
+  return merged;
 }
 
 const runtimeConfig = readRuntimeConfig();
@@ -614,6 +627,29 @@ function getDialogPrintOptions() {
   };
 }
 
+/**
+ * 수동 인쇄(시스템 대화상자) — 무인쇄와 동일한 80mm·스케일·여백을 넣지 않으면 드라이버 기본(A4)으로
+ * 좁은 영수증이 페이지 안에 축소되어 인쇄되는 PC가 많음.
+ * @param {string} [resolvedDevice] runtime-config 매칭 프린터(있으면 대화상자에도 동일 기기 우선)
+ */
+function getThermalHtmlDialogPrintOptions(resolvedDevice) {
+  const dev = String(resolvedDevice || "").trim() || DEFAULT_PRINT_DEVICE || "";
+  const options = {
+    silent: false,
+    printBackground: true,
+    scaleFactor: 100,
+    landscape: false,
+    pagesPerSheet: 1,
+    margins: { marginType: "printableArea" },
+    pageSize: {
+      width: THERMAL_PAGE_WIDTH_80MM,
+      height: THERMAL_PAGE_HEIGHT_600MM,
+    },
+  };
+  if (dev) options.deviceName = dev;
+  return options;
+}
+
 /** 영수증/주방전 HTML 전용: A4 기본값으로 축소되는 현상 방지 */
 function getThermalHtmlPrintOptions() {
   const options = {
@@ -735,7 +771,10 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
 
     if (preferDialog) {
       const printStage = "dialog_only";
-      const r = await printWebContentsPromise(printWindow.webContents, getDialogPrintOptions());
+      const r = await printWebContentsPromise(
+        printWindow.webContents,
+        getThermalHtmlDialogPrintOptions(resolvedDevice)
+      );
       debugLog("H5_fallback_dialog", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:preferDialog", "print_dialog_only", {
         ok: Boolean(r.success),
         reason: String(r.failureReason || ""),
@@ -806,7 +845,10 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         defaultPrintSilent: DEFAULT_PRINT_SILENT,
       });
       // #endregion
-      r = await printWebContentsPromise(printWindow.webContents, getDialogPrintOptions());
+      r = await printWebContentsPromise(
+        printWindow.webContents,
+        getThermalHtmlDialogPrintOptions(resolvedDevice)
+      );
       if (!DEFAULT_PRINT_DEVICE) {
         warnings.push("print dialog fallback used without explicit thermal device");
       }
@@ -818,12 +860,17 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       printStage,
     });
     // #endregion
+    /** deviceName 없이 무인쇄 성공 시 실제로는 OS 기본 프린터로 나감 — 절단(RAW) 대상 이름이 비지 않게 보정 */
+    let usedDeviceOut = resolvedDevice || "";
+    if (r.success && !String(usedDeviceOut).trim() && printStage !== "dialog") {
+      usedDeviceOut = await getWindowsDefaultPrinterName();
+    }
     return {
       ok: r.success,
       reason: r.failureReason || (r.success ? "" : "print_failed"),
       printStage,
       warnings,
-      usedDevice: resolvedDevice || "",
+      usedDevice: usedDeviceOut,
     };
   } catch (e) {
     return { ok: false, reason: String(e && e.message ? e.message : e), usedDevice: "" };
@@ -914,10 +961,8 @@ function resolveThermalDeviceForHtmlPrintSync(opts) {
   return receiptDev;
 }
 
-/** runtime-config에 deviceName이 없을 때 Windows 무인쇄가 실패·대화상자로 떨어지는 경우가 많아 OS 기본 프린터를 사용 */
-async function resolvePrintDeviceNameForJob() {
-  const configured = resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" });
-  if (configured) return configured;
+/** OS 기본 프린터 표시 이름(무인쇄 시 deviceName 미지정과 동일 대상) */
+async function getWindowsDefaultPrinterName() {
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return "";
     const printers = await mainWindow.webContents.getPrintersAsync();
@@ -926,6 +971,13 @@ async function resolvePrintDeviceNameForJob() {
   } catch {
     return "";
   }
+}
+
+/** runtime-config에 deviceName이 없을 때 Windows 무인쇄가 실패·대화상자로 떨어지는 경우가 많아 OS 기본 프린터를 사용 */
+async function resolvePrintDeviceNameForJob() {
+  const configured = resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" });
+  if (configured) return configured;
+  return getWindowsDefaultPrinterName();
 }
 
 function getEscPosCutScriptPath() {
@@ -953,7 +1005,7 @@ function sendEscPosCutForPrinter(printerName) {
     execFile(
       "powershell.exe",
       ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PrinterName", name],
-      { windowsHide: true, timeout: 15000, maxBuffer: 256 * 1024 },
+      { windowsHide: true, timeout: 30000, maxBuffer: 256 * 1024 },
       (err, _stdout, stderr) => {
         if (err) {
           console.warn("[cm-pos] ESC/POS cut failed:", err.message, stderr ? String(stderr) : "");
@@ -1344,15 +1396,25 @@ if (!gotLock) {
       if (result.ok && !Boolean(payload?.preferDialog) && PRINT_ESC_POS_CUT_AFTER_HTML) {
         await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED));
         try {
-          const device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
+          let device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
             printRole: payload?.printRole,
             kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
           });
-          const cutRes = await sendEscPosCutForPrinter(device);
-          out.cutOk = Boolean(cutRes.ok);
-          if (cutRes.reason) out.cutReason = String(cutRes.reason);
-          if (!cutRes.ok) {
-            console.warn("[cm-pos] ESC/POS cut failed:", cutRes.reason || "");
+          if (!device) {
+            device = String((await resolvePrintDeviceNameForJob()) || "").trim();
+          }
+          /** 무인쇄 실패 후 인쇄 대화상자로만 성공한 경우 — 사용자가 고른 기기명을 알 수 없어 RAW 절단 생략(빈 이름으로 no_printer 오탐 방지) */
+          if (!device && result.printStage === "dialog") {
+            console.warn("[cm-pos] skip ESC/POS cut: dialog fallback without resolved printer name");
+          } else if (device) {
+            const cutRes = await sendEscPosCutForPrinter(device);
+            out.cutOk = Boolean(cutRes.ok);
+            if (cutRes.reason) out.cutReason = String(cutRes.reason);
+            if (!cutRes.ok) {
+              console.warn("[cm-pos] ESC/POS cut failed:", cutRes.reason || "");
+            }
+          } else {
+            console.warn("[cm-pos] skip ESC/POS cut: no printer name (thermal silent used default but name unresolved)");
           }
         } catch (e) {
           out.cutOk = false;

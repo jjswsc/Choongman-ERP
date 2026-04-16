@@ -3,9 +3,18 @@
  * - kitchenMode: 주방 프린터 대수(1~3). 1대여도 품목별 "주방 미인쇄(0)"는 제외됨.
  * - 우선순위: 프린터 탭 메뉴별 → pos_menus.kitchen_printer(0=미인쇄) → 카테고리 → 대분류
  *   → (레거시) 주방2·3 카테고리 체크 목록이 비어 있지 않을 때만 예전 규칙 → 없으면 주방 1
+ * - 프로모션 줄에 promoItems 가 있으면(저장된 스냅샷) 구성 메뉴별로 펼쳐 각 메뉴의 주방으로 라우팅(splitPromoKitchenLines 기본 true)
  */
 
-export type KitchenSlipRoutingItem = { id?: string }
+/** 프로모션 구성품 분리 시 라우팅용 실제 메뉴 id (id 가 promo-… 일 때 사용) */
+export type KitchenSlipRoutingItem = {
+  id?: string
+  kitchenRouteMenuId?: string
+  name?: string
+  qty?: number
+  note?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+}
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */
 export type KitchenRouteValue = 0 | 1 | 2 | 3
@@ -38,6 +47,13 @@ export type BuildKitchenSlipGroupsOpts = {
   kitchenRouteByCategoryMain?: Record<string, KitchenRouteValue>
   /** pos_menus.kitchen_printer: 0 미인쇄, 1~3 주방 */
   kitchenPrinterByMenuId?: Record<string, KitchenRouteValue | null | undefined>
+  /** 구성 메뉴명 표시용 (promoItems 펼칠 때) */
+  menuNameByMenuId?: Record<string, string>
+  /**
+   * true: 프로모 줄에 promoItems 가 있으면 구성 메뉴별로 나누어 주방 라우팅(기본 true)
+   * false: 예전처럼 프로모 한 줄 전체를 한 주방으로만
+   */
+  splitPromoKitchenLines?: boolean
   labels: KitchenSlipGroupLabels
 }
 
@@ -55,7 +71,13 @@ function legacyKitchenIndex(cat: string, mode: number, k2: string[], k3: string[
   return 1
 }
 
-type MenuLike = { id: string; category?: string; categoryMain?: string; kitchenPrinter?: number | null }
+type MenuLike = {
+  id: string
+  name?: string
+  category?: string
+  categoryMain?: string
+  kitchenPrinter?: number | null
+}
 
 function normRouteMap(raw?: Record<string, number | undefined>): Record<string, KitchenRouteValue> {
   const out: Record<string, KitchenRouteValue> = {}
@@ -83,11 +105,13 @@ export function buildKitchenSlipGroupOpts(
   const categoryByMenuId: Record<string, string> = {}
   const categoryMainByMenuId: Record<string, string> = {}
   const kitchenPrinterByMenuId: Record<string, KitchenRouteValue> = {}
+  const menuNameByMenuId: Record<string, string> = {}
   for (const m of menus) {
     const id = String(m.id ?? '')
     if (!id) continue
     categoryByMenuId[id] = String(m.category ?? '').trim()
     categoryMainByMenuId[id] = String(m.categoryMain ?? '').trim()
+    menuNameByMenuId[id] = String(m.name ?? '').trim()
     const kp = m.kitchenPrinter
     if (kp === 0 || kp === 1 || kp === 2 || kp === 3) kitchenPrinterByMenuId[id] = kp
   }
@@ -104,8 +128,54 @@ export function buildKitchenSlipGroupOpts(
       settings.kitchenRouteByCategoryMain as Record<string, number | undefined>
     ),
     kitchenPrinterByMenuId,
+    menuNameByMenuId,
     labels,
   }
+}
+
+/**
+ * 프로모 한 줄(promo-…)은 id 로는 주방 라우팅이 안 되므로, promoItems 구성을 풀어
+ * 각 구성 메뉴 id 기준으로 프린터를 태운다.
+ */
+function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
+  items: T[],
+  menuNameByMenuId: Record<string, string>,
+  enabled: boolean
+): T[] {
+  if (!enabled) return items
+  const names = menuNameByMenuId || {}
+  const out: T[] = []
+  for (const it of items) {
+    const pi = it.promoItems
+    if (Array.isArray(pi) && pi.length > 0) {
+      const parentQty = Math.max(1, Number(it.qty ?? 1))
+      const parentName = String(it.name ?? '').trim()
+      let n = 0
+      for (const p of pi) {
+        const mid = String(p.menuId ?? '').trim()
+        if (!mid) continue
+        n += 1
+        const q = Math.max(0.0001, Number(p.quantity ?? 1)) * parentQty
+        const displayName = (names[mid] || '').trim() || parentName || mid
+        const baseNote = String(it.note ?? '').trim()
+        const promoMark = parentName ? `〔${parentName}〕` : ''
+        const mergedNote = [promoMark, baseNote].filter(Boolean).join(' ').trim()
+        out.push({
+          ...it,
+          id: `${String(it.id ?? 'promo')}-k${n}`,
+          kitchenRouteMenuId: mid,
+          name: displayName,
+          qty: q,
+          ...(mergedNote ? { note: mergedNote } : { note: undefined }),
+          promoItems: undefined,
+        } as T)
+      }
+      if (n === 0) out.push(it)
+    } else {
+      out.push(it)
+    }
+  }
+  return out
 }
 
 /**
@@ -116,6 +186,10 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   items: T[],
   opts: BuildKitchenSlipGroupsOpts
 ): KitchenSlipGroupRow<T>[] {
+  const splitPromo = opts.splitPromoKitchenLines !== false
+  const nameMap = opts.menuNameByMenuId || {}
+  const expanded = expandPromoLinesForKitchenRouting(items, nameMap, splitPromo) as T[]
+
   const mode = Math.min(3, Math.max(1, Number(opts.kitchenMode) || 1))
   const k2 = opts.kitchen2Categories || []
   const k3 = opts.kitchen3Categories || []
@@ -127,7 +201,11 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const routeMain = opts.kitchenRouteByCategoryMain || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
 
-  const menuIdOf = (it: T) => String(it.id ?? '').split('-')[0]
+  const menuIdOf = (it: T) => {
+    const kr = String((it as KitchenSlipRoutingItem).kitchenRouteMenuId ?? '').trim()
+    if (kr) return kr
+    return String(it.id ?? '').split('-')[0]
+  }
   const menuCat = (it: T) => String(catMap[menuIdOf(it)] ?? '')
   const menuMain = (it: T) => String(mainMap[menuIdOf(it)] ?? '').trim()
 
@@ -173,13 +251,13 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   }
 
   if (mode === 1) {
-    const kept = items.filter((it) => resolveRoute(it) !== 0)
+    const kept = expanded.filter((it) => resolveRoute(it) !== 0)
     if (kept.length === 0) return []
     return [{ label: opts.labels.unified, items: kept, station: 1 }]
   }
 
   const buckets: [T[], T[], T[]] = [[], [], []]
-  for (const it of items) {
+  for (const it of expanded) {
     const r = resolveRoute(it)
     if (r === 0) continue
     buckets[r - 1].push(it)

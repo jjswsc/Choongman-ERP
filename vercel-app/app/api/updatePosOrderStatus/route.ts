@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
+    const fromOfflineQueueSync =
+      String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
     const id = body.id != null ? Number(body.id) : NaN
     const status = String(body.status ?? '').trim()
 
@@ -59,6 +61,11 @@ export async function POST(req: NextRequest) {
     const prev = existing[0]
     const prevStatus = String(prev?.status ?? '').trim().toLowerCase()
     const nextStatus = String(status).trim().toLowerCase()
+
+    if (prevStatus === nextStatus) {
+      return NextResponse.json({ success: true, noop: true }, { headers })
+    }
+
     if (isPosReversalStatus(prevStatus) && isPosCompletionStatus(nextStatus)) {
       return NextResponse.json(
         { success: false, message: '취소/환불된 주문은 완료 상태로 되돌릴 수 없습니다.' },
@@ -66,6 +73,13 @@ export async function POST(req: NextRequest) {
       )
     }
     if (isPosCompletionStatus(prevStatus) && !isPosCompletionStatus(nextStatus) && !isPosReversalStatus(nextStatus)) {
+      // 오프라인 큐 재전송: 서버는 이미 completed 인데 큐에 paid 등 예전 단계 갱신만 남은 경우 → 큐 제거용 성공
+      if (fromOfflineQueueSync) {
+        return NextResponse.json(
+          { success: true, noop: true, message: 'skip_stale_status_replay' },
+          { headers }
+        )
+      }
       return NextResponse.json(
         { success: false, message: '완료 주문은 취소/환불 상태로만 변경할 수 있습니다.' },
         { status: 409, headers }

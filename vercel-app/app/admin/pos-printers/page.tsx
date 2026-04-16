@@ -1644,10 +1644,7 @@ export default function PosPrintersPage() {
                 {tr("posDrawerHint", "결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다.")}
               </p>
               <p className="text-xs text-muted-foreground">
-                {tr(
-                  "posDrawerBridgeHint",
-                  "※ 실제 자동 열림은 POS PC의 로컬 드로어 브리지(127.0.0.1) 실행이 필요합니다. 브리지가 없으면 설정은 저장되지만 하드웨어는 열리지 않습니다."
-                )}
+                {tr("posDrawerBridgeHint", "")}
               </p>
               <div className="space-y-3">
                 <ToggleRow label={tr("posCardAutoOpen", "카드결제 자동열기")} value={cardAutoOpen} onChange={setCardAutoOpen} t={t} />

@@ -3,7 +3,11 @@ Param(
   [string]$BaseUrl = "https://choongman-erp.vercel.app",
 
   [Parameter(Mandatory = $false)]
-  [string]$ReleaseNotes = "Stability improvements and latest features."
+  [string]$ReleaseNotes = "Stability improvements and latest features.",
+
+  # 비우면 windows-pos\dist, 없으면 가장 최근 windows-pos\dist-eb-*
+  [Parameter(Mandatory = $false)]
+  [string]$DistDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,11 +18,39 @@ function Get-Sha256($path) {
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $windowsPosDir = Join-Path $projectRoot "windows-pos"
-$distDir = Join-Path $windowsPosDir "dist"
 $publishDir = Join-Path $projectRoot "public\downloads\windows-pos"
 
-if (-not (Test-Path $distDir)) {
-  throw "No build output. Run build-windows-pos.ps1 or: cd windows-pos; npm run build:win"
+function Test-DistHasPublishableExe {
+  Param([string]$Dir)
+  if (-not (Test-Path -LiteralPath $Dir)) { return $false }
+  $exes = Get-ChildItem -Path $Dir -Filter "*.exe" -File -ErrorAction SilentlyContinue | Where-Object {
+    $_.Name -notlike "*blockmap*" -and $_.Name -notlike "*unpacked*"
+  }
+  return $null -ne $exes -and $exes.Count -gt 0
+}
+
+if (-not [string]::IsNullOrWhiteSpace($DistDir)) {
+  if ([System.IO.Path]::IsPathRooted($DistDir)) {
+    $distDir = $DistDir
+  } else {
+    $distDir = Join-Path $projectRoot $DistDir
+  }
+} else {
+  # dist 가 잠겨 비어 있으면 electron-builder 가 dist-eb-* 에만 exe 를 둠 → 그쪽을 자동 선택
+  $distDir = Join-Path $windowsPosDir "dist"
+  if (-not (Test-DistHasPublishableExe $distDir)) {
+    $fallback = Get-ChildItem -Path $windowsPosDir -Directory -Filter "dist-eb-*" -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+    if ($fallback -and (Test-DistHasPublishableExe $fallback.FullName)) {
+      $distDir = $fallback.FullName
+      Write-Host "Using build output folder: $distDir"
+    }
+  }
+}
+
+if (-not (Test-Path -LiteralPath $distDir)) {
+  throw "No build output under windows-pos (dist or dist-eb-*). Run scripts/build-windows-pos.ps1 or: cd windows-pos; npm run build:win"
 }
 
 if (-not (Test-Path $publishDir)) {
@@ -35,7 +67,7 @@ $exeCandidates = Get-ChildItem -Path $distDir -Filter "*.exe" -File | Where-Obje
   $_.Name -notlike "*blockmap*" -and $_.Name -notlike "*unpacked*"
 }
 if ($exeCandidates.Count -eq 0) {
-  throw "No .exe artifacts found under dist/"
+  throw "No .exe artifacts found under: $distDir"
 }
 
 $installer = $exeCandidates | Where-Object { $_.Name -match "Setup|setup|Installer|install" } | Select-Object -First 1

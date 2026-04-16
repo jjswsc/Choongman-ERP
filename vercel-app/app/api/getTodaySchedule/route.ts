@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import {
+  attendanceStoreNamePostgrestVariantsFilter,
+  employeeStorePostgrestVariantsFilter,
+} from '@/lib/attendance-utils'
 import { canonicalAreaFromText, primaryAreaForDisplay } from '@/lib/schedule-area'
+import { scheduleJoinMetaFromRow, type EmpRowForRealtimeJoin } from '@/lib/today-realtime-join'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -37,14 +42,50 @@ export async function GET(request: NextRequest) {
 
   try {
     const isAll = !store || store.toLowerCase() === 'all' || store === '전체' || store === '전체 매장'
-    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; memo?: string; plan_in_prev_day?: boolean }
-    let scheduleRows: SchRow[] = []
+    type SchRow = {
+      schedule_date?: string
+      store_name?: string
+      name?: string
+      employee_id?: number | null
+      plan_in?: string
+      plan_out?: string
+      break_start?: string
+      break_end?: string
+      memo?: string
+      plan_in_prev_day?: boolean
+    }
+    const scheduleSelectWithEid =
+      'schedule_date,store_name,name,employee_id,plan_in,plan_out,break_start,break_end,memo,plan_in_prev_day'
+    const scheduleSelectLegacy =
+      'schedule_date,store_name,name,plan_in,plan_out,break_start,break_end,memo,plan_in_prev_day'
+
+    const fetchScheduleChunk = async (filter: string): Promise<SchRow[]> => {
+      try {
+        return (await supabaseSelectFilter('schedules', filter, {
+          order: 'schedule_date.asc',
+          limit: 500,
+          select: scheduleSelectWithEid,
+        })) as SchRow[]
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (/employee_id|42703|column/i.test(em)) {
+          return (await supabaseSelectFilter('schedules', filter, {
+            order: 'schedule_date.asc',
+            limit: 500,
+            select: scheduleSelectLegacy,
+          })) as SchRow[]
+        }
+        throw e
+      }
+    }
+
     const dateFilter = `schedule_date=eq.${dateStr}`
+    let scheduleRows: SchRow[] = []
     if (isAll) {
-      scheduleRows = (await supabaseSelectFilter('schedules', dateFilter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
+      scheduleRows = await fetchScheduleChunk(dateFilter)
     } else {
-      const filter = `${dateFilter}&store_name=ilike.${encodeURIComponent(store)}`
-      scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
+      const filter = `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
+      scheduleRows = await fetchScheduleChunk(filter)
     }
     // 자정 넘는 근무: schedule_date=다음날 + plan_in_prev_day → 당일에도 포함 (당일 18:00~익일 02:00 등)
     const nextDay = (() => {
@@ -55,14 +96,30 @@ export async function GET(request: NextRequest) {
     const prevDayFilter = `schedule_date=eq.${nextDay}&plan_in_prev_day=eq.true`
     let prevDayRows: SchRow[] = []
     if (isAll) {
-      prevDayRows = (await supabaseSelectFilter('schedules', prevDayFilter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
+      prevDayRows = await fetchScheduleChunk(prevDayFilter)
     } else {
-      const filter = `${prevDayFilter}&store_name=ilike.${encodeURIComponent(store)}`
-      prevDayRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
+      const filter = `${prevDayFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
+      prevDayRows = await fetchScheduleChunk(filter)
     }
     scheduleRows = [...scheduleRows, ...prevDayRows]
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store,job' })) as { name?: string; nick?: string; store?: string; job?: string }[]
+    let empList: EmpRowForRealtimeJoin[] = []
+    const empSelectCandidates = [
+      'id,name,nick,store,job,employee_code,extra_stores',
+      'id,name,nick,store,employee_code,extra_stores',
+      'id,name,nick,store,job,employee_code',
+      'name,nick,store,job,employee_code',
+      'id,name,nick,store,job',
+      'name,nick,store,job',
+    ] as const
+    for (const sel of empSelectCandidates) {
+      try {
+        empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 5000, select: sel })) as EmpRowForRealtimeJoin[]
+        break
+      } catch {
+        continue
+      }
+    }
     const nameToNick: Record<string, string> = {}
     const storeNameToJob: Record<string, string> = {}
     for (const e of empList || []) {
@@ -84,14 +141,28 @@ export async function GET(request: NextRequest) {
 
     let leaveFilter = `leave_date=eq.${dateStr}&status=eq.승인`
     if (!isAll && store) {
-      leaveFilter += `&store=ilike.${encodeURIComponent(store)}`
+      leaveFilter += `&${employeeStorePostgrestVariantsFilter(store)}`
     }
     const leaveRows = (await supabaseSelectFilter(
       'leave_requests',
       leaveFilter,
       { order: 'leave_date.asc', limit: 100, select: 'store,name,leave_date,type' }
     )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
-    const leaveMerged: { date: string; store: string; name: string; nick: string; pIn: string; pOut: string; pBS: string; pBE: string; area: string; plan_in_prev_day: boolean; leaveType: string }[] = []
+    const leaveMerged: {
+      date: string
+      store: string
+      name: string
+      nick: string
+      pIn: string
+      pOut: string
+      pBS: string
+      pBE: string
+      area: string
+      plan_in_prev_day: boolean
+      leaveType: string
+      joinKey: string
+      employeeCode?: string
+    }[] = []
     for (const lr of leaveRows || []) {
       const storeVal = String(lr.store || '').trim()
       const nameVal = String(lr.name || '').trim()
@@ -99,6 +170,7 @@ export async function GET(request: NextRequest) {
       if (scheduleKeySet.has(key)) continue
       const type = String(lr.type || '').trim() || '휴가'
       const area = canonicalAreaFromText(storeNameToJob[storeVal + '|' + nameVal] || '')
+      const leaveMeta = scheduleJoinMetaFromRow(storeVal, nameVal, undefined, empList || [])
       leaveMerged.push({
         date: dateStr,
         store: storeVal,
@@ -111,6 +183,8 @@ export async function GET(request: NextRequest) {
         area: area || 'Service',
         plan_in_prev_day: false,
         leaveType: type,
+        joinKey: leaveMeta.joinKey,
+        employeeCode: leaveMeta.employeeCode,
       })
     }
 
@@ -118,6 +192,7 @@ export async function GET(request: NextRequest) {
       const st = String(r.store_name || '').trim()
       const nm = String(r.name || '').trim()
       const area = primaryAreaForDisplay(r.memo, storeNameToJob[st + '|' + nm])
+      const meta = scheduleJoinMetaFromRow(st, nm, r.employee_id ?? null, empList || [])
       return {
         date: toDateStr(r.schedule_date),
         store: st,
@@ -129,6 +204,12 @@ export async function GET(request: NextRequest) {
         pBE: formatTime(r.break_end),
         area,
         plan_in_prev_day: !!r.plan_in_prev_day,
+        joinKey: meta.joinKey,
+        employeeCode: meta.employeeCode,
+        employeeId:
+          r.employee_id != null && Number.isFinite(Number(r.employee_id))
+            ? Math.floor(Number(r.employee_id))
+            : undefined,
       }
     })
 

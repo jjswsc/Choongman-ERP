@@ -9,6 +9,9 @@ import {
   supabaseUpdate,
   supabaseDeleteByFilter,
 } from './supabase-server'
+import { formatReceivableInvoiceNo } from './receivable-invoice-format'
+
+export { formatReceivableInvoiceNo }
 
 export async function upsertPayableFromPO(params: {
   poId: number
@@ -41,12 +44,6 @@ export async function upsertPayableFromPO(params: {
   } else {
     await supabaseInsert('payable_transactions', row)
   }
-}
-
-/** 인보이스 번호 생성: IV{yyyymmdd}-{orderId} (출고 관리와 동일 형식) */
-export function formatReceivableInvoiceNo(orderId: number, transDate: string): string {
-  const datePart = String(transDate || '').replace(/\D/g, '').slice(0, 8) || new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  return `IV${datePart}-${orderId}`
 }
 
 export async function upsertReceivableFromOrder(params: {

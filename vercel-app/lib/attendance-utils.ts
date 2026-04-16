@@ -3,6 +3,7 @@
  */
 
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import { expandStoreVariantsForGrade } from '@/lib/grade-store-key-variants'
 
 export const ATTENDANCE_TZ = 'Asia/Bangkok'
 
@@ -70,6 +71,48 @@ export function employeeStorePostgrestFilter(storeFilter: string): string {
   return postgrestIlikeColumnFilter('store', storeFilter)
 }
 
+/**
+ * `expandStoreVariantsForGrade` 로 만든 매장 문자열 각각에 `*…*` 부분 일치 OR.
+ * UI는 "CM Silom" 인데 attendance_logs.store_name 이 `Silom` 만이면 단일 `*CM Silom*` 는 매칭되지 않음.
+ */
+function uniqueIlikeWildcardFragmentsForStore(storeFilter: string): string[] {
+  const raw = String(storeFilter || '').trim().replace(/\s+/g, ' ')
+  if (!raw) return []
+  const variants = expandStoreVariantsForGrade(raw)
+    .map((v) => String(v).trim())
+    .filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const v of variants) {
+    const frag = '*' + v.replace(/\*/g, '') + '*'
+    const key = frag.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(frag)
+  }
+  return out
+}
+
+/** attendance_logs / schedules — CM 접두·무접두 동시 허용 (쿼리당 `or` 키 1개) */
+export function attendanceStoreNamePostgrestVariantsFilter(storeFilter: string): string {
+  const fragments = uniqueIlikeWildcardFragmentsForStore(storeFilter)
+  if (fragments.length === 0) return ''
+  if (fragments.length === 1) {
+    return `store_name=ilike.${encodeURIComponent(fragments[0])}`
+  }
+  return `or=(${fragments.map((f) => `store_name.ilike.${encodeURIComponent(f)}`).join(',')})`
+}
+
+/** leave_requests.store 등 — 위와 동일 변형 OR */
+export function employeeStorePostgrestVariantsFilter(storeFilter: string): string {
+  const fragments = uniqueIlikeWildcardFragmentsForStore(storeFilter)
+  if (fragments.length === 0) return ''
+  if (fragments.length === 1) {
+    return `store=ilike.${encodeURIComponent(fragments[0])}`
+  }
+  return `or=(${fragments.map((f) => `store.ilike.${encodeURIComponent(f)}`).join(',')})`
+}
+
 /** 퇴근 로그 `approved` — 급여·getAttendanceRecordsAdmin은 승인/승인완료 모두 승인 처리. UI도 동일해야 조정 반영 버튼이 빠지지 않음 */
 export function isAttendanceOutApproved(approval: string | undefined | null): boolean {
   const a = String(approval || '').trim()
@@ -79,6 +122,19 @@ export function isAttendanceOutApproved(approval: string | undefined | null): bo
 /** 현재 시각을 방콕 기준 날짜 YYYY-MM-DD */
 export function todayStrBangkok(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })
+}
+
+/** 방콕 기준 현재 시각을 0~24 소수 시간(예: 14.5 = 14:30). 당일 실시간 시간 칸 판별용 */
+export function nowDecimalHoursBangkok(): number {
+  const hm = new Date().toLocaleTimeString('en-GB', {
+    timeZone: ATTENDANCE_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const m = hm.match(/(\d{1,2}):(\d{2})/)
+  if (!m) return 0
+  return parseInt(m[1], 10) + parseInt(m[2], 10) / 60
 }
 
 /** log_at(UTC ISO) → 방콕 기준 날짜 YYYY-MM-DD (급여/근태 집계용) */

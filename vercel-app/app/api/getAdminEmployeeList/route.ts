@@ -3,11 +3,8 @@ import { supabaseSelect, supabaseSelectPageCap } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
-import {
-  franchiseeQueryStoreAllowed,
-  normalizedAllowedStoresFromJwt,
-  parseExtraStoresColumn,
-} from '@/lib/franchisee-multi-store'
+import { franchiseeQueryStoreAllowed, normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
+import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 
 function toDateStr(val: unknown): string {

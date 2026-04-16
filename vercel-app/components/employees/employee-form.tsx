@@ -30,6 +30,19 @@ const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Franchisee", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
+/** 급여·수당 입력: 콤마 표시, 저장 값은 정수(바트) */
+function parseBahtAmountInput(raw: string): number {
+  const digits = raw.replace(/\D/g, "")
+  if (!digits) return 0
+  const n = Number(digits)
+  return Number.isFinite(n) ? Math.trunc(n) : 0
+}
+
+function formatBahtAmountInput(n: number): string {
+  if (n === 0 || !Number.isFinite(n)) return ""
+  return Math.trunc(n).toLocaleString("en-US")
+}
+
 function gradeBadgeStyle(g: string): string {
   const v = String(g || "-").trim().toUpperCase()
   if (v === "A" || v === "S") return "bg-[#1B5E20] text-white"
@@ -701,10 +714,12 @@ export function EmployeeForm({
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_label_sal_amt")}</label>
           <Input
-            type="number"
-            value={form.salAmt || ""}
-            onChange={(e) => update("salAmt", e.target.value ? Number(e.target.value) : 0)}
-            className="h-8 text-xs"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={formatBahtAmountInput(form.salAmt)}
+            onChange={(e) => update("salAmt", parseBahtAmountInput(e.target.value))}
+            className="h-8 text-xs tabular-nums"
           />
         </div>
         <div>
@@ -752,35 +767,36 @@ export function EmployeeForm({
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_position_allowance")}</label>
           <Input
-            type="number"
-            min={0}
-            value={form.positionAllowance || ""}
-            onChange={(e) => update("positionAllowance", e.target.value ? Number(e.target.value) : 0)}
-            className="h-8 text-xs"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={formatBahtAmountInput(form.positionAllowance)}
+            onChange={(e) => update("positionAllowance", parseBahtAmountInput(e.target.value))}
+            className="h-8 text-xs tabular-nums"
           />
           <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_position_allowance_hint")}</p>
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_risk_allowance")}</label>
           <Input
-            type="number"
-            min={0}
-            value={form.riskAllowance || ""}
-            onChange={(e) => update("riskAllowance", e.target.value ? Number(e.target.value) : 0)}
-            className="h-8 text-xs"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={formatBahtAmountInput(form.riskAllowance)}
+            onChange={(e) => update("riskAllowance", parseBahtAmountInput(e.target.value))}
+            className="h-8 text-xs tabular-nums"
           />
           <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_risk_allowance_hint")}</p>
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_attendance_allowance")}</label>
           <Input
-            type="number"
-            min={0}
-            value={form.attendanceAllowance || ""}
-            onChange={(e) =>
-              update("attendanceAllowance", e.target.value ? Number(e.target.value) : 0)
-            }
-            className="h-8 text-xs"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={formatBahtAmountInput(form.attendanceAllowance)}
+            onChange={(e) => update("attendanceAllowance", parseBahtAmountInput(e.target.value))}
+            className="h-8 text-xs tabular-nums"
           />
           <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_attendance_allowance_hint")}</p>
         </div>

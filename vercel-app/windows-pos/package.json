@@ -1,6 +1,6 @@
 {
   "name": "choongman-pos-windows",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "author": "Choongman",
   "description": "Windows installed hybrid POS shell (Electron)",
@@ -23,7 +23,9 @@
       {
         "from": "scripts",
         "to": "scripts",
-        "filter": ["**/*.ps1"]
+        "filter": [
+          "**/*.ps1"
+        ]
       }
     ],
     "files": [

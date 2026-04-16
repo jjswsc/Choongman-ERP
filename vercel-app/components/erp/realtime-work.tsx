@@ -15,7 +15,11 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getTodaySchedule, getTodayAttendanceSummary, type TodayScheduleItem, type TodayAttendanceItem } from "@/lib/api-client"
-import { todayStrBangkok } from "@/lib/attendance-utils"
+import { todayStrBangkok, nowDecimalHoursBangkok } from "@/lib/attendance-utils"
+import {
+  buildAttendanceSummaryLookupMap,
+  findAttendanceForRealtimeScheduleRow,
+} from "@/lib/today-realtime-join"
 import { cn } from "@/lib/utils"
 
 function todayStr() {
@@ -29,11 +33,65 @@ function parseTimeToDecimal(s: string | null | undefined): number | null {
   return parseInt(match[1], 10) + parseInt(match[2], 10) / 60
 }
 
-/** 근무=● 파란(정상)/빨간(문제), 휴게=○ 테두리만 */
+/**
+ * getTodayAttendanceSummary 행: 당일 실시간 격자의 행·칸 톤용.
+ * 퇴근 전·퇴근미기록·outTimeStr 미기록 은 **파랑** — onlyIn 누락·캐시 깨짐 시에도 late_min 만으로 빨강 안 나게 한다.
+ */
+function attendanceSummaryIndicatesProblem(att: TodayAttendanceItem): boolean {
+  if (att.onlyIn === true) return false
+  const outRaw = String(att.outTimeStr ?? "")
+    .trim()
+    .toLowerCase()
+  if (!outRaw || outRaw === "미기록" || outRaw === "-" || outRaw === "n/a") return false
+
+  const s = String(att.status ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+  if (s.includes("퇴근") && s.includes("미기록")) return false
+  if (s.includes("퇴근미기록")) return false
+  if (/^정상/.test(s)) return false
+
+  const lm = Number(att.lateMin)
+  if (Number.isFinite(lm) && lm > 0) return true
+  if (!s) return false
+  if (/지각|결석|조퇴|휴게초과/.test(s)) return true
+  if (s.includes("미기록") && !s.includes("퇴근")) return true
+  return false
+}
+
+/** 근무=● 파란(정상)/빨간(문제)/미출근·중립(흰+테두리), 휴게=○ 테두리만 */
 const WORK_NORMAL = "bg-blue-500"
 const WORK_PROBLEM = "bg-red-500"
+const WORK_PENDING = "bg-white border border-muted-foreground/40 dark:bg-card dark:border-muted-foreground/50"
 
-/** ●/○ 원형 마크 - 시간표 정상=파란, 문제=빨간 */
+type WorkMarkTone = "pending" | "normal" | "problem"
+
+function workClassForTone(tone: WorkMarkTone): string {
+  if (tone === "problem") return WORK_PROBLEM
+  if (tone === "pending") return WORK_PENDING
+  return WORK_NORMAL
+}
+
+/** 출근 기록 없을 때: 예정 출근 시각 이전·당일 미래 칸은 중립, 지난 칸은 문제(빨강). 과거 날은 근무 칸 전부 문제. */
+function workToneWithoutAttendance(params: {
+  viewingDate: string
+  planInDec: number | null
+  planOutDec: number | null
+  hourCol: number
+  /** 당일 조회일 때만 사용 (방콕 현재 시각 소수 시간) */
+  nowDecToday: number
+}): WorkMarkTone {
+  const { viewingDate, planInDec, planOutDec, hourCol, nowDecToday } = params
+  if (planInDec == null || planOutDec == null) return "pending"
+  const today = todayStrBangkok()
+  if (viewingDate > today) return "pending"
+  if (viewingDate < today) return "problem"
+  if (nowDecToday < planInDec) return "pending"
+  if (hourCol < nowDecToday) return "problem"
+  return "pending"
+}
+
+/** ●/○ 원형 마크 — 출근 전은 중립(흰), 출근 후 정상=파랑, 문제=빨강 */
 function ScheduleCellMark({
   fullBreak,
   fullWork,
@@ -41,7 +99,7 @@ function ScheduleCellMark({
   breakSecond,
   workFirst,
   workSecond,
-  hasProblem,
+  workTone,
 }: {
   fullBreak: boolean
   fullWork: boolean
@@ -49,9 +107,9 @@ function ScheduleCellMark({
   breakSecond: boolean
   workFirst: boolean
   workSecond: boolean
-  hasProblem: boolean
+  workTone: WorkMarkTone
 }) {
-  const workClass = hasProblem ? WORK_PROBLEM : WORK_NORMAL
+  const workClass = workClassForTone(workTone)
   if (fullBreak) {
     return <span className="inline-block h-4 w-4 rounded-full border-2 border-muted-foreground/50 flex-shrink-0 bg-transparent" />
   }
@@ -157,17 +215,38 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     areaFilter === "all"
       ? schedule
       : schedule.filter((r) => (r.area || "Service") === (areaFilter === "service" ? "Service" : areaFilter === "kitchen" ? "Kitchen" : "Office"))
-  const attByKey: Record<string, TodayAttendanceItem> = {}
-  for (const a of attendance) {
-    attByKey[`${a.store}|${a.name}`] = a
-  }
+  const attLookup = buildAttendanceSummaryLookupMap(attendance)
 
-  const byPerson: Record<string, { name: string; store: string; area: string; pIn: string; pOut: string; pBS: string; pBE: string; leaveType?: string }> = {}
+  const byPerson: Record<
+    string,
+    {
+      joinKey: string
+      name: string
+      scheduleName: string
+      nick: string
+      store: string
+      employeeCode?: string
+      employeeId?: number
+      area: string
+      pIn: string
+      pOut: string
+      pBS: string
+      pBE: string
+      leaveType?: string
+    }
+  > = {}
   for (const s of filteredSchedule) {
-    const key = `${s.store}|${s.name}`
+    const sn = String(s.name || "").trim()
+    const nk = String(s.nick || "").trim()
+    const key = s.joinKey || `${s.store}|${sn}`
     byPerson[key] = {
+      joinKey: key,
       name: s.nick || s.name,
+      scheduleName: sn,
+      nick: nk,
       store: s.store,
+      employeeCode: s.employeeCode,
+      employeeId: s.employeeId,
       area: s.area || "Service",
       pIn: s.pIn,
       pOut: s.pOut,
@@ -291,21 +370,35 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                 </tr>
               </thead>
               <tbody>
-                {personKeys.map((key) => {
+                {(() => {
+                  /** input[type=date] 값과 방콕 오늘을 동일 규칙(YYYY-MM-DD)으로만 비교 — 엄격 === 오판 방지 */
+                  const dateKey = String(date ?? "")
+                    .trim()
+                    .slice(0, 10)
+                  const todayKey = todayStrBangkok().trim().slice(0, 10)
+                  const nowDecToday = dateKey === todayKey ? nowDecimalHoursBangkok() : 0
+                  return personKeys.map((key) => {
                   const p = byPerson[key]
                   const isLeave = !!p.leaveType
-                  const att = attByKey[key]
+                  /** 스케줄 표시(nick)·출근 요약(풀네임)·joinKey 불일치 보강 — @/lib/today-realtime-join */
+                  const att = findAttendanceForRealtimeScheduleRow(attendance, attLookup, {
+                    joinKey: p.joinKey,
+                    store: p.store,
+                    employeeCode: p.employeeCode,
+                    employeeId: p.employeeId,
+                    scheduleName: p.scheduleName,
+                    nick: p.nick,
+                    displayLabel: p.name,
+                  })
                   const inDec = parseTimeToDecimal(p.pIn)
                   const outDec = parseTimeToDecimal(p.pOut)
                   const bsDec = parseTimeToDecimal(p.pBS)
                   const beDec = parseTimeToDecimal(p.pBE)
-                  // 휴가일: 보라 배경. 그 외 출근만 하면 파란색, 지각·조퇴 등이면 빨간색. 퇴근미기록(근무중)은 정상
-                  const hasProblem: boolean = !isLeave && (!att
-                    ? true
-                    : Boolean(
-                        (att.lateMin && att.lateMin > 0) ||
-                          (att.status && att.status !== '퇴근미기록' && /지각|결석|미기록|조퇴|휴게초과/.test(att.status))
-                      ))
+                  // 휴가일: 보라 배경. 미출근: 예정 출근 전·당일 미래 칸 중립, 지난 칸 빨강. 출근 후 정상=파랑(퇴근미기록 포함), 지각 등만 빨강
+                  const hasProblem: boolean =
+                    !isLeave && !!att && attendanceSummaryIndicatesProblem(att)
+                  /** 출근 있을 때만 행 단위 톤(미출근은 칸별 workToneWithoutAttendance) */
+                  const attWorkTone: WorkMarkTone = !att ? "normal" : hasProblem ? "problem" : "normal"
                   const rowBg = isLeave
                     ? "bg-violet-50/80 dark:bg-violet-950/40"
                     : hasProblem
@@ -351,6 +444,15 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                         const fullBreak = breakFirst && breakSecond
                         const fullWork = workFirst && workSecond
                         const inAny = fullBreak || fullWork || breakFirst || breakSecond || workFirst || workSecond
+                        const cellWorkTone: WorkMarkTone = att
+                          ? attWorkTone
+                          : workToneWithoutAttendance({
+                                viewingDate: date,
+                                planInDec: inDec,
+                                planOutDec: outDec,
+                                hourCol: h,
+                                nowDecToday,
+                              })
 
                         return (
                           <td key={h} className="border-r border-border px-0 py-1.5 text-center align-middle last:border-r-0 w-[28px] min-w-[28px]">
@@ -363,7 +465,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                                   breakSecond={breakSecond}
                                   workFirst={workFirst}
                                   workSecond={workSecond}
-                                  hasProblem={hasProblem}
+                                  workTone={cellWorkTone}
                                 />
                               </div>
                             ) : (
@@ -374,15 +476,22 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                       })}
                     </tr>
                   )
-                })}
+                })
+                })()}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Legend - ● 파란=정상, ● 빨간=문제, ○ 휴게 */}
+      {/* Legend - ● 흰=출근 전 예정, 파란=정상, 빨간=문제, ○ 휴게 */}
       <div className="flex flex-wrap items-center justify-center gap-4 rounded-b-2xl border-t bg-muted/20 px-4 py-3">
+        <div className="flex items-center gap-1.5">
+          <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/45 bg-white dark:bg-card shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">
+            {t("scheduleWork")} ● {t("scheduleTodayPending")}
+          </span>
+        </div>
         <div className="flex items-center gap-1.5">
           <div className="h-3.5 w-3.5 rounded-full bg-blue-500 shrink-0" />
           <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} ● {t("scheduleTodayNormal")}</span>

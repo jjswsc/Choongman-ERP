@@ -1286,16 +1286,27 @@ export interface TodayScheduleItem {
   plan_in_prev_day?: boolean
   /** 승인된 휴가일 때 종류 (병가, 휴가, ลากิจ 등) */
   leaveType?: string
+  /** 당일 출근 요약과 조인 (직원코드 > id > 이름) */
+  joinKey?: string
+  employeeCode?: string
+  /** schedules.employee_id — joinKey 불일치 시 보조 매칭 */
+  employeeId?: number
 }
 
 export interface TodayAttendanceItem {
   store: string
   name: string
+  /** employees.nick — 실시간 격자에서 표시명(nick)과 출근 요약(풀네임) 조인 보강 */
+  nick?: string
   inTimeStr: string
   outTimeStr: string
   lateMin: number
   status: string
   onlyIn: boolean
+  joinKey?: string
+  employeeCode?: string
+  /** attendance_logs.employee_id — joinKey 불일치 시 보조 매칭 */
+  employeeId?: number
 }
 
 export async function getTodaySchedule(params: { store: string; date: string }) {

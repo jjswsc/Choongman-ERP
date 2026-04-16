@@ -13,9 +13,50 @@ import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { normalizeEmployeeNameFields } from "@/lib/employee-display-name"
 import { cn, displayLabelShort } from "@/lib/utils"
 
+/** 이보다 적게 움직이면 스크롤 드래그로 보지 않음 — 행 접기/펼치기 클릭과 공존 */
+const SCHEDULE_SCROLL_DRAG_ARM_PX = 10
+
 function scheduleRowIsLeave(r: WeeklyScheduleItem): boolean {
   const lt = r.leaveType
   return lt != null && String(lt).trim() !== ""
+}
+
+/** 스케줄 박스 기준 위로 — 세로로 스크롤 가능한 첫 부모(없으면 문서) */
+function findVerticalScrollParent(from: HTMLElement): HTMLElement {
+  let el: HTMLElement | null = from
+  for (let i = 0; i < 24 && el; i++) {
+    const { overflowY } = getComputedStyle(el)
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      el.scrollHeight > el.clientHeight + 2
+    ) {
+      return el
+    }
+    el = el.parentElement
+  }
+  return (document.scrollingElement as HTMLElement) || document.documentElement
+}
+
+/** 뷰포트(문서) 스크롤은 일부 환경에서 element.scrollTop 만으로 반영되지 않음 → window.scrollTo 사용 */
+function verticalScrollReadWrite(from: HTMLElement): { getTop: () => number; setTop: (top: number) => void } {
+  const el = findVerticalScrollParent(from)
+  const se = document.scrollingElement as HTMLElement | null
+  const isViewport =
+    el === se || el === document.documentElement || (document.body && el === document.body)
+  if (isViewport) {
+    return {
+      getTop: () => window.scrollY || document.documentElement.scrollTop || document.body?.scrollTop || 0,
+      setTop: (top: number) => {
+        window.scrollTo({ top, left: window.scrollX, behavior: "instant" })
+      },
+    }
+  }
+  return {
+    getTop: () => el.scrollTop,
+    setTop: (top: number) => {
+      el.scrollTop = top
+    },
+  }
 }
 
 function scheduleTimeOnly(v: string | null | undefined): string {
@@ -54,8 +95,9 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(new Set())
 
   /**
-   * 가로 드래그 스크롤: (1) flex 자식은 min-w-0 없으면 부모가 내용만큼 커져 scrollWidth===clientWidth가 됨
-   * (2) capture/setPointerCapture는 환경에 따라 동작이 달라 버블 pointerdown + window move/up만 사용
+   * 드래그 스크롤: 가로 → scrollEl.scrollLeft / 세로 → 상위 overflow-y 부모/문서 scrollTop
+   * SCHEDULE_SCROLL_DRAG_ARM_PX 이전에는 캡처하지 않아 행 접기/펼치기 클릭과 겹친다.
+   * 그 이후에만 setPointerCapture 로 셀 위에서도 move 가 온다.
    */
   const scheduleHScrollRef = React.useRef<HTMLDivElement>(null)
   const suppressScheduleRowClickRef = React.useRef(false)
@@ -69,34 +111,99 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
 
     let activeId: number | null = null
     let startX = 0
+    let startY = 0
     let startScroll = 0
+    let vScroll: ReturnType<typeof verticalScrollReadWrite> | null = null
+    let startScrollTop = 0
+    let dragAxisLocked: "h" | "v" | null = null
+    let dragArmed = false
     let dragMoved = false
     let uiDragging = false
 
-    function detachWindowListeners() {
-      window.removeEventListener("pointermove", onPointerMove)
-      window.removeEventListener("pointerup", onPointerEnd)
-      window.removeEventListener("pointercancel", onPointerEnd)
+    let docMove: ((e: PointerEvent) => void) | null = null
+    let docUp: ((e: PointerEvent) => void) | null = null
+    let onLostCap: ((e: Event) => void) | null = null
+
+    function removeDocPointerTracking() {
+      if (docMove) {
+        document.removeEventListener("pointermove", docMove)
+        docMove = null
+      }
+      if (docUp) {
+        document.removeEventListener("pointerup", docUp)
+        document.removeEventListener("pointercancel", docUp)
+        docUp = null
+      }
+      if (onLostCap) {
+        scrollEl.removeEventListener("lostpointercapture", onLostCap)
+        onLostCap = null
+      }
     }
 
-    function onPointerEnd(e: PointerEvent) {
+    function endPointerSession(e: PointerEvent) {
       if (activeId == null || e.pointerId !== activeId) return
       activeId = null
-      detachWindowListeners()
+      removeDocPointerTracking()
+      if (dragArmed) {
+        try {
+          scrollEl.releasePointerCapture(e.pointerId)
+        } catch {
+          /* noop */
+        }
+      }
       if (uiDragging) {
         uiDragging = false
         setScheduleHScrollDragging(false)
       }
-      if (dragMoved) suppressScheduleRowClickRef.current = true
+      if (dragArmed && dragMoved) suppressScheduleRowClickRef.current = true
       dragMoved = false
+      dragArmed = false
+      dragAxisLocked = null
     }
 
-    function onPointerMove(e: PointerEvent) {
+    function onLostCapture(e: Event) {
+      if (activeId == null) return
+      const pe = e as PointerEvent
+      if (pe.pointerId !== activeId) return
+      endPointerSession(pe)
+    }
+
+    function onPointerMoveDoc(e: PointerEvent) {
       if (activeId == null || e.pointerId !== activeId) return
       const dx = e.clientX - startX
-      if (Math.abs(dx) <= 4) return
-      dragMoved = true
-      scrollEl.scrollLeft = startScroll - dx
+      const dy = e.clientY - startY
+      const canScrollH = scrollEl.scrollWidth > scrollEl.clientWidth + 2
+
+      if (!dragArmed) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < SCHEDULE_SCROLL_DRAG_ARM_PX) return
+        dragArmed = true
+        try {
+          scrollEl.setPointerCapture(e.pointerId)
+        } catch {
+          /* noop */
+        }
+        onLostCap = onLostCapture
+        scrollEl.addEventListener("lostpointercapture", onLostCap)
+        if (!canScrollH) dragAxisLocked = "v"
+        else {
+          const bias = 4
+          if (Math.abs(dy) >= Math.abs(dx) + bias) dragAxisLocked = "v"
+          else if (Math.abs(dx) >= Math.abs(dy) + bias) dragAxisLocked = "h"
+          else dragAxisLocked = Math.abs(dy) >= Math.abs(dx) ? "v" : "h"
+        }
+      }
+
+      if (dragAxisLocked === null) return
+      if (dragAxisLocked === "h") {
+        if (!canScrollH) return
+        if (Math.abs(dx) <= 2) return
+        dragMoved = true
+        scrollEl.scrollLeft = startScroll - dx
+      } else {
+        if (Math.abs(dy) <= 2) return
+        dragMoved = true
+        if (vScroll) vScroll.setTop(startScrollTop + dy)
+      }
       e.preventDefault()
       if (!uiDragging) {
         uiDragging = true
@@ -107,13 +214,26 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     function onPointerDownBubble(e: PointerEvent) {
       if (e.target instanceof Node && !scrollEl.contains(e.target)) return
       if (e.pointerType === "mouse" && e.button !== 0) return
+      const t = e.target
+      if (t instanceof Element) {
+        const tag = t.tagName
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A") return
+      }
       activeId = e.pointerId
       startX = e.clientX
+      startY = e.clientY
       startScroll = scrollEl.scrollLeft
+      vScroll = verticalScrollReadWrite(scrollEl)
+      startScrollTop = vScroll.getTop()
+      dragAxisLocked = null
+      dragArmed = false
       dragMoved = false
-      window.addEventListener("pointermove", onPointerMove, { passive: false })
-      window.addEventListener("pointerup", onPointerEnd)
-      window.addEventListener("pointercancel", onPointerEnd)
+
+      docMove = onPointerMoveDoc
+      docUp = endPointerSession
+      document.addEventListener("pointermove", docMove, { passive: false })
+      document.addEventListener("pointerup", docUp)
+      document.addEventListener("pointercancel", docUp)
     }
 
     function onWheel(e: WheelEvent) {
@@ -129,13 +249,13 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       }
     }
 
-    scrollEl.addEventListener("pointerdown", onPointerDownBubble)
+    scrollEl.addEventListener("pointerdown", onPointerDownBubble, { capture: true })
     scrollEl.addEventListener("wheel", onWheel, { passive: false })
 
     return () => {
-      detachWindowListeners()
+      removeDocPointerTracking()
       activeId = null
-      scrollEl.removeEventListener("pointerdown", onPointerDownBubble)
+      scrollEl.removeEventListener("pointerdown", onPointerDownBubble, { capture: true })
       scrollEl.removeEventListener("wheel", onWheel)
     }
   }, [hasSearched, schedule.length, loading])
@@ -489,12 +609,12 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
             <div
               ref={scheduleHScrollRef}
               className={cn(
-                "min-w-0 w-full max-w-full max-h-[min(75vh,42rem)] overflow-x-auto overflow-y-auto overscroll-contain px-4 pb-4 [-webkit-overflow-scrolling:touch] print:max-h-none print:overflow-visible print:px-0",
+                "min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-4 pb-4 [-webkit-overflow-scrolling:touch] print:overflow-visible print:px-0 touch-none select-none",
                 scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
               )}
             >
             <div
-              className="w-max print:!min-w-0 print:w-full print:max-w-none print-schedule-wrap"
+              className="w-max print:!min-w-0 print:w-full print:max-w-none print-schedule-wrap select-none"
               style={{ minWidth: "max(720px, max-content, calc(100% + 1px))" }}
             >
               {/* 요일 헤더 */}

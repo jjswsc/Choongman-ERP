@@ -549,7 +549,7 @@ export function AdminAccountingCompliance({
   const canWriteCompliance = canWriteAccountingCompliance(role)
   const canApproveCompliance = canApproveAccountingCompliance(role)
   const canApproveUnlock = canApproveAccountingPeriodUnlock(role)
-  const { stores: storeList } = useStoreList()
+  const { stores: storeList, resolveStoreKey } = useStoreList()
   const isOffice = isOfficeRole(role)
   const isManager = isManagerOrFranchiseeRole(role)
   const managerStore = (auth?.store || "").trim()
@@ -571,6 +571,14 @@ export function AdminAccountingCompliance({
   )
   const storeTb = externalFiling ? filingStoreFilter : internalStoreTb
   const setStoreTb = externalFiling ? onFilingStoreFilterChange : setInternalStoreTb
+
+  /** POS·원장의 store_name(코드)과 로그인/표시 문자열이 다를 때 레거시→코드로 맞춤 */
+  const storeFilterForLedger = React.useMemo(() => {
+    const s = String(storeTb ?? "").trim()
+    if (!s || s === "All" || s === "*") return "All"
+    const r = String(resolveStoreKey(s) ?? "").trim()
+    return r || s
+  }, [storeTb, resolveStoreKey])
 
   const [resp, setResp] = React.useState<Record<string, ThaiFilingResponsibility>>({})
   const [notes, setNotes] = React.useState("")
@@ -903,7 +911,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
       })
       if (data.error) appAlert(t("accCompLoadFail"))
       setVatRows(mapVat(data.entries || []))
@@ -913,7 +921,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeTb, mapVat])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapVat])
 
   const mapWht = React.useCallback(
     (entries: Record<string, unknown>[]): WhtDraft[] =>
@@ -948,7 +956,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
       })
       setWhtRows(mapWht(data.entries || []))
     } catch {
@@ -956,7 +964,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeTb, mapWht])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapWht])
 
   const loadTaxSummary = React.useCallback(async () => {
     if (!canUse) return
@@ -966,7 +974,7 @@ export function AdminAccountingCompliance({
         userRole: role,
         yearMonth: taxMonth,
         periodType,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
       })
       setTaxSummary(data)
     } catch {
@@ -974,7 +982,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, storeTb])
+  }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
 
   const loadCit = React.useCallback(async () => {
     if (!canUse) return
@@ -1583,7 +1591,7 @@ export function AdminAccountingCompliance({
     if (!canUse || tab !== "summary") return
     if (pp30SubView === "wht") void loadWht()
     else void loadVat()
-  }, [canUse, tab, pp30SubView, taxMonth, storeTb, loadVat, loadWht])
+  }, [canUse, tab, pp30SubView, taxMonth, storeFilterForLedger, loadVat, loadWht])
 
   React.useEffect(() => {
     if (canUse && tab === "cit") void loadCit()
@@ -2232,9 +2240,9 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
       }),
-    [role, taxMonth, periodType, ledgerStatusFilter, storeTb]
+    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
   const whtExportUrl = React.useMemo(
     () =>
@@ -2244,9 +2252,9 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
       }),
-    [role, taxMonth, periodType, ledgerStatusFilter, storeTb]
+    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
   const pnd1FilingForm = React.useMemo<"pnd1" | "pnd1a" | "all">(() => {
     if (pnd1FormMode === "pnd1" || pnd1FormMode === "pnd1a" || pnd1FormMode === "all") return pnd1FormMode
@@ -2260,7 +2268,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
         filingForm: pnd1FilingForm,
         payerTaxId: pnd1PayerTaxId,
         payerBranchNo: pnd1PayerBranchNo,
@@ -2272,7 +2280,7 @@ export function AdminAccountingCompliance({
       taxMonth,
       periodType,
       ledgerStatusFilter,
-      storeTb,
+      storeFilterForLedger,
       pnd1FilingForm,
       pnd1PayerTaxId,
       pnd1PayerBranchNo,
@@ -2580,7 +2588,7 @@ export function AdminAccountingCompliance({
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
-        storeFilter: storeTb,
+        storeFilter: storeFilterForLedger,
         filingForm: pnd1FilingForm,
       })
       setPnd1ValidationResult(data)
@@ -2604,7 +2612,7 @@ export function AdminAccountingCompliance({
     } finally {
       setPnd1Validating(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeTb, pnd1FilingForm, lang])
+  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, pnd1FilingForm, lang])
 
   const storeOptionLabel = React.useCallback(
     (code: string) => (code === "All" ? t("all") : code),
@@ -4051,7 +4059,7 @@ export function AdminAccountingCompliance({
                       onClick={() =>
                         setVatRows((prev) => [
                           ...prev,
-                          { ...emptyVat(taxMonth, storeTb !== "All" ? storeTb : ""), direction: "output" },
+                          { ...emptyVat(taxMonth, storeFilterForLedger !== "All" ? storeFilterForLedger : ""), direction: "output" },
                         ])
                       }
                     >
@@ -4268,7 +4276,7 @@ export function AdminAccountingCompliance({
                       onClick={() =>
                         setVatRows((prev) => [
                           ...prev,
-                          { ...emptyVat(taxMonth, storeTb !== "All" ? storeTb : ""), direction: "input" },
+                          { ...emptyVat(taxMonth, storeFilterForLedger !== "All" ? storeFilterForLedger : ""), direction: "input" },
                         ])
                       }
                     >

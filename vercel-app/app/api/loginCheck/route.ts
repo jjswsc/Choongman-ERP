@@ -5,11 +5,8 @@ import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore } from '@/lib/permissions'
 import { deriveTenantIdFromCompany, normalizeCompanyName } from '@/lib/tenant-context'
-import {
-  buildAllowedStoresForToken,
-  getFranchiseeMultiStoreSettings,
-  parseExtraStoresColumn,
-} from '@/lib/franchisee-multi-store'
+import { buildAllowedStoresForToken, getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store'
+import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { buildSetAuthCookieHeader } from '@/lib/auth-cookie'
 import {
   employeeRowsMatchingSubmittedStore,

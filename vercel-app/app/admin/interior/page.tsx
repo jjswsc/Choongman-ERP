@@ -227,13 +227,15 @@ export default function InteriorPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-24">{t("posMenuCode")}</TableHead>
-                    <TableHead>{t("posMenuName")}</TableHead>
-                    <TableHead className="w-24">{t("status")}</TableHead>
-                    <TableHead className="w-28 text-right">{t("interiorBudget")}</TableHead>
-                    <TableHead className="w-24">{t("dateFrom")}</TableHead>
-                    <TableHead className="w-24">{t("dateTo")}</TableHead>
-                    <TableHead className="min-w-[10rem]">{t("interiorToolShortcuts")}</TableHead>
+                    <TableHead className="w-24 text-center">{t("posMenuCode")}</TableHead>
+                    <TableHead className="text-center">{t("posMenuName")}</TableHead>
+                    <TableHead className="w-24 text-center">{t("status")}</TableHead>
+                    <TableHead className="w-28 text-center">{t("interiorBudget")}</TableHead>
+                    <TableHead className="w-24 text-center">{t("dateFrom")}</TableHead>
+                    <TableHead className="w-24 text-center">{t("dateTo")}</TableHead>
+                    <TableHead className="min-w-[15rem] whitespace-nowrap text-center">
+                      {t("interiorToolShortcuts")}
+                    </TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -260,9 +262,9 @@ export default function InteriorPage() {
                       <TableCell className="text-xs text-muted-foreground">
                         {p.endDate ?? "—"}
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()} className="align-top">
+                      <TableCell onClick={(e) => e.stopPropagation()} className="text-center">
                         {p.id ? (
-                          <div className="flex max-w-[14rem] flex-wrap justify-end gap-0.5">
+                          <div className="inline-flex flex-nowrap items-center justify-center gap-0.5">
                             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild title={t("interiorSchedule")}>
                               <Link href={withInteriorProjectId(INTERIOR_ADMIN.schedule, p.id)}><Calendar className="h-3.5 w-3.5" /></Link>
                             </Button>

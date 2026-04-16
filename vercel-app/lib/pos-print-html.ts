@@ -3,6 +3,7 @@ import {
   type PrintHtmlInHiddenIframeOptions,
 } from '@/lib/print-html-iframe'
 import { appAlert } from '@/lib/app-message'
+import { getClientUiLang, getUiString } from '@/lib/i18n'
 
 /**
  * 주문 영수증(directPrint) 직후 주방전을 바로 호출하면, 일부 ESC/POS 드라이버가 스풀에서
@@ -85,6 +86,7 @@ export function printPosHtmlDocument(
       : undefined
 
   if (useShell) {
+    const uiLang = getClientUiLang()
     void shell
       .printHtml!(fullDocumentHtml, shellOpts)
       .then((r) => {
@@ -92,23 +94,23 @@ export function printPosHtmlDocument(
         if (ok) {
           if (r?.cutOk === false && opts?.alertOnCutFailure !== false) {
             const detail = r?.cutReason ? ` (${String(r.cutReason)})` : ''
-            void appAlert(`인쇄는 완료되었으나 용지 자동 절단에 실패했습니다.${detail}`)
+            void appAlert(getUiString(uiLang, 'posPrintCutFailedDetail', { detail }))
           }
           opts?.onAfterCleanup?.()
           return
         }
-        const reason =
+        const reason: string =
           r && typeof (r as { reason?: string }).reason === 'string'
-            ? (r as { reason?: string }).reason
+            ? String((r as { reason?: string }).reason)
             : 'print_failed'
         if (opts?.suppressPrintError !== true) {
-          void appAlert(`인쇄에 실패했습니다: ${reason}`)
+          void appAlert(getUiString(uiLang, 'posPrintFailedWithReason', { reason }))
         }
         printHtmlInHiddenIframe(fullDocumentHtml, opts)
       })
       .catch(() => {
         if (opts?.suppressPrintError !== true) {
-          void appAlert('인쇄 요청 중 오류가 발생했습니다.')
+          void appAlert(getUiString(uiLang, 'posPrintRequestError'))
         }
         printHtmlInHiddenIframe(fullDocumentHtml, opts)
       })

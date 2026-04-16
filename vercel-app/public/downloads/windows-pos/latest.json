@@ -1,29 +1,29 @@
 ﻿{
-    "version":  "0.1.0",
+    "version":  "0.1.1",
     "files":  [
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "e1cbf325fd108bb95e848af8f644bd55c137446eb2c0d8e03b5a42db43860f65"
+                      "sha256":  "468163336a5fb3a4ab285932c922e834efdf51d6f937748bdfee344b45854111"
                   },
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.0-setup.exe",
-                      "name":  "cm-pos-windows-0.1.0-setup.exe",
-                      "sha256":  "e1cbf325fd108bb95e848af8f644bd55c137446eb2c0d8e03b5a42db43860f65"
+                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.1-setup.exe",
+                      "name":  "cm-pos-windows-0.1.1-setup.exe",
+                      "sha256":  "468163336a5fb3a4ab285932c922e834efdf51d6f937748bdfee344b45854111"
                   },
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-portable.exe",
+                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-portable.exe",
                       "name":  "cm-pos-windows-latest-portable.exe",
-                      "sha256":  "20f3dda5de827f242bc29dcc0fbb197b3dac963c9cee2721fc5f34db81a981ed"
+                      "sha256":  "a461940abaa0c45eba1b663542de3f3a796b84db850ee7982c5bcdf71fdb60bc"
                   },
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-0.1.0-portable.exe",
-                      "name":  "cm-pos-windows-0.1.0-portable.exe",
-                      "sha256":  "20f3dda5de827f242bc29dcc0fbb197b3dac963c9cee2721fc5f34db81a981ed"
+                      "url":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.1-portable.exe",
+                      "name":  "cm-pos-windows-0.1.1-portable.exe",
+                      "sha256":  "a461940abaa0c45eba1b663542de3f3a796b84db850ee7982c5bcdf71fdb60bc"
                   }
               ],
-    "installerSha256":  "e1cbf325fd108bb95e848af8f644bd55c137446eb2c0d8e03b5a42db43860f65",
-    "publishedAtUtc":  "2026-04-04T07:27:32.5918686Z",
-    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "notes":  "Stability improvements and latest features."
+    "installerSha256":  "468163336a5fb3a4ab285932c922e834efdf51d6f937748bdfee344b45854111",
+    "publishedAtUtc":  "2026-04-16T06:58:19.1875279Z",
+    "installerUrl":  "https://www.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+    "notes":  "판매용 빌드"
 }
