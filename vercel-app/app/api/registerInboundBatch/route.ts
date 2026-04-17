@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
+import { deletePayableFromPO } from '@/lib/receivable-payable'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
@@ -118,6 +119,10 @@ export async function POST(request: NextRequest) {
         trans_date: batchDate,
         memo: `입고 ${batchDate} ${vendorName}`,
       })
+    }
+    // 발주 승인으로 쌓인 PO 미지급은 입고 확정 시 Inbound 행으로 대체(중복 잔액 방지)
+    if (batchId && purchaseOrderId && !isNaN(purchaseOrderId)) {
+      await deletePayableFromPO(purchaseOrderId)
     }
     return NextResponse.json(
       { success: true, message: `✅ ${validRows.length}건 입고 완료!` },

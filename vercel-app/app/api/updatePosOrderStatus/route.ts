@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { processPosStockDeduction, reversePosStockDeduction } from '@/lib/pos-stock-deduction'
 import {
   hasJournalForSource,
@@ -40,11 +41,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '유효하지 않은 상태입니다.' }, { headers })
     }
 
-    const existing = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
-      limit: 1,
-      select:
-        'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by',
-    })) as {
+    const existing = (await supabaseSelectFilterStrippingUnknownColumns(
+      'pos_orders',
+      `id=eq.${id}`,
+      {
+        limit: 1,
+        select:
+          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by',
+      },
+      'updatePosOrderStatus'
+    )) as {
       id?: number
       order_no?: string
       store_code?: string

@@ -1,10 +1,10 @@
-﻿{
+{
     "print":  {
                   "silent":  true,
                   "deviceName":  ""
               },
-    "updateManifestUrl":  "https://www.omnifoodtech.com/downloads/windows-pos/latest.json",
+    "updateManifestUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/latest.json",
     "kiosk":  "1",
-    "posUrl":  "https://www.omnifoodtech.com/pos/login",
-    "allowedOrigin":  "https://www.omnifoodtech.com"
+    "posUrl":  "https://app.omnifoodtech.com/pos/login",
+    "allowedOrigin":  "https://app.omnifoodtech.com"
 }

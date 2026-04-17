@@ -1,10 +1,11 @@
 /**
  * 본사 발주(PO) 승인 API
  * - status: Draft → Approved
- * - (입고 기준) payable은 입고 시점에 생성하므로 여기서는 생성하지 않음
+ * - 승인 시 미지급금(payable_transactions, ref_type=PO) 반영 — 실지급액 기준
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { syncPayableFromApprovedPo } from '@/lib/receivable-payable'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -35,10 +36,12 @@ export async function POST(request: NextRequest) {
 
     const po = rows[0]
     if (po.status === 'Approved') {
+      await syncPayableFromApprovedPo(poId)
       return NextResponse.json({ success: true, message: '이미 승인된 발주입니다.' }, { headers })
     }
 
     await supabaseUpdate('purchase_orders', poId, { status: 'Approved' })
+    await syncPayableFromApprovedPo(poId)
     return NextResponse.json({ success: true, message: '승인되었습니다.' }, { headers })
   } catch (e) {
     console.error('processPurchaseOrderApproval:', e)

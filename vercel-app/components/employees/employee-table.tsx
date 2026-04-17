@@ -1,6 +1,6 @@
 "use client"
 
-import { Briefcase, Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 import { displayLabelShort } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import type { AdminEmployeeItem } from "@/lib/api-client"
@@ -40,14 +40,12 @@ interface EmployeeTableProps {
   loading?: boolean
   onEdit: (idx: number) => void
   onDelete: (rowId: number) => void
-  /** 직무·위험수당만 빠르게 편집 */
-  onEditJob?: (idx: number) => void
   t: (k: string) => string
   /** 전체 조회 시 퇴사일이 지난 경우에만 퇴사자 행 빨간색 표시 */
   statusFilter?: string
 }
 
-export function EmployeeTable({ rows, loading, onEdit, onDelete, onEditJob, t, statusFilter }: EmployeeTableProps) {
+export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter }: EmployeeTableProps) {
   const cols = [
     t("emp_label_store"),
     t("emp_grade"),
@@ -139,16 +137,6 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, onEditJob, t, s
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-1.5">
-                      {onEditJob ? (
-                        <button
-                          type="button"
-                          onClick={() => onEditJob(idx)}
-                          title={t("emp_job_edit_title")}
-                          className="rounded p-1.5 text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 transition-colors"
-                        >
-                          <Briefcase className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
                       <button
                         type="button"
                         onClick={() => onEdit(idx)}

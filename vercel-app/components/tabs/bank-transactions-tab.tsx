@@ -22,7 +22,7 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -68,9 +68,75 @@ import {
   mergeWithdrawalCategoryIntoBankNote,
   stripWithdrawalCategoryMetaFromNote,
 } from "@/lib/bank-transaction-note-meta"
+import {
+  BANK_QUICK_MEMO_DEFAULTS,
+  loadBankQuickMemos,
+  resetBankQuickMemosStorage,
+  saveBankQuickMemos,
+} from "@/lib/bank-quick-memos"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function BankQuickMemoChipBar({
+  title,
+  hint,
+  phrases,
+  onPhrase,
+  onManageClick,
+  manageLabel,
+  className,
+}: {
+  title: string
+  hint: string
+  phrases: string[]
+  onPhrase: (phrase: string) => void
+  onManageClick?: () => void
+  manageLabel?: string
+  className?: string
+}) {
+  return (
+    <div
+      className={`rounded-md border border-amber-200/80 dark:border-amber-800/60 bg-background/80 px-3 py-2 space-y-2 ${className ?? ""}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">{title}</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">{hint}</p>
+        </div>
+        {onManageClick ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 gap-1 px-2 text-xs"
+            onClick={onManageClick}
+            title={manageLabel}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">{manageLabel}</span>
+          </Button>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {phrases.map((phrase, i) => (
+          <Button
+            key={`${i}-${phrase.slice(0, 48)}`}
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-7 text-xs font-normal px-2.5"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onPhrase(phrase)}
+            title={phrase}
+          >
+            {phrase}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function BankTransactionsTab() {
@@ -199,6 +265,13 @@ export function BankTransactionsTab() {
   const [approvedPickSaving, setApprovedPickSaving] = React.useState(false)
   const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  /** 미리보기 표의 메모 입력에 포커스가 있을 때의 행 인덱스 (빠른 메모 칩 삽입용) */
+  const importMemoFocusIdxRef = React.useRef<number | null>(null)
+  /** 조회 탭 메모 입력 포커스 시 해당 통장 거래 id */
+  const queryMemoFocusIdRef = React.useRef<number | null>(null)
+  const [bankQuickMemos, setBankQuickMemos] = React.useState<string[]>(() => [...BANK_QUICK_MEMO_DEFAULTS])
+  const [bankQuickMemosEditOpen, setBankQuickMemosEditOpen] = React.useState(false)
+  const [bankQuickMemosDraft, setBankQuickMemosDraft] = React.useState<string[]>([])
   const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
@@ -574,6 +647,22 @@ export function BankTransactionsTab() {
       return next
     })
   }, [importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
+
+  React.useEffect(() => {
+    if (!importPreview) importMemoFocusIdxRef.current = null
+  }, [importPreview])
+
+  React.useEffect(() => {
+    queryMemoFocusIdRef.current = null
+  }, [accountId, startStr, endStr])
+
+  React.useEffect(() => {
+    if (list.length === 0) queryMemoFocusIdRef.current = null
+  }, [list.length])
+
+  React.useEffect(() => {
+    setBankQuickMemos(loadBankQuickMemos())
+  }, [])
 
   const fmt = (n: number) => `฿${(n ?? 0).toLocaleString()}`
   const diff = summary && actualBalance.trim() !== ""
@@ -1004,6 +1093,82 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
     }))
   }
 
+  const applyImportQuickMemo = React.useCallback(
+    (phrase: string) => {
+      const idx = importMemoFocusIdxRef.current
+      if (idx !== null && idx >= 0) {
+        setImportRowEdits((prev) => {
+          const cur = (prev[idx]?.note ?? "").trim()
+          const next = cur ? `${cur} | ${phrase}` : phrase
+          return { ...prev, [idx]: { ...prev[idx], note: next } }
+        })
+        return
+      }
+      void navigator.clipboard.writeText(phrase).then(
+        () => {
+          void appAlert(tt("bankImportQuickMemoCopied", "Copied to clipboard."))
+        },
+        () => {
+          void appAlert(tt("bankImportQuickMemoCopyFailed", "Could not copy."))
+        }
+      )
+    },
+    [tt]
+  )
+
+  const applyQueryQuickMemo = React.useCallback(
+    (phrase: string) => {
+      const rowId = queryMemoFocusIdRef.current
+      if (rowId != null && rowId > 0) {
+        const r = list.find((x) => x.id === rowId)
+        if (r) {
+          setQueryRowEdits((prev) => {
+            const edits = prev[rowId]
+            const base =
+              edits?.note !== undefined ? edits.note ?? "" : stripWithdrawalCategoryMetaFromNote(r.note ?? "")
+            const cur = base.trim()
+            const next = cur ? `${cur} | ${phrase}` : phrase
+            return { ...prev, [rowId]: { ...prev[rowId], note: next } }
+          })
+          return
+        }
+      }
+      void navigator.clipboard.writeText(phrase).then(
+        () => {
+          void appAlert(tt("bankImportQuickMemoCopied", "Copied to clipboard."))
+        },
+        () => {
+          void appAlert(tt("bankImportQuickMemoCopyFailed", "Could not copy."))
+        }
+      )
+    },
+    [list, tt]
+  )
+
+  const openBankQuickMemosEdit = React.useCallback(() => {
+    setBankQuickMemosDraft(bankQuickMemos.length ? [...bankQuickMemos] : [...BANK_QUICK_MEMO_DEFAULTS])
+    setBankQuickMemosEditOpen(true)
+  }, [bankQuickMemos])
+
+  const saveBankQuickMemosFromDialog = React.useCallback(async () => {
+    const cleaned = bankQuickMemosDraft.map((s) => s.trim()).filter(Boolean)
+    if (cleaned.length === 0) {
+      await appAlert(tt("bankQuickMemosNeedOne", "한 줄 이상 입력해 주세요."))
+      return
+    }
+    saveBankQuickMemos(cleaned)
+    setBankQuickMemos(cleaned)
+    setBankQuickMemosEditOpen(false)
+  }, [bankQuickMemosDraft, tt])
+
+  const resetBankQuickMemosToDefault = React.useCallback(async () => {
+    if (!(await appConfirm(tt("bankQuickMemosResetConfirm", "저장된 목록을 지우고 기본 문구로 되돌릴까요?")))) return
+    resetBankQuickMemosStorage()
+    const next = loadBankQuickMemos()
+    setBankQuickMemos(next)
+    setBankQuickMemosDraft([...next])
+  }, [tt])
+
   const handleImportSave = async () => {
     if (!importPreview || !accountId) return
     const acc = accounts.find((a) => String(a.id) === accountId)
@@ -1317,6 +1482,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </Button>
                   </div>
 
+                  {!loading && accountId && accounts.length > 0 && (
+                    <BankQuickMemoChipBar
+                      className="mb-3"
+                      phrases={bankQuickMemos}
+                      title={t("bankImportQuickMemosTitle") || "자주 쓰는 메모"}
+                      hint={
+                        t("bankImportQuickMemoHint") ||
+                        "메모 칸을 먼저 선택한 뒤 누르면 해당 줄에 붙고, 아니면 클립보드로 복사됩니다."
+                      }
+                      onPhrase={applyQueryQuickMemo}
+                      onManageClick={openBankQuickMemosEdit}
+                      manageLabel={t("bankQuickMemosManage") || "편집"}
+                    />
+                  )}
+
                   <div id="bank-query-list-wrap" className="rounded-lg border max-h-[70vh] min-h-[320px] overflow-auto">
                     {loading ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
@@ -1607,6 +1787,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       : stripWithdrawalCategoryMetaFromNote(r.note ?? "")
                                   }
                                   onChange={(e) => r.id && setQueryRowEdit(r.id, "note", e.target.value)}
+                                  onFocus={() => {
+                                    if (r.id) queryMemoFocusIdRef.current = r.id
+                                  }}
                                   className="h-8 text-xs min-w-[120px] max-w-[160px]"
                                 />
                               </td>
@@ -1774,6 +1957,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                 {t("bankImportWithdrawCoaHint") || "※ 출금: 아래 표에서 용도·계정과목(매입 대금이면 거래처)을 선택하면 저장 시 통장에 반영됩니다. 적요 규칙으로 자동 채워집니다."}
               </p>
+              <BankQuickMemoChipBar
+                phrases={bankQuickMemos}
+                title={t("bankImportQuickMemosTitle") || "자주 쓰는 메모"}
+                hint={
+                  t("bankImportQuickMemoHint") ||
+                  "메모 칸을 먼저 선택한 뒤 누르면 해당 줄에 붙고, 아니면 클립보드로 복사됩니다."
+                }
+                onPhrase={applyImportQuickMemo}
+                onManageClick={openBankQuickMemosEdit}
+                manageLabel={t("bankQuickMemosManage") || "편집"}
+              />
               <div className="max-h-[520px] overflow-x-auto overflow-y-auto border rounded">
                 <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-muted/50 sticky top-0">
@@ -1945,6 +2139,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             placeholder={t("bankNotePlaceholder") || "메모 입력"}
                             value={importRowEdits[idx]?.note ?? ""}
                             onChange={(e) => setImportRowEdit(idx, "note", e.target.value)}
+                            onFocus={() => {
+                              importMemoFocusIdxRef.current = idx
+                            }}
                             className="h-8 text-xs min-w-[150px]"
                           />
                         </td>
@@ -2406,6 +2603,67 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               ))
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bankQuickMemosEditOpen} onOpenChange={setBankQuickMemosEditOpen}>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{t("bankQuickMemosEditTitle") || "자주 쓰는 메모 편집"}</DialogTitle>
+            <DialogDescription className="text-left">
+              {t("bankQuickMemosEditHint") ||
+                "이 브라우저에만 저장됩니다. 다른 PC나 브라우저와는 공유되지 않습니다."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 overflow-y-auto flex-1 min-h-0 max-h-[min(420px,50vh)] py-1 pr-1">
+            {bankQuickMemosDraft.map((line, i) => (
+              <div key={`draft-${i}`} className="flex gap-2 items-center">
+                <Input
+                  value={line}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setBankQuickMemosDraft((prev) => prev.map((x, j) => (j === i ? v : x)))
+                  }}
+                  placeholder={t("bankQuickMemosLinePlaceholder") || "문구"}
+                  className="h-9 text-sm flex-1 min-w-0"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 text-muted-foreground"
+                  onClick={() => setBankQuickMemosDraft((prev) => prev.filter((_, j) => j !== i))}
+                  title={t("delete") || "삭제"}
+                  aria-label={t("delete") || "삭제"}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start shrink-0"
+            onClick={() => setBankQuickMemosDraft((p) => [...p, ""])}
+          >
+            <Plus className="h-4 w-4 mr-1" aria-hidden />
+            {t("bankQuickMemosAddLine") || "항목 추가"}
+          </Button>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
+            <Button type="button" variant="ghost" size="sm" className="self-start" onClick={() => void resetBankQuickMemosToDefault()}>
+              {t("bankQuickMemosResetDefault") || "기본값으로 되돌리기"}
+            </Button>
+            <div className="flex gap-2 justify-end w-full sm:w-auto">
+              <Button type="button" variant="outline" onClick={() => setBankQuickMemosEditOpen(false)}>
+                {t("cancel")}
+              </Button>
+              <Button type="button" onClick={() => void saveBankQuickMemosFromDialog()}>
+                {t("btn_save")}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

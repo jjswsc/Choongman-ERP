@@ -22,7 +22,10 @@ const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
 function readJsonFileIfExists(filePath) {
   try {
     if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    let raw = fs.readFileSync(filePath, "utf8");
+    // PowerShell Set-Content -Encoding UTF8 등으로 저장된 UTF-8 BOM 이 있으면 JSON.parse 가 실패함 → 번들 URL 이 무시될 수 있음
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    return JSON.parse(raw);
   } catch {
     return null;
   }

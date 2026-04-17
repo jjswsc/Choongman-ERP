@@ -1,6 +1,6 @@
 {
   "name": "choongman-pos-windows",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "private": true,
   "author": "Choongman",
   "description": "Windows installed hybrid POS shell (Electron)",
@@ -9,6 +9,7 @@
     "dev": "electron .",
     "icon:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/generate-windows-pos-icon.ps1",
     "pack": "electron-builder --dir",
+    "prebuild:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/build-windows-pos.ps1 -ClearDistOnly",
     "build:win": "npm run icon:win && electron-builder --win nsis portable"
   },
   "build": {

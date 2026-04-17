@@ -26,7 +26,7 @@ if (-not (Test-Path $resolvedTemplate)) {
 $jsonRaw = Get-Content -Path $resolvedTemplate -Raw
 $null = $jsonRaw | ConvertFrom-Json
 
-Set-Content -Path $runtimeConfigPath -Value $jsonRaw -Encoding UTF8
+[System.IO.File]::WriteAllText($runtimeConfigPath, $jsonRaw, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Applied store config:"
 Write-Host "- source: $resolvedTemplate"

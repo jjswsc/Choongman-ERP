@@ -58,6 +58,8 @@ android/keystore.properties
 # Windows POS local outputs/secrets
 windows-pos/node_modules/
 windows-pos/dist/
+# electron-builder 등이 만드는 해시 폴더 (dist-eb-<hash>/)
+windows-pos/dist-*/
 windows-pos/*.blockmap
 # Inno/Electron 설치 산출물 — public/downloads 또는 별도 배포, Git에는 포함하지 않음
 windows-pos/*.exe

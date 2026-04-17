@@ -6,6 +6,11 @@ import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { franchiseeQueryStoreAllowed, normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+import {
+  DEFAULT_EMPLOYEE_JOB_CATALOG,
+  loadEmployeeJobCatalog,
+  mergeJobOptionsFromCatalogAndEmployees,
+} from '@/lib/employee-job-catalog'
 
 function toDateStr(val: unknown): string {
   if (!val) return ''
@@ -133,7 +138,16 @@ export async function GET(req: NextRequest) {
       const j = String(r.job || r.role || '').trim()
       if (j && j !== '매장명' && j !== 'Store' && j !== '직급' && j !== 'Job' && j !== '부서') jobSet.add(j)
     }
-    const allJobOptions = Array.from(jobSet).sort((a, b) => a.localeCompare(b))
+    const fromEmpJobs = Array.from(jobSet)
+    let catalog: string[] = [...DEFAULT_EMPLOYEE_JOB_CATALOG]
+    try {
+      catalog = await loadEmployeeJobCatalog()
+    } catch {
+      catalog = [...DEFAULT_EMPLOYEE_JOB_CATALOG]
+    }
+    const mergedJobOpts = mergeJobOptionsFromCatalogAndEmployees(catalog, fromEmpJobs)
+    const allJobOptions =
+      mergedJobOpts.length > 0 ? mergedJobOpts : [...DEFAULT_EMPLOYEE_JOB_CATALOG]
 
     const storeSet = new Set((rows || []).map((r) => String(r.store || '').trim()).filter(Boolean))
     let allStores = Array.from(storeSet).sort((a, b) => {
@@ -151,7 +165,7 @@ export async function GET(req: NextRequest) {
     const body: { list: Record<string, unknown>[]; stores: string[]; jobOptions?: string[]; _debug?: Record<string, unknown> } = {
       list,
       stores: allStores,
-      jobOptions: allJobOptions.length > 0 ? allJobOptions : ['Service', 'Kitchen', 'Officer', 'Director', 'Logistic'],
+      jobOptions: allJobOptions,
     }
     if (list.length === 0 && rows && rows.length > 0) {
       body._debug = {

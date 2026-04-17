@@ -8795,6 +8795,25 @@ export type FranchiseeMultiStoreSettings = {
   maxStores: number
 }
 
+export async function getEmployeeJobCatalog() {
+  const res = await apiFetchWithOffline('/api/employeeJobCatalog')
+  const data = await res.json()
+  return {
+    catalog: (data.catalog || []) as string[],
+    jobsInUseOutsideCatalog: (data.jobsInUseOutsideCatalog || []) as string[],
+    canEdit: Boolean(data.canEdit),
+  }
+}
+
+export async function saveEmployeeJobCatalog(jobs: string[]) {
+  const res = await apiFetchWithOffline('/api/employeeJobCatalog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobs }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getFranchiseeMultiStoreSettings() {
   const res = await apiFetch('/api/franchiseeMultiStoreSettings')
   return res.json() as Promise<{ success?: boolean; settings?: FranchiseeMultiStoreSettings; message?: string }>

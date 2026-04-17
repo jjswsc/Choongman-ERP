@@ -31,7 +31,11 @@ Param(
 
   # Brand omnifoodtech 일 때만 사용 (비우면 OmniFoodTech POS)
   [Parameter(Mandatory = $false)]
-  [string]$ProductName = ""
+  [string]$ProductName = "",
+
+  # dist 잠금만 해제 후 종료 — npm prebuild:win 에서 사용 (app.asar 사용 중 오류 방지)
+  [Parameter(Mandatory = $false)]
+  [switch]$ClearDistOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -141,6 +145,13 @@ function Clear-WindowsPosDistLock {
   return -not (Test-Path -LiteralPath $dist)
 }
 
+if ($ClearDistOnly) {
+  $projectRootEarly = Split-Path -Parent $PSScriptRoot
+  $windowsPosDirEarly = Join-Path $projectRootEarly "windows-pos"
+  $null = Clear-WindowsPosDistLock -WindowsPosRoot $windowsPosDirEarly
+  exit 0
+}
+
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $windowsPosDir = Join-Path $projectRoot "windows-pos"
 
@@ -171,7 +182,8 @@ $runtimeConfig = @{
     deviceName = ""
   }
 } | ConvertTo-Json -Depth 6
-Set-Content -Path $runtimeConfigPath -Value $runtimeConfig -Encoding UTF8
+# Windows PowerShell 5.1 의 Set-Content -Encoding UTF8 은 BOM 을 붙여 JSON.parse(Electron) 가 실패할 수 있음 → BOM 없이 저장
+[System.IO.File]::WriteAllText($runtimeConfigPath, $runtimeConfig, [System.Text.UTF8Encoding]::new($false))
 
 $ebOutputFolder = "dist"
 Push-Location $windowsPosDir
