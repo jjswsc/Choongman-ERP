@@ -18,7 +18,7 @@ import { useStoreList } from '@/lib/api-client'
 import { getPosOrders, getPosMenus, getPosPrinterSettings, type PosOrder, type PosMenu } from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, tr as i18nTr } from '@/lib/i18n'
 import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
 import { isOfficeRole } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
@@ -163,12 +163,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const store = (o.storeCode ?? '').trim()
     if (!store || !o.items?.length) {
-      await appAlert(t('posPrintUnavailable') || '인쇄할 수 없습니다.')
+      await appAlert(t('posPrintUnavailable'))
       return
     }
     const win = window.open('', '_blank')
     if (!win) {
-      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다.')
+      await appAlert(t('posPrintBlockedBrowser'))
       return
     }
     try {
@@ -183,7 +183,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
       if (!slips.length) {
         win.close()
-        await appAlert(t('posKitchenNoItemsToPrint') || '주방으로 인쇄할 품목이 없습니다.')
+        await appAlert(t('posKitchenNoItemsToPrint'))
         return
       }
       const slipDesign = resolveKitchenSlipDesign(settings)
@@ -229,7 +229,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       printOne(0)
     } catch (e) {
       win.close()
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }
 

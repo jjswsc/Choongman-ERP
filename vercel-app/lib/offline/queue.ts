@@ -65,6 +65,20 @@ export async function getOfflineQueueCounts(): Promise<{ retriable: number; dead
   return { retriable, dead }
 }
 
+/** 배너 표시용: 재시도 가능한 건 중 가장 최근 실패 메시지(서버/HTTP 원인) */
+export async function getOfflineQueueErrorHint(): Promise<string | null> {
+  const all = await getAllPending()
+  const retriable = all.filter((i) => i.retryCount < OFFLINE_QUEUE_MAX_RETRIES)
+  const withErr = retriable
+    .filter((i) => (i.lastError ?? '').trim().length > 0)
+    .sort(
+      (a, b) =>
+        (b.lastTriedAt ?? b.createdAt) - (a.lastTriedAt ?? a.createdAt)
+    )
+  const msg = withErr[0]?.lastError?.trim()
+  return msg || null
+}
+
 /** 재시도 한도 초과 항목만 로컬 큐에서 제거 (서버 미반영 데이터는 복구되지 않음) */
 export async function removeDeadLetterFromQueue(): Promise<number> {
   const all = await getAllPending()

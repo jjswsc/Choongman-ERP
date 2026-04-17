@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr as i18nTr } from "@/lib/i18n"
 import {
   getPosPrinterSettings,
   getPosMenuCategories,
@@ -69,6 +69,11 @@ import {
 } from "@/lib/pos-receipt-layout"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { PosDualMonitorSettingsContent } from "@/components/pos/pos-dual-monitor-settings-content"
+import {
+  printPosHtmlDocument,
+  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  type PrintPosHtmlDocumentOptions,
+} from "@/lib/pos-print-html"
 
 type PreviewKind = "receipt" | "kitchen"
 
@@ -1004,56 +1009,50 @@ export default function PosPrintersPage() {
   }
 
   const handleTestPrint = async (kind: PreviewKind) => {
-    if (kind === "receipt") {
-      const html = buildReceiptHtml()
-      const w = window.open("", "_blank")
-      if (!w) {
-        await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+    /** `window.open` 대신 숨김 iframe — 팝업 차단과 무관, Windows 하이브리드는 OS 인쇄 대화상자 옵션 전달 */
+    const printTestHtml = (
+      fullHtml: string,
+      title: string,
+      thermal?: Pick<PrintPosHtmlDocumentOptions, "printRole" | "kitchenStation">
+    ) =>
+      new Promise<void>((resolve, reject) => {
+        printPosHtmlDocument(fullHtml, {
+          title,
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
+          focusIframeBeforePrint: false,
+          preferSystemPrintDialog: true,
+          ...thermal,
+          onPrintUnavailable: () => reject(new Error("print_unavailable")),
+          onAfterCleanup: () => resolve(),
+        })
+      })
+
+    try {
+      if (kind === "receipt") {
+        const html = buildReceiptHtml()
+        await printTestHtml(html, tr("posReceipt", "영수증"), { printRole: "receipt" })
         return
       }
-      w.document.write(html)
-      w.document.close()
-      w.focus()
-      let closed = false
-      const safeClose = () => {
-        if (closed) return
-        closed = true
-        w.close()
-      }
-      w.onafterprint = safeClose
-      setTimeout(() => w.print(), 250)
-      setTimeout(safeClose, 30000)
-      return
-    }
-    const slips = kitchenSlipsForPreview
-    if (!slips.length) {
-      await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 인쇄할 품목이 없습니다.")
-      return
-    }
-    const printOne = (idx: number) => {
-      if (idx >= slips.length) return
-      const slip = slips[idx]
-      const html = buildKitchenSlipHtmlForSlip(slip)
-      const w = window.open("", "_blank")
-      if (!w) {
-        void appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      const slips = kitchenSlipsForPreview
+      if (!slips.length) {
+        await appAlert(t("posKitchenNoItemsToPrint"))
         return
       }
-      w.document.write(html)
-      w.document.close()
-      w.focus()
-      let done = false
-      const afterPrint = () => {
-        if (done) return
-        done = true
-        w.close()
-        if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+      for (let i = 0; i < slips.length; i++) {
+        const slip = slips[i]
+        const html = buildKitchenSlipHtmlForSlip(slip)
+        await printTestHtml(html, slip.label, {
+          printRole: "kitchen",
+          kitchenStation: slip.station,
+        })
+        if (i + 1 < slips.length) {
+          await new Promise<void>((r) => setTimeout(() => r(), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+        }
       }
-      w.onafterprint = afterPrint
-      setTimeout(() => w.print(), 250)
-      setTimeout(afterPrint, 30000)
+    } catch (e) {
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     }
-    printOne(0)
   }
 
   const receiptPreviewIsTaxInvoice = false
@@ -1952,7 +1951,7 @@ export default function PosPrintersPage() {
             >
                   {kitchenSlipsForPreview.length === 0 ? (
                     <p className="py-6 text-center text-sm text-muted-foreground">
-                      {t("posKitchenNoItemsToPrint") || "주방으로 인쇄할 품목이 없습니다."}
+                      {t("posKitchenNoItemsToPrint")}
                     </p>
                   ) : (
                     kitchenSlipsForPreview.map((slip) => (

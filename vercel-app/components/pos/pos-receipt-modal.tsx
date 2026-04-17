@@ -16,6 +16,7 @@ import {
 } from '@/lib/pos-receipt-layout'
 import type { PosMenu } from '@/lib/api-client'
 import { useLang } from '@/lib/lang-context'
+import { tr as i18nTr } from '@/lib/i18n'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import {
   buildKitchenSlipDocumentHtml,
@@ -191,7 +192,7 @@ export function PosReceiptModal({
         focusIframeBeforePrint: false,
         preferSystemPrintDialog,
         ...thermal,
-        onPrintUnavailable: () => reject(new Error(t('posPrintBlocked') || '인쇄를 시작할 수 없습니다.')),
+        onPrintUnavailable: () => reject(new Error(t('posPrintUnavailable'))),
         onAfterCleanup: () => resolve(),
       }
       printPosHtmlDocument(fullHtml, opts)
@@ -385,7 +386,7 @@ export function PosReceiptModal({
         printRole: 'receipt',
       })
     } catch {
-      await appAlert(t('posPrintBlocked') || '팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정을 확인해 주세요.')
+      await appAlert(t('posPrintBlockedBrowser'))
     }
   }
 
@@ -450,7 +451,7 @@ export function PosReceiptModal({
       }
       await printOne(0)
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }
 

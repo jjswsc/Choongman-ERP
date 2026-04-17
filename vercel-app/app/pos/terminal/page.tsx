@@ -899,7 +899,7 @@ export default function PosTerminalPage() {
       /** 자동(주문 직후) 인쇄: iframe 포커스 생략 → 인쇄창 닫힌 뒤 POS 화면 전환이 덜 튐 */
       focusIframeBeforePrint: !directPrint,
       onPrintUnavailable: () => {
-        void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+        void appAlert(t('posPrintUnavailable'))
       },
       ...(directPrint && typeof onAfterDirectPrint === 'function'
         ? {
@@ -1020,7 +1020,7 @@ export default function PosTerminalPage() {
                 printRole: 'kitchen',
                 kitchenStation: slip.station,
                 onPrintUnavailable: () => {
-                  void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                  void appAlert(t('posPrintUnavailable'))
                 },
                 onAfterCleanup: () => {
                   if (idx + 1 < slips.length)
@@ -1284,7 +1284,7 @@ export default function PosTerminalPage() {
                     printRole: 'kitchen',
                     kitchenStation: slip.station,
                     onPrintUnavailable: () => {
-                      void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                      void appAlert(t('posPrintUnavailable'))
                     },
                     onAfterCleanup: () => {
                       if (idx + 1 < slips.length)
@@ -2120,7 +2120,7 @@ export default function PosTerminalPage() {
                           printRole: 'kitchen',
                           kitchenStation: slip.station,
                           onPrintUnavailable: () => {
-                            void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                            void appAlert(t('posPrintUnavailable'))
                           },
                           onAfterCleanup: () => {
                             if (idx + 1 < slips.length)

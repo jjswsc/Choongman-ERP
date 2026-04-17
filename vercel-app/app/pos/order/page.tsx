@@ -27,7 +27,7 @@ import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr as i18nTr } from "@/lib/i18n"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
@@ -728,7 +728,7 @@ export default function PosOrderPage() {
         await appAlert(res.message ?? (t("posCouponInvalid") || "유효하지 않은 쿠폰입니다."))
       }
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     } finally {
       setCouponLoading(false)
     }
@@ -846,10 +846,10 @@ export default function PosOrderPage() {
         handleClearCoupon()
         loadTodaySales()
       } else {
-        await appAlert(res.message || "저장 실패")
+        await appAlert(res.message || t("msg_save_fail"))
       }
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     } finally {
       setSubmitting(false)
     }
@@ -888,7 +888,7 @@ export default function PosOrderPage() {
           printDelayMs: 0,
           fallbackCleanupMs: 120_000,
           ...thermal,
-          onPrintUnavailable: () => reject(new Error(t("posPrintBlocked") || "인쇄를 시작할 수 없습니다.")),
+          onPrintUnavailable: () => reject(new Error(t("posPrintUnavailable"))),
           onAfterCleanup: () => resolve(),
         })
       }),
@@ -929,7 +929,7 @@ export default function PosOrderPage() {
     try {
       await printInIframe(fullHtml, t("posReceipt") || "영수증", { printRole: "receipt" })
     } catch {
-      await appAlert(t("posPrintBlocked") || "팝업/인쇄 차단으로 출력할 수 없습니다. 브라우저 설정을 확인해 주세요.")
+      await appAlert(t("posPrintBlockedBrowser"))
     }
   }
 
@@ -994,7 +994,7 @@ export default function PosOrderPage() {
       }
       await printOne(0)
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     }
   }
 

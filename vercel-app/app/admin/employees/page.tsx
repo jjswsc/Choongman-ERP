@@ -56,6 +56,7 @@ import {
   EmployeeEvalItemsSettingsTab,
   EmployeeMovementTab,
   EmployeeHeadcountTab,
+  EmployeeJobEditDialog,
   emptyForm,
   type EmployeeTableRow,
   type EmployeeFormData,
@@ -183,6 +184,8 @@ export default function EmployeesPage() {
   const [hrMainTab, setHrMainTab] = React.useState("list")
   const [evalJumpPayload, setEvalJumpPayload] = React.useState<EmployeeEvalJumpTarget | null>(null)
   const clearEvalJump = React.useCallback(() => setEvalJumpPayload(null), [])
+  const [jobEditOpen, setJobEditOpen] = React.useState(false)
+  const [jobEditForm, setJobEditForm] = React.useState<EmployeeFormData | null>(null)
 
   const adminRowToForm = React.useCallback(
     (e: AdminEmployeeItem): EmployeeFormData => {
@@ -393,6 +396,43 @@ export default function EmployeesPage() {
   const handleEdit = (idx: number) => {
     const e = filteredRows[idx]
     if (e) setForm(adminRowToForm(e))
+  }
+
+  const handleOpenJobEdit = (idx: number) => {
+    const e = filteredRows[idx]
+    if (!e) return
+    setJobEditForm(adminRowToForm(e))
+    setJobEditOpen(true)
+  }
+
+  const handleJobEditSave = async (next: EmployeeFormData) => {
+    if (!next.name || !next.row) return
+    setSaving(true)
+    try {
+      const { managerGradeDisplay, ...employeePayload } = next
+      void managerGradeDisplay
+      const res = await saveAdminEmployee({
+        d: employeePayload,
+        userStore,
+        userRole,
+        userName: auth?.user || userStore,
+        ...(isOfficeRole(userRole) || isAccountingRole(userRole) ? { extraStores: next.extraStores } : {}),
+      })
+      if (res.success) {
+        await appAlert(translateApiMessage(res.message, t) || t("msg_saved"))
+        setJobEditOpen(false)
+        setJobEditForm(null)
+        setForm((f) => (f.row === next.row ? { ...f, job: next.job, riskAllowance: next.riskAllowance } : f))
+        await loadEmployeeList({ updateDisplay: true })
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      }
+    } catch (e) {
+      console.error(e)
+      await appAlert(t("msg_save_fail"))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (rowId: number) => {
@@ -609,6 +649,7 @@ export default function EmployeesPage() {
                     rows={filteredRows}
                     loading={loading}
                     onEdit={handleEdit}
+                    onEditJob={handleOpenJobEdit}
                     onDelete={handleDelete}
                     t={t}
                     statusFilter={statusFilter}
@@ -670,6 +711,23 @@ export default function EmployeesPage() {
             </TabsContent>
           )}
         </Tabs>
+
+        <EmployeeJobEditDialog
+          open={jobEditOpen}
+          onOpenChange={(o) => {
+            if (!o) {
+              setJobEditOpen(false)
+              setJobEditForm(null)
+            } else {
+              setJobEditOpen(true)
+            }
+          }}
+          form={jobEditForm}
+          jobOptions={jobOptions}
+          saving={saving}
+          onSave={handleJobEditSave}
+          t={t}
+        />
       </div>
     </div>
   )

@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, tr } from '@/lib/i18n'
 
 const TYPE_OPTIONS = [
   { value: 'dine_in', label: 'Dine in' },
@@ -124,11 +124,11 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
 
   const handleSave = async () => {
     if (!form.storeCode.trim()) {
-      await appAlert('매장을 선택해 주세요.')
+      await appAlert(t('adminOrderCreateSelectStore'))
       return
     }
     if (!form.boardName.trim()) {
-      await appAlert('메뉴판 이름을 입력해 주세요.')
+      await appAlert(t('posMenuBoardNameRequired'))
       return
     }
     const res = await savePosMenuBoard({
@@ -147,7 +147,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
       isActive: form.isActive,
     })
     if (!res?.success) {
-      await appAlert(res?.message || '저장 실패')
+      await appAlert(res?.message || t('msg_save_fail'))
       return
     }
     setDialogOpen(false)
@@ -155,10 +155,10 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
   }
 
   const handleDelete = async (row: PosMenuBoardConfig) => {
-    if (!await appConfirm(`삭제하시겠습니까?\n${row.boardName}`)) return
+    if (!await appConfirm(tr(t, 'posMenuBoardDeleteConfirm', { name: row.boardName }))) return
     const res = await deletePosMenuBoard({ id: row.id })
     if (!res?.success) {
-      await appAlert(res?.message || '삭제 실패')
+      await appAlert(res?.message || t('msg_delete_fail'))
       return
     }
     load()

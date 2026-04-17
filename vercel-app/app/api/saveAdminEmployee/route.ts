@@ -16,6 +16,7 @@ import {
   rowRoleLooksFranchisee,
 } from '@/lib/franchisee-multi-store'
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+import { effectiveHazardAllowanceForJob } from '@/lib/employee-job-rules'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 
@@ -273,7 +274,10 @@ export async function POST(req: NextRequest) {
       bank_name: d.bankName != null ? String(d.bankName).trim() : '',
       account_number: d.accountNumber != null ? String(d.accountNumber).trim() : '',
       position_allowance: d.positionAllowance != null ? Number(d.positionAllowance) : 0,
-      haz_allow: d.riskAllowance != null ? Number(d.riskAllowance) : 0,
+      haz_allow: effectiveHazardAllowanceForJob(
+        String(d.job || '').trim(),
+        d.riskAllowance != null ? Number(d.riskAllowance) : 0
+      ),
       attendance_allowance: (() => {
         const aa = (d as { attendanceAllowance?: unknown }).attendanceAllowance
         return aa == null || aa === '' ? 500 : Number(aa)
@@ -410,7 +414,7 @@ export async function POST(req: NextRequest) {
     const newSalType = String(d.salType || 'Monthly').trim()
     const newSalAmt = Number(d.salAmt) || 0
     const newPosAllow = d.positionAllowance != null ? Number(d.positionAllowance) : 0
-    const newHazAllow = d.riskAllowance != null ? Number(d.riskAllowance) : 0
+    const newHazAllow = Number(payload.haz_allow) || 0
     const salaryChanged =
       oldSalType !== newSalType ||
       oldSalAmt !== newSalAmt ||

@@ -10,6 +10,7 @@ import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
+import { useT, tr as i18nTr } from '@/lib/i18n'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TakeoutOrderPanelProps {
@@ -33,6 +34,7 @@ export function TakeoutOrderPanel({
   t = (k) => k,
 }: TakeoutOrderPanelProps) {
   const { lang } = useLang()
+  const ti = useT(lang)
   const isCompleted = order?.status === 'completed'
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
@@ -59,11 +61,7 @@ export function TakeoutOrderPanel({
     if (Number.isNaN(id)) return
     if (!posOrderHasServerId(order.id)) {
       const msg = t('posServedNeedsOrderId')
-      await appAlert(
-        msg && msg !== 'posServedNeedsOrderId'
-          ? msg
-          : '이 주문은 아직 서버에 전송되지 않았습니다. 전송이 끝난 뒤 포장 완료를 눌러 주세요.'
-      )
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
       return
     }
     const nextPackaged = !itemPackaged[itemId]
@@ -81,7 +79,7 @@ export function TakeoutOrderPanel({
       setItemPackaged((prev) => ({ ...prev, [itemId]: nextPackaged }))
       onPackaged?.()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setSavingItemId(null)
     }
@@ -101,7 +99,7 @@ export function TakeoutOrderPanel({
       onCancel?.()
       onClose?.()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setCancelling(false)
     }

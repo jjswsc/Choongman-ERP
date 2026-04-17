@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
   try {
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = (await req.json()) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
+    }
     const id = Number(body?.id)
     const items = Array.isArray(body?.items) ? body.items : []
     const tableName = String(body?.tableName ?? '').trim()
@@ -196,6 +201,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, pointEarned }, { headers })
   } catch (e) {
     console.error('updatePosOrder:', e)
-    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json(
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
   }
 }

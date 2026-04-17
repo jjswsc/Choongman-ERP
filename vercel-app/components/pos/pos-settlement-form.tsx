@@ -40,6 +40,7 @@ import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
+import { tr as i18nTr } from '@/lib/i18n'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
@@ -557,7 +558,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         await appAlert(res.message || t('msg_save_fail_detail'))
       }
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setSaving(false)
     }
@@ -596,7 +597,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       fallbackCleanupMs: 120_000,
       printRole: 'receipt',
       onPrintUnavailable: () => {
-        void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+        void appAlert(t('posPrintUnavailable'))
       },
     })
   }

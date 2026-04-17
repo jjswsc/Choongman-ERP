@@ -138,7 +138,12 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = (await req.json()) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
+    }
     const idempotencyHeader = String(req.headers.get('x-idempotency-key') ?? '').trim()
     const idempotencyBody = String(body.localOrderNo ?? body.local_order_no ?? '').trim()
     const idempotencyKey = idempotencyHeader || idempotencyBody
@@ -162,7 +167,9 @@ export async function POST(req: NextRequest) {
       }
     }
     const storeCode = String(body.storeCode ?? '').trim()
-    const orderType = coercePosOrderTypeForDb(body.orderType ?? body.order_type)
+    const orderType = coercePosOrderTypeForDb(
+      String(body.orderType ?? body.order_type ?? '')
+    )
     const tableName = String(body.tableName ?? '')
     const memo = String(body.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body.discountAmt ?? 0))
@@ -398,7 +405,14 @@ export async function POST(req: NextRequest) {
     }, { headers })
   } catch (e) {
     console.error('savePosOrder:', e)
-    /** 503이어야 클라이언트 apiFetchWithOffline이 오프라인 큐로 적재(200+success:false는 큐 미동작 → ENOTFOUND 등 노출) */
-    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json(
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
   }
 }

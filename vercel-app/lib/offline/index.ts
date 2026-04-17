@@ -8,12 +8,20 @@ export {
   getPendingCount,
   getAllPending,
   getOfflineQueueCounts,
+  getOfflineQueueErrorHint,
   removeDeadLetterFromQueue,
   removeFromQueue,
   updateQueueItem,
   OFFLINE_QUEUE_MAX_RETRIES,
   type PendingRequest,
 } from './queue'
+export {
+  formatQueuedAtBangkok,
+  formatLastTriedBangkok,
+  isQueueItemDeadLetter,
+  summarizeQueuedRequestBody,
+  normalQueuedApiPath,
+} from './queued-request-display'
 export { isOnline, useOnlineStatus } from './network'
 export {
   syncPending,

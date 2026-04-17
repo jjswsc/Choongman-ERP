@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Check, CheckCircle, Users, XCircle, ArrowRightLeft, Combine, LayoutGrid, ArrowLeft } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, tr as i18nTr } from '@/lib/i18n'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TableOrderPanelProps {
@@ -87,11 +87,7 @@ export function TableOrderPanel({
     if (Number.isNaN(id)) return
     if (!posOrderHasServerId(order.id)) {
       const msg = t('posServedNeedsOrderId')
-      await appAlert(
-        msg && msg !== 'posServedNeedsOrderId'
-          ? msg
-          : '이 주문은 아직 서버에 전송되지 않았습니다. 전송이 끝난 뒤 서빙 완료를 눌러 주세요.'
-      )
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : tDefault('posServedNeedsOrderId'))
       return
     }
     const nextServed = !itemServed[itemId]
@@ -109,7 +105,7 @@ export function TableOrderPanel({
       setItemServed((prev) => ({ ...prev, [itemId]: nextServed }))
       onServed?.()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setSavingItemId(null)
     }
@@ -172,7 +168,7 @@ export function TableOrderPanel({
       onCancel?.()
       onClose?.()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setCancelling(false)
     }
@@ -212,7 +208,7 @@ export function TableOrderPanel({
       onServed?.()
       onClose?.()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setTransferSubmitting(false)
     }
@@ -249,7 +245,7 @@ export function TableOrderPanel({
       onServed?.()
       if (mergeDirection === 'into_selected') onClose?.()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setTransferSubmitting(false)
     }
@@ -370,7 +366,7 @@ export function TableOrderPanel({
                     await updatePosOrderStatus({ id: Number(order.id), status: 'completed' })
                     await onLeaveTable?.()
                   } catch (e) {
-                    await appAlert(String(e))
+                    await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
                   }
                 }}
               >

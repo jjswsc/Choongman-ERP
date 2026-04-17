@@ -22,7 +22,12 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = (await req.json()) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
+    }
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
     const id = body.id != null ? Number(body.id) : NaN
@@ -165,6 +170,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('updatePosOrderStatus:', e)
-    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
+    const msg = e instanceof Error ? e.message : String(e)
+    /**
+     * 예전에는 503을 썼지만, 브라우저·Vercel 로그에서 "서비스 불가"로 오인되고,
+     * 오프라인 큐(sync.ts)는 JSON message 대신 raw 텍스트로만 남는 경우가 있었음.
+     * HTTP 200 + success:false 로 통일해 실제 원인(Supabase 오류 등)이 message로 전달되게 함.
+     */
+    return NextResponse.json(
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        /** 첫 요청(apiFetchWithOffline)에서 구 503처럼 큐 재적재 허용 */
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
   }
 }

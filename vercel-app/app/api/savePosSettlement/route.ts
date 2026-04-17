@@ -7,7 +7,12 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = (await req.json()) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
+    }
     const storeCode = String(body.storeCode ?? '').trim()
     const settleDate = String(body.settleDate ?? '').trim()
     const cashActual = body.cashActual != null ? Number(body.cashActual) : null
@@ -54,6 +59,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('savePosSettlement:', e)
-    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json(
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
   }
 }

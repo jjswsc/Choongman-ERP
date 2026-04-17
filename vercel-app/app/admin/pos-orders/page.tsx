@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr as i18nTr } from "@/lib/i18n"
 import {
   getPosOrders,
   getPosPaymentAttempts,
@@ -405,7 +405,7 @@ export default function PosOrdersPage() {
     e.stopPropagation()
     navigator.clipboard.writeText(orderNo).then(
       () => {
-        void appAlert(t("posOrderNoCopied") || "주문번호가 복사되었습니다.")
+        void appAlert(t("posOrderNoCopied"))
       },
       () => {}
     )
@@ -435,7 +435,7 @@ export default function PosOrdersPage() {
   const handleSaveEdit = async () => {
     if (!editOrder) return
     if (editItems.length === 0) {
-      await appAlert(t("posEditItemsRequired") || "항목이 하나 이상 필요합니다.")
+      await appAlert(t("posEditItemsRequired"))
       return
     }
     setUpdatingId(editOrder.id)
@@ -472,7 +472,7 @@ export default function PosOrdersPage() {
         await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     } finally {
       setUpdatingId(null)
     }
@@ -501,7 +501,7 @@ export default function PosOrdersPage() {
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
     if (newStatus === "cancelled") {
-      if (!await appConfirm(t("posCancelConfirm") || "이 주문을 취소하시겠습니까?")) return
+      if (!await appConfirm(t("posCancelConfirm"))) return
     }
     setUpdatingId(orderId)
     try {
@@ -514,7 +514,7 @@ export default function PosOrdersPage() {
         await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     } finally {
       setUpdatingId(null)
     }
@@ -523,12 +523,12 @@ export default function PosOrdersPage() {
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const storeCode = (o.storeCode ?? "").trim()
     if (!storeCode || !o.items?.length) {
-      await appAlert(t("posPrintUnavailable") || "인쇄할 수 없습니다.")
+      await appAlert(t("posPrintUnavailable"))
       return
     }
     const win = window.open("", "_blank")
     if (!win) {
-      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      await appAlert(t("posPrintBlockedBrowser"))
       return
     }
     try {
@@ -543,7 +543,7 @@ export default function PosOrdersPage() {
       const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
       if (!slips.length) {
         win.close()
-        await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 인쇄할 품목이 없습니다.")
+        await appAlert(t("posKitchenNoItemsToPrint"))
         return
       }
       const slipDesign = resolveKitchenSlipDesign(settings)
@@ -599,7 +599,7 @@ export default function PosOrdersPage() {
       printOne(0)
     } catch (e) {
       win.close()
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     }
   }
 
@@ -645,11 +645,11 @@ export default function PosOrdersPage() {
     const keyword = ruleKeyword.trim().toLowerCase().replace(/\s+/g, "")
     const tenderKey = ruleKey.trim()
     if (!keyword) {
-      await appAlert("매칭 키워드를 입력해 주세요.")
+      await appAlert(t("posLinkposMatchKeywordRequired"))
       return
     }
     if (!tenderKey) {
-      await appAlert("매핑 키를 입력해 주세요.")
+      await appAlert(t("posLinkposTenderKeyRequired"))
       return
     }
     const targetStoreCode =
@@ -657,7 +657,7 @@ export default function PosOrdersPage() {
         ? "__shared__"
         : (currentStoreCode || "").trim()
     if (ruleScope === "store" && !targetStoreCode) {
-      await appAlert("매장 규칙은 매장을 먼저 선택해야 저장할 수 있습니다.")
+      await appAlert(t("posLinkposRuleStoreRequiredFirst"))
       return
     }
     setRuleSaving(true)
@@ -671,7 +671,7 @@ export default function PosOrdersPage() {
         isActive: true,
       })
       if (!res.success) {
-        await appAlert(res.message || "규칙 저장에 실패했습니다.")
+        await appAlert(res.message || t("posLinkposRuleSaveFailed"))
         return
       }
       setRuleKeyword("")
@@ -679,11 +679,11 @@ export default function PosOrdersPage() {
       setRulePriority("100")
       loadTenderRules()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     } finally {
       setRuleSaving(false)
     }
-  }, [ruleKeyword, ruleKey, ruleScope, currentStoreCode, ruleGroup, rulePriority, loadTenderRules])
+  }, [ruleKeyword, ruleKey, ruleScope, currentStoreCode, ruleGroup, rulePriority, loadTenderRules, t])
 
   const handleToggleTenderRule = React.useCallback(async (rule: PosLinkposTenderRule) => {
     try {
@@ -697,29 +697,35 @@ export default function PosOrdersPage() {
         isActive: !rule.isActive,
       })
       if (!res.success) {
-        await appAlert(res.message || "규칙 상태 변경에 실패했습니다.")
+        await appAlert(res.message || t("posLinkposRuleStatusFailed"))
         return
       }
       loadTenderRules()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     }
-  }, [loadTenderRules, setTenderRules, appAlert])
+  }, [loadTenderRules, t])
 
   const handleDeleteTenderRule = React.useCallback(async (rule: PosLinkposTenderRule) => {
-    const ok = await appConfirm(`규칙을 삭제하시겠습니까?\n[${rule.storeCode}] ${rule.matchKeyword} → ${rule.tenderKey}`)
+    const ok = await appConfirm(
+      i18nTr(t, "posLinkposRuleDeleteConfirm", {
+        storeCode: rule.storeCode,
+        matchKeyword: rule.matchKeyword,
+        tenderKey: rule.tenderKey,
+      })
+    )
     if (!ok) return
     try {
       const res = await deletePosLinkposTenderRule({ id: rule.id })
       if (!res.success) {
-        await appAlert(res.message || "규칙 삭제에 실패했습니다.")
+        await appAlert(res.message || t("posLinkposRuleDeleteFailed"))
         return
       }
       loadTenderRules()
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
     }
-  }, [loadTenderRules, appAlert, appConfirm])
+  }, [loadTenderRules, t])
 
   const handleRuleDrop = React.useCallback(async (target: PosLinkposTenderRule) => {
     const sourceId = dragRuleId
@@ -735,7 +741,7 @@ export default function PosOrdersPage() {
       return
     }
     if (source.storeCode !== target.storeCode) {
-      await appAlert("드래그 정렬은 같은 범위(공통 또는 동일 매장) 안에서만 가능합니다.")
+      await appAlert(t("posLinkposDragSameScopeOnly"))
       setDragRuleId(null)
       setDropRuleId(null)
       return
@@ -774,32 +780,32 @@ export default function PosOrdersPage() {
         if (!res.success) throw new Error(res.message || "priority_update_failed")
       }
     } catch (e) {
-      await appAlert(`우선순위 저장 실패: ${String(e)}`)
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
       loadTenderRules()
     } finally {
       setReorderingRules(false)
       setDragRuleId(null)
       setDropRuleId(null)
     }
-  }, [dragRuleId, tenderRules, loadTenderRules])
+  }, [dragRuleId, tenderRules, loadTenderRules, t])
 
   const handleRetryAttempt = React.useCallback(
     async (attempt: PosPaymentAttempt) => {
       const amount = Number(attempt.requestAmount || 0)
       if (amount <= 0) {
-        await appAlert("요청금액이 0이라 재시도할 수 없습니다.")
+        await appAlert(t("posLinkposRetryAmountZero"))
         return
       }
       const newReference1 = buildRetryReference1(attempt.localTxId)
       if (!newReference1 || newReference1 === String(attempt.localTxId || "").trim()) {
-        await appAlert("신규 R1 생성에 실패했습니다. 다시 시도해 주세요.")
+        await appAlert(t("posLinkposRetryR1Failed"))
         return
       }
       const ok = await appConfirm(
-        `동일 R1 재사용은 차단됩니다.\n` +
-          `기존 R1: ${attempt.localTxId || "-"}\n` +
-          `신규 R1: ${newReference1}\n\n` +
-          `재시도하시겠습니까?`
+        i18nTr(t, "posLinkposRetryConfirmBody", {
+          existingR1: String(attempt.localTxId || "-"),
+          newR1: newReference1,
+        })
       )
       if (!ok) return
 
@@ -818,23 +824,28 @@ export default function PosOrdersPage() {
         })
         if (res.success) {
           await appAlert(
-            `재시도 승인 완료\n` +
-              `R1: ${newReference1}\n` +
-              `응답코드: ${res.payment?.responseCode || "00"}\n` +
-              `승인번호: ${res.payment?.approvalCode || "-"}`
+            i18nTr(t, "posLinkposRetryApprovedBody", {
+              r1: newReference1,
+              responseCode: String(res.payment?.responseCode || "00"),
+              approvalCode: String(res.payment?.approvalCode || "-"),
+            })
           )
         } else {
-          await appAlert(`재시도 실패: ${res.message || "unknown_error"}`)
+          await appAlert(
+            i18nTr(t, "posLinkposRetryFailedWithReason", {
+              message: String(res.message || "unknown_error"),
+            })
+          )
         }
         loadAttempts()
         if (attempt.orderId) loadOrders()
       } catch (e) {
-        await appAlert(String(e))
+        await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
       } finally {
         setRetryingAttemptId(null)
       }
     },
-    [loadAttempts, loadOrders]
+    [loadAttempts, loadOrders, t]
   )
 
   React.useEffect(() => {
@@ -1615,7 +1626,9 @@ export default function PosOrdersPage() {
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-semibold">LINKPOS 자동분류 규칙</div>
                 <div className="text-xs text-muted-foreground">
-                  {rulesLoading ? "불러오는 중..." : `규칙 ${tenderRules.length}${t("posCount") || "건"}`}
+                  {rulesLoading
+                    ? t("posLinkposRulesLoading")
+                    : i18nTr(t, "posLinkposRulesCountLabel", { count: tenderRules.length })}
                 </div>
               </div>
               <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-6">
@@ -1646,7 +1659,7 @@ export default function PosOrdersPage() {
                 <Input
                   value={ruleKey}
                   onChange={(e) => setRuleKey(e.target.value)}
-                  placeholder="매핑 키 (예: Visa)"
+                  placeholder={t("posLinkposTenderKeyPlaceholder")}
                   className="h-8 text-xs"
                 />
                 <Input
@@ -1658,12 +1671,14 @@ export default function PosOrdersPage() {
               </div>
               <div className="mb-3 flex items-center gap-2">
                 <Button size="sm" className="h-8 text-xs" onClick={() => void handleSaveTenderRule()} disabled={ruleSaving}>
-                  {ruleSaving ? "..." : "규칙 추가"}
+                  {ruleSaving ? t("posLinkposSavingShort") : t("posLinkposAddRule")}
                 </Button>
                 <Button size="sm" variant="outline" className="h-8 text-xs" onClick={loadTenderRules}>
-                  새로고침
+                  {t("posRefresh")}
                 </Button>
-                {reorderingRules && <span className="text-xs text-muted-foreground">우선순위 저장 중...</span>}
+                {reorderingRules && (
+                  <span className="text-xs text-muted-foreground">{t("posLinkposPrioritySaving")}</span>
+                )}
                 {ruleScope === "store" && !currentStoreCode && (
                   <span className="text-xs text-amber-600">현재 매장을 선택하면 매장 규칙 저장이 가능합니다.</span>
                 )}
@@ -1686,7 +1701,7 @@ export default function PosOrdersPage() {
                     {tenderRules.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-2 py-5 text-center text-muted-foreground">
-                          규칙이 없습니다.
+                          {t("posLinkposRulesEmpty")}
                         </td>
                       </tr>
                     ) : (
@@ -1711,7 +1726,9 @@ export default function PosOrdersPage() {
                             void handleRuleDrop(r)
                           }}
                         >
-                          <td className="px-2 py-1.5">{r.storeCode === "__shared__" ? "공통" : r.storeCode}</td>
+                          <td className="px-2 py-1.5">
+                            {r.storeCode === "__shared__" ? t("posLinkposScopeShared") : r.storeCode}
+                          </td>
                           <td className="px-2 py-1.5 font-mono">{r.matchKeyword}</td>
                           <td className="px-2 py-1.5 text-center">{r.tenderGroup}</td>
                           <td className="px-2 py-1.5">{r.tenderKey}</td>
@@ -1818,7 +1835,7 @@ export default function PosOrdersPage() {
                                   type="button"
                                   className="rounded px-1.5 py-0.5 text-primary hover:bg-primary/10"
                                   onClick={() => setChainDialogAttemptId(a.id)}
-                                  title="재시도 체인 보기"
+                                  title={t("posLinkposRetryChainTitle")}
                                 >
                                   {total}
                                 </button>
@@ -1841,7 +1858,7 @@ export default function PosOrdersPage() {
                                 }}
                                 disabled={retryingAttemptId === a.id}
                               >
-                                {retryingAttemptId === a.id ? "..." : "재시도"}
+                                {retryingAttemptId === a.id ? t("posLinkposSavingShort") : t("posLinkposRetryButton")}
                               </Button>
                             ) : (
                               <span className="text-muted-foreground text-xs">-</span>
@@ -1889,7 +1906,9 @@ export default function PosOrdersPage() {
                         <tr key={r.id} className="border-b last:border-b-0">
                           <td className="px-4 py-2.5 text-center">
                             <span className={cn("rounded px-2 py-0.5 text-xs", r.depth === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                              {r.depth === 0 ? "원시도" : `${r.depth}차`}
+                              {r.depth === 0
+                                ? t("posLinkposRetryDepthRoot")
+                                : i18nTr(t, "posLinkposRetryDepthN", { n: r.depth })}
                             </span>
                           </td>
                           <td className="px-4 py-2.5">

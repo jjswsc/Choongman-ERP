@@ -37,6 +37,7 @@ import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 import { employeeMeetsMinEvalLetterGrade, hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
 import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter } from '@/lib/evaluation-postgrest-filters'
+import { isKitchenJobForPayroll } from '@/lib/employee-job-rules'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
@@ -1325,7 +1326,7 @@ export async function GET(request: NextRequest) {
         if (holidaySet.has(d)) holidayWorkDays++
       }
 
-      const isKitchen = /주방|kitchen|chef|쿡|cook/i.test(dept)
+      const isKitchen = isKitchenJobForPayroll(dept)
       const empGrade = String((e as EmpRowPayroll).grade || '').trim()
       const evalGradeForHaz = kitchenGrade || empGrade
       const hazAllow = hazAllowEligibleWithEvalGrade(

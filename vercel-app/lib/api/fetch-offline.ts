@@ -277,6 +277,35 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
   try {
     const res = await apiFetch(input, init)
     if (res.ok) {
+      const ct = (res.headers.get('content-type') || '').toLowerCase()
+      if (ct.includes('application/json') && canQueue(url, init)) {
+        const POS_RETRY_AFTER_QUEUE = new Set([
+          '/api/savePosOrder',
+          '/api/updatePosOrder',
+          '/api/updatePosOrderStatus',
+          '/api/markPosOrderItemServed',
+          '/api/savePosSettlement',
+          '/api/processPosStockDeduction',
+        ])
+        if (POS_RETRY_AFTER_QUEUE.has(path)) {
+          try {
+            const j = (await res.clone().json()) as {
+              success?: boolean
+              retryAfterQueue?: boolean
+            }
+            if (j?.success === false && j?.retryAfterQueue === true) {
+              reportNetworkFailure()
+              try {
+                return await queueAndReturnFallback()
+              } catch {
+                /* 원 응답 유지 */
+              }
+            }
+          } catch {
+            /* JSON 파싱 실패 시 아래에서 성공 처리 */
+          }
+        }
+      }
       reportNetworkSuccess()
     }
     // 서버/DB 장애(5xx) 시에도 큐 적재 → Supabase 등 장애 시 오프라인처럼 동작

@@ -29,7 +29,12 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = (await req.json()) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
+    }
     const id = Number(body?.id)
     const itemId = String(body?.itemId ?? '').trim()
     const served = body?.served === true
@@ -88,6 +93,14 @@ export async function POST(req: NextRequest) {
     )
   } catch (e) {
     console.error('markPosOrderItemServed:', e)
-    return NextResponse.json({ success: false, message: String(e) }, { status: 503, headers })
+    const msg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json(
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
   }
 }

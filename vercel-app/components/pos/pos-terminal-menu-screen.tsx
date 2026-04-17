@@ -26,7 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { useT, tr as i18nTr } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Pencil, Save, Upload } from 'lucide-react'
 import {
@@ -554,7 +554,7 @@ export function PosTerminalMenuScreen({
       await loadMenuData()
       setMenuEditOpen(false)
     } catch (e) {
-      await appAlert(String(e))
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setMenuEditSaving(false)
     }
@@ -609,7 +609,7 @@ export function PosTerminalMenuScreen({
         await appAlert(msg)
       }
     } catch (err) {
-      await appAlert(String(err))
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(err) }))
     } finally {
       setImageUploading(false)
       e.target.value = ''

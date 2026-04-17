@@ -115,7 +115,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens([])
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || t('posTerminalUnassignFailed'))
         }
       })
       .finally(() => setClearing(false))
@@ -136,7 +136,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => prev.filter((x) => x !== deviceToken))
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || t('posTerminalUnassignFailed'))
         }
       })
       .finally(() => setActionToken(null))
@@ -181,7 +181,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || '지정에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || t('posTerminalAssignMainFailed'))
         }
       })
       .finally(() => setActionToken(null))
@@ -228,7 +228,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => prev.filter((x) => x !== deviceToken))
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || t('posTerminalUnassignFailed'))
         }
       })
       .finally(() => setActionToken(null))

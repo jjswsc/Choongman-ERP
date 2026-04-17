@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getPosPrinterSettings, savePosPrinterSettings, type PosPrinterSettings } from "@/lib/api-client"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr as i18nTr } from "@/lib/i18n"
 
 function ToggleRow({
   label,
@@ -126,9 +126,13 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
     }
     const res = await shell.openCustomerDisplayWindow()
     if (!res?.ok) {
-      await appAlert(String(res?.reason || "open_failed"))
+      await appAlert(
+        i18nTr(t, "posDualMonitorCustomerOpenFailed", {
+          reason: String(res?.reason || "open_failed"),
+        })
+      )
     }
-  }, [tr])
+  }, [t, tr])
 
   const closeNow = React.useCallback(async () => {
     const shell = window.cmPosShell
@@ -138,9 +142,13 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
     }
     const res = await shell.closeCustomerDisplayWindow()
     if (!res?.ok) {
-      await appAlert(String(res?.reason || "close_failed"))
+      await appAlert(
+        i18nTr(t, "posDualMonitorCustomerCloseFailed", {
+          reason: String(res?.reason || "close_failed"),
+        })
+      )
     }
-  }, [tr])
+  }, [t, tr])
 
   if (!String(storeCode || "").trim()) {
     return <p className="text-sm text-muted-foreground">{tr("store", "매장")} {tr("required", "필수")}</p>

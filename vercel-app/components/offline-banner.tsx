@@ -4,14 +4,33 @@ import * as React from 'react'
 import { WifiOff, RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
+import {
   useOnlineStatus,
   getOfflineQueueCounts,
+  getOfflineQueueErrorHint,
   removeDeadLetterFromQueue,
   syncPending,
   onSyncComplete,
   getSyncSnapshot,
   onSyncSnapshot,
+  getAllPending,
+  OFFLINE_QUEUE_MAX_RETRIES,
+  formatQueuedAtBangkok,
+  formatLastTriedBangkok,
+  isQueueItemDeadLetter,
+  summarizeQueuedRequestBody,
+  normalQueuedApiPath,
   type SyncSnapshot,
+  type PendingRequest,
 } from '@/lib/offline'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
@@ -52,6 +71,10 @@ export function OfflineBanner({
   const [deadLetterCount, setDeadLetterCount] = React.useState(0)
   const [syncing, setSyncing] = React.useState(false)
   const [syncSnapshot, setSyncSnapshot] = React.useState<SyncSnapshot>(() => getSyncSnapshot())
+  const [lastErrorHint, setLastErrorHint] = React.useState<string | null>(null)
+  const [queueDetailOpen, setQueueDetailOpen] = React.useState(false)
+  const [queueDetailItems, setQueueDetailItems] = React.useState<PendingRequest[]>([])
+  const [queueDetailLoading, setQueueDetailLoading] = React.useState(false)
 
   const totalQueued = retriableCount + deadLetterCount
 
@@ -65,13 +88,20 @@ export function OfflineBanner({
 
   const refreshPending = React.useCallback(() => {
     getOfflineQueueCounts()
-      .then(({ retriable, dead }) => {
+      .then(async ({ retriable, dead }) => {
         setRetriableCount(retriable)
         setDeadLetterCount(dead)
+        try {
+          const hint = await getOfflineQueueErrorHint()
+          setLastErrorHint(hint)
+        } catch {
+          setLastErrorHint(null)
+        }
       })
       .catch(() => {
         setRetriableCount(0)
         setDeadLetterCount(0)
+        setLastErrorHint(null)
       })
   }, [])
 
@@ -123,13 +153,39 @@ export function OfflineBanner({
   const syncMetaText = React.useMemo(() => {
     const synced = Math.max(0, Number(syncSnapshot.lastSynced ?? 0))
     const failed = Math.max(0, Number(syncSnapshot.lastFailed ?? 0))
-    return `Sync ${lastSyncAtText} | +${synced} / !${failed}`
-  }, [lastSyncAtText, syncSnapshot.lastFailed, syncSnapshot.lastSynced])
+    return t('offlineBannerSyncMetaLine')
+      .replace('{time}', lastSyncAtText)
+      .replace('{synced}', String(synced))
+      .replace('{failed}', String(failed))
+  }, [lastSyncAtText, syncSnapshot.lastFailed, syncSnapshot.lastSynced, t])
+
+  const lastErrorLine = React.useMemo(() => {
+    if (!lastErrorHint || !lastErrorHint.trim()) return null
+    const max = 220
+    const reason =
+      lastErrorHint.length > max ? `${lastErrorHint.slice(0, max)}…` : lastErrorHint
+    return t('offlineBannerLastError').replace('{reason}', reason)
+  }, [lastErrorHint, t])
+
+  const openQueueDetail = React.useCallback(async () => {
+    setQueueDetailOpen(true)
+    setQueueDetailLoading(true)
+    try {
+      const all = await getAllPending()
+      all.sort((a, b) => a.createdAt - b.createdAt)
+      setQueueDetailItems(all)
+    } catch {
+      setQueueDetailItems([])
+    } finally {
+      setQueueDetailLoading(false)
+    }
+  }, [])
 
   if (offlineOnly && online) return null
   if (!offlineOnly && online && totalQueued === 0) return null
 
   return (
+    <>
     <div className="mx-4 my-2 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
@@ -169,9 +225,35 @@ export function OfflineBanner({
             {t('offlineBannerDeadLetterLine').replace('{count}', String(deadLetterCount))}
           </div>
         )}
-        <div className="truncate text-xs text-amber-700/90">
+        <button
+          type="button"
+          disabled={syncing}
+          title={t('offlineBannerViewQueueDetails')}
+          onClick={() => {
+            if (!syncing) void openQueueDetail()
+          }}
+          className={cn(
+            'w-full min-w-0 truncate text-left text-xs text-amber-700/90',
+            !syncing && 'cursor-pointer rounded-sm hover:underline hover:decoration-amber-700/80',
+            syncing && 'cursor-default opacity-70',
+          )}
+        >
           {syncMetaText}
-        </div>
+        </button>
+        {totalQueued > 0 && !syncing && (
+          <button
+            type="button"
+            onClick={() => void openQueueDetail()}
+            className="w-fit text-left text-xs font-medium text-amber-900 underline-offset-2 hover:underline"
+          >
+            {t('offlineBannerViewQueueDetails')}
+          </button>
+        )}
+        {online && retriableCount > 0 && lastErrorLine && (
+          <div className="break-words text-xs text-destructive/95" title={lastErrorHint ?? undefined}>
+            {lastErrorLine}
+          </div>
+        )}
       </div>
       {online && !syncing && (
         <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
@@ -214,5 +296,95 @@ export function OfflineBanner({
         </div>
       )}
     </div>
+
+    <Dialog open={queueDetailOpen} onOpenChange={setQueueDetailOpen}>
+      <DialogContent className="max-h-[85vh] max-w-lg gap-0 p-0 sm:max-w-lg">
+        <DialogHeader className="space-y-1 px-4 pb-2 pt-4">
+          <DialogTitle>{t('offlineBannerQueueDetailTitle')}</DialogTitle>
+          <DialogDescription>{t('offlineBannerQueueDetailDesc')}</DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="max-h-[min(60vh,420px)] px-4">
+          {queueDetailLoading ? (
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>{syncingMsg}</span>
+            </div>
+          ) : queueDetailItems.length === 0 ? (
+            <p className="py-6 text-sm text-muted-foreground">{t('offlineBannerQueueEmpty')}</p>
+          ) : (
+            <ul className="space-y-3 pb-4">
+              {queueDetailItems.map((item) => {
+                const dead = isQueueItemDeadLetter(item)
+                const lastTry = formatLastTriedBangkok(item.lastTriedAt, item.createdAt)
+                return (
+                  <li
+                    key={item.id}
+                    className="rounded-md border border-amber-500/35 bg-background/80 p-3 text-xs shadow-sm"
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="font-mono font-semibold text-foreground">
+                        {item.method} {normalQueuedApiPath(item.api)}
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                          dead
+                            ? 'bg-destructive/15 text-destructive'
+                            : 'bg-amber-500/20 text-amber-900',
+                        )}
+                      >
+                        {dead
+                          ? t('offlineBannerQueueStatusDead')
+                          : t('offlineBannerQueueStatusRetriable')}
+                      </span>
+                    </div>
+                    <dl className="grid gap-1.5 text-[11px] leading-snug text-muted-foreground">
+                      <div className="flex gap-2">
+                        <dt className="w-28 shrink-0 text-foreground/80">{t('offlineBannerQueueLabelQueuedAt')}</dt>
+                        <dd className="min-w-0 break-words">{formatQueuedAtBangkok(item.createdAt)}</dd>
+                      </div>
+                      {lastTry ? (
+                        <div className="flex gap-2">
+                          <dt className="w-28 shrink-0 text-foreground/80">{t('offlineBannerQueueLabelLastTry')}</dt>
+                          <dd className="min-w-0 break-words">{lastTry}</dd>
+                        </div>
+                      ) : null}
+                      <div className="flex gap-2">
+                        <dt className="w-28 shrink-0 text-foreground/80">{t('offlineBannerQueueLabelRetries')}</dt>
+                        <dd>
+                          {item.retryCount}/{OFFLINE_QUEUE_MAX_RETRIES}
+                        </dd>
+                      </div>
+                      {item.metadata?.localOrderNo ? (
+                        <div className="flex gap-2">
+                          <dt className="w-28 shrink-0 text-foreground/80">{t('offlineBannerQueueLabelLocalOrder')}</dt>
+                          <dd className="font-mono text-foreground">{item.metadata.localOrderNo}</dd>
+                        </div>
+                      ) : null}
+                      <div className="flex gap-2">
+                        <dt className="w-28 shrink-0 align-top text-foreground/80">{t('offlineBannerQueueLabelSummary')}</dt>
+                        <dd className="min-w-0 break-words text-foreground/90">{summarizeQueuedRequestBody(item)}</dd>
+                      </div>
+                      {item.lastError?.trim() ? (
+                        <div className="flex gap-2">
+                          <dt className="w-28 shrink-0 align-top text-foreground/80">{t('offlineBannerQueueLabelLastError')}</dt>
+                          <dd className="min-w-0 break-words text-destructive">{item.lastError.trim()}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </ScrollArea>
+        <DialogFooter className="border-t px-4 py-3">
+          <Button type="button" variant="secondary" onClick={() => setQueueDetailOpen(false)}>
+            {t('btnClose')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

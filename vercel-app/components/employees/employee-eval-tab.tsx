@@ -27,14 +27,10 @@ import { compressImageForUpload } from "@/lib/utils"
 import { formatEmployeeDisplayName, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { getEvaluationDistinctStores } from "@/lib/api-client"
+import { matchesEvalKitchenJob, matchesEvalServiceJob } from "@/lib/employee-job-rules"
 
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
-function normJobKey(j: string) {
-  return String(j || "")
-    .trim()
-    .toLowerCase()
-}
 
 /** 평가 유형별 대상: 주방/서비스는 job, 매니저 평가는 권한(role)만 사용(직무와 혼동하지 않음) */
 function employeeMatchesEvalType(
@@ -46,17 +42,15 @@ function employeeMatchesEvalType(
       .trim()
       .toLowerCase() === "manager"
   }
-  const j = normJobKey(e.job || "")
-  if (evalType === "kitchen") return j === "kitchen"
-  if (evalType === "service") return j === "service"
+  if (evalType === "kitchen") return matchesEvalKitchenJob(e.job || "")
+  if (evalType === "service") return matchesEvalServiceJob(e.job || "")
   return false
 }
 
 /** 미평가 분석 행·직무 문자열 → 평가 유형 */
 function evalTypeFromJobLabel(job: string): "kitchen" | "service" | "manager" {
-  const j = normJobKey(job)
-  if (j === "kitchen") return "kitchen"
-  if (j === "service") return "service"
+  if (matchesEvalKitchenJob(job)) return "kitchen"
+  if (matchesEvalServiceJob(job)) return "service"
   return "manager"
 }
 
@@ -68,9 +62,8 @@ function deriveEvalTypeFromEmployee(e: AdminEmployeeItem): "kitchen" | "service"
     .trim()
     .toLowerCase()
   if (r === "manager") return "manager"
-  const j = normJobKey(e.job || "")
-  if (j === "kitchen") return "kitchen"
-  if (j === "service") return "service"
+  if (matchesEvalKitchenJob(e.job || "")) return "kitchen"
+  if (matchesEvalServiceJob(e.job || "")) return "service"
   return "kitchen"
 }
 

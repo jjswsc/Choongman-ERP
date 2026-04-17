@@ -8,7 +8,12 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const body = await req.json()
+    let body: Record<string, unknown>
+    try {
+      body = (await req.json()) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
+    }
     const idempotencyKey = String(
       req.headers.get('x-idempotency-key') ??
         body?.idempotencyKey ??
@@ -39,8 +44,13 @@ export async function POST(req: NextRequest) {
     }, { headers })
   } catch (e) {
     console.error('processPosStockDeduction:', e)
+    const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json(
-      { success: false, message: String(e) },
+      {
+        success: false,
+        message: msg.slice(0, 500),
+        retryAfterQueue: true,
+      },
       { headers }
     )
   }

@@ -184,9 +184,9 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
       const res = await apiFetch(item.api, init)
 
       if (res.status === 401) {
-        // 토큰 만료 - 재로그인 필요, 큐 유지
+        // 토큰 만료 — 큐에 남김(i18n 배너와 무관하게 저장 문자열은 영문 고정)
         await updateQueueItem(item.id, {
-          lastError: '로그인이 필요합니다.',
+          lastError: 'HTTP 401: session expired — open POS login and sign in again',
           retryCount: item.retryCount + 1,
           lastTriedAt: now,
         })
