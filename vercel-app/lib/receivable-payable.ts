@@ -10,6 +10,11 @@ import {
   supabaseDeleteByFilter,
 } from './supabase-server'
 import { formatReceivableInvoiceNo } from './receivable-invoice-format'
+import {
+  isAccountingPurchaseOrderByCartJson,
+  purchaseOrderMetaOrderDate,
+  resolveAccountingPoReceivableStoreName,
+} from './purchase-order-cart'
 
 export { formatReceivableInvoiceNo }
 
@@ -61,6 +66,7 @@ export async function syncPayableFromApprovedPo(poId: number): Promise<void> {
   const rows = (await supabaseSelectFilter('purchase_orders', `id=eq.${poId}`, { limit: 1 })) as {
     status?: string
     vendor_code?: string
+    cart_json?: string
     total?: number
     withholding_tax_amount?: number | null
     created_at?: string
@@ -68,6 +74,12 @@ export async function syncPayableFromApprovedPo(poId: number): Promise<void> {
   if (!rows?.length) return
   const po = rows[0]
   if (po.status !== 'Approved') return
+
+  /** 물류·일반 매입 PO만 미지급. 회계 전용 PO는 미지급에 넣지 않음 */
+  if (isAccountingPurchaseOrderByCartJson(po.cart_json)) {
+    await deletePayableFromPO(poId)
+    return
+  }
 
   const vendorCode = String(po.vendor_code || '').trim()
   const total = Number(po.total) || 0
@@ -85,6 +97,88 @@ export async function syncPayableFromApprovedPo(poId: number): Promise<void> {
   }
 
   await upsertPayableFromPO({ poId, vendorCode, total: net, transDate })
+}
+
+export async function deleteReceivableFromAccountingPo(poId: number): Promise<void> {
+  if (!poId) return
+  await supabaseDeleteByFilter('receivable_transactions', `ref_type=eq.AccountingPO&ref_id=eq.${poId}`)
+}
+
+/**
+ * 회계 전용 발주(cart_json 메타) 승인 → 미수금 1건(ref AccountingPO).
+ * 물류 PO는 호출 시 기존 AccountingPO 행만 정리한다.
+ */
+export async function syncReceivableFromApprovedAccountingPo(poId: number): Promise<void> {
+  if (!poId) return
+  const rows = (await supabaseSelectFilter('purchase_orders', `id=eq.${poId}`, { limit: 1 })) as {
+    status?: string
+    cart_json?: string
+    total?: number
+    withholding_tax_amount?: number | null
+    created_at?: string
+    po_no?: string
+    location_name?: string
+  }[]
+  if (!rows?.length) return
+  const po = rows[0]
+
+  if (!isAccountingPurchaseOrderByCartJson(po.cart_json)) {
+    await deleteReceivableFromAccountingPo(poId)
+    return
+  }
+  if (po.status !== 'Approved') {
+    await deleteReceivableFromAccountingPo(poId)
+    return
+  }
+
+  const total = Number(po.total) || 0
+  const wht = Math.max(0, Number(po.withholding_tax_amount) || 0)
+  const net = Math.round((total - wht) * 100) / 100
+
+  const metaYmd = purchaseOrderMetaOrderDate(po.cart_json)
+  const transDate = metaYmd
+    ? metaYmd
+    : po.created_at && !isNaN(Date.parse(String(po.created_at)))
+      ? new Date(po.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+      : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+
+  const storeName = resolveAccountingPoReceivableStoreName(po)
+
+  if (!storeName || net <= 0) {
+    await deleteReceivableFromAccountingPo(poId)
+    return
+  }
+
+  const datePart = String(transDate).replace(/\D/g, '').slice(0, 8)
+  const invNo = `APO${datePart}-${poId}`
+  const memoBase = String(po.po_no || '').trim() || `PO #${poId}`
+  const memo = `회계발주 ${memoBase}`
+
+  const existing = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `ref_type=eq.AccountingPO&ref_id=eq.${poId}`,
+    { limit: 1 }
+  )) as { id?: number }[]
+  const row = {
+    store_name: storeName,
+    amount: net,
+    ref_type: 'AccountingPO',
+    ref_id: poId,
+    trans_date: transDate.slice(0, 10),
+    memo,
+    invoice_no: invNo,
+  }
+  if (existing?.length) {
+    await supabaseUpdate('receivable_transactions', existing[0].id!, {
+      store_name: storeName,
+      amount: net,
+      trans_date: row.trans_date,
+      memo,
+      invoice_no: invNo,
+    })
+  } else {
+    await supabaseInsert('receivable_transactions', row)
+  }
 }
 
 export async function upsertReceivableFromOrder(params: {

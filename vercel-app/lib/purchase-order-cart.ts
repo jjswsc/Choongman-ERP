@@ -128,3 +128,16 @@ export function formatPoDisplayDate(
   }
   return "-"
 }
+
+/**
+ * 회계 PO 승인 → 미수금 귀속 매장명.
+ * meta.relatedStore → 품목 줄 store → 발주 수령처(location_name)
+ */
+export function resolveAccountingPoReceivableStoreName(po: { cart_json?: string; location_name?: string }): string {
+  const { meta, items } = parsePurchaseOrderCart(po.cart_json)
+  const fromMeta = String(meta?.relatedStore ?? "").trim()
+  if (fromMeta) return fromMeta
+  const fromLine = items.map((i) => String(i.store ?? "").trim()).find(Boolean)
+  if (fromLine) return fromLine
+  return String(po.location_name ?? "").trim()
+}

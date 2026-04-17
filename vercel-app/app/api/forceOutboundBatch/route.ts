@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
+import { syncReceivableFromForceOutboundStockLogRow } from '@/lib/force-outbound-receivable'
 
 /** 강제 출고 - 본사 재고 차감 + 매장 재고 증가 (ForcePush + ForceOutbound) */
 export async function POST(request: NextRequest) {
@@ -95,7 +96,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await supabaseInsertMany('stock_logs', rows)
+    const insertedRaw = await supabaseInsertMany('stock_logs', rows)
+    const inserted = (Array.isArray(insertedRaw) ? insertedRaw : []) as {
+      id?: number
+      log_type?: string
+      log_date?: string
+      vendor_target?: string
+      item_code?: string
+      item_name?: string
+      qty?: number
+      invoice_unit_price?: number | string | null
+    }[]
+    for (const r of inserted) {
+      if (String(r.log_type || '') !== 'ForceOutbound' || r.id == null) continue
+      try {
+        await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode })
+      } catch (recErr) {
+        console.error('forceOutboundBatch receivable:', recErr)
+      }
+    }
     const count = Math.floor(rows.length / 2)
 
     // 앱 내 공지: 출고된 각 매장의 매니저에게 알림

@@ -188,7 +188,11 @@ export function AdminPurchaseOrderHistory() {
     async (po: PurchaseOrderRow) => {
       const id = po.id
       if (!id) return
-      const ok = await appConfirm(t("posCancelConfirm") || t("cancel") || "취소하시겠습니까?")
+      const confirmMsg = isPoApprovedStatus(po.status)
+        ? t("poCancelApprovedConfirm") ||
+          "승인된 발주를 취소하면 미수·미지급 연동이 해제됩니다. 계속하시겠습니까?"
+        : t("posCancelConfirm") || t("cancel") || "취소하시겠습니까?"
+      const ok = await appConfirm(confirmMsg)
       if (!ok) return
 
       setCancellingId(id)
@@ -592,7 +596,7 @@ ${allRows.map((row, ri) => {
                               <CheckCircle className="h-4 w-4" />
                             </Button>
                           )}
-                          {!isPoApprovedStatus(po.status) && po.status !== "Cancelled" && (
+                          {po.status !== "Cancelled" && (
                             <Button
                               variant="ghost"
                               size="icon"

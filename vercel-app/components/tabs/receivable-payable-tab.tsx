@@ -293,7 +293,45 @@ export function ReceivablePayableTab() {
       .then((r) => setListData(r.list || []))
       .catch(() => setListData([]))
       .finally(() => setLoading(false))
-  }, [tab, storeFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
+  }, [tab, recStoreFilter, payStoreFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
+
+  /** 매출처 선택값과 동일·유사 이름의 매입 거래처(발주·미지급) — 미수금이 비어 있을 때 미지급 탭 유도용 */
+  const purchaseVendorMatchForOutlet = React.useMemo(() => {
+    if (salesOutletFilter === "All") return null
+    const needle = salesOutletFilter.trim().toLowerCase()
+    if (!needle) return null
+    return (
+      vendors.find((v) => {
+        const n = (v.name || "").trim().toLowerCase()
+        const c = (v.code || "").trim().toLowerCase()
+        return n === needle || c === needle || n.includes(needle) || needle.includes(n)
+      }) ?? null
+    )
+  }, [salesOutletFilter, vendors])
+
+  const jumpToPayableForMatchedVendor = React.useCallback(() => {
+    const v = purchaseVendorMatchForOutlet
+    if (!v || !canSelectStores) return
+    setTab("payable")
+    setVendorFilter(v.code)
+    setPayableStoreFilter("All")
+    window.setTimeout(() => {
+      setLoading(true)
+      setHasSearchedList(true)
+      getReceivablePayableList({
+        type: "payable",
+        storeFilter: undefined,
+        vendorFilter: v.code,
+        startStr,
+        endStr,
+        userStore: auth?.store || undefined,
+        userRole: auth?.role || undefined,
+      })
+        .then((r) => setListData(r.list || []))
+        .catch(() => setListData([]))
+        .finally(() => setLoading(false))
+    }, 0)
+  }, [purchaseVendorMatchForOutlet, canSelectStores, startStr, endStr, auth?.store, auth?.role])
 
   const [hasSearchedList, setHasSearchedList] = React.useState(false)
 
@@ -470,13 +508,13 @@ export function ReceivablePayableTab() {
   const handleBulkOutboundSyncOrderReceivables = React.useCallback(async () => {
     const msg =
       salesOutletFilter !== "All"
-        ? tt("recBulkOutboundSyncConfirmOutlet", '선택한 매출처({outlet})의 Order 미수금만 출고 기준으로 다시 맞춥니다. 계속할까요?').replace(
-            /\{outlet\}/g,
-            salesOutletFilter
-          )
+        ? tt(
+            "recBulkOutboundSyncConfirmOutlet",
+            '선택한 매출처({outlet})의 주문(출고) 미수금과 강제출고 미수금을 출고 관리와 같은 규칙으로 맞춥니다. 계속할까요?'
+          ).replace(/\{outlet\}/g, salesOutletFilter)
         : tt(
             "recBulkOutboundSyncConfirmAll",
-            "전체 매출처의 Order 미수금을 출고(본사 출고 로그) 기준으로 다시 맞춥니다. 계속할까요?"
+            "전체 매출처의 주문(출고) 미수금과 강제출고 미수금을 출고(본사 출고 로그) 기준으로 맞춥니다. 계속할까요?"
           )
     const ok = await appConfirm(msg)
     if (!ok) return
@@ -489,6 +527,8 @@ export function ReceivablePayableTab() {
       skipped: 0,
       errors: 0,
       cartFallback: 0,
+      forceOutboundProcessed: 0,
+      forceOutboundErrors: 0,
     }
     try {
       for (;;) {
@@ -510,12 +550,14 @@ export function ReceivablePayableTab() {
           acc.skipped += s.skipped
           acc.errors += s.errors
           acc.cartFallback += s.cartFallback
+          if (s.forceOutboundProcessed != null) acc.forceOutboundProcessed = s.forceOutboundProcessed
+          if (s.forceOutboundErrors != null) acc.forceOutboundErrors = s.forceOutboundErrors
         }
         lastReceivableId = Number(r.nextReceivableId ?? lastReceivableId)
         setBulkOutboundRecProgress(
           tt(
             "recBulkOutboundSyncProgress",
-            `출고 맞춤 처리 중… 누적 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped} / 카트대체 ${acc.cartFallback} / 오류 ${acc.errors})`
+            `출고 맞춤 처리 중… 주문(출고) 누적 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped} / 카트대체 ${acc.cartFallback} / 오류 ${acc.errors}) · 강제출고는 마지막에 일괄 반영됩니다`
           )
             .replace(/\{processed\}/g, String(acc.processed))
             .replace(/\{updated\}/g, String(acc.updated))
@@ -532,14 +574,16 @@ export function ReceivablePayableTab() {
           await appAlert(
             tt(
               "recBulkOutboundSyncDone",
-              `출고 기준 일괄 맞춤 완료: 처리 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped} / 오류 ${acc.errors} / 카트대체 ${acc.cartFallback})`
+              `출고 기준 일괄 맞춤 완료: 주문(출고) {processed}건 (갱신 {updated} / 제거 {removed} / 스킵 {skipped} / 오류 {errors} / 카트대체 {fallback}) · 강제출고 {forceFc}건 맞춤 (오류 {forceErr})`
             )
               .replace(/\{processed\}/g, String(acc.processed))
               .replace(/\{updated\}/g, String(acc.updated))
               .replace(/\{removed\}/g, String(acc.removed))
               .replace(/\{skipped\}/g, String(acc.skipped))
               .replace(/\{errors\}/g, String(acc.errors))
-              .replace(/\{fallback\}/g, String(acc.cartFallback)) + detail
+              .replace(/\{fallback\}/g, String(acc.cartFallback))
+              .replace(/\{forceFc\}/g, String(acc.forceOutboundProcessed))
+              .replace(/\{forceErr\}/g, String(acc.forceOutboundErrors)) + detail
           )
           loadList()
           break
@@ -614,7 +658,14 @@ export function ReceivablePayableTab() {
 
   const filterItemsByUnpaid = <T extends { ref_type?: string }>(items: T[] | undefined, isRec: boolean): T[] => {
     if (!filterUnpaidOnly || !items?.length) return items ?? []
-    if (isRec) return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "Order")
+    if (isRec)
+      return items.filter(
+        (r) =>
+          r.ref_type === "Opening" ||
+          r.ref_type === "Order" ||
+          r.ref_type === "AccountingPO" ||
+          r.ref_type === "ForceOutbound"
+      )
     return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
   }
 
@@ -685,6 +736,8 @@ export function ReceivablePayableTab() {
     const isRec = tab === "receivable"
     const entityCol = isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")
     const typeOrder = isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")
+    const typeAccountingPo = tt("recTypeAccountingPO", "회계발주")
+    const typeForceOutbound = tt("recTypeForceOutbound", "강제출고")
     const typeReceive = isRec ? (t("recTypeReceive") || "수령") : (t("payTypePayment") || "지급")
     const typeOpening = t("recTypeOpening") || "기초이월"
     const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")
@@ -706,9 +759,30 @@ export function ReceivablePayableTab() {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
       if (displayItems.length === 0) continue
       const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
-      const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
+      const typeLabel = (ref: string) =>
+        ref === "Opening"
+          ? typeOpening
+          : ref === "AccountingPO"
+            ? typeAccountingPo
+            : ref === "ForceOutbound"
+              ? typeForceOutbound
+              : ref === (isRec ? "Order" : "PO")
+                ? typeOrder
+                : typeReceive
       for (const row of displayItems) {
-        const orderOrInv = isRec && row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "")) : ""
+        const orderOrInv =
+          isRec && (row.ref_type === "Order" || row.ref_type === "AccountingPO" || row.ref_type === "ForceOutbound")
+            ? row.ref_type === "AccountingPO"
+              ? row.invoice_no || (row.ref_id ? `APO#${row.ref_id}` : "")
+              : row.ref_type === "ForceOutbound"
+                ? row.invoice_no || (row.ref_id ? `IVF#${row.ref_id}` : "")
+                : row.invoice_no ||
+                  (row.ref_id && row.trans_date
+                    ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}`
+                    : row.ref_id
+                      ? `#${row.ref_id}`
+                      : "")
+            : ""
         const receiveCheckCell = isRec
           ? (row.ref_type === "Order"
             ? ((row as { receive_checked?: boolean }).receive_checked
@@ -761,7 +835,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
   const isRec = tab === "receivable"
   const printTitle = isRec ? (t("receivableTab") || "미수금 (매출)") : (t("payableTab") || "미지급금 (매입)")
   const typeLabel = (ref: string) =>
-    ref === "Opening" ? (t("recTypeOpening") || "기초이월") : ref === (isRec ? "Order" : "PO") ? (isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")) : (isRec ? (t("recTypeReceive") || "수령") : (t("payTypePayment") || "지급"))
+    ref === "Opening"
+      ? (t("recTypeOpening") || "기초이월")
+      : ref === "AccountingPO"
+        ? (t("recTypeAccountingPO") || "회계발주")
+        : ref === "ForceOutbound"
+          ? (t("recTypeForceOutbound") || "강제출고")
+          : ref === (isRec ? "Order" : "PO")
+            ? isRec
+              ? (t("recTypeOrder") || "주문")
+              : (t("payTypePO") || "발주")
+            : isRec
+              ? (t("recTypeReceive") || "수령")
+              : (t("payTypePayment") || "지급")
 
   return (
     <div className="space-y-4">
@@ -829,7 +915,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       ? `#${row.ref_id}`
                                       : "") ||
                                   "-"
-                                : "-"}
+                                : row.ref_type === "AccountingPO"
+                                  ? row.invoice_no || (row.ref_id ? `APO#${row.ref_id}` : "-")
+                                  : row.ref_type === "ForceOutbound"
+                                    ? row.invoice_no || (row.ref_id ? `IVF#${row.ref_id}` : "-")
+                                    : "-"}
                             </td>
                           )}
                           {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
@@ -958,6 +1048,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       {t("excelBtn")}
                     </Button>
                   </div>
+                  {canSelectStores ? (
+                    <p className="text-xs text-amber-900 dark:text-amber-100/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-md px-3 py-2 mb-3 leading-snug">
+                      {tt(
+                        "recVsPayPoHint",
+                        "※ 발주(PO) 승인·매입 대금은 「미지급금(매입)」에 반영됩니다. 이 탭(미수금)은 매장·매출처 매출 회수(주문·수금)용입니다."
+                      )}
+                    </p>
+                  ) : null}
                   {bulkOutboundRecProgress ? (
                     <p className="text-xs text-muted-foreground mb-1">{bulkOutboundRecProgress}</p>
                   ) : null}
@@ -969,7 +1067,23 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : !hasSearchedList ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : listData.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("receivableEmpty") || "조회된 미수금이 없습니다."}</p>
+                    <div className="py-8 space-y-3 text-center px-2">
+                      <p className="text-sm text-muted-foreground">{t("receivableEmpty") || "조회된 미수금이 없습니다."}</p>
+                      {purchaseVendorMatchForOutlet && canSelectStores ? (
+                        <>
+                          <p className="text-xs text-amber-800 dark:text-amber-200 max-w-lg mx-auto leading-relaxed">
+                            {tt(
+                              "recEmptyMaybePoHint",
+                              "선택한 매출처 이름과 같은 매입 거래처가 있으면, 발주(PO) 승인 금액은 「미지급금」에만 나타납니다. 미수금에는 주문·수금 기준 잔액만 표시됩니다."
+                            )}
+                          </p>
+                          <Button type="button" size="sm" variant="secondary" onClick={jumpToPayableForMatchedVendor}>
+                            <Building2 className="h-4 w-4 mr-1" aria-hidden />
+                            {tt("recGoToPayableBtn", "미지급금(매입) 탭에서 이 거래처 조회")}
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   ) : (
                     <div className="w-full">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 남은 미수액 */}
@@ -1058,11 +1172,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         item.storeName || ""
                                       )
                                     const orderNoDisplay =
-                                      row.ref_type === "Order"
-                                        ? row.invoice_no ||
-                                          (rowOrderId != null ? `#${rowOrderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
-                                          "-"
-                                        : "-"
+                                      row.ref_type === "AccountingPO"
+                                        ? row.invoice_no || (row.ref_id != null ? `APO#${row.ref_id}` : "-")
+                                        : row.ref_type === "ForceOutbound"
+                                          ? row.invoice_no || (row.ref_id != null ? `IVF#${row.ref_id}` : "-")
+                                          : row.ref_type === "Order"
+                                            ? row.invoice_no ||
+                                              (rowOrderId != null ? `#${rowOrderId}` : row.ref_id ? `#${row.ref_id}` : "") ||
+                                              "-"
+                                            : "-"
                                     return (
                                     <React.Fragment key={row.id ?? recRowKey}>
                                     <tr className="border-b border-border/50">
@@ -1086,7 +1204,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         ) : null}
                                       </td>
                                       <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
-                                      <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "Order" ? (t("recTypeOrder") || "주문") : (t("recTypeReceive") || "수령")}</td>
+                                      <td className="py-1.5 px-4 w-[95px]">
+                                        {row.ref_type === "Opening"
+                                          ? (t("recTypeOpening") || "기초이월")
+                                          : row.ref_type === "AccountingPO"
+                                            ? (t("recTypeAccountingPO") || "회계발주")
+                                            : row.ref_type === "ForceOutbound"
+                                              ? (t("recTypeForceOutbound") || "강제출고")
+                                              : row.ref_type === "Order"
+                                                ? (t("recTypeOrder") || "주문")
+                                                : (t("recTypeReceive") || "수령")}
+                                      </td>
                                       <td
                                         className={cn(
                                           "py-1.5 px-3 w-[160px] min-w-[160px] whitespace-nowrap",

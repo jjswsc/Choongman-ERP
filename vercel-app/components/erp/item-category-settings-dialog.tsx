@@ -52,6 +52,16 @@ export function ItemCategorySettingsDialog({
     }
   }, [])
 
+  /** 저장/삭제 직후 목록만 서버와 맞춤 (전체 패널 로딩 없이) */
+  const refreshListFromServer = React.useCallback(async () => {
+    try {
+      const data = await getItemCategorySettings()
+      setList(data || [])
+    } catch {
+      /* 목록 유지 */
+    }
+  }, [])
+
   React.useEffect(() => {
     if (open) load()
   }, [open, load])
@@ -62,18 +72,37 @@ export function ItemCategorySettingsDialog({
       await appAlert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
       return
     }
+    const sortOrder = form.sort_order || 0
     setSaving(true)
     try {
       const res = await saveItemCategory({
         id: editing?.id,
         name,
         oldName: editing?.name,
-        sort_order: form.sort_order || 0,
+        sort_order: sortOrder,
       })
       if (res.success) {
+        if (res.queued) {
+          await appAlert(t("posPrinterSavedQueued"))
+          const id = editing?.id
+          if (id != null && id > 0) {
+            setList((prev) =>
+              prev.map((row) =>
+                row.id === id ? { ...row, name, sort_order: sortOrder } : row
+              )
+            )
+          } else {
+            setList((prev) =>
+              [...prev, { name, sort_order: sortOrder }].sort(
+                (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name)
+              )
+            )
+          }
+        } else {
+          await refreshListFromServer()
+        }
         setEditing(null)
         setForm({ name: "", sort_order: 0 })
-        await load()
         onSaved?.()
       } else {
         await appAlert(res.message || t("msg_save_fail_detail"))
@@ -91,7 +120,16 @@ export function ItemCategorySettingsDialog({
     try {
       const res = await deleteItemCategory({ id: item.id, name: item.name })
       if (res.success) {
-        await load()
+        if (res.queued) {
+          await appAlert(t("posPrinterSavedQueued"))
+          setList((prev) =>
+            prev.filter((row) =>
+              item.id != null && item.id > 0 ? row.id !== item.id : row.name !== item.name
+            )
+          )
+        } else {
+          await refreshListFromServer()
+        }
         onSaved?.()
       } else {
         await appAlert(res.message || t("msg_delete_fail_detail"))
@@ -150,10 +188,10 @@ export function ItemCategorySettingsDialog({
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                  <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
                     {saving ? "..." : (t("btn_save") || t("emp_save") || "저장")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={cancelEdit}>
+                  <Button type="button" size="sm" variant="outline" onClick={cancelEdit}>
                     {t("cancel") || "취소"}
                   </Button>
                 </div>
@@ -161,6 +199,7 @@ export function ItemCategorySettingsDialog({
             </div>
           ) : (
             <Button
+              type="button"
               size="sm"
               variant="outline"
               onClick={() => startEdit({ name: "", sort_order: 0 })}
@@ -185,6 +224,7 @@ export function ItemCategorySettingsDialog({
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
@@ -193,6 +233,7 @@ export function ItemCategorySettingsDialog({
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"

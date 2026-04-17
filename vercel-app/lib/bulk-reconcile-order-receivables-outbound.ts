@@ -1,9 +1,11 @@
 /**
  * receivable_transactions(Order) 배치를 출고 로그 기준(syncReceivableToOutboundView)으로 재동기화
+ * 마지막 배치에서 HQ 강제출고(ForceOutbound) 미수금도 동일 출고 규칙으로 일괄 맞춤
  */
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { syncReceivableToOutboundView } from '@/lib/receivable-match-outbound'
 import { orderIdFromReceivableOrderRow } from '@/lib/receivable-order-id-parse'
+import { reconcileAllForceOutboundReceivables } from '@/lib/force-outbound-receivable'
 
 export type BulkOutboundStats = {
   processed: number
@@ -12,6 +14,9 @@ export type BulkOutboundStats = {
   skipped: number
   errors: number
   cartFallback: number
+  /** 마지막 배치에서만 채워짐 — 강제출고 stock_logs 기준 미수금 맞춤 */
+  forceOutboundProcessed?: number
+  forceOutboundErrors?: number
 }
 
 export type BulkOutboundBatchResult = {
@@ -51,6 +56,9 @@ export async function reconcileOrderReceivablesOutboundBatch(params: {
   })) as { id?: number; ref_id?: number; invoice_no?: string | null; memo?: string | null }[]
 
   if (!recRows?.length) {
+    const fo = await reconcileAllForceOutboundReceivables({ storeFilter })
+    stats.forceOutboundProcessed = fo.processed
+    stats.forceOutboundErrors = fo.errors
     return { nextReceivableId: lastReceivableId, hasMore: false, stats, errorSamples }
   }
 
@@ -83,6 +91,12 @@ export async function reconcileOrderReceivablesOutboundBatch(params: {
     if (r.usedCartFallback) stats.cartFallback += 1
     if (r.removed) stats.removed += 1
     else stats.updated += 1
+  }
+
+  if (!hasMore) {
+    const fo = await reconcileAllForceOutboundReceivables({ storeFilter })
+    stats.forceOutboundProcessed = fo.processed
+    stats.forceOutboundErrors = fo.errors
   }
 
   return { nextReceivableId, hasMore, stats, errorSamples }

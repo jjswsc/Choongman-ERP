@@ -1,9 +1,11 @@
 /**
  * 본사 발주(PO) 취소 API
- * - status: Draft -> Cancelled
+ * - Draft → Cancelled
+ * - Approved → Cancelled (미수·미지급 연동 제거, 입고·통장 연결 시 불가)
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { deletePayableFromPO, deleteReceivableFromAccountingPo } from '@/lib/receivable-payable'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -35,11 +37,35 @@ export async function POST(request: NextRequest) {
     if (po.status === 'Cancelled') {
       return NextResponse.json({ success: true, message: '이미 취소된 발주입니다.' }, { headers })
     }
+
     if (po.status === 'Approved') {
-      return NextResponse.json({ success: false, message: '승인된 발주는 취소할 수 없습니다.' }, { headers })
+      const inboundLinked = (await supabaseSelectFilter(
+        'inbound_batches',
+        `purchase_order_id=eq.${poId}`,
+        { limit: 1 }
+      )) as unknown[]
+      if (inboundLinked?.length) {
+        return NextResponse.json(
+          { success: false, message: '이미 입고가 등록된 발주는 취소할 수 없습니다.' },
+          { headers }
+        )
+      }
+      const bankLinked = (await supabaseSelectFilter(
+        'bank_transactions',
+        `purchase_order_id=eq.${poId}`,
+        { limit: 1 }
+      )) as unknown[]
+      if (bankLinked?.length) {
+        return NextResponse.json(
+          { success: false, message: '통장 거래와 연결된 발주는 취소할 수 없습니다.' },
+          { headers }
+        )
+      }
     }
 
     await supabaseUpdate('purchase_orders', poId, { status: 'Cancelled' })
+    await deletePayableFromPO(poId)
+    await deleteReceivableFromAccountingPo(poId)
     return NextResponse.json({ success: true, message: '취소되었습니다.' }, { headers })
   } catch (e) {
     console.error('processPurchaseOrderCancel:', e)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { syncPayableFromApprovedPo } from '@/lib/receivable-payable'
+import { syncPayableFromApprovedPo, syncReceivableFromApprovedAccountingPo } from '@/lib/receivable-payable'
 
 /** 발주(PO) 인보이스 수령·원천징수세 수정 */
 export async function POST(request: NextRequest) {
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
 
     await supabaseUpdate('purchase_orders', poId, patch)
     await syncPayableFromApprovedPo(poId)
+    await syncReceivableFromApprovedAccountingPo(poId)
 
     // 연동: 이 발주에 연결된 통장 거래도 인보이스 상태 동기화
     if (typeof invoiceReceived === 'boolean') {

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-17T04:43:22.036Z",
-  "entryCount": 791,
+  "generatedAt": "2026-04-17T07:56:11.161Z",
+  "entryCount": 800,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -3399,7 +3399,7 @@
     },
     {
       "path": "app/api/patchStockLogInvoiceUnitPrice/route.ts",
-      "line": 46,
+      "line": 47,
       "kind": "limit",
       "value": 1,
       "apiLabel": "patchStockLogInvoiceUnitPrice"
@@ -3553,7 +3553,21 @@
     },
     {
       "path": "app/api/processPurchaseOrderCancel/route.ts",
-      "line": 26,
+      "line": 28,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "processPurchaseOrderCancel"
+    },
+    {
+      "path": "app/api/processPurchaseOrderCancel/route.ts",
+      "line": 45,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "processPurchaseOrderCancel"
+    },
+    {
+      "path": "app/api/processPurchaseOrderCancel/route.ts",
+      "line": 56,
       "kind": "limit",
       "value": 1,
       "apiLabel": "processPurchaseOrderCancel"
@@ -5050,6 +5064,41 @@
       "apiLabel": "lib:firebase-admin"
     },
     {
+      "path": "lib/force-outbound-receivable.ts",
+      "line": 32,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "lib:force-outbound-receivable"
+    },
+    {
+      "path": "lib/force-outbound-receivable.ts",
+      "line": 91,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:force-outbound-receivable"
+    },
+    {
+      "path": "lib/force-outbound-receivable.ts",
+      "line": 118,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:force-outbound-receivable"
+    },
+    {
+      "path": "lib/force-outbound-receivable.ts",
+      "line": 139,
+      "kind": "limit",
+      "value": 8000,
+      "apiLabel": "lib:force-outbound-receivable"
+    },
+    {
+      "path": "lib/force-outbound-receivable.ts",
+      "line": 170,
+      "kind": "limit",
+      "value": 8000,
+      "apiLabel": "lib:force-outbound-receivable"
+    },
+    {
       "path": "lib/franchisee-multi-store.ts",
       "line": 36,
       "kind": "limit",
@@ -5457,35 +5506,49 @@
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 28,
+      "line": 33,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 61,
+      "line": 66,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 117,
+      "line": 113,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 156,
+      "line": 160,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:receivable-payable"
+    },
+    {
+      "path": "lib/receivable-payable.ts",
+      "line": 211,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:receivable-payable"
+    },
+    {
+      "path": "lib/receivable-payable.ts",
+      "line": 250,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:receivable-payable"
     },
     {
       "path": "lib/receivable-payable.ts",
-      "line": 201,
+      "line": 295,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:receivable-payable"

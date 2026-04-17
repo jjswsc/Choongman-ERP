@@ -91,6 +91,8 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // 발주
   "발주가 저장되었습니다.": "purchaseOrderSuccess",
+  "이미 입고가 등록된 발주는 취소할 수 없습니다.": "poCancelBlockedInbound",
+  "통장 거래와 연결된 발주는 취소할 수 없습니다.": "poCancelBlockedBank",
 
   // 방문
   "매장과 사용자 정보가 필요합니다.": "visitStoreRequired",

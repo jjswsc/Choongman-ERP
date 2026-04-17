@@ -513,8 +513,22 @@ export default function PosMenusPage() {
       )
       return
     }
-    const code = formData.code.trim()
+    let code = formData.code.trim()
     const name = formData.name.trim()
+    /** 자동 코드 대분류인데 아직 code가 비어 있으면(비동기 실패·오프라인 등) 저장 직전에 한 번 더 발급 시도 */
+    const mainTrim = formData.categoryMain.trim()
+    if (
+      !editingId &&
+      !code &&
+      mainTrim &&
+      (CODE_AUTO_MAINS as readonly string[]).includes(mainTrim)
+    ) {
+      const { code: next } = await getNextPosMenuCode(mainTrim)
+      if (next) {
+        code = next
+        setFormData((p) => ({ ...p, code: next }))
+      }
+    }
     if (!code || !name) {
       await appAlert(t("posMenuAlertCodeName"))
       return
@@ -1883,9 +1897,14 @@ export default function PosMenusPage() {
                         {formData.categoryMain.trim() &&
                           !mainCategories.some((m) => m.toLowerCase() === formData.categoryMain.trim().toLowerCase()) && (
                           <DropdownMenuItem
-                            onClick={() => {
-                              setFormData((p) => ({ ...p, categoryMain: formData.categoryMain.trim() }))
+                            onClick={async () => {
+                              const trimmed = formData.categoryMain.trim()
+                              setFormData((p) => ({ ...p, categoryMain: trimmed }))
                               setCategoryMainOpen(false)
+                              if ((CODE_AUTO_MAINS as readonly string[]).includes(trimmed)) {
+                                const { code: next } = await getNextPosMenuCode(trimmed)
+                                if (next) setFormData((p) => ({ ...p, categoryMain: trimmed, code: next }))
+                              }
                             }}
                             className="text-primary font-medium"
                           >
@@ -1908,8 +1927,15 @@ export default function PosMenusPage() {
                       className="mt-1 h-10"
                       value={formData.code}
                       onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
-                      disabled={(CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain)}
-                      title={(CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain) ? (t("posMenuCodeAuto") || "대분류 선택 시 자동 생성") : undefined}
+                      disabled={
+                        (CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain) &&
+                        !!formData.code.trim()
+                      }
+                      title={
+                        (CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain)
+                          ? (t("posMenuCodeAuto") || "대분류 선택 시 자동 생성")
+                          : undefined
+                      }
                     />
                   </div>
                   <div>

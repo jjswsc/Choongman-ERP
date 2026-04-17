@@ -1698,6 +1698,8 @@ export const i18n = {
     recCheckWait: '수금대기',
     payColPaymentStatus: '지급여부',
     recTypeOrder: '주문',
+    recTypeAccountingPO: '회계발주',
+    recTypeForceOutbound: '강제출고',
     recTypeOpening: '기초이월',
     recTypeReceive: '수령',
     payTypePO: '발주',
@@ -1713,12 +1715,16 @@ export const i18n = {
       '일괄 동기화 완료.\n처리 {processed}건 · 갱신 {updated} · 제거 {removed} · 스킵 {skipped} · 고아 삭제 {orphanRemoved} · 오류 {errors}',
     recBulkSyncBtn: 'Order 미수 일괄 맞춤',
     recBulkOutboundSyncBtn: '출고 기준 일괄 맞춤',
-    recBulkOutboundSyncBtnTitle: 'Order 미수금을 출고 로그·출고 화면과 같은 합계로 전건 재설정합니다. 시간이 걸릴 수 있습니다.',
-    recBulkOutboundSyncConfirmAll: '전체 매출처의 Order 미수금을 출고(본사 출고 로그) 기준으로 다시 맞춥니다. 계속할까요?',
-    recBulkOutboundSyncConfirmOutlet: '선택한 매출처({outlet})의 Order 미수금만 출고 기준으로 다시 맞춥니다. 계속할까요?',
-    recBulkOutboundSyncDone: '출고 기준 일괄 맞춤 완료: 처리 {processed}건 (갱신 {updated} / 제거 {removed} / 스킵 {skipped} / 오류 {errors} / 카트대체 {fallback})',
+    recBulkOutboundSyncBtnTitle:
+      '주문(출고) 미수금과 강제출고 미수금을 출고 관리·본사 출고 로그와 같은 규칙으로 맞춥니다. 시간이 걸릴 수 있습니다.',
+    recBulkOutboundSyncConfirmAll:
+      '전체 매출처의 주문(출고) 미수금과 강제출고 미수금을 출고(본사 출고 로그) 기준으로 맞춥니다. 계속할까요?',
+    recBulkOutboundSyncConfirmOutlet:
+      '선택한 매출처({outlet})의 주문(출고) 미수금과 강제출고 미수금을 출고 관리와 같은 규칙으로 맞춥니다. 계속할까요?',
+    recBulkOutboundSyncDone:
+      '출고 기준 일괄 맞춤 완료: 주문(출고) {processed}건 (갱신 {updated} / 제거 {removed} / 스킵 {skipped} / 오류 {errors} / 카트대체 {fallback}) · 강제출고 {forceFc}건 맞춤 (오류 {forceErr})',
     recBulkOutboundSyncProgress:
-      '출고 맞춤 처리 중… 누적 {processed}건 (갱신 {updated} / 제거 {removed} / 스킵 {skipped} / 카트대체 {fallback} / 오류 {errors})',
+      '출고 맞춤 처리 중… 주문(출고) 누적 {processed}건 (갱신 {updated} / 제거 {removed} / 스킵 {skipped} / 카트대체 {fallback} / 오류 {errors}) · 강제출고는 마지막에 일괄 반영됩니다',
     recBulkSyncBtnTitle: '과거 포함 Order 미수금 전건을 출고·직접정산 규칙에 맞게 재계산합니다.',
     recSyncOrderColHint: '출고·직접정산 규칙에 맞게 본사 미수 재계산',
     recSyncOrderBtnTitle: '본사 미수 재동기화 (지두방·직접정산 반영)',
@@ -3206,6 +3212,10 @@ export const i18n = {
     poHistorySearchPlaceholder: 'PO번호·거래처·출고지·작성자 검색',
     poHistoryNoMatch: '조건에 맞는 발주가 없습니다.',
     poHistoryColOrigin: '구분',
+    poCancelApprovedConfirm:
+      '승인된 발주를 취소하면 미수·미지급 연동이 해제됩니다. 계속하시겠습니까?',
+    poCancelBlockedInbound: '이미 입고가 등록된 발주는 취소할 수 없습니다.',
+    poCancelBlockedBank: '통장 거래와 연결된 발주는 취소할 수 없습니다.',
     poTaxSummaryHint: '부가세·원천징수',
     poPrintInvoiceTotal: '세금포함 합계',
     orderTabPoHistory: '발주 내역',
@@ -5472,6 +5482,11 @@ export const i18n = {
     posPromoCodeSuggestBtn: '자동 채번',
     posMenuBoardPlaceholder: '메뉴판 미리보기 (준비 중)',
     receivableEmpty: '조회된 미수금이 없습니다.',
+    recVsPayPoHint:
+      '※ 발주(PO) 승인·매입 대금은 「미지급금(매입)」에 반영됩니다. 이 탭(미수금)은 매장·매출처 매출 회수(주문·수금)용입니다.',
+    recEmptyMaybePoHint:
+      '선택한 매출처 이름과 같은 매입 거래처가 있으면, 발주(PO) 승인 금액은 「미지급금」에만 나타납니다. 미수금에는 주문·수금 기준 잔액만 표시됩니다.',
+    recGoToPayableBtn: '미지급금(매입) 탭에서 이 거래처 조회',
     posMenuOptionsSelectHint: '옵션 탭에서 사이즈, 부위, 토핑 등을 추가해 주세요.',
     posMenuGoToOptions: '옵션 탭으로 이동',
     posMenuTabScreen: '메뉴 정보',
@@ -7605,6 +7620,8 @@ Only matters the employee must handle personally on a working day:
     recCheckWait: 'Wait to pay',
     payColPaymentStatus: 'Paid',
     recTypeOrder: 'Order',
+    recTypeAccountingPO: 'Accounting PO',
+    recTypeForceOutbound: 'Force outbound',
     recTypeOpening: 'Opening',
     recTypeReceive: 'Received',
     payTypePO: 'PO',
@@ -7620,12 +7637,16 @@ Only matters the employee must handle personally on a working day:
       'Bulk sync finished.\nProcessed {processed} · updated {updated} · removed {removed} · skipped {skipped} · orphan removed {orphanRemoved} · errors {errors}',
     recBulkSyncBtn: 'Re-align all Order receivables',
     recBulkOutboundSyncBtn: 'Re-align to outbound (bulk)',
-    recBulkOutboundSyncBtnTitle: 'Reset all Order receivables to match HQ outbound logs and totals. May take a while.',
-    recBulkOutboundSyncConfirmAll: 'Re-align all outlets’ Order receivables to outbound totals. Continue?',
-    recBulkOutboundSyncConfirmOutlet: 'Re-align Order receivables for "{outlet}" only to outbound totals. Continue?',
-    recBulkOutboundSyncDone: 'Outbound bulk sync done: {processed} processed (updated {updated} / removed {removed} / skipped {skipped} / errors {errors} / cart fallback {fallback})',
+    recBulkOutboundSyncBtnTitle:
+      'Re-align Order and force-outbound receivables to match Outbound Management and HQ stock logs. May take a while.',
+    recBulkOutboundSyncConfirmAll:
+      'Re-align all outlets’ Order and force-outbound receivables to outbound totals. Continue?',
+    recBulkOutboundSyncConfirmOutlet:
+      'Re-align Order and force-outbound receivables for "{outlet}" only to outbound totals. Continue?',
+    recBulkOutboundSyncDone:
+      'Outbound bulk sync: Order {processed} (updated {updated} / removed {removed} / skipped {skipped} / errors {errors} / cart fallback {fallback}) · force outbound {forceFc} (errors {forceErr})',
     recBulkOutboundSyncProgress:
-      'Outbound bulk sync… total {processed} (updated {updated} / removed {removed} / skipped {skipped} / cart fallback {fallback} / errors {errors})',
+      'Outbound bulk… Order total {processed} (updated {updated} / removed {removed} / skipped {skipped} / cart fallback {fallback} / errors {errors}) · force outbound runs at the end',
     recBulkSyncBtnTitle: 'Recalculate all Order receivables (incl. past) to match outbound and direct-settlement rules.',
     recSyncOrderColHint: 'Recalculate HQ receivable per outbound & direct-settlement rules',
     recSyncOrderBtnTitle: 'Sync HQ receivable (Jidubang / direct settlement)',
@@ -9114,6 +9135,11 @@ Only matters the employee must handle personally on a working day:
     poHistorySearchPlaceholder: 'Search PO #, vendor, location, user',
     poHistoryNoMatch: 'No purchase orders match your filters.',
     poHistoryColOrigin: 'Source',
+    poCancelApprovedConfirm:
+      'Cancelling an approved PO will remove linked receivable/payable entries. Continue?',
+    poCancelBlockedInbound:
+      'This PO cannot be cancelled because inbound receipts are already registered.',
+    poCancelBlockedBank: 'This PO cannot be cancelled because it is linked to a bank transaction.',
     poTaxSummaryHint: 'VAT & withholding tax',
     poPrintInvoiceTotal: 'Total (incl. tax)',
     orderTabPoHistory: 'PO History',
@@ -11272,6 +11298,11 @@ orderItemQty: 'Qty',
     posPromoCodeSuggestBtn: 'Suggest',
     posMenuBoardPlaceholder: 'Menu board preview (coming soon)',
     receivableEmpty: 'No receivables found.',
+    recVsPayPoHint:
+      'Approved POs and purchase payables appear under Payables (Purchases). This tab (Receivables) is for collecting sales from stores/outlets (orders and receipts).',
+    recEmptyMaybePoHint:
+      'If this outlet name also exists as a purchase vendor, PO-approved amounts show only under Payables. Receivables here reflect order/collection balances only.',
+    recGoToPayableBtn: 'Open Payables tab for this vendor',
     posMenuOptionsSelectHint: 'Add size, part, topping etc. in the Options tab.',
     posMenuGoToOptions: 'Go to Options tab',
     posMenuTabScreen: 'Menu info',
@@ -12425,6 +12456,10 @@ orderItemQty: 'Qty',
     poHistorySearchPlaceholder: 'ค้นหาเลขที่·ผู้ขาย·ที่จัดส่ง·ผู้จัดทำ',
     poHistoryNoMatch: 'ไม่มีรายการที่ตรงเงื่อนไข',
     poHistoryColOrigin: 'ประเภท',
+    poCancelApprovedConfirm:
+      'การยกเลิกใบสั่งซื้อที่อนุมัติแล้วจะลบรายการลูกหนี้/เจ้าหนี้ที่เชื่อม ต้องการดำเนินการต่อหรือไม่',
+    poCancelBlockedInbound: 'ไม่สามารถยกเลิกได้ เนื่องจากมีการรับสินค้าเข้าคลังแล้ว',
+    poCancelBlockedBank: 'ไม่สามารถยกเลิกได้ เนื่องจากเชื่อมกับรายการธนาคาร',
     poTaxSummaryHint: 'VAT และ ภาษีหัก ณ ที่จ่าย',
     poPrintInvoiceTotal: 'รวมภาษี',
     orderTabPoHistory: 'ประวัติใบสั่งซื้อ',
@@ -13432,6 +13467,12 @@ orderItemQty: 'จำนวน',
     adminReceivablePayable: 'ลูกหนี้/เจ้าหนี้',
     receivablePayableTitle: 'ลูกหนี้·เจ้าหนี้',
     receivableTab: 'ลูกหนี้ (ขาย)',
+    receivableEmpty: 'ไม่พบยอดลูกหนี้จากการค้นหา',
+    recVsPayPoHint:
+      '※ การอนุมัติ PO และยอดเจ้าหนี้จากการซื้อจะไปที่แท็บ「เจ้าหนี้ (ซื้อ)」 แท็บนี้(ลูกหนี้)ใช้สำหรับเก็บเงินจากร้าน/ลูกค้าขาย (ออเดอร์·รับเงิน)',
+    recEmptyMaybePoHint:
+      'ถ้าชื่อลูกค้าที่เลือกตรงกับผู้จัดส่ง(ซื้อ) ยอดจาก PO ที่อนุมัติจะอยู่ที่「เจ้าหนี้」เท่านั้น ลูกหนี้ที่นี่คิดจากออเดอร์/การรับเงิน',
+    recGoToPayableBtn: 'ไปดูเจ้าหนี้ (ซื้อ) สำหรับรายนี้',
     payableTab: 'เจ้าหนี้ (ซื้อ)',
     recColSalesAmount: 'ยอดขาย',
     recColReceiveAmount: 'รับแล้ว',
@@ -17768,6 +17809,11 @@ orderItemQty: 'จำนวน',
     poHistorySearchPlaceholder: 'နံပါတ်·ရောင်းချသူ·နေရာ·ပြုစုသူ ရှာရန်',
     poHistoryNoMatch: 'ကိုက်ညီသော အမှာစာမရှိပါ',
     poHistoryColOrigin: 'အမျိုးအစား',
+    poCancelApprovedConfirm:
+      'Cancelling an approved PO will remove linked receivable/payable entries. Continue?',
+    poCancelBlockedInbound:
+      'This PO cannot be cancelled because inbound receipts are already registered.',
+    poCancelBlockedBank: 'This PO cannot be cancelled because it is linked to a bank transaction.',
     poTaxSummaryHint: 'VAT နှင့် အခွန်ဖြတ်တောက်မှု',
     poPrintInvoiceTotal: 'အခွန်ပါ စုစုပေါင်း',
     orderTabPoHistory: 'အမှာစာအစဉ်',
@@ -22887,6 +22933,11 @@ orderItemQty: 'အရေအတွက်',
     poHistorySearchPlaceholder: 'ຄົ້ນຫາເລກທີ·ຜູ້ຂາຍ·ທີ່ສົ່ງ·ຜູ້ຈັດທຳ',
     poHistoryNoMatch: 'ບໍ່ມີລາຍການທີ່ກົງກັບເງື່ອນໄຂ',
     poHistoryColOrigin: 'ປະເພດ',
+    poCancelApprovedConfirm:
+      'Cancelling an approved PO will remove linked receivable/payable entries. Continue?',
+    poCancelBlockedInbound:
+      'This PO cannot be cancelled because inbound receipts are already registered.',
+    poCancelBlockedBank: 'This PO cannot be cancelled because it is linked to a bank transaction.',
     poTaxSummaryHint: 'VAT ແລະ ພາສີຫັກ ຢູ່ທີ່ຈ່າຍ',
     poPrintInvoiceTotal: 'ລວມລວມພາສີ',
     orderTabPoHistory: 'ປະຫວັດການສັ່ງຊື້',

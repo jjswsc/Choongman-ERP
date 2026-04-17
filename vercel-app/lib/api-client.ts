@@ -1783,6 +1783,8 @@ export async function syncAllOrderReceivablesFromOutboundBatch(params: {
       skipped: number
       errors: number
       cartFallback: number
+      forceOutboundProcessed?: number
+      forceOutboundErrors?: number
     }
     errorSamples?: { orderId: number; message: string }[]
   }>
@@ -4730,7 +4732,7 @@ export async function saveItemCategory(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; queued?: boolean }>
 }
 
 export async function deleteItemCategory(params: { id?: number; name?: string }) {
@@ -4739,7 +4741,7 @@ export async function deleteItemCategory(params: { id?: number; name?: string })
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; queued?: boolean }>
 }
 
 export async function getItemCategories() {

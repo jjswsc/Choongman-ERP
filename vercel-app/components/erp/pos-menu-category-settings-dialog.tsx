@@ -67,6 +67,16 @@ export function PosMenuCategorySettingsDialog({
     }
   }, [])
 
+  /** 저장 직후 서버·병합 규칙과 동기화 (전체 로딩 스피너 없이) */
+  const refreshConfigFromServer = React.useCallback(async () => {
+    try {
+      const data = await getPosMenuCategoriesConfig()
+      setConfig(data || { mainCategories: [], categoriesByMain: {} })
+    } catch {
+      /* keep existing config */
+    }
+  }, [])
+
   React.useEffect(() => {
     if (open) load()
   }, [open, load])
@@ -77,7 +87,10 @@ export function PosMenuCategorySettingsDialog({
       await appAlert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
       return
     }
-    if (!config) return
+    if (!config) {
+      await appAlert(t("msg_save_fail_detail") || "저장에 실패했습니다.")
+      return
+    }
     setSaving(true)
     try {
       const newMains = editingMain
@@ -96,7 +109,12 @@ export function PosMenuCategorySettingsDialog({
         applyToMenus: false,
       })
       if (res?.success) {
-        setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
+        if ((res as { queued?: boolean }).queued) {
+          await appAlert(t("posPrinterSavedQueued"))
+          setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
+        } else {
+          await refreshConfigFromServer()
+        }
         setEditingMain(null)
         setFormMain("")
         onSaved?.()
@@ -112,7 +130,10 @@ export function PosMenuCategorySettingsDialog({
 
   const handleDeleteMain = async (main: string) => {
     if (!await appConfirm(`"${main}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
-    if (!config) return
+    if (!config) {
+      await appAlert(t("msg_delete_fail_detail") || "삭제에 실패했습니다.")
+      return
+    }
     setDeletingMain(main)
     try {
       const newMains = config.mainCategories.filter((c) => c !== main)
@@ -124,7 +145,12 @@ export function PosMenuCategorySettingsDialog({
         applyToMenus: false,
       })
       if (res?.success) {
-        setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
+        if ((res as { queued?: boolean }).queued) {
+          await appAlert(t("posPrinterSavedQueued"))
+          setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
+        } else {
+          await refreshConfigFromServer()
+        }
         onSaved?.()
       } else {
         await appAlert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
@@ -137,13 +163,19 @@ export function PosMenuCategorySettingsDialog({
   }
 
   const handleSaveSub = async () => {
-    const main = formSub.main.trim()
+    const mains = config?.mainCategories || []
+    const mainResolved =
+      formSub.main.trim() && mains.includes(formSub.main) ? formSub.main.trim() : mains[0]?.trim() || ""
+    const main = mainResolved
     const name = formSub.name.trim()
     if (!main || !name) {
       await appAlert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
       return
     }
-    if (!config) return
+    if (!config) {
+      await appAlert(t("msg_save_fail_detail") || "저장에 실패했습니다.")
+      return
+    }
     setSaving(true)
     try {
       const subs = config.categoriesByMain[main] || []
@@ -163,7 +195,12 @@ export function PosMenuCategorySettingsDialog({
         applyToMenus: false,
       })
       if (res?.success) {
-        setConfig({ ...config, categoriesByMain: newCategoriesByMain })
+        if ((res as { queued?: boolean }).queued) {
+          await appAlert(t("posPrinterSavedQueued"))
+          setConfig({ ...config, categoriesByMain: newCategoriesByMain })
+        } else {
+          await refreshConfigFromServer()
+        }
         setEditingSub(null)
         setFormSub({ main: "", name: "" })
         onSaved?.()
@@ -179,7 +216,10 @@ export function PosMenuCategorySettingsDialog({
 
   const handleDeleteSub = async (main: string, sub: string) => {
     if (!await appConfirm(`"${main} > ${sub}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
-    if (!config) return
+    if (!config) {
+      await appAlert(t("msg_delete_fail_detail") || "삭제에 실패했습니다.")
+      return
+    }
     setDeletingSub(`${main}|${sub}`)
     try {
       const subs = (config.categoriesByMain[main] || []).filter((c) => c !== sub)
@@ -193,7 +233,12 @@ export function PosMenuCategorySettingsDialog({
         applyToMenus: false,
       })
       if (res?.success) {
-        setConfig({ ...config, categoriesByMain: newCategoriesByMain })
+        if ((res as { queued?: boolean }).queued) {
+          await appAlert(t("posPrinterSavedQueued"))
+          setConfig({ ...config, categoriesByMain: newCategoriesByMain })
+        } else {
+          await refreshConfigFromServer()
+        }
         onSaved?.()
       } else {
         await appAlert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
@@ -254,16 +299,16 @@ export function PosMenuCategorySettingsDialog({
                     placeholder={t("posMenuCategoryMain") || "대분류명"}
                     className="h-9 flex-1"
                   />
-                  <Button size="sm" onClick={handleSaveMain} disabled={saving}>
+                  <Button type="button" size="sm" onClick={handleSaveMain} disabled={saving}>
                     {saving ? "..." : t("btn_save") || "저장"}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => startEditMain(null)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => startEditMain(null)}>
                     {t("cancel") || "취소"}
                   </Button>
                 </div>
               </div>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => startEditMain("")}>
+              <Button type="button" size="sm" variant="outline" onClick={() => startEditMain("")}>
                 + {(t("posMenuCategoryMainAdd") === "posMenuCategoryMainAdd" ? "대분류 추가" : t("posMenuCategoryMainAdd"))}
               </Button>
             )}
@@ -280,10 +325,11 @@ export function PosMenuCategorySettingsDialog({
                     <li key={m} className="flex items-center justify-between gap-2 px-4 py-2">
                       <span className="font-medium">{m}</span>
                       <div className="flex gap-1 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditMain(m)}>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditMain(m)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
@@ -309,12 +355,16 @@ export function PosMenuCategorySettingsDialog({
                   <div>
                     <label className="text-xs font-medium">{t("posMenuCategoryMain") || "대분류"}</label>
                     <Select
-                      value={formSub.main}
+                      value={
+                        formSub.main && (config?.mainCategories || []).includes(formSub.main)
+                          ? formSub.main
+                          : (config?.mainCategories?.[0] ?? "")
+                      }
                       onValueChange={(v) => setFormSub((p) => ({ ...p, main: v }))}
                       disabled={!!editingSub.sub}
                     >
                       <SelectTrigger className="h-9 mt-0.5">
-                        <SelectValue />
+                        <SelectValue placeholder={t("posMenuCategoryMain") || "대분류"} />
                       </SelectTrigger>
                       <SelectContent>
                         {(config?.mainCategories || []).map((c) => (
@@ -333,10 +383,10 @@ export function PosMenuCategorySettingsDialog({
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={handleSaveSub} disabled={saving}>
+                    <Button type="button" size="sm" onClick={handleSaveSub} disabled={saving}>
                       {saving ? "..." : t("btn_save") || "저장"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => startEditSub("", null)}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => startEditSub("", null)}>
                       {t("cancel") || "취소"}
                     </Button>
                   </div>
@@ -344,6 +394,7 @@ export function PosMenuCategorySettingsDialog({
               </div>
             ) : (
               <Button
+                type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => startEditSub(config?.mainCategories?.[0] || "", "")}
@@ -368,6 +419,7 @@ export function PosMenuCategorySettingsDialog({
                         <span className="font-medium flex-1">{translatePosMenuCategoryLabel(sub, t)}</span>
                         <div className="flex gap-1 shrink-0">
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
@@ -376,6 +428,7 @@ export function PosMenuCategorySettingsDialog({
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"

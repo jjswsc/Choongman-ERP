@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { syncReceivableToOutboundView } from '@/lib/receivable-match-outbound'
+import { syncReceivableFromForceOutboundStockLogById } from '@/lib/force-outbound-receivable'
 
 /**
  * 출고 이력(stock_logs) 확정 단가·수량 수정. orders.cart_json 은 변경하지 않음.
@@ -84,6 +85,16 @@ export async function POST(request: NextRequest) {
           receivableSync.ok = false
           receivableSync.message = err instanceof Error ? err.message : '미수금 동기화 오류'
         }
+      }
+    } else if (lt === 'ForceOutbound') {
+      receivableSync.ran = true
+      try {
+        await syncReceivableFromForceOutboundStockLogById(stockLogId)
+        receivableSync.ok = true
+        receivableSync.message = '강제출고 미수금 반영'
+      } catch (err) {
+        receivableSync.ok = false
+        receivableSync.message = err instanceof Error ? err.message : '미수금 동기화 오류'
       }
     }
 
