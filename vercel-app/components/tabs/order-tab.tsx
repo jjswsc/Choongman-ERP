@@ -413,14 +413,6 @@ export function OrderTab() {
 
   const handleReceiveSubmit = async () => {
     if (!receiveModal) return
-    if (!receivePhotoFiles.length) {
-      await appAlert(t("receivePhotoRequired"))
-      return
-    }
-    if (receivePhotoFiles.some(isReceiveVideoFile)) {
-      await appAlert(t("receiveImagesOnly"))
-      return
-    }
     const eligible = receiveModal.order ? getEligibleReceiveIndices(receiveModal.order) : []
     const isPartial = receiveModal.order && !isAllEligibleInspected(receiveModal.order)
     if (isPartial) {
@@ -431,42 +423,49 @@ export function OrderTab() {
         return
       }
     }
-    setReceiveSubmitting(true)
+    if (receivePhotoFiles.length > 0 && receivePhotoFiles.some(isReceiveVideoFile)) {
+      await appAlert(t("receiveImagesOnly"))
+      return
+    }
+
     const modal = receiveModal
+    setReceiveSubmitting(true)
+
+    const compressWithTimeout = async (file: File, timeoutMs = 15000): Promise<string> => {
+      return await new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("compress timeout")), timeoutMs)
+        compressImageForUpload(file)
+          .then((dataUrl) => {
+            clearTimeout(timer)
+            resolve(dataUrl)
+          })
+          .catch((e) => {
+            clearTimeout(timer)
+            reject(e)
+          })
+      })
+    }
+    const fetchJsonWithTimeout = async (url: string, init: RequestInit, timeoutMs = 15000) => {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+      try {
+        const res = await fetch(url, { ...init, signal: ctrl.signal })
+        const json = await res.json().catch(() => ({}))
+        return { res, json }
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+    const dataUrlToBlob = (dataUrl: string): Blob => {
+      const [meta, b64 = ""] = dataUrl.split(",")
+      const mime = /data:([^;]+);base64/.exec(meta || "")?.[1] || "image/jpeg"
+      const bytes = atob(b64)
+      const arr = new Uint8Array(bytes.length)
+      for (let i = 0; i < bytes.length; i += 1) arr[i] = bytes.charCodeAt(i)
+      return new Blob([arr], { type: mime })
+    }
+
     try {
-      const compressWithTimeout = async (file: File, timeoutMs = 15000): Promise<string> => {
-        return await new Promise<string>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error("compress timeout")), timeoutMs)
-          compressImageForUpload(file)
-            .then((dataUrl) => {
-              clearTimeout(timer)
-              resolve(dataUrl)
-            })
-            .catch((e) => {
-              clearTimeout(timer)
-              reject(e)
-            })
-        })
-      }
-      const fetchJsonWithTimeout = async (url: string, init: RequestInit, timeoutMs = 15000) => {
-        const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-        try {
-          const res = await fetch(url, { ...init, signal: ctrl.signal })
-          const json = await res.json().catch(() => ({}))
-          return { res, json }
-        } finally {
-          clearTimeout(timer)
-        }
-      }
-      const dataUrlToBlob = (dataUrl: string): Blob => {
-        const [meta, b64 = ""] = dataUrl.split(",")
-        const mime = /data:([^;]+);base64/.exec(meta || "")?.[1] || "image/jpeg"
-        const bytes = atob(b64)
-        const arr = new Uint8Array(bytes.length)
-        for (let i = 0; i < bytes.length; i += 1) arr[i] = bytes.charCodeAt(i)
-        return new Blob([arr], { type: mime })
-      }
       const uploadedImageUrls: string[] = []
       for (const file of receivePhotoFiles) {
         try {
@@ -496,77 +495,67 @@ export function OrderTab() {
           if (!putRes.ok) continue
           uploadedImageUrls.push(String(p.publicUrl))
         } catch {
-          // 개별 파일 실패는 무시하고 나머지 파일 진행
+          // 개별 파일 실패는 건너뜀 — 사진 없이 수령도 허용
         }
       }
-      if (!uploadedImageUrls.length) {
-        setReceiveSubmitting(false)
-        await appAlert(t("orderFail"))
-        return
+
+      const elig = modal.order ? getEligibleReceiveIndices(modal.order) : []
+      const inspectedSet = modal.order ? (inspectedItems[modal.order.id] ?? new Set<number>()) : new Set<number>()
+      const inspectedIndices = [...inspectedSet].filter((i) => elig.includes(i)).sort((a, b) => a - b)
+      const isPartialRecv = modal.order ? inspectedIndices.length < elig.length : false
+      const items = modal.order?.items ?? []
+      const receivedQtysMap: Record<number, number> = {}
+      if (isPartialRecv) {
+        inspectedIndices.forEach((idx) => {
+          const it = items[idx]
+          const origQty = it?.qty ?? 0
+          receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, origQty)
+        })
+      } else {
+        elig.forEach((idx) => {
+          const it = items[idx]
+          receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, it?.qty ?? 0)
+        })
       }
-      try {
-        const elig = modal.order ? getEligibleReceiveIndices(modal.order) : []
-        const inspectedSet = modal.order ? (inspectedItems[modal.order.id] ?? new Set<number>()) : new Set<number>()
-        const inspectedIndices = [...inspectedSet].filter((i) => elig.includes(i)).sort((a, b) => a - b)
-        const isPartial = modal.order ? inspectedIndices.length < elig.length : false
-        const items = modal.order?.items ?? []
-        const receivedQtysMap: Record<number, number> = {}
-        if (isPartial) {
-          inspectedIndices.forEach((idx) => {
-            const it = items[idx]
-            const origQty = it?.qty ?? 0
-            receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, origQty)
-          })
-        } else {
-          elig.forEach((idx) => {
-            const it = items[idx]
-            receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, it?.qty ?? 0)
-          })
+
+      const res = await processOrderReceive({
+        orderRowId: modal.orderId,
+        imageUrls: uploadedImageUrls,
+        isPartialReceive: isPartialRecv,
+        inspectedIndices: inspectedIndices.length > 0 ? inspectedIndices : undefined,
+        receivedQtys: receivedQtysMap,
+      })
+
+      if (res && res.success === true) {
+        if (receiveCameraRef.current) receiveCameraRef.current.value = ""
+        if (receiveFileRef.current) receiveFileRef.current.value = ""
+        loadHistory()
+        if (effectiveStore) {
+          getAppData(effectiveStore, { scope: "order" }).then((r) => setStock(r.stock || {}))
         }
-        const res = await processOrderReceive({
-            orderRowId: modal.orderId,
-            imageUrls: uploadedImageUrls,
-            isPartialReceive: isPartial,
-            /** 일부배송완료 후 마지막 라인만 수령 시 isPartial=false 가 되어도 서버(연속 수령 분기)는 반드시 인덱스 배열이 필요함 — 빠지면 수령 실패·로딩만 도는 것처럼 보일 수 있음 */
-            inspectedIndices: inspectedIndices.length > 0 ? inspectedIndices : undefined,
-            receivedQtys: receivedQtysMap,
-          })
-        if (res && res.success === true) {
-          if (receiveCameraRef.current) receiveCameraRef.current.value = ""
-          if (receiveFileRef.current) receiveFileRef.current.value = ""
-          loadHistory()
-          if (effectiveStore) {
-            getAppData(effectiveStore, { scope: 'order' }).then((r) => setStock(r.stock || {}))
-          }
-          setReceivePhotoPreviews((p) => { p.forEach((u) => URL.revokeObjectURL(u)); return [] })
-          setReceiveModal(null)
-          setReceivePhotoFiles([])
-          setReceivedQtys((prev) => {
-            const next = { ...prev }
-            delete next[modal.orderId]
-            receivedQtysRef.current = next
-            return next
-          })
-          setReceiveSubmitting(false)
-          setTimeout(() => {
-            void appAlert(t("receiveDone"))
-          }, 50)
-        } else {
-          /** 알림(await)이 WebView에서 대기만 하면 try가 끝나지 않아 finally 미실행 → 로딩 무한. 먼저 버튼 복구 */
-          setReceiveSubmitting(false)
-          await appAlert(translateApiMessage(res?.message, t) || t("orderFail"))
-        }
-      } catch (err) {
-        console.error("processOrderReceive error:", err)
-        setReceiveSubmitting(false)
-        await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
-      } finally {
-        setReceiveSubmitting(false)
+        setReceivePhotoPreviews((p) => {
+          p.forEach((u) => URL.revokeObjectURL(u))
+          return []
+        })
+        setReceiveModal(null)
+        setReceivePhotoFiles([])
+        setReceivedQtys((prev) => {
+          const next = { ...prev }
+          delete next[modal.orderId]
+          receivedQtysRef.current = next
+          return next
+        })
+        setTimeout(() => {
+          void appAlert(t("receiveDone"))
+        }, 50)
+      } else {
+        void appAlert(translateApiMessage(res?.message, t) || t("orderFail"))
       }
     } catch (err) {
-      console.error("compressImage error:", err)
+      console.error("handleReceiveSubmit:", err)
+      void appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
+    } finally {
       setReceiveSubmitting(false)
-      await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
     }
   }
 
@@ -702,14 +691,14 @@ export function OrderTab() {
                   )}
                 </div>
               ) : (
-                <p className="py-4 text-center text-xs text-muted-foreground">{t("receivePhotoRequired")}</p>
+                <p className="py-4 text-center text-xs text-muted-foreground">{t("receivePhotoOptionalHint")}</p>
               )}
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={closeReceiveModal}>
                 {t("cancel")}
               </Button>
-              <Button size="sm" onClick={handleReceiveSubmit} disabled={!receivePhotoFiles.length || receiveSubmitting}>
+              <Button size="sm" onClick={handleReceiveSubmit} disabled={receiveSubmitting}>
                 {receiveSubmitting ? t("loading") : t("confirmReceive")}
               </Button>
             </div>
