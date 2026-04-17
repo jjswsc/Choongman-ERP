@@ -86,8 +86,15 @@ function parsePositiveIntQty(s: string): number {
   return Number.isFinite(n) && n >= 1 ? n : 1
 }
 
+/** 동영상은 수령 증빙에 쓰지 않음 — WebView가 전체화면 재생·「다시 보기」UI를 띄워 레이어가 꼬일 수 있음 */
+function isReceiveVideoFile(f: File): boolean {
+  if (f.type.startsWith("video/")) return true
+  return /\.(mp4|mpe?g|mov|webm|mkv|avi|3gp)$/i.test(f.name || "")
+}
+
 /** 모바일에서 카메라/갤러리가 image/* 외 MIME(빈 문자열, octet-stream)으로 주는 경우가 있어 허용 */
 function isLikelyReceiveImageFile(f: File): boolean {
+  if (isReceiveVideoFile(f)) return false
   if (f.type.startsWith("image/")) return true
   if (f.type === "application/octet-stream" || f.type === "") {
     return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(f.name || "")
@@ -337,6 +344,11 @@ export function OrderTab() {
   const MAX_RECEIVE_PHOTOS = 5
 
   const openReceiveModal = (orderId: number, o: OrderHistoryItem) => {
+    // 상품 사진 확대(z-50)·설명 다이얼로그가 열린 채 수령 모달(z-9999)을 켜면 뒤에 X·반투명 레이어가 겹쳐 보임 → 수령 전에 닫음
+    setImageModal(null)
+    setImageLoadError(false)
+    setDescriptionModal(null)
+    setDescriptionTranslated(null)
     // 모달을 열 때 검수 체크·수량을 지우지 않음 — 아코디언에서 선택한 뒤 열면 그대로 반영되어야 함(이전에는 초기화되어 부분수령 제출이 불가능했음)
     setReceiveModal({ orderId, order: o })
     setReceivePhotoFiles([])
@@ -359,7 +371,12 @@ export function OrderTab() {
 
   const appendReceivePhotos = (newFiles: FileList | null) => {
     if (!newFiles?.length) return
-    const valid = Array.from(newFiles).filter(isLikelyReceiveImageFile)
+    const picked = Array.from(newFiles)
+    const hadVideo = picked.some(isReceiveVideoFile)
+    if (hadVideo) {
+      void appAlert(t("receiveImagesOnly"))
+    }
+    const valid = picked.filter(isLikelyReceiveImageFile)
     if (!valid.length) return
     setReceivePhotoFiles((prev) => {
       const next = [...prev, ...valid].slice(0, MAX_RECEIVE_PHOTOS)
@@ -398,6 +415,10 @@ export function OrderTab() {
     if (!receiveModal) return
     if (!receivePhotoFiles.length) {
       await appAlert(t("receivePhotoRequired"))
+      return
+    }
+    if (receivePhotoFiles.some(isReceiveVideoFile)) {
+      await appAlert(t("receiveImagesOnly"))
       return
     }
     const eligible = receiveModal.order ? getEligibleReceiveIndices(receiveModal.order) : []
@@ -479,8 +500,8 @@ export function OrderTab() {
         }
       }
       if (!uploadedImageUrls.length) {
-        await appAlert(t("orderFail"))
         setReceiveSubmitting(false)
+        await appAlert(t("orderFail"))
         return
       }
       try {
@@ -506,7 +527,8 @@ export function OrderTab() {
             orderRowId: modal.orderId,
             imageUrls: uploadedImageUrls,
             isPartialReceive: isPartial,
-            inspectedIndices: isPartial ? inspectedIndices : undefined,
+            /** 일부배송완료 후 마지막 라인만 수령 시 isPartial=false 가 되어도 서버(연속 수령 분기)는 반드시 인덱스 배열이 필요함 — 빠지면 수령 실패·로딩만 도는 것처럼 보일 수 있음 */
+            inspectedIndices: inspectedIndices.length > 0 ? inspectedIndices : undefined,
             receivedQtys: receivedQtysMap,
           })
         if (res && res.success === true) {
@@ -530,18 +552,21 @@ export function OrderTab() {
             void appAlert(t("receiveDone"))
           }, 50)
         } else {
+          /** 알림(await)이 WebView에서 대기만 하면 try가 끝나지 않아 finally 미실행 → 로딩 무한. 먼저 버튼 복구 */
+          setReceiveSubmitting(false)
           await appAlert(translateApiMessage(res?.message, t) || t("orderFail"))
         }
       } catch (err) {
         console.error("processOrderReceive error:", err)
+        setReceiveSubmitting(false)
         await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
       } finally {
         setReceiveSubmitting(false)
       }
     } catch (err) {
       console.error("compressImage error:", err)
-      await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
       setReceiveSubmitting(false)
+      await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
     }
   }
 

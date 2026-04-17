@@ -126,7 +126,8 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
         }}
       >
         <DialogContent
-          className="max-w-lg"
+          className="z-[10050] max-w-lg"
+          overlayClassName="z-[10050]"
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >

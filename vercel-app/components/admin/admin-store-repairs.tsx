@@ -632,9 +632,27 @@ export function AdminStoreRepairs() {
                               ) : null}
                             </td>
                             <td className="px-3 py-2">{leadTimeLabel(row, t)}</td>
-                            <td className="px-3 py-2 text-center">
+                            <td
+                              className="px-3 py-2 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               {row.photoUrls?.length ? (
-                                <ImageIcon className="inline h-4 w-4 text-primary" />
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center justify-center gap-0.5 rounded-md p-1 text-primary hover:bg-muted"
+                                  title={t("repair_list_photo_view")}
+                                  onClick={() => {
+                                    const u = row.photoUrls![0]
+                                    if (u) setPhotoPreview(u)
+                                  }}
+                                >
+                                  <ImageIcon className="h-4 w-4" />
+                                  {row.photoUrls.length > 1 ? (
+                                    <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+                                      +{row.photoUrls.length - 1}
+                                    </span>
+                                  ) : null}
+                                </button>
                               ) : (
                                 "—"
                               )}

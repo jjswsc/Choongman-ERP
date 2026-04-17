@@ -15,7 +15,14 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getTodaySchedule, getTodayAttendanceSummary, type TodayScheduleItem, type TodayAttendanceItem } from "@/lib/api-client"
-import { todayStrBangkok, nowDecimalHoursBangkok } from "@/lib/attendance-utils"
+import { todayStrBangkok } from "@/lib/attendance-utils"
+import {
+  collectRealtimeLinearHourIndices,
+  formatRealtimeLinearHourLabel,
+  nowDecimalHoursSinceBangkokDateMidnight,
+  realtimeSlotPartsForLinearHour,
+  type RealtimeScheduleRowInput,
+} from "@/lib/realtime-work-grid"
 import {
   buildAttendanceSummaryLookupMap,
   findAttendanceForRealtimeScheduleRow,
@@ -77,17 +84,19 @@ function workToneWithoutAttendance(params: {
   viewingDate: string
   planInDec: number | null
   planOutDec: number | null
-  hourCol: number
-  /** 당일 조회일 때만 사용 (방콕 현재 시각 소수 시간) */
-  nowDecToday: number
+  /** 자정 넘김 격자 열(0~47) — viewingDate 자정부터 선형 */
+  linearK: number
+  /** 방콕 기준 viewingDate 자정부터 경과(h). 당일(달력)일 때만 */
+  nowHoursSinceViewingMidnight: number | null
 }): WorkMarkTone {
-  const { viewingDate, planInDec, planOutDec, hourCol, nowDecToday } = params
+  const { viewingDate, planInDec, planOutDec, linearK, nowHoursSinceViewingMidnight } = params
   if (planInDec == null || planOutDec == null) return "pending"
   const today = todayStrBangkok()
   if (viewingDate > today) return "pending"
   if (viewingDate < today) return "problem"
-  if (nowDecToday < planInDec) return "pending"
-  if (hourCol < nowDecToday) return "problem"
+  if (nowHoursSinceViewingMidnight == null) return "pending"
+  if (nowHoursSinceViewingMidnight < planInDec) return "pending"
+  if (linearK < nowHoursSinceViewingMidnight) return "problem"
   return "pending"
 }
 
@@ -233,6 +242,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       pBS: string
       pBE: string
       leaveType?: string
+      plan_in_prev_day?: boolean
     }
   > = {}
   for (const s of filteredSchedule) {
@@ -253,25 +263,37 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       pBS: s.pBS,
       pBE: s.pBE,
       leaveType: s.leaveType,
+      plan_in_prev_day: s.plan_in_prev_day,
     }
   }
 
-  let minDec = 24,
-    maxDec = 0
-  for (const p of Object.values(byPerson)) {
-    const inD = parseTimeToDecimal(p.pIn),
-      outD = parseTimeToDecimal(p.pOut),
-      bsD = parseTimeToDecimal(p.pBS),
-      beD = parseTimeToDecimal(p.pBE)
-    if (inD != null && inD < minDec) minDec = inD
-    if (bsD != null && bsD < minDec) minDec = bsD
-    if (outD != null && outD > maxDec) maxDec = outD
-    if (beD != null && beD > maxDec) maxDec = beD
+  const rowInputsForHours: RealtimeScheduleRowInput[] = filteredSchedule.map((s) => ({
+    leaveType: s.leaveType,
+    pIn: s.pIn,
+    pOut: s.pOut,
+    pBS: s.pBS,
+    pBE: s.pBE,
+    plan_in_prev_day: s.plan_in_prev_day,
+  }))
+  let hours = collectRealtimeLinearHourIndices(rowInputsForHours)
+  if (hours.length === 0 && filteredSchedule.length > 0) {
+    let minDec = 24,
+      maxDec = 0
+    for (const p of Object.values(byPerson)) {
+      const inD = parseTimeToDecimal(p.pIn),
+        outD = parseTimeToDecimal(p.pOut),
+        bsD = parseTimeToDecimal(p.pBS),
+        beD = parseTimeToDecimal(p.pBE)
+      if (inD != null && inD < minDec) minDec = inD
+      if (bsD != null && bsD < minDec) minDec = bsD
+      if (outD != null && outD > maxDec) maxDec = outD
+      if (beD != null && beD > maxDec) maxDec = beD
+    }
+    const hourStart = minDec <= maxDec ? Math.max(0, Math.floor(minDec)) : 6
+    const hourEnd = minDec <= maxDec ? Math.min(24, Math.ceil(maxDec) + 1) : 24
+    hours = []
+    for (let h = hourStart; h < hourEnd; h++) hours.push(h)
   }
-  const hourStart = minDec <= maxDec ? Math.max(0, Math.floor(minDec)) : 6
-  const hourEnd = minDec <= maxDec ? Math.min(24, Math.ceil(maxDec) + 1) : 24
-  const hours: number[] = []
-  for (let h = hourStart; h < hourEnd; h++) hours.push(h)
 
   const areaOrder: Record<string, number> = { Service: 0, Kitchen: 1, Office: 2 }
   const personKeys = Object.keys(byPerson).sort((a, b) => {
@@ -364,7 +386,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   <th className="border-b border-r border-border px-3 py-2.5 text-[11px] font-bold text-muted-foreground w-[80px]">{t("scheduleName") || "이름"}</th>
                   {hours.map((h) => (
                     <th key={h} className="border-b border-r border-border px-0 py-2 text-center text-[10px] font-bold tabular-nums text-muted-foreground w-[28px] min-w-[28px] last:border-r-0">
-                      {h}
+                      {formatRealtimeLinearHourLabel(h)}
                     </th>
                   ))}
                 </tr>
@@ -376,7 +398,8 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                     .trim()
                     .slice(0, 10)
                   const todayKey = todayStrBangkok().trim().slice(0, 10)
-                  const nowDecToday = dateKey === todayKey ? nowDecimalHoursBangkok() : 0
+                  const nowHoursSinceViewingMidnight =
+                    dateKey === todayKey ? nowDecimalHoursSinceBangkokDateMidnight(dateKey) : null
                   return personKeys.map((key) => {
                   const p = byPerson[key]
                   const isLeave = !!p.leaveType
@@ -392,8 +415,14 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   })
                   const inDec = parseTimeToDecimal(p.pIn)
                   const outDec = parseTimeToDecimal(p.pOut)
-                  const bsDec = parseTimeToDecimal(p.pBS)
-                  const beDec = parseTimeToDecimal(p.pBE)
+                  const slotRow: RealtimeScheduleRowInput = {
+                    leaveType: p.leaveType,
+                    pIn: p.pIn,
+                    pOut: p.pOut,
+                    pBS: p.pBS,
+                    pBE: p.pBE,
+                    plan_in_prev_day: p.plan_in_prev_day,
+                  }
                   // 휴가일: 보라 배경. 미출근: 예정 출근 전·당일 미래 칸 중립, 지난 칸 빨강. 출근 후 정상=파랑(퇴근미기록 포함), 지각 등만 빨강
                   const hasProblem: boolean =
                     !isLeave && !!att && attendanceSummaryIndicatesProblem(att)
@@ -434,24 +463,23 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                           </td>
                         ))
                       ) : hours.map((h) => {
-                        const h0 = h,
-                          h05 = h + 0.5,
-                          h1 = h + 1
-                        const breakFirst = bsDec != null && beDec != null && bsDec < h05 && beDec > h0
-                        const breakSecond = bsDec != null && beDec != null && bsDec < h1 && beDec > h05
-                        const workFirst = inDec != null && outDec != null && inDec < h05 && outDec > h0 && !breakFirst
-                        const workSecond = inDec != null && outDec != null && inDec < h1 && outDec > h05 && !breakSecond
-                        const fullBreak = breakFirst && breakSecond
-                        const fullWork = workFirst && workSecond
-                        const inAny = fullBreak || fullWork || breakFirst || breakSecond || workFirst || workSecond
+                        const {
+                          fullBreak,
+                          fullWork,
+                          breakFirst,
+                          breakSecond,
+                          workFirst,
+                          workSecond,
+                          inAny,
+                        } = realtimeSlotPartsForLinearHour(h, slotRow)
                         const cellWorkTone: WorkMarkTone = att
                           ? attWorkTone
                           : workToneWithoutAttendance({
                                 viewingDate: date,
                                 planInDec: inDec,
                                 planOutDec: outDec,
-                                hourCol: h,
-                                nowDecToday,
+                                linearK: h,
+                                nowHoursSinceViewingMidnight,
                               })
 
                         return (
