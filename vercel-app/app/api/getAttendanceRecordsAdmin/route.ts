@@ -128,7 +128,9 @@ export async function GET(request: NextRequest) {
 
   const startStr = startDate.slice(0, 10)
   const endStr = endDate.slice(0, 10)
-  const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
+  /** 전일 미퇴근 마감 퇴근을 전날 행에 붙이려면 하루 전 로그가 필요함 (getPayrollCalc buildAttendanceSummary와 동일 취지) */
+  const fetchStartStr = addDay(startStr, -1)
+  const { startISO } = bangkokDateRangeToUtc(fetchStartStr, endStr)
   // 자정 넘김 퇴근(익일 00:00~06:59 방콕) 포함: log_at 조회 끝을 익일 07:00 방콕(= 익일 00:00 UTC)까지 연장
   const logEndISOExclusive = addDay(endStr, 1) + 'T00:00:00.000Z'
 
@@ -443,7 +445,7 @@ export async function GET(request: NextRequest) {
       const rowDate = toDateStr(r.log_at)
       const type = String(r.log_type || '').trim()
       const logAt = r.log_at || ''
-      if (!rowDate || rowDate < startStr) continue
+      if (!rowDate || rowDate < fetchStartStr) continue
       // 조회 구간 밖 날짜: 익일 새벽 퇴근(자정 넘김)만 허용 → 전날 행에 붙이기 위함
       if (rowDate > endStr) {
         const isOvernightOutForRange = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDay(endStr, 1)
@@ -529,8 +531,42 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 익일 아침에 찍힌 "전일 세션 마감" 퇴근이 당일 버킷에 출근보다 먼저 잡히는 경우 → 전날로 이동 (급여 집계와 동일)
+    for (const rec of Object.values(byKey)) {
+      if (!rec.outTime) continue
+      const inMs = rec.inTime ? new Date(rec.inTime).getTime() : NaN
+      const outMs = new Date(rec.outTime).getTime()
+      const shouldCarryToPrev =
+        Number.isFinite(outMs) &&
+        (!rec.inTime || (Number.isFinite(inMs) && outMs < inMs))
+      if (!shouldCarryToPrev) continue
+      const prevKey =
+        rec.employeeId > 0
+          ? `${addDay(rec.date, -1)}|${rec.store}|#${rec.employeeId}`
+          : `${addDay(rec.date, -1)}|${rec.store}|${rec.name}`
+      const prevRec = byKey[prevKey]
+      if (!prevRec?.inTime || prevRec.outTime) continue
+      prevRec.outTime = rec.outTime
+      prevRec.earlyMinFromDb = rec.earlyMinFromDb
+      prevRec.otMin = rec.otMin
+      if (rec.status) prevRec.status = rec.status
+      prevRec.outApproved = rec.outApproved
+      prevRec.outId = rec.outId
+      prevRec.outLogId = rec.outLogId
+      prevRec.breakMin += rec.breakMin
+      rec.outTime = null
+      rec.earlyMinFromDb = null
+      rec.otMin = null
+      rec.status = ''
+      rec.outApproved = ''
+      rec.outId = null
+      rec.outLogId = null
+      rec.breakMin = 0
+    }
+
     const result: AttendanceDailyRow[] = []
     for (const rec of Object.values(byKey)) {
+      if (rec.date < startStr || rec.date > endStr) continue
       if (!rec.inTime) continue
       const dateForRow = rec.date
       const inTimeForRow = rec.inTime

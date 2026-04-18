@@ -11,6 +11,9 @@
     "kitchenDeviceName": "",
     "kitchen1DeviceName": "",
     "kitchen2DeviceName": "",
-    "kitchen3DeviceName": ""
+    "kitchen3DeviceName": "",
+    "escPosCutAfterKitchenHtml": true,
+    "escPosCutAfterHallOrderHtml": false,
+    "escPosCutAfterPaymentReceiptHtml": false
   }
 }

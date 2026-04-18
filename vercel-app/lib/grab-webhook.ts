@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server'
 
+function isGrabProductionDeployment(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+}
+
 /** Grab 문서 권장: 응답 헤더의 요청 ID 로깅 */
 export function grabRequestIds(req: NextRequest): Record<string, string | undefined> {
   return {
@@ -19,11 +23,21 @@ export function logGrabWebhook(
 
 /**
  * Grab이 파트너 토큰 웹훅으로 받은 Bearer와 동일한 값이어야 함.
- * 설정 시에만 검증; 미설정이면 스텁(경고 로그) — 연동 전 개발용.
+ * 로컬/미설정: 스텁(경고 로그). 운영(Vercel/production): 토큰 미설정 시 거부.
  */
 export function grabWebhookUnauthorized(req: NextRequest, kind: string): Response | null {
   const expected = process.env.GRAB_PARTNER_ISSUED_ACCESS_TOKEN?.trim()
   if (!expected) {
+    if (isGrabProductionDeployment()) {
+      logGrabWebhook(kind, req, { auth: 'rejected_missing_GRAB_PARTNER_ISSUED_ACCESS_TOKEN' })
+      return new Response(
+        JSON.stringify({
+          reason: 'misconfigured',
+          message: 'GRAB_PARTNER_ISSUED_ACCESS_TOKEN is required in production',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
     logGrabWebhook(kind, req, { auth: 'skipped_no_GRAB_PARTNER_ISSUED_ACCESS_TOKEN' })
     return null
   }
@@ -48,7 +62,7 @@ type PartnerOauthBody = {
 /**
  * POST /oauth/token (Grab → 파트너)
  * GRAB_OAUTH_CLIENT_ID / GRAB_OAUTH_CLIENT_SECRET 이 있으면 반드시 일치해야 함.
- * 없으면 스텁으로 어떤 client_id도 허용(개발용).
+ * 로컬에서만 미설정 시 스텁 허용; 운영에서는 클라이언트 자격 증명 필수.
  */
 export function grabVerifyPartnerOauthBody(body: PartnerOauthBody): boolean {
   const id = process.env.GRAB_OAUTH_CLIENT_ID?.trim()
@@ -56,14 +70,28 @@ export function grabVerifyPartnerOauthBody(body: PartnerOauthBody): boolean {
   if (id && secret) {
     return body.client_id === id && body.client_secret === secret
   }
+  if (isGrabProductionDeployment()) {
+    return false
+  }
   return true
 }
 
 export function grabPartnerOauthTokenResponse(): Response {
-  const accessToken =
-    process.env.GRAB_PARTNER_ISSUED_ACCESS_TOKEN?.trim() || 'dev-stub-token-set-GRAB_PARTNER_ISSUED_ACCESS_TOKEN'
+  const accessToken = process.env.GRAB_PARTNER_ISSUED_ACCESS_TOKEN?.trim()
+  if (!accessToken) {
+    if (isGrabProductionDeployment()) {
+      return new Response(
+        JSON.stringify({
+          reason: 'misconfigured',
+          message: 'GRAB_PARTNER_ISSUED_ACCESS_TOKEN is required in production',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+  }
+  const token = accessToken || 'dev-stub-token-set-GRAB_PARTNER_ISSUED_ACCESS_TOKEN'
   const payload = {
-    access_token: accessToken,
+    access_token: token,
     token_type: 'Bearer',
     expires_in: 604799,
   }

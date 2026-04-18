@@ -172,14 +172,24 @@ if ([string]::IsNullOrWhiteSpace($UpdateManifestUrl)) {
 }
 
 $runtimeConfigPath = Join-Path $windowsPosDir "runtime-config.json"
+# 내부용·외부용(PosUrl 등만 다름) 동일 스키마 — runtime-config.example.json 과 맞춤(빌드 후에도 프린터 키·절단 플래그 유지)
 $runtimeConfig = @{
   posUrl            = $PosUrl
   allowedOrigin     = $AllowedOrigin
+  openDevtools      = $false
   kiosk             = $Kiosk
   updateManifestUrl = $UpdateManifestUrl
   print             = @{
-    silent     = $true
-    deviceName = ""
+    silent                           = $true
+    deviceName                       = ""
+    receiptDeviceName                = ""
+    kitchenDeviceName                = ""
+    kitchen1DeviceName               = ""
+    kitchen2DeviceName               = ""
+    kitchen3DeviceName               = ""
+    escPosCutAfterKitchenHtml        = $true
+    escPosCutAfterHallOrderHtml      = $false
+    escPosCutAfterPaymentReceiptHtml = $false
   }
 } | ConvertTo-Json -Depth 6
 # Windows PowerShell 5.1 의 Set-Content -Encoding UTF8 은 BOM 을 붙여 JSON.parse(Electron) 가 실패할 수 있음 → BOM 없이 저장

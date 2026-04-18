@@ -320,13 +320,21 @@ CREATE TABLE IF NOT EXISTS public.withholding_tax_ledger_entries (
   submitted_at TIMESTAMPTZ NULL,
   submitted_by TEXT NULL,
   memo TEXT NULL,
+  store_name TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by TEXT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 기존 DB(테이블만 먼저 생성된 경우) 호환
+ALTER TABLE public.withholding_tax_ledger_entries
+  ADD COLUMN IF NOT EXISTS store_name TEXT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_wht_ledger_tax_month
   ON public.withholding_tax_ledger_entries(tax_month);
+
+CREATE INDEX IF NOT EXISTS idx_wht_ledger_tax_month_store
+  ON public.withholding_tax_ledger_entries (tax_month, store_name);
 
 ALTER TABLE IF EXISTS public.bank_transactions
   ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ NULL,
@@ -697,6 +705,42 @@ FROM vat_agg va
 CROSS JOIN wht_total_agg wt
 CROSS JOIN wht_json wj;
 $$;
+
+-- ------------------------------------------------------------
+-- Payroll (KT20k·PND1A 대사 RPC) — 급여 테이블 없으면 42P01. 레거시 supabase_schema와 동일 계열
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payroll_records (
+  id BIGSERIAL PRIMARY KEY,
+  month TEXT NOT NULL,
+  store TEXT NOT NULL,
+  name TEXT NOT NULL,
+  dept TEXT DEFAULT '',
+  role TEXT DEFAULT '',
+  salary NUMERIC(12,2) DEFAULT 0,
+  pos_allow NUMERIC(12,2) DEFAULT 0,
+  haz_allow NUMERIC(12,2) DEFAULT 0,
+  birth_bonus NUMERIC(12,2) DEFAULT 0,
+  holiday_pay NUMERIC(12,2) DEFAULT 0,
+  spl_bonus NUMERIC(12,2) DEFAULT 0,
+  ot_15 NUMERIC(12,2) DEFAULT 0,
+  ot_20 NUMERIC(12,2) DEFAULT 0,
+  ot_30 NUMERIC(12,2) DEFAULT 0,
+  ot_amt NUMERIC(12,2) DEFAULT 0,
+  late_min NUMERIC(12,2) DEFAULT 0,
+  late_ded NUMERIC(12,2) DEFAULT 0,
+  sso NUMERIC(12,2) DEFAULT 0,
+  tax NUMERIC(12,2) DEFAULT 0,
+  other_ded NUMERIC(12,2) DEFAULT 0,
+  net_pay NUMERIC(12,2) DEFAULT 0,
+  status TEXT DEFAULT '확정',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (month, store, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_records_month ON public.payroll_records (month);
+
+ALTER TABLE public.payroll_records ADD COLUMN IF NOT EXISTS employee_id BIGINT NULL;
+ALTER TABLE public.payroll_records ADD COLUMN IF NOT EXISTS diligence_allow NUMERIC(12,2) DEFAULT 0;
 
 CREATE OR REPLACE FUNCTION public.get_kt20k_monthly_agg(p_year INTEGER, p_store TEXT DEFAULT 'All')
 RETURNS TABLE (month TEXT, employee_count BIGINT, salary_amount NUMERIC, daily_wage_amount NUMERIC, other_comp_amount NUMERIC, total_wage NUMERIC, excess_over_20000 NUMERIC, net_wage_to_report NUMERIC, pnd1a_ledger_gross NUMERIC, diff_total_vs_pnd1a NUMERIC, diff_net_vs_pnd1a NUMERIC)

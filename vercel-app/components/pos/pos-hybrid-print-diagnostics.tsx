@@ -63,6 +63,26 @@ export function PosHybridPrintDiagnosticsButton() {
     t('posShellPrintDiagnosticsHint') ||
     'Windows에 등록된 프린터와 runtime-config 인쇄 설정을 비교합니다. 이름은 PowerShell Get-Printer 의 Name 과 동일해야 합니다.'
 
+  const defaultPrinter = printers.find((p) => p.isDefault)
+  const defaultPrinterLabel = defaultPrinter
+    ? `${defaultPrinter.name}${defaultPrinter.displayName && defaultPrinter.displayName !== defaultPrinter.name ? ` (${defaultPrinter.displayName})` : ''}`
+    : ''
+
+  const hasExplicitPrintDevices =
+    !!config &&
+    Boolean(
+      (config.deviceName && String(config.deviceName).trim()) ||
+        (config.receiptDeviceName && String(config.receiptDeviceName).trim()) ||
+        (config.kitchenDeviceName && String(config.kitchenDeviceName).trim()) ||
+        (config.kitchen1DeviceName && String(config.kitchen1DeviceName).trim()) ||
+        (config.kitchen2DeviceName && String(config.kitchen2DeviceName).trim()) ||
+        (config.kitchen3DeviceName && String(config.kitchen3DeviceName).trim())
+    )
+
+  const nullHint =
+    t('posShellPrintDiagnosticsRuntimeNullExplain') ||
+    'deviceName·receiptDeviceName·kitchen* 가 모두 비어 있으면(null) 무인쇄용 프린터를 아직 지정하지 않은 상태입니다. 이 경우 영수증·주방 모두 Windows 기본 프린터로 나가는 경우가 많습니다. 서로 다른 기기로 나누려면 아래 목록의 이름을 그대로 복사해 runtime-config.json 의 print 섹션에 넣으세요.'
+
   return (
     <>
       <button
@@ -115,6 +135,17 @@ export function PosHybridPrintDiagnosticsButton() {
                     ? '…'
                     : '-'}
               </pre>
+              {!loading && config && !hasExplicitPrintDevices ? (
+                <div className="mt-2 space-y-1 rounded-md border border-amber-200/80 bg-amber-50/90 p-2 text-[11px] leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+                  <p>{nullHint}</p>
+                  {defaultPrinterLabel ? (
+                    <p className="font-medium">
+                      {t('posShellPrintDiagnosticsWindowsDefaultNow') || '현재 Windows 기본 프린터(무인쇄에 자주 사용됨):'}{' '}
+                      <span className="font-mono">{defaultPrinterLabel}</span>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div>
               <p className="mb-1 font-semibold text-foreground">

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-17T07:56:11.161Z",
+  "generatedAt": "2026-04-18T13:20:42.123Z",
   "entryCount": 800,
   "entries": [
     {
@@ -354,7 +354,7 @@
     },
     {
       "path": "app/api/debug-sauces/route.ts",
-      "line": 15,
+      "line": 16,
       "kind": "limit",
       "value": 5,
       "apiLabel": "debug-sauces"
@@ -375,7 +375,7 @@
     },
     {
       "path": "app/api/debugSauces/route.ts",
-      "line": 15,
+      "line": 16,
       "kind": "limit",
       "value": 5,
       "apiLabel": "debugSauces"
@@ -921,63 +921,63 @@
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 73,
+      "line": 82,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 74,
+      "line": 83,
       "kind": "maxRows",
       "value": 2000000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 80,
+      "line": 89,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 81,
+      "line": 90,
       "kind": "maxRows",
       "value": 2000000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 97,
+      "line": 106,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 105,
+      "line": 114,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 131,
+      "line": 140,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 139,
+      "line": 148,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getAttendanceNoRecordList"
     },
     {
       "path": "app/api/getAttendanceNoRecordList/route.ts",
-      "line": 161,
+      "line": 170,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAttendanceNoRecordList"
@@ -1005,42 +1005,42 @@
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 165,
+      "line": 167,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 166,
+      "line": 168,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 278,
+      "line": 280,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 336,
+      "line": 338,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 397,
+      "line": 399,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getAttendanceRecordsAdmin"
     },
     {
       "path": "app/api/getAttendanceRecordsAdmin/route.ts",
-      "line": 398,
+      "line": 400,
       "kind": "maxRows",
       "value": 2000000,
       "apiLabel": "getAttendanceRecordsAdmin"
@@ -2468,7 +2468,7 @@
     },
     {
       "path": "app/api/getPosPrinterSettings/route.ts",
-      "line": 189,
+      "line": 193,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosPrinterSettings"
@@ -3168,7 +3168,7 @@
     },
     {
       "path": "app/api/linkpos/pay/route.ts",
-      "line": 43,
+      "line": 50,
       "kind": "limit",
       "value": 1,
       "apiLabel": "linkpos/pay"
@@ -4253,7 +4253,7 @@
     },
     {
       "path": "app/api/savePosPrinterSettings/route.ts",
-      "line": 199,
+      "line": 203,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosPrinterSettings"
@@ -4666,14 +4666,14 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 316,
+      "line": 326,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1138,
+      "line": 1158,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"

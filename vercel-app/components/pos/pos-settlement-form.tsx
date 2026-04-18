@@ -24,6 +24,7 @@ import {
   getPosSettlement,
   getPosDeliveryApps,
   getPosPaymentSettings,
+  getPosPrinterSettings,
   useStoreList,
   type PosDeliveryApp,
   type PosSettlement,
@@ -46,6 +47,7 @@ import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import {
   Collapsible,
   CollapsibleContent,
@@ -566,6 +568,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
   const handlePrint = async () => {
     const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
+    const hw =
+      effectiveStore.length > 0
+        ? await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
+        : null
     const fullHtml = `
       <!DOCTYPE html>
       <html><head><title>${t('posSettlementReport') || 'POS 결산 리포트'} - ${storeLabel} - ${settleDate}</title>
@@ -596,6 +602,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       printDelayMs: 0,
       fallbackCleanupMs: 120_000,
       printRole: 'receipt',
+      printReceiptKind: 'payment',
+      escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'payment' }),
       onPrintUnavailable: () => {
         void appAlert(t('posPrintUnavailable'))
       },

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseCountTable, supabaseSelect } from '@/lib/supabase-server'
+import { guardDebugDiagnosticsRoute } from '@/lib/debug-diagnostics-guard'
 
 type TableDiag = {
   ok: boolean
@@ -27,7 +28,10 @@ async function readTable(table: string, select: string): Promise<TableDiag> {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await guardDebugDiagnosticsRoute(req)
+  if (denied) return denied
+
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
   const anonKey = (process.env.SUPABASE_ANON_KEY || '').trim()
   const url = (process.env.SUPABASE_URL || '').trim()

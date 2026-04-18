@@ -25,6 +25,9 @@ export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS = 1000
 /** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
 export type PosPrintTargetRole = 'receipt' | 'kitchen'
 
+/** `printRole: 'receipt'`일 때만 사용 — ESC/POS 절단을 홀 주문서 vs 결제 영수증으로 나눔 */
+export type PosPrintReceiptKind = 'hall_order' | 'payment'
+
 export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   /**
    * Windows 하이브리드 셸: true면 무인쇄(열전사 최적화)를 건너뛰고 **시스템 인쇄 대화상자**만 띄움.
@@ -33,6 +36,15 @@ export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   preferSystemPrintDialog?: boolean
   /** Windows 하이브리드: 영수증 vs 주방 무인쇄 대상 프린터 (runtime-config `print.*DeviceName`) */
   printRole?: PosPrintTargetRole
+  /**
+   * Windows 하이브리드: `printRole: 'receipt'`일 때 ESC/POS 절단 구분(홀 주문서 / 결제 영수증).
+   * 생략 시 셸은 예전 단일 `printEscPosCutAfterReceiptHtml` 플래그로 처리(호환).
+   */
+  printReceiptKind?: PosPrintReceiptKind
+  /**
+   * Windows 하이브리드: 매장 프린터 설정 등에서 계산한 값. 있으면 셸의 로컬 runtime-config보다 우선.
+   */
+  escPosCutOverride?: boolean
   /** 주방 슬립이 주방 1·2·3 중 어디로 갈지 — `printRole: 'kitchen'`일 때만 사용 */
   kitchenStation?: 1 | 2 | 3
   /** 하이브리드 무인쇄 실패 시 알림 생략 */
@@ -61,6 +73,8 @@ export function printPosHtmlDocument(
             o?: {
               preferDialog?: boolean
               printRole?: PosPrintTargetRole
+              printReceiptKind?: PosPrintReceiptKind
+              escPosCutOverride?: boolean
               kitchenStation?: number
             }
           ) => Promise<{
@@ -77,10 +91,16 @@ export function printPosHtmlDocument(
   const useShell = typeof shell?.printHtml === 'function'
   const preferDialog = opts?.preferSystemPrintDialog === true
   const shellOpts =
-    preferDialog || opts?.printRole || opts?.kitchenStation != null
+    preferDialog ||
+    opts?.printRole ||
+    opts?.kitchenStation != null ||
+    opts?.printReceiptKind != null ||
+    opts?.escPosCutOverride !== undefined
       ? {
           preferDialog,
           ...(opts?.printRole ? { printRole: opts.printRole } : {}),
+          ...(opts?.printReceiptKind ? { printReceiptKind: opts.printReceiptKind } : {}),
+          ...(opts?.escPosCutOverride !== undefined ? { escPosCutOverride: Boolean(opts.escPosCutOverride) } : {}),
           ...(opts?.kitchenStation != null ? { kitchenStation: opts.kitchenStation } : {}),
         }
       : undefined

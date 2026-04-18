@@ -25,15 +25,26 @@ const EXPIRY = '7d'
 
 const FALLBACK_SECRET = 'cm-erp-fallback'
 
+function isProdLike(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+}
+
 function getSecret(): Uint8Array {
-  const secret = (process.env.JWT_SECRET || process.env.SUPABASE_ANON_KEY || '').trim()
-  if (secret.length >= 16) {
-    return new TextEncoder().encode(secret)
+  const jwtExplicit = (process.env.JWT_SECRET || '').trim()
+  if (isProdLike()) {
+    if (jwtExplicit.length < 32) {
+      throw new Error(
+        '운영 환경에서는 서버 전용 JWT_SECRET을 32자 이상으로 설정하세요. (SUPABASE_ANON_KEY로 서명하지 마세요.)'
+      )
+    }
+    return new TextEncoder().encode(jwtExplicit)
   }
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      '운영 환경에서는 .env에 JWT_SECRET(32자 이상 권장) 또는 SUPABASE_ANON_KEY를 반드시 설정하세요.'
-    )
+  if (jwtExplicit.length >= 16) {
+    return new TextEncoder().encode(jwtExplicit)
+  }
+  const anon = (process.env.SUPABASE_ANON_KEY || '').trim()
+  if (anon.length >= 16) {
+    return new TextEncoder().encode(anon)
   }
   return new TextEncoder().encode(FALLBACK_SECRET)
 }

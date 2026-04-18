@@ -14,14 +14,20 @@
 1. Node 설치
 2. Android Studio 설치 (SDK/Platform Tools 포함)
 3. Java 17 설정
-4. 환경변수 예시
+4. 환경변수 예시(수동 동기화 시)
    - `CAPACITOR_POS_URL=https://your-domain/pos/login`
+   - 아래 **npm 프로필**을 쓰면 동기화 시점에 URL이 자동 설정되므로, 보통은 수동 env 없이 진행하면 됩니다.
 
 ## 4) 실행 절차
 1. 의존성 설치: `npm install`
-2. Android 프로젝트 동기화: `npm run mobile:android:sync`
+2. Android 프로젝트 동기화 (`capacitor.config.ts`에 WebView URL 반영):
+   - **내부(충만) 기본:** `npm run mobile:android:sync` 또는 `npm run mobile:android:sync:internal`
+   - **판매(omnifoodtech):** `npm run mobile:android:sync:external`
+   - 구현: `scripts/cap-sync-android-profile.cjs`가 프로필별 `CAPACITOR_POS_URL`·`DEPLOY_PUBLIC_ORIGIN`을 넣은 뒤 `npx cap sync android` 실행
 3. Android Studio 열기: `npm run mobile:android:open`
-4. APK 생성: Android Studio Build 메뉴 또는 Gradle task 사용
+4. APK 생성: Android Studio Build 메뉴 또는 Gradle task 사용 (`npm run mobile:android:assemble:prod` 등)
+
+**웹 빌드 + 동기화 한 번에:** `npm run mobile:android:build`(내부 기본), `npm run mobile:android:build:external`(판매 URL로 동기화)
 
 ## 5) 운영 원칙
 - 주문/정산/상태 변경은 온라인 우선, 실패 시 오프라인 큐 적재

@@ -31,6 +31,7 @@ import {
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
+import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -182,7 +183,10 @@ export function PosReceiptModal({
     fullHtml: string,
     title: string,
     preferSystemPrintDialog = false,
-    thermal?: Pick<PrintPosHtmlDocumentOptions, 'printRole' | 'kitchenStation'>
+    thermal?: Pick<
+      PrintPosHtmlDocumentOptions,
+      'printRole' | 'printReceiptKind' | 'kitchenStation' | 'escPosCutOverride'
+    >
   ) =>
     new Promise<void>((resolve, reject) => {
       const opts: PrintPosHtmlDocumentOptions = {
@@ -255,7 +259,7 @@ export function PosReceiptModal({
           <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posBranchLabel', '지점'))}</span><span>${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</span></div>
           <div class="tax-invoice-row tax-invoice-addr"><span class="tax-invoice-label">${esc(tr('settings_address', '주소'))}</span><span>${esc(taxInvoice.address)}</span></div>
           <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posPhone', '전화번호'))}</span><span>${esc(taxInvoice.phone)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('email', '이메일'))}</span><span>${esc(taxInvoice.email)}</span></div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxEmailLabel', '이메일'))}</span><span>${esc(taxInvoice.email)}</span></div>
         </div>`
       : ''
     const printContent = `
@@ -382,8 +386,15 @@ export function PosReceiptModal({
       </html>
     `
     try {
+      const printReceiptKind =
+        receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'
+          ? 'hall_order'
+          : 'payment'
+      const hw = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
       await printInIframe(fullHtml, t('posReceipt') || '영수증', preferSystemPrintDialog, {
         printRole: 'receipt',
+        printReceiptKind,
+        escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind }),
       })
     } catch {
       await appAlert(t('posPrintBlockedBrowser'))
@@ -443,6 +454,7 @@ export function PosReceiptModal({
         await printInIframe(html, slip.label, preferSystemPrintDialog, {
           printRole: 'kitchen',
           kitchenStation: slip.station,
+          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
         })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))

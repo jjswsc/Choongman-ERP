@@ -6874,6 +6874,8 @@ export interface PosPrinterSettings {
   autoPrintReceiptOnAddOrder?: boolean
   autoPrintReceiptOnPayment?: boolean
   autoPrintKitchenSlipOnOrder?: boolean
+  /** 결제 모달 열기 직전 최종 주문서(홀) 자동 인쇄 */
+  autoPrintFinalOrderBeforePayment?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
   receiptBizAbn?: string
@@ -6901,6 +6903,12 @@ export interface PosPrinterSettings {
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
+  /** Windows 하이브리드: 주방 주문서 ESC/POS 절단 (기본 true) */
+  escPosCutAfterKitchenHtml?: boolean
+  /** Windows 하이브리드: 홀 주문서(주문·터미널) 절단 */
+  escPosCutAfterHallOrderHtml?: boolean
+  /** Windows 하이브리드: 결제 영수증 절단 */
+  escPosCutAfterPaymentReceiptHtml?: boolean
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
@@ -6985,6 +6993,7 @@ export async function savePosPrinterSettings(params: {
   autoPrintReceiptOnAddOrder?: boolean
   autoPrintReceiptOnPayment?: boolean
   autoPrintKitchenSlipOnOrder?: boolean
+  autoPrintFinalOrderBeforePayment?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
   receiptBizAbn?: string
@@ -7011,6 +7020,9 @@ export async function savePosPrinterSettings(params: {
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean
+  escPosCutAfterKitchenHtml?: boolean
+  escPosCutAfterHallOrderHtml?: boolean
+  escPosCutAfterPaymentReceiptHtml?: boolean
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number

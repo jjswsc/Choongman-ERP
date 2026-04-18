@@ -125,6 +125,7 @@ export async function GET(request: NextRequest) {
     autoPrintReceiptOnAddOrder: false,
     autoPrintReceiptOnPayment: false,
     autoPrintKitchenSlipOnOrder: false,
+    autoPrintFinalOrderBeforePayment: false,
     receiptBizName: '',
     receiptBizTaxId: '',
     receiptBizAbn: '',
@@ -150,6 +151,9 @@ export async function GET(request: NextRequest) {
     kitchenSlipFontScale: 'md' as const,
     kitchenSlipShowLineNotes: true,
     kitchenSlipShowOrderMemo: true,
+    escPosCutAfterKitchenHtml: true,
+    escPosCutAfterHallOrderHtml: false,
+    escPosCutAfterPaymentReceiptHtml: false,
     vatRate: 7,
     vatMode: 'included' as const,
     serviceRate: 0,
@@ -223,6 +227,7 @@ export async function GET(request: NextRequest) {
       auto_print_receipt_on_add_order?: boolean
       auto_print_receipt_on_payment?: boolean
       auto_print_kitchen_slip_on_order?: boolean
+      auto_print_final_order_before_payment?: boolean
       receipt_biz_name?: string
       receipt_biz_tax_id?: string
       receipt_biz_abn?: string
@@ -248,6 +253,9 @@ export async function GET(request: NextRequest) {
       kitchen_slip_font_scale?: string
       kitchen_slip_show_line_notes?: boolean
       kitchen_slip_show_order_memo?: boolean
+      esc_pos_cut_after_kitchen_html?: boolean
+      esc_pos_cut_after_hall_order_html?: boolean
+      esc_pos_cut_after_payment_receipt_html?: boolean
       receipt_print_lang?: string
       vat_rate?: number
       vat_mode?: string
@@ -349,6 +357,7 @@ export async function GET(request: NextRequest) {
       autoPrintReceiptOnAddOrder: Boolean(raw?.auto_print_receipt_on_add_order),
       autoPrintReceiptOnPayment: Boolean(raw?.auto_print_receipt_on_payment),
       autoPrintKitchenSlipOnOrder: Boolean(raw?.auto_print_kitchen_slip_on_order),
+      autoPrintFinalOrderBeforePayment: Boolean(raw?.auto_print_final_order_before_payment),
       receiptBizName: String(raw?.receipt_biz_name || '').trim() || fallback.receiptBizName,
       receiptBizTaxId: String(raw?.receipt_biz_tax_id || '').trim() || fallback.receiptBizTaxId,
       receiptBizAbn: String(raw?.receipt_biz_abn || '').trim() || fallback.receiptBizAbn,
@@ -384,6 +393,14 @@ export async function GET(request: NextRequest) {
             : 'md',
       kitchenSlipShowLineNotes: raw?.kitchen_slip_show_line_notes !== false,
       kitchenSlipShowOrderMemo: raw?.kitchen_slip_show_order_memo !== false,
+      escPosCutAfterKitchenHtml:
+        raw?.esc_pos_cut_after_kitchen_html === false
+          ? false
+          : raw?.esc_pos_cut_after_kitchen_html === true
+            ? true
+            : true,
+      escPosCutAfterHallOrderHtml: Boolean(raw?.esc_pos_cut_after_hall_order_html),
+      escPosCutAfterPaymentReceiptHtml: Boolean(raw?.esc_pos_cut_after_payment_receipt_html),
       receiptPrintLang: String(raw?.receipt_print_lang ?? '').trim(),
       vatRate: Math.max(0, Number(raw?.vat_rate ?? 7)),
       vatMode: String(raw?.vat_mode || 'included') === 'separate' ? 'separate' : 'included',

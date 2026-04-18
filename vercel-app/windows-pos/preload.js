@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("cmPosShell", {
       html,
       preferDialog: Boolean(o.preferDialog),
       printRole: o.printRole === "kitchen" || o.printRole === "receipt" ? o.printRole : undefined,
+      printReceiptKind:
+        o.printReceiptKind === "hall_order" || o.printReceiptKind === "payment" ? o.printReceiptKind : undefined,
+      escPosCutOverride: typeof o.escPosCutOverride === "boolean" ? o.escPosCutOverride : undefined,
       kitchenStation:
         o.kitchenStation === 1 || o.kitchenStation === 2 || o.kitchenStation === 3 ? o.kitchenStation : undefined,
     });

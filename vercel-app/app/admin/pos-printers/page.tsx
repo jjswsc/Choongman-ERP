@@ -74,6 +74,7 @@ import {
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
   type PrintPosHtmlDocumentOptions,
 } from "@/lib/pos-print-html"
+import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 
 type PreviewKind = "receipt" | "kitchen"
 
@@ -280,6 +281,10 @@ export default function PosPrintersPage() {
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = React.useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
+  const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = React.useState(false)
+  const [escPosCutAfterKitchenHtml, setEscPosCutAfterKitchenHtml] = React.useState(true)
+  const [escPosCutAfterHallOrderHtml, setEscPosCutAfterHallOrderHtml] = React.useState(false)
+  const [escPosCutAfterPaymentReceiptHtml, setEscPosCutAfterPaymentReceiptHtml] = React.useState(false)
   const [receiptBizName, setReceiptBizName] = React.useState("")
   const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
   const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
@@ -437,6 +442,10 @@ export default function PosPrintersPage() {
       Boolean(settings.autoPrintReceiptOnPayment ?? settings.autoPrintReceiptOnOrder)
     )
     setAutoPrintKitchenSlipOnOrder(Boolean(settings.autoPrintKitchenSlipOnOrder))
+    setAutoPrintFinalOrderBeforePayment(Boolean(settings.autoPrintFinalOrderBeforePayment))
+    setEscPosCutAfterKitchenHtml(settings.escPosCutAfterKitchenHtml !== false)
+    setEscPosCutAfterHallOrderHtml(Boolean(settings.escPosCutAfterHallOrderHtml))
+    setEscPosCutAfterPaymentReceiptHtml(Boolean(settings.escPosCutAfterPaymentReceiptHtml))
     setReceiptBizName(String(settings.receiptBizName || ""))
     setReceiptBizTaxId(String(settings.receiptBizTaxId || ""))
     setReceiptBizAbn(String(settings.receiptBizAbn || ""))
@@ -545,6 +554,10 @@ export default function PosPrintersPage() {
         autoPrintReceiptOnAddOrder,
         autoPrintReceiptOnPayment,
         autoPrintKitchenSlipOnOrder,
+        autoPrintFinalOrderBeforePayment,
+        escPosCutAfterKitchenHtml,
+        escPosCutAfterHallOrderHtml,
+        escPosCutAfterPaymentReceiptHtml,
         receiptBizName,
         receiptBizTaxId,
         receiptBizAbn,
@@ -657,6 +670,10 @@ export default function PosPrintersPage() {
       if (copyTabReceipt) {
         copyKeys([
           "autoPrintKitchenSlipOnOrder",
+          "autoPrintFinalOrderBeforePayment",
+          "escPosCutAfterKitchenHtml",
+          "escPosCutAfterHallOrderHtml",
+          "escPosCutAfterPaymentReceiptHtml",
           "autoPrintReceiptOnOrder",
           "autoPrintReceiptOnAddOrder",
           "autoPrintReceiptOnPayment",
@@ -1013,7 +1030,10 @@ export default function PosPrintersPage() {
     const printTestHtml = (
       fullHtml: string,
       title: string,
-      thermal?: Pick<PrintPosHtmlDocumentOptions, "printRole" | "kitchenStation">
+      thermal?: Pick<
+        PrintPosHtmlDocumentOptions,
+        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
+      >
     ) =>
       new Promise<void>((resolve, reject) => {
         printPosHtmlDocument(fullHtml, {
@@ -1029,9 +1049,20 @@ export default function PosPrintersPage() {
       })
 
     try {
+      const hwSettings =
+        effectiveStore.length > 0
+          ? await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
+          : null
       if (kind === "receipt") {
         const html = buildReceiptHtml()
-        await printTestHtml(html, tr("posReceipt", "영수증"), { printRole: "receipt" })
+        await printTestHtml(html, tr("posReceipt", "영수증"), {
+          printRole: "receipt",
+          printReceiptKind: "payment",
+          escPosCutOverride: resolveEscPosCutOverride(hwSettings, {
+            printRole: "receipt",
+            printReceiptKind: "payment",
+          }),
+        })
         return
       }
       const slips = kitchenSlipsForPreview
@@ -1045,6 +1076,7 @@ export default function PosPrintersPage() {
         await printTestHtml(html, slip.label, {
           printRole: "kitchen",
           kitchenStation: slip.station,
+          escPosCutOverride: resolveEscPosCutOverride(hwSettings, { printRole: "kitchen" }),
         })
         if (i + 1 < slips.length) {
           await new Promise<void>((r) => setTimeout(() => r(), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
@@ -1304,6 +1336,39 @@ export default function PosPrintersPage() {
                   <ToggleRow label={tr("posAutoPrintReceiptOnOrder", "주문 시 영수증 자동 인쇄")} value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
                   <ToggleRow label={tr("posAutoPrintReceiptOnAddOrder", "추가 주문 시 영수증 자동 인쇄")} value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
                   <ToggleRow label={tr("posAutoPrintReceiptOnPayment", "결제 시 영수증 자동 인쇄")} value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />
+                  <ToggleRow
+                    label={tr("posAutoPrintFinalHallOrderBeforePayment", "결제 직전 최종 홀 주문서 자동 인쇄")}
+                    value={autoPrintFinalOrderBeforePayment}
+                    onChange={setAutoPrintFinalOrderBeforePayment}
+                    t={t}
+                  />
+                </div>
+                <div className="space-y-3 rounded-lg border p-4">
+                  <p className="text-sm font-medium">{tr("posEscPosCutSection", "용지 절단 (Windows 설치형 POS)")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {tr(
+                      "posEscPosCutSectionHint",
+                      "하이브리드(Choongman POS)에서 ESC/POS 절단을 켜면, 드라이버가 자동 절단하지 않는 프린터에서도 잘립니다. 웹 브라우저만 쓰는 매장은 적용되지 않습니다."
+                    )}
+                  </p>
+                  <ToggleRow
+                    label={tr("posEscPosCutKitchen", "주방 주문서 인쇄 후 절단")}
+                    value={escPosCutAfterKitchenHtml}
+                    onChange={setEscPosCutAfterKitchenHtml}
+                    t={t}
+                  />
+                  <ToggleRow
+                    label={tr("posEscPosCutHall", "홀 주문서·터미널 주문서 인쇄 후 절단")}
+                    value={escPosCutAfterHallOrderHtml}
+                    onChange={setEscPosCutAfterHallOrderHtml}
+                    t={t}
+                  />
+                  <ToggleRow
+                    label={tr("posEscPosCutPayment", "결제 영수증 인쇄 후 절단")}
+                    value={escPosCutAfterPaymentReceiptHtml}
+                    onChange={setEscPosCutAfterPaymentReceiptHtml}
+                    t={t}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium">{tr("posReceiptPrintLang", "주문·영수증·주방 인쇄 언어")}</label>

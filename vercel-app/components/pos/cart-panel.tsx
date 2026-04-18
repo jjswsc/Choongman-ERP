@@ -144,6 +144,27 @@ function deliveryAppBrandClasses(app: string | undefined) {
 
 type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'
 
+/** printReceiptNow 첫 인자와 동일 스냅샷 (결제 모달 직전 홀 주문서 자동 인쇄 등) */
+export type CartPanelBeforePaymentReceiptPayload = {
+  orderNo: string
+  storeCode: string
+  orderType: string
+  tableName?: string
+  memo?: string
+  items: { id: string; name: string; price: number; qty: number; note?: string; isAddon?: boolean }[]
+  subtotal: number
+  discountAmt: number
+  total: number
+  vatFeeAmt?: number
+  vatFeeMode?: 'included' | 'separate'
+  serviceFeeAmt?: number
+  serviceFeeMode?: 'included' | 'separate'
+  cardFeeAmt?: number
+  cardFeeMode?: 'included' | 'separate'
+  otherFeeAmt?: number
+  otherFeeMode?: 'included' | 'separate'
+}
+
 export type CartPanelPaymentPayload = {
   paymentCash: number
   paymentCard: number
@@ -343,6 +364,8 @@ interface CartPanelProps {
   posMenus?: PosMenu[]
   /** 터미널 고객 모니터: 결제 모달이 열려 있을 때 수단별 입력 금액 브로드캐스트 */
   onCustomerDisplayPaymentDraftChange?: (draft: CartPanelPaymentPayload | null) => void
+  /** 결제 모달을 열기 직전 (최종 홀 주문서 자동 인쇄 등) */
+  onBeforeOpenPayment?: (payload: CartPanelBeforePaymentReceiptPayload) => void | Promise<void>
 }
 
 type CartItem = OrderItem
@@ -503,6 +526,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   setCartItems: setCartItemsProp,
   posMenus,
   onCustomerDisplayPaymentDraftChange,
+  onBeforeOpenPayment,
 }, ref) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -767,24 +791,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!Number.isNaN(v)) setGuestCount(Math.max(1, Math.min(99, v)))
     setGuestDirectOpen(false)
   }
-
-  const openPaymentModalWithAmount = (amount: number) => {
-    if (amount <= 0) return
-    setPayCash(String(amount))
-    setPayCard('0')
-    setPayTrueMoney('0')
-    setPayWeChat('0')
-    setPayAlipay('0')
-    setPayPromptPay('0')
-    setPayLinePay('0')
-    setPayShopeePay('0')
-    setPayOther('0')
-    setPayDeliveryApp('0')
-    setDeliveryPaymentChannel('grab')
-    setPayAdminLineAmounts(Object.fromEntries(adminPaymentLinesRef.current.map((i) => [i.id, '0'])))
-    setShowPaymentModal(true)
-  }
-  const openPaymentModal = () => openPaymentModalWithAmount(total)
 
   const legacyWalletPaymentSum =
     (parseFloat(payTrueMoney) || 0) +
@@ -1316,6 +1322,84 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return baseMemo.trim() ? `${baseMemo.trim()}\n${taxMemo}` : taxMemo
   }
 
+  const openPaymentModalWithAmount = async (amount: number) => {
+    if (amount <= 0) return
+    if (onBeforeOpenPayment) {
+      const deliveryLabelForPrint = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
+        .filter(Boolean)
+        .join(' ')
+      const dineInTableName = selectedTable?.name || paymentTableNameOverride || ''
+      const orderTypeLabel =
+        orderType === 'dine-in'
+          ? t('posOrderTypeDineIn') || '매장'
+          : orderType === 'delivery'
+            ? t('posOrderTypeDelivery') || '배달'
+            : t('posOrderTypeTakeout') || '포장'
+      const orderNo =
+        orderType === 'dine-in' && selectedTable?.order?.orderNo?.trim()
+          ? String(selectedTable.order.orderNo).trim()
+          : ''
+      let tableNameForPrint: string | undefined
+      if (orderType === 'dine-in') {
+        tableNameForPrint = dineInTableName || undefined
+      } else if (orderType === 'delivery') {
+        tableNameForPrint = deliveryLabelForPrint || undefined
+      } else {
+        tableNameForPrint = (takeoutLabelProp?.trim() || takeoutSlot || '').trim() || undefined
+      }
+      const memoStr = buildOrderMemo(customerMemo)
+      const receiptItems = cartItems.map((i) => ({
+        id: String(i.id ?? ''),
+        name: String(i.name ?? ''),
+        price: Number(i.price ?? 0),
+        qty: Math.max(1, Number(i.quantity ?? 1) || 1),
+        ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
+      }))
+      const discountTotal = discount + pointUsedNum
+      const pricingSnapshot = computePosPricing({
+        subtotal,
+        discountAmt: discountTotal,
+        cardPaymentAmount: 0,
+        adjustments: pricingAdjustments,
+      })
+      await Promise.resolve(
+        onBeforeOpenPayment({
+          orderNo,
+          storeCode: currentStoreId,
+          orderType: orderTypeLabel,
+          tableName: tableNameForPrint,
+          memo: memoStr || undefined,
+          items: receiptItems,
+          subtotal,
+          discountAmt: discountTotal,
+          total: pricingSnapshot.finalTotal,
+          vatFeeAmt: pricingSnapshot.vatFeeAmt,
+          vatFeeMode: pricingSnapshot.vatFeeMode,
+          serviceFeeAmt: pricingSnapshot.serviceFeeAmt,
+          serviceFeeMode: pricingSnapshot.serviceFeeMode,
+          cardFeeAmt: pricingSnapshot.cardFeeAmt,
+          cardFeeMode: pricingSnapshot.cardFeeMode,
+          otherFeeAmt: pricingSnapshot.otherFeeAmt,
+          otherFeeMode: pricingSnapshot.otherFeeMode,
+        })
+      )
+    }
+    setPayCash(String(amount))
+    setPayCard('0')
+    setPayTrueMoney('0')
+    setPayWeChat('0')
+    setPayAlipay('0')
+    setPayPromptPay('0')
+    setPayLinePay('0')
+    setPayShopeePay('0')
+    setPayOther('0')
+    setPayDeliveryApp('0')
+    setDeliveryPaymentChannel('grab')
+    setPayAdminLineAmounts(Object.fromEntries(adminPaymentLinesRef.current.map((i) => [i.id, '0'])))
+    setShowPaymentModal(true)
+  }
+  const openPaymentModal = () => void openPaymentModalWithAmount(total)
+
   const submitNonDineOrder = (withPayment: boolean) => {
     if (orderType === 'dine-in') return
     if (!onNonDineOrderComplete) return
@@ -1545,7 +1629,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    openPaymentModalWithAmount(amount)
+    void openPaymentModalWithAmount(amount)
   }
 
   const openTakeoutPaymentFromOrder = (payload: {
@@ -1565,7 +1649,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    openPaymentModalWithAmount(amount)
+    void openPaymentModalWithAmount(amount)
   }
 
   const openDeliveryPaymentFromOrder = (payload: {
@@ -1585,7 +1669,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    openPaymentModalWithAmount(amount)
+    void openPaymentModalWithAmount(amount)
   }
 
   const handleClearCart = () => {

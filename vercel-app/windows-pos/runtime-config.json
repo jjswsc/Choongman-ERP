@@ -1,10 +1,19 @@
 {
     "print":  {
+                  "receiptDeviceName":  "",
+                  "escPosCutAfterPaymentReceiptHtml":  false,
+                  "escPosCutAfterKitchenHtml":  true,
+                  "kitchen1DeviceName":  "",
+                  "deviceName":  "",
+                  "kitchen3DeviceName":  "",
+                  "kitchenDeviceName":  "",
                   "silent":  true,
-                  "deviceName":  ""
+                  "escPosCutAfterHallOrderHtml":  false,
+                  "kitchen2DeviceName":  ""
               },
-    "updateManifestUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/latest.json",
+    "allowedOrigin":  "https://choongman-erp.vercel.app",
+    "openDevtools":  false,
+    "updateManifestUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
     "kiosk":  "1",
-    "posUrl":  "https://app.omnifoodtech.com/pos/login",
-    "allowedOrigin":  "https://app.omnifoodtech.com"
+    "posUrl":  "https://choongman-erp.vercel.app/pos/login"
 }

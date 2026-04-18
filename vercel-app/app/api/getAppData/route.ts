@@ -207,12 +207,23 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const auth = await getVerifiedAuth(request)
+  if (!auth) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: '인증이 필요합니다.',
+        msg: '인증이 필요합니다.',
+        items: [],
+        stock: {},
+      },
+      { status: 401, headers }
+    )
+  }
   const { searchParams } = new URL(request.url)
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
   const asOfDate = String(searchParams.get('asOfDate') || searchParams.get('date') || '').trim()
   const scope = String(searchParams.get('scope') || '').trim()
-
-  const auth = await getVerifiedAuth(request)
   const userRole = (auth?.role || '').toLowerCase()
   const isManager = userRole.includes('manager') || userRole.includes('franchisee')
   const userStore = (auth?.store || '').trim()

@@ -10,12 +10,40 @@ Windows 설치형 하이브리드 POS 셸(Electron)입니다.
 
 기본 설정 파일: `runtime-config.json`
 
+- **설치본(NSIS·포터블)**: `electron-builder` 가 `app.asar` 안에 이 파일을 **항상 포함**합니다(`package.json` → `build.files`). 별도로 복사할 필요 없이 설치되어 있습니다.
+- **첫 실행 시**: 아직 `%APPDATA%` 쪽에 사용자 파일이 없으면, 번들에 넣어 둔 `runtime-config.json`을 **그대로 복사**해 `userData/runtime-config.json`을 만들어 둡니다. 이후 매장은 이 경로만 메모장으로 열어 `print.receiptDeviceName` 등을 채우면 됩니다.
+
+### Windows에서 파일이 안 보일 때 (검색 안 됨)
+
+- 탐색기·시작 메뉴 검색은 **`AppData\Roaming` 아래를 잘 안 잡을** 수 있습니다. **앱을 한 번이라도 실행한 뒤**에는 위 자동 복사로 사용자 파일이 생깁니다.
+- 셸은 두 곳을 **병합**합니다: (1) 설치된 앱(번들) (2) **사용자 덮어쓰기** — 매장에서 고치는 건 보통 (2)입니다.
+
+**사용자 덮어쓰기 경로(일반적, `package.json`의 `name`이 `choongman-pos-windows`일 때):**
+
+`%APPDATA%\choongman-pos-windows\runtime-config.json`  
+→ 전체 예: `C:\Users\<사용자이름>\AppData\Roaming\choongman-pos-windows\runtime-config.json`
+
+PowerShell에서 폴더를 바로 엽니다:
+
+```powershell
+explorer $env:APPDATA\choongman-pos-windows
+```
+
+여기에 아직 없으면 **POS를 한 번 실행**하거나, 수동으로 `windows-pos/runtime-config.example.json`과 같은 내용의 파일을 만들면 됩니다.
+
+**참고:** 개발 중 `electron .`로 띄운 경우에도 동일하게 `AppData\Roaming\choongman-pos-windows`를 씁니다. 제품명만 다른 빌드(OmniFoodTech 등)는 `%APPDATA%` 아래 **앱 이름 폴더**가 다를 수 있으니, 해당 PC에서 위 `explorer`로 `Roaming`을 열어 폴더명을 확인하세요.
+
 - `posUrl`: POS 접속 URL
 - `allowedOrigin`: 허용 오리진(외부 이동 차단 기준)
 - `kiosk`: `1`(기본) 키오스크 / `0` 일반창
 - `updateManifestUrl`: 업데이트 매니페스트 URL (`latest.json`)
 - `print.silent`: `true`(기본)이면 영수증·주방 HTML 인쇄도 **무인쇄 우선**. `false`이면 **항상 인쇄 대화상자**가 먼저 뜸.
 - `print.deviceName`: 무인쇄·빠른 인쇄에 쓸 프린터 이름. Windows **정확한 표시 이름**과 일치해야 무인쇄 성공률이 높음 (비우면 Windows 기본 프린터).
+- **ESC/POS 절단(무인쇄 RAW)**: `WINDOWS_POS_PRINT_ESC_POS_CUT=0`이면 종류와 관계없이 절단 안 함. 그 외에는 종류별로 `print` 또는 환경 변수로 지정:
+  - `print.escPosCutAfterKitchenHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_KITCHEN_HTML` (기본 `true`)
+  - `print.escPosCutAfterHallOrderHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML` (기본 `false`) — 터미널·주문 화면 **홀 주문서**
+  - `print.escPosCutAfterPaymentReceiptHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML` (기본 `false`) — **결제 영수증**
+  - (호환) 예전 단일 `printEscPosCutAfterReceiptHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML` — 웹에서 `printReceiptKind`를 안 보낼 때만 적용.
 
 운영 시에는 `runtime-config.example.json`을 복사해 값을 채운 뒤 빌드합니다.
 
@@ -52,6 +80,13 @@ npm run dev
 ```
 
 ## 빌드
+
+**권장:** `vercel-app/` 루트에서 아래 중 하나를 실행하면 `build-windows-pos.ps1`가 `runtime-config.json`·아이콘·브랜드(제품명)를 **한 번에** 맞춥니다.
+
+- `npm run windows:pos:build` 또는 `npm run windows:pos:build:internal` — 내부(충만) 배포 URL·Choongman 브랜드
+- `npm run windows:pos:build:external` — 판매(OmniFoodTech) URL·브랜드
+
+`windows-pos/`에서만 `npm run build:win`을 쓰면, 커밋된 `runtime-config.json`과 제품명/아이콘 파이프라인이 서로 다른 경우가 있어 내부·외부가 어긋날 수 있습니다.
 
 `package.json`의 `win.signAndEditExecutable`은 **false**(기본)로 두는 것을 권장합니다.  
 `true`이면 electron-builder가 `winCodeSign` 번들을 풀 때 **macOS용 심볼릭 링크**를 만들려다, Windows에서 **개발자 모드**가 꺼져 있거나 **관리자 권한**이 없으면 `Cannot create symbolic link` 로 실패할 수 있습니다.

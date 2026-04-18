@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { upsertPosMenuFromBody, type PosMenuUpsertApiBody } from '@/lib/pos-menu-upsert-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 const MAX_ROWS = 2000
 
@@ -7,6 +8,13 @@ const MAX_ROWS = 2000
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+
+  const authResult = await requireAuth(req, 'manager')
+  if (authResult.errorResponse) {
+    const res = authResult.errorResponse
+    res.headers.set('Access-Control-Allow-Origin', '*')
+    return res
+  }
 
   try {
     const body = (await req.json()) as { menus?: unknown }

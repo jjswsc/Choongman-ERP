@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
     const autoPrintReceiptOnAddOrder = Boolean(body?.autoPrintReceiptOnAddOrder)
     const autoPrintReceiptOnPayment = Boolean(body?.autoPrintReceiptOnPayment)
     const autoPrintKitchenSlipOnOrder = Boolean(body?.autoPrintKitchenSlipOnOrder)
+    const autoPrintFinalOrderBeforePayment = Boolean(body?.autoPrintFinalOrderBeforePayment)
     const receiptBizName = String(body?.receiptBizName ?? '').trim()
     const receiptBizTaxId = String(body?.receiptBizTaxId ?? '').trim()
     const receiptBizAbn = String(body?.receiptBizAbn ?? '').trim()
@@ -140,6 +141,9 @@ export async function POST(req: NextRequest) {
     const kitchenSlipFontScale = kitchenSlipScaleRaw === 'sm' ? 'sm' : kitchenSlipScaleRaw === 'lg' ? 'lg' : 'md'
     const kitchenSlipShowLineNotes = body?.kitchenSlipShowLineNotes !== false
     const kitchenSlipShowOrderMemo = body?.kitchenSlipShowOrderMemo !== false
+    const escPosCutAfterKitchenHtml = parseBoolParam(body?.escPosCutAfterKitchenHtml, true)
+    const escPosCutAfterHallOrderHtml = parseBoolParam(body?.escPosCutAfterHallOrderHtml, false)
+    const escPosCutAfterPaymentReceiptHtml = parseBoolParam(body?.escPosCutAfterPaymentReceiptHtml, false)
     const vatRate = Math.max(0, Number(body?.vatRate ?? 7))
     const vatMode = String(body?.vatMode || 'included') === 'separate' ? 'separate' : 'included'
     const serviceRate = Math.max(0, Number(body?.serviceRate ?? 0))
@@ -236,6 +240,7 @@ export async function POST(req: NextRequest) {
       auto_print_receipt_on_add_order: autoPrintReceiptOnAddOrder,
       auto_print_receipt_on_payment: autoPrintReceiptOnPayment,
       auto_print_kitchen_slip_on_order: autoPrintKitchenSlipOnOrder,
+      auto_print_final_order_before_payment: autoPrintFinalOrderBeforePayment,
       receipt_biz_name: receiptBizName,
       receipt_biz_tax_id: receiptBizTaxId,
       receipt_biz_abn: receiptBizAbn,
@@ -261,6 +266,9 @@ export async function POST(req: NextRequest) {
       kitchen_slip_font_scale: kitchenSlipFontScale,
       kitchen_slip_show_line_notes: kitchenSlipShowLineNotes,
       kitchen_slip_show_order_memo: kitchenSlipShowOrderMemo,
+      esc_pos_cut_after_kitchen_html: escPosCutAfterKitchenHtml,
+      esc_pos_cut_after_hall_order_html: escPosCutAfterHallOrderHtml,
+      esc_pos_cut_after_payment_receipt_html: escPosCutAfterPaymentReceiptHtml,
       receipt_print_lang: receiptPrintLang,
       vat_rate: vatRate,
       vat_mode: vatMode,

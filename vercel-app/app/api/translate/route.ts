@@ -5,6 +5,7 @@
  * 원문 언어 자동 감지 (sl=auto)
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/verify-auth'
 
 const LANG_MAP: Record<string, string> = { ko: 'ko', en: 'en', th: 'th', mm: 'my', la: 'lo', kh: 'km', vi: 'vi', ms: 'ms' }
 const UA = 'Mozilla/5.0 (compatible; ChoongmanERP/1.0)'
@@ -31,6 +32,12 @@ async function translateOne(text: string, targetLang: string): Promise<string> {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    const res = authResult.errorResponse
+    res.headers.set('Access-Control-Allow-Origin', '*')
+    return res
+  }
   let body: { texts?: unknown[]; text?: unknown; targetLang?: string } = {}
   try {
     body = (await request.json().catch(() => ({}))) as typeof body

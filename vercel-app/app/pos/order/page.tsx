@@ -12,6 +12,7 @@ import {
   getPosTodaySales,
   getPosTableLayout,
   getPosPrinterSettings,
+  type PosPrinterSettings,
   getPosCollabCampaigns,
   validatePosCoupon,
   useStoreList,
@@ -72,6 +73,7 @@ import {
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
   type PrintPosHtmlDocumentOptions,
 } from "@/lib/pos-print-html"
+import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import {
   RECEIPT_AMOUNT_COL_MM,
   RECEIPT_CONTENT_NUDGE_LEFT_MM,
@@ -169,6 +171,8 @@ export default function PosOrderPage() {
   const [storeFees, setStoreFees] = React.useState({ deliveryFee: 0, packagingFee: 0 })
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
+  const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = React.useState(false)
+  const posPrinterSettingsRef = React.useRef<PosPrinterSettings | null>(null)
   const [receiptBizName, setReceiptBizName] = React.useState("")
   const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
   const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
@@ -253,9 +257,11 @@ export default function PosOrderPage() {
     if (!storeCode) return
     getPosPrinterSettings({ storeCode })
       .then((s) => {
+        posPrinterSettingsRef.current = s
         setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 })
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
+        setAutoPrintFinalOrderBeforePayment(Boolean(s.autoPrintFinalOrderBeforePayment))
         setReceiptBizName(String(s.receiptBizName || ""))
         setReceiptBizTaxId(String(s.receiptBizTaxId || ""))
         setReceiptBizAbn(String(s.receiptBizAbn || ""))
@@ -286,9 +292,11 @@ export default function PosOrderPage() {
         setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
       })
       .catch(() => {
+        posPrinterSettingsRef.current = null
         setStoreFees({ deliveryFee: 0, packagingFee: 0 })
         setAutoPrintReceiptOnPayment(false)
         setAutoPrintKitchenSlipOnOrder(false)
+        setAutoPrintFinalOrderBeforePayment(false)
         setReceiptBizName("")
         setReceiptBizTaxId("")
         setReceiptBizAbn("")
@@ -743,20 +751,6 @@ export default function PosOrderPage() {
     if (appliedCoupon) setAppliedCoupon(null)
   }, [cart])
 
-  const openPaymentModal = async () => {
-    if (cart.length === 0) {
-      await appAlert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
-      return
-    }
-    setPayCash(String(total))
-    setPayCard("0")
-    setPayQr("0")
-    setPayOther("0")
-    setPayDeliveryApp("0")
-    setDeliveryPaymentChannel("grab")
-    setShowPaymentModal(true)
-  }
-
   const handleCheckout = async (payment: {
     cash: number
     card: number
@@ -880,7 +874,10 @@ export default function PosOrderPage() {
     (
       fullHtml: string,
       title: string,
-      thermal?: Pick<PrintPosHtmlDocumentOptions, "printRole" | "kitchenStation">
+      thermal?: Pick<
+        PrintPosHtmlDocumentOptions,
+        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
+      >
     ) =>
       new Promise<void>((resolve, reject) => {
         printPosHtmlDocument(fullHtml, {
@@ -927,10 +924,34 @@ export default function PosOrderPage() {
       </html>
     `
     try {
-      await printInIframe(fullHtml, t("posReceipt") || "영수증", { printRole: "receipt" })
+      await printInIframe(fullHtml, t("posReceipt") || "영수증", {
+        printRole: "receipt",
+        printReceiptKind: "hall_order",
+        escPosCutOverride: resolveEscPosCutOverride(posPrinterSettingsRef.current, {
+          printRole: "receipt",
+          printReceiptKind: "hall_order",
+        }),
+      })
     } catch {
       await appAlert(t("posPrintBlockedBrowser"))
     }
+  }
+
+  const openPaymentModal = async () => {
+    if (cart.length === 0) {
+      await appAlert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
+      return
+    }
+    if (autoPrintFinalOrderBeforePayment && receiptRef.current) {
+      await handlePrintReceipt()
+    }
+    setPayCash(String(total))
+    setPayCard("0")
+    setPayQr("0")
+    setPayOther("0")
+    setPayDeliveryApp("0")
+    setDeliveryPaymentChannel("grab")
+    setShowPaymentModal(true)
   }
 
   const handlePrintKitchenSlip = async () => {
@@ -986,6 +1007,7 @@ export default function PosOrderPage() {
         await printInIframe(html, slip.label, {
           printRole: "kitchen",
           kitchenStation: slip.station,
+          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: "kitchen" }),
         })
         if (idx + 1 < slips.length) {
           await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
@@ -1893,7 +1915,7 @@ export default function PosOrderPage() {
                     <div>{tr("posBranchLabel", "지점")}: {parsedReceiptMemo.taxInvoice.branchNo || (parsedReceiptMemo.taxInvoice.customerType === "company" ? "00000" : tr("posHeadOffice", "본점"))}</div>
                     <div>{tr("settings_address", "주소")}: {parsedReceiptMemo.taxInvoice.address}</div>
                     <div>{tr("posPhone", "전화번호")}: {parsedReceiptMemo.taxInvoice.phone}</div>
-                    <div>{tr("email", "이메일")}: {parsedReceiptMemo.taxInvoice.email}</div>
+                    <div>{tr("posTaxEmailLabel", "이메일")}: {parsedReceiptMemo.taxInvoice.email}</div>
                   </div>
                 )}
                 <div className="space-y-1">

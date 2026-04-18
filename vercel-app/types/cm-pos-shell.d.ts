@@ -20,6 +20,10 @@ declare global {
           preferDialog?: boolean
           /** runtime-config print.receiptDeviceName vs kitchenNDeviceName */
           printRole?: 'receipt' | 'kitchen'
+          /** printRole이 receipt일 때 홀 주문서 vs 결제 영수증(ESC/POS 절단 분기) */
+          printReceiptKind?: 'hall_order' | 'payment'
+          /** 매장 프린터 설정에서 온 절단 여부(우선) */
+          escPosCutOverride?: boolean
           kitchenStation?: 1 | 2 | 3
         }
       ) => Promise<{

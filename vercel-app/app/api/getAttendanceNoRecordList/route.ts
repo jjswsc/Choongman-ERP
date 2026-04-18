@@ -2,11 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
 
+const TZ = 'Asia/Bangkok'
+
+/**
+ * 스케줄·휴가일 등 YYYY-MM-DD 문자열은 그대로, log_at 같은 ISO 시각은 방콕 달력일로 변환.
+ * (UTC 날짜만 잘라 쓰면 새벽 근무일이 하루 밀려 '미기록' 가짜 행이 쌓임 — getAttendanceRecordsAdmin 과 동일 기준)
+ */
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s.slice(0, 10))) return s.slice(0, 10)
+  }
+  const d = new Date(val as string | Date)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
 function formatTime(v: string | null | undefined): string {

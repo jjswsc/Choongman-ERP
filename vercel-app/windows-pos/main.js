@@ -54,6 +54,24 @@ function toOrigin(urlText) {
   }
 }
 
+/**
+ * 첫 실행 시에만: 번들에 포함된 runtime-config.json 을 userData 로 복사.
+ * - 설치 직후에도 %APPDATA%\…\runtime-config.json 을 열어 프린터 이름을 넣을 수 있게 함.
+ * - 병합 규칙(readRuntimeConfig)은 그대로 — 이후 사용자 파일만 수정하면 됨.
+ */
+function ensureUserRuntimeConfigSeeded() {
+  try {
+    const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
+    const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+    if (fs.existsSync(userPath)) return;
+    if (!fs.existsSync(bundledPath)) return;
+    fs.mkdirSync(path.dirname(userPath), { recursive: true });
+    fs.copyFileSync(bundledPath, userPath);
+  } catch (e) {
+    console.warn("[cm-pos] ensureUserRuntimeConfigSeeded:", e && e.message ? e.message : e);
+  }
+}
+
 function readRuntimeConfig() {
   const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
   const userPath = path.join(app.getPath("userData"), "runtime-config.json");
@@ -99,6 +117,19 @@ function readConfigInt(value, defaultValue, minValue, maxValue) {
   return Math.min(hi, Math.max(lo, i));
 }
 
+/**
+ * 원격 POS URL이 did-fail-load 없이 무한 대기할 때(오프라인·DNS 지연 등) 흰 화면으로 멈추지 않게 함.
+ * `runtime-config.json` 의 `mainLoadTimeoutMs` 또는 환경 변수 `WINDOWS_POS_MAIN_LOAD_TIMEOUT_MS` (밀리초).
+ */
+const POS_MAIN_LOAD_WATCHDOG_MS = readConfigInt(
+  process.env.WINDOWS_POS_MAIN_LOAD_TIMEOUT_MS !== undefined && process.env.WINDOWS_POS_MAIN_LOAD_TIMEOUT_MS !== ""
+    ? process.env.WINDOWS_POS_MAIN_LOAD_TIMEOUT_MS
+    : runtimeConfig.mainLoadTimeoutMs,
+  45000,
+  5000,
+  300000
+);
+
 const POS_URL = process.env.WINDOWS_POS_URL || runtimeConfig.posUrl || DEFAULT_POS_URL;
 const ALLOWED_ORIGIN = process.env.WINDOWS_POS_ALLOWED_ORIGIN || runtimeConfig.allowedOrigin || toOrigin(POS_URL);
 const isKiosk = String(process.env.WINDOWS_POS_KIOSK || runtimeConfig.kiosk || "1") !== "0";
@@ -138,18 +169,82 @@ const PRINT_ESC_POS_CUT_AFTER_HTML = readConfigBool(
   true
 );
 /**
- * 영수증(receipt) HTML 직후 RAW ESC/POS 절단 — 기본 false.
- * 일부 드라이버는 GDI 인쇄 작업 종료 시 이미 피드/절단하는데, 여기서 RAW를 또 보내면 이중 컷·백지 토출이 난다.
- * 주방(kitchen) 슬립은 아래와 무관하게( PRINT_ESC_POS_CUT_AFTER_HTML 켜져 있으면) RAW 절단 유지.
- * 켜기: runtime-config `"printEscPosCutAfterReceiptHtml": true` 또는 WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML=1
+ * (레거시) 영수증 전체에 공통 — `printReceiptKind` 미지정 시에만 사용.
+ * 세분화: `print.escPosCutAfterKitchenHtml` / `escPosCutAfterHallOrderHtml` / `escPosCutAfterPaymentReceiptHtml`
+ * 또는 WINDOWS_POS_ESC_POS_CUT_AFTER_* 환경 변수.
  */
-const ESC_POS_CUT_AFTER_RECEIPT_HTML = readConfigBool(
+const LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML = readConfigBool(
   process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML !== undefined &&
     process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML !== ""
     ? process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML
     : runtimeConfig.printEscPosCutAfterReceiptHtml ?? runtimeConfig.print?.escPosCutAfterReceiptHtml,
   false
 );
+
+function readEscPosCutKitchenResolved() {
+  if (process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_KITCHEN_HTML !== undefined && process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_KITCHEN_HTML !== "") {
+    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_KITCHEN_HTML, true);
+  }
+  const p = runtimeConfig.print || {};
+  if (Object.prototype.hasOwnProperty.call(p, "escPosCutAfterKitchenHtml")) {
+    return readConfigBool(p.escPosCutAfterKitchenHtml, true);
+  }
+  if (runtimeConfig.printEscPosCutAfterKitchenHtml !== undefined) {
+    return readConfigBool(runtimeConfig.printEscPosCutAfterKitchenHtml, true);
+  }
+  return true;
+}
+
+function readEscPosCutHallResolved() {
+  if (process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML !== undefined && process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML !== "") {
+    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML, false);
+  }
+  const p = runtimeConfig.print || {};
+  if (Object.prototype.hasOwnProperty.call(p, "escPosCutAfterHallOrderHtml")) {
+    return readConfigBool(p.escPosCutAfterHallOrderHtml, false);
+  }
+  if (runtimeConfig.printEscPosCutAfterHallOrderHtml !== undefined) {
+    return readConfigBool(runtimeConfig.printEscPosCutAfterHallOrderHtml, false);
+  }
+  return LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML;
+}
+
+function readEscPosCutPaymentResolved() {
+  if (process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML !== undefined && process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML !== "") {
+    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML, false);
+  }
+  const p = runtimeConfig.print || {};
+  if (Object.prototype.hasOwnProperty.call(p, "escPosCutAfterPaymentReceiptHtml")) {
+    return readConfigBool(p.escPosCutAfterPaymentReceiptHtml, false);
+  }
+  if (runtimeConfig.printEscPosCutAfterPaymentReceiptHtml !== undefined) {
+    return readConfigBool(runtimeConfig.printEscPosCutAfterPaymentReceiptHtml, false);
+  }
+  return LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML;
+}
+
+const ESC_POS_CUT_AFTER_KITCHEN_HTML = readEscPosCutKitchenResolved();
+const ESC_POS_CUT_AFTER_HALL_ORDER_HTML = readEscPosCutHallResolved();
+const ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML = readEscPosCutPaymentResolved();
+
+/**
+ * @param {object} payload cm-pos-print-html IPC payload
+ */
+function shouldSendEscPosRawCut(payload) {
+  if (!PRINT_ESC_POS_CUT_AFTER_HTML) return false;
+  if (payload && Object.prototype.hasOwnProperty.call(payload, "escPosCutOverride")) {
+    return Boolean(payload.escPosCutOverride);
+  }
+  const role = payload?.printRole;
+  if (role === "kitchen") return ESC_POS_CUT_AFTER_KITCHEN_HTML;
+  if (role === "receipt") {
+    const rk = payload?.printReceiptKind;
+    if (rk === "payment") return ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML;
+    if (rk === "hall_order") return ESC_POS_CUT_AFTER_HALL_ORDER_HTML;
+    return LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML;
+  }
+  return false;
+}
 const PRINT_HTML_DEBUG_ENABLED = readConfigBool(
   process.env.CM_POS_DEBUG_LOG_ENABLED !== undefined && process.env.CM_POS_DEBUG_LOG_ENABLED !== ""
     ? process.env.CM_POS_DEBUG_LOG_ENABLED
@@ -282,6 +377,7 @@ let mainWindow = null;
 /** POS 메인 URL 로드 실패 시 재시도(did-fail-load 일시 오류·리다이렉트 완화) */
 let posMainLoadFailAttempts = 0;
 let posMainLoadRetryTimer = null;
+let posMainLoadWatchdogTimer = null;
 const POS_MAIN_LOAD_MAX_ATTEMPTS = 5;
 let customerDisplayWindow = null;
 let isCheckingUpdate = false;
@@ -455,9 +551,47 @@ function clearPosMainLoadRetryTimer() {
   }
 }
 
+function clearPosMainLoadWatchdog() {
+  if (posMainLoadWatchdogTimer) {
+    try {
+      clearTimeout(posMainLoadWatchdogTimer);
+    } catch {
+      /* ignore */
+    }
+    posMainLoadWatchdogTimer = null;
+  }
+}
+
+/** POS URL 로드 시작 후 일정 시간 안에 화면이 확정되지 않으면 offline.html 로 폴백 */
+function schedulePosMainLoadWatchdog() {
+  clearPosMainLoadWatchdog();
+  posMainLoadWatchdogTimer = setTimeout(() => {
+    posMainLoadWatchdogTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      const u = mainWindow.webContents.getURL() || "";
+      if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) return;
+      if (u.includes("offline.html")) return;
+      console.warn("[cm-pos] main URL load watchdog: no usable page, showing offline fallback");
+      loadOfflineFallbackPage();
+    } catch (e) {
+      console.warn("[cm-pos] watchdog check failed", e && e.message ? e.message : e);
+      loadOfflineFallbackPage();
+    }
+  }, POS_MAIN_LOAD_WATCHDOG_MS);
+}
+
 function loadOfflineFallbackPage() {
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.webContents.stop();
+    } catch {
+      /* ignore */
+    }
+    clearPosMainLoadRetryTimer();
+    posMainLoadFailAttempts = 0;
+    clearPosMainLoadWatchdog();
     void mainWindow.loadFile(path.join(__dirname, "offline.html"));
   } catch (e) {
     console.error("[cm-pos] loadFile offline failed", e);
@@ -1191,6 +1325,12 @@ function createWindow() {
       if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) {
         posMainLoadFailAttempts = 0;
         clearPosMainLoadRetryTimer();
+        clearPosMainLoadWatchdog();
+      }
+      if (u.includes("offline.html")) {
+        clearPosMainLoadWatchdog();
+        clearPosMainLoadRetryTimer();
+        posMainLoadFailAttempts = 0;
       }
     } catch {
       /* ignore */
@@ -1213,6 +1353,7 @@ function createWindow() {
   });
 
   void mainWindow.loadURL(POS_URL);
+  schedulePosMainLoadWatchdog();
 
   if (OPEN_DEVTOOLS_ON_START) {
     mainWindow.webContents.once("did-finish-load", () => {
@@ -1242,6 +1383,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    ensureUserRuntimeConfigSeeded();
     Menu.setApplicationMenu(buildAppMenu());
     // #region agent log
     debugLog("H1_silent_flag", "windows-pos/main.js:app.whenReady", "print_runtime_boot", {
@@ -1263,6 +1405,7 @@ if (!gotLock) {
       }
       posMainLoadFailAttempts = 0;
       clearPosMainLoadRetryTimer();
+      schedulePosMainLoadWatchdog();
       try {
         await mainWindow.loadURL(POS_URL, {
           extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
@@ -1409,15 +1552,8 @@ if (!gotLock) {
         deviceName: typeof payload?.deviceName === "string" ? payload.deviceName : "",
       });
       const out = { ...result };
-      const printRoleForCut = payload?.printRole === "kitchen" || payload?.printRole === "receipt" ? payload.printRole : "";
-      const skipEscPosRawBecauseReceipt =
-        printRoleForCut === "receipt" && !ESC_POS_CUT_AFTER_RECEIPT_HTML;
-      if (skipEscPosRawBecauseReceipt) {
-        console.warn(
-          "[cm-pos] skip ESC/POS RAW cut after receipt HTML (avoid double-cut with driver). Kitchen slips still use RAW when enabled. Enable: printEscPosCutAfterReceiptHtml or WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML=1"
-        );
-      }
-      if (result.ok && !Boolean(payload?.preferDialog) && PRINT_ESC_POS_CUT_AFTER_HTML && !skipEscPosRawBecauseReceipt) {
+      const sendCut = shouldSendEscPosRawCut(payload);
+      if (result.ok && !Boolean(payload?.preferDialog) && sendCut) {
         await new Promise((r) => setTimeout(r, POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED));
         try {
           let device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({

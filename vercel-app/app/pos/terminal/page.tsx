@@ -10,7 +10,13 @@ import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
 import { OrderBarList, type OrderBarItem } from '@/components/pos/order-bar-list'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
-import { CartPanel, type CartPanelHandle, type CartPanelAddItemPayload, type CartPanelPaymentPayload } from '@/components/pos/cart-panel'
+import {
+  CartPanel,
+  type CartPanelHandle,
+  type CartPanelAddItemPayload,
+  type CartPanelPaymentPayload,
+  type CartPanelBeforePaymentReceiptPayload,
+} from '@/components/pos/cart-panel'
 import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -35,6 +41,7 @@ import {
   type PosDeliveryApp,
   type LinkposPaymentSummary,
   type PosOrder,
+  type PosPrinterSettings,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
@@ -63,6 +70,7 @@ import {
   POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
 } from '@/lib/pos-print-html'
+import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
@@ -200,6 +208,7 @@ export default function PosTerminalPage() {
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = useState(false)
+  const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = useState(false)
   const [receiptBizName, setReceiptBizName] = useState('')
   const [receiptBizTaxId, setReceiptBizTaxId] = useState('')
   const [receiptBizAbn, setReceiptBizAbn] = useState('')
@@ -301,6 +310,7 @@ export default function PosTerminalPage() {
   }, [])
   usePosMenusCatalogLiveRefresh(applyPosMenusList)
   const drawerOpenWarnedRef = useRef(false)
+  const posPrinterSettingsRef = useRef<PosPrinterSettings | null>(null)
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -340,6 +350,7 @@ export default function PosTerminalPage() {
     if (!currentStoreId) return
     getPosPrinterSettings({ storeCode: currentStoreId })
       .then((s) => {
+        posPrinterSettingsRef.current = s
         const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
         const warning = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
         const warnDiff = Math.max(0, Number(s.cookingRecipeWarningDiffMin ?? 0))
@@ -358,6 +369,7 @@ export default function PosTerminalPage() {
         setAutoPrintReceiptOnAddOrder(Boolean(s.autoPrintReceiptOnAddOrder))
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
+        setAutoPrintFinalOrderBeforePayment(Boolean(s.autoPrintFinalOrderBeforePayment))
         setReceiptBizName(String(s.receiptBizName || ''))
         setReceiptBizTaxId(String(s.receiptBizTaxId || ''))
         setReceiptBizAbn(String(s.receiptBizAbn || ''))
@@ -430,6 +442,7 @@ export default function PosTerminalPage() {
         setCustomerDisplayIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? '').trim())
       })
       .catch(() => {
+        posPrinterSettingsRef.current = null
         setCookingRules({
           freshMaxMin: 10,
           warningMaxMin: 15,
@@ -444,6 +457,7 @@ export default function PosTerminalPage() {
         setAutoPrintReceiptOnAddOrder(false)
         setAutoPrintReceiptOnPayment(false)
         setAutoPrintKitchenSlipOnOrder(false)
+        setAutoPrintFinalOrderBeforePayment(false)
         setReceiptBizName('')
         setReceiptBizTaxId('')
         setReceiptBizAbn('')
@@ -896,6 +910,11 @@ export default function PosTerminalPage() {
       printDelayMs: 0,
       fallbackCleanupMs: 120_000,
       printRole: 'receipt',
+      printReceiptKind: 'hall_order',
+      escPosCutOverride: resolveEscPosCutOverride(posPrinterSettingsRef.current, {
+        printRole: 'receipt',
+        printReceiptKind: 'hall_order',
+      }),
       /** 자동(주문 직후) 인쇄: iframe 포커스 생략 → 인쇄창 닫힌 뒤 POS 화면 전환이 덜 튐 */
       focusIframeBeforePrint: !directPrint,
       onPrintUnavailable: () => {
@@ -1019,6 +1038,7 @@ export default function PosTerminalPage() {
                 focusIframeBeforePrint: false,
                 printRole: 'kitchen',
                 kitchenStation: slip.station,
+                escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
                 onPrintUnavailable: () => {
                   void appAlert(t('posPrintUnavailable'))
                 },
@@ -1283,6 +1303,7 @@ export default function PosTerminalPage() {
                     focusIframeBeforePrint: false,
                     printRole: 'kitchen',
                     kitchenStation: slip.station,
+                    escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
                     onPrintUnavailable: () => {
                       void appAlert(t('posPrintUnavailable'))
                     },
@@ -1753,6 +1774,10 @@ export default function PosTerminalPage() {
             pricingAdjustments={pricingAdjustments}
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
+            onBeforeOpenPayment={async (payload: CartPanelBeforePaymentReceiptPayload) => {
+              if (!autoPrintFinalOrderBeforePayment || !isMainPosDevice) return
+              await printReceiptNow(payload, undefined, false, undefined, true)
+            }}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               try {
                 if (existingOrderId != null && payload.payment != null) {
@@ -2119,6 +2144,7 @@ export default function PosTerminalPage() {
                           focusIframeBeforePrint: false,
                           printRole: 'kitchen',
                           kitchenStation: slip.station,
+                          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
                           onPrintUnavailable: () => {
                             void appAlert(t('posPrintUnavailable'))
                           },

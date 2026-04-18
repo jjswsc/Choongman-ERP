@@ -1,15 +1,14 @@
 -- ============================================================
--- CM_ERP All-in-One Bundle (Accounting + Tax + Interior + POS)
--- Supabase SQL Editor에서 통째로 실행 (idempotent)
--- 포함 순서:
---   1) 000_accounting_core_one_shot.sql
---   2) tax_ledger_filing_status.sql
---   3) interior_management_upgrade.sql
---   4) pos_hardening_phase2.sql
--- ============================================================
-
--- ============================================================
--- [1/4] 000_accounting_core_one_shot.sql
+-- supabase_one_paste_accounting_and_pos_printer_cut.sql
+-- Supabase SQL Editor에서 이 파일 전체를 한 번에 실행 (UTF-8)
+--
+-- 구성:
+--   (1) 000_accounting_core_one_shot.sql  전체 — 회계/세무 핵심
+--   (2) pos_printer_settings 부트스트랩 + ESC/POS 절단 컬럼 3개
+--
+-- 초장문 붙여넣기에서 뺀 것 (필요 시 vercel-app/sql 개별 파일로만 실행):
+--   POS 프로모 인덱스/템플릿, 근태 진단 SELECT, RLS 린트 일괄, 인테리어 중복 DDL,
+--   storage 버킷, 함수 search_path 일괄 등
 -- ============================================================
 -- ============================================================
 -- CM_ERP Accounting & Thai Filing Core (One-shot)
@@ -339,6 +338,7 @@ CREATE TABLE IF NOT EXISTS public.withholding_tax_ledger_entries (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 기존 DB(테이블만 먼저 생성된 경우) 호환
 ALTER TABLE public.withholding_tax_ledger_entries
   ADD COLUMN IF NOT EXISTS store_name TEXT NULL;
 
@@ -829,474 +829,34 @@ $$;
 
 COMMIT;
 
--- ============================================================
--- [2/4] tax_ledger_filing_status.sql
--- ============================================================
--- VAT/WHT 원장 제출상태(대기/완료/제출자/제출시각) 확장
--- 주의: omni처럼 원장 테이블 자체가 없는 환경에서는 이 스크립트가 "건너뛰기"만 합니다.
---       먼저 accounting_compliance_extensions.sql(또는 000_accounting_core_one_shot.sql) 적용 후 재실행하세요.
 
-DO $$
-BEGIN
-  IF to_regclass('public.vat_ledger_entries') IS NOT NULL THEN
-    EXECUTE $sql$
-      ALTER TABLE public.vat_ledger_entries
-        ADD COLUMN IF NOT EXISTS filing_status TEXT NULL,
-        ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ NULL,
-        ADD COLUMN IF NOT EXISTS submitted_by TEXT NULL
-    $sql$;
+-- ------------------------------------------------------------
+-- POS: pos_printer_settings (테이블 없으면 생성 + 절단 컬럼)
+-- ------------------------------------------------------------
 
-    EXECUTE $sql$
-      UPDATE public.vat_ledger_entries
-      SET filing_status = 'draft'
-      WHERE filing_status IS NULL OR btrim(filing_status) = ''
-    $sql$;
+-- =============================================================================
+-- pos_printer_settings 없음 (ERROR 42P01) 또는 ESC/POS 절단 컬럼만 추가할 때
+-- Supabase 대시보드 → SQL Editor → **본인 프로젝트** 선택 후 실행 (멱등)
+-- =============================================================================
 
-    EXECUTE $sql$
-      UPDATE public.vat_ledger_entries
-      SET submitted_at = NULL,
-          submitted_by = NULL
-      WHERE filing_status <> 'submitted'
-    $sql$;
-
-    IF NOT EXISTS (
-      SELECT 1
-      FROM pg_constraint
-      WHERE conname = 'vat_ledger_entries_filing_status_check'
-    ) THEN
-      EXECUTE $sql$
-        ALTER TABLE public.vat_ledger_entries
-          ADD CONSTRAINT vat_ledger_entries_filing_status_check
-          CHECK (filing_status IS NULL OR filing_status IN ('draft', 'submitted'))
-      $sql$;
-    END IF;
-
-    EXECUTE $sql$
-      CREATE INDEX IF NOT EXISTS idx_vat_ledger_filing_status
-        ON public.vat_ledger_entries (tax_month, filing_status)
-    $sql$;
-  ELSE
-    RAISE NOTICE 'SKIP: public.vat_ledger_entries not found. Run accounting_compliance_extensions.sql first.';
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF to_regclass('public.withholding_tax_ledger_entries') IS NOT NULL THEN
-    EXECUTE $sql$
-      ALTER TABLE public.withholding_tax_ledger_entries
-        ADD COLUMN IF NOT EXISTS filing_status TEXT NULL,
-        ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ NULL,
-        ADD COLUMN IF NOT EXISTS submitted_by TEXT NULL
-    $sql$;
-
-    EXECUTE $sql$
-      UPDATE public.withholding_tax_ledger_entries
-      SET filing_status = 'draft'
-      WHERE filing_status IS NULL OR btrim(filing_status) = ''
-    $sql$;
-
-    EXECUTE $sql$
-      UPDATE public.withholding_tax_ledger_entries
-      SET submitted_at = NULL,
-          submitted_by = NULL
-      WHERE filing_status <> 'submitted'
-    $sql$;
-
-    IF NOT EXISTS (
-      SELECT 1
-      FROM pg_constraint
-      WHERE conname = 'withholding_tax_ledger_entries_filing_status_check'
-    ) THEN
-      EXECUTE $sql$
-        ALTER TABLE public.withholding_tax_ledger_entries
-          ADD CONSTRAINT withholding_tax_ledger_entries_filing_status_check
-          CHECK (filing_status IS NULL OR filing_status IN ('draft', 'submitted'))
-      $sql$;
-    END IF;
-
-    EXECUTE $sql$
-      CREATE INDEX IF NOT EXISTS idx_wht_ledger_filing_status
-        ON public.withholding_tax_ledger_entries (tax_month, filing_status)
-    $sql$;
-  ELSE
-    RAISE NOTICE 'SKIP: public.withholding_tax_ledger_entries not found. Run accounting_compliance_extensions.sql first.';
-  END IF;
-END $$;
-
--- ============================================================
--- [3/4] interior_management_upgrade.sql
--- ============================================================
--- 인테리어 관리 고도화 (공정/업체/배치/자재)
--- 기존 interior_* 테이블과 독립적으로 추가되며 project_id 기준으로 조회한다.
-
-CREATE TABLE IF NOT EXISTS interior_work_packages (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  project_id bigint NOT NULL,
-  part_type text NOT NULL DEFAULT '',
-  title text NOT NULL DEFAULT '',
-  description text,
-  start_date date,
-  end_date date,
-  status text NOT NULL DEFAULT 'planned',
-  progress_pct numeric(5,2) NOT NULL DEFAULT 0,
-  color text,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+-- 1) 테이블이 아예 없을 때: 최소 스키마 (기존 supabase_pos_printer_settings.sql 과 동일 계열)
+CREATE TABLE IF NOT EXISTS public.pos_printer_settings (
+  store_code text NOT NULL PRIMARY KEY,
+  kitchen_mode integer DEFAULT 1,
+  kitchen1_categories jsonb DEFAULT '[]'::jsonb,
+  kitchen2_categories jsonb DEFAULT '[]'::jsonb,
+  updated_at timestamptz DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_interior_work_packages_project
-  ON interior_work_packages (project_id, sort_order, id);
-CREATE INDEX IF NOT EXISTS idx_interior_work_packages_dates
-  ON interior_work_packages (project_id, start_date, end_date);
+-- 2) Windows 하이브리드 절단 설정 (관리자 POS 프린터 설정 UI)
+ALTER TABLE public.pos_printer_settings
+  ADD COLUMN IF NOT EXISTS esc_pos_cut_after_kitchen_html boolean DEFAULT true,
+  ADD COLUMN IF NOT EXISTS esc_pos_cut_after_hall_order_html boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS esc_pos_cut_after_payment_receipt_html boolean DEFAULT false;
 
-ALTER TABLE interior_work_packages
-  DROP CONSTRAINT IF EXISTS chk_interior_work_packages_status;
-ALTER TABLE interior_work_packages
-  ADD CONSTRAINT chk_interior_work_packages_status
-  CHECK (status IN ('planned', 'in_progress', 'blocked', 'done', 'cancelled'));
-
-ALTER TABLE interior_work_packages
-  DROP CONSTRAINT IF EXISTS chk_interior_work_packages_progress_pct;
-ALTER TABLE interior_work_packages
-  ADD CONSTRAINT chk_interior_work_packages_progress_pct
-  CHECK (progress_pct >= 0 AND progress_pct <= 100);
-
-CREATE TABLE IF NOT EXISTS interior_vendor_tracks (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  project_id bigint NOT NULL,
-  vendor_name text NOT NULL DEFAULT '',
-  vendor_code text,
-  work_package_id bigint REFERENCES interior_work_packages(id) ON DELETE SET NULL,
-  payment_due_date date,
-  payment_paid_date date,
-  material_eta_date date,
-  material_received_date date,
-  work_completed_date date,
-  status text NOT NULL DEFAULT 'planned',
-  amount numeric(14,2) NOT NULL DEFAULT 0,
-  note text,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_interior_vendor_tracks_project
-  ON interior_vendor_tracks (project_id, sort_order, id);
-CREATE INDEX IF NOT EXISTS idx_interior_vendor_tracks_work_package
-  ON interior_vendor_tracks (work_package_id);
-
-ALTER TABLE interior_vendor_tracks
-  DROP CONSTRAINT IF EXISTS chk_interior_vendor_tracks_status;
-ALTER TABLE interior_vendor_tracks
-  ADD CONSTRAINT chk_interior_vendor_tracks_status
-  CHECK (status IN ('planned', 'ordered', 'paid', 'received', 'done', 'delayed', 'cancelled'));
-
-CREATE TABLE IF NOT EXISTS interior_layout_items (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  project_id bigint NOT NULL,
-  zone text NOT NULL DEFAULT 'hall',
-  floor text,
-  x numeric(10,2) NOT NULL DEFAULT 0,
-  y numeric(10,2) NOT NULL DEFAULT 0,
-  w numeric(10,2) NOT NULL DEFAULT 1,
-  h numeric(10,2) NOT NULL DEFAULT 1,
-  rotation numeric(6,2) NOT NULL DEFAULT 0,
-  item_name text NOT NULL DEFAULT '',
-  qty numeric(10,2) NOT NULL DEFAULT 1,
-  status text NOT NULL DEFAULT 'planned',
-  material_spec_id bigint,
-  note text,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_interior_layout_items_project
-  ON interior_layout_items (project_id, zone, sort_order, id);
-
-ALTER TABLE interior_layout_items
-  DROP CONSTRAINT IF EXISTS chk_interior_layout_items_zone;
-ALTER TABLE interior_layout_items
-  ADD CONSTRAINT chk_interior_layout_items_zone
-  CHECK (zone IN ('kitchen', 'hall'));
-
-ALTER TABLE interior_layout_items
-  DROP CONSTRAINT IF EXISTS chk_interior_layout_items_status;
-ALTER TABLE interior_layout_items
-  ADD CONSTRAINT chk_interior_layout_items_status
-  CHECK (status IN ('planned', 'ordered', 'installed', 'done', 'blocked'));
-
-CREATE TABLE IF NOT EXISTS interior_material_specs (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  project_id bigint NOT NULL,
-  material_code text,
-  material_name text NOT NULL DEFAULT '',
-  spec text,
-  supplier text,
-  unit text,
-  unit_cost numeric(14,2) NOT NULL DEFAULT 0,
-  image_url text,
-  location text,
-  note text,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_interior_material_specs_project
-  ON interior_material_specs (project_id, sort_order, id);
-
-ALTER TABLE interior_layout_items
-  DROP CONSTRAINT IF EXISTS fk_interior_layout_items_material_spec_id;
-ALTER TABLE interior_layout_items
-  ADD CONSTRAINT fk_interior_layout_items_material_spec_id
-  FOREIGN KEY (material_spec_id) REFERENCES interior_material_specs(id) ON DELETE SET NULL;
-
--- 레이아웃 편집 사용자 기본값(복제 오프셋 등) - 프로젝트/존/사용자 단위
-CREATE TABLE IF NOT EXISTS interior_layout_editor_prefs (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  project_id bigint NOT NULL,
-  zone text NOT NULL DEFAULT 'kitchen',
-  user_key text NOT NULL,
-  user_store text,
-  user_name text,
-  employee_id bigint,
-  duplicate_offset_x numeric(10,2) NOT NULL DEFAULT 0.5,
-  duplicate_offset_y numeric(10,2) NOT NULL DEFAULT 0.5,
-  snap_enabled boolean NOT NULL DEFAULT true,
-  snap_step numeric(10,2) NOT NULL DEFAULT 0.5,
-  nudge_small numeric(10,2) NOT NULL DEFAULT 0.1,
-  nudge_medium numeric(10,2) NOT NULL DEFAULT 0.5,
-  nudge_large numeric(10,2) NOT NULL DEFAULT 1.0,
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS duplicate_offset_x numeric(10,2) NOT NULL DEFAULT 0.5;
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS duplicate_offset_y numeric(10,2) NOT NULL DEFAULT 0.5;
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS snap_enabled boolean NOT NULL DEFAULT true;
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS snap_step numeric(10,2) NOT NULL DEFAULT 0.5;
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS nudge_small numeric(10,2) NOT NULL DEFAULT 0.1;
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS nudge_medium numeric(10,2) NOT NULL DEFAULT 0.5;
-ALTER TABLE interior_layout_editor_prefs
-  ADD COLUMN IF NOT EXISTS nudge_large numeric(10,2) NOT NULL DEFAULT 1.0;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_interior_layout_editor_prefs_scope
-  ON interior_layout_editor_prefs (project_id, zone, user_key);
-
-CREATE INDEX IF NOT EXISTS idx_interior_layout_editor_prefs_lookup
-  ON interior_layout_editor_prefs (project_id, zone, user_store, user_name);
-
-ALTER TABLE interior_layout_editor_prefs
-  DROP CONSTRAINT IF EXISTS chk_interior_layout_editor_prefs_zone;
-ALTER TABLE interior_layout_editor_prefs
-  ADD CONSTRAINT chk_interior_layout_editor_prefs_zone
-  CHECK (zone IN ('kitchen', 'hall'));
-
--- ============================================================
--- [4/4] pos_hardening_phase2.sql
--- ============================================================
--- POS 고도화 2차: 프린터 설정 감사로그 + POS 기간집계 RPC
--- Supabase SQL Editor에서 실행 (idempotent)
-
-BEGIN;
-
--- 1) POS 프린터 설정 감사 로그
-CREATE TABLE IF NOT EXISTS public.pos_printer_settings_audit_logs (
-  id BIGSERIAL PRIMARY KEY,
-  store_code TEXT NOT NULL,
-  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  changed_by TEXT NULL,
-  changed_role TEXT NULL,
-  changed_keys_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-  before_json JSONB NULL,
-  after_json JSONB NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pos_printer_settings_audit_logs_store_changed
-  ON public.pos_printer_settings_audit_logs(store_code, changed_at DESC);
-
-ALTER TABLE public.pos_printer_settings_audit_logs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow all pos_printer_settings_audit_logs" ON public.pos_printer_settings_audit_logs;
-CREATE POLICY "Allow all pos_printer_settings_audit_logs" ON public.pos_printer_settings_audit_logs
-  FOR ALL USING (true) WITH CHECK (true);
-
--- 2) POS 기간 집계용 RPC (앱 메모리 집계 전 단계 행 조회)
-CREATE OR REPLACE FUNCTION public.get_pos_sales_period_rows(
-  p_start_utc TIMESTAMPTZ,
-  p_end_utc_exclusive TIMESTAMPTZ,
-  p_store_codes TEXT[] DEFAULT NULL,
-  p_limit INT DEFAULT 50000
-)
-RETURNS TABLE (
-  created_at TIMESTAMPTZ,
-  total NUMERIC,
-  subtotal NUMERIC,
-  vat NUMERIC,
-  discount_amt NUMERIC,
-  coupon_discount_amt NUMERIC,
-  guest_count INTEGER,
-  store_code TEXT,
-  status TEXT,
-  order_type TEXT
-)
-LANGUAGE plpgsql
-STABLE
-AS $$
-DECLARE
-  v_has_total boolean;
-  v_has_total_amount boolean;
-  v_has_subtotal boolean;
-  v_has_vat boolean;
-  v_has_discount_amt boolean;
-  v_has_coupon_discount_amt boolean;
-  v_has_guest_count boolean;
-  v_has_store_code boolean;
-  v_has_store_name boolean;
-  v_has_status boolean;
-  v_has_order_type boolean;
-  v_total_expr text;
-  v_subtotal_expr text;
-  v_vat_expr text;
-  v_discount_expr text;
-  v_coupon_discount_expr text;
-  v_guest_count_expr text;
-  v_store_expr text;
-  v_status_expr text;
-  v_order_type_expr text;
-  v_sql text;
-BEGIN
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'total'
-  ) INTO v_has_total;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'total_amount'
-  ) INTO v_has_total_amount;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'subtotal'
-  ) INTO v_has_subtotal;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'vat'
-  ) INTO v_has_vat;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'discount_amt'
-  ) INTO v_has_discount_amt;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'coupon_discount_amt'
-  ) INTO v_has_coupon_discount_amt;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'guest_count'
-  ) INTO v_has_guest_count;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'store_code'
-  ) INTO v_has_store_code;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'store_name'
-  ) INTO v_has_store_name;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'status'
-  ) INTO v_has_status;
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'order_type'
-  ) INTO v_has_order_type;
-
-  v_total_expr := 'COALESCE((o.payload->>''total'')::numeric, (o.payload->>''totalAmount'')::numeric, 0)';
-  IF v_has_total THEN
-    v_total_expr := 'COALESCE(o.total, ' || v_total_expr || ')';
-  ELSIF v_has_total_amount THEN
-    v_total_expr := 'COALESCE(o.total_amount, ' || v_total_expr || ')';
-  END IF;
-
-  v_subtotal_expr := 'COALESCE((o.payload->>''subtotal'')::numeric, 0)';
-  IF v_has_subtotal THEN
-    v_subtotal_expr := 'COALESCE(o.subtotal, ' || v_subtotal_expr || ')';
-  END IF;
-
-  v_vat_expr := 'COALESCE((o.payload->>''vat'')::numeric, (o.payload->>''vatFeeAmt'')::numeric, 0)';
-  IF v_has_vat THEN
-    v_vat_expr := 'COALESCE(o.vat, ' || v_vat_expr || ')';
-  END IF;
-
-  v_discount_expr := 'COALESCE((o.payload->>''discountAmt'')::numeric, (o.payload->>''discount_amt'')::numeric, 0)';
-  IF v_has_discount_amt THEN
-    v_discount_expr := 'COALESCE(o.discount_amt, ' || v_discount_expr || ')';
-  END IF;
-
-  v_coupon_discount_expr := 'COALESCE((o.payload->>''couponDiscountAmt'')::numeric, (o.payload->>''coupon_discount_amt'')::numeric, 0)';
-  IF v_has_coupon_discount_amt THEN
-    v_coupon_discount_expr := 'COALESCE(o.coupon_discount_amt, ' || v_coupon_discount_expr || ')';
-  END IF;
-
-  v_guest_count_expr := 'COALESCE((o.payload->>''guestCount'')::integer, (o.payload->>''guest_count'')::integer, 0)';
-  IF v_has_guest_count THEN
-    v_guest_count_expr := 'COALESCE(o.guest_count, ' || v_guest_count_expr || ')';
-  END IF;
-
-  IF v_has_store_code THEN
-    v_store_expr := 'COALESCE(o.store_code, '''')';
-  ELSIF v_has_store_name THEN
-    v_store_expr := 'COALESCE(o.store_name, '''')';
-  ELSE
-    v_store_expr := 'COALESCE((o.payload->>''storeCode''), (o.payload->>''store_code''), '''')';
-  END IF;
-
-  IF v_has_status THEN
-    v_status_expr := 'COALESCE(o.status, '''')';
-  ELSE
-    v_status_expr := 'COALESCE((o.payload->>''status''), '''')';
-  END IF;
-
-  IF v_has_order_type THEN
-    v_order_type_expr := 'COALESCE(o.order_type, '''')';
-  ELSE
-    v_order_type_expr := 'COALESCE((o.payload->>''orderType''), (o.payload->>''order_type''), '''')';
-  END IF;
-
-  v_sql := '
-    SELECT
-      o.created_at,
-      (' || v_total_expr || ')::numeric AS total,
-      (' || v_subtotal_expr || ')::numeric AS subtotal,
-      (' || v_vat_expr || ')::numeric AS vat,
-      (' || v_discount_expr || ')::numeric AS discount_amt,
-      (' || v_coupon_discount_expr || ')::numeric AS coupon_discount_amt,
-      (' || v_guest_count_expr || ')::integer AS guest_count,
-      (' || v_store_expr || ')::text AS store_code,
-      (' || v_status_expr || ')::text AS status,
-      (' || v_order_type_expr || ')::text AS order_type
-    FROM public.pos_orders o
-    WHERE o.created_at >= $1
-      AND o.created_at < $2
-      AND (
-        $3 IS NULL
-        OR COALESCE(array_length($3, 1), 0) = 0
-        OR (' || v_store_expr || ') = ANY ($3)
-      )
-    ORDER BY o.created_at ASC
-    LIMIT GREATEST(1, LEAST(COALESCE($4, 50000), 100000))
-  ';
-
-  RETURN QUERY EXECUTE v_sql USING p_start_utc, p_end_utc_exclusive, p_store_codes, p_limit;
-END;
-$$;
-
-COMMIT;
+COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_kitchen_html IS
+  'Windows 설치형 POS: 주방 주문서 인쇄 후 ESC/POS 절단';
+COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_hall_order_html IS
+  'Windows 설치형 POS: 홀/터미널 주문서 인쇄 후 절단';
+COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_payment_receipt_html IS
+  'Windows 설치형 POS: 결제 영수증 인쇄 후 절단';
