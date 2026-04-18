@@ -332,6 +332,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           setLoadError("SERVER_ERROR")
           const probeOk = await runReachabilityProbe()
           setLoginListProbeOk(probeOk)
+          if (probeOk) setBrowserOnline(true)
         } else {
           setLoadError(null)
         }
@@ -340,6 +341,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         const msg = e instanceof Error ? e.message : String(e)
         const probeOk = await runReachabilityProbe()
         setLoginListProbeOk(probeOk)
+        if (probeOk) setBrowserOnline(true)
         setLoadError(
           msg.includes("연결") || msg.includes("시간 초과") || msg.includes("fetch") || msg.includes("Failed")
             ? "SERVER_ERROR"
@@ -590,17 +592,18 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    * 매장 목록이 있거나(api/cache 성공) 서버에서 빈 목록을 준 경우에도 연결 실패 배너를 띄우지 않음.
    */
   const listFromServerOk = loginDataSource === "api" || loginDataSource === "cache"
+  /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 — !offlineResume 로 배너를 막지 않음 */
   const showServerUnreachableBanner =
-    !offlineResume &&
-    (serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk))
+    serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
   /** 동일 출처 프로브 성공 + 목록 API만 실패 — 긴 PIN·오프라인 안내 대신 짧은 안내 */
   const useSoftListFailureCopy = Boolean(showServerUnreachableBanner && loginListProbeOk === true)
   const useSoftSubmitNetworkCopy = Boolean(errorIsConnectivity && loginListProbeOk === true)
   /**
-   * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷 있고, 브라우저가 오프라인이며, 매장 목록도 못 받은 경우.
-   * (일부 환경에서 navigator.onLine 이 거짓 false → 목록은 실제로 받아졌으면 폼을 보여 줌)
+   * 전용「오프라인 모드로 들어가기」전체 화면: 진짜 망 단절에 가깝고(목록 실패 배너가 아님), 스냅샷·오프라인·목록 없음.
+   * 목록 API 오류/타임아웃(serverListDegraded)이면 재시도 폼을 보여야 하므로 여기서 막지 않음.
    */
-  const offlineOnlyScreen = Boolean(offlineResume) && !browserOnline && !listLoadedOk
+  const offlineOnlyScreen =
+    Boolean(offlineResume) && !browserOnline && !listLoadedOk && !serverListDegraded
   /** 온라인 + 매장 목록 정상이면 일반 로그인만 — 스냅샷이 있어도「오프라인으로」배너 숨김 */
   const showOfflineResumeBanner =
     Boolean(offlineResume) &&
