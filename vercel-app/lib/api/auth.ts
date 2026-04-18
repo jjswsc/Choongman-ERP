@@ -1,5 +1,22 @@
 import { apiFetch } from './fetch'
 
+/** 본문이 JSON이 아닐 때(502 HTML 등) 명시적 오류 */
+async function readJsonOrThrow(res: Response, label: string): Promise<Record<string, unknown>> {
+  const text = await res.text()
+  if (!text.trim()) {
+    throw new Error(`${label} (${res.status})`)
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    throw new Error(
+      res.ok
+        ? `${label}: 서버 응답 형식 오류`
+        : `${label} 실패 (HTTP ${res.status})`
+    )
+  }
+}
+
 export async function getLoginData() {
   const res = await apiFetch('/api/getLoginData')
   let data: { users?: Record<string, string[]>; vendors?: string[]; error?: string }
@@ -25,7 +42,7 @@ export async function loginCheck(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{
+  const data = (await readJsonOrThrow(res, 'loginCheck')) as {
     success: boolean
     message?: string
     companyName?: string
@@ -37,7 +54,9 @@ export async function loginCheck(params: {
     employeeId?: number
     employeeCode?: string
     allowedStores?: string[]
-  }>
+    code?: string
+  }
+  return data
 }
 
 export async function changePassword(params: {
@@ -52,5 +71,5 @@ export async function changePassword(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return (await readJsonOrThrow(res, 'changePassword')) as { success: boolean; message?: string }
 }

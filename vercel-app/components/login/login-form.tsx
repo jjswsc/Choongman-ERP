@@ -219,7 +219,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return erpLandingPath
   }, [loginApp, erpLandingPath])
 
-  const effectiveIsAdminPage = loginApp === "erp"
+  /** SaaS 관리 로그인은 탭과 무관하게 항상 관리자 권한 검증 — 이전: mobile/POS 탭이면 isAdminPage false로 잘못 전달됨 */
+  const effectiveIsAdminPage =
+    normalizeLoginPathname(pathname) === "/saas-admin/login" ? true : loginApp === "erp"
   const isAdminLoginRoute = pathname === "/admin/login" || pathname === "/saas-admin/login"
 
   useEffect(() => {
