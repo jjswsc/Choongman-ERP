@@ -592,6 +592,12 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
    * 매장 목록이 있거나(api/cache 성공) 서버에서 빈 목록을 준 경우에도 연결 실패 배너를 띄우지 않음.
    */
   const listFromServerOk = loginDataSource === "api" || loginDataSource === "cache"
+  /**
+   * navigator.onLine 거짓·일시 오류와 무관하게, 서버/프로브로 온라인이면 오프라인 유도 UI를 숨김.
+   * (이전: 목록 API만 실패해도 serverListDegraded 로 에메랄드「오프라인으로」가 떠 사용자 혼란)
+   */
+  const treatAsOnline =
+    browserOnline || loginListProbeOk === true || listFromServerOk
   /** 목록 API 실패 시에도 이전 스냅샷이 있으면 재시도·안내가 필요 — !offlineResume 로 배너를 막지 않음 */
   const showServerUnreachableBanner =
     serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
@@ -599,17 +605,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const useSoftListFailureCopy = Boolean(showServerUnreachableBanner && loginListProbeOk === true)
   const useSoftSubmitNetworkCopy = Boolean(errorIsConnectivity && loginListProbeOk === true)
   /**
-   * 전용「오프라인 모드로 들어가기」전체 화면: 진짜 망 단절에 가깝고(목록 실패 배너가 아님), 스냅샷·오프라인·목록 없음.
-   * 목록 API 오류/타임아웃(serverListDegraded)이면 재시도 폼을 보여야 하므로 여기서 막지 않음.
+   * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷·목록 없음·오프라인으로만 보일 때.
+   * 서버/캐시로 목록 출처가 있거나 프로브 성공(treatAsOnline)이면 일반 폼 유지.
    */
   const offlineOnlyScreen =
-    Boolean(offlineResume) && !browserOnline && !listLoadedOk && !serverListDegraded
-  /** 온라인 + 매장 목록 정상이면 일반 로그인만 — 스냅샷이 있어도「오프라인으로」배너 숨김 */
+    Boolean(offlineResume) && !listLoadedOk && !serverListDegraded && !treatAsOnline
+  /**
+   * 이전 세션 오프라인 복귀 안내 — 실제로 오프라인일 때만(온라인인데 목록만 실패한 경우 제외).
+   */
   const showOfflineResumeBanner =
-    Boolean(offlineResume) &&
-    !offlineOnlyScreen &&
-    (!browserOnline || serverListDegraded) &&
-    !listLoadedOk
+    Boolean(offlineResume) && !offlineOnlyScreen && !listLoadedOk && !treatAsOnline
 
   const labels = {
     ko: {
@@ -987,7 +992,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             />
 
             {error &&
-              (errorIsConnectivity && offlineResume ? (
+              (errorIsConnectivity && offlineResume && !treatAsOnline ? (
                 <button
                   type="button"
                   onClick={() => {
