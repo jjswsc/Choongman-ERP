@@ -177,6 +177,67 @@ const crossOriginImageGetNetworkOnly = {
 }
 
 /**
+ * 로그인·인증 API와 로그인 문서는 SW 캐시 전략에 넣지 않음(NetworkOnly).
+ * defaultCache에 걸리면 SW 경유 fetch가 깨져 "Failed to fetch"가 나는 환경이 있음.
+ */
+const authLoginApisGetNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (!sameOrigin || request.method !== "GET") return false
+    return pathname === "/api/getLoginData" || pathname === "/api/online-probe"
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
+}
+
+const authLoginPostNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    return (
+      sameOrigin &&
+      (pathname === "/api/loginCheck" || pathname === "/api/changePassword") &&
+      request.method === "POST"
+    )
+  },
+  method: "POST" as const,
+  handler: new NetworkOnly(),
+}
+
+const loginPagesGetNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (!sameOrigin || request.method !== "GET") return false
+    return pathname === "/admin/login" || pathname === "/login" || pathname === "/pos/login"
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
+}
+
+/**
  * 메뉴 썸네일 동일 출처 프록시: fetch/img가 defaultCache에 걸리면 SW(sw.js) 경유 시
  * (canceled)/ERR_FAILED·빈 타일이 난다. 캐시하지 않고 항상 네트워크만 사용.
  */
@@ -233,10 +294,14 @@ const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
   clientsClaim: true,
-  navigationPreload: true,
+  /** true일 때 일부 브라우저에서 navigate fetch + SW 조합으로 Failed to fetch 로그가 남는 사례 있음 */
+  navigationPreload: false,
   /** posMenuImageProxy 는 href가 `...png`로 끝나 defaultCache 이미지 RegExp에도 걸릴 수 있어 반드시 최우선 등록 */
   runtimeCaching: [
     posMenuImageProxyGetNetworkOnly,
+    authLoginApisGetNetworkOnly,
+    authLoginPostNetworkOnly,
+    loginPagesGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,
     posWarmGetApis,

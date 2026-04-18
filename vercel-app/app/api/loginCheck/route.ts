@@ -13,6 +13,7 @@ import {
   fetchErpStoresMaster,
   pickBestEmployeeStoreMatch,
 } from '@/lib/erp-store-master'
+import { loginCheckFailureFromError } from '@/lib/login-check-error'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -125,11 +126,9 @@ export async function POST(req: NextRequest) {
     )
   } catch (e) {
     console.error('loginCheck:', e)
+    const { message, code } = loginCheckFailureFromError(e)
     return NextResponse.json(
-      {
-        success: false,
-        message: '서버에 일시적으로 연결할 수 없습니다. 인터넷 상태를 확인하고 잠시 후 다시 시도해 주세요.',
-      },
+      { success: false, message, ...(code ? { code } : {}) },
       { headers: new Headers({ 'Access-Control-Allow-Origin': '*' }) }
     )
   }
