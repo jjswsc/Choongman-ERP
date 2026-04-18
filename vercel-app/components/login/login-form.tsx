@@ -140,6 +140,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [error, setError] = useState("")
   /** 연결·서버 도달 실패 등 — 에러 칸 아래에 오프라인 CTA를 같이 띄움 */
   const [errorIsConnectivity, setErrorIsConnectivity] = useState(false)
+  /** loginCheck 호출이 브라우저에서 네트워크 예외로 끊긴 경우만 true(API JSON으로 실패 메시지를 받은 경우는 false) */
+  const [loginErrorFromClientFetch, setLoginErrorFromClientFetch] = useState(false)
   const { lang, setLang } = useLang()
   const tMsg = useT(lang)
 
@@ -272,6 +274,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const clearFormError = useCallback(() => {
     setError("")
     setErrorIsConnectivity(false)
+    setLoginErrorFromClientFetch(false)
   }, [])
 
   const fetchLoginData = useCallback(() => {
@@ -460,10 +463,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       } else {
         const apiMsg = res.message || ""
         if (isLoginCheckBackendFailureMessage(apiMsg)) {
-          setError(pickLoginStr(tMsg, "msg_login_network_error", lang))
-          setErrorIsConnectivity(true)
+          /** 응답 본문이 왔으므로 TCP/브라우저 단절이 아님 — 서버·DB·토큰 처리 등일 수 있음(연결 재시도 안내는 오해 소지) */
+          setErrorIsConnectivity(false)
+          setLoginErrorFromClientFetch(false)
+          setError(
+            translateApiMessage(apiMsg, tMsg) ||
+              pickLoginStr(tMsg, "msg_login_network_error", lang)
+          )
         } else {
           setErrorIsConnectivity(false)
+          setLoginErrorFromClientFetch(false)
           setError(translateApiMessage(apiMsg, tMsg) || apiMsg || tMsg("msg_login_failed"))
         }
       }
@@ -481,8 +490,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       if (isNetErr) {
         setError(pickLoginStr(tMsg, "msg_login_network_error", lang))
         setErrorIsConnectivity(true)
+        setLoginErrorFromClientFetch(true)
       } else {
         setErrorIsConnectivity(false)
+        setLoginErrorFromClientFetch(false)
         setError(tMsg("msg_server_error_prefix") + msg)
       }
     } finally {
@@ -603,7 +614,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     serverListDegraded || (!browserOnline && !listLoadedOk && !listFromServerOk)
   /** 동일 출처 프로브 성공 + 목록 API만 실패 — 긴 PIN·오프라인 안내 대신 짧은 안내 */
   const useSoftListFailureCopy = Boolean(showServerUnreachableBanner && loginListProbeOk === true)
-  const useSoftSubmitNetworkCopy = Boolean(errorIsConnectivity && loginListProbeOk === true)
+  const useSoftSubmitNetworkCopy = Boolean(
+    errorIsConnectivity && loginListProbeOk === true && loginErrorFromClientFetch
+  )
   /**
    * 전용「오프라인 모드로 들어가기」전체 화면: 스냅샷·목록 없음·오프라인으로만 보일 때.
    * 서버/캐시로 목록 출처가 있거나 프로브 성공(treatAsOnline)이면 일반 폼 유지.
