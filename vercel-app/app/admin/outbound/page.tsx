@@ -164,6 +164,7 @@ export default function OutboundPage() {
 
   const [outDate, setOutDate] = React.useState("")
   const [deliveryDate, setDeliveryDate] = React.useState("")
+  const [outReferenceNo, setOutReferenceNo] = React.useState("")
   const [outStore, setOutStore] = React.useState("")
   const [outQty, setOutQty] = React.useState("")
   const [cart, setCart] = React.useState<OutboundCartItem[]>([])
@@ -323,10 +324,14 @@ export default function OutboundPage() {
         spec: c.spec,
         qty: c.qty,
       }))
-      const res = await forceOutboundBatch(list, { processorName: auth?.user })
+      const res = await forceOutboundBatch(list, {
+        processorName: auth?.user,
+        referenceNo: outReferenceNo.trim() || undefined,
+      })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
         setCart([])
+        setOutReferenceNo("")
       } else {
         await appAlert(translateApiMessage(res.message, t) || t("outSaveFailed"))
       }
@@ -1120,6 +1125,17 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                           onChange={(e) => setDeliveryDate(e.target.value)}
                           className="mt-1 h-9"
                         />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("outReferenceNoLabel")}</label>
+                        <Input
+                          value={outReferenceNo}
+                          onChange={(e) => setOutReferenceNo(e.target.value)}
+                          className="mt-1 h-9"
+                          autoComplete="off"
+                          maxLength={200}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">{t("outReferenceNoHint")}</p>
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("outStore")}</label>

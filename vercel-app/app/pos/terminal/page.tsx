@@ -3064,6 +3064,7 @@ export default function PosTerminalPage() {
         itemBarcode={
           itemBarcode && receiptData?.receiptAutoPrintContext !== 'payment'
         }
+        printerSettingsRef={posPrinterSettingsRef}
       />
       <DeliveryEditOrderNoDialog
         open={deliveryEditOrderNoOpen}

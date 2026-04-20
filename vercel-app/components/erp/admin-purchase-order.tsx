@@ -180,6 +180,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   }, [cart])
   /** 본사(회계) 발주일 — 방콕 달력 YYYY-MM-DD */
   const [poOrderDate, setPoOrderDate] = React.useState(todayStrBangkok)
+  const [poReferenceNo, setPoReferenceNo] = React.useState("")
   const [withholdingTaxAmount, setWithholdingTaxAmount] = React.useState("")
   const [manualLineName, setManualLineName] = React.useState("")
   const [manualLinePrice, setManualLinePrice] = React.useState("")
@@ -657,6 +658,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         billingMonthYm: passBillingUpsert ? billingMonthYm : undefined,
         billingKind: passBillingUpsert ? billingIntentMode! : undefined,
         orderDate: allowManualLines && poOrderDate ? poOrderDate : undefined,
+        referenceNo: poReferenceNo.trim() || undefined,
       })
       if (res.success) {
         void invalidatePurchaseOrdersListCache()
@@ -668,6 +670,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             : t("purchaseOrderSuccess")
         await appAlert(msg + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
+        setPoReferenceNo("")
         setWithholdingTaxAmount("")
         setBillingIntentMode(null)
       } else {
@@ -840,6 +843,19 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             ) : null}
           </CardContent>
         </Card>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card px-4 py-3 space-y-2">
+        <label className="text-xs font-medium text-foreground">{t("poReferenceNoLabel")}</label>
+        <Input
+          className="h-9 max-w-md"
+          value={poReferenceNo}
+          onChange={(e) => setPoReferenceNo(e.target.value)}
+          placeholder={t("poReferenceNoPlaceholder")}
+          autoComplete="off"
+          maxLength={200}
+        />
+        <p className="text-xs text-muted-foreground">{t("poReferenceNoHint")}</p>
       </div>
 
       {allowManualLines ? (

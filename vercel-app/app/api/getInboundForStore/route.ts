@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { expandStoreVariantsForGrade, escapeForIlikeExact, storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purchase-synthetic'
 
-/** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) */
+/** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) + 통장 매입 지급 행 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -44,13 +46,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const locVariants = [...new Set(expandStoreVariantsForGrade(storeName).filter(Boolean))]
+    const orLoc =
+      locVariants.length === 0
+        ? ''
+        : locVariants.length === 1
+          ? `&location=ilike.${encodeURIComponent(escapeForIlikeExact(locVariants[0]))}`
+          : `&or=(${locVariants.map((v) => `location.ilike.${encodeURIComponent(escapeForIlikeExact(v))}`).join(',')})`
     const logs = (await supabaseSelectFilter(
       'stock_logs',
-      `location=ilike.${encodeURIComponent(storeName)}`,
-      { order: 'log_date.desc', limit: 400, select: 'log_date,log_type,vendor_target,item_code,item_name,qty,unit_cost' }
+      `log_type=in.(Inbound,ForcePush)${orLoc}`,
+      { order: 'log_date.desc', limit: 800, select: 'log_date,log_type,location,vendor_target,item_code,item_name,qty,unit_cost' }
     )) as {
       log_date?: string
       log_type?: string
+      location?: string
       vendor_target?: string
       item_code?: string
       item_name?: string
@@ -63,10 +73,23 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; purchaseSource?: 'hq' | 'store' }[] = []
+    const list: {
+      date: string
+      vendor: string
+      name: string
+      spec: string
+      qty: number
+      amount: number
+      purchaseSource?: 'hq' | 'store'
+      bank_transaction_id?: number
+      row_kind?: 'stock' | 'bank_purchase_payment'
+    }[] = []
     for (const row of logs || []) {
       const type = String(row.log_type || '')
       const note = String(row.vendor_target || '').trim()
+      const loc = String(row.location || '').trim()
+      if (!storesMatchForGradeLookup(loc, storeName)) continue
+
       const isInbound = type === 'Inbound'
       const isForcePushFromHq = type === 'ForcePush' && note === 'HQ'
       if (!isInbound && !isForcePushFromHq) continue
@@ -91,9 +114,37 @@ export async function GET(request: NextRequest) {
         qty,
         amount: unitCost * qty,
         purchaseSource: info.purchaseSource,
+        row_kind: 'stock',
       })
       if (list.length >= 300) break
     }
+
+    try {
+      const bankSynth = await fetchInboundBankPurchaseSyntheticRows({
+        startStr,
+        endStr,
+        storeFilter: storeName,
+        vendorFilter: vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' ? vendorFilter : undefined,
+        maxRows: 120,
+      })
+      for (const b of bankSynth) {
+        list.push({
+          date: b.date,
+          vendor: b.vendor,
+          name: b.name,
+          spec: b.spec,
+          qty: b.qty,
+          amount: b.amount,
+          purchaseSource: b.purchaseSource,
+          bank_transaction_id: b.bank_transaction_id,
+          row_kind: 'bank_purchase_payment',
+        })
+      }
+    } catch (e) {
+      console.error('getInboundForStore bank synthetic:', e)
+    }
+
+    list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 
     return NextResponse.json(list, { headers })
   } catch (e) {

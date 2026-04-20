@@ -63,7 +63,7 @@ export function buildPosTaxInvoiceThermalHtml(opts: {
     row(tr('posBranchLabel', '지점'), branchDisplay) +
     row(tr('settings_address', '주소'), taxInvoice.address) +
     row(tr('posPhone', '전화번호'), taxInvoice.phone) +
-    row(tr('posTaxEmailLabel', '이메일'), taxInvoice.email) +
+    row(tr('posTaxEmailLabel', 'E-mail'), taxInvoice.email) +
     '</div>'
   )
 }

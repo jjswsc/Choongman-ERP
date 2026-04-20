@@ -1915,7 +1915,7 @@ export default function PosOrderPage() {
                     <div>{tr("posBranchLabel", "지점")}: {parsedReceiptMemo.taxInvoice.branchNo || (parsedReceiptMemo.taxInvoice.customerType === "company" ? "00000" : tr("posHeadOffice", "본점"))}</div>
                     <div>{tr("settings_address", "주소")}: {parsedReceiptMemo.taxInvoice.address}</div>
                     <div>{tr("posPhone", "전화번호")}: {parsedReceiptMemo.taxInvoice.phone}</div>
-                    <div>{tr("posTaxEmailLabel", "이메일")}: {parsedReceiptMemo.taxInvoice.email}</div>
+                    <div>{tr("posTaxEmailLabel", "E-mail")}: {parsedReceiptMemo.taxInvoice.email}</div>
                   </div>
                 )}
                 <div className="space-y-1">

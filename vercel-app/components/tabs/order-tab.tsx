@@ -491,7 +491,11 @@ export function OrderTab() {
           const p = presign.json as { success?: boolean; signedUrl?: string; publicUrl?: string; message?: string }
           if (!presign.res.ok || !p?.success || !p?.signedUrl || !p?.publicUrl) continue
           const { putFileToSupabaseSignedUploadUrl } = await import("@/lib/storage-client-upload")
-          const putRes = await putFileToSupabaseSignedUploadUrl(p.signedUrl, blob, { upsert: false })
+          // 기본 120초 대기는 모바일에서 “로딩 멈춤”으로 보일 수 있어 수령 증빙 업로드만 짧게 제한
+          const putRes = await putFileToSupabaseSignedUploadUrl(p.signedUrl, blob, {
+            upsert: false,
+            timeoutMs: 35000,
+          })
           if (!putRes.ok) continue
           uploadedImageUrls.push(String(p.publicUrl))
         } catch {

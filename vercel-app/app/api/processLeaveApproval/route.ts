@@ -52,9 +52,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rowType = String(rows[0].type || '').trim()
-    const isSick = rowType.indexOf('병가') !== -1 || rowType.toLowerCase().indexOf('sick') !== -1
-    const isLakij = rowType.indexOf('ลากิจ') !== -1 || rowType.toLowerCase().indexOf('lakij') !== -1
     const isReject = decision === '반려' || decision === 'Rejected'
     const rejectReason = body?.rejectReason != null ? String(body.rejectReason).trim() : ''
 
@@ -65,14 +62,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let status = decision === '승인' || decision === 'Approved' ? '승인' : '반려'
-    let type: string | undefined
-    if (isReject && (isSick || isLakij)) {
-      type = '무급휴가'
-      status = '승인'
-    }
+    const status = decision === '승인' || decision === 'Approved' ? '승인' : '반려'
 
-    const updatePayload: Record<string, unknown> = type != null ? { type, status } : { status }
+    const updatePayload: Record<string, unknown> = { status }
     if (isReject) updatePayload.reject_reason = rejectReason
     await supabaseUpdate('leave_requests', id, updatePayload)
 

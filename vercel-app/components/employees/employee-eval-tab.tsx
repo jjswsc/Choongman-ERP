@@ -73,6 +73,8 @@ export type EmployeeEvalJumpTarget = {
   name: string
   nick: string
   job: string
+  /** 평가 저장 시의 유형(경고·사건 바로가기 등). 있으면 직무 추정보다 우선 */
+  evalType?: "kitchen" | "service" | "manager"
 }
 
 function findEmployeeForEvalJump(
@@ -206,14 +208,11 @@ export function EmployeeEvalTab({
     return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
   }, [stores, storesFromEvalDb])
 
-  const lastHandledEvalJumpKey = React.useRef<number | null>(null)
   React.useEffect(() => {
-    if (!jumpToEmployee) {
-      lastHandledEvalJumpKey.current = null
-      return
-    }
-    if (lastHandledEvalJumpKey.current === jumpToEmployee.key) return
-    lastHandledEvalJumpKey.current = jumpToEmployee.key
+    if (!jumpToEmployee) return
+    /** 상위 `allEmployees`가 비동기로 채워지기 전에 점프하면 매칭 실패·payload 소비만 되고 끝남 → 목록이 올 때까지 대기 */
+    if (employees.length === 0) return
+
     const jump = {
       store: jumpToEmployee.store,
       name: jumpToEmployee.name,
@@ -224,8 +223,9 @@ export function EmployeeEvalTab({
     const pickedStore =
       storeOptionsForEval.find((s) => storesMatchForGradeLookup(s, jStore)) || jStore
     const match = findEmployeeForEvalJump(employees, jump)
-    const jobForType = String(match?.job || jump.job || "").trim()
-    const nextType = evalTypeFromJobLabel(jobForType)
+    const nextType =
+      jumpToEmployee.evalType ??
+      (match ? deriveEvalTypeFromEmployee(match) : evalTypeFromJobLabel(String(jump.job || "")))
     setEvalStore(pickedStore)
     setEvalScope(nextType)
     if (match) {
@@ -236,14 +236,15 @@ export function EmployeeEvalTab({
       void appAlert(t("eval_jump_not_found"))
     }
     onJumpToEmployeeConsumed?.()
-  }, [jumpToEmployee, employees, storeOptionsForEval, onJumpToEmployeeConsumed])
+  }, [jumpToEmployee, employees, storeOptionsForEval, onJumpToEmployeeConsumed, t])
 
+  /** 매장 매니저: 최초에만 본인 매장을 기본 선택. 경고·사건에서 평가 탭으로 점프할 때는 매장을 덮어쓰지 않음 */
   React.useEffect(() => {
     const isManager = isManagerRole(auth?.role || "")
     const userStore = (auth?.store || "").trim()
-    if (isManager && userStore && storeOptionsForEval.some((s) => storesMatchForGradeLookup(s, userStore))) {
-      setEvalStore(userStore)
-    }
+    if (!isManager || !userStore) return
+    if (!storeOptionsForEval.some((s) => storesMatchForGradeLookup(s, userStore))) return
+    setEvalStore((prev) => (String(prev).trim() ? prev : userStore))
   }, [auth?.role, auth?.store, storeOptionsForEval])
   const [userTextTrans, setUserTextTrans] = React.useState<{
     totalMemo: string
@@ -275,14 +276,11 @@ export function EmployeeEvalTab({
   }, [employeesAtStore, evalScope])
 
   React.useEffect(() => {
-    setEvalEmployee("")
-  }, [evalScope])
-
-  React.useEffect(() => {
     if (!evalEmployee) return
+    if (employees.length === 0) return
     const ok = employeeList.some((e) => (e.name || "__unnamed__") === evalEmployee)
     if (!ok) setEvalEmployee("")
-  }, [employeeList, evalEmployee])
+  }, [employeeList, evalEmployee, employees.length])
 
   const selectedEmp = React.useMemo(
     () => employeeList.find((e) => (e.name || "__unnamed__") === evalEmployee),
@@ -769,7 +767,10 @@ export function EmployeeEvalTab({
             </label>
             <Select
               value={evalScope}
-              onValueChange={(v) => setEvalScope(v as EvalScope)}
+              onValueChange={(v) => {
+                setEvalScope(v as EvalScope)
+                setEvalEmployee("")
+              }}
             >
               <SelectTrigger className="h-8 w-[min(168px,36vw)] text-xs">
                 <SelectValue />

@@ -67,6 +67,9 @@ export async function POST(request: NextRequest) {
 
     const orderDateRaw = String(body.orderDate ?? body.order_date ?? '').trim().slice(0, 10)
     const orderDateNorm = /^\d{4}-\d{2}-\d{2}$/.test(orderDateRaw) ? orderDateRaw : ''
+    const referenceNoNorm = String(body.referenceNo ?? body.reference_no ?? '')
+      .trim()
+      .slice(0, 200)
 
     const meta: PoCartMeta | undefined =
       relatedStore ||
@@ -74,7 +77,8 @@ export async function POST(request: NextRequest) {
       storeVendorName ||
       poFormatLabel ||
       billingUpsertEligible ||
-      orderDateNorm
+      orderDateNorm ||
+      referenceNoNorm
         ? {
             relatedStore: relatedStore || undefined,
             storeVendorCode: storeVendorCode || undefined,
@@ -83,6 +87,7 @@ export async function POST(request: NextRequest) {
             billingMonthYm: billingUpsertEligible ? billingMonthYm : undefined,
             billingKind: billingUpsertEligible ? billingKindParsed! : undefined,
             orderDate: orderDateNorm || undefined,
+            referenceNo: referenceNoNorm || undefined,
           }
         : undefined
 

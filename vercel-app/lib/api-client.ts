@@ -892,6 +892,7 @@ export async function getLeavePendingList(params: {
     type: string
     date: string
     requestDate: string
+    requestTimeBangkok?: string
     reason: string
     status: string
     certificateUrl: string
@@ -8452,6 +8453,9 @@ export interface InboundHistoryItem {
   po_created_at?: string | null
   code?: string
   purchaseSource?: 'hq' | 'store'
+  /** 통장 매입 지급만 등록된 건(stock_logs 없음) */
+  bank_transaction_id?: number
+  row_kind?: 'stock' | 'bank_purchase_payment'
 }
 
 export interface InboundBatchDetail {
@@ -8598,9 +8602,17 @@ export async function forceOutboundBatch(
     spec?: string
     qty: number | string
   }[],
-  options?: { processorName?: string }
+  options?: { processorName?: string; referenceNo?: string }
 ) {
-  const payload = options?.processorName ? { list, processorName: options.processorName } : list
+  const ref = String(options?.referenceNo ?? '').trim()
+  const useObj = Boolean(options?.processorName) || ref.length > 0
+  const payload = useObj
+    ? {
+        list,
+        ...(options?.processorName ? { processorName: options.processorName } : {}),
+        ...(ref ? { referenceNo: ref } : {}),
+      }
+    : list
   const res = await apiFetchWithOffline('/api/forceOutboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -8952,6 +8964,225 @@ export async function getEvaluationDistinctStores(): Promise<{ stores: string[] 
 }
 
 /** 평가 이력 조회 */
+/** GET /api/getWarningLettersFromEvaluations — 평가 JSON 사건·경고 펼침 목록 */
+export type WarningLetterRegistryRow = {
+  id: number
+  store_name: string
+  employee_name: string
+  incident_date: string | null
+  incident_type: string
+  details: string
+  warning_letter_url: string | null
+  evaluator_name: string
+  approval_status: 'draft' | 'pending' | 'approved' | 'rejected'
+  approved_by: string | null
+  approved_at: string | null
+  rejected_reason: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type WarningLetterIncidentItem = {
+  source?: 'evaluation' | 'registry'
+  registryId?: number
+  /** 독립 건 등록자(표시명) — 재상신 버튼 노출 판단 등 */
+  createdBy?: string
+  approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected'
+  rejectedReason?: string
+  evaluationId: string
+  evalDate: string
+  evalType: 'kitchen' | 'service' | 'manager' | 'standalone'
+  store: string
+  employeeName: string
+  evaluator: string
+  finalGrade: string
+  incidentIndex: number
+  incidentType: string
+  incidentDate: string
+  details: string
+  warningLetterChecked: boolean
+  warningLetterUrl: string
+}
+
+export function mapWarningRegistryRowToIncident(row: WarningLetterRegistryRow): WarningLetterIncidentItem {
+  const st = row.approval_status
+  return {
+    source: 'registry',
+    registryId: row.id,
+    createdBy: row.created_by ? String(row.created_by) : undefined,
+    evaluationId: '',
+    evalDate: String(row.incident_date || row.created_at || '').slice(0, 10),
+    evalType: 'standalone',
+    store: row.store_name,
+    employeeName: row.employee_name,
+    evaluator: row.evaluator_name,
+    finalGrade: '',
+    incidentIndex: 0,
+    incidentType: row.incident_type,
+    incidentDate: String(row.incident_date || '').slice(0, 10),
+    details: row.details,
+    warningLetterChecked:
+      st === 'approved' || Boolean(String(row.warning_letter_url || '').trim()),
+    warningLetterUrl: String(row.warning_letter_url || '').trim(),
+    approvalStatus: st,
+    rejectedReason: row.rejected_reason ? String(row.rejected_reason) : '',
+  }
+}
+
+export async function getWarningLettersFromEvaluations(params: {
+  type: string
+  start?: string
+  end?: string
+  store?: string
+  employee?: string
+  evaluator?: string
+  /** false면 사건 행 전체(내용 있는 것만). 기본 true = 경고 발부·첨부 있는 행만 */
+  warningsOnly?: boolean
+}) {
+  const q = new URLSearchParams()
+  q.set('type', params.type || 'all')
+  if (params.start) q.set('start', params.start)
+  if (params.end) q.set('end', params.end)
+  if (params.store) q.set('store', params.store)
+  if (params.employee) q.set('employee', params.employee)
+  if (params.evaluator) q.set('evaluator', params.evaluator)
+  if (params.warningsOnly === false) q.set('warningsOnly', '0')
+  const res = await apiFetchWithOffline(`/api/getWarningLettersFromEvaluations?${q}`)
+  const data = (await res.json().catch(() => ({}))) as {
+    items?: WarningLetterIncidentItem[]
+    truncated?: boolean
+    pageCap?: number
+    error?: string
+  }
+  if (!res.ok) throw new Error(data.error || '조회 실패')
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    truncated: Boolean(data.truncated),
+    pageCap: typeof data.pageCap === 'number' ? data.pageCap : undefined,
+  }
+}
+
+export async function getWarningLetterRegistry(params: {
+  start?: string
+  end?: string
+  store?: string
+  employee?: string
+  evaluator?: string
+  approval?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.start) q.set('start', params.start)
+  if (params.end) q.set('end', params.end)
+  if (params.store) q.set('store', params.store)
+  if (params.employee) q.set('employee', params.employee)
+  if (params.evaluator) q.set('evaluator', params.evaluator)
+  if (params.approval) q.set('approval', params.approval)
+  const res = await apiFetchWithOffline(`/api/getWarningLetterRegistry?${q}`)
+  const data = (await res.json().catch(() => ({}))) as {
+    items?: WarningLetterRegistryRow[]
+    summary?: { draft: number; pending: number; approved: number; rejected: number }
+    truncated?: boolean
+    pageCap?: number
+    error?: string
+  }
+  if (!res.ok) throw new Error(data.error || '조회 실패')
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    summary: data.summary ?? { draft: 0, pending: 0, approved: 0, rejected: 0 },
+    truncated: Boolean(data.truncated),
+    pageCap: typeof data.pageCap === 'number' ? data.pageCap : undefined,
+  }
+}
+
+export async function saveWarningLetterRegistry(body: {
+  id?: number
+  store_name: string
+  employee_name: string
+  incident_date: string
+  incident_type?: string
+  details?: string
+  warning_letter_url?: string
+  evaluator_name?: string
+}) {
+  const res = await apiFetchWithOffline('/api/saveWarningLetterRegistry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function presignWarningLetterRegistryUpload(params: {
+  storeName: string
+  fileName: string
+  contentType: string
+  fileSize: number
+}) {
+  const res = await apiFetchWithOffline('/api/uploadWarningLetterRegistry/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeName: params.storeName,
+      fileName: params.fileName,
+      contentType: params.contentType,
+      fileSize: params.fileSize,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    signedUrl?: string
+    publicUrl?: string
+    storagePath?: string
+    message?: string
+  }>
+}
+
+/** presign 후 Supabase Storage에 직접 PUT (Vercel 경유 없음) */
+export async function uploadWarningLetterRegistryFile(file: File, storeName: string): Promise<{ publicUrl: string }> {
+  const presign = await presignWarningLetterRegistryUpload({
+    storeName,
+    fileName: file.name,
+    contentType: file.type || 'application/octet-stream',
+    fileSize: file.size,
+  })
+  if (!presign.success || !presign.signedUrl || !presign.publicUrl) {
+    throw new Error(presign.message || 'presign failed')
+  }
+  const put = await fetch(presign.signedUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+  })
+  if (!put.ok) {
+    const errText = await put.text().catch(() => '')
+    throw new Error(errText || `upload failed (${put.status})`)
+  }
+  return { publicUrl: presign.publicUrl }
+}
+
+export async function warningLetterRegistryAction(body: {
+  id: number
+  action: 'submit' | 'approve' | 'reject' | 'reopen'
+  rejectedReason?: string
+}) {
+  const res = await apiFetchWithOffline('/api/warningLetterRegistryAction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteWarningLetterRegistry(body: { id: number }) {
+  const res = await apiFetchWithOffline('/api/deleteWarningLetterRegistry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getEvaluationHistory(params: {
   type: string
   start?: string
@@ -9828,6 +10059,8 @@ export async function savePurchaseOrder(params: {
   billingKind?: 'royalty' | 'delivery_gp' | 'grab_gp' | 'all'
   /** 본사 발주일 YYYY-MM-DD(방콕). cart_json meta + created_at·PO번호 일자 반영 */
   orderDate?: string
+  /** 세금계산서·내부 참조번호 — cart_json meta */
+  referenceNo?: string
 }) {
   const res = await apiFetchWithOffline('/api/savePurchaseOrder', {
     method: 'POST',

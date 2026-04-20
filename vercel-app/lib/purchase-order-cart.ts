@@ -25,6 +25,8 @@ export type PoCartMeta = {
   billingKind?: PoBillingKind
   /** 본사(회계) 발주일 YYYY-MM-DD — 방콕 달력 */
   orderDate?: string
+  /** 세금계산서·내부 문서 참조번호 */
+  referenceNo?: string
 }
 
 export type PoCartPayloadV1 = {

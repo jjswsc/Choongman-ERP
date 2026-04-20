@@ -406,6 +406,12 @@ export default function InboundPage() {
     }
   }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
 
+  const formatInboundLineName = React.useCallback(
+    (it: InboundHistoryItem) =>
+      it.name === "__BANK_PURCHASE_PAYMENT__" ? t("inBankPurchasePaymentLabel") : it.name || "",
+    [t]
+  )
+
   const filteredHistoryList = React.useMemo(() => {
     if (!histPurchaseSource) return historyList
     return historyList.filter((i) => (i.purchaseSource ?? "hq") === histPurchaseSource)
@@ -415,7 +421,8 @@ export default function InboundPage() {
     const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
     for (const i of filteredHistoryList) {
       const batchId = i.inbound_batch_id
-      const k = batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
+      const bankId = i.bank_transaction_id
+      const k = bankId ? `banktx-${bankId}` : batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
         g[k] = { date: i.date, po_created_at: i.po_created_at, vendor: i.vendor, totalQty: 0, totalAmt: 0, items: [], inbound_batch_id: batchId, po_no: i.po_no, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
       }
@@ -434,10 +441,11 @@ export default function InboundPage() {
     if (!isOffice) return []
     return groupedHistory.map((g, i) => {
       const first = g.items[0]
+      const firstLine = formatInboundLineName(first)
       const itemsSummary =
         g.items.length === 1
-          ? `${first?.name || ""}${first?.spec ? ` (${first.spec})` : ""}`
-          : `${g.items[0]?.name || ""} ${t("inEtcCount")} ${g.items.length - 1}`
+          ? `${firstLine}${first?.spec ? ` (${first.spec})` : ""}`
+          : `${formatInboundLineName(g.items[0])} ${t("inEtcCount")} ${g.items.length - 1}`
       return {
         id: `g-${i}-${g.date}-${g.vendor}`,
         date: g.date,
@@ -448,7 +456,7 @@ export default function InboundPage() {
         invoiceNo: g.invoice_no ?? undefined,
         invoiceReceived: g.invoice_received,
         items: g.items.map((it) => ({
-          name: it.name || "",
+          name: formatInboundLineName(it),
           spec: it.spec || "",
           qty: it.qty || 0,
           amount: it.amount || 0,
@@ -458,18 +466,18 @@ export default function InboundPage() {
         totalAmt: g.totalAmt,
       }
     })
-  }, [groupedHistory, isOffice, t])
+  }, [groupedHistory, isOffice, t, formatInboundLineName])
 
   const storeRows = React.useMemo(
     () =>
       filteredHistoryList.map((i) => ({
         date: i.date,
         vendor: i.vendor,
-        item: `${i.name || ""}${i.spec ? ` (${i.spec})` : ""}`.trim() || "-",
+        item: `${formatInboundLineName(i)}${i.spec ? ` (${i.spec})` : ""}`.trim() || "-",
         qty: i.qty,
         amount: i.amount || 0,
       })),
-    [filteredHistoryList]
+    [filteredHistoryList, formatInboundLineName]
   )
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "guide">("new")

@@ -10,6 +10,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const bodyObj = Array.isArray(body) ? null : body && typeof body === 'object' ? (body as Record<string, unknown>) : null
+    const referenceNoBatch = bodyObj
+      ? String(bodyObj.referenceNo ?? bodyObj.reference_no ?? '')
+          .trim()
+          .slice(0, 200)
+      : ''
     const list = (Array.isArray(body) ? body : (body?.list || [])) as {
       date?: string
       deliveryDate?: string
@@ -63,6 +69,7 @@ export async function POST(request: NextRequest) {
       const invoiceUnit =
         snapPrice != null && Number.isFinite(snapPrice) && snapPrice >= 0 ? snapPrice : null
 
+      const refPatch = referenceNoBatch ? { reference_no: referenceNoBatch } : {}
       rows.push({
         location: store,
         item_code: code,
@@ -74,6 +81,7 @@ export async function POST(request: NextRequest) {
         log_type: 'ForcePush',
         delivery_status: deliveryDate,
         invoice_unit_price: invoiceUnit,
+        ...refPatch,
       })
       rows.push({
         location: '본사',
@@ -86,6 +94,7 @@ export async function POST(request: NextRequest) {
         log_type: 'ForceOutbound',
         delivery_status: deliveryDate,
         invoice_unit_price: invoiceUnit,
+        ...refPatch,
       })
     }
 

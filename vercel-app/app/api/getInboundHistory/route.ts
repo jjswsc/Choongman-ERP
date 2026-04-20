@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purchase-synthetic'
 
-/** 입고 내역 조회 - stock_logs log_type=Inbound (From HQ 제외) */
+/** 입고 내역 조회 - stock_logs log_type=Inbound (From HQ 제외) + 통장 매입 지급(품목 입고 없음) 보조 행 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -40,16 +42,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let locationFilter = 'log_type=eq.Inbound'
-    if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장') {
-      locationFilter += `&location=eq.${encodeURIComponent(storeFilter)}`
-    }
+    const locationFilter = 'log_type=eq.Inbound'
     const logs = (await supabaseSelectFilter(
       'stock_logs',
       locationFilter,
-      { order: 'log_date.desc', limit: 400, select: 'log_date,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id' }
+      { order: 'log_date.desc', limit: 800, select: 'log_date,location,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id' }
     )) as {
       log_date?: string
+      location?: string
       vendor_target?: string
       item_code?: string
       item_name?: string
@@ -63,9 +63,29 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; code?: string; purchaseSource?: 'hq' | 'store'; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }[] = []
+    const list: {
+      date: string
+      vendor: string
+      name: string
+      spec: string
+      qty: number
+      amount: number
+      code?: string
+      purchaseSource?: 'hq' | 'store'
+      inbound_batch_id?: number | null
+      po_no?: string | null
+      invoice_no?: string | null
+      invoice_received?: boolean
+      po_created_at?: string | null
+      bank_transaction_id?: number
+      row_kind?: 'stock' | 'bank_purchase_payment'
+    }[] = []
     for (const row of logs || []) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
+      const loc = String(row.location || '').trim()
+      if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장') {
+        if (!storesMatchForGradeLookup(loc, storeFilter)) continue
+      }
       const rowDate = row.log_date ? new Date(row.log_date) : null
       if (!rowDate || isNaN(rowDate.getTime())) continue
       if (rowDate < startD || rowDate > endD) continue
@@ -87,9 +107,39 @@ export async function GET(request: NextRequest) {
         code: code || undefined,
         purchaseSource: info.purchaseSource,
         inbound_batch_id: row.inbound_batch_id ?? undefined,
+        row_kind: 'stock',
       })
       if (list.length >= 300) break
     }
+
+    try {
+      const bankSynth = await fetchInboundBankPurchaseSyntheticRows({
+        startStr,
+        endStr,
+        storeFilter:
+          storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장' ? storeFilter : undefined,
+        vendorFilter: vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' ? vendorFilter : undefined,
+        maxRows: 120,
+      })
+      for (const b of bankSynth) {
+        list.push({
+          date: b.date,
+          vendor: b.vendor,
+          name: b.name,
+          spec: b.spec,
+          qty: b.qty,
+          amount: b.amount,
+          purchaseSource: b.purchaseSource,
+          inbound_batch_id: null,
+          bank_transaction_id: b.bank_transaction_id,
+          row_kind: 'bank_purchase_payment',
+        })
+      }
+    } catch (e) {
+      console.error('getInboundHistory bank synthetic:', e)
+    }
+
+    list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 
     const batchIds = [...new Set(list.map((r) => r.inbound_batch_id).filter((id): id is number => typeof id === 'number' && id > 0))]
     const batchMap: Record<number, { po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }> = {}

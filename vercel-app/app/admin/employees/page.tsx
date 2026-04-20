@@ -7,6 +7,7 @@ import {
   BarChart2,
   ClipboardList,
   ClipboardPenLine,
+  FileWarning,
   LayoutList,
   LineChart,
   ListChecks,
@@ -58,6 +59,7 @@ import {
   EmployeeMovementTab,
   EmployeeHeadcountTab,
   EmployeeJobCatalogTab,
+  EmployeeWarningLettersTab,
   emptyForm,
   type EmployeeTableRow,
   type EmployeeFormData,
@@ -538,6 +540,12 @@ export default function EmployeesPage() {
                     {t("tab_hr_eval")}
                   </TabsTrigger>
                 )}
+                {showEmployeeEvalTab && (
+                  <TabsTrigger value="warning-letters" className={adminTabsTriggerCn}>
+                    <FileWarning className={adminTabsIconCn} aria-hidden />
+                    {t("tab_hr_warning_letters")}
+                  </TabsTrigger>
+                )}
                 {showEvalAnalyticsTab && (
                   <TabsTrigger value="eval-analytics" className={adminTabsTriggerCn}>
                     <LineChart className={adminTabsIconCn} aria-hidden />
@@ -654,6 +662,26 @@ export default function EmployeesPage() {
                 onSaved={loadEmployeeList}
                 jumpToEmployee={evalJumpPayload}
                 onJumpToEmployeeConsumed={clearEvalJump}
+              />
+            </TabsContent>
+          )}
+          {showEmployeeEvalTab && (
+            <TabsContent value="warning-letters" className={adminTabsContentCn}>
+              <EmployeeWarningLettersTab
+                stores={storesForFilter}
+                employees={allEmployees}
+                onOpenEval={(target) => {
+                  if (target.evalType === "standalone") return
+                  setEvalJumpPayload({
+                    key: Date.now(),
+                    store: target.store,
+                    name: target.name,
+                    nick: target.nick,
+                    job: target.job,
+                    evalType: target.evalType,
+                  })
+                  setHrMainTab("eval")
+                }}
               />
             </TabsContent>
           )}

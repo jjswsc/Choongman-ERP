@@ -1,8 +1,8 @@
 'use client'
 import { appAlert } from "@/lib/app-message"
 
-import { useEffect, useRef } from 'react'
-import { getPosPrinterSettings } from '@/lib/api-client'
+import { useEffect, useRef, type RefObject } from 'react'
+import { getPosPrinterSettings, type PosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -135,6 +135,11 @@ interface PosReceiptModalProps {
   signatureLine?: boolean
   receiptBarcode?: boolean
   itemBarcode?: boolean
+  /**
+   * 매장에서 이미 불러 둔 프린터 설정(ref). 있으면 인쇄 클릭 시 await 없이 사용해
+   * 사용자 제스처가 만료되어 print()가 무시되는 것을 완화합니다.
+   */
+  printerSettingsRef?: RefObject<PosPrinterSettings | null>
 }
 
 export function PosReceiptModal({
@@ -171,6 +176,7 @@ export function PosReceiptModal({
   signatureLine = false,
   receiptBarcode = false,
   itemBarcode = false,
+  printerSettingsRef,
 }: PosReceiptModalProps) {
   const { lang } = useLang()
   const autoPrintedKeyRef = useRef<string>('')
@@ -259,7 +265,7 @@ export function PosReceiptModal({
           <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posBranchLabel', '지점'))}</span><span>${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</span></div>
           <div class="tax-invoice-row tax-invoice-addr"><span class="tax-invoice-label">${esc(tr('settings_address', '주소'))}</span><span>${esc(taxInvoice.address)}</span></div>
           <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posPhone', '전화번호'))}</span><span>${esc(taxInvoice.phone)}</span></div>
-          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxEmailLabel', '이메일'))}</span><span>${esc(taxInvoice.email)}</span></div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxEmailLabel', 'E-mail'))}</span><span>${esc(taxInvoice.email)}</span></div>
         </div>`
       : ''
     const printContent = `
@@ -390,7 +396,9 @@ export function PosReceiptModal({
         receiptData.receiptAutoPrintContext === 'order' || receiptData.receiptAutoPrintContext === 'add_order'
           ? 'hall_order'
           : 'payment'
-      const hw = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
+      const hw =
+        printerSettingsRef?.current ??
+        (await getPosPrinterSettings({ storeCode: receiptData.storeCode }))
       await printInIframe(fullHtml, t('posReceipt') || '영수증', preferSystemPrintDialog, {
         printRole: 'receipt',
         printReceiptKind,
@@ -404,7 +412,9 @@ export function PosReceiptModal({
   const handlePrintKitchenSlip = async (preferSystemPrintDialog = false) => {
     if (!receiptData || !receiptData.storeCode) return
     try {
-      const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
+      const settings =
+        printerSettingsRef?.current ??
+        (await getPosPrinterSettings({ storeCode: receiptData.storeCode }))
       const slipLabels = {
         unified: t('posKitchenOrder') || '주방 주문서',
         kitchen1: `${t('posKitchen1') || '주방 1'}`,

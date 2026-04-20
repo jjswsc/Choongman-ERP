@@ -901,16 +901,23 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
     });
     // #endregion
     fs.writeFileSync(tmpPath, htmlString, "utf8");
-    printWindow = new BrowserWindow({
+    const printWinOptions = {
       width: PRINT_HTML_OFFSCREEN_WIDTH,
       height: PRINT_HTML_OFFSCREEN_HEIGHT,
       show: false,
+      /** 매 인쇄마다 작업 표시줄 아이콘이 깜빡이지 않게 */
+      skipTaskbar: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
       },
-    });
+    };
+    /** 수동 인쇄(시스템 대화상자): 부모 없이 숨은 창만 쓰면 일부 Windows에서 대화상자가 안 뜨거나 뒤에 깔림 */
+    if (preferDialog && mainWindow && !mainWindow.isDestroyed()) {
+      printWinOptions.parent = mainWindow;
+    }
+    printWindow = new BrowserWindow(printWinOptions);
     try {
       printWindow.webContents.setZoomFactor(1);
     } catch {
@@ -921,6 +928,15 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
 
     if (preferDialog) {
       const printStage = "dialog_only";
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.focus();
+        }
+        /** 완전 비표시 창에서 print(silent:false) 호출 시 OS 인쇄 창이 생략되는 사례 완화 */
+        printWindow.showInactive();
+      } catch {
+        /* ignore */
+      }
       const r = await printWebContentsPromise(
         printWindow.webContents,
         getThermalHtmlDialogPrintOptions(resolvedDevice)

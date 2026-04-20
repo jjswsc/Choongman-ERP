@@ -9,6 +9,22 @@ function toDateStr(val: string | Date | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
+/** 신청 시각 표시용 (Asia/Bangkok, 24h) — 짧은 통지 판단용 */
+function formatRequestTimeBangkok(val: string | Date | null | undefined): string {
+  if (!val) return ''
+  const d = typeof val === 'string' ? new Date(val) : val
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-GB', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 function normEmployeeCode(c: string | null | undefined): string {
   return String(c ?? '')
     .trim()
@@ -177,6 +193,7 @@ export async function GET(request: NextRequest) {
       type: string
       date: string
       requestDate: string
+      requestTimeBangkok: string
       reason: string
       status: string
       certificateUrl: string
@@ -190,7 +207,9 @@ export async function GET(request: NextRequest) {
       if (typeFilter && typeFilter !== 'All' && typeFilter !== '전체' && rowType !== typeFilter) continue
 
       const dateStr = toDateStr(r.leave_date)
-      const requestDateStr = toDateStr(r.request_at || r.created_at)
+      const rawReqAt = r.request_at || r.created_at
+      const requestDateStr = toDateStr(rawReqAt)
+      const requestTimeBangkok = formatRequestTimeBangkok(rawReqAt)
 
       const filterBy = dateFilterType === 'request' ? requestDateStr : dateStr
       if (startStr && filterBy < startStr) continue
@@ -221,6 +240,7 @@ export async function GET(request: NextRequest) {
         type: String(r.type || '').trim(),
         date: dateStr,
         requestDate: requestDateStr,
+        requestTimeBangkok,
         reason: String(r.reason || '').trim(),
         status: rowStatus,
         certificateUrl: String(r.certificate_url || '').trim(),

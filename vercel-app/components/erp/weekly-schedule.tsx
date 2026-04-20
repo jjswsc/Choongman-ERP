@@ -12,6 +12,30 @@ import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/
 import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { normalizeEmployeeNameFields } from "@/lib/employee-display-name"
 import { cn, displayLabelShort } from "@/lib/utils"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
+
+/** 인쇄/PDF 상단에 표시 — 방콕(Asia/Bangkok) 기준 */
+function formatBangkokDateTimeForPrint(locale: string): string {
+  const loc =
+    locale === "th" ? "th-TH" : locale === "en" ? "en-US" : locale === "zh" ? "zh-CN" : "ko-KR"
+  try {
+    return new Intl.DateTimeFormat(loc, {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date())
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Bangkok",
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date())
+  }
+}
 
 /** 이보다 적게 움직이면 스크롤 드래그로 보지 않음 — 행 접기/펼치기 클릭과 공존 */
 const SCHEDULE_SCROLL_DRAG_ARM_PX = 10
@@ -83,6 +107,7 @@ interface WeeklyScheduleProps {
 export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: storeListProp = [], onStoreChange }: WeeklyScheduleProps) {
   const { auth } = useAuth()
   const { lang } = useLang()
+  const brand = useAppBrandConfig()
   const t = useT(lang)
   const [storeList, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
@@ -438,34 +463,94 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     setTimeout(() => {
     const area = document.getElementById("weekly-schedule-print-area")
     if (!area) return
+    const tsEl = document.getElementById("schedule-print-timestamp")
+    if (tsEl) tsEl.textContent = formatBangkokDateTimeForPrint(lang)
     const style = document.createElement("style")
     style.id = "schedule-print-style"
     style.textContent = `@media print {
-      @page { margin: 0.5in; }
+      @page { margin: 0.45in; }
       body * { visibility: hidden; }
       #weekly-schedule-print-area, #weekly-schedule-print-area * { visibility: visible; }
       #weekly-schedule-print-area { position: absolute; left: 0; top: 0; width: 100%; }
       .print\\:hidden { display: none !important; }
-      #weekly-schedule-print-area .print-schedule-header {
-        text-align: center;
-        font-size: 1.2rem;
-        font-weight: 800;
-        font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
-        letter-spacing: 0.03em;
+      #weekly-schedule-print-area .print-only-report-header {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        background: linear-gradient(180deg, #f1f5f9 0%, #ffffff 55%);
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 10px 12px 14px;
+        margin-bottom: 14px !important;
       }
-      #weekly-schedule-print-area .print-schedule-header p { margin: 0.4em 0; }
+      #weekly-schedule-print-area .print-report-timestamp {
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        color: #334155 !important;
+        letter-spacing: 0.02em;
+      }
+      #weekly-schedule-print-area .print-brand-title {
+        font-size: 15px !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.14em !important;
+        color: #0f172a !important;
+        margin: 0 !important;
+        font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans Thai", "Noto Sans KR", Pretendard, sans-serif !important;
+      }
+      #weekly-schedule-print-area .print-report-store,
+      #weekly-schedule-print-area .print-report-period {
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        color: #1e293b !important;
+        line-height: 1.35 !important;
+        margin: 0.35em 0 0 !important;
+        font-family: "Malgun Gothic", "Noto Sans Thai", "Noto Sans KR", sans-serif !important;
+      }
+      #weekly-schedule-print-area .print-report-period { font-size: 12.5px !important; font-weight: 700 !important; }
       #weekly-schedule-print-area .print-schedule-wrap { width: 100% !important; min-width: 100% !important; }
       #weekly-schedule-print-area .print-schedule-grid {
-        grid-template-columns: 72px repeat(7, 1fr) !important;
+        grid-template-columns: 96px repeat(7, minmax(0, 1fr)) !important;
         width: 100% !important;
       }
-      #weekly-schedule-print-area .print-schedule-person { padding: 4px 6px !important; min-height: 28px !important; gap: 2px !important; }
-      #weekly-schedule-print-area .print-schedule-slot { min-height: 24px !important; padding: 2px 4px !important; font-size: 10px !important; }
-      #weekly-schedule-print-area .print-schedule-slot-empty { min-height: 24px !important; font-size: 9px !important; }
-      #weekly-schedule-print-area .print-schedule-person-name { font-size: 10px !important; }
-      #weekly-schedule-print-area .print-schedule-person-area { font-size: 9px !important; }
-      #weekly-schedule-print-area .print-schedule-gap { gap: 4px !important; }
-      #weekly-schedule-print-area .print-schedule-card { border-radius: 4px !important; }
+      #weekly-schedule-print-area .print-schedule-col-head-day {
+        font-size: 12px !important;
+        font-weight: 900 !important;
+      }
+      #weekly-schedule-print-area .print-schedule-col-head-date {
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        opacity: 1 !important;
+        color: #475569 !important;
+      }
+      #weekly-schedule-print-area .print-schedule-person {
+        padding: 6px 8px !important;
+        min-height: 34px !important;
+        gap: 4px !important;
+      }
+      #weekly-schedule-print-area .print-schedule-slot {
+        min-height: 28px !important;
+        padding: 4px 5px !important;
+        font-size: 11.5px !important;
+      }
+      #weekly-schedule-print-area .print-schedule-slot-empty { min-height: 28px !important; font-size: 11px !important; }
+      #weekly-schedule-print-area .print-schedule-person-name { font-size: 13px !important; font-weight: 800 !important; color: #0f172a !important; }
+      #weekly-schedule-print-area .print-schedule-person-area { font-size: 10.5px !important; font-weight: 600 !important; color: #64748b !important; }
+      #weekly-schedule-print-area .print-schedule-gap { gap: 10px !important; }
+      #weekly-schedule-print-area .print-schedule-card {
+        border-radius: 6px !important;
+        border-color: #cbd5e1 !important;
+        break-inside: avoid;
+      }
+      #weekly-schedule-print-area .print-schedule-store-banner {
+        font-size: 12.5px !important;
+        font-weight: 800 !important;
+        color: #0f172a !important;
+        padding: 6px 8px !important;
+        background: #f1f5f9 !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 6px !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
     }`
     document.head.appendChild(style)
     window.print()
@@ -600,10 +685,23 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
       ) : (
         <>
           <div id="weekly-schedule-print-area">
-            {/* 인쇄용 상단 - 매장, 기간 (가운데 정렬, 제목 스타일) */}
-            <div className="hidden print:block print-schedule-header border-b border-border pb-3 mb-3 pt-1">
-              <p>{t("scheduleStorePlaceholder")}: {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal}</p>
-              <p>{t("schedulePeriod")}: {weekRangeStr}</p>
+            {/* 인쇄/PDF 전용 — 브랜드·매장·기간·인쇄 시각(방콕) */}
+            <div className="hidden print:block print-only-report-header">
+              <div className="flex justify-end">
+                <span id="schedule-print-timestamp" className="print-report-timestamp tabular-nums text-muted-foreground" />
+              </div>
+              <div className="text-center px-1">
+                <p className="print-brand-title font-black tracking-[0.12em] text-foreground">{brand.appName}</p>
+                <p className="print-report-store mt-2 font-bold text-foreground">
+                  {t("scheduleStorePlaceholder")}:{" "}
+                  {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal
+                    ? t("scheduleStoreAll")
+                    : storeFilterFinal}
+                </p>
+                <p className="print-report-period mt-1 font-bold text-foreground tabular-nums">
+                  {t("schedulePeriod")}: {weekRangeStr}
+                </p>
+              </div>
             </div>
             {/* 가로 스크롤 영역 - 마우스로 끌어 스크롤 (행이 button이라 기본 제스처만으로는 불편함) */}
             <div
@@ -624,13 +722,15 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                   <div key={day} className="flex flex-col items-center gap-0.5 shrink-0 min-w-[72px]">
                     <span
                       className={cn(
-                        "text-[10px] font-bold",
+                        "print-schedule-col-head-day text-[11px] font-extrabold",
                         i === 5 ? "text-[hsl(215,80%,50%)]" : i === 6 ? "text-[hsl(0,72%,51%)]" : "text-muted-foreground"
                       )}
                     >
                       {day}
                     </span>
-                    <span className="text-[9px] text-muted-foreground/70 tabular-nums">{daysFull[i]}</span>
+                    <span className="print-schedule-col-head-date text-[10px] font-semibold text-muted-foreground tabular-nums">
+                      {daysFull[i]}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -640,7 +740,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 {personsByStore.map(({ store: storeName, persons: storePersons }) => (
                   <div key={storeName} className="space-y-2">
                     {storeFilterIsAll && storeName && (
-                      <div className="text-sm font-bold text-card-foreground px-2 py-1.5 rounded-lg bg-muted/50 border print:bg-transparent print:border-0">
+                      <div className="print-schedule-store-banner text-sm font-bold text-card-foreground px-2 py-1.5 rounded-lg bg-muted/50 border print:bg-muted/30 print:border-border">
                         {storeName}
                       </div>
                     )}

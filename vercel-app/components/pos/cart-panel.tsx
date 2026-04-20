@@ -1322,7 +1322,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return baseMemo.trim() ? `${baseMemo.trim()}\n${taxMemo}` : taxMemo
   }
 
-  const openPaymentModalWithAmount = async (amount: number) => {
+  const openPaymentModalWithAmount = async (
+    amount: number,
+    /** 기존 주문에서 결제 모달을 열 때 setCartItems 직후라 cartItems가 아직 비어 있음 → 스냅샷을 넘겨야 함 */
+    receiptOpts?: {
+      receiptLines?: Array<{ id?: string; name: string; price: number; quantity?: number; note?: string }>
+      receiptSubtotal?: number
+      /** 미입력 시 현재 할인+포인트(상태) */
+      receiptDiscountTotal?: number
+    }
+  ) => {
     if (amount <= 0) return
     if (onBeforeOpenPayment) {
       const deliveryLabelForPrint = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
@@ -1348,16 +1357,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         tableNameForPrint = (takeoutLabelProp?.trim() || takeoutSlot || '').trim() || undefined
       }
       const memoStr = buildOrderMemo(customerMemo)
-      const receiptItems = cartItems.map((i) => ({
+      const linesForReceipt = receiptOpts?.receiptLines ?? cartItems
+      const receiptSubtotal =
+        receiptOpts?.receiptSubtotal ??
+        linesForReceipt.reduce(
+          (sum, i) => sum + Number(i.price ?? 0) * Math.max(1, Number(i.quantity ?? 1) || 1),
+          0
+        )
+      const receiptItems = linesForReceipt.map((i) => ({
         id: String(i.id ?? ''),
         name: String(i.name ?? ''),
         price: Number(i.price ?? 0),
         qty: Math.max(1, Number(i.quantity ?? 1) || 1),
         ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
       }))
-      const discountTotal = discount + pointUsedNum
+      const discountTotal =
+        receiptOpts?.receiptDiscountTotal !== undefined
+          ? receiptOpts.receiptDiscountTotal
+          : discount + pointUsedNum
       const pricingSnapshot = computePosPricing({
-        subtotal,
+        subtotal: receiptSubtotal,
         discountAmt: discountTotal,
         cardPaymentAmount: 0,
         adjustments: pricingAdjustments,
@@ -1629,7 +1648,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    void openPaymentModalWithAmount(amount)
+    void openPaymentModalWithAmount(amount, {
+      receiptLines: normalized,
+      receiptSubtotal: amount,
+      receiptDiscountTotal: pointUsedNum,
+    })
   }
 
   const openTakeoutPaymentFromOrder = (payload: {
@@ -1649,7 +1672,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    void openPaymentModalWithAmount(amount)
+    void openPaymentModalWithAmount(amount, {
+      receiptLines: normalized,
+      receiptSubtotal: amount,
+      receiptDiscountTotal: pointUsedNum,
+    })
   }
 
   const openDeliveryPaymentFromOrder = (payload: {
@@ -1669,7 +1696,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    void openPaymentModalWithAmount(amount)
+    void openPaymentModalWithAmount(amount, {
+      receiptLines: normalized,
+      receiptSubtotal: amount,
+      receiptDiscountTotal: pointUsedNum,
+    })
   }
 
   const handleClearCart = () => {

@@ -52,6 +52,7 @@ export function AdminLeaveApproval() {
       type: string
       date: string
       requestDate: string
+      requestTimeBangkok?: string
       reason: string
       status: string
       certificateUrl: string
@@ -282,7 +283,10 @@ export function AdminLeaveApproval() {
                   <th className="p-2 text-center font-medium">{t("store")}</th>
                   <th className="p-2 text-center font-medium min-w-[100px] whitespace-nowrap">{t("leave_col_name")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap tabular-nums">{t("emp_label_employee_code")}</th>
-                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap min-w-[108px]">
+                    <div>{t("leave_col_request_date")}</div>
+                    <div className="font-normal text-muted-foreground">{t("leave_col_request_time")}</div>
+                  </th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
                   <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
                   <th className="p-2 text-center font-medium min-w-[200px]">{t("leave_col_reason")}</th>
@@ -296,7 +300,14 @@ export function AdminLeaveApproval() {
                     <td className="p-2 text-center">{item.store}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${displayLabelShort(item.nick)})` : ""}</td>
                     <td className="p-2 text-center whitespace-nowrap tabular-nums">{item.employeeCode || "-"}</td>
-                    <td className="p-2 text-center whitespace-nowrap">{item.requestDate}</td>
+                    <td className="p-2 text-center whitespace-nowrap align-top">
+                      <div className="tabular-nums">{item.requestDate || "-"}</div>
+                      {item.requestTimeBangkok ? (
+                        <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground tabular-nums" title={t("leave_col_request_time")}>
+                          {item.requestTimeBangkok} ICT
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
                     <td className="p-2 text-center">{item.reason || "-"}</td>
@@ -323,9 +334,6 @@ export function AdminLeaveApproval() {
                       ) : (
                         <div className="flex items-center justify-center gap-1.5">
                           <Badge variant={item.status === "승인" || item.status === "Approved" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
-                          {(item.status === "승인" || item.status === "Approved") && (
-                            <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
-                          )}
                           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       )}
