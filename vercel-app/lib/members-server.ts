@@ -137,6 +137,7 @@ function deriveLastUpdateReason(params: { source: string; lastLineEventType: str
   if (params.lastLineEventType) return `line_webhook:${params.lastLineEventType}`
   if (params.source === 'line_import') return 'crm_import'
   if (params.source === 'line') return 'line_sync_or_register'
+  if (params.source === 'app') return 'app_master'
   return 'erp_manual'
 }
 

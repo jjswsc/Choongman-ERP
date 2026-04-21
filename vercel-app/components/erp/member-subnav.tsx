@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 const items = [
-  { href: "/admin/members", label: "회원 리스트" },
-  { href: "/admin/members/line", label: "LINE 회원" },
+  { href: "/admin/members", label: "회원 마스터" },
+  { href: "/admin/members#line-tools", label: "LINE 연동" },
   { href: "/admin/members/points", label: "포인트" },
   { href: "/admin/members/coupons", label: "쿠폰" },
   { href: "/admin/members/visits", label: "방문 기록" },

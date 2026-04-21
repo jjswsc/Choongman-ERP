@@ -31,7 +31,7 @@ export type PosPrintReceiptKind = 'hall_order' | 'payment'
 export type PrintPosHtmlDocumentOptions = PrintHtmlInHiddenIframeOptions & {
   /**
    * Windows 하이브리드 셸: true면 무인쇄(열전사 최적화)를 건너뛰고 **시스템 인쇄 대화상자**만 띄움.
-   * 자동 인쇄를 끈 뒤 수동으로 프린터를 고를 때 사용.
+   * 프린터를 바꿀 때만 쓰고, 일부 드라이버에서는 80mm 무인쇄보다 축소되어 나올 수 있음.
    */
   preferSystemPrintDialog?: boolean
   /** Windows 하이브리드: 영수증 vs 주방 무인쇄 대상 프린터 (runtime-config `print.*DeviceName`) */

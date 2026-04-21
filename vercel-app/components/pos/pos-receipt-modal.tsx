@@ -567,7 +567,7 @@ export function PosReceiptModal({
             <DialogDescription>
               {tr(
                 'posPrintManualHint',
-                '인쇄할 항목을 선택하세요. 다음 화면에서 프린터와 미리보기를 지정할 수 있습니다.'
+                '인쇄할 항목을 선택하세요. 메인 포스에 설정된 영수증·주방 프린터로 인쇄되며, 자동 인쇄와 같은 크기(80mm 열전사 경로)로 나갑니다.'
               )}
             </DialogDescription>
           </DialogHeader>
@@ -575,7 +575,7 @@ export function PosReceiptModal({
             <Button
               type="button"
               className="w-full sm:w-auto"
-              onClick={() => void handlePrintReceipt(true)}
+              onClick={() => void handlePrintReceipt(false)}
             >
               {tr('posPrintReceiptOnly', '영수증 인쇄')}
             </Button>
@@ -584,7 +584,7 @@ export function PosReceiptModal({
                 type="button"
                 variant="outline"
                 className="w-full sm:w-auto"
-                onClick={() => void handlePrintKitchenSlip(true)}
+                onClick={() => void handlePrintKitchenSlip(false)}
               >
                 {tr('posPrintKitchenOnly', '주방 주문서 인쇄')}
               </Button>

@@ -222,7 +222,9 @@ export function EmployeeEvalSettingTab({
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="p-2 text-left font-medium w-14">{t("store_no")}</th>
+              <th className="p-2 text-left font-medium w-[4.5rem]">
+                {t("eval_setting_seq_col")}
+              </th>
               {!readOnly && (
                 <th className="p-2 text-center font-medium w-[70px]">{t("eval_order")}</th>
               )}
@@ -258,7 +260,15 @@ export function EmployeeEvalSettingTab({
             ) : (
               items.map((item, idx) => (
                 <tr key={String(item.id)} className="border-t border-border">
-                  <td className="p-2">{item.id}</td>
+                  <td className="p-2 align-top">
+                    <div className="tabular-nums font-medium">{idx + 1}</div>
+                    <div
+                      className="mt-0.5 text-[10px] leading-tight text-muted-foreground"
+                      title={`item_id=${item.id}`}
+                    >
+                      ID {item.id}
+                    </div>
+                  </td>
                   {!readOnly && (
                     <td className="p-2 text-center">
                       <div className="flex items-center justify-center gap-1">

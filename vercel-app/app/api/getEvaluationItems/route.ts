@@ -8,6 +8,7 @@ export interface EvaluationItem {
   sub: string
   name: string
   use?: boolean
+  sort_order?: number
 }
 
 /** 평가 항목 조회 (kitchen | service | manager). activeOnly=true면 use_flag=true만 */
@@ -34,6 +35,10 @@ export async function GET(req: Request) {
       sub: String(r.sub_cat || '').trim(),
       name: String(r.name || '').trim(),
       use: r.use_flag === true || r.use_flag === 1,
+      sort_order:
+        r.sort_order != null && Number.isFinite(Number(r.sort_order))
+          ? Number(r.sort_order)
+          : undefined,
     }))
 
     return NextResponse.json(list, { headers })

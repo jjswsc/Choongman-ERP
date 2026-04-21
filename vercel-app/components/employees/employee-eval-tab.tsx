@@ -114,6 +114,7 @@ interface EvalItem {
   sub: string
   name: string
   use?: boolean
+  sort_order?: number
 }
 
 interface EvalSection {
@@ -182,6 +183,9 @@ export function EmployeeEvalTab({
   const [evalTransMap, setEvalTransMap] = React.useState<Record<string, string>>({})
   const [storesFromEvalDb, setStoresFromEvalDb] = React.useState<string[]>([])
 
+  /** 경고·사건 등에서 평가 탭으로 점프한 뒤 `loadForm`을 자동 호출(수동 「양식 불러오기」 없이 양식 표시) */
+  const pendingEvalFormAutoLoadRef = React.useRef(false)
+
   React.useEffect(() => {
     let cancelled = false
     void getEvaluationDistinctStores()
@@ -231,8 +235,10 @@ export function EmployeeEvalTab({
     if (match) {
       const nameForSelect = String(match.name || "").trim() ? String(match.name) : "__unnamed__"
       setEvalEmployee(nameForSelect)
+      pendingEvalFormAutoLoadRef.current = true
     } else {
       setEvalEmployee("")
+      pendingEvalFormAutoLoadRef.current = false
       void appAlert(t("eval_jump_not_found"))
     }
     onJumpToEmployeeConsumed?.()
@@ -306,32 +312,57 @@ export function EmployeeEvalTab({
       const MAIN_TO_KR: Record<string, string> = {
         "Menu skill": "메뉴숙련",
         "Cooking Accuracy & Cost Control": "원가정확도",
-        "Hygiene": "위생",
-        "Attitude": "태도",
-        "Service": "서비스",
+        Hygiene: "위생",
+        Attitude: "태도",
+        Service: "서비스",
         Manager: "매니저",
         Leadership: "리더십",
+        Operations: "운영",
+        Operation: "운영",
+        "Customer service": "고객서비스",
+        "Customer Service": "고객서비스",
+        Finance: "재무",
+        HR: "인사",
+        Personnel: "인사",
       }
+      const sortEvalItems = (arr: EvalItem[]) =>
+        [...arr].sort((a, b) => {
+          const sa = a.sort_order ?? 1e9
+          const sb = b.sort_order ?? 1e9
+          if (sa !== sb) return sa - sb
+          return Number(a.id) - Number(b.id)
+        })
+      const minSort = (arr: EvalItem[]) =>
+        arr.length
+          ? Math.min(...arr.map((i) => (i.sort_order != null ? Number(i.sort_order) : 1e9)))
+          : 1e9
       for (const it of items) {
         let sec = (it.main || "").trim()
         sec = MAIN_TO_KR[sec] || sec
         if (!bySection[sec]) bySection[sec] = []
         bySection[sec].push(it)
       }
-      const order =
+      for (const k of Object.keys(bySection)) {
+        bySection[k] = sortEvalItems(bySection[k])
+      }
+      const keysWithItems = Object.keys(bySection).filter((k) => bySection[k]?.length)
+      const presetOrder =
         effectiveEvalType === "service"
           ? ["서비스"]
           : effectiveEvalType === "manager"
-            ? ["매니저"]
+            ? ["매니저", "리더십", "운영", "고객서비스", "재무", "인사"]
             : ["메뉴숙련", "원가정확도", "위생", "태도"]
-      const secs: EvalSection[] = order
-        .filter((o) => bySection[o]?.length)
-        .map((o) => ({ main: o, items: bySection[o] }))
-      for (const k of Object.keys(bySection)) {
-        if (!order.includes(k) && bySection[k]?.length) {
-          secs.push({ main: k, items: bySection[k] })
-        }
-      }
+      const presetKeys = presetOrder.filter((k) => keysWithItems.includes(k))
+      const restKeys = keysWithItems.filter((k) => !presetOrder.includes(k))
+      restKeys.sort(
+        (a, b) =>
+          minSort(bySection[a]) - minSort(bySection[b]) || a.localeCompare(b)
+      )
+      const orderedKeys = [...presetKeys, ...restKeys]
+      const secs: EvalSection[] = orderedKeys.map((main) => ({
+        main,
+        items: bySection[main],
+      }))
       setSections(secs)
       const initScores: Record<string, string> = {}
       const initRemarks: Record<string, string> = {}
@@ -363,6 +394,15 @@ export function EmployeeEvalTab({
       setLoading(false)
     }
   }, [effectiveEvalType])
+
+  React.useEffect(() => {
+    if (!pendingEvalFormAutoLoadRef.current) return
+    if (!String(evalStore || "").trim()) return
+    /** 점프 시에는 항상 주방/서비스/매니저 중 하나로 맞춤 — 초기값 `all`이 남아 있으면 `effectiveEvalType`이 어긋날 수 있음 */
+    if (evalScope === "all") return
+    pendingEvalFormAutoLoadRef.current = false
+    void loadForm()
+  }, [evalStore, evalScope, loadForm])
 
   React.useEffect(() => {
     if (sections.length === 0) {
@@ -665,6 +705,10 @@ export function EmployeeEvalTab({
             매니저: t("eval_section_manager"),
             Manager: t("eval_section_manager"),
             리더십: t("eval_section_leadership"),
+            운영: t("eval_section_operations"),
+            고객서비스: t("eval_section_customer"),
+            재무: t("eval_section_finance"),
+            인사: t("eval_section_hr"),
           }
         : {
             메뉴숙련: t("eval_section_menu"),
@@ -857,10 +901,28 @@ export function EmployeeEvalTab({
 
       {sections.length > 0 && (
         <>
-          {sections.map((sec) => (
+          {sections.map((sec, secIdx) => {
+            const managerRowBase =
+              effectiveEvalType === "manager"
+                ? sections
+                    .slice(0, secIdx)
+                    .reduce((acc, s) => acc + s.items.length, 0)
+                : 0
+            const isMenuSec = sec.main === "메뉴숙련"
+            const showManagerSubCol =
+              effectiveEvalType === "manager" &&
+              !isMenuSec &&
+              sec.items.some((x) => String(x.sub || "").trim().length > 0)
+            const catColW =
+              isMenuSec ? "110px" : showManagerSubCol ? "min(28vw,120px)" : "10px"
+            const sectionShell =
+              effectiveEvalType === "manager"
+                ? "rounded-lg border border-border bg-card p-4 shadow-sm border-l-4 border-l-primary/30"
+                : "rounded-lg border border-border bg-card p-4"
+            return (
             <div
               key={sec.main}
-              className="rounded-lg border border-border bg-card p-4"
+              className={sectionShell}
             >
               <h6 className="mb-3 border-b pb-2 text-sm font-bold">
                 {sectionTitles[sec.main] || getEvalTrans(sec.main) || sec.main}
@@ -868,9 +930,9 @@ export function EmployeeEvalTab({
               <div className="overflow-x-auto">
                 <table className="w-full text-xs table-fixed">
                   <colgroup>
-                    <col style={{ width: "36px" }} />
-                    <col style={{ width: sec.main === "메뉴숙련" ? "110px" : "8px" }} />
-                    <col style={{ width: sec.main === "메뉴숙련" ? "160px" : undefined }} />
+                    <col style={{ width: "40px" }} />
+                    <col style={{ width: catColW }} />
+                    <col style={{ width: isMenuSec ? "160px" : undefined }} />
                     <col style={{ width: "64px" }} />
                     <col style={{ width: "44px" }} />
                     <col style={{ width: "44px" }} />
@@ -881,33 +943,50 @@ export function EmployeeEvalTab({
                     <tr className="border-b bg-muted/50">
                       <th className="px-2 py-2 text-center font-semibold">NO</th>
                       <th className="px-2 py-2 text-left font-semibold">
-                        {sec.main === "메뉴숙련" ? t("eval_col_category") : ""}
+                        {isMenuSec
+                          ? t("eval_col_category")
+                          : showManagerSubCol
+                            ? t("eval_cat_sub")
+                            : ""}
                       </th>
                       <th className="px-2 py-2 text-left font-semibold">
-                        {sec.main === "메뉴숙련" ? t("eval_col_menu_item") : t("eval_item")}
+                        {isMenuSec ? t("eval_col_menu_item") : t("eval_item")}
                       </th>
                       <th className="px-2 py-2 text-center font-semibold w-16 shrink-0">{t("eval_score")}</th>
-                      <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_solo_ok") : ""}</th>
-                      <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_peak_ok") : ""}</th>
-                      <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_can_train") : ""}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{isMenuSec ? t("eval_solo_ok") : ""}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{isMenuSec ? t("eval_peak_ok") : ""}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{isMenuSec ? t("eval_can_train") : ""}</th>
                       <th className="px-2 py-2 text-left font-semibold">{t("eval_notes")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sec.items.map((it) => {
+                    {sec.items.map((it, itemIdx) => {
                       const key = String(it.id)
+                      const displayNo =
+                        effectiveEvalType === "manager"
+                          ? managerRowBase + itemIdx + 1
+                          : itemIdx + 1
                       return (
                         <tr key={key} className="border-b">
-                          <td className="px-2 py-2 text-center font-medium shrink-0">{it.id}</td>
-                          {sec.main === "메뉴숙련" ? (
+                          <td className="px-2 py-2 text-center font-medium tabular-nums text-muted-foreground shrink-0">
+                            {displayNo}
+                          </td>
+                          {isMenuSec ? (
                             <>
                               <td className="px-2 py-2 break-words">{getEvalTrans(it.sub) || it.sub}</td>
                               <td className="px-2 py-2 break-words">{getEvalTrans(it.name) || it.name}</td>
                             </>
+                          ) : showManagerSubCol ? (
+                            <>
+                              <td className="px-2 py-2 align-top text-[11px] break-words text-muted-foreground">
+                                {getEvalTrans(it.sub) || it.sub}
+                              </td>
+                              <td className="px-2 py-2 break-words font-medium">{getEvalTrans(it.name) || it.name}</td>
+                            </>
                           ) : (
                             <>
                               <td className="px-2 py-2" />
-                              <td className="px-2 py-2 truncate">{getEvalTrans(it.name) || it.name}</td>
+                              <td className="px-2 py-2 break-words">{getEvalTrans(it.name) || it.name}</td>
                             </>
                           )}
                           <td className="px-2 py-2 w-16 shrink-0">
@@ -928,7 +1007,7 @@ export function EmployeeEvalTab({
                               ))}
                             </select>
                           </td>
-                          {sec.main === "메뉴숙련" ? (
+                          {isMenuSec ? (
                             <>
                               <td className="px-2 py-2 text-center shrink-0">
                                 <input
@@ -1008,7 +1087,8 @@ export function EmployeeEvalTab({
                   : "-"}
               </p>
             </div>
-          ))}
+            )
+          })}
 
           <div className="rounded-lg border border-border bg-muted/30 p-4">
             <p className="text-sm font-bold">

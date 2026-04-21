@@ -8953,7 +8953,9 @@ export async function getEvaluationItems(params: {
     activeOnly: String(params.activeOnly === true),
   })
   const res = await apiFetchWithOffline(`/api/getEvaluationItems?${q}`)
-  return res.json() as Promise<{ id: string | number; main: string; sub: string; name: string; use?: boolean }[]>
+  return res.json() as Promise<
+    { id: string | number; main: string; sub: string; name: string; use?: boolean; sort_order?: number }[]
+  >
 }
 
 /** evaluation_results 에 저장된 매장명 목록 (RPC 미배포 시 빈 배열) */

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  createMember,
   getLineMessagingStatus,
   getMembers,
   importLineCrmFile,
@@ -93,7 +94,17 @@ function reasonLabel(reason?: string): string {
   if (key === "crm_import") return "CRM 파일 반영"
   if (key === "line_sync_or_register") return "LINE 동기화/등록"
   if (key === "erp_manual") return "ERP 수동수정"
+  if (key === "app_master") return "앱·웹 마스터 등록"
   return key
+}
+
+function sourceLabel(source?: string): string {
+  const s = String(source || "").trim()
+  if (s === "app") return "앱·웹"
+  if (s === "line") return "LINE"
+  if (s === "line_import") return "CRM파일"
+  if (s === "manual") return "수동"
+  return s || "—"
 }
 
 export default function MembersPage() {
@@ -216,7 +227,37 @@ export default function MembersPage() {
     setSaving(true)
     try {
       if (!form.id) {
-        await appAlert("신규 등록은 LINE OA를 통해 진행됩니다. 목록에서 회원을 선택해 수정해 주세요.")
+        const created = await createMember({
+          name,
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+          source: "app",
+        })
+        if (!created.success || !created.member) {
+          await appAlert(created.message || "회원 등록에 실패했습니다.")
+          return
+        }
+        const newId = created.member.id
+        const res = await updateMember({
+          id: newId,
+          name,
+          fullName: form.fullName.trim(),
+          lineDisplayName: form.lineDisplayName.trim(),
+          birthDate: form.birthDate.trim(),
+          gender: form.gender.trim(),
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+          consentMarketing: form.consentMarketing,
+          consentPrivacy: form.consentPrivacy,
+          consentAt: form.consentAt.trim(),
+          status: form.status,
+        })
+        if (!res.success || !res.member) {
+          await appAlert(res.message || "등록 후 상세 정보 저장에 실패했습니다.")
+          return
+        }
+        setForm({ ...emptyForm })
+        await load(query)
         return
       }
       const res = await updateMember({
@@ -253,7 +294,9 @@ export default function MembersPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">회원 관리</h1>
-            <p className="text-xs text-muted-foreground">LINE Official 회원 항목 기준으로 조회/관리합니다.</p>
+            <p className="text-xs text-muted-foreground">
+              회원 마스터는 ERP·자사 앱 기준으로 관리합니다. LINE OA는 선택 연동·동기화 채널입니다.
+            </p>
           </div>
         </div>
 
@@ -267,8 +310,8 @@ export default function MembersPage() {
               Vercel(또는 서버) 환경 변수에 <code className="rounded bg-muted px-1">LINE_CHANNEL_ACCESS_TOKEN</code>{" "}
               (오피셜의 Messaging API 채널에서 발급)과 웹훅용{" "}
               <code className="rounded bg-muted px-1">LINE_CHANNEL_SECRET</code>를 설정한 뒤 재배포해야 친구 목록·표시명
-              동기화가 동작합니다. LINE Login 채널 토큰과는 다릅니다. 포인트·등급은 LINE MyCustomer API로 일괄 조회되지
-              않으므로 ERP에서 관리하고, 전화·실명 등은 CRM 파일 반영 또는 수동 입력을 사용합니다.
+              동기화가 동작합니다. LINE Login 채널 토큰과는 다릅니다. 회원 마스터는 앱·ERP에 두고, LINE은 보조 동기화로
+              사용합니다. 포인트·등급은 ERP에서 관리합니다.
             </p>
             {lineMessagingStatus.channelSecretConfigured === false && (
               <p className="mt-2 text-xs text-muted-foreground">
@@ -283,10 +326,13 @@ export default function MembersPage() {
           <div className="lg:sticky lg:top-0 lg:self-start">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">회원 정보 수정</CardTitle>
+              <CardTitle className="text-base">회원 등록·수정</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">신규 등록은 LINE 친구추가/이벤트 동기화로 자동 생성됩니다.</p>
+              <p className="text-xs text-muted-foreground">
+                신규는 아래에서 저장 시 <span className="font-medium">앱·웹 마스터(source=app)</span>로 등록됩니다. LINE
+                친구·웹훅으로 생긴 회원은 목록에서 선택해 수정하거나, LINE 동기화/CRM으로 보완할 수 있습니다.
+              </p>
               <div className="space-y-1.5">
                 <Label>이름 *</Label>
                 <Input value={form.name ?? ""} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
@@ -352,7 +398,7 @@ export default function MembersPage() {
               </div>
               <div className="flex gap-2 pt-1">
                 <Button onClick={onSave} disabled={saving}>
-                  {saving ? "저장 중..." : "저장"}
+                  {saving ? "저장 중..." : form.id ? "저장" : "신규 등록 (마스터)"}
                 </Button>
                 <Button variant="outline" onClick={() => setForm({ ...emptyForm })}>
                   선택 해제
@@ -362,12 +408,12 @@ export default function MembersPage() {
           </Card>
           </div>
 
-          <Card>
+          <Card id="line-tools">
             <CardHeader className="space-y-3">
-              <CardTitle className="text-base">회원 목록 (LINE 기준)</CardTitle>
+              <CardTitle className="text-base">회원 목록 (마스터 기준)</CardTitle>
               <div className="flex gap-2">
                 <Input
-                  placeholder="LINE표시명/전화번호/성명/등급/생년월일/회원번호/LINE ID 검색"
+                  placeholder="이름·LINE표시명·전화·이메일·성명·등급·생일·회원번호·LINE ID 검색"
                   value={query ?? ""}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -379,6 +425,7 @@ export default function MembersPage() {
                 </Button>
                 <Button
                   variant="outline"
+                  title="LINE Messaging API 기반 보조 동기화"
                   disabled={syncing}
                   onClick={async () => {
                     setSyncing(true)
@@ -472,6 +519,9 @@ export default function MembersPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40">
                       <tr>
+                        <th className="p-2 text-left">회원명</th>
+                        <th className="p-2 text-left">등록 소스</th>
+                        <th className="p-2 text-left">LINE 연결</th>
                         <th className="p-2 text-left">LINE 표시명</th>
                         <th className="p-2 text-left">전화번호</th>
                         <th className="p-2 text-left">성명(Full name)</th>
@@ -492,7 +542,7 @@ export default function MembersPage() {
                           onClick={() =>
                             setForm({
                               id: m.id,
-                              name: String(m.lineDisplayName || m.name || ""),
+                              name: String(m.name || m.lineDisplayName || ""),
                               fullName: m.fullName || "",
                               lineDisplayName: m.lineDisplayName || "",
                               birthDate: toDateInput(m.birthDate || ""),
@@ -506,8 +556,11 @@ export default function MembersPage() {
                             })
                           }
                         >
-                          <td className="p-2">{m.lineDisplayName || "-"}</td>
-                          <td className="p-2">{m.phone || "-"}</td>
+                          <td className="p-2">{m.name || "—"}</td>
+                          <td className="p-2">{sourceLabel(m.source)}</td>
+                          <td className="p-2">{m.lineLinked ? "예" : "아니오"}</td>
+                          <td className="p-2">{m.lineDisplayName || "—"}</td>
+                          <td className="p-2">{m.phone || "—"}</td>
                           <td className="p-2">{m.fullName || "-"}</td>
                           <td className="p-2">{m.birthDate || "-"}</td>
                           <td className="p-2">{calcAge(m.birthDate)}</td>
