@@ -876,11 +876,7 @@ export default function PosOrderPage() {
       title: string,
       thermal?: Pick<
         PrintPosHtmlDocumentOptions,
-        | "printRole"
-        | "printReceiptKind"
-        | "kitchenStation"
-        | "escPosCutOverride"
-        | "preferSystemPrintDialog"
+        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
       >
     ) =>
       new Promise<void>((resolve, reject) => {
@@ -896,7 +892,7 @@ export default function PosOrderPage() {
     [t]
   )
 
-  const handlePrintReceipt = async (preferSystemPrintDialog = false) => {
+  const handlePrintReceipt = async () => {
     if (!receiptRef.current) return
     const printContent = receiptRef.current.innerHTML
     const fullHtml = `
@@ -905,7 +901,7 @@ export default function PosOrderPage() {
         <head>
           <title>${t("posReceipt") || "영수증"}</title>
           <style>
-            ${getPosPaperBaseCss("'Inter', 'Pretendard', 'Noto Sans KR', 'Sukhumvit Set', 'Noto Sans Thai', 'Malgun Gothic', Arial, sans-serif", 12)}
+            ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; break-inside: avoid; page-break-inside: avoid; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
@@ -929,7 +925,6 @@ export default function PosOrderPage() {
     `
     try {
       await printInIframe(fullHtml, t("posReceipt") || "영수증", {
-        ...(preferSystemPrintDialog ? { preferSystemPrintDialog: true } : {}),
         printRole: "receipt",
         printReceiptKind: "hall_order",
         escPosCutOverride: resolveEscPosCutOverride(posPrinterSettingsRef.current, {
@@ -959,7 +954,7 @@ export default function PosOrderPage() {
     setShowPaymentModal(true)
   }
 
-  const handlePrintKitchenSlip = async (preferSystemPrintDialog = false) => {
+  const handlePrintKitchenSlip = async () => {
     if (!receiptData || !receiptData.storeCode) return
     try {
       const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
@@ -1010,7 +1005,6 @@ export default function PosOrderPage() {
           printColorAdjust: "economy",
         })
         await printInIframe(html, slip.label, {
-          ...(preferSystemPrintDialog ? { preferSystemPrintDialog: true } : {}),
           printRole: "kitchen",
           kitchenStation: slip.station,
           escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: "kitchen" }),
@@ -1234,11 +1228,7 @@ export default function PosOrderPage() {
               <span className="shrink-0 text-xs text-slate-600 w-12">
                 {t("store") || "매장"}
               </span>
-              <Select
-                value={storeCode || effectiveStores[0]}
-                onValueChange={setStoreCode}
-                disabled={!canSearchAll}
-              >
+              <Select value={storeCode || effectiveStores[0]} onValueChange={setStoreCode} disabled={!canSearchAll}>
                 <SelectTrigger className="h-8 flex-1 border-slate-200 bg-white text-sm text-slate-800">
                   <SelectValue />
                 </SelectTrigger>
@@ -2001,7 +1991,7 @@ export default function PosOrderPage() {
                   variant="outline"
                   size="sm"
                   className="gap-1.5"
-                  onClick={() => void handlePrintReceipt(true)}
+                  onClick={handlePrintReceipt}
                 >
                   <Printer className="h-4 w-4" />
                   {t("posPrint") || "인쇄"}
@@ -2010,7 +2000,7 @@ export default function PosOrderPage() {
                   variant="outline"
                   size="sm"
                   className="gap-1.5"
-                  onClick={() => void handlePrintKitchenSlip(true)}
+                  onClick={handlePrintKitchenSlip}
                 >
                   <Printer className="h-4 w-4" />
                   {t("posKitchenSlip") || "주방 주문서"}

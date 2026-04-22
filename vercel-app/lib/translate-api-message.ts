@@ -147,6 +147,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // verify-auth / 공통 API
   "인증이 필요합니다. 다시 로그인해 주세요.": "msg_auth_required_relogin",
   "본사 권한이 필요합니다.": "msg_office_permission_required",
+  "매니저 이상 권한이 필요합니다.": "msg_manager_or_higher_required",
   "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
 }
 

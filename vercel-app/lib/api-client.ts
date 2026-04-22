@@ -33,6 +33,7 @@ import {
   attachEvalAnalyticsRedirectFlag,
   parseEvalAnalyticsErrorResponse,
 } from './eval-analytics-http-error'
+import { jsonAsArray, jsonAsPlainObject, jsonAsStringArray, jsonObjectWithList } from './safe-api-json'
 
 export { apiFetch } from './api/fetch'
 export { apiFetchWithOffline }
@@ -269,7 +270,7 @@ export async function getAdjustmentHistory(params: {
     ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
   const res = await apiFetchWithOffline(`/api/getAdjustmentHistory?${q}`)
-  return res.json() as Promise<AdjustmentHistoryItem[]>
+  return jsonAsArray<AdjustmentHistoryItem>(await res.json())
 }
 
 /** stock_logs Usage 기간 합계 (발주 도움). 기준일·기간은 방콕 달력. */
@@ -296,7 +297,7 @@ export async function getStockUsageAggregate(params: {
 
 export async function getStockStores() {
   const res = await apiFetchWithOffline('/api/getStockStores')
-  return res.json() as Promise<string[]>
+  return jsonAsArray<string>(await res.json())
 }
 
 export async function adjustStock(params: {
@@ -526,7 +527,7 @@ export interface AdminActivityItem {
 
 export async function getAdminRecentActivity() {
   const res = await apiFetchWithOffline('/api/getAdminRecentActivity')
-  return res.json() as Promise<AdminActivityItem[]>
+  return jsonAsArray<AdminActivityItem>(await res.json())
 }
 
 export async function processOrderDecision(params: {
@@ -669,7 +670,7 @@ export async function getAttendanceList(params: {
   if (params.employeeCode != null && String(params.employeeCode).trim())
     q.set('employeeCode', String(params.employeeCode).trim())
   const res = await apiFetchWithOffline(`/api/getAttendanceList?${q}`)
-  return res.json() as Promise<AttendanceLogItem[]>
+  return jsonAsArray<AttendanceLogItem>(await res.json())
 }
 
 export async function submitAttendance(params: {
@@ -796,7 +797,13 @@ export async function uploadLeaveCertificate(params: {
 // ─── 관리 (Admin) ───
 export async function getNoticeOptions() {
   const res = await apiFetchWithOffline('/api/getNoticeOptions')
-  return res.json() as Promise<{ stores: string[]; roles: string[]; permissionGroups: string[] }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    stores: jsonAsStringArray(o.stores),
+    roles: jsonAsStringArray(o.roles),
+    permissionGroups: jsonAsStringArray(o.permissionGroups),
+  }
 }
 
 export async function sendNotice(params: {
@@ -997,7 +1004,7 @@ export async function getAttendancePendingList(params: {
   if (params.userStore != null && params.userStore !== '') q.set('userStore', params.userStore)
   if (params.userRole != null && params.userRole !== '') q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getAttendancePendingList?${q}`)
-  return res.json() as Promise<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>
+  return jsonAsArray<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }>(await res.json())
 }
 
 export async function processAttendanceApproval(params: {
@@ -1058,7 +1065,7 @@ export async function getAttendanceNoRecordList(params: {
   if (params.userStore != null && params.userStore !== '') q.set('userStore', params.userStore)
   if (params.userRole != null && params.userRole !== '') q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getAttendanceNoRecordList?${q}`)
-  return res.json() as Promise<AttendanceNoRecordRow[]>
+  return jsonAsArray<AttendanceNoRecordRow>(await res.json())
 }
 
 export async function createAttendanceFromSchedule(params: {
@@ -1180,12 +1187,21 @@ export interface WorkLogData {
 
 export async function getWorkLogStaffList() {
   const res = await apiFetchWithOffline('/api/getWorkLogStaffList')
-  return res.json() as Promise<{ staff: { name: string; displayName: string }[] }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    staff: jsonAsArray<{ name: string; displayName: string }>(o.staff),
+  }
 }
 
 export async function getWorkLogOfficeOptions() {
   const res = await apiFetchWithOffline('/api/getWorkLogOfficeOptions')
-  return res.json() as Promise<{ staff: { name: string; displayName: string }[]; depts: string[] }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    staff: jsonAsArray<{ name: string; displayName: string }>(o.staff),
+    depts: jsonAsStringArray(o.depts),
+  }
 }
 
 export async function getWorkLogData(params: { dateStr: string; name: string }) {
@@ -1194,7 +1210,16 @@ export async function getWorkLogData(params: { dateStr: string; name: string }) 
     name: params.name,
   })
   const res = await apiFetchWithOffline(`/api/getWorkLogData?${q}`)
-  return res.json() as Promise<WorkLogData>
+  const raw: unknown = await res.json()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { finish: [], continueItems: [], todayItems: [] }
+  }
+  const o = raw as Record<string, unknown>
+  return {
+    finish: jsonAsArray<WorkLogItem>(o.finish),
+    continueItems: jsonAsArray<WorkLogItem>(o.continueItems),
+    todayItems: jsonAsArray<WorkLogItem>(o.todayItems),
+  }
 }
 
 export async function saveWorkLogData(params: {
@@ -1282,7 +1307,7 @@ export async function getWorkLogManagerReport(params: {
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
   if (params.status && params.status !== 'all') q.set('status', params.status)
   const res = await apiFetchWithOffline(`/api/getWorkLogManagerReport?${q}`)
-  return res.json() as Promise<WorkLogManagerItem[]>
+  return jsonAsArray<WorkLogManagerItem>(await res.json())
 }
 
 export interface WorkLogWeeklySummary {
@@ -1308,13 +1333,18 @@ export async function getWorkLogWeekly(params: {
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
   const res = await apiFetchWithOffline(`/api/getWorkLogWeekly?${q}`)
-  return res.json() as Promise<{
-    summaries: WorkLogWeeklySummary[]
-    totalTasks: number
-    totalCompleted: number
-    totalCarried: number
-    overallAvg: number
-  }>
+  const raw: unknown = await res.json()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { summaries: [], totalTasks: 0, totalCompleted: 0, totalCarried: 0, overallAvg: 0 }
+  }
+  const o = raw as Record<string, unknown>
+  return {
+    summaries: jsonAsArray<WorkLogWeeklySummary>(o.summaries),
+    totalTasks: Number(o.totalTasks) || 0,
+    totalCompleted: Number(o.totalCompleted) || 0,
+    totalCarried: Number(o.totalCarried) || 0,
+    overallAvg: Number(o.overallAvg) || 0,
+  }
 }
 
 // ─── 시간표 (Timesheet) ───
@@ -1357,7 +1387,7 @@ export interface TodayAttendanceItem {
 export async function getTodaySchedule(params: { store: string; date: string }) {
   const q = new URLSearchParams(params)
   const res = await apiFetchWithOffline(`/api/getTodaySchedule?${q}`)
-  return res.json() as Promise<TodayScheduleItem[]>
+  return jsonAsArray<TodayScheduleItem>(await res.json())
 }
 
 export async function getTodayAttendanceSummary(params: {
@@ -1366,7 +1396,7 @@ export async function getTodayAttendanceSummary(params: {
 }) {
   const q = new URLSearchParams(params)
   const res = await apiFetchWithOffline(`/api/getTodayAttendanceSummary?${q}`)
-  return res.json() as Promise<TodayAttendanceItem[]>
+  return jsonAsArray<TodayAttendanceItem>(await res.json())
 }
 
 export type WeeklyScheduleItem = TodayScheduleItem
@@ -1382,7 +1412,7 @@ export async function getWeeklySchedule(params: {
   })
   if (params.area && params.area !== 'All') q.set('area', params.area)
   const res = await apiFetchWithOffline(`/api/getWeeklySchedule?${q}`)
-  return res.json() as Promise<WeeklyScheduleItem[]>
+  return jsonAsArray<WeeklyScheduleItem>(await res.json())
 }
 
 export async function saveSchedule(params: {
@@ -1431,7 +1461,7 @@ export interface TodayVisitItem {
 export async function getTodayMyVisits(params: { userName: string }) {
   const q = new URLSearchParams({ userName: params.userName })
   const res = await apiFetchWithOffline(`/api/getTodayMyVisits?${q}`)
-  return res.json() as Promise<TodayVisitItem[]>
+  return jsonAsArray<TodayVisitItem>(await res.json())
 }
 
 export async function checkUserVisitStatus(params: { userName: string }) {
@@ -1527,7 +1557,7 @@ export async function getPettyCashMonthDetail(params: {
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getPettyCashMonthDetail?${q}`)
-  return res.json() as Promise<PettyCashItem[]>
+  return jsonAsArray<PettyCashItem>(await res.json())
 }
 
 /** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시 */
@@ -1596,7 +1626,7 @@ export async function getTillList(params: {
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.typeFilter && params.typeFilter !== 'all') q.set('typeFilter', params.typeFilter)
   const res = await apiFetchWithOffline(`/api/getTillList?${q}`)
-  return res.json() as Promise<TillItem[]>
+  return jsonAsArray<TillItem>(await res.json())
 }
 
 export async function addTillTransaction(params: {
@@ -2874,7 +2904,14 @@ export async function getAccountingComplianceAuditLogs(params: {
   if (params.actionKeyword) q.set('actionKeyword', params.actionKeyword)
   if (params.limit != null && Number.isFinite(params.limit)) q.set('limit', String(params.limit))
   const res = await apiFetchWithOffline(`/api/getAccountingComplianceAuditLogs?${q}`)
-  return res.json() as Promise<{ success: boolean; rows: AccountingComplianceAuditLog[]; fallbackUsed?: boolean; error?: string }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    success: o.success === true,
+    rows: jsonAsArray<AccountingComplianceAuditLog>(o.rows),
+    fallbackUsed: o.fallbackUsed === true,
+    error: typeof o.error === 'string' ? o.error : undefined,
+  }
 }
 
 export async function getAccountingComplianceAuditTrend(params: {
@@ -2896,9 +2933,11 @@ export async function getAccountingComplianceAuditTrend(params: {
   if (params.decision && params.decision !== 'all') q.set('decision', params.decision)
   if (params.actionKeyword) q.set('actionKeyword', params.actionKeyword)
   const res = await apiFetchWithOffline(`/api/getAccountingComplianceAuditTrend?${q}`)
-  return res.json() as Promise<{
-    success: boolean
-    rows: {
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    success: o.success === true,
+    rows: jsonAsArray<{
       year_month?: string | null
       total?: number | null
       allow_count?: number | null
@@ -2906,10 +2945,10 @@ export async function getAccountingComplianceAuditTrend(params: {
       error_count?: number | null
       deny_rate?: number | null
       error_rate?: number | null
-    }[]
-    fallbackUsed?: boolean
-    error?: string
-  }>
+    }>(o.rows),
+    fallbackUsed: o.fallbackUsed === true,
+    error: typeof o.error === 'string' ? o.error : undefined,
+  }
 }
 
 export async function getAccountingWorkflowReminders(params: {
@@ -2923,10 +2962,28 @@ export async function getAccountingWorkflowReminders(params: {
     storeFilter: params.storeFilter || 'All',
   })
   const res = await apiFetchWithOffline(`/api/getAccountingWorkflowReminders?${q}`)
-  return res.json() as Promise<{
-    success: boolean
-    bangkokToday?: string
-    rows: {
+  const raw: unknown = await res.json()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      success: false,
+      rows: [] as {
+        filingType: string
+        filingLabelKo: string
+        periodType: 'monthly' | 'half_year' | 'annual'
+        yearMonth: string
+        dueDateBangkok: string
+        daysToDue: number
+        severity: 'info' | 'warn' | 'critical'
+        status: string
+        messageKo: string
+      }[],
+    }
+  }
+  const o = raw as Record<string, unknown>
+  return {
+    success: o.success === true,
+    bangkokToday: typeof o.bangkokToday === 'string' ? o.bangkokToday : undefined,
+    rows: jsonAsArray<{
       filingType: string
       filingLabelKo: string
       periodType: 'monthly' | 'half_year' | 'annual'
@@ -2936,10 +2993,13 @@ export async function getAccountingWorkflowReminders(params: {
       severity: 'info' | 'warn' | 'critical'
       status: string
       messageKo: string
-    }[]
-    summary?: { critical: number; warn: number; info: number }
-    error?: string
-  }>
+    }>(o.rows),
+    summary:
+      o.summary && typeof o.summary === 'object' && !Array.isArray(o.summary)
+        ? (o.summary as { critical: number; warn: number; info: number })
+        : undefined,
+    error: typeof o.error === 'string' ? o.error : undefined,
+  }
 }
 
 export function getExportAccountingComplianceAuditCsvUrl(params: {
@@ -3021,7 +3081,12 @@ export async function getAccountingWorkflowStatus(params: {
   if (params.periodType) q.set('periodType', params.periodType)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getAccountingWorkflowStatus?${q}`)
-  return res.json() as Promise<{ rows: AccountingWorkflowStatusRow[]; fallbackUsed?: boolean }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    rows: jsonAsArray<AccountingWorkflowStatusRow>(o.rows),
+    fallbackUsed: o.fallbackUsed === true,
+  }
 }
 
 export async function saveAccountingWorkflowStatus(params: {
@@ -3049,7 +3114,9 @@ export async function getFixedAssets(params: { storeFilter?: string; status?: st
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.status) q.set('status', params.status)
   const res = await apiFetchWithOffline(`/api/getFixedAssets?${q}`)
-  return res.json() as Promise<{ success: boolean; list: unknown[] }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return { success: o.success === true, list: jsonAsArray(o.list) }
 }
 
 export async function saveFixedAsset(params: {
@@ -3096,18 +3163,34 @@ export async function getDepreciationEntries(params: { yearMonth: string; storeF
   const q = new URLSearchParams({ yearMonth: params.yearMonth })
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getDepreciationEntries?${q}`)
-  return res.json() as Promise<{ success: boolean; list: unknown[]; totalAmount: number }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return {
+    success: o.success === true,
+    list: jsonAsArray(o.list),
+    totalAmount: Number(o.totalAmount) || 0,
+  }
 }
 
 export async function runDepreciationPreview(params: { yearMonth: string; storeFilter?: string }) {
   const q = new URLSearchParams({ yearMonth: params.yearMonth })
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/runDepreciation?${q}`)
-  return res.json() as Promise<{
-    success: boolean
-    candidates: { id: number; name: string; store_name: string; monthly_amount: number }[]
-    totalAmount: number
-  }>
+  const raw: unknown = await res.json()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { success: false, candidates: [], totalAmount: 0 }
+  }
+  const o = raw as Record<string, unknown>
+  return {
+    success: o.success === true,
+    candidates: jsonAsArray<{
+      id: number
+      name: string
+      store_name: string
+      monthly_amount: number
+    }>(o.candidates),
+    totalAmount: Number(o.totalAmount) || 0,
+  }
 }
 
 export async function runDepreciation(params: { yearMonth: string; storeFilter?: string; dryRun?: boolean }) {
@@ -3489,7 +3572,7 @@ export interface CardTransaction {
 
 export async function getCardAccounts() {
   const res = await apiFetchWithOffline('/api/getCardAccounts')
-  return res.json() as Promise<CardAccount[]>
+  return jsonAsArray<CardAccount>(await res.json())
 }
 
 export async function getCardTransactions(params: {
@@ -3502,7 +3585,7 @@ export async function getCardTransactions(params: {
   if (params.startStr) q.set('startStr', params.startStr)
   if (params.endStr) q.set('endStr', params.endStr)
   const res = await apiFetchWithOffline(`/api/getCardTransactions?${q}`)
-  return res.json() as Promise<{ list: CardTransaction[] }>
+  return jsonObjectWithList<CardTransaction>(await res.json())
 }
 
 export async function saveCardAccount(params: { id?: number; name: string; store?: string; memo?: string; cardNumber?: string; holderName?: string; cardCompany?: string }) {
@@ -3646,7 +3729,9 @@ export async function getPosSalesByStore(params: {
 export async function getPosSalesFilterOptions(params: { startStr: string; endStr: string }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   const res = await apiFetchWithOffline(`/api/posSalesFilterOptions?${q}`)
-  return res.json() as Promise<{ posOptions: string[] }>
+  const raw: unknown = await res.json()
+  const o = jsonAsPlainObject(raw)
+  return { posOptions: jsonAsStringArray(o.posOptions) }
 }
 
 export type PosSalesPeriodRow = {
@@ -3743,7 +3828,7 @@ export async function getPosSalesByChannel(params: {
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByChannel?${q}`)
-  return res.json() as Promise<{ channelKey: string; sales: number }[]>
+  return jsonAsArray<{ channelKey: string; sales: number }>(await res.json())
 }
 
 export async function getPosSalesByMenu(params: {
@@ -3763,7 +3848,7 @@ export async function getPosSalesByMenu(params: {
   if (params.searchMode === 'and') q.set('searchMode', 'and')
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
-  return res.json() as Promise<{ name: string; qty: number; sales: number }[]>
+  return jsonAsArray<{ name: string; qty: number; sales: number }>(await res.json())
 }
 
 export async function getPosSalesByPayment(params: {
@@ -3778,7 +3863,7 @@ export async function getPosSalesByPayment(params: {
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByPayment?${q}`)
-  return res.json() as Promise<{ paymentKey: string; sales: number }[]>
+  return jsonAsArray<{ paymentKey: string; sales: number }>(await res.json())
 }
 
 // ─── 통장 거래 ───
@@ -3827,7 +3912,7 @@ export async function getBankAccounts(params?: { store?: string; userStore?: str
   if (params?.userStore) q.set('userStore', params.userStore)
   if (params?.userRole) q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getBankAccounts?${q}`)
-  return res.json() as Promise<BankAccount[]>
+  return jsonAsArray<BankAccount>(await res.json())
 }
 
 export async function getBankTransactions(params: {
@@ -3874,7 +3959,7 @@ export async function getExpenseRegisterList(params: {
   if (params.accountId) q.set('accountId', String(params.accountId))
   if (params.category) q.set('category', params.category)
   const res = await apiFetchWithOffline(`/api/getExpenseRegisterList?${q}`)
-  return res.json() as Promise<{ list: ExpenseRegisterItem[] }>
+  return jsonObjectWithList<ExpenseRegisterItem>(await res.json())
 }
 
 export async function addBankTransaction(params: {
@@ -3979,12 +4064,12 @@ export async function getInboundBatchesForLink(params: {
   if (params.vendorName?.trim()) q.set('vendorName', params.vendorName.trim())
   if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
   const res = await apiFetchWithOffline(`/api/getInboundBatchesForLink?${q}`)
-  return res.json() as Promise<InboundBatchForLink[]>
+  return jsonAsArray<InboundBatchForLink>(await res.json())
 }
 
 export async function getBankTransactionInboundLinks(bankTransactionId: number) {
   const res = await apiFetchWithOffline(`/api/getBankTransactionInboundLinks?bankTransactionId=${bankTransactionId}`)
-  return res.json() as Promise<{ id?: number; inboundBatchId?: number; amount: number }[]>
+  return jsonAsArray<{ id?: number; inboundBatchId?: number; amount: number }>(await res.json())
 }
 
 export async function saveBankTransactionInboundLinks(params: {
@@ -4009,7 +4094,7 @@ export interface BankMemoRule {
 
 export async function getBankMemoRules() {
   const res = await apiFetchWithOffline('/api/getBankMemoRules')
-  return res.json() as Promise<BankMemoRule[]>
+  return jsonAsArray<BankMemoRule>(await res.json())
 }
 
 export async function saveBankMemoRule(params: {
@@ -4099,7 +4184,7 @@ export async function getAccountSubjects(params?: {
   if (params?.forCard) q.set('forCard', 'true')
   if (params?.excludeHeaders) q.set('excludeHeaders', 'true')
   const res = await apiFetchWithOffline(`/api/getAccountSubjects?${q}`)
-  return res.json() as Promise<AccountSubjectItem[]>
+  return jsonAsArray<AccountSubjectItem>(await res.json())
 }
 
 export async function saveAccountSubject(params: {
@@ -4152,7 +4237,7 @@ export async function getFixedExpenses(params?: { store?: string; userStore?: st
   if (params?.userStore) q.set('userStore', params.userStore)
   if (params?.userRole) q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getFixedExpenses?${q}`)
-  return res.json() as Promise<FixedExpenseItem[]>
+  return jsonAsArray<FixedExpenseItem>(await res.json())
 }
 
 export async function saveFixedExpense(params: {
@@ -4196,7 +4281,7 @@ export interface InteriorProject {
 
 export async function getInteriorProjects() {
   const res = await apiFetchWithOffline('/api/getInteriorProjects')
-  return res.json() as Promise<InteriorProject[]>
+  return jsonAsArray<InteriorProject>(await res.json())
 }
 
 export async function saveInteriorProject(params: Partial<InteriorProject> & { code: string; name: string }) {
@@ -4249,7 +4334,7 @@ export interface InteriorScheduleItem {
 export async function getInteriorSchedule(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorSchedule?${q}`)
-  return res.json() as Promise<InteriorScheduleItem[]>
+  return jsonAsArray<InteriorScheduleItem>(await res.json())
 }
 
 export async function saveInteriorScheduleItem(params: Partial<InteriorScheduleItem> & { projectId: number; workDetail: string }) {
@@ -4289,7 +4374,7 @@ export interface InteriorWorkPackage {
 export async function getInteriorWorkPackages(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorWorkPackages?${q}`)
-  return res.json() as Promise<InteriorWorkPackage[]>
+  return jsonAsArray<InteriorWorkPackage>(await res.json())
 }
 
 export async function saveInteriorWorkPackage(
@@ -4332,7 +4417,7 @@ export interface InteriorVendorTrack {
 export async function getInteriorVendorTracks(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorVendorTracks?${q}`)
-  return res.json() as Promise<InteriorVendorTrack[]>
+  return jsonAsArray<InteriorVendorTrack>(await res.json())
 }
 
 export async function saveInteriorVendorTrack(
@@ -4388,7 +4473,7 @@ export async function getInteriorLayoutItems(params: { projectId: string | numbe
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   if (params.zone) q.set('zone', String(params.zone))
   const res = await apiFetchWithOffline(`/api/getInteriorLayoutItems?${q}`)
-  return res.json() as Promise<InteriorLayoutItem[]>
+  return jsonAsArray<InteriorLayoutItem>(await res.json())
 }
 
 export async function saveInteriorLayoutItem(
@@ -4469,7 +4554,7 @@ export interface InteriorMaterialSpec {
 export async function getInteriorMaterialSpecs(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorMaterialSpecs?${q}`)
-  return res.json() as Promise<InteriorMaterialSpec[]>
+  return jsonAsArray<InteriorMaterialSpec>(await res.json())
 }
 
 export async function saveInteriorMaterialSpec(
@@ -4508,7 +4593,7 @@ export interface InteriorExpenseItem {
 export async function getInteriorExpenseItems(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorExpenseItems?${q}`)
-  return res.json() as Promise<InteriorExpenseItem[]>
+  return jsonAsArray<InteriorExpenseItem>(await res.json())
 }
 
 export async function saveInteriorExpenseItem(params: Partial<InteriorExpenseItem> & { projectId: number; description: string }) {
@@ -4562,7 +4647,7 @@ export interface InteriorDirectPurchase {
 export async function getInteriorDirectPurchases(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorDirectPurchases?${q}`)
-  return res.json() as Promise<InteriorDirectPurchase[]>
+  return jsonAsArray<InteriorDirectPurchase>(await res.json())
 }
 
 export async function saveInteriorDirectPurchase(params: Partial<InteriorDirectPurchase> & { projectId: number; description: string }) {
@@ -4596,7 +4681,7 @@ export interface InteriorProjectFile {
 export async function getInteriorFiles(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorFiles?${q}`)
-  return res.json() as Promise<InteriorProjectFile[]>
+  return jsonAsArray<InteriorProjectFile>(await res.json())
 }
 
 export async function uploadInteriorFile(params: {
@@ -4676,7 +4761,7 @@ export interface InteriorKitchenItem {
 export async function getInteriorKitchenItems(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorKitchenItems?${q}`)
-  return res.json() as Promise<InteriorKitchenItem[]>
+  return jsonAsArray<InteriorKitchenItem>(await res.json())
 }
 
 export async function saveInteriorKitchenItem(params: Partial<InteriorKitchenItem> & { projectId: number }) {
@@ -4710,7 +4795,7 @@ export interface InteriorSpecification {
 export async function getInteriorSpecifications(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
   const res = await apiFetchWithOffline(`/api/getInteriorSpecifications?${q}`)
-  return res.json() as Promise<InteriorSpecification[]>
+  return jsonAsArray<InteriorSpecification>(await res.json())
 }
 
 export async function saveInteriorSpecification(params: Partial<InteriorSpecification> & { projectId: number; description: string }) {
@@ -4823,7 +4908,7 @@ export interface ItemCategory {
 
 export async function getItemCategorySettings() {
   const res = await apiFetchWithOffline('/api/getItemCategorySettings')
-  return res.json() as Promise<ItemCategory[]>
+  return jsonAsArray<ItemCategory>(await res.json())
 }
 
 export async function saveItemCategory(params: {
@@ -4856,7 +4941,7 @@ export async function getItemCategories() {
 
 export async function getAdminVendors() {
   const res = await apiFetchWithOffline('/api/getVendors')
-  return res.json() as Promise<AdminVendor[]>
+  return jsonAsArray<AdminVendor>(await res.json())
 }
 
 export async function saveItem(params: {
@@ -5189,7 +5274,7 @@ export async function getPosMenuIngredients(
     const err = (await res.json().catch(() => ({}))) as { message?: string }
     throw new Error(err.message || `재료 조회 실패 (${res.status})`)
   }
-  return res.json() as Promise<PosMenuIngredient[]>
+  return jsonAsArray<PosMenuIngredient>(await res.json())
 }
 
 export async function savePosMenuIngredient(
@@ -5232,7 +5317,15 @@ export async function getMenuCost(params: { menuId: string; optionId?: string })
   q.set('menuId', params.menuId)
   if (params.optionId !== undefined) q.set('optionId', params.optionId)
   const res = await apiFetch('/api/getMenuCost?' + q.toString())
-  return res.json() as Promise<{ cost: number; breakdown: MenuCostBreakdown[] }>
+  const raw: unknown = await res.json()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { cost: 0, breakdown: [] }
+  }
+  const o = raw as Record<string, unknown>
+  return {
+    cost: Number(o.cost) || 0,
+    breakdown: jsonAsArray<MenuCostBreakdown>(o.breakdown),
+  }
 }
 
 export interface PosMenuCostAnalysisRow {
@@ -5801,7 +5894,7 @@ export async function getPosPromoItems(params: { promoId: string }) {
   const q = new URLSearchParams()
   q.set('promoId', params.promoId)
   const res = await apiFetchWithOffline('/api/getPosPromoItems?' + q.toString())
-  return res.json() as Promise<PosPromoItem[]>
+  return jsonAsArray<PosPromoItem>(await res.json())
 }
 
 export async function savePosPromo(params: {
@@ -6800,7 +6893,7 @@ export async function getMarketingMaterialGifts(params?: { campaignId?: string; 
   if (params?.campaignId) q.set('campaignId', params.campaignId)
   if (params?.materialId) q.set('materialId', params.materialId)
   const res = await apiFetchWithOffline('/api/marketingMaterialGifts' + (q.toString() ? '?' + q.toString() : ''))
-  return res.json() as Promise<MarketingMaterialGift[]>
+  return jsonAsArray<MarketingMaterialGift>(await res.json())
 }
 
 export async function saveMarketingMaterialGift(params: {
@@ -6839,7 +6932,7 @@ export async function getMarketingMaterialLookup(ids: string[]) {
   const res = await apiFetchWithOffline(
     `/api/marketingMaterialLookup?ids=${encodeURIComponent(uniq.join(','))}`
   )
-  return res.json() as Promise<{ id: string; name: string; campaignId: string | null }[]>
+  return jsonAsArray<{ id: string; name: string; campaignId: string | null }>(await res.json())
 }
 
 export interface PosCoupon {
@@ -6860,7 +6953,7 @@ export interface PosCoupon {
 
 export async function getPosCoupons() {
   const res = await apiFetchWithOffline('/api/getPosCoupons')
-  return res.json() as Promise<PosCoupon[]>
+  return jsonAsArray<PosCoupon>(await res.json())
 }
 
 export async function savePosCoupon(params: {
@@ -7401,7 +7494,7 @@ export async function getPosMenuBoards(params?: {
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.boardType) q.set('boardType', params.boardType)
   const res = await apiFetchWithOffline('/api/getPosMenuBoards?' + q.toString())
-  return res.json() as Promise<PosMenuBoardConfig[]>
+  return jsonAsArray<PosMenuBoardConfig>(await res.json())
 }
 
 export async function savePosMenuBoard(params: {
@@ -8654,7 +8747,7 @@ export async function getInboundHistory(params: {
     ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
   const res = await apiFetchWithOffline(`/api/getInboundHistory?${q}`)
-  return res.json() as Promise<InboundHistoryItem[]>
+  return jsonAsArray<InboundHistoryItem>(await res.json())
 }
 
 export async function getInboundForStore(params: {
@@ -8674,7 +8767,7 @@ export async function getInboundForStore(params: {
     ...(params.itemSearch?.trim() ? { itemSearch: params.itemSearch.trim() } : {}),
   })
   const res = await apiFetchWithOffline(`/api/getInboundForStore?${q}`)
-  return res.json() as Promise<InboundHistoryItem[]>
+  return jsonAsArray<InboundHistoryItem>(await res.json())
 }
 
 // ─── 출고 관리 (Outbound) ───
@@ -8761,7 +8854,7 @@ export async function getCombinedOutboundHistory(params: {
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.itemSearch?.trim()) q.set('itemSearch', params.itemSearch.trim())
   const res = await apiFetchWithOffline(`/api/getCombinedOutboundHistory?${q}`)
-  return res.json() as Promise<OutboundHistoryItem[]>
+  return jsonAsArray<OutboundHistoryItem>(await res.json())
 }
 
 /** 출고 로그(stock_logs) 확정 단가·수량 수정 — 본사 권한, orders 미변경 */
@@ -9627,7 +9720,7 @@ export async function getStoreVisitHistory(params: {
     ...(params.purpose && { purpose: params.purpose }),
   })
   const res = await apiFetchWithOffline(`/api/getStoreVisitHistory?${q}`)
-  return res.json() as Promise<StoreVisitHistoryItem[]>
+  return jsonAsArray<StoreVisitHistoryItem>(await res.json())
 }
 
 export interface StoreVisitTodaySnapshotActive {
@@ -9716,7 +9809,7 @@ export async function getStoreVisitRecords(params: {
     ...(params.purpose && params.purpose !== "__ALL__" && { purpose: params.purpose }),
   })
   const res = await apiFetchWithOffline(`/api/getStoreVisitRecords?${q}`)
-  return res.json() as Promise<VisitRecord[]>
+  return jsonAsArray<VisitRecord>(await res.json())
 }
 
 // ─── 컴플레인 일지 ───
@@ -9761,7 +9854,7 @@ export async function getComplaintLogList(params: {
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.statusFilter) q.set('statusFilter', params.statusFilter)
   const res = await apiFetchWithOffline(`/api/getComplaintLogList?${q}`)
-  return res.json() as Promise<ComplaintLogItem[]>
+  return jsonAsArray<ComplaintLogItem>(await res.json())
 }
 
 export async function saveComplaintLog(data: Record<string, unknown>) {
@@ -9824,7 +9917,7 @@ export async function getStoreRepairTicketList(params: {
   if (params.priority) q.set('priority', params.priority)
   if (params.q) q.set('q', params.q)
   const res = await apiFetchWithOffline(`/api/getStoreRepairTicketList?${q}`)
-  return res.json() as Promise<StoreRepairTicketItem[]>
+  return jsonAsArray<StoreRepairTicketItem>(await res.json())
 }
 
 export async function saveStoreRepairTicket(data: Record<string, unknown>) {
@@ -9983,7 +10076,7 @@ export interface StoreRepairProgressLog {
 
 export async function getStoreRepairProgressLogs(ticketId: number) {
   const res = await apiFetchWithOffline(`/api/getStoreRepairProgressLogs?ticketId=${ticketId}`)
-  return res.json() as Promise<StoreRepairProgressLog[]>
+  return jsonAsArray<StoreRepairProgressLog>(await res.json())
 }
 
 export async function addStoreRepairProgressLog(data: {
@@ -10101,7 +10194,7 @@ export interface ItemByVendor {
 
 export async function getPurchaseLocations() {
   const res = await apiFetchWithOffline('/api/getPurchaseLocations')
-  return res.json() as Promise<PurchaseLocation[]>
+  return jsonAsArray<PurchaseLocation>(await res.json())
 }
 
 export async function getVendorsForPurchase() {
@@ -10124,7 +10217,7 @@ export async function getItemsByVendor(
   if (outboundLocation?.trim()) q.set('outboundLocation', outboundLocation.trim())
   if (outboundLocationName?.trim()) q.set('outboundLocationName', outboundLocationName.trim())
   const res = await apiFetchWithOffline(`/api/getItemsByVendor?${q}`)
-  return res.json() as Promise<ItemByVendor[]>
+  return jsonAsArray<ItemByVendor>(await res.json())
 }
 
 export interface ItemVendorRow {
@@ -10138,7 +10231,7 @@ export interface ItemVendorRow {
 export async function getItemVendors(itemCode: string) {
   const q = new URLSearchParams({ itemCode })
   const res = await apiFetchWithOffline(`/api/getItemVendors?${q}`)
-  return res.json() as Promise<ItemVendorRow[]>
+  return jsonAsArray<ItemVendorRow>(await res.json())
 }
 
 export async function saveItemVendors(params: {

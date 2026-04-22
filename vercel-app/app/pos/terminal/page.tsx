@@ -2,7 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
@@ -47,8 +47,6 @@ import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '
 import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
-import { resolveDineInCloseStatus } from '@/lib/pos-dine-in-order-domain'
-import { isPosTableOrderEnabledStore } from '@/lib/pos-table-order-access'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
@@ -134,7 +132,6 @@ type PendingPayRequest = {
 const FLOOR_PREF_KEY = 'pos-terminal-floor:'
 
 export default function PosTerminalPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const typeParam = searchParams.get('type') ?? 'dine_in'
   const orderType = useMemo(() => {
@@ -314,13 +311,6 @@ export default function PosTerminalPage() {
   usePosMenusCatalogLiveRefresh(applyPosMenusList)
   const drawerOpenWarnedRef = useRef(false)
   const posPrinterSettingsRef = useRef<PosPrinterSettings | null>(null)
-
-  useEffect(() => {
-    if (orderType !== 'dine-in') return
-    if (!currentStoreId) return
-    if (isPosTableOrderEnabledStore(currentStoreId)) return
-    router.replace('/pos/order?type=dine_in')
-  }, [orderType, currentStoreId, router])
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -2233,7 +2223,7 @@ export default function PosTerminalPage() {
                 const pay = payload.payment
                 const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
                 if (!linkpos.ok) return
-                const targetClose = resolveDineInCloseStatus(!!payload.isPrepaid)
+                const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
                   await updatePosOrder({

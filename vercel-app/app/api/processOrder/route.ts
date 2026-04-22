@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Headers', 'Content-Type')
 
   try {
-    const authResult = await requireAuth(request, 'manager')
+    // 모바일 발주: 로그인한 일반 직원도 본인 매장(스코프)에서 발주 가능. 매장 검증은 아래 isScopedRole 분기
+    const authResult = await requireAuth(request, 'any')
     if (authResult.errorResponse) {
       authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
       authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')

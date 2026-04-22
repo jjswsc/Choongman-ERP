@@ -21,7 +21,15 @@ export function TimesheetTab() {
   React.useEffect(() => {
     if (!auth?.store) return
     const stores = [...storeListRaw]
-    const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+    // AppNavigation·MobileStoreSelectorBar와 동일: role 부분일치(대소문자 무시)로 본사/권한 판별
+    const roleLower = String(auth?.role || "").toLowerCase()
+    const isOffice =
+      (auth?.store &&
+        (auth.store.toLowerCase() === "office" ||
+          auth.store === "본사" ||
+          auth.store === "CM Office" ||
+          auth.store.toLowerCase().includes("office"))) ||
+      ["director", "officer", "ceo", "hr"].some((r) => roleLower.includes(r))
     if (isOffice && stores.length > 0) {
       setStoreList(stores)
       setStoreFilter(stores.includes(auth.store) ? auth.store : stores[0] || auth.store)

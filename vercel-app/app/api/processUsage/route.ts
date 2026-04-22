@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
-    const authResult = await requireAuth(request, 'manager')
+    // 모바일 사용(재고 출고): 일반 직원도 본인 매장에서 사용 등록 가능. 매장 검증은 아래 isScopedRole 분기
+    const authResult = await requireAuth(request, 'any')
     if (authResult.errorResponse) {
       authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
       authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')

@@ -652,6 +652,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "모바일",
+      /** ERP 탭: 웹 관리(Admin)용 — Staff는 「모바일」 안내 */
+      loginErpStaffHint:
+        "「ERP」는 매장/본사 관리 권한(매니저·가맹점주·본사·회계 등)이 있는 계정만 사용할 수 있습니다. 일반 직원은 「모바일」을 선택하세요.",
       offlineResumeStore: "매장",
       offlineResumeStaff: "담당자",
       offlineResumeSyncNote:
@@ -678,6 +681,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP (Admin)",
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
+      loginErpStaffHint:
+        "“ERP (Admin)” is for managers, franchisees, HQ, and other authorized accounts. Store staff should choose “Mobile”.",
       offlineResumeStore: "Store",
       offlineResumeStaff: "Staff",
       offlineResumeSyncNote:
@@ -704,6 +709,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "มือถือ",
+      loginErpStaffHint:
+        "แท็บ “ERP” สำหรับบัญชีที่มีสิทธิ์จัดการ (ผู้จัดการ/แฟรนไชส์/สำนักงาน/บัญชี) เท่านั้น พนักงานทั่วไปให้เลือก “มือถือ”",
       offlineResumeStore: "สาขา",
       offlineResumeStaff: "พนักงาน",
       offlineResumeSyncNote:
@@ -730,6 +737,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "မိုဘိုင်း",
+      loginErpStaffHint:
+        "“ERP” ဟာ မန်နေဂျာ/ဖြေရှင်းချိန်/ရုံးစသည့် အကောင့်အတွက်သာ။ ပြေစာပိုင်းဝန်ထမ်းများသည် “မိုဘိုင်း”ကို ရွေးပါ။",
       offlineResumeStore: "ဆိုင်",
       offlineResumeStaff: "တာဝန်ခံ",
       offlineResumeSyncNote:
@@ -756,6 +765,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "ມືຖື",
+      loginErpStaffHint:
+        "ແຖບ “ERP” ສຳລັບບັນຊີທີ່ມີສິດຄວບຄຸມ (ຜູ້ຈັດການ/ສຳນັກງານ/ບັນຊີ). ພະນັກງານທົ່ວໄປ ເລືອກ “ມືຖື”.",
       offlineResumeStore: "ສາຂາ",
       offlineResumeStaff: "ຜູ້ຮັບຜິດຊອບ",
       offlineResumeSyncNote:
@@ -823,6 +834,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   </button>
                 ))}
               </div>
+              {loginApp === "erp" && normalizeLoginPathname(pathname) !== "/saas-admin/login" ? (
+                <p className="mt-2 rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 py-2 text-center text-[11px] leading-relaxed text-amber-100/95">
+                  {t.loginErpStaffHint}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
