@@ -36,6 +36,7 @@ import {
   XCircle,
   FileCheck,
   FileText,
+  Paperclip,
 } from "lucide-react"
 import {
   isPoApprovedStatus,
@@ -329,18 +330,6 @@ export function AdminPurchaseOrderHistory() {
       pad([t("subtotal"), ...Array(colCount - 2).fill(""), String(po.subtotal ?? 0)], colCount),
       pad([t("vat"), ...Array(colCount - 2).fill(""), String(po.vat ?? 0)], colCount),
       pad([t("total"), ...Array(colCount - 2).fill(""), String(po.total ?? 0)], colCount),
-      pad(
-        [t("poWithholdingTax") || "WHT", ...Array(colCount - 2).fill(""), String(po.withholding_tax_amount ?? 0)],
-        colCount
-      ),
-      pad(
-        [
-          t("poNetAmount") || "Net",
-          ...Array(colCount - 2).fill(""),
-          String((po.total ?? 0) - (po.withholding_tax_amount ?? 0)),
-        ],
-        colCount
-      ),
     ]
     const pxPerChar = 8
     const minW = 50
@@ -357,7 +346,7 @@ export function AdminPurchaseOrderHistory() {
     const isHeaderDataRow = (ri: number) =>
       headerPadded.length > 0 &&
       headerPadded.every((cell, i) => String(allRows[ri][i] ?? "") === String(cell))
-    const footerCount = 5
+    const footerCount = 3
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
 <body>
@@ -411,7 +400,6 @@ ${allRows.map((row, ri) => {
       total: po.total ?? 0,
       userName: po.user_name || "-",
       status: po.status,
-      withholdingTaxAmount: po.withholding_tax_amount,
       relatedStore: meta?.relatedStore,
       storeVendorName: meta?.storeVendorName,
       poFormatLabel: meta?.poFormatLabel,
@@ -509,8 +497,6 @@ ${allRows.map((row, ri) => {
                   <th className="px-3 py-2 text-left font-medium">{t("status")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("vat")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("total")}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t("poWithholdingTax") || "WHT"}</th>
-                  <th className="px-3 py-2 text-right font-medium">{t("poNetAmount") || "실지급액"}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poPreparedBy")}</th>
                   <th className="w-28 px-1 py-2" />
                 </tr>
@@ -523,12 +509,26 @@ ${allRows.map((row, ri) => {
                   return (
                     <tr key={po.id} className="border-b border-border/60 last:border-0">
                       <td className="px-3 py-2">
-                        <Badge
-                          variant={isAcct ? "default" : "secondary"}
-                          className="whitespace-nowrap text-[10px] font-medium"
-                        >
-                          {isAcct ? t("poHistorySourceAccounting") : t("poHistorySourceLogistics")}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge
+                            variant={isAcct ? "default" : "secondary"}
+                            className="whitespace-nowrap text-[10px] font-medium"
+                          >
+                            {isAcct ? t("poHistorySourceAccounting") : t("poHistorySourceLogistics")}
+                          </Badge>
+                          {isAcct && quotation && (
+                            <a
+                              href={quotation.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex min-h-[1.5rem] min-w-[1.5rem] items-center justify-center rounded-md text-base leading-none text-amber-800 hover:bg-amber-500/20 dark:text-amber-400"
+                              title={`${quotation.name} — ${t("poQuotationView")}`}
+                              aria-label={`${t("poQuotationView")}: ${quotation.name}`}
+                            >
+                              <span aria-hidden>📎</span>
+                            </a>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 font-medium">{po.po_no || `#${po.id}`}</td>
                       <td className="px-3 py-2 text-muted-foreground">{dateStr}</td>
@@ -547,20 +547,28 @@ ${allRows.map((row, ri) => {
                       <td className="px-3 py-2 text-right font-semibold text-primary tabular-nums">
                         {po.total != null ? po.total.toLocaleString() : "-"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                        {(po.withholding_tax_amount ?? 0) > 0
-                          ? (po.withholding_tax_amount ?? 0).toLocaleString()
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">
-                        {po.total != null
-                          ? ((po.total ?? 0) - (po.withholding_tax_amount ?? 0)).toLocaleString()
-                          : "-"}
-                      </td>
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
                         <div className="flex items-center gap-0.5">
-                          {quotation && (
+                          {isAcct && quotation && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-amber-800 ring-1 ring-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 dark:text-amber-400"
+                              asChild
+                            >
+                              <a
+                                href={quotation.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={`${quotation.name} — ${t("poQuotationView")}`}
+                                aria-label={`${t("poQuotationView")}: ${quotation.name}`}
+                              >
+                                <Paperclip className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          )}
+                          {!isAcct && quotation && (
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" asChild>
                               <a
                                 href={quotation.url}

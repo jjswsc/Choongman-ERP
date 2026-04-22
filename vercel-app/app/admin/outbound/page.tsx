@@ -85,6 +85,28 @@ function compareItemCodes(a: string, b: string): number {
   return (a || "").localeCompare(b || "", undefined, { numeric: true, sensitivity: "base" })
 }
 
+type OutboundDeleteJob = {
+  mode: "order" | "force"
+  orderId?: number
+  stockLogIds?: number[]
+  orderDate: string
+  target: string
+}
+
+function deleteJobFromShipmentRow(row: ShipmentTableRow): OutboundDeleteJob | null {
+  const orderIdNum = Number(row.orderRowId || 0)
+  const forceStockLogIds = row.items
+    .map((d) => Number(d.stockLogId || 0))
+    .filter((n) => Number.isFinite(n) && n > 0)
+  if (row.type === "Outbound" && orderIdNum > 0) {
+    return { mode: "order", orderId: orderIdNum, orderDate: row.orderDate, target: row.target }
+  }
+  if (row.type === "Force" && forceStockLogIds.length > 0) {
+    return { mode: "force", stockLogIds: forceStockLogIds, orderDate: row.orderDate, target: row.target }
+  }
+  return null
+}
+
 function ReceivePhotoGallery({ urls, t }: { urls: string[]; t: (k: string) => string }) {
   const [idx, setIdx] = React.useState(0)
   const current = urls[idx] ?? urls[0]
@@ -726,91 +748,6 @@ export default function OutboundPage() {
     }
   }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store])
 
-  const handleDeleteOutboundRow = React.useCallback(
-    async (params: {
-      mode: "order" | "force"
-      orderId?: number
-      stockLogIds?: number[]
-      orderDate: string
-      target: string
-    }) => {
-      if (deletingOutbound) return
-      setDeletingOutbound(true)
-      try {
-        const preview = await previewDeleteOutbound({
-          mode: params.mode,
-          ...(params.mode === "order" && params.orderId ? { orderId: params.orderId } : {}),
-          ...(params.mode === "force" && params.stockLogIds?.length ? { stockLogIds: params.stockLogIds } : {}),
-        })
-        if (!preview?.success) {
-          await appAlert(translateApiMessage(preview?.message, t) || preview?.message || "삭제 대상 조회에 실패했습니다.")
-          return
-        }
-        const targetCount = Number(preview.targetCount || 0)
-        const conflictLines = (preview.conflicts || []).map((c) => `- ${c.message}`)
-        const receivableImpactLines = Object.entries(preview.receivableDeleteByStore || {})
-          .map(([store, amount]) => `- ${store}: ${Number(amount || 0).toLocaleString()}`)
-          .slice(0, 12)
-        const summaryLines = [
-          `대상 건수: ${targetCount.toLocaleString()}건`,
-          `유형: ${params.mode === "order" ? "주문출고" : "강제출고"}`,
-          `매장/수령처: ${params.target}`,
-          `기준일: ${params.orderDate || "-"}`,
-        ]
-        if (receivableImpactLines.length > 0) {
-          summaryLines.push("", "삭제 시 미수금 감소 예상:", ...receivableImpactLines)
-        }
-        if (conflictLines.length > 0) {
-          summaryLines.push("", "삭제 충돌:", ...conflictLines)
-          await appAlert(summaryLines.join("\n"))
-          return
-        }
-        const reason = (await appPrompt(`${summaryLines.join("\n")}\n\n삭제 사유를 입력해 주세요.`))?.trim()
-        if (!reason) return
-        const ok = await appConfirm(
-          `출고 소프트 삭제를 진행할까요?\n\n사유: ${reason}\n대상: ${targetCount.toLocaleString()}건`
-        )
-        if (!ok) return
-
-        const idempotencyKey =
-          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `delete-outbound-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-        const result = await deleteOutbound({
-          mode: params.mode,
-          reason,
-          ...(params.mode === "order" && params.orderId ? { orderId: params.orderId } : {}),
-          ...(params.mode === "force" && params.stockLogIds?.length ? { stockLogIds: params.stockLogIds } : {}),
-          idempotencyKey,
-        })
-        if (!result.success) {
-          const conflictMsg = (result.conflicts || []).map((c) => `- ${c.message}`).join("\n")
-          await appAlert(
-            [translateApiMessage(result.message, t) || result.message || "삭제 실패", conflictMsg]
-              .filter(Boolean)
-              .join("\n\n")
-          )
-          return
-        }
-        const warnText = (result.warnings || []).slice(0, 8).join("\n")
-        await appAlert(
-          [
-            translateApiMessage(result.message, t) || result.message || "삭제되었습니다.",
-            warnText ? `후속 점검 메시지:\n${warnText}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n")
-        )
-        await fetchHistory()
-      } catch (e) {
-        await appAlert(e instanceof Error ? e.message : String(e))
-      } finally {
-        setDeletingOutbound(false)
-      }
-    },
-    [deletingOutbound, fetchHistory, t]
-  )
-
   const fetchSummaryHistory = React.useCallback(async () => {
     let s = histStart
     let e = histEnd
@@ -984,6 +921,140 @@ export default function OutboundPage() {
       }
     })
   }, [filteredGroupedHistory, isOffice, t])
+
+  const handleDeleteSelectedOutbounds = React.useCallback(async () => {
+    if (!isOffice) return
+    if (deletingOutbound) return
+    const sortedIdx = Array.from(selectedForPrint).sort((a, b) => a - b)
+    if (sortedIdx.length === 0) {
+      await appAlert(t("outSelectForDelete") || "삭제할 출고를 체크하세요.")
+      return
+    }
+    const selectedRows = sortedIdx.map((i) => shipmentTableRows[i]).filter(Boolean)
+    if (selectedRows.length === 0) {
+      await appAlert(t("outSelectForDelete") || "삭제할 출고를 체크하세요.")
+      return
+    }
+    const jobs: OutboundDeleteJob[] = []
+    for (const row of selectedRows) {
+      const j = deleteJobFromShipmentRow(row)
+      if (j) jobs.push(j)
+    }
+    if (jobs.length === 0) {
+      await appAlert(
+        t("outDeleteNoneApplicable") ||
+          "체크한 항목은 출고 삭제 대상이 아닙니다. (주문 출고: 주문 식별 필요, 강제출고: 출고 로그 필요)"
+      )
+      return
+    }
+    if (jobs.length < selectedRows.length) {
+      const ok = await appConfirm(
+        t("outDeletePartialConfirm") ||
+          `체크 ${selectedRows.length}건 중 ${jobs.length}건만 삭제할 수 있습니다. 계속할까요?`
+      )
+      if (!ok) return
+    }
+    setDeletingOutbound(true)
+    try {
+      const allConflicts: string[] = []
+      const receivableMerge: Record<string, number> = {}
+      let totalLogCount = 0
+      for (const j of jobs) {
+        const preview = await previewDeleteOutbound({
+          mode: j.mode,
+          ...(j.mode === "order" && j.orderId ? { orderId: j.orderId } : {}),
+          ...(j.mode === "force" && j.stockLogIds?.length ? { stockLogIds: j.stockLogIds } : {}),
+        })
+        if (!preview?.success) {
+          await appAlert(translateApiMessage(preview?.message, t) || preview?.message || "삭제 대상 조회에 실패했습니다.")
+          return
+        }
+        totalLogCount += Number(preview.targetCount || 0)
+        for (const c of preview.conflicts || []) {
+          allConflicts.push(`- ${c.message}`)
+        }
+        for (const [store, amount] of Object.entries(preview.receivableDeleteByStore || {})) {
+          receivableMerge[store] = (receivableMerge[store] || 0) + Number(amount || 0)
+        }
+      }
+      const receivableImpactLines = Object.entries(receivableMerge)
+        .map(([store, amount]) => `- ${store}: ${Number(amount || 0).toLocaleString()}`)
+        .slice(0, 12)
+      const detailLines: string[] = jobs.slice(0, 5).map((j) => {
+        const typeLabel = j.mode === "order" ? t("outTypeOrder") : t("outTypeForce")
+        return `- ${j.target} / ${typeLabel} / ${j.orderDate || "-"}`
+      })
+      if (jobs.length > 5) {
+        detailLines.push(`- … ${t("inEtcCount")} ${jobs.length - 5}`)
+      }
+      const summaryLines = [
+        `대상 그룹: ${jobs.length.toLocaleString()}건, 출고 로그(항목) 합계: ${totalLogCount.toLocaleString()}건`,
+        ...detailLines,
+        "",
+      ]
+      if (receivableImpactLines.length > 0) {
+        summaryLines.push("삭제 시 미수금 감소 예상:", ...receivableImpactLines)
+      }
+      if (allConflicts.length > 0) {
+        summaryLines.push("", "삭제 충돌:", ...allConflicts)
+        await appAlert(summaryLines.join("\n"))
+        return
+      }
+      const reason = (await appPrompt(`${summaryLines.join("\n")}\n\n삭제 사유를 입력해 주세요.`))?.trim()
+      if (!reason) return
+      const ok2 = await appConfirm(
+        `출고 소프트 삭제를 진행할까요?\n\n사유: ${reason}\n대상 그룹: ${jobs.length.toLocaleString()}건, 출고 항목: ${totalLogCount.toLocaleString()}건`
+      )
+      if (!ok2) return
+
+      const allWarnings: string[] = []
+      for (const j of jobs) {
+        const idempotencyKey =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `delete-outbound-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+        const result = await deleteOutbound({
+          mode: j.mode,
+          reason,
+          ...(j.mode === "order" && j.orderId ? { orderId: j.orderId } : {}),
+          ...(j.mode === "force" && j.stockLogIds?.length ? { stockLogIds: j.stockLogIds } : {}),
+          idempotencyKey,
+        })
+        if (!result.success) {
+          const conflictMsg = (result.conflicts || []).map((c) => `- ${c.message}`).join("\n")
+          await appAlert(
+            [
+              translateApiMessage(result.message, t) || result.message || "삭제 실패",
+              `${j.target} / ${j.mode === "order" ? t("outTypeOrder") : t("outTypeForce")}`,
+              conflictMsg,
+            ]
+              .filter(Boolean)
+              .join("\n\n")
+          )
+          await fetchHistory()
+          return
+        }
+        for (const w of result.warnings || []) {
+          if (w) allWarnings.push(String(w))
+        }
+      }
+      const warnText = allWarnings.slice(0, 12).join("\n")
+      await appAlert(
+        [
+          `선택 ${jobs.length.toLocaleString()}개 그룹이 삭제되었습니다.`,
+          warnText ? `후속 점검 메시지:\n${warnText}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+      )
+      setSelectedForPrint(new Set())
+      await fetchHistory()
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeletingOutbound(false)
+    }
+  }, [isOffice, deletingOutbound, selectedForPrint, shipmentTableRows, t, fetchHistory])
 
   const usageTableRows = React.useMemo(
     () =>
@@ -2106,6 +2177,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               onPrintInvoice={handlePrintInvoice}
               onExcelDownload={isOffice ? handleExcelDownload : undefined}
               onEtaxXmlDownload={isOffice ? handleEtaxXmlDownload : undefined}
+              onDeleteSelected={isOffice ? handleDeleteSelectedOutbounds : undefined}
+              deleteBusy={deletingOutbound}
               selectedCount={selectedForPrint.size}
             />
             <div className="overflow-x-auto max-h-[500px]">
@@ -2146,7 +2219,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   }
                 }}
                 onReloadHistory={canEditOutboundLogUnitPrice ? fetchHistory : undefined}
-                onDeleteOutbound={isOffice ? handleDeleteOutboundRow : undefined}
                 usageRows={usageTableRows}
               />
             </div>

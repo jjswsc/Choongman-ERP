@@ -34,7 +34,6 @@ export interface PoPrintData {
   total: number
   userName: string
   status?: string
-  withholdingTaxAmount?: number
   /** 회계 PO: 연결 매장 */
   relatedStore?: string
   /** 회계 PO: 매장별 거래처 표시명 */
@@ -114,9 +113,6 @@ export function PurchaseOrderPrint({
     grandTotal?: string
     /** 세금 포함 공급대가 합계(인보이스 총액) */
     invoiceTotal?: string
-    withholdingTax?: string
-    /** 원천징수 차감 후 지급액 */
-    amountDue?: string
     preparedBy?: string
     store?: string
     receivedBy?: string
@@ -432,30 +428,6 @@ export function PurchaseOrderPrint({
               </span>
               <span className="font-semibold text-[#1e4d8c]">
                 {formatCurrency(data.total ?? 0)} THB
-              </span>
-            </div>
-            <div className="flex justify-between text-sm py-2">
-              <span className="text-muted-foreground">{t("withholdingTax") || "Withholding tax"}:</span>
-              <span
-                className={
-                  (data.withholdingTaxAmount ?? 0) > 0 ? "font-medium text-amber-700" : "font-medium text-muted-foreground"
-                }
-              >
-                {(data.withholdingTaxAmount ?? 0) > 0
-                  ? `-${formatCurrency(data.withholdingTaxAmount ?? 0)}`
-                  : formatCurrency(0)}{" "}
-                THB
-              </span>
-            </div>
-            <div className="flex justify-between py-3 bg-[#1e4d8c] text-white -mx-4 px-4 rounded-lg mt-2">
-              <span className="font-bold text-lg">
-                {t("amountDue") || t("grandTotal") || "Amount due"}:
-              </span>
-              <span className="font-bold text-lg">
-                {formatCurrency(
-                  (data.total ?? 0) - (data.withholdingTaxAmount ?? 0)
-                )}{" "}
-                THB
               </span>
             </div>
           </div>

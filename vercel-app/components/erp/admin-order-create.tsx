@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, getLineRemarksPh } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList, getAppData, processOrder, type AppItem } from "@/lib/api-client"
 import { isManagerRole } from "@/lib/permissions"
@@ -79,6 +79,7 @@ export function AdminOrderCreate() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const lineRemarksPlaceholder = getLineRemarksPh(lang, t)
   const isManager = isManagerRole(auth?.role || "")
 
   const [stores, setStores] = React.useState<string[]>([])
@@ -404,7 +405,7 @@ export function AdminOrderCreate() {
                             <Textarea
                               value={c.lineRemarks || ""}
                               onChange={(e) => updateLineRemarks(c.code, e.target.value)}
-                              placeholder={t("orderLineRemarksPh") || "비고 (예: TOTAL WEIGHT : 26KG./1BOX\\nPRICE : 600 THB./1 KG.)"}
+                              placeholder={lineRemarksPlaceholder}
                               className="min-h-[56px] resize-y border-primary/20 bg-background text-xs leading-relaxed"
                             />
                           </td>

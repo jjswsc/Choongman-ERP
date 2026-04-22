@@ -3332,6 +3332,7 @@ export const i18n = {
     orderItemTotal: '합계',
     orderDeliveryDate: '배송 일자',
     orderDeliveryDatePh: '년-월-일',
+    orderLineRemarksPh: '비고 (무게/단가 등)',
     orderDeliveryDateRequired: '승인하려면 배송일을 선택해 주세요.',
     orderBatchDeliveryByStore: '배송지별 배송일 일괄 설정',
     orderApproveNeedItems: '승인할 품목을 하나 이상 선택해 주세요.',
@@ -9347,6 +9348,7 @@ orderItemQty: 'Qty',
     orderItemTotal: 'Total',
     orderDeliveryDate: 'Delivery Date',
     orderDeliveryDatePh: 'YYYY-MM-DD',
+    orderLineRemarksPh: 'Remarks (weight, price, etc.)',
     orderDeliveryDateRequired: 'Please select a delivery date to approve.',
     orderBatchDeliveryByStore: 'Batch set delivery date by store',
     orderApproveNeedItems: 'Select at least one item to approve.',
@@ -12697,6 +12699,7 @@ orderItemQty: 'จำนวน',
     orderItemTotal: 'รวม',
     orderDeliveryDate: 'วันจัดส่ง',
     orderDeliveryDatePh: 'ปี-เดือน-วัน',
+    orderLineRemarksPh: 'หมายเหตุ (น้ำหนัก/ราคา ฯลฯ)',
     orderDeliveryDateRequired: 'กรุณาเลือกวันจัดส่งเพื่ออนุมัติ',
     orderBatchDeliveryByStore: 'ตั้งวันจัดส่งตามสาขา',
     orderApproveNeedItems: 'เลือกอย่างน้อย 1 รายการเพื่ออนุมัติ',
@@ -18140,6 +18143,7 @@ orderItemQty: 'အရေအတွက်',
     orderItemTotal: 'စုစုပေါင်း',
     orderDeliveryDate: 'ပို့ဆောင်မည့်နေ့',
     orderDeliveryDatePh: 'နှစ်-လ-နေ့',
+    orderLineRemarksPh: 'မှတ်ချက် (ချိန်ခွာချက်/ဈေးနှုန်း စသည်)',
     orderDeliveryDateRequired: 'အတည်ပြုရန် ပို့ဆောင်မည့်နေ့ ရွေးပါ။',
     orderBatchDeliveryByStore: 'ဆိုင်အလိုက် ပို့ဆောင်မည့်နေ့ ချမှတ်',
     orderApproveNeedItems: 'အတည်ပြုရန် ပစ္စည်းတစ်ခုခု ရွေးပါ။',
@@ -23344,6 +23348,7 @@ orderItemQty: 'ຈຳນວນ',
     orderItemTotal: 'ລວມ',
     orderDeliveryDate: 'ວັນສົ່ງ',
     orderDeliveryDatePh: 'ປີ-ເດືອນ-ວັນ',
+    orderLineRemarksPh: 'ຫມາຍເຫດ (ນ້ຳໜັກ/ລາຄາ ແລະ ອື່ນໆ)',
     orderDeliveryDateRequired: 'ກະລຸນາເລືອກວັນສົ່ງເພື່ອອະນຸມັດ.',
     orderBatchDeliveryByStore: 'ຕັ້ງວັນສົ່ງຕາມສາຂາ',
     orderApproveNeedItems: 'ເລືອກຢ່າງໜ້ອຍ 1 ລາຍການເພື່ອອະນຸມັດ.',
@@ -35396,6 +35401,18 @@ const i18nWithPosBackfill: Record<string, Record<string, string>> = Object.fromE
     return [lang, merged]
   })
 )
+
+/**
+ * `orderLineRemarksPh` 미등록·폴백 키 노출 시 사람이 읽는 문구로 대체
+ * (useT는 미번역 시 키 이름을 그대로 반환해 `||` 폴백이 동작하지 않음)
+ */
+export function getLineRemarksPh(lang: string, t: (k: string) => string): string {
+  const s = t("orderLineRemarksPh")
+  if (s && s !== "orderLineRemarksPh") return s
+  if (lang === "en") return "Remarks (weight, price, etc.)"
+  if (lang === "th") return "หมายเหตุ (น้ำหนัก/ราคา ฯลฯ)"
+  return "비고 (무게/단가 등)"
+}
 
 /** useT와 동일 규칙 — React 바깥(인쇄 유틸 등)에서 사용. `vars`로 `{name}` 치환 */
 export function getUiString(

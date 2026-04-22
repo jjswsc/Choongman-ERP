@@ -54,32 +54,47 @@ export function serializePurchaseOrderCart(items: PoCartLine[], meta?: PoCartMet
   return JSON.stringify(lines)
 }
 
-export function parsePurchaseOrderCart(json: string | undefined): { items: PoCartLine[]; meta?: PoCartMeta } {
-  if (!json || typeof json !== "string") return { items: [] }
-  try {
-    const parsed = JSON.parse(json) as unknown
-    if (Array.isArray(parsed)) {
-      return { items: parsed as PoCartLine[] }
+/**
+ * API/PostgREST에서 json/jsonb 컬럼이 객체로 오거나(일반), text로 쌓인 행이 문자열로 올 수 있음.
+ * 둘 다 동일 파서로 처리해야 견적 URL 등 meta를 읽을 수 있음.
+ */
+function toParsedCartJson(raw: unknown): unknown {
+  if (raw == null) return null
+  if (typeof raw === "string") {
+    const t = raw.trim()
+    if (!t) return null
+    try {
+      return JSON.parse(t) as unknown
+    } catch {
+      return null
     }
-    if (parsed && typeof parsed === "object" && "items" in parsed && Array.isArray((parsed as PoCartPayloadV1).items)) {
-      const p = parsed as PoCartPayloadV1
-      return { items: p.items || [], meta: p.meta }
-    }
-  } catch {
-    /* ignore */
+  }
+  if (typeof raw === "object") return raw
+  return null
+}
+
+export function parsePurchaseOrderCart(json: unknown): { items: PoCartLine[]; meta?: PoCartMeta } {
+  const parsed = toParsedCartJson(json)
+  if (parsed == null) return { items: [] }
+  if (Array.isArray(parsed)) {
+    return { items: parsed as PoCartLine[] }
+  }
+  if (parsed && typeof parsed === "object" && "items" in parsed && Array.isArray((parsed as PoCartPayloadV1).items)) {
+    const p = parsed as PoCartPayloadV1
+    return { items: p.items || [], meta: p.meta }
   }
   return { items: [] }
 }
 
 /** cart_json 메타의 발주일(YYYY-MM-DD). 없으면 null */
-export function purchaseOrderMetaOrderDate(cartJson: string | undefined): string | null {
+export function purchaseOrderMetaOrderDate(cartJson: unknown): string | null {
   const { meta } = parsePurchaseOrderCart(cartJson)
   const s = String(meta?.orderDate ?? "").trim().slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
 }
 
 /** cart_json 메타에 저장된 견적서 첨부 (없으면 빈 객체) */
-export function poQuotationFromMeta(cartJson: string | undefined): { url: string; name: string } | null {
+export function poQuotationFromMeta(cartJson: unknown): { url: string; name: string } | null {
   const { meta } = parsePurchaseOrderCart(cartJson)
   const url = String(meta?.quotationFileUrl ?? "").trim()
   if (!url) return null
@@ -92,7 +107,7 @@ export function poQuotationFromMeta(cartJson: string | undefined): { url: string
  * `savePurchaseOrder`에서 회계 전용 메타(orderDate, billing*, relatedStore)가 있으면 회계.
  * 순수 JSON 배열 또는 메타 없음은 물류(레거시 매장 발주)로 본다.
  */
-export function isAccountingPurchaseOrderByCartJson(cartJson: string | undefined): boolean {
+export function isAccountingPurchaseOrderByCartJson(cartJson: unknown): boolean {
   const { meta } = parsePurchaseOrderCart(cartJson)
   if (!meta) return false
   if (purchaseOrderMetaOrderDate(cartJson)) return true
@@ -105,7 +120,7 @@ export function isAccountingPurchaseOrderByCartJson(cartJson: string | undefined
 
 /** 목록·보내기용: meta.orderDate 우선, 없으면 created_at — 표시는 Asia/Bangkok */
 export function formatPoDisplayDate(
-  po: { cart_json?: string; created_at?: string },
+  po: { cart_json?: unknown; created_at?: string },
   locale: string
 ): string {
   const metaYmd = purchaseOrderMetaOrderDate(po.cart_json)
@@ -148,7 +163,7 @@ export function formatPoDisplayDate(
  * 회계 PO 승인 → 미수금 귀속 매장명.
  * meta.relatedStore → 품목 줄 store → 발주 수령처(location_name)
  */
-export function resolveAccountingPoReceivableStoreName(po: { cart_json?: string; location_name?: string }): string {
+export function resolveAccountingPoReceivableStoreName(po: { cart_json?: unknown; location_name?: string }): string {
   const { meta, items } = parsePurchaseOrderCart(po.cart_json)
   const fromMeta = String(meta?.relatedStore ?? "").trim()
   if (fromMeta) return fromMeta

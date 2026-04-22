@@ -109,8 +109,6 @@ export default function PoPrintPage() {
       subtotal: t("subtotal") || "Subtotal",
       vat: t("vat") || "VAT",
       invoiceTotal: t("poPrintInvoiceTotal") || "Total (incl. tax)",
-      withholdingTax: t("poWithholdingTax") || "Withholding tax",
-      amountDue: t("poNetAmount") || "Amount due",
       grandTotal: t("total") || "Grand Total",
       preparedBy: t("poPreparedBy") || "Prepared by",
       store: t("orderColStore") || "Store",

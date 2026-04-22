@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
-import { useT } from "@/lib/i18n"
+import { useT, getLineRemarksPh } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 
 export interface OrderItem {
@@ -89,6 +89,7 @@ export function OrderApprovalDetailPanel({
 }: OrderApprovalDetailPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const lineRemarksPlaceholder = getLineRemarksPh(lang, t)
   const canEdit = order.status === "Pending" && !isManager
 
   const byOutboundGroups = React.useMemo(() => {
@@ -234,7 +235,7 @@ export function OrderApprovalDetailPanel({
                                             { lineRemarks: e.target.value }
                                           )
                                         }
-                                        placeholder={t("orderLineRemarksPh") || "비고 (무게/단가 등)"}
+                                        placeholder={lineRemarksPlaceholder}
                                         className="min-h-[46px] resize-y border-primary/20 bg-background text-[11px] leading-snug"
                                       />
                                     ) : item.lineRemarks?.trim() ? (

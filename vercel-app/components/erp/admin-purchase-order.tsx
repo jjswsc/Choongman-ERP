@@ -185,7 +185,6 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [poQuotation, setPoQuotation] = React.useState<{ url: string; name: string } | null>(null)
   const [poQuotationUploading, setPoQuotationUploading] = React.useState(false)
   const quotationFileInputRef = React.useRef<HTMLInputElement>(null)
-  const [withholdingTaxAmount, setWithholdingTaxAmount] = React.useState("")
   const [manualLineName, setManualLineName] = React.useState("")
   const [manualLinePrice, setManualLinePrice] = React.useState("")
   const [manualLineQty, setManualLineQty] = React.useState("1")
@@ -677,7 +676,6 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         locationCode: locationSelect.location_code,
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store, taxType: c.taxType })),
         userName: auth.user,
-        withholdingTaxAmount: Number(withholdingTaxAmount?.replace(/,/g, "")) || 0,
         relatedStore:
           allowManualLines && relatedStore && relatedStore !== "_none" ? relatedStore : undefined,
         billingMonthYm: passBillingUpsert ? billingMonthYm : undefined,
@@ -699,7 +697,6 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         await appAlert(msg + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
         setPoReferenceNo("")
-        setWithholdingTaxAmount("")
         setPoQuotation(null)
         setBillingIntentMode(null)
       } else {
@@ -1399,9 +1396,6 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 </table>
               </div>
               <div className="mt-2 rounded-md border border-border/70 bg-muted/20 p-2 space-y-1.5 text-xs text-muted-foreground">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/90">
-                  {t("poTaxSummaryHint") || "부가세·원천징수"}
-                </div>
                 <div className="flex justify-between">
                   <span>{t("subtotal")}</span>
                   <span className="tabular-nums">{formatMoneyComma(subtotal)}</span>
@@ -1410,29 +1404,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   <span>{t("vat")}</span>
                   <span className="tabular-nums">{formatMoneyComma(vat)}</span>
                 </div>
-                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-1.5">
-                  <span className="whitespace-nowrap">{t("poWithholdingTax") || "원천징수세"}</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    placeholder="0"
-                    value={withholdingTaxAmount}
-                    onChange={(e) => setWithholdingTaxAmount(e.target.value)}
-                    className="h-8 w-28 text-right text-sm bg-background"
-                  />
-                </div>
                 <div className="flex justify-between border-t border-border/50 pt-1.5 font-semibold text-foreground">
                   <span>{t("total")}</span>
                   <span className="tabular-nums">{formatMoneyComma(total)}</span>
-                </div>
-                <div className="flex justify-between text-xs font-medium text-foreground/90">
-                  <span>{t("poNetAmount") || "실지급액"}</span>
-                  <span className="tabular-nums">
-                    {formatMoneyComma(
-                      total - (Number(String(withholdingTaxAmount).replace(/,/g, "")) || 0)
-                    )}
-                  </span>
                 </div>
               </div>
             </div>

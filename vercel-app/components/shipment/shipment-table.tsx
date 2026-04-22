@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { ChevronDown, ChevronRight, Image as ImageIcon, MessageSquare, Pencil, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Image as ImageIcon, MessageSquare, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -88,14 +88,6 @@ interface ShipmentTableProps {
   onForceReceived?: (date: string, target: string) => void | Promise<void>
   /** 본사: 출고 로그 단가 저장 후 목록 새로고침 */
   onReloadHistory?: () => void
-  /** 출고 소프트 삭제 */
-  onDeleteOutbound?: (params: {
-    mode: "order" | "force"
-    orderId?: number
-    stockLogIds?: number[]
-    orderDate: string
-    target: string
-  }) => void | Promise<void>
 }
 
 export function ShipmentTable({
@@ -111,7 +103,6 @@ export function ShipmentTable({
   storeTargets = [],
   onForceReceived,
   onReloadHistory,
-  onDeleteOutbound,
 }: ShipmentTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -349,7 +340,6 @@ export function ShipmentTable({
                 onToggleSelect={() => onToggleSelect(idx)}
                 onPhotoClick={onPhotoClick}
                 onForceReceived={onForceReceived}
-                onDeleteOutbound={onDeleteOutbound}
                 storeTargetsSet={new Set(storeTargets)}
                 getOrderTypeBadge={getOrderTypeBadge}
                 getOutboundTypeBadge={getOutboundTypeBadge}
@@ -425,7 +415,6 @@ function TableRow({
   onToggleSelect,
   onPhotoClick,
   onForceReceived,
-  onDeleteOutbound,
   storeTargetsSet,
   getOrderTypeBadge,
   getOutboundTypeBadge,
@@ -440,13 +429,6 @@ function TableRow({
   onToggleSelect: () => void
   onPhotoClick?: (orderId: string) => void
   onForceReceived?: (date: string, target: string) => void | Promise<void>
-  onDeleteOutbound?: (params: {
-    mode: "order" | "force"
-    orderId?: number
-    stockLogIds?: number[]
-    orderDate: string
-    target: string
-  }) => void | Promise<void>
   storeTargetsSet: Set<string>
   getOrderTypeBadge: (type: string) => StatusBadgeKey | null
   getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
@@ -470,14 +452,6 @@ function TableRow({
   const toggleCodeSort = () => {
     setCodeSort((prev) => (prev === null ? "asc" : prev === "asc" ? "desc" : null))
   }
-  const orderIdNum = Number(row.orderRowId || 0)
-  const forceStockLogIds = row.items
-    .map((d) => Number(d.stockLogId || 0))
-    .filter((n) => Number.isFinite(n) && n > 0)
-  const canDeleteOrder = row.type === "Outbound" && orderIdNum > 0
-  const canDeleteForce = row.type === "Force" && forceStockLogIds.length > 0
-  const canDelete = Boolean(onDeleteOutbound && (canDeleteOrder || canDeleteForce))
-
   return (
     <>
       <tr
@@ -577,25 +551,6 @@ function TableRow({
                   {t("outForceReceived")}
                 </button>
               )}
-            {canDelete && (
-              <button
-                type="button"
-                onClick={() =>
-                  onDeleteOutbound?.({
-                    mode: canDeleteForce ? "force" : "order",
-                    ...(canDeleteOrder ? { orderId: orderIdNum } : {}),
-                    ...(canDeleteForce ? { stockLogIds: forceStockLogIds } : {}),
-                    orderDate: row.orderDate,
-                    target: row.target,
-                  })
-                }
-                className="mt-0.5 inline-flex items-center rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[10px] font-medium leading-none text-destructive hover:bg-destructive/20"
-                title={t("delete")}
-              >
-                <Trash2 className="mr-1 h-3 w-3" />
-                {t("delete")}
-              </button>
-            )}
           </div>
         </td>
         <td className="max-w-0 px-2 py-2.5 sm:px-2.5 sm:py-3">

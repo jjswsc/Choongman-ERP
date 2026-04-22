@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, Printer, Download, FileX, CalendarIcon, Store } from "lucide-react"
+import { Search, Printer, Download, FileX, CalendarIcon, Store, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -40,7 +40,11 @@ interface ShipmentFilterBarProps {
   onPrintInvoice?: () => void
   onExcelDownload?: () => void
   onEtaxXmlDownload?: () => void
-  /** 선택된 행 수 (0이면 인쇄/엑셀/e-Tax 버튼 비활성화) */
+  /** 본사: 체크한 출고 그룹 일괄 소프트 삭제 */
+  onDeleteSelected?: () => void
+  /** 삭제 처리 중 (버튼 비활성화) */
+  deleteBusy?: boolean
+  /** 선택된 행 수 (0이면 인쇄/엑셀/e-Tax/삭제 버튼 비활성화) */
   selectedCount?: number
 }
 
@@ -73,6 +77,8 @@ export function ShipmentFilterBar({
   onPrintInvoice,
   onExcelDownload,
   onEtaxXmlDownload,
+  onDeleteSelected,
+  deleteBusy = false,
   selectedCount = 0,
 }: ShipmentFilterBarProps) {
   const { lang } = useLang()
@@ -304,6 +310,19 @@ export function ShipmentFilterBar({
           >
             <Printer className="h-3.5 w-3.5" />
             {t("outPrintInvoice")}
+            {selectedCount > 0 && ` (${selectedCount})`}
+          </button>
+        )}
+
+        {isOffice && onDeleteSelected && (
+          <button
+            type="button"
+            onClick={onDeleteSelected}
+            disabled={selectedCount === 0 || deleteBusy}
+            className="h-8 flex items-center gap-1.5 rounded border border-destructive/50 bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {t("delete")}
             {selectedCount > 0 && ` (${selectedCount})`}
           </button>
         )}
