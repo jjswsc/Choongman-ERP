@@ -45,6 +45,7 @@ export {
   getCheckHistoryWithCache,
   getBankTransactionsWithCache,
   invalidateBankTransactionsListCache,
+  invalidateReceivablePayableListCache,
   getPettyCashListWithCache,
   getAdminItemsWithCache,
   getWarehouseLocationsWithCache,

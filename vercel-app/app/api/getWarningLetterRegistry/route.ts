@@ -22,7 +22,7 @@ export type WarningLetterRegistryApiRow = {
   updated_at: string
 }
 
-/** 독립 등록 경고 레지스트리 — JWT·매장 접근은 평가 조회와 동일 */
+/** 직접 등록 경고서 레지스트리 — JWT·매장 접근은 평가 조회와 동일 */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

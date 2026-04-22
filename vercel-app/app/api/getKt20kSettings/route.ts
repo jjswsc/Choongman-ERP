@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(auth.role || '').trim()
   const year = Number(String(searchParams.get('year') || '').trim())
 
   try {

@@ -29,6 +29,7 @@ function SpecsHubBody() {
       toolBasePath={INTERIOR_ADMIN.specs}
       titleKey="interiorHubSpecs"
       icon={PackageSearch}
+      allowMultiProject
     >
       {(projectId) => (
         <div className="px-1">

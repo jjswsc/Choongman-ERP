@@ -222,19 +222,19 @@ export function EmployeeEvalSettingTab({
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="p-2 text-left font-medium w-[4.5rem]">
+              <th className="p-2 text-center font-medium w-[4.5rem]">
                 {t("eval_setting_seq_col")}
               </th>
               {!readOnly && (
                 <th className="p-2 text-center font-medium w-[70px]">{t("eval_order")}</th>
               )}
-              <th className="p-2 text-left font-medium min-w-[100px]">
+              <th className="p-2 text-center font-medium min-w-[100px]">
                 {t("eval_cat_main")}
               </th>
-              <th className="p-2 text-left font-medium min-w-[80px]">
+              <th className="p-2 text-center font-medium min-w-[80px]">
                 {t("eval_cat_sub")}
               </th>
-              <th className="p-2 text-left font-medium">{t("eval_item")}</th>
+              <th className="p-2 text-center font-medium">{t("eval_item")}</th>
               <th className="p-2 text-center font-medium w-14">{t("eval_use")}</th>
               {!readOnly && (
                 <th className="p-2 text-center font-medium w-16">{t("eval_delete")}</th>

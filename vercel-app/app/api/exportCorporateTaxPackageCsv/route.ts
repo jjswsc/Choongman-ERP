@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { computeCorporateTaxComputation } from '@/lib/corporate-tax'
+import { requireAuth } from '@/lib/verify-auth'
 
 function escCell(s: string): string {
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -10,13 +11,19 @@ function escCell(s: string): string {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(auth.role || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim()
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'half_year' || periodTypeRaw === 'annual' ? periodTypeRaw : 'monthly'
   const storeFilter = String(searchParams.get('storeFilter') || 'All').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
+  const userStore = String(auth.store || '').trim()
   const taxRateRaw = Number(searchParams.get('taxRate'))
 
   try {

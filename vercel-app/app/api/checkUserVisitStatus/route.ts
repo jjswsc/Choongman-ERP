@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 const TZ = 'Asia/Bangkok'
 
@@ -26,8 +27,14 @@ async function fetchVisitList(userName: string, dateStr: string): Promise<{ visi
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userName = String(searchParams.get('userName') || searchParams.get('name') || '').trim()
+  const userName = String(auth.name || searchParams.get('userName') || searchParams.get('name') || '').trim()
 
   if (!userName) {
     return NextResponse.json({ active: false }, { headers })
@@ -70,8 +77,14 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const data = (await request.json()) as { userName?: string; name?: string }
-    const userName = String(data?.userName || data?.name || '').trim()
+    const userName = String(auth.name || data?.userName || data?.name || '').trim()
 
     if (!userName) {
       return NextResponse.json({ active: false }, { headers })

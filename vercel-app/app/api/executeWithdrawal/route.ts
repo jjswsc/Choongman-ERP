@@ -7,6 +7,7 @@ import {
   type WithdrawalCategory,
 } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { requireAuth } from '@/lib/verify-auth'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 
@@ -15,20 +16,18 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
+  const authResult = await requireAuth(request, 'office')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    authResult.errorResponse.headers.set('Content-Type', 'application/json')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
 
   try {
     const body = await request.json()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
-    const userName = String(body.userName || body.user_name || '').trim()
-    const _userStore = String(body.userStore || body.user_store || '').trim()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-
-    if (!isOffice) {
-      return NextResponse.json(
-        { success: false, message: '본사 권한만 출금 등록할 수 있습니다.' },
-        { status: 403, headers }
-      )
-    }
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const _userStore = String(auth.store || '').trim()
 
     const paymentMethod = String(body.paymentMethod || body.payment_method || 'bank').toLowerCase()
     const amount = Math.abs(Number(body.amount || 0))

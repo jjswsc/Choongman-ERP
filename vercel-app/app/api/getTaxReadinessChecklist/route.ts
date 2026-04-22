@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const BASE_LIMIT = 50000
 const SOURCE_TYPES = ['bank_transaction', 'petty_cash', 'card_transaction', 'store_purchase', 'pos_order'] as const
@@ -79,12 +82,37 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'no-store')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    authResult.errorResponse.headers.set('Cache-Control', 'no-store')
+    return authResult.errorResponse
+  }
 
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(authResult.auth.role || '').trim()
   const yearMonthInput = String(searchParams.get('yearMonth') || '').trim()
-  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
-  const normalizedStore = storeFilter && storeFilter !== 'All' ? storeFilter : ''
+  const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
+  const allowedStores =
+    (Array.isArray(authResult.auth.allowedStores) ? authResult.auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(String(authResult.auth.store || '').trim())
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  let normalizedStore = requestedStoreFilter && requestedStoreFilter !== 'All' ? requestedStoreFilter : ''
+  if (!isOfficeLevel) {
+    if (!normalizedStore) {
+      normalizedStore = String(allowedStores[0] || '').trim()
+      if (!normalizedStore) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, normalizedStore))
+      if (!allowed) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    }
+  }
 
   try {
     assertCanManageAccountingCompliance(userRole)

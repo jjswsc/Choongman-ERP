@@ -41,6 +41,7 @@ export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
 export {
   invalidateBankTransactionsListCache,
+  invalidateReceivablePayableListCache,
   invalidatePurchaseOrdersListCache,
   invalidateAdminItemsCache,
 } from './offline/erp-offline'
@@ -2410,6 +2411,31 @@ export type ValidatePnd1RdPrepResult = {
   }[]
 }
 
+export type PayrollWhtTinGapResult = {
+  period: {
+    periodType: 'monthly' | 'half_year' | 'annual'
+    periodKey: string
+    startMonth: string
+    endMonth: string
+    months: string[]
+  }
+  storeFilter: string
+  payrollRowCount: number
+  gapRowCount: number
+  uniqueEmployeeCount: number
+  gaps: {
+    id: number | null
+    paymentDate: string
+    taxMonth: string
+    payeeName: string
+    storeName: string
+    whtAmount: number
+    certificateNo: string
+    formHint: string
+    memo: string
+  }[]
+}
+
 export async function validatePnd1RdPrep(params: {
   userRole: string
   taxMonth: string
@@ -2427,6 +2453,21 @@ export async function validatePnd1RdPrep(params: {
   if (params.filingForm) q.set('filingForm', params.filingForm)
   const res = await apiFetchWithOffline(`/api/validatePnd1RdPrep?${q}`)
   return res.json() as Promise<ValidatePnd1RdPrepResult>
+}
+
+export async function getPayrollWhtTinGaps(params: {
+  userRole: string
+  taxMonth: string
+  yearMonth?: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.periodType) q.set('periodType', params.periodType)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getPayrollWhtTinGaps?${q}`)
+  return res.json() as Promise<PayrollWhtTinGapResult>
 }
 
 export type Kt20kSettings = {
@@ -2978,6 +3019,26 @@ export async function saveFixedAsset(params: {
   residualRate?: number
   usefulLifeMonths?: number
   depreciationMethod?: string
+  memo?: string
+  assetAccountCode?: string
+  accumulatedDepreciationAccountCode?: string
+  depreciationExpenseAccountCode?: string
+}) {
+  const res = await apiFetchWithOffline('/api/saveFixedAsset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function setFixedAssetStatus(params: {
+  id: number
+  action: 'dispose' | 'restore'
+  disposedAt?: string
+  disposalProceeds?: number
+  disposalGainAccountCode?: string
+  disposalLossAccountCode?: string
   memo?: string
 }) {
   const res = await apiFetchWithOffline('/api/saveFixedAsset', {
@@ -8535,12 +8596,18 @@ export async function getInboundHistory(params: {
   startStr: string
   endStr: string
   vendorFilter?: string
+  /** 드롭다운 미선택 시 거래처명 부분 검색 */
+  vendorSearch?: string
+  /** 품목 코드·품목명 부분 검색 */
+  itemSearch?: string
   storeFilter?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
     endStr: params.endStr,
     ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
+    ...(params.vendorSearch?.trim() ? { vendorSearch: params.vendorSearch.trim() } : {}),
+    ...(params.itemSearch?.trim() ? { itemSearch: params.itemSearch.trim() } : {}),
     ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
   const res = await apiFetchWithOffline(`/api/getInboundHistory?${q}`)
@@ -8552,12 +8619,16 @@ export async function getInboundForStore(params: {
   startStr: string
   endStr: string
   vendorFilter?: string
+  vendorSearch?: string
+  itemSearch?: string
 }) {
   const q = new URLSearchParams({
     storeName: params.storeName,
     startStr: params.startStr,
     endStr: params.endStr,
     ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
+    ...(params.vendorSearch?.trim() ? { vendorSearch: params.vendorSearch.trim() } : {}),
+    ...(params.itemSearch?.trim() ? { itemSearch: params.itemSearch.trim() } : {}),
   })
   const res = await apiFetchWithOffline(`/api/getInboundForStore?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
@@ -8636,6 +8707,8 @@ export async function getCombinedOutboundHistory(params: {
   endStr: string
   vendorFilter?: string
   typeFilter?: string
+  /** 출고 로그 품목코드·품목명 부분 검색 */
+  itemSearch?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -8643,6 +8716,7 @@ export async function getCombinedOutboundHistory(params: {
   })
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
+  if (params.itemSearch?.trim()) q.set('itemSearch', params.itemSearch.trim())
   const res = await apiFetchWithOffline(`/api/getCombinedOutboundHistory?${q}`)
   return res.json() as Promise<OutboundHistoryItem[]>
 }
@@ -8966,7 +9040,7 @@ export async function getEvaluationDistinctStores(): Promise<{ stores: string[] 
 }
 
 /** 평가 이력 조회 */
-/** GET /api/getWarningLettersFromEvaluations — 평가 JSON 사건·경고 펼침 목록 */
+/** GET /api/getWarningLettersFromEvaluations — 평가 JSON에서 펼친 경고서 행 목록 */
 export type WarningLetterRegistryRow = {
   id: number
   store_name: string
@@ -8988,7 +9062,7 @@ export type WarningLetterRegistryRow = {
 export type WarningLetterIncidentItem = {
   source?: 'evaluation' | 'registry'
   registryId?: number
-  /** 독립 건 등록자(표시명) — 재상신 버튼 노출 판단 등 */
+  /** 직접 등록 건 등록자(표시명) — 재상신 버튼 노출 판단 등 */
   createdBy?: string
   approvalStatus?: 'draft' | 'pending' | 'approved' | 'rejected'
   rejectedReason?: string
@@ -9039,7 +9113,7 @@ export async function getWarningLettersFromEvaluations(params: {
   store?: string
   employee?: string
   evaluator?: string
-  /** false면 사건 행 전체(내용 있는 것만). 기본 true = 경고 발부·첨부 있는 행만 */
+  /** false면 내용 있는 전체 행. 기본 true = 발부·첨부 있는 행만 */
   warningsOnly?: boolean
 }) {
   const q = new URLSearchParams()

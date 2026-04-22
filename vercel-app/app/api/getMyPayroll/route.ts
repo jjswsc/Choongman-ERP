@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** 매장별 회사명 조회 (vendors gps_name 또는 name 일치, 없으면 본사) */
 async function getStoreCompanyName(store: string): Promise<string> {
@@ -36,13 +37,20 @@ async function getStoreCompanyName(store: string): Promise<string> {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim().slice(0, 7)
-  const userStore = String(searchParams.get('userStore') || searchParams.get('store') || '').trim()
-  const userName = String(searchParams.get('userName') || searchParams.get('name') || '').trim()
-  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
-  const employeeId =
-    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
+  const userStore = String(auth.store || '').trim()
+  const userName = String(auth.name || '').trim()
+  const employeeIdFromAuth = Number((auth as { employeeId?: unknown }).employeeId)
+  const employeeId = Number.isFinite(employeeIdFromAuth) && employeeIdFromAuth > 0
+    ? Math.floor(employeeIdFromAuth)
+    : 0
 
   if (!monthStr || monthStr.length < 7) {
     return NextResponse.json(

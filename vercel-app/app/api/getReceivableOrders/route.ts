@@ -5,19 +5,49 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const startStr = String(searchParams.get('startStr') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || '').trim().slice(0, 10)
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
 
-  const isManager = userRole.includes('manager') || userRole.includes('franchisee')
-  const effectiveStore = isManager && userStore ? userStore : storeFilter
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes('manager') || userRole.includes('franchisee'))
+  if (isScopedRole) {
+    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) {
+        return NextResponse.json({ type: 'receivable_orders', list: [], storeBalances: {} }, { status: 403, headers })
+      }
+      storeFilter = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) {
+        return NextResponse.json({ type: 'receivable_orders', list: [], storeBalances: {} }, { status: 403, headers })
+      }
+    }
+  }
+  const effectiveStore = storeFilter
 
   try {
     let recFilter = `ref_type=eq.Order&ref_id=not.is.null`

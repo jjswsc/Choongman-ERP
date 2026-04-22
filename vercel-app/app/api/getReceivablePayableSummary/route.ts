@@ -6,6 +6,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 async function getStoreToVendorMap(): Promise<Map<string, { code: string; name: string }>> {
   const vendors = (await supabaseSelect('vendors', {
@@ -30,17 +33,26 @@ async function getStoreToVendorMap(): Promise<Map<string, { code: string; name: 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
-  const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  const requestedStoreFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const vendorFilter = String(searchParams.get('vendorFilter') || searchParams.get('vendor') || '').trim()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
 
-  const canSelectStores = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
-    || userRole.includes('accounting')
-    || userRole.includes('회계')
+  const canSelectStores = isOfficeRole(userRole) || isAccountingRole(userRole)
   const isManager = (userRole.includes('manager') || userRole.includes('franchisee')) && !canSelectStores
   if (type === 'payable' && isManager) {
     return NextResponse.json({ type: 'payable', list: [] }, { headers })
@@ -69,7 +81,17 @@ export async function GET(request: NextRequest) {
     }
 
     // receivable
-    const storeFilterVal = isManager && userStore ? userStore : storeFilter
+    let storeFilterVal = requestedStoreFilter
+    if (!canSelectStores) {
+      if (!requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체') {
+        storeFilterVal = String(allowedStores[0] || '').trim()
+      } else {
+        const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
+        if (!allowed) {
+          return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+        }
+      }
+    }
     const rows = (await supabaseRpc<{ store_name: string; balance: number; item_count: number }[]>(
       'get_receivable_summary',
       {
@@ -104,8 +126,14 @@ export async function GET(request: NextRequest) {
       const pFilter = pParts.length ? pParts.join('&') : 'id=gt.0'
 
       const rParts: string[] = []
-      if (isManager && userStore) rParts.push(`store_name=ilike.${encodeURIComponent(userStore)}`)
-      else if (storeFilter) rParts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
+      if (!canSelectStores) {
+        const scopeStore = (!requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체')
+          ? String(allowedStores[0] || '').trim()
+          : requestedStoreFilter
+        if (scopeStore) rParts.push(`store_name=ilike.${encodeURIComponent(scopeStore)}`)
+      } else if (requestedStoreFilter) {
+        rParts.push(`store_name=ilike.${encodeURIComponent(requestedStoreFilter)}`)
+      }
       if (endStr) rParts.push(`trans_date=lte.${endStr}`)
       const rFilter = rParts.length ? rParts.join('&') : 'id=gt.0'
 

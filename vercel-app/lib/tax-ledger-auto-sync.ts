@@ -1,0 +1,661 @@
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelect,
+  supabaseSelectFilterAllPages,
+  supabaseUpdate,
+} from '@/lib/supabase-server'
+import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+
+type ItemTaxMeta = {
+  price: number
+  cost: number
+  taxType: 'taxable' | 'exempt' | 'zero'
+}
+
+type StockLogRow = {
+  id?: number
+  log_type?: string
+  log_date?: string
+  location?: string
+  vendor_target?: string
+  item_code?: string
+  item_name?: string
+  qty?: number
+  invoice_unit_price?: number | string | null
+  unit_cost?: number | string | null
+}
+
+type ExistingAutoRow = {
+  id?: number
+  memo?: string | null
+  filing_status?: string | null
+}
+
+type ExpenseAccrualWhtRow = {
+  id?: number
+  status?: string | null
+  payee_code?: string | null
+  payee_name?: string | null
+  amount?: number | null
+  vat_amount?: number | null
+  withholding_tax_amount?: number | null
+  expense_date?: string | null
+  memo?: string | null
+  store_name?: string | null
+}
+
+type EmployeeTaxRow = {
+  id?: number
+  name?: string | null
+  store?: string | null
+  tax_id?: string | null
+  id_number?: string | null
+}
+
+function isMissingSubmissionColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('filing_status') || msg.includes('submitted_at') || msg.includes('submitted_by')
+}
+
+function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.filing_status
+  delete next.submitted_at
+  delete next.submitted_by
+  return next
+}
+
+function round2(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100
+}
+
+function monthStartYmd(ym: string): string {
+  return `${ym}-01`
+}
+
+function monthEndYmd(ym: string): string {
+  const y = Number(ym.slice(0, 4))
+  const m = Number(ym.slice(5, 7))
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return `${ym}-28`
+  const d = new Date(Date.UTC(y, m, 0))
+  return d.toISOString().slice(0, 10)
+}
+
+function vatRateFromTaxType(taxType: ItemTaxMeta['taxType']): number {
+  if (taxType === 'exempt' || taxType === 'zero') return 0
+  return 0.07
+}
+
+function parseStockLogIdFromMemo(memo: string): number {
+  const m = memo.match(/\[AUTO:STOCK_LOG:(\d+)\]/)
+  if (!m) return 0
+  return Math.floor(Number(m[1]) || 0)
+}
+
+function parseExpenseAccrualWhtIdFromMemo(memo: string): number {
+  const m = memo.match(/\[AUTO:EXPENSE_ACCRUAL_WHT:(\d+)\]/)
+  if (!m) return 0
+  return Math.floor(Number(m[1]) || 0)
+}
+
+function parsePayrollRecordIdFromMemo(memo: string): number {
+  const m = memo.match(/\[AUTO:PAYROLL_RECORD_WHT:(\d+)\]/)
+  if (!m) return 0
+  return Math.floor(Number(m[1]) || 0)
+}
+
+function normalizeStoreFilter(storeFilter?: string): string {
+  const s = String(storeFilter || '').trim()
+  if (!s || s === 'All' || s === '*') return ''
+  return s
+}
+
+function decodePayeeCode(raw: string | undefined): { payeeCode: string } {
+  const src = String(raw || '').trim()
+  const marker = '::wm::'
+  const idx = src.lastIndexOf(marker)
+  if (idx < 0) return { payeeCode: src }
+  return { payeeCode: src.slice(0, idx).trim() }
+}
+
+function digitsOnly(v: unknown): string {
+  return String(v || '')
+    .replace(/\D/g, '')
+    .trim()
+}
+
+function normalizeEmployeeName(v: string): string {
+  return String(v || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function pickEmployeeTin(row?: EmployeeTaxRow | null): string | null {
+  if (!row) return null
+  const cands = [row.tax_id, row.id_number]
+  for (const c of cands) {
+    const d = digitsOnly(c)
+    if (d.length === 13) return d
+  }
+  return null
+}
+
+export async function syncTaxVatLedgersFromStockAndExpenses(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ stockUpserted: number; stockDeleted: number; expenseSynced: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { stockUpserted: 0, stockDeleted: 0, expenseSynced: 0 }
+
+  const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
+  const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const startYmd = monthStartYmd(validMonths[0])
+  const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
+
+  const itemRows = (await supabaseSelect('items', {
+    order: 'id.asc',
+    limit: 12000,
+    select: 'code,price,cost,tax_type',
+  })) as { code?: string; price?: number; cost?: number; tax_type?: string }[] | null
+  const itemMap: Record<string, ItemTaxMeta> = {}
+  for (const it of itemRows || []) {
+    const code = String(it.code || '').trim()
+    if (!code) continue
+    const taxRaw = String(it.tax_type || '').trim().toLowerCase()
+    const taxType: ItemTaxMeta['taxType'] =
+      taxRaw === 'exempt' || taxRaw === 'zero' ? (taxRaw as 'exempt' | 'zero') : 'taxable'
+    itemMap[code] = {
+      price: Number(it.price) || 0,
+      cost: Number(it.cost) || 0,
+      taxType,
+    }
+  }
+
+  const stockFilter = [
+    'log_type=in.(Outbound,ForceOutbound,Inbound)',
+    `log_date=gte.${encodeURIComponent(`${startYmd}T00:00:00.000`)}`,
+    `log_date=lte.${encodeURIComponent(`${endYmd}T23:59:59.999`)}`,
+  ].join('&')
+  const stockLogs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
+    select:
+      'id,log_type,log_date,location,vendor_target,item_code,item_name,qty,invoice_unit_price,unit_cost',
+    order: 'id.asc',
+    pageSize: 8000,
+    maxRows: 200000,
+  })) as StockLogRow[]
+
+  const autoFilterBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:STOCK_LOG:%')}`
+  const autoFilter = appendStoreNameFilter(autoFilterBase, storeFilter)
+  const existingAutoRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', autoFilter, {
+    select: 'id,memo,filing_status',
+    order: 'id.asc',
+    pageSize: 4000,
+    maxRows: 30000,
+  })) as ExistingAutoRow[]
+  const existingByStockId = new Map<number, { id: number; filingStatus: string }>()
+  for (const row of existingAutoRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    const stockLogId = parseStockLogIdFromMemo(String(row.memo || ''))
+    if (id <= 0 || stockLogId <= 0) continue
+    existingByStockId.set(stockLogId, {
+      id,
+      filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+    })
+  }
+
+  const seenStockIds = new Set<number>()
+  let stockUpserted = 0
+
+  for (const log of stockLogs || []) {
+    const stockLogId = Math.floor(Number(log.id) || 0)
+    if (stockLogId <= 0) continue
+    const logType = String(log.log_type || '').trim()
+    const loc = String(log.location || '').trim()
+    if (storeFilter && !storesMatchForGradeLookup(loc, storeFilter)) continue
+
+    const vendor = String(log.vendor_target || '').trim() || '-'
+    if (logType === 'Inbound' && (vendor === 'From HQ' || vendor === 'HQ')) {
+      // 내부 재고 이동은 매입세금계산서 대상에서 제외
+      continue
+    }
+
+    const docDate = String(log.log_date || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) continue
+    const taxMonth = docDate.slice(0, 7)
+    if (!validMonths.includes(taxMonth)) continue
+
+    const qty = Math.abs(Number(log.qty) || 0)
+    if (qty <= 0) continue
+
+    const code = String(log.item_code || '').trim()
+    const item = itemMap[code] || { price: 0, cost: 0, taxType: 'taxable' as const }
+    const unit =
+      logType === 'Outbound' || logType === 'ForceOutbound'
+        ? Number(log.invoice_unit_price) > 0
+          ? Number(log.invoice_unit_price)
+          : Number(item.price) || 0
+        : Number(log.unit_cost) > 0
+          ? Number(log.unit_cost)
+          : Number(item.cost) || 0
+    const net = round2(qty * unit)
+    if (net <= 0) continue
+    const vat = round2(net * vatRateFromTaxType(item.taxType))
+    const total = round2(net + vat)
+
+    const memoTag = `[AUTO:STOCK_LOG:${stockLogId}]`
+    const row = {
+      doc_date: docDate,
+      tax_month: taxMonth,
+      direction: logType === 'Inbound' ? ('input' as const) : ('output' as const),
+      counterparty_name: vendor.slice(0, 500),
+      counterparty_tax_id: null,
+      invoice_number: `SL-${stockLogId}`.slice(0, 128),
+      net_amount: net,
+      vat_amount: vat,
+      total_amount: total,
+      vat_status: 'draft_auto',
+      memo: `${memoTag} stock_logs 자동 반영`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: loc || null,
+      updated_at: new Date().toISOString(),
+    }
+
+    const existing = existingByStockId.get(stockLogId)
+    if (existing?.id && existing.filingStatus === 'submitted') {
+      seenStockIds.add(stockLogId)
+      continue
+    }
+    if (existing?.id) {
+      try {
+        await supabaseUpdate('vat_ledger_entries', existing.id, row)
+      } catch (e) {
+        if (!isMissingSubmissionColumnError(e)) throw e
+        await supabaseUpdate('vat_ledger_entries', existing.id, stripSubmissionAuditFields(row))
+      }
+      seenStockIds.add(stockLogId)
+      stockUpserted += 1
+      continue
+    }
+
+    const insertRow = {
+      ...row,
+      created_by: 'system',
+      created_at: new Date().toISOString(),
+    }
+    try {
+      await supabaseInsert('vat_ledger_entries', insertRow)
+    } catch (e) {
+      if (!isMissingSubmissionColumnError(e)) throw e
+      await supabaseInsert('vat_ledger_entries', stripSubmissionAuditFields(insertRow))
+    }
+    seenStockIds.add(stockLogId)
+    stockUpserted += 1
+  }
+
+  let stockDeleted = 0
+  for (const [stockLogId, ex] of existingByStockId.entries()) {
+    if (seenStockIds.has(stockLogId)) continue
+    if (ex.filingStatus === 'submitted') continue
+    await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${ex.id}`)
+    stockDeleted += 1
+  }
+
+  const expParts = [
+    `expense_date=gte.${encodeURIComponent(startYmd)}`,
+    `expense_date=lte.${encodeURIComponent(endYmd)}`,
+    'vat_amount=gt.0',
+    'status=neq.rejected',
+  ]
+  if (storeFilter) expParts.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
+  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
+    select: 'id',
+    order: 'id.asc',
+    pageSize: 4000,
+    maxRows: 30000,
+  })) as { id?: number }[]
+  let expenseSynced = 0
+  for (const row of expenseRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    if (id <= 0) continue
+    await syncExpenseAccrualInputVatLedger(id)
+    expenseSynced += 1
+  }
+
+  return { stockUpserted, stockDeleted, expenseSynced }
+}
+
+export async function syncTaxWithholdingLedgersFromExpenses(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ upserted: number; deleted: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
+
+  const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const startYmd = monthStartYmd(validMonths[0])
+  const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
+  const expParts = [
+    `expense_date=gte.${encodeURIComponent(startYmd)}`,
+    `expense_date=lte.${encodeURIComponent(endYmd)}`,
+    'withholding_tax_amount=gt.0',
+  ]
+  if (storeFilter) expParts.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
+  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
+    select: 'id,status,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,memo,store_name',
+    order: 'id.asc',
+    pageSize: 4000,
+    maxRows: 40000,
+  })) as ExpenseAccrualWhtRow[]
+
+  const vendorRows = (await supabaseSelect('vendors', {
+    select: 'code,tax_id',
+    order: 'id.asc',
+    limit: 15000,
+  })) as { code?: string | null; tax_id?: string | null }[] | null
+  const vendorTinByCode = new Map<string, string>()
+  for (const v of vendorRows || []) {
+    const code = String(v.code || '').trim()
+    if (!code) continue
+    const tin = String(v.tax_id || '')
+      .trim()
+      .replace(/\D/g, '')
+    if (tin) vendorTinByCode.set(code, tin)
+  }
+
+  const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
+  const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:EXPENSE_ACCRUAL_WHT:%')}`
+  const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
+  const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
+    select: 'id,memo,filing_status',
+    order: 'id.asc',
+    pageSize: 3000,
+    maxRows: 30000,
+  })) as ExistingAutoRow[]
+  const existingByExpenseId = new Map<number, { id: number; filingStatus: string }>()
+  for (const row of existingAutoRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    const expId = parseExpenseAccrualWhtIdFromMemo(String(row.memo || ''))
+    if (id <= 0 || expId <= 0) continue
+    existingByExpenseId.set(expId, {
+      id,
+      filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+    })
+  }
+
+  let upserted = 0
+  const seenExpenseIds = new Set<number>()
+  for (const row of expenseRows || []) {
+    const expenseId = Math.floor(Number(row.id) || 0)
+    if (expenseId <= 0) continue
+    const status = String(row.status || '').trim().toLowerCase()
+    const wht = round2(Math.max(0, Math.abs(Number(row.withholding_tax_amount) || 0)))
+    if (status === 'rejected' || wht <= 0) continue
+
+    const expenseDate = String(row.expense_date || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) continue
+    const taxMonth = expenseDate.slice(0, 7)
+    if (!validMonths.includes(taxMonth)) continue
+
+    const rawAmount = Math.max(0, Math.abs(Number(row.amount) || 0))
+    const vatAmount = Math.max(0, Math.abs(Number(row.vat_amount) || 0))
+    const grossBase = round2(Math.max(0, rawAmount - vatAmount))
+    const { payeeCode } = decodePayeeCode(String(row.payee_code || ''))
+    const payeeName = String(row.payee_name || payeeCode || `지출-${expenseId}`).trim()
+    const payeeTaxId = payeeCode ? vendorTinByCode.get(payeeCode) || null : null
+    const whtRate = grossBase > 0 ? round2((wht / grossBase) * 100) : null
+    const memoTag = `[AUTO:EXPENSE_ACCRUAL_WHT:${expenseId}]`
+    const saveRow = {
+      payment_date: expenseDate,
+      tax_month: taxMonth,
+      payee_name: payeeName.slice(0, 500),
+      payee_tax_id: payeeTaxId,
+      income_type: '서비스',
+      gross_amount: grossBase > 0 ? grossBase : rawAmount,
+      wht_rate: whtRate,
+      wht_amount: wht,
+      form_hint: 'PND53',
+      certificate_no: `EAW-${expenseId}`.slice(0, 128),
+      memo: `${memoTag} 지출 원천세 자동`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: String(row.store_name || '').trim() || null,
+      updated_at: new Date().toISOString(),
+    }
+
+    const existing = existingByExpenseId.get(expenseId)
+    if (existing?.id && existing.filingStatus === 'submitted') {
+      seenExpenseIds.add(expenseId)
+      continue
+    }
+    if (existing?.id) {
+      try {
+        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, saveRow)
+      } catch (e) {
+        if (!isMissingSubmissionColumnError(e)) throw e
+        await supabaseUpdate(
+          'withholding_tax_ledger_entries',
+          existing.id,
+          stripSubmissionAuditFields(saveRow)
+        )
+      }
+      upserted += 1
+      seenExpenseIds.add(expenseId)
+      continue
+    }
+
+    const insertRow = {
+      ...saveRow,
+      created_by: 'system',
+      created_at: new Date().toISOString(),
+    }
+    try {
+      await supabaseInsert('withholding_tax_ledger_entries', insertRow)
+    } catch (e) {
+      if (!isMissingSubmissionColumnError(e)) throw e
+      await supabaseInsert('withholding_tax_ledger_entries', stripSubmissionAuditFields(insertRow))
+    }
+    upserted += 1
+    seenExpenseIds.add(expenseId)
+  }
+
+  let deleted = 0
+  for (const [expenseId, ex] of existingByExpenseId.entries()) {
+    if (seenExpenseIds.has(expenseId)) continue
+    if (ex.filingStatus === 'submitted') continue
+    await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
+    deleted += 1
+  }
+
+  return { upserted, deleted }
+}
+
+export async function syncTaxWithholdingLedgersFromPayroll(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ upserted: number; deleted: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
+
+  const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
+  const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const payrollFilter = appendStoreNameFilter(monthFilter, storeFilter).replace(/store_name=eq\./g, 'store=eq.')
+  const payrollRows = (await supabaseSelectFilterAllPages('payroll_records', payrollFilter, {
+    select:
+      'id,month,store,name,employee_id,status,salary,pos_allow,haz_allow,diligence_allow,birth_bonus,holiday_pay,spl_bonus,ot_amt,sso,tax,other_ded,net_pay',
+    order: 'id.asc',
+    pageSize: 4000,
+    maxRows: 80000,
+  })) as {
+    id?: number
+    month?: string
+    store?: string
+    name?: string
+    employee_id?: number
+    status?: string
+    salary?: number
+    pos_allow?: number
+    haz_allow?: number
+    diligence_allow?: number
+    birth_bonus?: number
+    holiday_pay?: number
+    spl_bonus?: number
+    ot_amt?: number
+    sso?: number
+    tax?: number
+    other_ded?: number
+    net_pay?: number
+  }[]
+
+  const empRows = (await supabaseSelect('employees', {
+    select: 'id,name,store,tax_id,id_number',
+    order: 'id.asc',
+    limit: 15000,
+  })) as EmployeeTaxRow[] | null
+  const employeeTinById = new Map<number, string>()
+  const employeeTinByStoreName = new Map<string, string>()
+  for (const e of empRows || []) {
+    const tin = pickEmployeeTin(e)
+    if (!tin) continue
+    const eid = Math.floor(Number(e.id) || 0)
+    if (eid > 0 && !employeeTinById.has(eid)) employeeTinById.set(eid, tin)
+    const key = `${String(e.store || '').trim().toLowerCase()}|${normalizeEmployeeName(String(e.name || ''))}`
+    if (key !== '|' && !employeeTinByStoreName.has(key)) employeeTinByStoreName.set(key, tin)
+  }
+
+  const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:PAYROLL_RECORD_WHT:%')}`
+  const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
+  const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
+    select: 'id,memo,filing_status',
+    order: 'id.asc',
+    pageSize: 3000,
+    maxRows: 30000,
+  })) as ExistingAutoRow[]
+  const existingByPayrollId = new Map<number, { id: number; filingStatus: string }>()
+  for (const row of existingAutoRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    const payrollId = parsePayrollRecordIdFromMemo(String(row.memo || ''))
+    if (id <= 0 || payrollId <= 0) continue
+    existingByPayrollId.set(payrollId, {
+      id,
+      filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+    })
+  }
+
+  let upserted = 0
+  const seenPayrollIds = new Set<number>()
+  for (const p of payrollRows || []) {
+    const payrollId = Math.floor(Number(p.id) || 0)
+    if (payrollId <= 0) continue
+    const taxMonth = String(p.month || '').slice(0, 7)
+    if (!validMonths.includes(taxMonth)) continue
+    const store = String(p.store || '').trim()
+    if (storeFilter && !storesMatchForGradeLookup(store, storeFilter)) continue
+    const employeeName = String(p.name || '').trim()
+    if (!employeeName) continue
+    const employeeId = Math.floor(Number(p.employee_id) || 0)
+    const tinById = employeeId > 0 ? employeeTinById.get(employeeId) || null : null
+    const tinByStoreName =
+      employeeTinByStoreName.get(`${store.toLowerCase()}|${normalizeEmployeeName(employeeName)}`) || null
+    const payeeTaxId = tinById || tinByStoreName || null
+
+    const st = String(p.status || '').trim().toLowerCase()
+    if (st === 'cancel' || st === 'cancelled' || st === 'canceled' || st === 'rejected' || st === '반려') continue
+
+    const whtAmount = round2(Math.max(0, Number(p.tax) || 0))
+    if (whtAmount <= 0) continue
+
+    const grossFromPayroll =
+      Number(p.salary || 0) +
+      Number(p.pos_allow || 0) +
+      Number(p.haz_allow || 0) +
+      Number(p.diligence_allow || 0) +
+      Number(p.birth_bonus || 0) +
+      Number(p.holiday_pay || 0) +
+      Number(p.spl_bonus || 0) +
+      Number(p.ot_amt || 0)
+    const grossFallback =
+      Number(p.net_pay || 0) + Number(p.tax || 0) + Number(p.sso || 0) + Number(p.other_ded || 0)
+    const grossAmount = round2(Math.max(0, grossFromPayroll > 0 ? grossFromPayroll : grossFallback))
+    const rate = grossAmount > 0 ? round2((whtAmount / grossAmount) * 100) : null
+    const paymentDate = monthEndYmd(taxMonth)
+    const memoTag = `[AUTO:PAYROLL_RECORD_WHT:${payrollId}]`
+    const saveRow = {
+      payment_date: paymentDate,
+      tax_month: taxMonth,
+      payee_name: employeeName.slice(0, 500),
+      payee_tax_id: payeeTaxId,
+      income_type: '급여',
+      gross_amount: grossAmount,
+      wht_rate: rate,
+      wht_amount: whtAmount,
+      form_hint: 'PND1',
+      certificate_no: `PR-${taxMonth.replace('-', '')}-${payrollId}`.slice(0, 128),
+      memo: `${memoTag} 급여 원천세 자동`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: store || null,
+      updated_at: new Date().toISOString(),
+    }
+
+    const existing = existingByPayrollId.get(payrollId)
+    if (existing?.id && existing.filingStatus === 'submitted') {
+      seenPayrollIds.add(payrollId)
+      continue
+    }
+    if (existing?.id) {
+      try {
+        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, saveRow)
+      } catch (e) {
+        if (!isMissingSubmissionColumnError(e)) throw e
+        await supabaseUpdate(
+          'withholding_tax_ledger_entries',
+          existing.id,
+          stripSubmissionAuditFields(saveRow)
+        )
+      }
+      upserted += 1
+      seenPayrollIds.add(payrollId)
+      continue
+    }
+
+    const insertRow = {
+      ...saveRow,
+      created_by: 'system',
+      created_at: new Date().toISOString(),
+    }
+    try {
+      await supabaseInsert('withholding_tax_ledger_entries', insertRow)
+    } catch (e) {
+      if (!isMissingSubmissionColumnError(e)) throw e
+      await supabaseInsert('withholding_tax_ledger_entries', stripSubmissionAuditFields(insertRow))
+    }
+    upserted += 1
+    seenPayrollIds.add(payrollId)
+  }
+
+  let deleted = 0
+  for (const [payrollId, ex] of existingByPayrollId.entries()) {
+    if (seenPayrollIds.has(payrollId)) continue
+    if (ex.filingStatus === 'submitted') continue
+    await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
+    deleted += 1
+  }
+
+  return { upserted, deleted }
+}
+

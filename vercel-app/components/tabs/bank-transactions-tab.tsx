@@ -46,6 +46,7 @@ import {
   updateBankTransaction,
   deleteExpenseRegisterItem,
   invalidateBankTransactionsListCache,
+  invalidateReceivablePayableListCache,
   getPurchaseOrders,
   getBankMemoRules,
   saveBankMemoRule,
@@ -327,7 +328,10 @@ export function BankTransactionsTab() {
         await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_delete_fail", "삭제 실패"))
         return
       }
-      await invalidateBankTransactionsListCache({ accountId, startStr, endStr })
+      await Promise.all([
+        invalidateBankTransactionsListCache({ accountId, startStr, endStr }),
+        invalidateReceivablePayableListCache(),
+      ])
       await loadData()
     } catch (e) {
       await appAlert(`${tt("msg_delete_fail", "삭제 실패")}: ${e instanceof Error ? e.message : String(e)}`)
@@ -355,6 +359,7 @@ export function BankTransactionsTab() {
       }
       const res = await updateBankTransaction(payload)
       if (res.success) {
+        await invalidateReceivablePayableListCache()
         const nextCategory =
           edits.category !== undefined
             ? edits.category

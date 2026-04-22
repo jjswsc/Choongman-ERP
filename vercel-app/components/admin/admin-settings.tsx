@@ -326,8 +326,21 @@ export function AdminSettings() {
   }
 
   const filteredEmployees = permEmployees.filter((e) => e.store === permStore)
-  const togglePerm = (key: string) => {
-    setPermChecks((p) => ({ ...p, [key]: !p[key] }))
+
+  const setMenuView = (id: string, checked: boolean) => {
+    setPermChecks((p) => {
+      const next = { ...p, [`${id}_view`]: checked }
+      if (!checked) next[`${id}_edit`] = false
+      return next
+    })
+  }
+
+  const setMenuEdit = (id: string, checked: boolean) => {
+    setPermChecks((p) => {
+      const next = { ...p, [`${id}_edit`]: checked }
+      if (checked) next[`${id}_view`] = true
+      return next
+    })
   }
 
   const persistLimitsNote = (v: string) => {
@@ -484,19 +497,37 @@ export function AdminSettings() {
                 {permLoading ? (
                   <p className="py-6 text-center text-muted-foreground text-xs">{t("loading")}</p>
                 ) : (
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {MENU_IDS.map((id) => (
-                      <div key={id} className="flex items-center gap-2 rounded border p-2">
-                        <Checkbox
-                          id={`perm_${id}`}
-                          checked={!!permChecks[`${id}_view`]}
-                          onCheckedChange={() => togglePerm(`${id}_view`)}
-                        />
-                        <label htmlFor={`perm_${id}`} className="text-xs cursor-pointer flex-1">
-                          {t(MENU_TO_TKEY[id] || id)}
-                        </label>
-                      </div>
-                    ))}
+                  <div className="space-y-2">
+                    <div className="hidden sm:flex items-center gap-2 rounded border border-dashed bg-muted/30 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+                      <span className="flex-1 min-w-0">{t("settings_perm_table_col_menu")}</span>
+                      <span className="w-[4.5rem] shrink-0 text-center">{t("settings_menu_perm_view")}</span>
+                      <span className="w-[4.5rem] shrink-0 text-center">{t("settings_menu_perm_edit")}</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {MENU_IDS.map((id) => (
+                        <div key={id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded border p-2">
+                          <span className="text-xs flex-1 min-w-[7rem] font-medium">{t(MENU_TO_TKEY[id] || id)}</span>
+                          <div className="flex items-center gap-3 shrink-0 ml-auto">
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-muted-foreground whitespace-nowrap">
+                              <Checkbox
+                                id={`perm_${id}_view`}
+                                checked={!!permChecks[`${id}_view`]}
+                                onCheckedChange={(v) => setMenuView(id, v === true)}
+                              />
+                              <span>{t("settings_menu_perm_view")}</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-muted-foreground whitespace-nowrap">
+                              <Checkbox
+                                id={`perm_${id}_edit`}
+                                checked={!!permChecks[`${id}_edit`]}
+                                onCheckedChange={(v) => setMenuEdit(id, v === true)}
+                              />
+                              <span>{t("settings_menu_perm_edit")}</span>
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>

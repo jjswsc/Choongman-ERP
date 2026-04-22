@@ -5,6 +5,7 @@ import {
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { requireAuth } from '@/lib/verify-auth'
 
 const BUCKET = 'sso-evidence-files'
 const MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -33,8 +34,13 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = (await request.json()) as {
-      userRole?: string
       yearMonth?: string
       storeFilter?: string
       fileName?: string
@@ -42,7 +48,7 @@ export async function POST(request: NextRequest) {
       fileSize?: number
     }
 
-    const userRole = String(body.userRole || '').trim()
+    const userRole = String(auth.role || '').trim()
     assertCanManageAccountingCompliance(userRole)
 
     const yearMonth = String(body.yearMonth || '').trim().slice(0, 7)

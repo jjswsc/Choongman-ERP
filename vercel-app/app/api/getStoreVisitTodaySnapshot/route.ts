@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelect, supabaseSelectFilter } from "@/lib/supabase-server"
 import { buildVisitDisplayNameMap, visitDisplayName } from "@/lib/visit-display-name"
+import { requireAuth } from "@/lib/verify-auth"
+import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
+import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import {
   attendanceBusinessDateStrBangkok,
   attendanceBusinessDayBoundsMs,
@@ -47,9 +50,28 @@ type SnapshotActive = {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const userStore = searchParams.get("userStore")?.trim()
-  const userRole = String(searchParams.get("userRole") || "").toLowerCase()
+  const authResult = await requireAuth(request, "manager")
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set("Access-Control-Allow-Origin", "*")
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
+  const userStore = String(auth.store || "").trim()
+  const userRole = String(auth.role || "").toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || "").trim())
+      .filter(Boolean)
+      .concat(userStore)
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes("manager") || userRole.includes("franchisee"))
+  if (isScopedRole && allowedStores.length === 0) {
+    return NextResponse.json(
+      { today: attendanceBusinessDateStrBangkok(Date.now()), active: [], segments: [], byStore: [] },
+      { status: 403 }
+    )
+  }
 
   /** 근태와 동일: 자정~07:59는 전날 근무일. "오늘" 스냅샷 기준일 */
   const businessToday = attendanceBusinessDateStrBangkok(Date.now())
@@ -76,8 +98,8 @@ export async function GET(request: NextRequest) {
     const displayMap = buildVisitDisplayNameMap(empList || [])
 
     const filters = [`visit_date=gte.${minD}`, `visit_date=lte.${maxD}`]
-    if (userRole.includes("manager") && userStore) {
-      filters.push(`store_name=eq.${encodeURIComponent(userStore)}`)
+    if (isScopedRole && allowedStores.length === 1) {
+      filters.push(`store_name=eq.${encodeURIComponent(allowedStores[0])}`)
     }
 
     const rows = (await supabaseSelectFilter(`store_visits`, filters.join("&"), {
@@ -97,7 +119,10 @@ export async function GET(request: NextRequest) {
 
     const typed = (rows || []).filter((r) => {
       const vt = String(r.visit_type || "")
-      return START_TYPES.has(vt) || END_TYPES.has(vt)
+      if (!(START_TYPES.has(vt) || END_TYPES.has(vt))) return false
+      if (!isScopedRole) return true
+      const rowStore = String(r.store_name || "").trim()
+      return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
     })
 
     const byName = new Map<string, typeof typed>()

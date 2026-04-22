@@ -21,6 +21,12 @@ interface InboundFilterBarProps {
   histVendor: string
   vendors: string[]
   onHistVendorChange: (v: string) => void
+  /** 품목 코드·명 부분 검색 (입고된 모든 품목 대상) */
+  histItemSearch?: string
+  onHistItemSearchChange?: (v: string) => void
+  /** 드롭다운 미선택 시 거래처명 부분 검색 */
+  histVendorSearch?: string
+  onHistVendorSearchChange?: (v: string) => void
   /** 본사/매장 구분 필터 */
   histPurchaseSource?: "" | "hq" | "store"
   onHistPurchaseSourceChange?: (v: "" | "hq" | "store") => void
@@ -43,6 +49,10 @@ export function InboundFilterBar({
   histVendor,
   vendors,
   onHistVendorChange,
+  histItemSearch = "",
+  onHistItemSearchChange,
+  histVendorSearch = "",
+  onHistVendorSearchChange,
   histPurchaseSource = "",
   onHistPurchaseSourceChange,
   onSearch,
@@ -119,8 +129,11 @@ export function InboundFilterBar({
         )}
         <select
           value={histVendor || "__all__"}
-          onChange={(e) => onHistVendorChange(e.target.value === "__all__" ? "" : e.target.value)}
-          className="h-8 rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+          onChange={(e) => {
+            onHistVendorChange(e.target.value === "__all__" ? "" : e.target.value)
+            onHistVendorSearchChange?.("")
+          }}
+          className="h-8 min-w-[120px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
         >
           <option value="__all__">{t("inVendorAll")}</option>
           {vendors.map((v) => (
@@ -129,6 +142,26 @@ export function InboundFilterBar({
             </option>
           ))}
         </select>
+        {onHistVendorSearchChange && (
+          <input
+            type="text"
+            value={histVendorSearch}
+            onChange={(e) => onHistVendorSearchChange(e.target.value)}
+            disabled={!!histVendor}
+            title={histVendor ? t("inVendorAll") : t("inVendorSearchHint") || "거래처명 일부로 검색"}
+            placeholder={t("inVendorSearchPh") || "거래처 검색(부분)"}
+            className="h-8 w-[140px] rounded border border-input bg-card px-2 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        )}
+        {onHistItemSearchChange && (
+          <input
+            type="text"
+            value={histItemSearch}
+            onChange={(e) => onHistItemSearchChange(e.target.value)}
+            placeholder={t("inItemSearchPh") || "품목 코드·명 검색"}
+            className="h-8 w-[160px] rounded border border-input bg-card px-2 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        )}
 
         {/* Search Button */}
         <button

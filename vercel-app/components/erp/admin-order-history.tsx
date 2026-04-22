@@ -458,7 +458,7 @@ export function AdminOrderHistory() {
     const html = `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${t("orderTabStoreOrderHist") || "매장 발주 내역"}</title>
-<style>body{font-family:Arial,sans-serif;padding:16px;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5;text-align:center}.num{text-align:center}</style>
+<style>body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;padding:16px;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5;text-align:center}.num{text-align:center}</style>
 </head><body>
 <h1>${t("orderTabStoreOrderHist") || "매장 발주 내역"}</h1>
 <p>${t("orderFilterPeriod")}: ${startDate} ~ ${endDate}${selectedIds.size > 0 ? ` (${t("orderSelectedItems") || "선택"} ${rowsToPrint.length}건)` : ""}</p>

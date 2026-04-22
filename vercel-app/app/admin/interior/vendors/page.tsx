@@ -13,6 +13,7 @@ function Inner() {
       toolBasePath={INTERIOR_ADMIN.vendors}
       titleKey="interiorVendorTracks"
       icon={HandCoins}
+      allowMultiProject
     >
       {(projectId) => <InteriorVendorsPanel projectId={projectId} />}
     </InteriorProjectToolShell>

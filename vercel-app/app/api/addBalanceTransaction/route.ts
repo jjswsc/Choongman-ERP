@@ -8,6 +8,9 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -17,12 +20,25 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const type = String(body.type || '').trim().toLowerCase()
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const storeName = String(body.storeName || body.store_name || '').trim()
-    const userStore = String(body.userStore || body.user_store || '').trim()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
     const amount = Number(body.amount ?? 0)
     const transDate = String(body.transDate || body.trans_date || '').trim().slice(0, 10)
     const memo = String(body.memo || '').trim()
@@ -35,9 +51,7 @@ export async function POST(request: NextRequest) {
       )
     }
     // 본사/회계직원: 매장별 관리 가능. 매니저/가맹점주: 미지급금 입력 불가
-    const canSelectStores = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
-      || userRole.includes('accounting')
-      || userRole.includes('회계')
+    const canSelectStores = isOfficeRole(userRole) || isAccountingRole(userRole)
     const isManager = (userRole.includes('manager') || userRole.includes('franchisee')) && !canSelectStores
     if (type === 'payable' && isManager) {
       return NextResponse.json(
@@ -87,11 +101,14 @@ export async function POST(request: NextRequest) {
       )
     }
     // 매니저(회계권한 없을 때): 자기 매장만 수령 입력 가능
-    if (isManager && userStore && storeName !== userStore) {
-      return NextResponse.json(
-        { success: false, message: '자기 매장만 수령 입력할 수 있습니다.' },
-        { headers }
-      )
+    if (isManager) {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeName))
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, message: '자기 매장만 수령 입력할 수 있습니다.' },
+          { headers }
+        )
+      }
     }
     const amt = isOpening ? Math.abs(amount) : -Math.abs(amount)
     await supabaseInsert('receivable_transactions', {

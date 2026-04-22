@@ -14,7 +14,7 @@ import {
   isFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
-import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { requireAuth, tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
 
 async function franchiseeStoreAccessOpts(req: NextRequest): Promise<{ allowedStores?: string[] }> {
@@ -39,9 +39,15 @@ function parseBy(v: string | null): SearchBy {
 export async function GET(req: NextRequest) {
   const headers = cors()
   try {
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const { searchParams } = new URL(req.url)
-    const userRole = String(searchParams.get('userRole') || '')
-    const userStore = String(searchParams.get('userStore') || '').trim()
+    const userRole = String(auth.role || '')
+    const userStore = String(auth.store || '').trim()
     const storeCode = String(searchParams.get('storeCode') || '').trim()
     const q = String(searchParams.get('q') || '').trim()
     const by = parseBy(searchParams.get('by'))
@@ -81,9 +87,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const headers = cors()
   try {
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await req.json()
-    const userRole = String(body.userRole || '')
-    const userStore = String(body.userStore || '').trim()
+    const userRole = String(auth.role || '')
+    const userStore = String(auth.store || '').trim()
     const storeCode = String(body.storeCode || '').trim()
 
     if (!canAccessPosOrder(userRole)) {
@@ -128,9 +140,15 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const headers = cors()
   try {
+    const authResult = await requireAuth(req, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await req.json()
-    const userRole = String(body.userRole || '')
-    const userStore = String(body.userStore || '').trim()
+    const userRole = String(auth.role || '')
+    const userStore = String(auth.store || '').trim()
     const id = String(body.id || '').trim()
 
     if (!canAccessPosSettlement(userRole) && !isOfficeRole(userRole)) {

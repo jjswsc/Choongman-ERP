@@ -8,6 +8,9 @@ import { workflowStoreScopeFromStoreTb } from '@/lib/accounting-ledger-store-fil
 import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { writeAccountingWorkflowEvent } from '@/lib/accounting-workflow-events'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function parsePeriodType(v: unknown): 'monthly' | 'half_year' | 'annual' {
   const raw = String(v || '').trim().toLowerCase()
@@ -27,9 +30,21 @@ function isMissingWorkflowPeriodColumnsError(e: unknown): boolean {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
+  const jwtUserRole = String(auth.role || '').trim()
+  const jwtAllowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(String(auth.store || '').trim())
   try {
     const body = await request.json().catch(() => ({}))
-    const userRole = String(body.userRole || '').trim()
+    const userRole = jwtUserRole
     const yearMonth = String(body.yearMonth || '').trim().slice(0, 7)
     const periodType = parsePeriodType(body.periodType)
     const filingType = String(body.filingType || '').trim()
@@ -38,9 +53,23 @@ export async function POST(request: NextRequest) {
     const note = body.note != null ? String(body.note).slice(0, 2000) : null
     const owner = body.owner != null ? String(body.owner).slice(0, 200) : null
     const updatedBy = body.updatedBy != null ? String(body.updatedBy).slice(0, 200) : null
-    const storeScope = workflowStoreScopeFromStoreTb(
-      body.storeFilter != null ? String(body.storeFilter) : 'All'
-    )
+    const requestedStoreFilter = body.storeFilter != null ? String(body.storeFilter).trim() : ''
+    const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+    let effectiveStoreFilter = requestedStoreFilter
+    if (!isOfficeLevel) {
+      if (!requestedStoreFilter || requestedStoreFilter === 'All') {
+        effectiveStoreFilter = String(jwtAllowedStores[0] || '').trim()
+        if (!effectiveStoreFilter) {
+          return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+        }
+      } else {
+        const allowed = jwtAllowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
+        if (!allowed) {
+          return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+        }
+      }
+    }
+    const storeScope = workflowStoreScopeFromStoreTb(effectiveStoreFilter || 'All')
 
     if (!/^\d{4}-\d{2}$/.test(yearMonth) || !filingType) {
       await writeAccountingComplianceAudit({
@@ -237,7 +266,7 @@ export async function POST(request: NextRequest) {
         const body = await request.json().catch(() => ({}))
         await writeAccountingComplianceAudit({
           actionType: 'workflow_status_save',
-          userRole: String(body.userRole || '').trim(),
+          userRole: jwtUserRole,
           actor: body.updatedBy != null ? String(body.updatedBy).trim() : null,
           decision: 'deny',
           reasonCode: 'FORBIDDEN',

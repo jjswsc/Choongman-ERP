@@ -3,6 +3,14 @@ import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import {
+  syncTaxVatLedgersFromStockAndExpenses,
+  syncTaxWithholdingLedgersFromPayroll,
+  syncTaxWithholdingLedgersFromExpenses,
+} from '@/lib/tax-ledger-auto-sync'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 type VatRow = {
   direction?: string
@@ -46,11 +54,36 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const userRole = String(authResult.auth.role || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim()
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
-  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
+  const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
+  const allowedStores =
+    (Array.isArray(authResult.auth.allowedStores) ? authResult.auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(String(authResult.auth.store || '').trim())
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  let storeFilter = requestedStoreFilter
+  if (!isOfficeLevel) {
+    if (!requestedStoreFilter || requestedStoreFilter === 'All') {
+      storeFilter = String(allowedStores[0] || '').trim()
+      if (!storeFilter) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
+      if (!allowed) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    }
+  }
 
   try {
     assertCanManageAccountingCompliance(userRole)
@@ -63,6 +96,22 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    try {
+      await syncTaxVatLedgersFromStockAndExpenses({
+        months: period.months,
+        storeFilter,
+      })
+      await syncTaxWithholdingLedgersFromExpenses({
+        months: period.months,
+        storeFilter,
+      })
+      await syncTaxWithholdingLedgersFromPayroll({
+        months: period.months,
+        storeFilter,
+      })
+    } catch (e) {
+      console.warn('getThaiTaxFilingSummary auto-sync skipped:', e)
+    }
     try {
       const rpcRows = await supabaseRpc<RpcSummaryRow[]>('get_thai_tax_filing_summary_agg', {
         p_tax_months: period.months,

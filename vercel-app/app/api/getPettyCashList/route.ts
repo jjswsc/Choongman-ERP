@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -13,22 +16,52 @@ function toDateStr(val: string | Date | null | undefined): string {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const scopeFilter = String(searchParams.get('scopeFilter') || searchParams.get('scope') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const departmentFilter = String(searchParams.get('departmentFilter') || searchParams.get('department') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
   const { page, pageSize } = parseListPagination(searchParams, null, 25)
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
-  const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
+  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
   let effectiveStore = ''
-  if (!isOffice && userStore) effectiveStore = userStore
-  else if (scopeFilter === 'office') {
+  if (!isOffice) {
+    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) {
+        return NextResponse.json(
+          { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
+          { status: 403, headers }
+        )
+      }
+      effectiveStore = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) {
+        return NextResponse.json(
+          { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
+          { status: 403, headers }
+        )
+      }
+      effectiveStore = storeFilter
+    }
+  } else if (scopeFilter === 'office') {
     effectiveStore = departmentFilter ? 'Office-' + departmentFilter : 'Office'
   } else if (storeFilter) effectiveStore = storeFilter
 

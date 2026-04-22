@@ -105,9 +105,7 @@ const menuSections: MenuSection[] = [
   },
   {
     titleKey: "adminSectionSales",
-    items: [
-      { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
-    ],
+    items: [{ titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" }],
   },
   {
     titleKey: "adminSectionMarketing",
@@ -118,7 +116,6 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
       { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
       { titleKey: "adminMarketingMaterials", icon: Package, href: "/admin/marketing/materials" },
-      { titleKey: "adminProductCatalog", icon: LayoutGrid, href: "/admin/product-catalog" },
       { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
       { titleKey: "adminMarketingReport", icon: FileText, href: "/admin/marketing/report" },
       { titleKey: "adminMarketingIntegrations", icon: Settings2, href: "/admin/marketing/integrations" },

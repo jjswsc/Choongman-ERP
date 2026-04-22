@@ -45,6 +45,7 @@ import {
   eventsByDateForMonth,
   getBangkokMonthGridMeta,
   CALENDAR_LAYER_IDS,
+  CALENDAR_LAYER_CHIP_CLASS,
   layerOfEvent,
   type CalendarLayerId,
   type MarketingCalendarEvent,
@@ -117,15 +118,6 @@ function calendarEventLocaleFromT(t: (key: string) => string): MarketingCalendar
     budget: t("marketingCalBudget"),
     sepMid: t("marketingCalSepMid"),
   }
-}
-
-const LAYER_CHIP: Record<CalendarLayerId, string> = {
-  campaign: "bg-violet-500/15 text-violet-800 border-violet-200 dark:text-violet-200 dark:border-violet-800",
-  promo: "bg-indigo-500/15 text-indigo-800 border-indigo-200 dark:text-indigo-200 dark:border-indigo-800",
-  ad: "bg-emerald-500/15 text-emerald-800 border-emerald-200 dark:text-emerald-200 dark:border-emerald-800",
-  influencer: "bg-amber-500/15 text-amber-900 border-amber-200 dark:text-amber-200 dark:border-amber-800",
-  material: "bg-rose-500/15 text-rose-800 border-rose-200 dark:text-rose-200 dark:border-rose-800",
-  collab: "bg-sky-500/15 text-sky-900 border-sky-200 dark:text-sky-200 dark:border-sky-800",
 }
 
 function addMonthsYm(ym: string, delta: number): string {
@@ -338,8 +330,8 @@ export function MarketingIntegratedCalendarPanel({
                     className={cn(
                       "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                       on
-                        ? "border-primary bg-primary/10 text-foreground shadow-sm"
-                        : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted"
+                        ? cn(CALENDAR_LAYER_CHIP_CLASS[opt.id], "shadow-sm")
+                        : "border-transparent bg-muted/60 text-muted-foreground opacity-80 hover:bg-muted hover:opacity-100"
                     )}
                   >
                     {opt.label}
@@ -491,7 +483,7 @@ export function MarketingIntegratedCalendarPanel({
                                   key={ev.id}
                                   className={cn(
                                     "truncate rounded border px-1 py-0.5 text-[10px] leading-tight",
-                                    LAYER_CHIP[layerOfEvent(ev)]
+                                    CALENDAR_LAYER_CHIP_CLASS[layerOfEvent(ev)]
                                   )}
                                   title={ev.label}
                                 >
@@ -525,7 +517,7 @@ export function MarketingIntegratedCalendarPanel({
           <span className="font-medium text-foreground">{t("marketingCalLegend")}</span>
           {layerOptions.map((opt) => (
             <span key={opt.id} className="inline-flex items-center gap-1.5">
-              <span className={cn("h-2.5 w-2.5 rounded-sm border", LAYER_CHIP[opt.id])} />
+              <span className={cn("h-2.5 w-2.5 rounded-sm border", CALENDAR_LAYER_CHIP_CLASS[opt.id])} />
               {opt.label}
             </span>
           ))}
@@ -546,7 +538,7 @@ export function MarketingIntegratedCalendarPanel({
                 {(eventsByDate[selectedDay] || []).map((ev) => (
                   <li key={ev.id} className="rounded-xl border bg-muted/20 p-3">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className={cn("text-[10px]", LAYER_CHIP[layerOfEvent(ev)])}>
+                      <Badge variant="outline" className={cn("text-[10px]", CALENDAR_LAYER_CHIP_CLASS[layerOfEvent(ev)])}>
                         {layerOptions.find((o) => o.id === layerOfEvent(ev))?.label}
                       </Badge>
                       {(ev.campaignNo || ev.campaignId) && (

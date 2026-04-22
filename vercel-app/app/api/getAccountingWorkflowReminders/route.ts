@@ -3,6 +3,7 @@ import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { THAI_FILING_DEFINITIONS, type ThaiFilingType } from '@/lib/thai-filing-scope'
+import { requireAuth } from '@/lib/verify-auth'
 
 type WorkflowStatusRow = {
   filing_type?: string | null
@@ -23,6 +24,14 @@ type ReminderRow = {
   severity: ReminderSeverity
   status: string
   messageKo: string
+}
+
+type WhtLedgerRow = {
+  id?: number | null
+  payee_name?: string | null
+  payee_tax_id?: string | null
+  form_hint?: string | null
+  memo?: string | null
 }
 
 function shiftYearMonth(ym: string, deltaMonths: number): string {
@@ -74,6 +83,18 @@ function severityFromDays(daysToDue: number): ReminderSeverity {
   return 'info'
 }
 
+function isPayrollWhtLedgerRow(row: WhtLedgerRow): boolean {
+  const memo = String(row.memo || '')
+  if (memo.includes('[AUTO:PAYROLL_RECORD_WHT:')) return true
+  const form = String(row.form_hint || '').toLowerCase()
+  return form.includes('pnd1') || form.includes('ภ.ง.ด.1')
+}
+
+function hasValidTin(v: unknown): boolean {
+  const digits = String(v || '').replace(/\D/g, '')
+  return digits.length === 13
+}
+
 function isMissingPeriodColumnsError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
   return msg.includes('period_type') || msg.includes('period_key') || msg.includes('42703')
@@ -82,8 +103,14 @@ function isMissingPeriodColumnsError(e: unknown): boolean {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(auth.role || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim().slice(0, 7)
   const storeFilter = String(searchParams.get('storeFilter') || '').trim() || 'All'
 
@@ -154,6 +181,39 @@ export async function GET(request: NextRequest) {
         status,
         messageKo,
       })
+
+      if (filingType === 'wht_ppnd') {
+        const whtRows = (await supabaseSelectFilter(
+          'withholding_tax_ledger_entries',
+          `tax_month=eq.${encodeURIComponent(ym)}`,
+          { select: 'id,payee_name,payee_tax_id,form_hint,memo', limit: 50000 }
+        )) as WhtLedgerRow[] | null
+        const payrollRows = (whtRows || []).filter(isPayrollWhtLedgerRow)
+        const missingTinRows = payrollRows.filter((r) => !hasValidTin(r.payee_tax_id))
+        if (missingTinRows.length > 0) {
+          const empSet = new Set(
+            missingTinRows.map((r) => String(r.payee_name || '').trim().toLowerCase()).filter(Boolean)
+          )
+          const sample = missingTinRows
+            .slice(0, 3)
+            .map((r) => String(r.payee_name || '').trim())
+            .filter(Boolean)
+            .join(', ')
+          reminders.push({
+            filingType,
+            filingLabelKo: `${filing.labelKo} (급여 TIN 점검)`,
+            periodType,
+            yearMonth: ym,
+            dueDateBangkok: dueYmd,
+            daysToDue,
+            severity: missingTinRows.length >= 3 ? 'critical' : 'warn',
+            status,
+            messageKo: `급여 원천 TIN 누락 ${missingTinRows.length}건 / 직원 ${empSet.size}명${
+              sample ? ` (예: ${sample})` : ''
+            }`,
+          })
+        }
+      }
     }
   }
 

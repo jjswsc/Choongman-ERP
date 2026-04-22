@@ -18,6 +18,9 @@ import {
   normalizeEmployeeNameForGradeMatch,
   resolveEmployeeDisplayNameForAttendanceGrid,
 } from '@/lib/employee-display-name'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
 
@@ -104,21 +107,33 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'no-store, max-age=0')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    authResult.errorResponse.headers.set('Cache-Control', 'no-store, max-age=0')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startDate = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   let employeeFilter = String(searchParams.get('employeeFilter') || searchParams.get('employee') || searchParams.get('name') || '').trim()
-  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
-  const employeeIdFilter =
-    employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
+  const queryEmployeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  let employeeIdFilter =
+    queryEmployeeIdRaw && Number.isFinite(Number(queryEmployeeIdRaw)) ? Math.floor(Number(queryEmployeeIdRaw)) : 0
   const employeeCodeNorm = normalizeEmployeeCodeForMatch(
     String(searchParams.get('employeeCode') || searchParams.get('code') || '').trim()
   )
   const hasEmployeeCodeFilter = employeeCodeNorm.length > 0
   const statusFilter = String(searchParams.get('statusFilter') || searchParams.get('status') || 'all').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
   if (storeFilter === 'null' || storeFilter === 'undefined') storeFilter = ''
   if (employeeFilter === 'null' || employeeFilter === 'undefined') employeeFilter = ''
 
@@ -136,12 +151,28 @@ export async function GET(request: NextRequest) {
 
   const isAllStores = !storeFilter || storeFilter === 'All' || storeFilter.toLowerCase() === 'all' || storeFilter === '전체' || storeFilter === '전체 매장'
   const isAllEmployeesByName = !employeeFilter || employeeFilter === 'All' || employeeFilter === '전체 직원'
-  const hasEmployeeIdFilter = employeeIdFilter > 0
-  const isAllEmployees = !hasEmployeeIdFilter && isAllEmployeesByName
   const pendingOnly = statusFilter === 'pending'
 
-  const isManager = userRole === 'manager'
-  if (isManager && userStore) storeFilter = userStore
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes('manager') || userRole.includes('franchisee'))
+  if (isScopedRole) {
+    const authEmployeeIdRaw = Number((auth as { employeeId?: unknown }).employeeId)
+    const authEmployeeId =
+      Number.isFinite(authEmployeeIdRaw) && authEmployeeIdRaw > 0 ? Math.floor(authEmployeeIdRaw) : 0
+    employeeFilter = String(auth.name || '').trim()
+    employeeIdFilter = authEmployeeId
+    if (!storeFilter || storeFilter === 'All' || storeFilter.toLowerCase() === 'all' || storeFilter === '전체' || storeFilter === '전체 매장') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) return NextResponse.json([], { status: 403, headers })
+      storeFilter = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) return NextResponse.json([], { status: 403, headers })
+    }
+  }
+  const hasEmployeeIdFilter = employeeIdFilter > 0
+  const isAllEmployees = !hasEmployeeIdFilter && isAllEmployeesByName
 
   try {
     type AttRow = {

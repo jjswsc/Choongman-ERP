@@ -7,9 +7,18 @@ import {
   visitNameVariantsForFilter,
 } from "@/lib/visit-display-name"
 import { addDayBangkok, visitRowBusinessDateStrBangkok } from "@/lib/attendance-utils"
+import { requireAuth } from "@/lib/verify-auth"
+import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
+import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 
 /** 매장 방문 통계용 raw records (VisitRecord 형식) - Supabase store_visits + employees 부서 매핑 */
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request, "manager")
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set("Access-Control-Allow-Origin", "*")
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get("start") || searchParams.get("startStr") || "2000-01-01").slice(0, 10)
   const endStr = String(searchParams.get("end") || searchParams.get("endStr") || "2100-12-31").slice(0, 10)
@@ -17,8 +26,19 @@ export async function GET(request: NextRequest) {
   const employeeName = searchParams.get("employeeName")?.trim()
   const department = searchParams.get("department")?.trim()
   const purpose = searchParams.get("purpose")?.trim()
-  const userStore = searchParams.get("userStore")?.trim()
-  const userRole = String(searchParams.get("userRole") || "").toLowerCase()
+  const userStore = String(auth.store || "").trim()
+  const userRole = String(auth.role || "").toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || "").trim())
+      .filter(Boolean)
+      .concat(userStore)
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes("manager") || userRole.includes("franchisee"))
+  if (isScopedRole && allowedStores.length === 0) {
+    return NextResponse.json([], { status: 403 })
+  }
 
   try {
     const empList = (await supabaseSelect("employees", { order: "id.asc", select: "store,job,nick,name", limit: 2000 })) as
@@ -34,10 +54,15 @@ export async function GET(request: NextRequest) {
       `visit_date=lte.${visitDateMax}`,
       `or=(visit_type.eq.${encodeURIComponent("방문종료")},visit_type.eq.${encodeURIComponent("강제 방문종료")},duration_min.gt.0)`,
     ]
-    if (userRole.includes("manager") && userStore) {
-      filters.push(`store_name=eq.${encodeURIComponent(userStore)}`)
+    if (store && store !== "__ALL__") {
+      if (isScopedRole) {
+        const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+        if (!allowed) return NextResponse.json([], { status: 403 })
+      }
+      filters.push(`store_name=eq.${encodeURIComponent(store)}`)
+    } else if (isScopedRole && allowedStores.length === 1) {
+      filters.push(`store_name=eq.${encodeURIComponent(allowedStores[0])}`)
     }
-    if (store && store !== "__ALL__") filters.push(`store_name=eq.${encodeURIComponent(store)}`)
     if (employeeName && employeeName !== "__ALL__") {
       const nameF = visitNameSupabaseFilter(visitNameVariantsForFilter(employeeName, empList))
       if (nameF) filters.push(nameF)
@@ -86,6 +111,11 @@ export async function GET(request: NextRequest) {
     }
 
     const result = (rows || [])
+      .filter((d) => {
+        if (!isScopedRole) return true
+        const rowStore = String(d.store_name || "").trim()
+        return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
+      })
       .filter((d) => !department || department === "__ALL__" || namesInDept.length === 0 || namesInDept.includes(String(d.name || "").trim()))
       .filter((d) => {
         const bd = visitRowBusinessDateStrBangkok(d as { visit_date?: string; visit_time?: string; created_at?: string })

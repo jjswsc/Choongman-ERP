@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectPageCap } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
-import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { requireAuth } from '@/lib/verify-auth'
 import { franchiseeQueryStoreAllowed, normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
@@ -25,13 +25,19 @@ export async function GET(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(req, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const { searchParams } = new URL(req.url)
-    const userStore = String(searchParams.get('userStore') || '').trim()
-    const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
     const forPettyTransfer =
       searchParams.get('forPettyTransfer') === '1' || searchParams.get('forPettyTransfer') === 'true'
 
-    const jwt = await tryVerifyBearerFromRequest(req)
+    const jwt = auth
     const effectiveRole = String(jwt?.role || userRole || '')
       .toLowerCase()
       .trim()

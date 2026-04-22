@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizeResponsibilities, THAI_FILING_DEFINITIONS } from '@/lib/thai-filing-scope'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const userRole = String(authResult.auth.role || '').trim()
 
   try {
     assertCanManageAccountingCompliance(userRole)

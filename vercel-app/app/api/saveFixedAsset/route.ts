@@ -1,5 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { deleteJournalEntriesBySource, postJournalEntry } from '@/lib/accounting-posting'
+import { accountLine } from '@/lib/chart-of-accounts-mapping'
+
+function normalizeAccountCode(v: unknown, fallback: string): string {
+  const code = String(v || '')
+    .trim()
+    .toUpperCase()
+  return code || fallback
+}
+
+function isMissingAccountColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return (
+    msg.includes('42703') ||
+    msg.includes('asset_account_code') ||
+    msg.includes('accumulated_depreciation_account_code') ||
+    msg.includes('depreciation_expense_account_code')
+  )
+}
+
+function stripAccountColumns<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload }
+  delete next.asset_account_code
+  delete next.accumulated_depreciation_account_code
+  delete next.depreciation_expense_account_code
+  return next
+}
+
+function isMissingDisposalColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return (
+    msg.includes('42703') ||
+    msg.includes('disposed_proceeds') ||
+    msg.includes('disposal_gain_loss_amount') ||
+    msg.includes('disposal_journal_entry_id')
+  )
+}
+
+function stripDisposalColumns<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload }
+  delete next.disposed_proceeds
+  delete next.disposal_gain_loss_amount
+  delete next.disposal_journal_entry_id
+  return next
+}
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -8,6 +53,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const action = String(body.action || '').trim().toLowerCase()
     const id = body.id != null ? Number(body.id) : null
     const assetCode = String(body.assetCode || body.asset_code || '').trim()
     const name = String(body.name || '').trim()
@@ -22,6 +68,163 @@ export async function POST(request: NextRequest) {
       ? String(body.depreciationMethod || body.depreciation_method)
       : 'straight_line'
     const memo = String(body.memo || '').trim() || null
+    const disposedAtInput = String(body.disposedAt || body.disposed_at || '').trim().slice(0, 10)
+    const assetAccountCode = normalizeAccountCode(body.assetAccountCode || body.asset_account_code, '1460')
+    const accumulatedDepreciationAccountCode = normalizeAccountCode(
+      body.accumulatedDepreciationAccountCode || body.accumulated_depreciation_account_code,
+      '1470'
+    )
+    const depreciationExpenseAccountCode = normalizeAccountCode(
+      body.depreciationExpenseAccountCode || body.depreciation_expense_account_code,
+      '5500'
+    )
+
+    if (action === 'dispose' || action === 'restore') {
+      if (!id || id <= 0) {
+        return NextResponse.json({ success: false, message: '자산 ID가 필요합니다.' }, { status: 400, headers })
+      }
+      const existing = (await supabaseSelectFilter('fixed_assets', `id=eq.${id}`, { select: '*', limit: 1 })) as
+        | Record<string, unknown>[]
+        | null
+      if (!existing?.length) {
+        return NextResponse.json({ success: false, message: '해당 자산이 없습니다.' }, { status: 404, headers })
+      }
+      const row = existing[0] || {}
+      const disposeYmd = /^\d{4}-\d{2}-\d{2}$/.test(disposedAtInput)
+        ? disposedAtInput
+        : new Date().toISOString().slice(0, 10)
+      const acquisitionCost = Math.max(0, Number(row.acquisition_cost || 0) || 0)
+      const storeNameRaw = String(row.store_name || '').trim() || 'All'
+      const assetNameRaw = String(row.name || '').trim() || `자산#${id}`
+      const assetAccountCodeForDisposal = normalizeAccountCode(row.asset_account_code, '1460')
+      const accumDepAccountCodeForDisposal = normalizeAccountCode(
+        row.accumulated_depreciation_account_code,
+        '1470'
+      )
+      const gainAccountCode = normalizeAccountCode(
+        body.disposalGainAccountCode || body.disposal_gain_account_code,
+        '4110'
+      )
+      const lossAccountCode = normalizeAccountCode(
+        body.disposalLossAccountCode || body.disposal_loss_account_code,
+        '5520'
+      )
+      const proceeds = Math.max(0, Number(body.disposalProceeds || body.disposal_proceeds || 0) || 0)
+      const autoMemo = `[AUTO:ASSET_DISPOSAL:${id}] ${assetNameRaw} 처분 (${disposeYmd})`
+
+      if (action === 'dispose') {
+        const depRows = (await supabaseSelectFilter(
+          'depreciation_entries',
+          `fixed_asset_id=eq.${id}&accounting_date=lte.${disposeYmd}`,
+          { select: 'amount', limit: 5000 }
+        )) as { amount?: number | null }[] | null
+        const accumulated = Math.min(
+          acquisitionCost,
+          (depRows || []).reduce((sum, r) => sum + (Number(r.amount || 0) || 0), 0)
+        )
+        const netBookValue = Math.max(0, acquisitionCost - accumulated)
+        const gainLoss = Math.round((proceeds - netBookValue) * 100) / 100
+
+        await deleteJournalEntriesBySource('fixed_asset_disposal', id, {
+          memoIncludes: ['[AUTO:ASSET_DISPOSAL:'],
+        })
+
+        const lines: {
+          accountCode: string
+          accountName: string
+          side: 'debit' | 'credit'
+          amount: number
+        }[] = []
+        if (accumulated > 0) {
+          const acc = accountLine(accumDepAccountCodeForDisposal)
+          lines.push({ accountCode: acc.accountCode, accountName: acc.accountName, side: 'debit', amount: accumulated })
+        }
+        if (proceeds > 0) {
+          const cash = accountLine('1010')
+          lines.push({ accountCode: cash.accountCode, accountName: cash.accountName, side: 'debit', amount: proceeds })
+        }
+        if (gainLoss < 0) {
+          const loss = accountLine(lossAccountCode)
+          lines.push({ accountCode: loss.accountCode, accountName: loss.accountName, side: 'debit', amount: Math.abs(gainLoss) })
+        }
+        const assetAcc = accountLine(assetAccountCodeForDisposal)
+        lines.push({ accountCode: assetAcc.accountCode, accountName: assetAcc.accountName, side: 'credit', amount: acquisitionCost })
+        if (gainLoss > 0) {
+          const gain = accountLine(gainAccountCode)
+          lines.push({ accountCode: gain.accountCode, accountName: gain.accountName, side: 'credit', amount: gainLoss })
+        }
+
+        const disposalJeId = await postJournalEntry({
+          accountingDate: disposeYmd,
+          sourceType: 'fixed_asset_disposal',
+          sourceId: id,
+          storeName: storeNameRaw,
+          memo: memo || autoMemo,
+          lines,
+        })
+
+        try {
+          await supabaseUpdate('fixed_assets', id, {
+            status: 'disposed',
+            disposed_at: disposeYmd,
+            disposed_proceeds: proceeds,
+            disposal_gain_loss_amount: gainLoss,
+            disposal_journal_entry_id: disposalJeId || null,
+            memo,
+            updated_at: new Date().toISOString(),
+          })
+        } catch (e) {
+          if (!isMissingDisposalColumnError(e)) throw e
+          await supabaseUpdate(
+            'fixed_assets',
+            id,
+            stripDisposalColumns({
+              status: 'disposed',
+              disposed_at: disposeYmd,
+              disposed_proceeds: proceeds,
+              disposal_gain_loss_amount: gainLoss,
+              disposal_journal_entry_id: disposalJeId || null,
+              memo,
+              updated_at: new Date().toISOString(),
+            })
+          )
+        }
+      } else {
+        await deleteJournalEntriesBySource('fixed_asset_disposal', id, {
+          memoIncludes: ['[AUTO:ASSET_DISPOSAL:'],
+        })
+        try {
+          await supabaseUpdate('fixed_assets', id, {
+            status: 'active',
+            disposed_at: null,
+            disposed_proceeds: 0,
+            disposal_gain_loss_amount: null,
+            disposal_journal_entry_id: null,
+            memo,
+            updated_at: new Date().toISOString(),
+          })
+        } catch (e) {
+          if (!isMissingDisposalColumnError(e)) throw e
+          await supabaseUpdate(
+            'fixed_assets',
+            id,
+            stripDisposalColumns({
+              status: 'active',
+              disposed_at: null,
+              disposed_proceeds: 0,
+              disposal_gain_loss_amount: null,
+              disposal_journal_entry_id: null,
+              memo,
+              updated_at: new Date().toISOString(),
+            })
+          )
+        }
+      }
+      return NextResponse.json(
+        { success: true, message: action === 'dispose' ? '자산이 처분 처리되었습니다.' : '자산이 복구되었습니다.' },
+        { headers }
+      )
+    }
 
     if (!name) {
       return NextResponse.json({ success: false, message: '자산명을 입력하세요.' }, { status: 400, headers })
@@ -40,18 +243,44 @@ export async function POST(request: NextRequest) {
       if (!existing?.length) {
         return NextResponse.json({ success: false, message: '해당 자산이 없습니다.' }, { status: 404, headers })
       }
-      await supabaseUpdate('fixed_assets', id, {
-        asset_code: code,
-        name,
-        store_name: storeName,
-        acquisition_date: acquisitionDate,
-        acquisition_cost: acquisitionCost,
-        residual_rate: residualRate,
-        useful_life_months: usefulLifeMonths,
-        depreciation_method: depreciationMethod,
-        memo,
-        updated_at: new Date().toISOString(),
-      })
+      try {
+        await supabaseUpdate('fixed_assets', id, {
+          asset_code: code,
+          name,
+          store_name: storeName,
+          acquisition_date: acquisitionDate,
+          acquisition_cost: acquisitionCost,
+          residual_rate: residualRate,
+          useful_life_months: usefulLifeMonths,
+          depreciation_method: depreciationMethod,
+          memo,
+          asset_account_code: assetAccountCode,
+          accumulated_depreciation_account_code: accumulatedDepreciationAccountCode,
+          depreciation_expense_account_code: depreciationExpenseAccountCode,
+          updated_at: new Date().toISOString(),
+        })
+      } catch (e) {
+        if (!isMissingAccountColumnError(e)) throw e
+        await supabaseUpdate(
+          'fixed_assets',
+          id,
+          stripAccountColumns({
+            asset_code: code,
+            name,
+            store_name: storeName,
+            acquisition_date: acquisitionDate,
+            acquisition_cost: acquisitionCost,
+            residual_rate: residualRate,
+            useful_life_months: usefulLifeMonths,
+            depreciation_method: depreciationMethod,
+            memo,
+            asset_account_code: assetAccountCode,
+            accumulated_depreciation_account_code: accumulatedDepreciationAccountCode,
+            depreciation_expense_account_code: depreciationExpenseAccountCode,
+            updated_at: new Date().toISOString(),
+          })
+        )
+      }
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
@@ -60,18 +289,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '동일한 자산코드가 이미 있습니다.' }, { status: 400, headers })
     }
 
-    await supabaseInsert('fixed_assets', {
-      asset_code: code,
-      name,
-      store_name: storeName,
-      acquisition_date: acquisitionDate,
-      acquisition_cost: acquisitionCost,
-      residual_rate: residualRate,
-      useful_life_months: usefulLifeMonths,
-      depreciation_method: depreciationMethod,
-      status: 'active',
-      memo,
-    })
+    try {
+      await supabaseInsert('fixed_assets', {
+        asset_code: code,
+        name,
+        store_name: storeName,
+        acquisition_date: acquisitionDate,
+        acquisition_cost: acquisitionCost,
+        residual_rate: residualRate,
+        useful_life_months: usefulLifeMonths,
+        depreciation_method: depreciationMethod,
+        status: 'active',
+        memo,
+        asset_account_code: assetAccountCode,
+        accumulated_depreciation_account_code: accumulatedDepreciationAccountCode,
+        depreciation_expense_account_code: depreciationExpenseAccountCode,
+      })
+    } catch (e) {
+      if (!isMissingAccountColumnError(e)) throw e
+      await supabaseInsert(
+        'fixed_assets',
+        stripAccountColumns({
+          asset_code: code,
+          name,
+          store_name: storeName,
+          acquisition_date: acquisitionDate,
+          acquisition_cost: acquisitionCost,
+          residual_rate: residualRate,
+          useful_life_months: usefulLifeMonths,
+          depreciation_method: depreciationMethod,
+          status: 'active',
+          memo,
+          asset_account_code: assetAccountCode,
+          accumulated_depreciation_account_code: accumulatedDepreciationAccountCode,
+          depreciation_expense_account_code: depreciationExpenseAccountCode,
+        })
+      )
+    }
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveFixedAsset:', e)

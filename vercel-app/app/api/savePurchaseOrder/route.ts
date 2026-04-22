@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { serializePurchaseOrderCart, type PoCartMeta } from '@/lib/purchase-order-cart'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 import {
   findDraftPurchaseOrderForBillingUpsert,
   normalizeBillingMonthYm,
@@ -14,7 +17,26 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
+    const userRole = String(auth.role || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const allowedStores = Array.from(
+      new Set(
+        [...(Array.isArray(auth.allowedStores) ? auth.allowedStores : []), userStore]
+          .map((s) => String(s || '').trim())
+          .filter(Boolean)
+      )
+    )
+    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+    if (isScopedRole && allowedStores.length === 0) {
+      return NextResponse.json({ success: false, message: '접근 가능한 매장 정보가 없습니다.' }, { status: 403, headers })
+    }
     const idempotencyKey = String(
       request.headers.get('x-idempotency-key') ??
         body.idempotencyKey ??
@@ -47,11 +69,18 @@ export async function POST(request: NextRequest) {
     const locationAddress = String(body.locationAddress || '').trim()
     const locationCode = String(body.locationCode || '').trim()
     const cart = Array.isArray(body.cart) ? body.cart : []
-    const userName = String(body.userName || '').trim()
+    const userName = String(auth.name || body.userName || '').trim()
     const withholdingTaxAmount = Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0
     const withholdingTaxRate = body.withholdingTaxRate ?? body.withholding_tax_rate
 
     const relatedStore = String(body.relatedStore ?? body.related_store ?? '').trim()
+    if (
+      isScopedRole &&
+      relatedStore &&
+      !allowedStores.some((s) => storesMatchForGradeLookup(s, relatedStore))
+    ) {
+      return NextResponse.json({ success: false, message: '허용되지 않은 관련 매장입니다.' }, { status: 403, headers })
+    }
     const storeVendorCode = String(body.storeVendorCode ?? body.store_vendor_code ?? '').trim()
     const storeVendorName = String(body.storeVendorName ?? body.store_vendor_name ?? '').trim()
     const poFormatLabel = String(body.poFormatLabel ?? body.po_format_label ?? '').trim()

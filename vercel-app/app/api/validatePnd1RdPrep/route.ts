@@ -4,6 +4,7 @@ import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { validatePnd1Rows, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
+import { requireAuth } from '@/lib/verify-auth'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -36,8 +37,14 @@ function normalizeRowFormHint(v: unknown): 'pnd1' | 'pnd1a' | 'other' {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(auth.role || '').trim()
   const taxMonth = String(searchParams.get('taxMonth') || '').trim().slice(0, 7)
   const yearMonth = String(searchParams.get('yearMonth') || taxMonth).trim().slice(0, 7)
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()

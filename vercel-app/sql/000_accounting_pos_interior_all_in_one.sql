@@ -169,6 +169,12 @@ CREATE TABLE IF NOT EXISTS public.fixed_assets (
   residual_rate NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (residual_rate >= 0 AND residual_rate <= 100),
   useful_life_months INT NOT NULL DEFAULT 60 CHECK (useful_life_months > 0),
   depreciation_method TEXT NOT NULL DEFAULT 'straight_line',
+  asset_account_code TEXT NULL DEFAULT '1460',
+  accumulated_depreciation_account_code TEXT NULL DEFAULT '1470',
+  depreciation_expense_account_code TEXT NULL DEFAULT '5500',
+  disposed_proceeds NUMERIC(14,2) NULL DEFAULT 0,
+  disposal_gain_loss_amount NUMERIC(14,2) NULL,
+  disposal_journal_entry_id BIGINT NULL,
   status TEXT NOT NULL DEFAULT 'active',
   disposed_at DATE NULL,
   memo TEXT NULL,
@@ -179,6 +185,10 @@ CREATE TABLE IF NOT EXISTS public.fixed_assets (
 CREATE INDEX IF NOT EXISTS idx_fixed_assets_store ON public.fixed_assets(store_name);
 CREATE INDEX IF NOT EXISTS idx_fixed_assets_status ON public.fixed_assets(status);
 CREATE INDEX IF NOT EXISTS idx_fixed_assets_acquisition_date ON public.fixed_assets(acquisition_date);
+CREATE INDEX IF NOT EXISTS idx_fixed_assets_asset_account_code ON public.fixed_assets(asset_account_code);
+CREATE INDEX IF NOT EXISTS idx_fixed_assets_accum_dep_account_code ON public.fixed_assets(accumulated_depreciation_account_code);
+CREATE INDEX IF NOT EXISTS idx_fixed_assets_dep_exp_account_code ON public.fixed_assets(depreciation_expense_account_code);
+CREATE INDEX IF NOT EXISTS idx_fixed_assets_disposal_journal_entry_id ON public.fixed_assets(disposal_journal_entry_id);
 
 CREATE TABLE IF NOT EXISTS public.depreciation_entries (
   id BIGSERIAL PRIMARY KEY,

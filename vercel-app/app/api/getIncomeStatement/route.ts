@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const yearMonth = String(searchParams.get('yearMonth') || searchParams.get('month') || '').trim()
   const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
   const includeDebug = ['1', 'true', 'yes'].includes(String(searchParams.get('includeDebug') || '').toLowerCase())
 
   try {

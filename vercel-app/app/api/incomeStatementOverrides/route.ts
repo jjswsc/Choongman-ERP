@@ -3,6 +3,7 @@ import { assertCanManageAccountingCompliance } from "@/lib/accounting-auth"
 import { isOfficeRole } from "@/lib/permissions"
 import { resolveIncomeStatementOverrideStoreKey } from "@/lib/pl-override-store-key"
 import { supabaseSelectFilter, supabaseUpsert } from "@/lib/supabase-server"
+import { requireAuth } from "@/lib/verify-auth"
 
 const cors = () => {
   const h = new Headers()
@@ -20,9 +21,15 @@ function assertStoreWriteAllowed(storeFilter: string, userRole: string, userStor
 export async function GET(request: NextRequest) {
   const headers = cors()
   try {
+    const authResult = await requireAuth(request, "any")
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set("Access-Control-Allow-Origin", "*")
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const sp = request.nextUrl.searchParams
-    const userRole = String(sp.get("userRole") || "").trim()
-    const userStore = String(sp.get("userStore") || "").trim()
+    const userRole = String(auth.role || "").trim()
+    const userStore = String(auth.store || "").trim()
     const storeFilter = String(sp.get("storeFilter") || "All").trim() || "All"
     const yearMonth = String(sp.get("yearMonth") || "").trim().slice(0, 7)
 
@@ -88,12 +95,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const headers = cors()
   try {
+    const authResult = await requireAuth(request, "any")
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set("Access-Control-Allow-Origin", "*")
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json().catch(() => ({}))
-    const userRole = String(body.userRole || "").trim()
-    const userStore = String(body.userStore || "").trim()
+    const userRole = String(auth.role || "").trim()
+    const userStore = String(auth.store || "").trim()
     const storeFilter = String(body.storeFilter || "All").trim() || "All"
     const yearMonth = String(body.yearMonth || "").trim().slice(0, 7)
-    const updatedBy = body.updatedBy != null ? String(body.updatedBy).slice(0, 200) : null
+    const updatedBy = auth.name != null ? String(auth.name).slice(0, 200) : body.updatedBy != null ? String(body.updatedBy).slice(0, 200) : null
 
     assertCanManageAccountingCompliance(userRole)
     assertStoreWriteAllowed(storeFilter, userRole, userStore)

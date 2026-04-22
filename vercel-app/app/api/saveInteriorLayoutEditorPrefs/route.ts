@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpsert } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 function buildUserKey(userStore: string, userName: string, employeeId?: number | null) {
   if (employeeId && Number.isFinite(employeeId) && employeeId > 0) return `eid:${Math.floor(employeeId)}`
@@ -13,13 +14,25 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const projectId = Number(body.projectId ?? 0)
     const zone = String(body.zone ?? '').trim()
-    const userStore = String(body.userStore ?? '').trim()
-    const userName = String(body.userName ?? '').trim()
+    const userStore = String(auth.store || '').trim()
+    const userName = String(auth.name || '').trim()
     const employeeIdRaw = body.employeeId
-    const employeeId = employeeIdRaw != null && employeeIdRaw !== '' ? Number(employeeIdRaw) : null
+    const employeeIdFromBody = employeeIdRaw != null && employeeIdRaw !== '' ? Number(employeeIdRaw) : null
+    const employeeIdFromAuth = Number((auth as { employeeId?: unknown }).employeeId)
+    const employeeId =
+      employeeIdFromBody != null && Number.isFinite(employeeIdFromBody)
+        ? employeeIdFromBody
+        : (Number.isFinite(employeeIdFromAuth) ? employeeIdFromAuth : null)
     const duplicateOffsetX = Number(body.duplicateOffsetX ?? 0.5)
     const duplicateOffsetY = Number(body.duplicateOffsetY ?? 0.5)
     const snapEnabled = body.snapEnabled !== false

@@ -107,6 +107,7 @@ function isNetworkError(e: unknown): boolean {
  */
 function syncOrder(item: { api: string; createdAt: number }): number {
   if (item.api === '/api/savePosOrder') return 0
+  if (item.api === '/api/updatePosOrder' || item.api === '/api/posDineInTableActions') return 1
   if (item.api === '/api/updatePosOrderStatus') return 2
   if (item.api === '/api/processPosStockDeduction') return 3
   if (item.api === '/api/savePosSettlement') return 4
@@ -128,7 +129,7 @@ function syncOrder(item: { api: string; createdAt: number }): number {
     return 7
   }
   if (item.api.startsWith('/api/save') || item.api.startsWith('/api/update')) return 5
-  return 1 // updatePosOrder 및 그 외
+  return 1
 }
 
 function nextRetryDelayMs(retryCount: number): number {

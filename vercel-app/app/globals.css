@@ -49,7 +49,8 @@
 }
 
 body {
-  font-family: var(--font-pretendard), "Noto Sans Thai", "Apple SD Gothic Neo", system-ui, sans-serif;
+  font-family: var(--font-inter), var(--font-pretendard), "Sukhumvit Set", var(--font-noto-sans-thai),
+    "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 
 /* POS: Pretendard가 이모지 코드포인트를 비우는 환경(Electron/Windows) 대비 — 프로모 🏷·타일 🍗 */

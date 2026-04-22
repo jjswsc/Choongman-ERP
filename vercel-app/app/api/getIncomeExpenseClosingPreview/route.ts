@@ -4,6 +4,9 @@ import { computeTrialBalanceReport } from '@/lib/trial-balance-report'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function isMissingClosingRunTableError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -13,13 +16,39 @@ function isMissingClosingRunTableError(e: unknown): boolean {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(auth.role || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim()
-  const storeFilter = String(searchParams.get('storeFilter') || '').trim() || 'All'
-  const userStore = String(searchParams.get('userStore') || '').trim()
+  let storeFilter = String(searchParams.get('storeFilter') || '').trim() || 'All'
+  const userStore = String(auth.store || '').trim()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
   const profitLossAccountCode = String(searchParams.get('profitLossAccountCode') || '3120').trim() || '3120'
   const sourceId = Number(yearMonth.replace('-', ''))
+
+  const roleLower = userRole.toLowerCase()
+  const isScopedRole =
+    !isOfficeRole(roleLower) && !isAccountingRole(roleLower) &&
+    (roleLower.includes('manager') || roleLower.includes('franchisee'))
+  if (isScopedRole) {
+    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      storeFilter = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+    }
+  }
 
   try {
     assertCanManageAccountingCompliance(userRole)

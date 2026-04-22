@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -24,9 +26,19 @@ function getMonthRange(yearMonth: string): { start: string; endExclusive: string
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const storeName = String(searchParams.get('store') || searchParams.get('storeName') || '').trim()
-  const userName = String(searchParams.get('name') || searchParams.get('userName') || '').trim()
+  const userRole = String(auth.role || '').trim()
+  const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+  const queryStoreName = String(searchParams.get('store') || searchParams.get('storeName') || '').trim()
+  const queryUserName = String(searchParams.get('name') || searchParams.get('userName') || '').trim()
+  const storeName = String(isScopedRole ? auth.store : queryStoreName || auth.store || '').trim()
+  const userName = String(isScopedRole ? auth.name : queryUserName || auth.name || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || searchParams.get('month') || '').trim()
 
   if (!storeName || !userName || !yearMonth) {

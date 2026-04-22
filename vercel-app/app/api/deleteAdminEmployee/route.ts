@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
-import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { requireAuth } from '@/lib/verify-auth'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import {
   franchiseeQueryStoreAllowed,
@@ -14,11 +14,17 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(req, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await req.json()
     const r = Number(body.r != null ? body.r : body.row)
-    const userStore = String(body.userStore || '').trim()
-    const userRole = String(body.userRole || '').toLowerCase()
-    const jwt = await tryVerifyBearerFromRequest(req)
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const jwt = auth
     const effectiveRole = String(jwt?.role || userRole).toLowerCase()
     const franchiseeJwtList =
       jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
@@ -33,7 +39,7 @@ export async function POST(req: NextRequest) {
     }
 
     const rowStore = String(rows[0].store || '').trim()
-    const isTop = ['director', 'officer', 'ceo', 'hr'].some((role) => userRole.includes(role)) || isAccountingRole(userRole)
+    const isTop = ['director', 'officer', 'ceo', 'hr'].some((role) => effectiveRole.includes(role)) || isAccountingRole(effectiveRole)
     if (!isTop) {
       if (jwt && isFranchiseeRole(effectiveRole) && !franchiseeQueryStoreAllowed(jwt, userStore)) {
         return NextResponse.json(

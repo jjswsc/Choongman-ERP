@@ -29,6 +29,7 @@ function DrawingsHubBody() {
       toolBasePath={INTERIOR_ADMIN.drawings}
       titleKey="interiorHubDrawings"
       icon={LayoutPanelTop}
+      allowMultiProject
     >
       {(projectId) => (
         <div className="px-1">

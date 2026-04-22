@@ -21,6 +21,9 @@ export type FixedAsset = {
   status: string
   disposed_at?: string | null
   memo?: string | null
+  asset_account_code?: string | null
+  accumulated_depreciation_account_code?: string | null
+  depreciation_expense_account_code?: string | null
 }
 
 /** 정액법 월 상각액 */
@@ -128,6 +131,8 @@ export async function runDepreciationForMonth(params: {
         assetName: asset.name,
         storeName: asset.store_name,
         memo: `감가상각 ${asset.name} (${yearMonth})`,
+        accumulatedDepreciationAccountCode: asset.accumulated_depreciation_account_code || null,
+        depreciationExpenseAccountCode: asset.depreciation_expense_account_code || null,
       })
       if (entryId && jeId) {
         await supabaseUpdate('depreciation_entries', entryId, { journal_entry_id: jeId })

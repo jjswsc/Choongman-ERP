@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
+import { requireAuth } from '@/lib/verify-auth'
 
 type LinkedPayableRow = {
   id?: number
@@ -19,12 +20,13 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
-    const body = await request.json()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) {
-      return NextResponse.json({ success: false, message: '본사 권한만 삭제할 수 있습니다.' }, { status: 403, headers })
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
     }
+    const body = await request.json()
 
     const bankTransactionId = Number(body.bankTransactionId || body.bank_transaction_id || 0)
     if (!bankTransactionId) {

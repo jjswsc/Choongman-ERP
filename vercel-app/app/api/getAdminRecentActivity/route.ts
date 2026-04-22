@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
 interface ActivityItem {
   id: string
@@ -29,6 +30,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const resolveVendorName = await createVendorNameResolver()
     const items: ActivityItem[] = []
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
@@ -94,7 +96,7 @@ export async function GET() {
 
     for (const row of outboundLogs || []) {
       const d = row.log_date ? new Date(row.log_date) : new Date()
-      const target = String(row.vendor_target || '').trim() || '매장'
+      const target = resolveVendorName(String(row.vendor_target || '').trim()) || '매장'
       const ta = computeTimeAgo(d)
       items.push({
         id: `out-${d.getTime()}-${target}`,

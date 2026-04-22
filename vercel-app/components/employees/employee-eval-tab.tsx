@@ -73,7 +73,7 @@ export type EmployeeEvalJumpTarget = {
   name: string
   nick: string
   job: string
-  /** 평가 저장 시의 유형(경고·사건 바로가기 등). 있으면 직무 추정보다 우선 */
+  /** 평가 저장 시의 유형(경고서 탭 바로가기 등). 있으면 직무 추정보다 우선 */
   evalType?: "kitchen" | "service" | "manager"
 }
 
@@ -183,7 +183,7 @@ export function EmployeeEvalTab({
   const [evalTransMap, setEvalTransMap] = React.useState<Record<string, string>>({})
   const [storesFromEvalDb, setStoresFromEvalDb] = React.useState<string[]>([])
 
-  /** 경고·사건 등에서 평가 탭으로 점프한 뒤 `loadForm`을 자동 호출(수동 「양식 불러오기」 없이 양식 표시) */
+  /** 경고서 탭 등에서 평가 탭으로 점프한 뒤 `loadForm`을 자동 호출(수동 「양식 불러오기」 없이 양식 표시) */
   const pendingEvalFormAutoLoadRef = React.useRef(false)
 
   React.useEffect(() => {
@@ -244,7 +244,7 @@ export function EmployeeEvalTab({
     onJumpToEmployeeConsumed?.()
   }, [jumpToEmployee, employees, storeOptionsForEval, onJumpToEmployeeConsumed, t])
 
-  /** 매장 매니저: 최초에만 본인 매장을 기본 선택. 경고·사건에서 평가 탭으로 점프할 때는 매장을 덮어쓰지 않음 */
+  /** 매장 매니저: 최초에만 본인 매장을 기본 선택. 경고서 탭에서 평가 탭으로 점프할 때는 매장을 덮어쓰지 않음 */
   React.useEffect(() => {
     const isManager = isManagerRole(auth?.role || "")
     const userStore = (auth?.store || "").trim()

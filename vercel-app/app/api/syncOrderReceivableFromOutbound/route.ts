@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncReceivableToOutboundView } from '@/lib/receivable-match-outbound'
 import { canSyncOrderReceivable } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -10,9 +11,16 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
     const body = await request.json()
     const orderId = Number(body.orderId ?? body.orderRowId ?? body.row)
-    const userRole = String(body.userRole ?? body.user_role ?? '').toLowerCase()
+    const userRole = String(authResult.auth.role || '').toLowerCase()
 
     if (!orderId || Number.isNaN(orderId)) {
       return NextResponse.json({ success: false, message: 'orderId가 필요합니다.' }, { headers })

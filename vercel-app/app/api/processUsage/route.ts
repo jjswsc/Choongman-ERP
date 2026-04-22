@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsertMany } from '@/lib/supabase-server'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -9,9 +12,44 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const items = Array.isArray(body.items) ? body.items : []
-    const storeName = String(body.storeName || body.store || '').trim()
+    const requestedStoreName = String(body.storeName || body.store || '').trim()
+    const userRole = String(auth.role || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const allowedStores = Array.from(
+      new Set(
+        [...(Array.isArray(auth.allowedStores) ? auth.allowedStores : []), userStore]
+          .map((s) => String(s || '').trim())
+          .filter(Boolean)
+      )
+    )
+    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+    if (isScopedRole && allowedStores.length === 0) {
+      return NextResponse.json(
+        { success: false, message: '접근 가능한 매장 정보가 없습니다.' },
+        { status: 403, headers }
+      )
+    }
+    const fallbackStore = allowedStores[0] || userStore
+    const storeName = requestedStoreName || fallbackStore
+    if (
+      isScopedRole &&
+      (!storeName || !allowedStores.some((s) => storesMatchForGradeLookup(s, storeName)))
+    ) {
+      return NextResponse.json(
+        { success: false, message: '허용되지 않은 매장입니다.' },
+        { status: 403, headers }
+      )
+    }
 
     if (!storeName) {
       return NextResponse.json(
@@ -26,7 +64,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const userName = String(body.userName || body.user_name || '').trim()
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const now = new Date().toISOString()
     const rows = items
       .filter((k: { code?: string; qty?: number }) => k && (k.code || (k as { name?: string }).name) && Number((k as { qty?: number }).qty) > 0)

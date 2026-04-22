@@ -1,7 +1,7 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
-import { Geist_Mono, Orbitron } from "next/font/google"
+import { Geist_Mono, Inter, Noto_Sans_Thai, Orbitron } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
@@ -12,9 +12,20 @@ import { getServerAppBrandConfig } from "@/lib/app-brand-server"
 
 import "./globals.css"
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+})
 const pretendard = localFont({
   src: "../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
   variable: "--font-pretendard",
+  display: "swap",
+})
+const notoSansThai = Noto_Sans_Thai({
+  subsets: ["latin", "thai"],
+  variable: "--font-noto-sans-thai",
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 })
 const geistMono = Geist_Mono({
@@ -78,7 +89,9 @@ export default async function RootLayout({
   const brand = await getServerAppBrandConfig()
   return (
     <html lang="ko">
-      <body className={`${pretendard.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased`}>
+      <body
+        className={`${inter.variable} ${pretendard.variable} ${notoSansThai.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased`}
+      >
         <AppBrandProvider value={brand}>
           <ErrorBoundary>
             <AuthProvider>

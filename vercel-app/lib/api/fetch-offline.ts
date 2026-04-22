@@ -180,6 +180,8 @@ const QUEUE_WHITELIST = new Set([
   '/api/processPosStockDeduction',
   /** 라인별 서빙/포장 완료 표시 — 오프라인 시 큐 적재 */
   '/api/markPosOrderItemServed',
+  /** 홀 테이블 이동/합석 — 오프라인 시 큐 적재 후 순차 복구 */
+  '/api/posDineInTableActions',
   '/api/saveItemVendors',
   '/api/addChecklistItem',
   '/api/deleteChecklistItem',

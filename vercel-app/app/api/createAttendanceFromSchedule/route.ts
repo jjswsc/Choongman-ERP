@@ -6,6 +6,8 @@ import {
   employeeStorePostgrestFilter,
 } from '@/lib/attendance-utils'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 
 /** submitAttendance 와 동일: employee_code / employee_id 컬럼 미배포 시 순차 제거 후 재시도 */
 async function insertAttendanceLogRow(payload: Record<string, unknown>) {
@@ -67,6 +69,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const dateStr = String(body?.date || body?.dateStr || '').trim().slice(0, 10)
     const storeName = String(body?.store || body?.storeName || '').trim()
@@ -74,8 +84,13 @@ export async function POST(request: NextRequest) {
     const employeeIdRaw = body?.employeeId
     let employeeId =
       employeeIdRaw != null && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
-    const userStore = String(body?.userStore || '').trim()
-    const userRole = String(body?.userRole || '').toLowerCase()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
 
     if (!dateStr || dateStr.length < 10 || !storeName || !empName) {
       return NextResponse.json(
@@ -84,14 +99,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isManager = userRole === 'manager'
-    if (isManager && userStore && !storesMatchForGradeLookup(String(storeName).trim(), userStore)) {
-      return NextResponse.json(
-        { success: false, message: '해당 매장만 처리할 수 있습니다.' },
-        { headers }
-      )
+    const isScopedRole =
+      !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+      (userRole.includes('manager') || userRole.includes('franchisee'))
+    if (isScopedRole) {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(String(storeName).trim(), s))
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, message: '해당 매장만 처리할 수 있습니다.' },
+          { headers }
+        )
+      }
     }
-
     // 스케줄 조회
     const schFilter =
       employeeId > 0

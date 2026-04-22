@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
 
@@ -24,17 +27,42 @@ function toDisplayStr(val: string | Date | null | undefined): string {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   let store = String(searchParams.get('store') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
   if (store === 'null' || store === 'undefined') store = ''
 
-  // 매장 매니저는 자기 매장만 조회
-  const isManager = userRole === 'manager'
-  if (isManager && userStore) store = userStore
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes('manager') || userRole.includes('franchisee'))
+  if (isScopedRole) {
+    if (!store || store === 'All' || store === '전체') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) {
+        return NextResponse.json([], { status: 403, headers })
+      }
+      store = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+      if (!allowed) {
+        return NextResponse.json([], { status: 403, headers })
+      }
+    }
+  }
 
   try {
     type Row = {

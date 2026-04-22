@@ -896,7 +896,7 @@ export default function PosPrintersPage() {
         <head>
           <title>${escapeHtml(t("posReceipt") || "영수증")}</title>
           <style>
-            ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
+            ${getPosPaperBaseCss("'Inter', 'Pretendard', 'Noto Sans KR', 'Sukhumvit Set', 'Noto Sans Thai', 'Malgun Gothic', Arial, sans-serif", 12)}
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; }
             .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }

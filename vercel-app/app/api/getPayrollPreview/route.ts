@@ -14,6 +14,9 @@ import {
 } from '@/lib/payroll-utils'
 import { hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -272,16 +275,39 @@ export interface PayrollPreviewRow {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim()
   let storeFilter = String(searchParams.get('store') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(String(auth.store || '').trim())
 
   if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) {
     return NextResponse.json({ success: false, list: [], msg: 'Invalid month (use yyyy-MM)' }, { headers })
   }
 
   if (storeFilter === 'All' || storeFilter === '전체') storeFilter = ''
+
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  if (!isOfficeLevel) {
+    if (!storeFilter) {
+      storeFilter = String(allowedStores[0] || '').trim()
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) {
+        return NextResponse.json({ success: false, list: [], msg: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    }
+  }
 
   const isDirector = userRole.includes('director') || userRole.includes('ceo') || userRole.includes('hr')
   const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사' || storeFilter.toLowerCase() === 'office'

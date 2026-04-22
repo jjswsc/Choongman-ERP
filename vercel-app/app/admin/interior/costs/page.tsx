@@ -31,6 +31,7 @@ function CostsHubBody() {
       toolBasePath={INTERIOR_ADMIN.costs}
       titleKey="interiorHubCosts"
       icon={Wallet}
+      allowMultiProject
     >
       {(projectId) => (
         <div className="px-1">

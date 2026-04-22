@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { postPettyCashJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -9,6 +12,13 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const store = String(body.store || '').trim()
     const transDate = String(body.transDate || body.trans_date || '').slice(0, 10)
@@ -20,9 +30,14 @@ export async function POST(request: NextRequest) {
     const category = String(body.category || '').toLowerCase()
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0) || null
-    const userName = String(body.userName || body.user_name || '').trim()
-    const userStore = String(body.userStore || body.user_store || '').trim()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
 
     if (!store) {
       return NextResponse.json({ success: false, message: '매장을 선택하세요.' }, { status: 400, headers })
@@ -34,9 +49,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '금액을 입력하세요.' }, { status: 400, headers })
     }
 
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice && userStore && store !== userStore) {
-      return NextResponse.json({ success: false, message: '해당 매장만 등록할 수 있습니다.' }, { status: 403, headers })
+    const isScopedRole =
+      !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+      (userRole.includes('manager') || userRole.includes('franchisee'))
+    if (isScopedRole) {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+      if (!allowed) {
+        return NextResponse.json({ success: false, message: '해당 매장만 등록할 수 있습니다.' }, { status: 403, headers })
+      }
     }
 
     let amt = amount

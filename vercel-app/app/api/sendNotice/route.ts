@@ -3,6 +3,9 @@ import { supabaseInsert } from '@/lib/supabase-server'
 import { sendFcmToRecipients, getRecipientsByTargetStoreRole } from '@/lib/firebase-admin'
 import { getNotificationSettings } from '@/lib/notification-settings-server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -11,16 +14,29 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Headers', 'Content-Type')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const title = String(body?.title || '').trim()
     const content = String(body?.content || '').trim()
     let targetStore = String(body?.targetStore ?? body?.target_store ?? '전체').trim()
     const targetRole = String(body?.targetRole ?? body?.target_role ?? '전체').trim()
     const targetPermissionGroup = String(body?.targetPermissionGroup ?? body?.target_permission_group ?? '').trim() || null
-    const sender = String(body?.sender || '').trim()
+    const sender = String(auth.name || body?.sender || '').trim()
     const targetRecipients = body?.targetRecipients ?? body?.target_recipients
-    const userStore = String(body?.userStore ?? body?.user_store ?? '').trim()
-    const userRole = String(body?.userRole ?? body?.user_role ?? '').toLowerCase()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
     let attachmentsStr = '[]'
     const rawAttachments = body?.attachments
     if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
@@ -44,16 +60,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 매장 매니저는 자기 매장에만 발송 가능
-    const isManager = userRole === 'manager'
-    if (isManager && userStore) {
-      if (targetStore === '전체') targetStore = userStore
-      const allowed = targetStore === userStore
-      if (!allowed) {
+    const isScopedRole =
+      !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+      (userRole.includes('manager') || userRole.includes('franchisee'))
+    if (isScopedRole) {
+      if (allowedStores.length === 0) {
         return NextResponse.json(
-          { success: false, message: '매장 매니저는 해당 매장에만 공지를 보낼 수 있습니다.' },
-          { headers }
+          { success: false, message: '매장 접근 권한이 없습니다.' },
+          { status: 403, headers }
         )
+      }
+      const isAllTarget = !targetStore || targetStore === '전체' || targetStore === 'All'
+      if (isAllTarget) {
+        if (allowedStores.length === 1) {
+          targetStore = allowedStores[0]
+        } else {
+          return NextResponse.json(
+            { success: false, message: '허용된 매장 중 하나를 선택해 주세요.' },
+            { status: 403, headers }
+          )
+        }
+      } else {
+        const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, targetStore))
+        if (!allowed) {
+          return NextResponse.json(
+            { success: false, message: '허용되지 않은 매장 대상입니다.' },
+            { status: 403, headers }
+          )
+        }
       }
     }
 
@@ -76,6 +110,17 @@ export async function POST(request: NextRequest) {
           })
           .filter((r) => !!r.store)
       : []
+    if (isScopedRole && normalizedRecipients.length > 0) {
+      const outOfScope = normalizedRecipients.some(
+        (r) => !allowedStores.some((s) => storesMatchForGradeLookup(s, String(r.store || '').trim()))
+      )
+      if (outOfScope) {
+        return NextResponse.json(
+          { success: false, message: '수신 대상에 허용되지 않은 매장이 포함되어 있습니다.' },
+          { status: 403, headers }
+        )
+      }
+    }
     const missingNameIds = Array.from(
       new Set(
         normalizedRecipients

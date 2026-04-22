@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function normalizeNameForSchedule(name: string): string {
   return normalizeEmployeeNameForGradeMatch(name)
@@ -51,6 +54,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const dateStr = String(body?.date || body?.dateStr || '').trim().slice(0, 10)
     const storeName = String(body?.store || body?.storeName || '').trim()
@@ -58,8 +69,13 @@ export async function POST(request: NextRequest) {
     const employeeIdRaw = body?.employeeId
     const employeeId =
       employeeIdRaw != null && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
-    const userStore = String(body?.userStore || '').trim()
-    const userRole = String(body?.userRole || '').toLowerCase()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
     const optEarlyRaw = body?.optEarlyMinutes ?? body?.earlyMinutes
     let optEarlyMinutes = 0
     if (optEarlyRaw != null && optEarlyRaw !== '') {
@@ -74,14 +90,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isManager = userRole === 'manager'
-    if (isManager && userStore && String(storeName).trim() !== userStore) {
-      return NextResponse.json(
-        { success: false, message: '해당 매장만 처리할 수 있습니다.' },
-        { headers }
-      )
+    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+      (userRole.includes('manager') || userRole.includes('franchisee'))
+    if (isScopedRole) {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeName))
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, message: '해당 매장만 처리할 수 있습니다.' },
+          { headers }
+        )
+      }
     }
-
     const nextD = new Date(dateStr + 'T12:00:00')
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)

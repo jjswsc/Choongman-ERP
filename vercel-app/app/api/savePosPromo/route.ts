@@ -14,6 +14,7 @@ import {
   fetchCampaignMetaForExpenseMemo,
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
+import { requireAuth } from '@/lib/verify-auth'
 
 function isColumnSchemaError(e: unknown): boolean {
   const s = String(e)
@@ -38,6 +39,12 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(req, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = (await req.json()) as {
       id?: string
       code?: string
@@ -60,9 +67,7 @@ export async function POST(req: NextRequest) {
       marketingActualCost?: number | null
       /** true: 캠페인 없이 메뉴 관리 세트만 저장 시 자동 코드(SET-1 …) */
       standaloneSetMenu?: boolean
-      userRole?: string
       userName?: string
-      user_role?: string
       user_name?: string
       /** 세트 구성 Step 1 가격 기준: hall | delivery */
       composePricingBasis?: string
@@ -125,8 +130,8 @@ export async function POST(req: NextRequest) {
 
     const categorySub = normalizePromotionSubcategory(String(body.category ?? 'Set').trim() || 'Set')
     const categoryMain = String(body.categoryMain ?? PROMOTION_MAIN_CATEGORY).trim() || PROMOTION_MAIN_CATEGORY
-    const userRole = String(body.userRole ?? body.user_role ?? '')
-    const userName = String(body.userName ?? body.user_name ?? '').trim()
+    const userRole = String(auth.role || '')
+    const userName = String(auth.name || body.userName ?? body.user_name ?? '').trim()
     const marketingActualCost =
       body.marketingActualCost != null && Number.isFinite(Number(body.marketingActualCost))
         ? Math.abs(Number(body.marketingActualCost))

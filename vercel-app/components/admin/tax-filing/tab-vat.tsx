@@ -14,6 +14,7 @@ export function TaxFilingVatTab(props: Props) {
     <AdminAccountingCompliance
       initialTab="summary"
       initialPp30SubView="output"
+      pp30Mode="vat_only"
       hideTabBar
       filingYearMonth={props.filingYearMonth}
       onFilingYearMonthChange={props.onFilingYearMonthChange}

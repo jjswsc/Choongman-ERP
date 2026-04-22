@@ -112,6 +112,7 @@ async function hasOtherActiveOrderOnTable(
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const isOfflineQueueSync = req.headers.get('X-CM-Offline-Queue-Sync') === '1'
 
   try {
     const body = await req.json()
@@ -135,6 +136,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: '매장(홀) 주문만 이동할 수 있습니다.' }, { headers })
       }
       if (isClosedStatus(String(row.status ?? ''))) {
+        if (isOfflineQueueSync && String(row.table_name ?? '').trim() === targetTableName) {
+          return NextResponse.json({ success: true }, { headers })
+        }
         return NextResponse.json({ success: false, message: '완료·취소된 주문은 이동할 수 없습니다.' }, { headers })
       }
 
@@ -186,6 +190,9 @@ export async function POST(req: NextRequest) {
       }
 
       if (isClosedStatus(String(keep.status ?? '')) || isClosedStatus(String(absorb.status ?? ''))) {
+        if (isOfflineQueueSync && String(absorb.status ?? '').toLowerCase() === 'cancelled') {
+          return NextResponse.json({ success: true }, { headers })
+        }
         return NextResponse.json(
           { success: false, message: '완료·취소된 주문은 합석할 수 없습니다.' },
           { headers }

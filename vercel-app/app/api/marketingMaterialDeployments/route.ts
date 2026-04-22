@@ -5,7 +5,9 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
-import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
+import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const ALLOWED_PLACEMENT_SPOTS = new Set(['counter', 'tv', 'table', 'entrance'])
 
@@ -38,6 +40,22 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
+    const authResult = await requireAuth(req, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
+    const userRole = String(auth.role || '')
+    const userStore = normalizeStoreName(auth.store || '')
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => normalizeStoreName(s))
+        .filter(Boolean)
+        .concat(userStore)
+    const isScopedRole =
+      !isOfficeRole(userRole) && !isAccountingRole(userRole) && isStoreScopedRole(userRole)
+
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
     const materialId = searchParams.get('materialId')?.trim()
@@ -60,7 +78,13 @@ export async function GET(req: NextRequest) {
           limit: 10000,
         })) as Record<string, unknown>[] | null
 
-    const list = (rows || []).map((row) => ({
+    const list = (rows || [])
+      .filter((row) => {
+        if (!isScopedRole) return true
+        const rowStore = normalizeStoreName(row.store_name)
+        return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
+      })
+      .map((row) => ({
       id: String(row.id ?? ''),
       materialId: String(row.material_id ?? ''),
       campaignId: row.campaign_id != null ? String(row.campaign_id) : null,
@@ -86,6 +110,12 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
+    const authResult = await requireAuth(req, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = (await req.json()) as {
       id?: string
       materialId?: string
@@ -96,18 +126,19 @@ export async function POST(req: NextRequest) {
       installedOn?: string
       removedOn?: string | null
       note?: string
-      userRole?: string
-      userStore?: string
-      user_role?: string
-      user_store?: string
     }
 
     const editingId = String(body.id ?? '').trim()
     const materialId = String(body.materialId ?? '').trim()
     const campaignIdRaw = String(body.campaignId ?? '').trim()
     const campaignId = campaignIdRaw ? Number(campaignIdRaw) : null
-    const userRole = String(body.userRole ?? body.user_role ?? '')
-    const userStore = normalizeStoreName(body.userStore ?? body.user_store ?? '')
+    const userRole = String(auth.role || '')
+    const userStore = normalizeStoreName(auth.store || '')
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => normalizeStoreName(s))
+        .filter(Boolean)
+        .concat(userStore)
     const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
     if (isStoreScopedRole(userRole) && !scopedStore) {
       return NextResponse.json(
@@ -116,17 +147,22 @@ export async function POST(req: NextRequest) {
       )
     }
     const requestedStoreName = String(body.storeName ?? '').trim()
-    if (
-      scopedStore &&
-      requestedStoreName &&
-      requestedStoreName.toLowerCase() !== scopedStore.toLowerCase()
-    ) {
+    if (scopedStore && requestedStoreName && !storesMatchForGradeLookup(scopedStore, requestedStoreName)) {
       return NextResponse.json(
         { success: false, message: `매니저/가맹점주는 본인 매장(${scopedStore})만 저장할 수 있습니다.` },
         { headers }
       )
     }
     const storeName = scopedStore || String(body.storeName ?? '').trim()
+    if (isStoreScopedRole(userRole)) {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeName))
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, message: `매니저/가맹점주는 본인 권한 매장만 저장할 수 있습니다.` },
+          { status: 403, headers }
+        )
+      }
+    }
     const placementSpot = parseSpot(body.placementSpot)
     const materialType = String(body.materialType ?? '').trim() || null
     const installedOn = parseDate(body.installedOn)

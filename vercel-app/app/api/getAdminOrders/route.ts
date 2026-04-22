@@ -1,17 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { ORDERS_ADMIN_LIST_COLS, ORDERS_STORE_NAME_COLS } from '@/lib/postgrest-narrow-select'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('startDate') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
   let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const isHQ = ['office', '본사', '오피스'].includes(userStore.toLowerCase().trim())
-  if (userStore && !isHQ) storeFilter = userStore
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes('manager') || userRole.includes('franchisee'))
+  if (isScopedRole) {
+    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) return NextResponse.json({ list: [] }, { status: 403, headers })
+      storeFilter = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) return NextResponse.json({ list: [] }, { status: 403, headers })
+    }
+  }
   const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || '').trim()
   const statusFilter = String(searchParams.get('status') || searchParams.get('statusFilter') || '').trim()
   const orderIdFilter = String(searchParams.get('orderId') || searchParams.get('search') || '').trim().replace(/^#/, '')
@@ -27,6 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const resolveVendorName = await createVendorNameResolver()
     const endIso = e + 'T23:59:59.999Z'
 
     const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 10000, select: 'code,category,spec,vendor,outbound_location' })) as {
@@ -45,7 +73,7 @@ export async function GET(request: NextRequest) {
       if (code) {
         itemSpecMap[code] = String(row.spec || '').trim()
         itemCategoryMap[code] = String(row.category || '').trim()
-        itemVendorMap[code] = String(row.vendor || '').trim()
+        itemVendorMap[code] = resolveVendorName(String(row.vendor || '').trim())
         itemOutboundMap[code] = String(row.outbound_location || '').trim()
       }
     }
@@ -128,7 +156,7 @@ export async function GET(request: NextRequest) {
         ...it,
         spec: it.spec || itemSpecMap[it.code || ''] || '',
         category: (it as { category?: string }).category || itemCategoryMap[it.code || ''] || '',
-        vendor: (it as { vendor?: string }).vendor || itemVendorMap[it.code || ''] || '',
+        vendor: resolveVendorName(String((it as { vendor?: string }).vendor || itemVendorMap[it.code || ''] || '')),
         outboundLocation: itemOutboundMap[it.code || ''] || '',
       }))
       let receivedIndices: number[] = []

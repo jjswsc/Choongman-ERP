@@ -3,6 +3,14 @@ import { supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 import { syncReceivableFromForceOutboundStockLogRow } from '@/lib/force-outbound-receivable'
 
+/** DB에 `stock_logs.reference_no` 마이그레이션 전인 환경: 해당 키만 제거 후 재시도 */
+function stripReferenceNoFromStockLogRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return rows.map((r) => {
+    const { reference_no: _rn, ...rest } = r
+    return rest
+  })
+}
+
 /** 강제 출고 - 본사 재고 차감 + 매장 재고 증가 (ForcePush + ForceOutbound) */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -105,7 +113,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const insertedRaw = await supabaseInsertMany('stock_logs', rows)
+    let insertedRaw: unknown
+    try {
+      insertedRaw = await supabaseInsertMany('stock_logs', rows)
+    } catch (insertErr) {
+      const msg = insertErr instanceof Error ? insertErr.message : String(insertErr)
+      const missingRefNoColumn =
+        referenceNoBatch &&
+        msg.includes('reference_no') &&
+        (msg.includes('PGRST204') || msg.includes('schema cache'))
+      if (!missingRefNoColumn) throw insertErr
+      console.warn(
+        'forceOutboundBatch: stock_logs.reference_no column missing; retrying insert without reference_no. Run sql/stock_logs_reference_no.sql on Supabase.'
+      )
+      insertedRaw = await supabaseInsertMany('stock_logs', stripReferenceNoFromStockLogRows(rows))
+    }
     const inserted = (Array.isArray(insertedRaw) ? insertedRaw : []) as {
       id?: number
       log_type?: string

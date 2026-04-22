@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { escapeIlikePattern } from '@/lib/postgrest-ilike'
 import { ORDERS_COMBINED_PENDING_COLS, STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import {
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const vendorFilter = String(searchParams.get('vendorFilter') || searchParams.get('vendor') || 'All').trim()
   const typeFilter = String(searchParams.get('typeFilter') || searchParams.get('type') || 'All').trim()
+  const itemSearch = String(searchParams.get('itemSearch') || searchParams.get('item') || '').trim()
 
   if (!startStr || !endStr) {
     return NextResponse.json([], { headers })
@@ -76,18 +78,23 @@ export async function GET(request: NextRequest) {
       vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처'
         ? `&vendor_target=eq.${encodeURIComponent(vendorFilter)}`
         : ''
-    const baseFilter = dateRange + vendorPart
+    const itemPart = itemSearch
+      ? `&or=(item_code.ilike.${encodeURIComponent(`%${escapeIlikePattern(itemSearch)}%`)},item_name.ilike.${encodeURIComponent(`%${escapeIlikePattern(itemSearch)}%`)})`
+      : ''
+    const baseFilter = dateRange + vendorPart + itemPart
 
     const [outboundLogs, forceLogs] = await Promise.all([
-      supabaseSelectFilter('stock_logs', `log_type=eq.Outbound&${baseFilter}`, {
+      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.Outbound&${baseFilter}`, {
         order: 'log_date.desc',
-        limit: 10000,
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
+        pageSize: 8000,
+        maxRows: 100000,
       }),
-      supabaseSelectFilter('stock_logs', `log_type=eq.ForceOutbound&${baseFilter}`, {
+      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.ForceOutbound&${baseFilter}`, {
         order: 'log_date.desc',
-        limit: 10000,
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
+        pageSize: 8000,
+        maxRows: 100000,
       }),
     ])
 

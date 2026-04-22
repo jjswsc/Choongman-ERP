@@ -8,6 +8,7 @@ import {
 import { isFranchiseeRole, isManagerRole } from '@/lib/permissions'
 import { normalizeMarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { parsePhasePeriodsFromUnknown } from '@/lib/marketing-campaign-periods'
+import { requireAuth } from '@/lib/verify-auth'
 
 /** 저장 직후 목록 재조회가 이전 응답을 쓰지 않도록 (Vercel/브라우저 캐시 방지) */
 export const dynamic = 'force-dynamic'
@@ -95,6 +96,12 @@ export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   noStoreHeaders(headers)
+  const authResult = await requireAuth(req, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    noStoreHeaders(authResult.errorResponse.headers)
+    return authResult.errorResponse
+  }
 
   try {
     const { searchParams } = new URL(req.url)
@@ -197,6 +204,13 @@ export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   noStoreHeaders(headers)
+  const authResult = await requireAuth(req, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    noStoreHeaders(authResult.errorResponse.headers)
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
 
   try {
     const body = (await req.json()) as {
@@ -247,8 +261,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const userRole = String(body.userRole ?? body.user_role ?? '')
-    const userStore = normalizeStoreName(body.userStore ?? body.user_store ?? '')
+    const userRole = String(auth.role || '')
+    const userStore = normalizeStoreName(auth.store || '')
     const scopedStore = isStoreScopedRole(userRole) ? userStore : ''
     if (isStoreScopedRole(userRole) && !scopedStore) {
       return NextResponse.json(

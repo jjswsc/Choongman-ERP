@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -25,18 +28,39 @@ export interface TillItem {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
   const typeFilter = String(searchParams.get('typeFilter') || searchParams.get('type') || 'all').toLowerCase()
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
-  const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-  const effectiveStore = !isOffice && userStore ? userStore : storeFilter || ''
+  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
+  if (!isOffice) {
+    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) return NextResponse.json([], { status: 403, headers })
+      storeFilter = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) return NextResponse.json([], { status: 403, headers })
+    }
+  }
+  const effectiveStore = storeFilter || ''
 
   if (!effectiveStore) {
     return NextResponse.json([], { headers })

@@ -10,6 +10,8 @@ import {
 } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const CHUNK = 50
 
@@ -220,8 +222,19 @@ export async function POST(request: NextRequest) {
     let list = rawList as unknown as PayrollSaveRow[]
     const userStore = (auth.store || '').trim()
     const userRole = (auth.role || '').toLowerCase()
-    if (userRole.includes('manager') && userStore) {
-      list = list.filter((r) => String(r.store || '').trim() === userStore)
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
+    const isScopedRole =
+      !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+      (userRole.includes('manager') || userRole.includes('franchisee'))
+    if (isScopedRole) {
+      list = list.filter((r) => {
+        const rowStore = String(r.store || '').trim()
+        return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
+      })
     }
 
     const rows: Record<string, unknown>[] = list.map((r) => ({

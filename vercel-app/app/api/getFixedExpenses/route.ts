@@ -1,17 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 /** 고정비 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
 
-  const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-  const effectiveStore = !isOffice && userStore ? userStore : storeFilter
+  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
+  if (!isOffice) {
+    if (!storeFilter || storeFilter === 'All') {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) return NextResponse.json([], { status: 403, headers })
+      storeFilter = fallbackStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) return NextResponse.json([], { status: 403, headers })
+    }
+  }
+  const effectiveStore = storeFilter
 
   try {
     type Row = { id?: number; name?: string; monthly_amount?: number; store?: string; start_year_month?: string; end_year_month?: string; memo?: string; account_subject_id?: number }

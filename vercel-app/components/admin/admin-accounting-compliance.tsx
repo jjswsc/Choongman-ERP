@@ -59,7 +59,9 @@ import {
   getExportWithholdingTaxLedgerCsvUrl,
   getExportPnd1RdPrepTxtUrl,
   validatePnd1RdPrep,
+  getPayrollWhtTinGaps,
   type ValidatePnd1RdPrepResult,
+  type PayrollWhtTinGapResult,
   getKt20kSettings,
   saveKt20kSettings,
   getExportKt20kCsvUrl,
@@ -97,6 +99,8 @@ import {
   downloadThaiSsoFilingFromPayrollXlsx,
   THAI_SSO_TEMPLATE_COLUMN_HELP,
 } from "@/lib/thai-sso-filing-template"
+import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
+import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
 
 type VatDraft = {
   id?: number
@@ -525,6 +529,8 @@ type AdminAccountingComplianceProps = {
   initialTab?: string
   hideTabBar?: boolean
   initialPp30SubView?: "output" | "input" | "wht"
+  /** PP30 영역 표시 모드: all(통합) / vat_only(매출·매입만) / wht_only(원천만) */
+  pp30Mode?: "all" | "vat_only" | "wht_only"
   /** 세무 신고 셸과 동기화 시 본문의 중복 년·매장 입력 숨김 */
   filingYearMonth?: string
   onFilingYearMonthChange?: (v: string) => void
@@ -536,6 +542,7 @@ export function AdminAccountingCompliance({
   initialTab = "scope",
   hideTabBar = false,
   initialPp30SubView = "output",
+  pp30Mode = "all",
   filingYearMonth,
   onFilingYearMonthChange,
   filingStoreFilter,
@@ -672,7 +679,15 @@ export function AdminAccountingCompliance({
   const [citFiscalYear, setCitFiscalYear] = React.useState(() => Number(ymNow().slice(0, 4)))
   /** 부가세(ภ.พ.30) 탭: FlowAccount Tax 메뉴와 유사 — 매출/매입/원천 3가지 조회 */
   const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "wht">(initialPp30SubView)
+  const allowedPp30Views = React.useMemo<("output" | "input" | "wht")[]>(() => {
+    if (pp30Mode === "vat_only") return ["output", "input"]
+    if (pp30Mode === "wht_only") return ["wht"]
+    return ["output", "input", "wht"]
+  }, [pp30Mode])
   const [taxSummary, setTaxSummary] = React.useState<ThaiTaxFilingSummary | null>(null)
+  /** 부가세(PP30) 요약 탭: 조건 변경 시 초기화, 검색 후에만 API 조회 */
+  const [pp30Queried, setPp30Queried] = React.useState(false)
+  const pp30FilterBootRef = React.useRef(true)
   const [citData, setCitData] = React.useState<CorporateTaxComputationData | null>(null)
   const [workflowRows, setWorkflowRows] = React.useState<AccountingWorkflowStatusRow[]>([])
   const [workflowFallbackUsed, setWorkflowFallbackUsed] = React.useState(false)
@@ -720,6 +735,8 @@ export function AdminAccountingCompliance({
   const [pnd1Validating, setPnd1Validating] = React.useState(false)
   const [pnd1ValidationResult, setPnd1ValidationResult] = React.useState<ValidatePnd1RdPrepResult | null>(null)
   const [pnd1IssueFilterCodes, setPnd1IssueFilterCodes] = React.useState<Pnd1IssueCode[]>([])
+  const [payrollTinGapLoading, setPayrollTinGapLoading] = React.useState(false)
+  const [payrollTinGapResult, setPayrollTinGapResult] = React.useState<PayrollWhtTinGapResult | null>(null)
   const whtRowRefs = React.useRef<Record<number, HTMLDivElement | null>>({})
   const [kt20kYear, setKt20kYear] = React.useState(() => getBangkokRecentYearMonths(1)[0].slice(0, 4))
   const [kt20kLoading, setKt20kLoading] = React.useState(false)
@@ -787,12 +804,10 @@ export function AdminAccountingCompliance({
   ])
   const storeOptions = React.useMemo(() => {
     if (!isOffice) return isManager && managerStore ? [managerStore] : []
-    return [
-      "All",
-      ...((storeList || []).filter(
-        (s) => !["본사", "Office", "오피스", "본점"].includes(s) && !s.toLowerCase().includes("office")
-      ) || []),
-    ]
+    const uniq = Array.from(
+      new Set((storeList || []).map((s) => String(s).trim()).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b))
+    return ["All", ...uniq]
   }, [isOffice, isManager, managerStore, storeList])
 
   React.useEffect(() => {
@@ -807,6 +822,11 @@ export function AdminAccountingCompliance({
   React.useEffect(() => {
     setPp30SubView(initialPp30SubView)
   }, [initialPp30SubView])
+
+  React.useEffect(() => {
+    if (allowedPp30Views.includes(pp30SubView)) return
+    setPp30SubView(allowedPp30Views[0] || "output")
+  }, [allowedPp30Views, pp30SubView])
 
   React.useEffect(() => {
     if (isManager && managerStore) setSsoStoreFilter(managerStore)
@@ -1584,14 +1604,41 @@ export function AdminAccountingCompliance({
   }, [canUse, tab, loadTrial])
 
   React.useEffect(() => {
-    if (canUse && tab === "summary") void loadTaxSummary()
-  }, [canUse, tab, loadTaxSummary])
+    if (pp30FilterBootRef.current) {
+      pp30FilterBootRef.current = false
+      return
+    }
+    setPp30Queried(false)
+    setVatRows([])
+    setWhtRows([])
+    setTaxSummary(null)
+  }, [taxMonth, storeFilterForLedger, periodType, ledgerStatusFilter])
 
   React.useEffect(() => {
-    if (!canUse || tab !== "summary") return
-    if (pp30SubView === "wht") void loadWht()
-    else void loadVat()
-  }, [canUse, tab, pp30SubView, taxMonth, storeFilterForLedger, loadVat, loadWht])
+    if (!canUse || tab !== "summary" || !pp30Queried) return
+    let cancelled = false
+    void (async () => {
+      await loadTaxSummary()
+      if (cancelled) return
+      if (pp30SubView === "wht") await loadWht()
+      else await loadVat()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    canUse,
+    tab,
+    pp30Queried,
+    pp30SubView,
+    taxMonth,
+    storeFilterForLedger,
+    periodType,
+    ledgerStatusFilter,
+    loadTaxSummary,
+    loadVat,
+    loadWht,
+  ])
 
   React.useEffect(() => {
     if (canUse && tab === "cit") void loadCit()
@@ -2101,6 +2148,33 @@ export function AdminAccountingCompliance({
     () => vatInputRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [vatInputRows, ledgerStatusFilter]
   )
+  const nonPosOutputCount = React.useMemo(
+    () => vatOutputRowsFiltered.filter((r) => !isPosAutoVatOutputRow(r)).length,
+    [vatOutputRowsFiltered]
+  )
+  const posFilingOutputSummaries = React.useMemo(() => {
+    const ledgers: VatLedgerRow[] = vatOutputRowsFiltered.map((r) => ({
+      id: r.id,
+      doc_date: r.doc_date,
+      tax_month: r.tax_month,
+      direction: "output",
+      counterparty_name: r.counterparty_name,
+      counterparty_tax_id: r.counterparty_tax_id,
+      invoice_number: r.invoice_number,
+      net_amount: r.net_amount,
+      vat_amount: r.vat_amount,
+      total_amount: r.total_amount,
+      vat_status: r.vat_status,
+      filing_status: r.filing_status,
+      submitted_at: r.submitted_at,
+      submitted_by: r.submitted_by,
+      memo: r.memo,
+      store_name: r.store_name,
+    }))
+    const posOnly = ledgers.filter(isPosAutoVatOutputRow)
+    if (!posOnly.length) return []
+    return consolidatePosOutputRowsForTaxExport(posOnly)
+  }, [vatOutputRowsFiltered])
   const whtRowsFiltered = React.useMemo(
     () => whtRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [whtRows, ledgerStatusFilter]
@@ -2613,6 +2687,38 @@ export function AdminAccountingCompliance({
       setPnd1Validating(false)
     }
   }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, pnd1FilingForm, lang])
+
+  const runPayrollTinGapCheck = React.useCallback(async () => {
+    if (!canUse) return
+    setPayrollTinGapLoading(true)
+    try {
+      const data = await getPayrollWhtTinGaps({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        storeFilter: storeFilterForLedger,
+      })
+      setPayrollTinGapResult(data)
+      if (data.gapRowCount > 0) {
+        const sample = data.gaps
+          .slice(0, 5)
+          .map((x) => (x.storeName ? `${x.storeName}/${x.payeeName || '-'}` : x.payeeName || '-'))
+          .join(', ')
+        appAlert(
+          `TIN 누락 점검 완료: ${data.gapRowCount.toLocaleString()}건 · 직원 ${data.uniqueEmployeeCount.toLocaleString()}명\n` +
+            (sample ? `예시: ${sample}` : '')
+        )
+      } else {
+        appAlert('TIN 누락 점검 완료: 누락 없음')
+      }
+    } catch {
+      setPayrollTinGapResult(null)
+      appAlert(lang === "th" ? "ตรวจสอบ TIN ไม่สำเร็จ" : lang === "en" ? "TIN check failed" : "TIN 누락 점검에 실패했습니다.")
+    } finally {
+      setPayrollTinGapLoading(false)
+    }
+  }, [canUse, role, taxMonth, periodType, storeFilterForLedger, lang])
 
   const storeOptionLabel = React.useCallback(
     (code: string) => (code === "All" ? t("all") : code),
@@ -3901,55 +4007,21 @@ export function AdminAccountingCompliance({
               <CardTitle className="text-base">{t("accCompTabPp30")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2 items-end">
-                {!externalFiling ? (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                    <Input
-                      type="month"
-                      className="h-9 w-[160px]"
-                      value={taxMonth}
-                      onChange={(e) => setTaxMonth(e.target.value)}
-                    />
-                  </div>
-                ) : null}
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompPeriodType")}</div>
-                  <Select
-                    value={periodType}
-                    onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}
-                  >
-                    <SelectTrigger className="w-[150px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
-                      <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
-                      <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
+                <div className="shrink-0">
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
+                  <Input
+                    type="month"
+                    className="h-9 w-[160px]"
+                    value={taxMonth}
+                    onChange={(e) => setTaxMonth(e.target.value)}
+                  />
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompColStatus")}</div>
-                  <Select
-                    value={ledgerStatusFilter}
-                    onValueChange={(v) => setLedgerStatusFilter(v as "all" | "draft" | "submitted")}
-                  >
-                    <SelectTrigger className="w-[150px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("all")}</SelectItem>
-                      <SelectItem value="draft">{t("accCompWorkflowStatusTodo")}</SelectItem>
-                      <SelectItem value="submitted">{t("accCompWorkflowStatusDone")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {isOffice && !externalFiling ? (
-                  <div>
+                {isOffice ? (
+                  <div className="shrink-0">
                     <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
                     <Select value={storeTb} onValueChange={setStoreTb}>
-                      <SelectTrigger className="w-[180px]">
+                      <SelectTrigger className="h-9 w-[180px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -3961,51 +4033,102 @@ export function AdminAccountingCompliance({
                       </SelectContent>
                     </Select>
                   </div>
+                ) : isManager && managerStore ? (
+                  <div className="shrink-0">
+                    <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
+                    <div className="flex h-9 min-w-[140px] max-w-[220px] items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
+                      <span className="truncate">{managerStore}</span>
+                    </div>
+                  </div>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    void loadTaxSummary()
-                    if (pp30SubView === "wht") void loadWht()
-                    else void loadVat()
-                  }}
-                  disabled={loading}
-                >
-                  {t("search")}
-                </Button>
+                <div className="shrink-0">
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompPeriodType")}</div>
+                  <Select
+                    value={periodType}
+                    onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}
+                  >
+                    <SelectTrigger className="h-9 w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
+                      <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
+                      <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="shrink-0">
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompColStatus")}</div>
+                  <Select
+                    value={ledgerStatusFilter}
+                    onValueChange={(v) => setLedgerStatusFilter(v as "all" | "draft" | "submitted")}
+                  >
+                    <SelectTrigger className="h-9 w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("all")}</SelectItem>
+                      <SelectItem value="draft">{t("accCompWorkflowStatusTodo")}</SelectItem>
+                      <SelectItem value="submitted">{t("accCompWorkflowStatusDone")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="shrink-0">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-9"
+                    onClick={() => setPp30Queried(true)}
+                    disabled={loading}
+                  >
+                    {t("search")}
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pp30SubView === "output" ? "default" : "outline"}
-                  onClick={() => setPp30SubView("output")}
-                >
-                  {t("accCompTaxOutputDocs")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pp30SubView === "input" ? "default" : "outline"}
-                  onClick={() => setPp30SubView("input")}
-                >
-                  {t("accCompTaxInputDocs")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pp30SubView === "wht" ? "default" : "outline"}
-                  onClick={() => setPp30SubView("wht")}
-                >
-                  {t("accCompTaxWhtDocs")}
-                </Button>
+                {allowedPp30Views.includes("output") && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pp30SubView === "output" ? "default" : "outline"}
+                    onClick={() => setPp30SubView("output")}
+                  >
+                    {t("accCompTaxOutputDocs")}
+                  </Button>
+                )}
+                {allowedPp30Views.includes("input") && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pp30SubView === "input" ? "default" : "outline"}
+                    onClick={() => setPp30SubView("input")}
+                  >
+                    {t("accCompTaxInputDocs")}
+                  </Button>
+                )}
+                {allowedPp30Views.includes("wht") && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pp30SubView === "wht" ? "default" : "outline"}
+                    onClick={() => setPp30SubView("wht")}
+                  >
+                    {t("accCompTaxWhtDocs")}
+                  </Button>
+                )}
               </div>
               <div className="text-xs text-muted-foreground">
                 {t("accCompPeriodType")}: {summaryPeriodLabel}
               </div>
 
+              {!pp30Queried ? (
+                <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
+                  년·월·매장·신고 상태 등 조건을 맞춘 뒤 <span className="font-medium text-foreground">검색</span>을 누르면
+                  집계와 원장이 표시됩니다.
+                </div>
+              ) : (
+                <>
               {pp30SubView === "output" && (
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -4019,8 +4142,11 @@ export function AdminAccountingCompliance({
                       {t("accCompVatPayable")}: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
                     </div>
                     <div>
-                      {t("accCompVatRowsSales")}: {vatOutputRowsFiltered.length.toLocaleString()} / {t("accCompVatTotalRows")}:{" "}
-                      {(taxSummary?.vat.rowCount || 0).toLocaleString()}
+                      {t("accCompVatRowsSales")}: {nonPosOutputCount.toLocaleString()}
+                      {posFilingOutputSummaries.length > 0
+                        ? ` · POS 자동(과세월 합계 ${posFilingOutputSummaries.length.toLocaleString()}줄)`
+                        : ""}{" "}
+                      / {t("accCompVatTotalRows")}: {(taxSummary?.vat.rowCount || 0).toLocaleString()}
                     </div>
                     <div>
                       {t("accCompMissingTin")}: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}
@@ -4029,7 +4155,7 @@ export function AdminAccountingCompliance({
                       {t("accCompMissingInvoice")}: {(taxSummary?.vat.missingInvoiceCount || 0).toLocaleString()}
                     </div>
                   </div>
-                  {taxSummary ? (
+                  {taxSummary && allowedPp30Views.includes("wht") ? (
                     <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
                       <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
@@ -4078,9 +4204,44 @@ export function AdminAccountingCompliance({
                   </div>
                   <Card>
                     <CardContent className="p-2 overflow-x-auto space-y-3">
+                      {posFilingOutputSummaries.length > 0 ? (
+                        <div className="rounded-md border border-primary/25 bg-primary/5 p-3 space-y-2 text-xs">
+                          <div className="font-medium text-foreground">POS 매출 (자동 집계)</div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            주문별 원장은 DB에 그대로 두고, 세무 신고·CSV 내보내기는 과세월별 합계 1줄로
+                            맞춥니다. 아래는 POS 외 수기·세금계산서 등 기타 매출만 편집합니다.
+                          </p>
+                          <div className="space-y-2">
+                            {posFilingOutputSummaries.map((row, sidx) => (
+                              <div
+                                key={`pos-sum-${row.tax_month}-${sidx}`}
+                                className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 border rounded p-2 bg-background/80"
+                              >
+                                <div className="text-muted-foreground">과세월</div>
+                                <div>{String(row.tax_month || "")}</div>
+                                <div className="text-muted-foreground">공급가</div>
+                                <div className="text-right tabular-nums">{Number(row.net_amount || 0).toLocaleString()}</div>
+                                <div className="text-muted-foreground">VAT</div>
+                                <div className="text-right tabular-nums">{Number(row.vat_amount || 0).toLocaleString()}</div>
+                                <div className="text-muted-foreground">합계</div>
+                                <div className="text-right tabular-nums font-medium">
+                                  {Number(row.total_amount || 0).toLocaleString()}
+                                </div>
+                                <div className="col-span-2 sm:col-span-4 text-[10px] text-muted-foreground break-all">
+                                  {String(row.memo || "")}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {nonPosOutputCount > 0 ? (
+                        <div className="text-[11px] font-medium text-muted-foreground px-0.5">POS 외 매출 (편집)</div>
+                      ) : null}
                       {vatRows.map((row, idx) => {
                         if (row.direction !== "output") return null
                         if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
+                        if (isPosAutoVatOutputRow(row)) return null
                         return (
                           <div
                             key={row.id ?? `vat-out-${idx}`}
@@ -4221,7 +4382,7 @@ export function AdminAccountingCompliance({
                           </div>
                         )
                       })}
-                      {!vatOutputRowsFiltered.length ? (
+                      {!posFilingOutputSummaries.length && !nonPosOutputCount ? (
                         <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
                       ) : null}
                     </CardContent>
@@ -4246,7 +4407,12 @@ export function AdminAccountingCompliance({
                       {(taxSummary?.vat.rowCount || 0).toLocaleString()}
                     </div>
                   </div>
-                  {taxSummary ? (
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    지출 발생에 부가세(VAT)를 입력한 건은 등록·수정·승인 시 매입 쪽에 자동 반영됩니다. 거래처
+                    마스터에 세금 ID가 있으면 TIN이 채워집니다. 과거 데이터는 아래 버튼으로 현재 신고월 기준
+                    백필할 수 있습니다.
+                  </p>
+                  {taxSummary && allowedPp30Views.includes("wht") ? (
                     <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
                       <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
@@ -4282,6 +4448,44 @@ export function AdminAccountingCompliance({
                     >
                       <Plus className="h-4 w-4 mr-1" />
                       {t("accCompVatAdd")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={loading}
+                      onClick={async () => {
+                        if (!canUse) return
+                        setLoading(true)
+                        try {
+                          const res = await apiFetch("/api/syncExpenseInputVatLedgers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ userRole: role, yearMonth: taxMonth }),
+                          })
+                          const j = (await res.json()) as {
+                            success?: boolean
+                            processed?: number
+                            failed?: number
+                            error?: string
+                          }
+                          if (!res.ok || !j.success) {
+                            appAlert(j.error || t("accCompLoadFail"))
+                            return
+                          }
+                          appAlert(
+                            `매입 부가세 백필: ${j.processed ?? 0}건 반영` +
+                              ((j.failed ?? 0) > 0 ? ` (실패 ${j.failed})` : "")
+                          )
+                          setPp30Queried(true)
+                        } catch {
+                          appAlert(t("accCompLoadFail"))
+                        } finally {
+                          setLoading(false)
+                        }
+                      }}
+                    >
+                      매입 백필 ({taxMonth})
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
@@ -4553,6 +4757,21 @@ export function AdminAccountingCompliance({
                     >
                       {pnd1Validating ? t("loading") : pnd1ValidateBtnLabel}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void runPayrollTinGapCheck()}
+                      disabled={payrollTinGapLoading}
+                    >
+                      {payrollTinGapLoading
+                        ? t("loading")
+                        : lang === "th"
+                          ? "ตรวจสอบ TIN พนักงาน"
+                          : lang === "en"
+                            ? "Check employee TIN gaps"
+                            : "직원 TIN 누락 점검"}
+                    </Button>
                   </div>
                   <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
                     <div className="font-medium text-foreground/90">{pnd1RdPrepGuideTitle}</div>
@@ -4567,6 +4786,90 @@ export function AdminAccountingCompliance({
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
+                  {payrollTinGapResult ? (
+                    <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-medium">
+                          {lang === "th"
+                            ? "ผลตรวจ TIN พนักงาน (รายเดือน)"
+                            : lang === "en"
+                              ? "Employee TIN gap check (monthly)"
+                              : "직원 TIN 누락 점검 결과(월별)"}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPayrollTinGapResult(null)}
+                        >
+                          {lang === "th" ? "ล้างผลลัพธ์" : lang === "en" ? "Clear result" : "결과 지우기"}
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div>
+                          {lang === "th" ? "แถวเงินเดือนรวม" : lang === "en" ? "Payroll WHT rows" : "급여 WHT 행"}:{" "}
+                          {payrollTinGapResult.payrollRowCount.toLocaleString()}
+                        </div>
+                        <div>
+                          {lang === "th" ? "แถวที่ TIN หาย" : lang === "en" ? "Rows missing TIN" : "TIN 누락 행"}:{" "}
+                          {payrollTinGapResult.gapRowCount.toLocaleString()}
+                        </div>
+                        <div>
+                          {lang === "th" ? "พนักงานที่ได้รับผลกระทบ" : lang === "en" ? "Impacted employees" : "누락 직원 수"}:{" "}
+                          {payrollTinGapResult.uniqueEmployeeCount.toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto rounded border border-border/60">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="text-left p-2">월</th>
+                              <th className="text-left p-2">지급일</th>
+                              <th className="text-left p-2">매장</th>
+                              <th className="text-left p-2">직원명</th>
+                              <th className="text-right p-2">원천세</th>
+                              <th className="text-left p-2">증명서번호</th>
+                              <th className="text-right p-2">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {payrollTinGapResult.gaps.slice(0, 200).map((row, i) => (
+                              <tr key={`${row.id ?? 'gap'}-${i}`} className="border-b border-border/40">
+                                <td className="p-2">{row.taxMonth || '-'}</td>
+                                <td className="p-2">{row.paymentDate || '-'}</td>
+                                <td className="p-2">{row.storeName || '-'}</td>
+                                <td className="p-2">{row.payeeName || '-'}</td>
+                                <td className="p-2 text-right">{row.whtAmount.toLocaleString()}</td>
+                                <td className="p-2">{row.certificateNo || '-'}</td>
+                                <td className="p-2 text-right">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!row.id}
+                                    onClick={() => jumpToWhtLedgerRow(row.id)}
+                                  >
+                                    {pnd1GoLedgerBtnLabel}
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                            {!payrollTinGapResult.gaps.length ? (
+                              <tr>
+                                <td colSpan={7} className="p-4 text-center text-muted-foreground">
+                                  {lang === "th"
+                                    ? "ไม่พบพนักงานที่ TIN หาย"
+                                    : lang === "en"
+                                      ? "No employee TIN gaps."
+                                      : "TIN 누락 직원이 없습니다."}
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
                   {pnd1ValidationResult ? (
                     <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
@@ -4837,6 +5140,8 @@ export function AdminAccountingCompliance({
                     </CardContent>
                   </Card>
                 </div>
+              )}
+                </>
               )}
             </CardContent>
           </Card>

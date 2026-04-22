@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 import {
   upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
@@ -40,10 +43,38 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const accountId = Number(body.accountId || body.account_id)
-    const store = String(body.store || '').trim()
-    const userName = String(body.userName || body.user_name || '').trim()
+    const userRole = String(auth.role || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const allowedStores = Array.from(
+      new Set(
+        [...(Array.isArray(auth.allowedStores) ? auth.allowedStores : []), userStore]
+          .map((s) => String(s || '').trim())
+          .filter(Boolean)
+      )
+    )
+    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+    if (isScopedRole && allowedStores.length === 0) {
+      return NextResponse.json({ success: false, message: '접근 가능한 매장 정보가 없습니다.' }, { status: 403, headers })
+    }
+    const requestedStore = String(body.store || '').trim()
+    const store = requestedStore || userStore
+    if (
+      isScopedRole &&
+      store &&
+      !allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+    ) {
+      return NextResponse.json({ success: false, message: '허용되지 않은 매장입니다.' }, { status: 403, headers })
+    }
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
     type BulkItem = { transDate?: string; trans_date?: string; transType?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; accountSubjectId?: number; account_subject_id?: number; salesDate?: string; sales_date?: string; expenseDate?: string; expense_date?: string; vendorCode?: string; vendor_code?: string; storeName?: string; store_name?: string }
     const items = (Array.isArray(body.items) ? body.items : []) as BulkItem[]
 
@@ -90,6 +121,18 @@ export async function POST(request: NextRequest) {
       const expenseDate = item.expenseDate ?? item.expense_date
       const vendorCode = String(item.vendorCode || item.vendor_code || '').trim()
       const storeNameForReceivable = String(item.storeName || item.store_name || '').trim()
+      if (
+        isScopedRole &&
+        transType === 'deposit' &&
+        category === 'receivable_receive' &&
+        storeNameForReceivable &&
+        !allowedStores.some((s) => storesMatchForGradeLookup(s, storeNameForReceivable))
+      ) {
+        return NextResponse.json(
+          { success: false, message: `허용되지 않은 미수금 매장입니다: ${storeNameForReceivable}` },
+          { status: 403, headers }
+        )
+      }
 
       if (!transDate || amount <= 0) continue
       if (!['deposit', 'withdraw'].includes(transType)) continue

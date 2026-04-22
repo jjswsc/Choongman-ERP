@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { getAnnualLeaveDays, hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 import {
   toLeaveDateStrBangkok,
   isApprovedLeaveStatus,
@@ -24,10 +26,23 @@ const LEAVE_ROWS_MAX_PER_EMPLOYEE = 15_000
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const store = String(searchParams.get('store') || '').trim()
-  const name = String(searchParams.get('name') || '').trim()
-  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const userRole = String(auth.role || '').trim()
+  const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+  const queryStore = String(searchParams.get('store') || '').trim()
+  const queryName = String(searchParams.get('name') || '').trim()
+  const queryEmployeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const store = String(isScopedRole ? auth.store : queryStore || auth.store || '').trim()
+  const name = String(isScopedRole ? auth.name : queryName || auth.name || '').trim()
+  const employeeIdRaw = String(
+    isScopedRole ? auth.employeeId || '' : queryEmployeeIdRaw || auth.employeeId || ''
+  ).trim()
   const employeeIdNum =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
 

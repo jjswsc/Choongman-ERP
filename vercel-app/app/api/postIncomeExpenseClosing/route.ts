@@ -5,6 +5,7 @@ import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
+import { requireAuth } from '@/lib/verify-auth'
 import {
   supabaseDeleteByFilter,
   supabaseInsert,
@@ -21,10 +22,17 @@ function isMissingClosingRunTableError(e: unknown): boolean {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  let auditUserRole = ''
+  let auditActor: string | null = null
+  let auditYearMonth = ''
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = (await request.json().catch(() => ({}))) as {
-      userRole?: string
-      userStore?: string
       postedBy?: string
       yearMonth?: string
       storeFilter?: string
@@ -34,13 +42,16 @@ export async function POST(request: NextRequest) {
       memo?: string
     }
 
-    const userRole = String(body.userRole || '').trim()
+    const userRole = String(auth.role || '').trim()
     assertCanApproveAccountingCompliance(userRole)
 
     const yearMonth = String(body.yearMonth || '').trim()
     const storeFilter = String(body.storeFilter || '').trim() || 'All'
-    const userStore = String(body.userStore || '').trim()
-    const postedBy = String(body.postedBy || '').trim() || null
+    const userStore = String(auth.store || '').trim()
+    const postedBy = String(auth.name || body.postedBy || '').trim() || null
+    auditUserRole = userRole
+    auditActor = postedBy
+    auditYearMonth = yearMonth
     const forceReset = Boolean(body.forceReset)
     const autoLockPeriod = Boolean(body.autoLockPeriod)
     const memo = String(body.memo || '').trim() || null
@@ -280,27 +291,25 @@ export async function POST(request: NextRequest) {
     )
   } catch (e) {
     if (e instanceof Error && (e.message === 'ACCOUNTING_FORBIDDEN' || e.message === 'ACCOUNTING_APPROVAL_FORBIDDEN')) {
-      const body = (await request.json().catch(() => ({}))) as { userRole?: string; postedBy?: string; yearMonth?: string }
       await writeAccountingComplianceAudit({
         actionType: 'income_expense_closing_post',
-        userRole: String(body.userRole || '').trim(),
-        actor: String(body.postedBy || '').trim() || null,
+        userRole: auditUserRole,
+        actor: auditActor,
         decision: 'deny',
         reasonCode: 'FORBIDDEN_APPROVE',
-        yearMonth: String(body.yearMonth || '').trim(),
+        yearMonth: auditYearMonth,
         targetType: 'closing_income_expense',
       })
       return NextResponse.json({ success: false, error: 'FORBIDDEN' }, { status: 403, headers })
     }
     try {
-      const body = (await request.json().catch(() => ({}))) as { userRole?: string; postedBy?: string; yearMonth?: string }
       await writeAccountingComplianceAudit({
         actionType: 'income_expense_closing_post',
-        userRole: String(body.userRole || '').trim(),
-        actor: String(body.postedBy || '').trim() || null,
+        userRole: auditUserRole,
+        actor: auditActor,
         decision: 'error',
         reasonCode: 'UNHANDLED_ERROR',
-        yearMonth: String(body.yearMonth || '').trim(),
+        yearMonth: auditYearMonth,
         targetType: 'closing_income_expense',
         payload: { error: e instanceof Error ? e.message : String(e) },
       })

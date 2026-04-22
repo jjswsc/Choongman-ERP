@@ -27,7 +27,7 @@ export function buildReceiptDocumentHtml(params: {
   const gap = RECEIPT_GRID_COL_GAP_PX
   const styles =
     posThermalReceiptPageSizeRule() +
-    ' html, body { margin: 0; padding: 0; } html { height: auto; } body { width: 80mm; max-width: 80mm; min-height: auto; height: auto; box-sizing: border-box; font-family: \'Noto Sans KR\', \'Malgun Gothic\', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.42; letter-spacing: 0; padding-top: 0; padding-left: ' +
+    ' html, body { margin: 0; padding: 0; } html { height: auto; } body { width: 80mm; max-width: 80mm; min-height: auto; height: auto; box-sizing: border-box; font-family: \'Inter\', \'Pretendard\', \'Noto Sans KR\', \'Sukhumvit Set\', \'Noto Sans Thai\', \'Malgun Gothic\', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.42; letter-spacing: 0; padding-top: 0; padding-left: ' +
     String(RECEIPT_INNER_INSET_LEFT_MM) +
     'mm; padding-right: ' +
     String(RECEIPT_INNER_INSET_RIGHT_MM) +

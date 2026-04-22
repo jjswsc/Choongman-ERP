@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assignLeaveRowToEmployeeForStats } from '@/lib/leave-request-utils'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -37,21 +40,41 @@ function normEmployeeCode(c: string | null | undefined): string {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   let store = String(searchParams.get('store') || '').trim()
   const status = String(searchParams.get('status') || '대기').trim()
   const typeFilter = String(searchParams.get('type') || searchParams.get('typeFilter') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
   const dateFilterType = String(searchParams.get('dateFilterType') || 'leave').trim() as 'request' | 'leave'
 
   if (store === 'undefined' || store === 'null') store = ''
   if (store === 'All') store = ''
 
-  const isManager = userRole === 'manager'
-  if (isManager && userStore) store = userStore
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  if (!isOfficeLevel) {
+    if (!store) {
+      store = String(allowedStores[0] || '').trim()
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+      if (!allowed) {
+        return NextResponse.json([], { status: 403, headers })
+      }
+    }
+  }
 
   try {
     type LeaveReqDb = {

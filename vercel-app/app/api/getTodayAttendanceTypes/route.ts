@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 
 const TZ = 'Asia/Bangkok'
 const DEFAULT_ATTENDANCE_STATE = {
@@ -13,10 +15,23 @@ const DEFAULT_ATTENDANCE_STATE = {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
-  const name = String(searchParams.get('name') || '').trim()
-  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const userRole = String(auth.role || '').trim()
+  const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+  const queryStoreName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
+  const queryName = String(searchParams.get('name') || '').trim()
+  const queryEmployeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const storeName = String(isScopedRole ? auth.store : queryStoreName || auth.store || '').trim()
+  const name = String(isScopedRole ? auth.name : queryName || auth.name || '').trim()
+  const employeeIdRaw = String(
+    isScopedRole ? auth.employeeId || '' : queryEmployeeIdRaw || auth.employeeId || ''
+  ).trim()
   const employeeId =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
   const employeeCodeNorm = normalizeEmployeeCodeForMatch(

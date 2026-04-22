@@ -51,6 +51,7 @@ import {
   getOutboundByWarehouse,
   getWarehouseLocations,
   generateEtaxXmlApi,
+  useStoreList,
   type AdminItem,
   type AdminVendor,
   type OutboundHistoryItem,
@@ -153,6 +154,7 @@ export default function OutboundPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
+  const { stores: pageStoreList } = useStoreList()
   const [items, setItems] = React.useState<AdminItem[]>([])
   const [outboundTargets, setOutboundTargets] = React.useState<string[]>([])
   const [storeTargets, setStoreTargets] = React.useState<string[]>([])
@@ -181,6 +183,14 @@ export default function OutboundPage() {
   const [histDeliveryStatus, setHistDeliveryStatus] = React.useState("")
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
   const [itemSearch, setItemSearch] = React.useState("")
+  const [summaryVendorFilter, setSummaryVendorFilter] = React.useState("")
+  const [summaryCategoryFilter, setSummaryCategoryFilter] = React.useState("")
+  const [summaryMenuSearch, setSummaryMenuSearch] = React.useState("")
+  const [summaryStoreFilter, setSummaryStoreFilter] = React.useState("")
+  const [summaryVendorSortBy, setSummaryVendorSortBy] = React.useState<"qty" | "amount">("amount")
+  const [summaryVendorSortDir, setSummaryVendorSortDir] = React.useState<"asc" | "desc">("desc")
+  const [summaryMenuSortBy, setSummaryMenuSortBy] = React.useState<"qty" | "amount">("amount")
+  const [summaryMenuSortDir, setSummaryMenuSortDir] = React.useState<"asc" | "desc">("desc")
   const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
   const [photoModalOpen, setPhotoModalOpen] = React.useState(false)
   const [photoModalUrls, setPhotoModalUrls] = React.useState<string[]>([])
@@ -212,7 +222,7 @@ export default function OutboundPage() {
     [auth?.role]
   )
 
-  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice">("hist")
+  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice" | "summary">("hist")
 
   React.useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -247,7 +257,8 @@ export default function OutboundPage() {
           .map((v: AdminVendor) => (v.sales_outlet || "").trim())
         const storeArr = [...new Set([...fromStockLogs, ...vendorStoreNames])].filter(Boolean).sort()
         const salesArr = [...new Set(vendorSalesNames)].filter(Boolean).sort()
-        const merged = [...new Set([...storeArr, ...salesArr])].filter(Boolean).sort()
+        const fromMasterStores = (pageStoreList || []).filter((s) => s && s !== "All")
+        const merged = [...new Set([...storeArr, ...salesArr, ...fromMasterStores])].filter(Boolean).sort()
         setStoreTargets(storeArr)
         setSalesTargets(salesArr)
         setOutboundTargets(merged)
@@ -262,7 +273,7 @@ export default function OutboundPage() {
         setWhWarehouseOptions([])
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [pageStoreList])
 
   const handleItemSelect = (item: AdminItem) => {
     setSelectedItem(item)
@@ -610,7 +621,7 @@ export default function OutboundPage() {
       <html><head><meta charset="utf-8"/><title>${escape(packingListTitle)}</title>
       <style>
         *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-        body{font-family:'Noto Sans KR','Noto Sans Thai',Arial,sans-serif; padding:24px; font-size:12px; color:#0f172a; line-height:1.5; max-width:210mm; margin:0 auto;}
+        body{font-family:'Inter','Pretendard','Noto Sans KR','Sukhumvit Set','Noto Sans Thai',Arial,sans-serif; padding:24px; font-size:12px; color:#0f172a; line-height:1.5; max-width:210mm; margin:0 auto;}
         .wh-print-section{margin-bottom:28px;}
         @media print{
           @page{margin:12mm;size:A4}
@@ -684,6 +695,7 @@ export default function OutboundPage() {
           endStr: e,
           vendorFilter: histStore || undefined,
           typeFilter: histType || undefined,
+          itemSearch: itemSearch.trim() || undefined,
         })
         setHistoryList(Array.isArray(list) ? list : [])
         setUsageList([])
@@ -693,6 +705,7 @@ export default function OutboundPage() {
           endStr: e,
           vendorFilter: auth?.store || undefined,
           typeFilter: histType || undefined,
+          itemSearch: itemSearch.trim() || undefined,
         })
         setHistoryList(Array.isArray(list) ? list : [])
         const usageListRes = await getMyUsageHistory({
@@ -708,7 +721,60 @@ export default function OutboundPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [histStart, histEnd, histMonth, histStore, histType, isOffice, auth?.store])
+  }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store])
+
+  const fetchSummaryHistory = React.useCallback(async () => {
+    let s = histStart
+    let e = histEnd
+    if (histMonth) {
+      const [y, m] = histMonth.split("-").map(Number)
+      const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+      const last = new Date(y, m, 0).toISOString().slice(0, 10)
+      s = first
+      e = last
+    }
+    if (!s || !e) return
+    setHistoryLoading(true)
+    try {
+      const list = await getCombinedOutboundHistory({
+        startStr: s,
+        endStr: e,
+        // 집계 탭은 내역조회의 숨은 조건(histStore, histType)을 타지 않게 분리
+        vendorFilter: isOffice ? undefined : auth?.store || undefined,
+        itemSearch: summaryMenuSearch.trim() || undefined,
+      })
+      setHistoryList(Array.isArray(list) ? list : [])
+      if (!isOffice) {
+        const usageListRes = await getMyUsageHistory({
+          store: auth?.store || "",
+          startStr: s,
+          endStr: e,
+        })
+        setUsageList(Array.isArray(usageListRes) ? usageListRes : [])
+      } else {
+        setUsageList([])
+      }
+    } catch {
+      setHistoryList([])
+      setUsageList([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [histStart, histEnd, histMonth, summaryMenuSearch, isOffice, auth?.store])
+
+  React.useEffect(() => {
+    if (tabValue === "summary" && historyList.length === 0 && !historyLoading) {
+      fetchSummaryHistory()
+    }
+  }, [tabValue, historyList.length, historyLoading, fetchSummaryHistory])
+
+  /** 출고처 드롭다운: 마스터 목록 + 조회 결과에 나온 매출처 병합 */
+  const outboundTargetsForFilter = React.useMemo(() => {
+    const fromHist = [...new Set(historyList.map((i) => i.target).filter(Boolean))]
+    return [...new Set([...outboundTargets, ...fromHist])]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+  }, [outboundTargets, historyList])
 
   const normalizedDeliveryStatus = (s: string) => {
     const v = String(s || "").trim()
@@ -782,7 +848,8 @@ export default function OutboundPage() {
         g.items.some(
           (it) =>
             (it.name || "").toLowerCase().includes(qItem) ||
-            (it.code || "").toLowerCase().includes(qItem)
+            (it.code || "").toLowerCase().includes(qItem) ||
+            (it.spec || "").toLowerCase().includes(qItem)
         )
       )
     }
@@ -840,6 +907,164 @@ export default function OutboundPage() {
       })),
     [usageList]
   )
+
+  const summaryCategoryOptions = React.useMemo(() => {
+    return [...new Set(items.map((item) => String(item.category || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  }, [items])
+
+  const itemVendorMap = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of items) {
+      const code = String(item.code || "").trim()
+      const vendor = String(item.vendor || "").trim()
+      if (code && vendor && !map.has(code)) map.set(code, vendor)
+    }
+    return map
+  }, [items])
+
+  const summaryVendorOptions = React.useMemo(() => {
+    return [...new Set(items.map((item) => String(item.vendor || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  }, [items])
+
+  const itemCategoryMap = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of items) {
+      const code = String(item.code || "").trim()
+      const category = String(item.category || "").trim()
+      if (code && category && !map.has(code)) map.set(code, category)
+    }
+    return map
+  }, [items])
+
+  const summarySourceRows = React.useMemo(() => {
+    let rows = historyList
+    if (summaryStoreFilter) {
+      rows = rows.filter((row) => String(row.target || "").trim() === summaryStoreFilter)
+    }
+    if (summaryVendorFilter) {
+      rows = rows.filter((row) => {
+        const vendor = itemVendorMap.get(String(row.code || "").trim()) || ""
+        return vendor === summaryVendorFilter
+      })
+    }
+    if (summaryCategoryFilter) {
+      rows = rows.filter((row) => {
+        const category = itemCategoryMap.get(String(row.code || "").trim()) || ""
+        return category === summaryCategoryFilter
+      })
+    }
+    if (summaryMenuSearch.trim()) {
+      const q = summaryMenuSearch.trim().toLowerCase()
+      rows = rows.filter((row) =>
+        (row.name || "").toLowerCase().includes(q) ||
+        (row.code || "").toLowerCase().includes(q) ||
+        (row.spec || "").toLowerCase().includes(q)
+      )
+    }
+    return rows
+  }, [historyList, summaryStoreFilter, summaryVendorFilter, summaryCategoryFilter, summaryMenuSearch, itemCategoryMap, itemVendorMap])
+
+  const summaryByTarget = React.useMemo(() => {
+    const map = new Map<string, { vendor: string; qty: number; amount: number }>()
+    for (const row of summarySourceRows) {
+      const vendor = itemVendorMap.get(String(row.code || "").trim()) || "-"
+      const current = map.get(vendor)
+      if (current) {
+        current.qty += Number(row.qty || 0)
+        current.amount += Number(row.amount || 0)
+      } else {
+        map.set(vendor, {
+          vendor,
+          qty: Number(row.qty || 0),
+          amount: Number(row.amount || 0),
+        })
+      }
+    }
+    const rows = Array.from(map.values())
+    rows.sort((a, b) => {
+      const primary = summaryVendorSortBy === "qty" ? a.qty - b.qty : a.amount - b.amount
+      if (primary !== 0) return summaryVendorSortDir === "asc" ? primary : -primary
+      const secondary = summaryVendorSortBy === "qty" ? a.amount - b.amount : a.qty - b.qty
+      if (secondary !== 0) return summaryVendorSortDir === "asc" ? secondary : -secondary
+      return a.vendor.localeCompare(b.vendor)
+    })
+    return rows
+  }, [summarySourceRows, itemVendorMap, summaryVendorSortBy, summaryVendorSortDir])
+
+  const summaryByMenu = React.useMemo(() => {
+    const map = new Map<string, { code: string; name: string; spec: string; qty: number; amount: number }>()
+    for (const row of summarySourceRows) {
+      const code = String(row.code || "").trim()
+      const name = String(row.name || "").trim()
+      const spec = String(row.spec || "").trim()
+      const key = `${code}__${name}__${spec}`
+      const current = map.get(key)
+      if (current) {
+        current.qty += Number(row.qty || 0)
+        current.amount += Number(row.amount || 0)
+      } else {
+        map.set(key, {
+          code,
+          name,
+          spec,
+          qty: Number(row.qty || 0),
+          amount: Number(row.amount || 0),
+        })
+      }
+    }
+    const rows = Array.from(map.values())
+    rows.sort((a, b) => {
+      const primary = summaryMenuSortBy === "qty" ? a.qty - b.qty : a.amount - b.amount
+      if (primary !== 0) return summaryMenuSortDir === "asc" ? primary : -primary
+      const secondary = summaryMenuSortBy === "qty" ? a.amount - b.amount : a.qty - b.qty
+      if (secondary !== 0) return summaryMenuSortDir === "asc" ? secondary : -secondary
+      return a.code.localeCompare(b.code) || a.name.localeCompare(b.name)
+    })
+    return rows
+  }, [summarySourceRows, summaryMenuSortBy, summaryMenuSortDir])
+
+  const summaryTargetTotals = React.useMemo(() => {
+    return summaryByTarget.reduce(
+      (acc, row) => ({
+        qty: acc.qty + row.qty,
+        amount: acc.amount + row.amount,
+      }),
+      { qty: 0, amount: 0 }
+    )
+  }, [summaryByTarget])
+
+  const summaryMenuTotals = React.useMemo(() => {
+    return summaryByMenu.reduce(
+      (acc, row) => ({
+        qty: acc.qty + row.qty,
+        amount: acc.amount + row.amount,
+      }),
+      { qty: 0, amount: 0 }
+    )
+  }, [summaryByMenu])
+
+  const toggleVendorSort = (field: "qty" | "amount") => {
+    if (summaryVendorSortBy === field) {
+      setSummaryVendorSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+      return
+    }
+    setSummaryVendorSortBy(field)
+    setSummaryVendorSortDir("desc")
+  }
+
+  const toggleMenuSort = (field: "qty" | "amount") => {
+    if (summaryMenuSortBy === field) {
+      setSummaryMenuSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+      return
+    }
+    setSummaryMenuSortBy(field)
+    setSummaryMenuSortDir("desc")
+  }
+
+  const sortMark = (active: boolean, dir: "asc" | "desc") => {
+    if (!active) return ""
+    return dir === "desc" ? " ▼" : " ▲"
+  }
 
   React.useEffect(() => {
     setSelectedForPrint(new Set())
@@ -1075,7 +1300,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             <p className="text-xs text-muted-foreground">{t("outPageSub")}</p>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice")} className={adminTabsRootCn}>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice" | "summary")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -1097,6 +1322,9 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     {t("outTabInvoice")}
                   </TabsTrigger>
                 )}
+                <TabsTrigger value="summary" className={adminTabsTriggerCn}>
+                  {t("outTabSummary")}
+                </TabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -1370,8 +1598,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         const whDisplay = (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn
                         return (
                           <AccordionItem key={wn} value={wn} className="border-b border-border/60 last:border-0">
-                            <AccordionTrigger className="px-4 py-3 hover:no-underline [&>svg]:shrink-0">
-                              <div className="flex items-center gap-3 w-full text-left">
+                            <AccordionTrigger className="px-4 py-3.5 text-sm hover:no-underline [&>svg]:shrink-0">
+                              <div className="flex w-full items-center gap-3 text-left">
                                 <div onClick={(e) => e.stopPropagation()}>
                                   <Checkbox
                                     checked={isChecked}
@@ -1380,15 +1608,15 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                                     onClick={(e) => e.stopPropagation()}
                                   />
                                 </div>
-                                <span className="font-semibold">{whDisplay}</span>
-                                <span className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                                <span className="text-base font-semibold tracking-tight text-foreground">{whDisplay}</span>
+                                <span className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium tabular-nums text-primary-foreground">
                                   {items.length}{t("outWhCountSuffix")}
                                 </span>
                               </div>
                             </AccordionTrigger>
-                            <AccordionContent className="px-4 pb-3">
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-sm border-collapse table-fixed" style={{ minWidth: 680 }}>
+                            <AccordionContent className="px-4 pb-4 pt-0">
+                              <div className="overflow-x-auto rounded-lg border border-border/70 bg-muted/25">
+                                <table className="w-full border-collapse text-sm table-fixed leading-relaxed" style={{ minWidth: 680 }}>
                                   <colgroup>
                                     <col style={{ width: 40 }} />
                                     <col style={{ width: "12%" }} />
@@ -1399,17 +1627,20 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                                     <col style={{ width: "8%" }} />
                                     <col style={{ width: "12%" }} />
                                   </colgroup>
-                                  <tbody>
+                                  <tbody className="divide-y divide-border/60">
                                     {items.map((r, idx) => (
-                                      <tr key={`${wn}-${idx}`} className="border-b">
-                                        <td className="py-2 px-2 text-center" style={{ width: 40 }}></td>
-                                        <td className="py-2 px-2 text-center text-muted-foreground">{whDisplay}</td>
-                                        <td className="py-2 px-2 text-center">{r.store}</td>
-                                        <td className="py-2 px-2 text-center">{r.code}</td>
-                                        <td className="py-2 px-2 text-center">{r.name}</td>
-                                        <td className="py-2 px-2 text-center">{r.spec}</td>
-                                        <td className="py-2 px-2 text-center font-medium">{r.qty}</td>
-                                        <td className="py-2 px-2 text-center">{r.deliveryDate}</td>
+                                      <tr
+                                        key={`${wn}-${idx}`}
+                                        className="transition-colors odd:bg-background/50 even:bg-muted/30 hover:bg-primary/[0.04]"
+                                      >
+                                        <td className="py-3 px-2" style={{ width: 40 }} aria-hidden />
+                                        <td className="py-3 px-3 text-center text-xs text-muted-foreground">{whDisplay}</td>
+                                        <td className="py-3 px-3 text-center font-medium text-card-foreground">{r.store}</td>
+                                        <td className="py-3 px-3 text-center font-mono text-xs text-card-foreground">{r.code}</td>
+                                        <td className="py-3 px-3 text-left text-sm font-medium leading-snug text-card-foreground">{r.name}</td>
+                                        <td className="py-3 px-3 text-left text-xs text-muted-foreground">{r.spec}</td>
+                                        <td className="py-3 px-3 text-center text-sm font-semibold tabular-nums text-card-foreground">{r.qty}</td>
+                                        <td className="py-3 px-3 text-center text-xs tabular-nums text-muted-foreground">{r.deliveryDate}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -1553,6 +1784,203 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             </TabsContent>
           )}
 
+          <TabsContent value="summary" className={cn(adminTabsContentCn, "space-y-4")}>
+              <div className="rounded-xl border bg-card p-5 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="date"
+                    value={histStart}
+                    onChange={(e) => setHistStart(e.target.value)}
+                    className="w-[140px] h-9"
+                  />
+                  <Input
+                    type="date"
+                    value={histEnd}
+                    onChange={(e) => setHistEnd(e.target.value)}
+                    className="w-[140px] h-9"
+                  />
+                  <Input
+                    type="month"
+                    value={histMonth}
+                    onChange={(e) => setHistMonth(e.target.value)}
+                    className="w-[140px] h-9"
+                    title={t("inMonthHint")}
+                  />
+                  <Button size="sm" onClick={fetchSummaryHistory} disabled={historyLoading}>
+                    {historyLoading ? t("loading") : t("btn_query")}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={summaryVendorFilter || "__all__"} onValueChange={(v) => setSummaryVendorFilter(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-[220px] h-9">
+                      <SelectValue placeholder={t("vendor")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      {summaryVendorOptions.map((v) => (
+                        <SelectItem key={v} value={v}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={summaryCategoryFilter || "__all__"} onValueChange={(v) => setSummaryCategoryFilter(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-[220px] h-9">
+                      <SelectValue placeholder={t("itemsCategory")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      {summaryCategoryOptions.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={summaryMenuSearch}
+                    onChange={(e) => setSummaryMenuSearch(e.target.value)}
+                    placeholder={t("outItemSearchPh")}
+                    className="w-[220px] h-9"
+                  />
+                  <Select value={summaryStoreFilter || "__all__"} onValueChange={(v) => setSummaryStoreFilter(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-[180px] h-9">
+                      <SelectValue placeholder={t("orderColStore")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("orderFilterStoreAll")}</SelectItem>
+                      {storeTargets.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("outSummaryHint")}</p>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-xl border bg-card p-5">
+                  <h3 className="text-sm font-bold mb-3">{t("vendor")}</h3>
+                  <div className="overflow-x-auto max-h-[480px]">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                        <tr className="border-b">
+                          <th className="py-2 px-2 text-left">{t("vendor")}</th>
+                          <th className="py-2 px-2 text-right">
+                            <button
+                              type="button"
+                              className="font-semibold hover:text-primary"
+                              onClick={() => toggleVendorSort("qty")}
+                            >
+                              {t("outColQty")}
+                              {sortMark(summaryVendorSortBy === "qty", summaryVendorSortDir)}
+                            </button>
+                          </th>
+                          <th className="py-2 px-2 text-right">
+                            <button
+                              type="button"
+                              className="font-semibold hover:text-primary"
+                              onClick={() => toggleVendorSort("amount")}
+                            >
+                              {t("inColAmount")}
+                              {sortMark(summaryVendorSortBy === "amount", summaryVendorSortDir)}
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryByTarget.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-muted-foreground">
+                              {t("outNoData")}
+                            </td>
+                          </tr>
+                        ) : (
+                          summaryByTarget.map((row) => (
+                            <tr key={row.vendor} className="border-b">
+                              <td className="py-2 px-2">{row.vendor}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                        {summaryByTarget.length > 0 && (
+                          <tr className="sticky bottom-0 bg-muted/90 border-t-2">
+                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.qty.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.amount.toLocaleString()}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-card p-5">
+                  <h3 className="text-sm font-bold mb-3">{t("outSummaryByMenu")}</h3>
+                  <div className="overflow-x-auto max-h-[480px]">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                        <tr className="border-b">
+                          <th className="py-2 px-2 text-left">{t("outSummaryMenuCol")}</th>
+                          <th className="py-2 px-2 text-right">
+                            <button
+                              type="button"
+                              className="font-semibold hover:text-primary"
+                              onClick={() => toggleMenuSort("qty")}
+                            >
+                              {t("outColQty")}
+                              {sortMark(summaryMenuSortBy === "qty", summaryMenuSortDir)}
+                            </button>
+                          </th>
+                          <th className="py-2 px-2 text-right">
+                            <button
+                              type="button"
+                              className="font-semibold hover:text-primary"
+                              onClick={() => toggleMenuSort("amount")}
+                            >
+                              {t("inColAmount")}
+                              {sortMark(summaryMenuSortBy === "amount", summaryMenuSortDir)}
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryByMenu.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-muted-foreground">
+                              {t("outNoData")}
+                            </td>
+                          </tr>
+                        ) : (
+                          summaryByMenu.map((row) => (
+                            <tr key={`${row.code}-${row.name}-${row.spec}`} className="border-b">
+                              <td className="py-2 px-2">
+                                {row.code ? `[${row.code}] ` : ""}
+                                {row.name || "-"}
+                                {row.spec ? ` (${row.spec})` : ""}
+                              </td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                        {summaryByMenu.length > 0 && (
+                          <tr className="sticky bottom-0 bg-muted/90 border-t-2">
+                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.qty.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.amount.toLocaleString()}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
           <TabsContent value="hist" className={adminTabsContentCn}>
             <ShipmentFilterBar
               totalAmount={periodTotalFormatted}
@@ -1571,7 +1999,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               histDeliveryStatus={histDeliveryStatus}
               histTargetType={histTargetType}
               histStore={histStore}
-              outboundTargets={outboundTargets}
+              outboundTargets={outboundTargetsForFilter}
               storeTargets={storeTargets}
               salesTargets={salesTargets}
               onHistTargetTypeChange={setHistTargetType}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
 /** 매장 발주 내역 필터용: items 테이블의 distinct category, vendor 목록 */
 export async function GET() {
@@ -7,6 +8,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const resolveVendorName = await createVendorNameResolver()
     const rows = (await supabaseSelect('items', {
       select: 'category,vendor',
       limit: 10000,
@@ -16,7 +18,7 @@ export async function GET() {
     const vendorSet = new Set<string>()
     for (const r of rows || []) {
       const c = String(r.category || '').trim()
-      const v = String(r.vendor || '').trim()
+      const v = resolveVendorName(String(r.vendor || '').trim())
       if (c) categorySet.add(c)
       if (v) vendorSet.add(v)
     }

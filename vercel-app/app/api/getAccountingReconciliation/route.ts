@@ -4,13 +4,20 @@ import { computeTrialBalanceReport } from '@/lib/trial-balance-report'
 import { computeIncomeStatementReport, computeBalanceSheetReport } from '@/lib/accounting-reports'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
+  const userRole = String(auth.role || '').trim()
+  const userStore = String(auth.store || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim().slice(0, 7)
   const storeFilter = String(searchParams.get('storeFilter') || '').trim() || 'All'
   const profitLossAccountCode = String(searchParams.get('profitLossAccountCode') || '3120').trim() || '3120'

@@ -98,9 +98,24 @@ export default function InboundPage() {
   const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histVendor, setHistVendor] = React.useState("")
+  const [histVendorSearch, setHistVendorSearch] = React.useState("")
+  const [histItemSearch, setHistItemSearch] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
   const [histPurchaseSource, setHistPurchaseSource] = React.useState<"" | "hq" | "store">("")
   const [histMonth, setHistMonth] = React.useState("")
+  const [summaryStart, setSummaryStart] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [summaryEnd, setSummaryEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [summaryMonth, setSummaryMonth] = React.useState("")
+  const [summaryLoading, setSummaryLoading] = React.useState(false)
+  const [summaryList, setSummaryList] = React.useState<InboundHistoryItem[]>([])
+  const [summaryVendorFilter, setSummaryVendorFilter] = React.useState("")
+  const [summaryCategoryFilter, setSummaryCategoryFilter] = React.useState("")
+  const [summaryItemSearch, setSummaryItemSearch] = React.useState("")
+  const [summaryStoreFilter, setSummaryStoreFilter] = React.useState("")
+  const [summaryVendorSortBy, setSummaryVendorSortBy] = React.useState<"qty" | "amount">("amount")
+  const [summaryVendorSortDir, setSummaryVendorSortDir] = React.useState<"asc" | "desc">("desc")
+  const [summaryItemSortBy, setSummaryItemSortBy] = React.useState<"qty" | "amount">("amount")
+  const [summaryItemSortDir, setSummaryItemSortDir] = React.useState<"asc" | "desc">("desc")
   const [fromPoId, setFromPoId] = React.useState<number | null>(null)
 
   const searchParams = useSearchParams()
@@ -114,6 +129,12 @@ export default function InboundPage() {
   const purchaseVendors = React.useMemo(() => {
     return vendors.filter((v) => v.type === "purchase" || v.type === "both")
   }, [vendors])
+
+  const histVendorSelectOptions = React.useMemo(() => {
+    const masters = purchaseVendors.map((v) => v.name).filter(Boolean)
+    const fromHist = [...new Set(historyList.map((h) => h.vendor).filter(Boolean))]
+    return [...new Set([...masters, ...fromHist])].sort((a, b) => a.localeCompare(b))
+  }, [purchaseVendors, historyList])
 
   /** 판매처 (입고 목적지로 선택 가능) - 매장 아닌 외부 판매처. sales_outlet 우선 */
   const salesVendors = React.useMemo(() => {
@@ -158,6 +179,16 @@ export default function InboundPage() {
         )
     return { stores: filteredStores, salesVendors: filteredSales }
   }, [storeOptions, inStoreSearch])
+
+  const summaryVendorOptions = React.useMemo(() => {
+    const fromMaster = purchaseVendors.map((v) => v.name).filter(Boolean)
+    const fromRows = [...new Set(summaryList.map((r) => r.vendor).filter(Boolean))]
+    return [...new Set([...fromMaster, ...fromRows])].sort((a, b) => a.localeCompare(b))
+  }, [purchaseVendors, summaryList])
+
+  const summaryCategoryOptions = React.useMemo(() => {
+    return [...new Set(items.map((it) => String(it.category || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  }, [items])
 
   /** 거래처 선택 시 해당 거래처에 등록된 품목 (items.vendor + item_vendors 매핑) */
   const itemsForPicker = React.useMemo(() => {
@@ -221,6 +252,12 @@ export default function InboundPage() {
     const today = new Date().toISOString().slice(0, 10)
     setHistStart(today)
     setHistEnd(today)
+  }, [])
+
+  React.useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    setSummaryStart(today)
+    setSummaryEnd(today)
   }, [])
 
   React.useEffect(() => {
@@ -387,6 +424,8 @@ export default function InboundPage() {
           startStr: s,
           endStr: e,
           vendorFilter: histVendor || undefined,
+          vendorSearch: !histVendor.trim() && histVendorSearch.trim() ? histVendorSearch.trim() : undefined,
+          itemSearch: histItemSearch.trim() || undefined,
           storeFilter: histStore || undefined,
         })
         setHistoryList(Array.isArray(list) ? list : [])
@@ -396,6 +435,8 @@ export default function InboundPage() {
           startStr: s,
           endStr: e,
           vendorFilter: histVendor || undefined,
+          vendorSearch: !histVendor.trim() && histVendorSearch.trim() ? histVendorSearch.trim() : undefined,
+          itemSearch: histItemSearch.trim() || undefined,
         })
         setHistoryList(Array.isArray(list) ? list : [])
       }
@@ -404,7 +445,159 @@ export default function InboundPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
+  }, [histStart, histEnd, histMonth, histVendor, histVendorSearch, histItemSearch, histStore, isOffice, auth?.store])
+
+  const fetchSummaryHistory = React.useCallback(async () => {
+    let s = summaryStart
+    let e = summaryEnd
+    if (summaryMonth) {
+      const [y, m] = summaryMonth.split("-").map(Number)
+      const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+      const last = new Date(y, m, 0).toISOString().slice(0, 10)
+      s = first
+      e = last
+    }
+    if (!s || !e) return
+    setSummaryLoading(true)
+    try {
+      if (isOffice) {
+        const list = await getInboundHistory({
+          startStr: s,
+          endStr: e,
+          storeFilter: summaryStoreFilter || undefined,
+          itemSearch: summaryItemSearch.trim() || undefined,
+        })
+        setSummaryList(Array.isArray(list) ? list : [])
+      } else {
+        const list = await getInboundForStore({
+          storeName: auth?.store || "",
+          startStr: s,
+          endStr: e,
+          itemSearch: summaryItemSearch.trim() || undefined,
+        })
+        setSummaryList(Array.isArray(list) ? list : [])
+      }
+    } catch {
+      setSummaryList([])
+    } finally {
+      setSummaryLoading(false)
+    }
+  }, [summaryStart, summaryEnd, summaryMonth, summaryStoreFilter, summaryItemSearch, isOffice, auth?.store])
+
+  const itemCategoryMap = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const item of items) {
+      const code = String(item.code || "").trim()
+      const category = String(item.category || "").trim()
+      if (code && category && !map.has(code)) map.set(code, category)
+    }
+    return map
+  }, [items])
+
+  const filteredSummaryRows = React.useMemo(() => {
+    let rows = summaryList
+    if (summaryVendorFilter) {
+      rows = rows.filter((r) => String(r.vendor || "").trim() === summaryVendorFilter)
+    }
+    if (summaryCategoryFilter) {
+      rows = rows.filter((r) => (itemCategoryMap.get(String(r.code || "").trim()) || "") === summaryCategoryFilter)
+    }
+    if (summaryItemSearch.trim()) {
+      const q = summaryItemSearch.trim().toLowerCase()
+      rows = rows.filter((r) =>
+        (r.name || "").toLowerCase().includes(q) ||
+        (r.code || "").toLowerCase().includes(q) ||
+        (r.spec || "").toLowerCase().includes(q)
+      )
+    }
+    return rows
+  }, [summaryList, summaryVendorFilter, summaryCategoryFilter, summaryItemSearch, itemCategoryMap])
+
+  const summaryByVendor = React.useMemo(() => {
+    const map = new Map<string, { vendor: string; qty: number; amount: number }>()
+    for (const row of filteredSummaryRows) {
+      const key = String(row.vendor || "").trim() || "-"
+      const current = map.get(key)
+      if (current) {
+        current.qty += Number(row.qty || 0)
+        current.amount += Number(row.amount || 0)
+      } else {
+        map.set(key, { vendor: key, qty: Number(row.qty || 0), amount: Number(row.amount || 0) })
+      }
+    }
+    const rows = Array.from(map.values())
+    rows.sort((a, b) => {
+      const primary = summaryVendorSortBy === "qty" ? a.qty - b.qty : a.amount - b.amount
+      if (primary !== 0) return summaryVendorSortDir === "asc" ? primary : -primary
+      return a.vendor.localeCompare(b.vendor)
+    })
+    return rows
+  }, [filteredSummaryRows, summaryVendorSortBy, summaryVendorSortDir])
+
+  const summaryByItem = React.useMemo(() => {
+    const map = new Map<string, { code: string; name: string; spec: string; qty: number; amount: number }>()
+    for (const row of filteredSummaryRows) {
+      const code = String(row.code || "").trim()
+      const name = String(row.name || "").trim()
+      const spec = String(row.spec || "").trim()
+      const key = `${code}__${name}__${spec}`
+      const current = map.get(key)
+      if (current) {
+        current.qty += Number(row.qty || 0)
+        current.amount += Number(row.amount || 0)
+      } else {
+        map.set(key, { code, name, spec, qty: Number(row.qty || 0), amount: Number(row.amount || 0) })
+      }
+    }
+    const rows = Array.from(map.values())
+    rows.sort((a, b) => {
+      const primary = summaryItemSortBy === "qty" ? a.qty - b.qty : a.amount - b.amount
+      if (primary !== 0) return summaryItemSortDir === "asc" ? primary : -primary
+      return a.code.localeCompare(b.code) || a.name.localeCompare(b.name)
+    })
+    return rows
+  }, [filteredSummaryRows, summaryItemSortBy, summaryItemSortDir])
+
+  const summaryVendorTotals = React.useMemo(
+    () =>
+      summaryByVendor.reduce((acc, row) => ({ qty: acc.qty + row.qty, amount: acc.amount + row.amount }), {
+        qty: 0,
+        amount: 0,
+      }),
+    [summaryByVendor]
+  )
+
+  const summaryItemTotals = React.useMemo(
+    () =>
+      summaryByItem.reduce((acc, row) => ({ qty: acc.qty + row.qty, amount: acc.amount + row.amount }), {
+        qty: 0,
+        amount: 0,
+      }),
+    [summaryByItem]
+  )
+
+  const toggleSummaryVendorSort = (field: "qty" | "amount") => {
+    if (summaryVendorSortBy === field) {
+      setSummaryVendorSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+      return
+    }
+    setSummaryVendorSortBy(field)
+    setSummaryVendorSortDir("desc")
+  }
+
+  const toggleSummaryItemSort = (field: "qty" | "amount") => {
+    if (summaryItemSortBy === field) {
+      setSummaryItemSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+      return
+    }
+    setSummaryItemSortBy(field)
+    setSummaryItemSortDir("desc")
+  }
+
+  const sortMark = (active: boolean, dir: "asc" | "desc") => {
+    if (!active) return ""
+    return dir === "desc" ? " ▼" : " ▲"
+  }
 
   const formatInboundLineName = React.useCallback(
     (it: InboundHistoryItem) =>
@@ -480,9 +673,144 @@ export default function InboundPage() {
     [filteredHistoryList, formatInboundLineName]
   )
 
-  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "guide">("new")
+  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "summary" | "guide">("new")
   const [editingRow, setEditingRow] = React.useState<InboundTableRow | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
+  const [filtersHydrated, setFiltersHydrated] = React.useState(false)
+
+  React.useEffect(() => {
+    try {
+      const histRaw = sessionStorage.getItem("inbound:hist-filters:v1")
+      if (histRaw) {
+        const parsed = JSON.parse(histRaw) as {
+          histStart?: string
+          histEnd?: string
+          histMonth?: string
+          histVendor?: string
+          histVendorSearch?: string
+          histItemSearch?: string
+          histStore?: string
+          histPurchaseSource?: "" | "hq" | "store"
+        }
+        if (typeof parsed.histStart === "string") setHistStart(parsed.histStart)
+        if (typeof parsed.histEnd === "string") setHistEnd(parsed.histEnd)
+        if (typeof parsed.histMonth === "string") setHistMonth(parsed.histMonth)
+        if (typeof parsed.histVendor === "string") setHistVendor(parsed.histVendor)
+        if (typeof parsed.histVendorSearch === "string") setHistVendorSearch(parsed.histVendorSearch)
+        if (typeof parsed.histItemSearch === "string") setHistItemSearch(parsed.histItemSearch)
+        if (typeof parsed.histStore === "string") setHistStore(parsed.histStore)
+        if (parsed.histPurchaseSource === "" || parsed.histPurchaseSource === "hq" || parsed.histPurchaseSource === "store") {
+          setHistPurchaseSource(parsed.histPurchaseSource)
+        }
+      }
+
+      const summaryRaw = sessionStorage.getItem("inbound:summary-filters:v1")
+      if (summaryRaw) {
+        const parsed = JSON.parse(summaryRaw) as {
+          summaryStart?: string
+          summaryEnd?: string
+          summaryMonth?: string
+          summaryVendorFilter?: string
+          summaryCategoryFilter?: string
+          summaryItemSearch?: string
+          summaryStoreFilter?: string
+          summaryVendorSortBy?: "qty" | "amount"
+          summaryVendorSortDir?: "asc" | "desc"
+          summaryItemSortBy?: "qty" | "amount"
+          summaryItemSortDir?: "asc" | "desc"
+        }
+        if (typeof parsed.summaryStart === "string") setSummaryStart(parsed.summaryStart)
+        if (typeof parsed.summaryEnd === "string") setSummaryEnd(parsed.summaryEnd)
+        if (typeof parsed.summaryMonth === "string") setSummaryMonth(parsed.summaryMonth)
+        if (typeof parsed.summaryVendorFilter === "string") setSummaryVendorFilter(parsed.summaryVendorFilter)
+        if (typeof parsed.summaryCategoryFilter === "string") setSummaryCategoryFilter(parsed.summaryCategoryFilter)
+        if (typeof parsed.summaryItemSearch === "string") setSummaryItemSearch(parsed.summaryItemSearch)
+        if (typeof parsed.summaryStoreFilter === "string") setSummaryStoreFilter(parsed.summaryStoreFilter)
+        if (parsed.summaryVendorSortBy === "qty" || parsed.summaryVendorSortBy === "amount") setSummaryVendorSortBy(parsed.summaryVendorSortBy)
+        if (parsed.summaryVendorSortDir === "asc" || parsed.summaryVendorSortDir === "desc") setSummaryVendorSortDir(parsed.summaryVendorSortDir)
+        if (parsed.summaryItemSortBy === "qty" || parsed.summaryItemSortBy === "amount") setSummaryItemSortBy(parsed.summaryItemSortBy)
+        if (parsed.summaryItemSortDir === "asc" || parsed.summaryItemSortDir === "desc") setSummaryItemSortDir(parsed.summaryItemSortDir)
+      }
+
+      const tabRaw = sessionStorage.getItem("inbound:active-tab:v1")
+      if (tabRaw === "new" || tabRaw === "hist" || tabRaw === "summary" || tabRaw === "guide") {
+        setTabValue(tabRaw)
+      }
+    } catch {}
+    setFiltersHydrated(true)
+  }, [])
+
+  React.useEffect(() => {
+    if (!filtersHydrated) return
+    try {
+      sessionStorage.setItem(
+        "inbound:hist-filters:v1",
+        JSON.stringify({
+          histStart,
+          histEnd,
+          histMonth,
+          histVendor,
+          histVendorSearch,
+          histItemSearch,
+          histStore,
+          histPurchaseSource,
+        })
+      )
+    } catch {}
+  }, [filtersHydrated, histStart, histEnd, histMonth, histVendor, histVendorSearch, histItemSearch, histStore, histPurchaseSource])
+
+  React.useEffect(() => {
+    if (!filtersHydrated) return
+    try {
+      sessionStorage.setItem(
+        "inbound:summary-filters:v1",
+        JSON.stringify({
+          summaryStart,
+          summaryEnd,
+          summaryMonth,
+          summaryVendorFilter,
+          summaryCategoryFilter,
+          summaryItemSearch,
+          summaryStoreFilter,
+          summaryVendorSortBy,
+          summaryVendorSortDir,
+          summaryItemSortBy,
+          summaryItemSortDir,
+        })
+      )
+    } catch {}
+  }, [
+    filtersHydrated,
+    summaryStart,
+    summaryEnd,
+    summaryMonth,
+    summaryVendorFilter,
+    summaryCategoryFilter,
+    summaryItemSearch,
+    summaryStoreFilter,
+    summaryVendorSortBy,
+    summaryVendorSortDir,
+    summaryItemSortBy,
+    summaryItemSortDir,
+  ])
+
+  React.useEffect(() => {
+    if (!filtersHydrated) return
+    try {
+      sessionStorage.setItem("inbound:active-tab:v1", tabValue)
+    } catch {}
+  }, [filtersHydrated, tabValue])
+
+  /** 내역 탭으로 들어오면 현재 필터로 조회 (본사·매장 공통) */
+  React.useEffect(() => {
+    if (tabValue !== "hist") return
+    void fetchHistory()
+  }, [tabValue])
+
+  React.useEffect(() => {
+    if (tabValue !== "summary") return
+    void fetchSummaryHistory()
+  }, [tabValue])
 
   const handleEditRow = React.useCallback((row: InboundTableRow) => {
     setEditingRow(row)
@@ -552,7 +880,7 @@ export default function InboundPage() {
         )
         .join("")
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("adminInbound")} - ${row.date}</title>
-<style>body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style></head><body>
+<style>body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style></head><body>
 <h1>${t("adminInbound")}</h1>${row.poDate ? `<p><strong>${t("inPoDate")}:</strong> ${poDateStr}</p>` : ""}<p><strong>${t("inInboundDate")}:</strong> ${inboundDateStr}</p><p><strong>${t("inVendor")}:</strong> ${(row.vendor || "-").replace(/</g, "&lt;")}</p>
 ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || "").replace(/</g, "&lt;")}</p>` : ""}${row.invoiceNo ? `<p><strong>${t("inInvoiceNo") || "인보이스"}:</strong> ${(row.invoiceNo || "").replace(/</g, "&lt;")}</p>` : ""}
 <hr/><table><thead><tr><th>No</th><th>${t("outColItem")}</th><th>${t("spec")}</th><th class="num">${t("outColQty")}</th><th class="num">${t("inColAmount")}</th></tr></thead>
@@ -613,7 +941,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             <p className="text-xs text-muted-foreground">{isOffice ? t("inPageSubOffice") : t("inPageSubStoreDirect")}</p>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "guide")} className={adminTabsRootCn}>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "summary" | "guide")} className={adminTabsRootCn}>
           <div className={adminTabsBarCn}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
@@ -622,6 +950,9 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                 </TabsTrigger>
                 <TabsTrigger value="hist" className={adminTabsTriggerCn}>
                   {t("inTabHist")}
+                </TabsTrigger>
+                <TabsTrigger value="summary" className={adminTabsTriggerCn}>
+                  {t("inTabSummary")}
                 </TabsTrigger>
                 <TabsTrigger value="guide" className={adminTabsTriggerCn}>
                   {t("inTabGuide")}
@@ -841,6 +1172,11 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             </TabsContent>
 
           <TabsContent value="hist" className={adminTabsContentCn}>
+            {isOffice && (
+              <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+                {t("inHistFilterHintOffice")}
+              </p>
+            )}
             <InboundFilterBar
               totalAmount={periodTotalFormatted}
               isOffice={isOffice}
@@ -858,8 +1194,12 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                 setHistMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
               }}
               histVendor={histVendor}
-              vendors={purchaseVendors.map((v) => v.name)}
+              vendors={histVendorSelectOptions}
               onHistVendorChange={setHistVendor}
+              histItemSearch={histItemSearch}
+              onHistItemSearchChange={setHistItemSearch}
+              histVendorSearch={histVendorSearch}
+              onHistVendorSearchChange={setHistVendorSearch}
               histPurchaseSource={histPurchaseSource}
               onHistPurchaseSourceChange={setHistPurchaseSource}
               onSearch={fetchHistory}
@@ -896,6 +1236,183 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                 return true
               }}
             />
+          </TabsContent>
+
+          <TabsContent value="summary" className={adminTabsContentCn}>
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-card p-5 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="date"
+                    value={summaryStart}
+                    onChange={(e) => setSummaryStart(e.target.value)}
+                    className="w-[140px] h-9"
+                  />
+                  <Input
+                    type="date"
+                    value={summaryEnd}
+                    onChange={(e) => setSummaryEnd(e.target.value)}
+                    className="w-[140px] h-9"
+                  />
+                  <Input
+                    type="month"
+                    value={summaryMonth}
+                    onChange={(e) => setSummaryMonth(e.target.value)}
+                    className="w-[140px] h-9"
+                    title={t("inMonthHint")}
+                  />
+                  {isOffice && (
+                    <Select value={summaryStoreFilter || "__all__"} onValueChange={(v) => setSummaryStoreFilter(v === "__all__" ? "" : v)}>
+                      <SelectTrigger className="w-[180px] h-9">
+                        <SelectValue placeholder={t("store")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">{t("all")}</SelectItem>
+                        {histStoreOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button size="sm" onClick={fetchSummaryHistory} disabled={summaryLoading}>
+                    {summaryLoading ? t("loading") : t("btn_query")}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={summaryVendorFilter || "__all__"} onValueChange={(v) => setSummaryVendorFilter(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-[220px] h-9">
+                      <SelectValue placeholder={t("vendor")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      {summaryVendorOptions.map((v) => (
+                        <SelectItem key={v} value={v}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={summaryCategoryFilter || "__all__"} onValueChange={(v) => setSummaryCategoryFilter(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="w-[220px] h-9">
+                      <SelectValue placeholder={t("itemsCategory")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
+                      {summaryCategoryOptions.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={summaryItemSearch}
+                    onChange={(e) => setSummaryItemSearch(e.target.value)}
+                    placeholder={t("inItemSearchPh")}
+                    className="w-[220px] h-9"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{t("inSummaryHint")}</p>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-xl border bg-card p-5">
+                  <h3 className="text-sm font-bold mb-3">{t("inSummaryByVendor")}</h3>
+                  <div className="overflow-x-auto max-h-[480px]">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                        <tr className="border-b">
+                          <th className="py-2 px-2 text-left">{t("vendor")}</th>
+                          <th className="py-2 px-2 text-right">
+                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryVendorSort("qty")}>
+                              {t("outColQty")}{sortMark(summaryVendorSortBy === "qty", summaryVendorSortDir)}
+                            </button>
+                          </th>
+                          <th className="py-2 px-2 text-right">
+                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryVendorSort("amount")}>
+                              {t("inColAmount")}{sortMark(summaryVendorSortBy === "amount", summaryVendorSortDir)}
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryByVendor.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-muted-foreground">{t("inNoData")}</td>
+                          </tr>
+                        ) : (
+                          summaryByVendor.map((row) => (
+                            <tr key={row.vendor} className="border-b">
+                              <td className="py-2 px-2">{row.vendor}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                        {summaryByVendor.length > 0 && (
+                          <tr className="sticky bottom-0 bg-muted/90 border-t-2">
+                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryVendorTotals.qty.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryVendorTotals.amount.toLocaleString()}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-card p-5">
+                  <h3 className="text-sm font-bold mb-3">{t("inSummaryByItem")}</h3>
+                  <div className="overflow-x-auto max-h-[480px]">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                        <tr className="border-b">
+                          <th className="py-2 px-2 text-left">{t("inSummaryItemCol")}</th>
+                          <th className="py-2 px-2 text-right">
+                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryItemSort("qty")}>
+                              {t("outColQty")}{sortMark(summaryItemSortBy === "qty", summaryItemSortDir)}
+                            </button>
+                          </th>
+                          <th className="py-2 px-2 text-right">
+                            <button type="button" className="font-semibold hover:text-primary" onClick={() => toggleSummaryItemSort("amount")}>
+                              {t("inColAmount")}{sortMark(summaryItemSortBy === "amount", summaryItemSortDir)}
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryByItem.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-8 text-center text-muted-foreground">{t("inNoData")}</td>
+                          </tr>
+                        ) : (
+                          summaryByItem.map((row) => (
+                            <tr key={`${row.code}-${row.name}-${row.spec}`} className="border-b">
+                              <td className="py-2 px-2">
+                                {row.code ? `[${row.code}] ` : ""}
+                                {row.name || "-"}
+                                {row.spec ? ` (${row.spec})` : ""}
+                              </td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                        {summaryByItem.length > 0 && (
+                          <tr className="sticky bottom-0 bg-muted/90 border-t-2">
+                            <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryItemTotals.qty.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryItemTotals.amount.toLocaleString()}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="guide" className={adminTabsContentCn}>

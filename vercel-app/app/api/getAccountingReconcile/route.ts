@@ -2,17 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
 import { getBangkokMonthRange } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   try {
     const { searchParams } = new URL(request.url)
     const yearMonth = String(searchParams.get('yearMonth') || '').trim()
     const storeFilter = String(searchParams.get('storeFilter') || '').trim()
-    const userStore = String(searchParams.get('userStore') || '').trim()
-    const userRole = String(searchParams.get('userRole') || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').trim()
 
     const legacy = await computeIncomeStatementReport({
       yearMonth,

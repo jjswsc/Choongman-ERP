@@ -4,6 +4,8 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { requireAuth } from '@/lib/verify-auth'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 
@@ -81,13 +83,15 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
-    const body = await request.json()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
-    const userName = String(body.userName || body.user_name || '').trim()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) {
-      return NextResponse.json({ success: false, message: '본사 권한만 등록할 수 있습니다.' }, { status: 403, headers })
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
     }
+    const auth = authResult.auth
+    const body = await request.json()
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
 
     const categoryMain = String(body.categoryMain || body.category_main || '').trim().toLowerCase()
     const categorySub = String(body.categorySub || body.category_sub || '').trim().toLowerCase()
@@ -209,6 +213,12 @@ export async function POST(request: NextRequest) {
       })
     } catch (postingErr) {
       console.error('addExpenseAccrual posting:', postingErr)
+    }
+
+    try {
+      await syncExpenseAccrualInputVatLedger(expenseAccrualId)
+    } catch (vatLedgerErr) {
+      console.error('addExpenseAccrual vat input ledger:', vatLedgerErr)
     }
 
     return NextResponse.json(

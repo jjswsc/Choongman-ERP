@@ -5,6 +5,7 @@ import {
   assertCanApproveAccountingPeriodUnlock,
 } from '@/lib/accounting-auth'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
+import { requireAuth } from '@/lib/verify-auth'
 
 function isMissingClosingRunTableError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -25,9 +26,15 @@ function isMissingUnlockColumnError(e: unknown): boolean {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const jwtUserRole = String(authResult.auth.role || '').trim()
   try {
     const body = await request.json().catch(() => ({}))
-    const userRole = String(body.userRole || '').trim()
+    const userRole = jwtUserRole
     assertCanApproveAccountingCompliance(userRole)
 
     const yearMonth = String(body.yearMonth || '').trim().slice(0, 7)
@@ -188,7 +195,7 @@ export async function POST(request: NextRequest) {
         const body = await request.json().catch(() => ({}))
         await writeAccountingComplianceAudit({
           actionType: 'accounting_period_toggle',
-          userRole: String(body.userRole || '').trim(),
+          userRole: jwtUserRole,
           actor: String(body.closedBy || '').trim() || null,
           decision: 'deny',
           reasonCode: 'FORBIDDEN',

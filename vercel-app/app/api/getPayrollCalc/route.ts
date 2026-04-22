@@ -23,7 +23,8 @@ import {
   resolveEarlyExplicitForPayroll,
 } from '@/lib/attendance-adjustment-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
-import { isOfficeStore } from '@/lib/permissions'
+import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   bangkokDateRangeToUtc,
   toDateStrBangkok,
@@ -697,7 +698,31 @@ export async function GET(request: NextRequest) {
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const userStore = (auth.store || '').trim()
   const userRole = (auth.role || '').toLowerCase()
-  if (userRole.includes('manager') && userStore) storeFilter = userStore
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
+  const isScopedRole =
+    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    (userRole.includes('manager') || userRole.includes('franchisee'))
+  if (isScopedRole) {
+    if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체') {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, msg: '허용되지 않은 매장 접근입니다.' },
+          { status: 403, headers }
+        )
+      }
+    } else {
+      const fallbackStore = String(allowedStores[0] || '').trim()
+      if (!fallbackStore) {
+        return NextResponse.json({ success: false, msg: '매장 접근 권한이 없습니다.' }, { status: 403, headers })
+      }
+      storeFilter = fallbackStore
+    }
+  }
 
   if (!monthStr || monthStr.length < 7) {
     return NextResponse.json(

@@ -4,6 +4,7 @@ import { computeTrialBalanceReport } from '@/lib/trial-balance-report'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
 import { supabaseDeleteByFilter, supabaseInsert } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 function isMissingClosingRunTableError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -14,22 +15,26 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = (await request.json().catch(() => ({}))) as {
-      userRole?: string
-      userStore?: string
       createdBy?: string
       yearMonth?: string
       storeFilter?: string
       profitLossAccountCode?: string
       memo?: string
     }
-    const userRole = String(body.userRole || '').trim()
+    const userRole = String(auth.role || '').trim()
     assertCanManageAccountingCompliance(userRole)
 
     const yearMonth = String(body.yearMonth || '').trim()
     const storeFilter = String(body.storeFilter || '').trim() || 'All'
-    const userStore = String(body.userStore || '').trim()
-    const createdBy = String(body.createdBy || '').trim() || null
+    const userStore = String(auth.store || '').trim()
+    const createdBy = String(auth.name || body.createdBy || '').trim() || null
     const memo = String(body.memo || '').trim() || null
     const profitLossAccountCode = String(body.profitLossAccountCode || '3120').trim() || '3120'
     if (!/^\d{4}-\d{2}$/.test(yearMonth)) {

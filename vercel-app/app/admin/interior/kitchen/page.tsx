@@ -13,6 +13,7 @@ function Inner() {
       toolBasePath={INTERIOR_ADMIN.kitchen}
       titleKey="interiorKitchen"
       icon={UtensilsCrossed}
+      allowMultiProject
     >
       {(projectId) => <InteriorKitchenPanel projectId={projectId} />}
     </InteriorProjectToolShell>

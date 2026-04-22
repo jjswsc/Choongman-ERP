@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -13,20 +14,18 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
     const body = await request.json()
     const orderId = Number(body.orderId ?? body.order_row_id)
     const deliveryDatesByOutbound = body.deliveryDatesByOutbound && typeof body.deliveryDatesByOutbound === 'object'
       ? body.deliveryDatesByOutbound as Record<string, string>
       : null
-    const userRole = String(body.userRole ?? '').toLowerCase()
-    const isOffice = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
-
-    if (!isOffice) {
-      return NextResponse.json(
-        { success: false, message: '오피스 직원만 배송일을 수정할 수 있습니다.' },
-        { headers }
-      )
-    }
 
     if (!orderId || isNaN(orderId)) {
       return NextResponse.json(

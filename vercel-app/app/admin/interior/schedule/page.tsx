@@ -13,6 +13,7 @@ function InteriorSchedulePageInner() {
       toolBasePath={INTERIOR_ADMIN.schedule}
       titleKey="interiorSchedule"
       icon={Calendar}
+      allowMultiProject
     >
       {(projectId) => <InteriorSchedulePanel projectId={projectId} />}
     </InteriorProjectToolShell>

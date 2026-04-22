@@ -25,8 +25,10 @@ import {
 } from "@/lib/realtime-work-grid"
 import {
   buildAttendanceSummaryLookupMap,
+  canonicalStoreSegmentForJoinKey,
   findAttendanceForRealtimeScheduleRow,
 } from "@/lib/today-realtime-join"
+import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { cn } from "@/lib/utils"
 
 function todayStr() {
@@ -169,6 +171,17 @@ interface RealtimeWorkProps {
   storeList?: string[]
 }
 
+function personMergeKeyForRealtimeRow(s: TodayScheduleItem): string {
+  const storeSeg = canonicalStoreSegmentForJoinKey(String(s.store || "").trim())
+  const code = normalizeEmployeeCodeForMatch(String(s.employeeCode ?? ""))
+  if (code) return `${storeSeg}|c:${code}`
+  const idNum = s.employeeId != null && Number.isFinite(Number(s.employeeId)) ? Math.floor(Number(s.employeeId)) : 0
+  if (idNum > 0) return `${storeSeg}|id:${idNum}`
+  const raw = String(s.name || s.nick || "").trim()
+  const normalized = normalizeEmployeeNameForGradeMatch(raw)
+  return `${storeSeg}|n:${normalized || raw}`
+}
+
 export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: storeListProp = [] }: RealtimeWorkProps) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -248,8 +261,9 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   for (const s of filteredSchedule) {
     const sn = String(s.name || "").trim()
     const nk = String(s.nick || "").trim()
+    const mergeKey = personMergeKeyForRealtimeRow(s)
     const key = s.joinKey || `${s.store}|${sn}`
-    byPerson[key] = {
+    const rowValue = {
       joinKey: key,
       name: s.nick || s.name,
       scheduleName: sn,
@@ -264,6 +278,28 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       pBE: s.pBE,
       leaveType: s.leaveType,
       plan_in_prev_day: s.plan_in_prev_day,
+    }
+    const existing = byPerson[mergeKey]
+    if (!existing) {
+      byPerson[mergeKey] = rowValue
+      continue
+    }
+    const incomingIsLeave = !!s.leaveType
+    const existingIsLeave = !!existing.leaveType
+    if (incomingIsLeave && !existingIsLeave) {
+      byPerson[mergeKey] = rowValue
+      continue
+    }
+    if (!incomingIsLeave && existingIsLeave) {
+      continue
+    }
+    byPerson[mergeKey] = {
+      ...existing,
+      ...rowValue,
+      joinKey: rowValue.joinKey || existing.joinKey,
+      employeeCode: rowValue.employeeCode || existing.employeeCode,
+      employeeId: rowValue.employeeId || existing.employeeId,
+      leaveType: rowValue.leaveType || existing.leaveType,
     }
   }
 

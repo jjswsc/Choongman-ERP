@@ -158,13 +158,13 @@ export function ShipmentTable({
   if (!isOffice && rows.length === 0) {
     return (
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full text-xs">
+        <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#1E293B] text-white">
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("stockColDate")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
+              <th className="px-3 py-3 text-center text-xs font-semibold tracking-wide whitespace-nowrap">{t("stockColDate")}</th>
+              <th className="px-3 py-3 text-left text-xs font-semibold tracking-wide">{t("outColItem")}</th>
+              <th className="px-3 py-3 text-center text-xs font-semibold tracking-wide whitespace-nowrap">{t("outColQty")}</th>
+              <th className="px-3 py-3 text-right text-xs font-semibold tracking-wide whitespace-nowrap">{t("inColAmount")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -178,11 +178,11 @@ export function ShipmentTable({
               </tr>
             ) : (
               usageRows.map((u, idx) => (
-                <tr key={idx} className="hover:bg-primary/5 transition-colors">
-                  <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{u.date}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground">{u.item}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{u.qty.toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{(u.amount || 0).toLocaleString()}</td>
+                <tr key={idx} className="transition-colors odd:bg-muted/20 hover:bg-primary/5">
+                  <td className="px-3 py-3 text-center text-card-foreground whitespace-nowrap tabular-nums">{u.date}</td>
+                  <td className="px-3 py-3 text-left leading-snug text-card-foreground">{u.item}</td>
+                  <td className="px-3 py-3 text-center font-medium tabular-nums text-card-foreground">{u.qty.toLocaleString()}</td>
+                  <td className="px-3 py-3 text-right text-base font-semibold tabular-nums text-primary">{(u.amount || 0).toLocaleString()}</td>
                 </tr>
               ))
             )}
@@ -266,7 +266,7 @@ export function ShipmentTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full table-fixed border-collapse text-xs">
+      <table className="w-full table-fixed border-collapse text-xs sm:text-[13px]">
         <colgroup>
           <col style={{ width: "3%" }} />
           <col style={{ width: "8%" }} />
@@ -282,7 +282,7 @@ export function ShipmentTable({
         </colgroup>
         <thead>
           <tr className="bg-[#1E293B] text-white">
-            <th className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
+            <th className="px-2 py-2.5 text-center sm:px-2.5 sm:py-3">
               <input
                 type="checkbox"
                 checked={rows.length > 0 && selectedIndices.size === rows.length}
@@ -290,32 +290,32 @@ export function ShipmentTable({
                 className="h-3.5 w-3.5 rounded border-[#1E293B] accent-[#3B82F6] cursor-pointer"
               />
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("orderColDate")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("orderColDeliveryDate")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("outColInvNo")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("outColOrderType")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("outColOutboundType")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("outColPhoto")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("outColStore")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight sm:px-2 sm:py-2.5 sm:text-xs">{t("outColItem")}</th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide sm:px-2.5 sm:py-3 sm:text-xs">{t("outColItem")}</th>
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("outColQty")}
             </th>
-            <th className="px-1.5 py-2 text-center text-[10px] font-semibold leading-tight whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
               {t("inColAmount")}
             </th>
           </tr>
@@ -461,7 +461,7 @@ function TableRow({
           isSelected && "bg-primary/5"
         )}
       >
-        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
+        <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">
           <input
             type="checkbox"
             checked={isSelected}
@@ -469,20 +469,20 @@ function TableRow({
             className="h-3.5 w-3.5 rounded border-gray-300 accent-[#3B82F6] cursor-pointer"
           />
         </td>
-        <td className="px-1.5 py-2 text-center text-[10px] text-card-foreground whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+        <td className="px-2 py-2.5 text-center text-[11px] leading-snug text-card-foreground whitespace-nowrap tabular-nums sm:px-2.5 sm:py-3 sm:text-xs">
           {row.orderDate}
         </td>
-        <td className="px-1.5 py-2 text-center text-[10px] text-card-foreground whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-xs">
+        <td className="px-2 py-2.5 text-center text-[11px] leading-snug text-card-foreground whitespace-nowrap tabular-nums sm:px-2.5 sm:py-3 sm:text-xs">
           {row.deliveryDate || "-"}
         </td>
-        <td className="px-1.5 py-2 text-center font-mono text-[10px] text-card-foreground whitespace-nowrap sm:px-2 sm:py-2.5 sm:text-[11px]">
+        <td className="px-2 py-2.5 text-center font-mono text-[11px] leading-snug text-card-foreground whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
           {row.invoiceNo}
         </td>
-        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
+        <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">
           {orderBadge ? (
             <span
               className={cn(
-                "inline-flex max-w-full items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold leading-tight whitespace-nowrap sm:px-1.5 sm:text-[10px]",
+                "inline-flex max-w-full items-center justify-center rounded-md px-1.5 py-1 text-[10px] font-semibold leading-tight whitespace-nowrap sm:text-[11px]",
                 statusStyles[orderBadge]
               )}
             >
@@ -492,11 +492,11 @@ function TableRow({
             <span className="text-muted-foreground">-</span>
           )}
         </td>
-        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
+        <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">
           {outboundBadge ? (
             <span
               className={cn(
-                "inline-flex max-w-full items-center justify-center rounded px-1 py-0.5 text-[9px] font-semibold leading-tight whitespace-nowrap sm:px-1.5 sm:text-[10px]",
+                "inline-flex max-w-full items-center justify-center rounded-md px-1.5 py-1 text-[10px] font-semibold leading-tight whitespace-nowrap sm:text-[11px]",
                 statusStyles[outboundBadge]
               )}
             >
@@ -506,7 +506,7 @@ function TableRow({
             <span className="text-muted-foreground">-</span>
           )}
         </td>
-        <td className="px-1.5 py-2 text-center sm:px-2 sm:py-2.5">
+        <td className="px-2 py-2.5 text-center align-middle sm:px-2.5 sm:py-3">
           <div className="flex items-center justify-center gap-1">
             {row.orderRowId && row.type === "Outbound" ? (
               <button
@@ -522,15 +522,15 @@ function TableRow({
             )}
           </div>
         </td>
-        <td className="max-w-0 px-1.5 py-2 text-center text-[10px] font-medium text-card-foreground sm:px-2 sm:py-2.5 sm:text-xs">
-          <div className="flex flex-col items-center gap-1">
-            <span className="truncate" title={row.target}>
+        <td className="max-w-0 px-2 py-2.5 text-center text-[11px] font-medium leading-snug text-card-foreground sm:px-2.5 sm:py-3 sm:text-xs">
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="line-clamp-2 max-w-full" title={row.target}>
               {row.target}
             </span>
             {storeTargetsSet.size > 0 && (
               <span
                 className={cn(
-                  "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium leading-none",
                   storeTargetsSet.has(row.target)
                     ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                     : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
@@ -547,48 +547,48 @@ function TableRow({
                 <button
                   type="button"
                   onClick={() => onForceReceived(row.orderDate, row.target)}
-                  className="mt-1 inline-flex items-center rounded border border-primary bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20"
+                  className="mt-0.5 inline-flex items-center rounded-md border border-primary bg-primary/10 px-2.5 py-1.5 text-[10px] font-medium leading-none text-primary hover:bg-primary/20"
                 >
                   {t("outForceReceived")}
                 </button>
               )}
           </div>
         </td>
-        <td className="max-w-0 px-1.5 py-2 text-white sm:px-2 sm:py-2.5">
-          <div className="flex min-w-0 items-center gap-1">
+        <td className="max-w-0 px-2 py-2.5 sm:px-2.5 sm:py-3">
+          <div className="flex min-w-0 items-start gap-1.5">
             {hasDetails && (
               <button
                 type="button"
                 onClick={onToggleExpand}
-                className="shrink-0 rounded p-0.5 text-primary transition-colors hover:bg-accent"
+                className="mt-0.5 shrink-0 rounded-md p-0.5 text-primary transition-colors hover:bg-accent"
               >
                 {isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-4 w-4" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-4 w-4" />
                 )}
               </button>
             )}
-            {!hasDetails && <span className="inline-block w-[18px] shrink-0" />}
-            <span className="min-w-0 truncate text-left text-[10px] text-card-foreground sm:text-xs" title={row.itemsSummary}>
+            {!hasDetails && <span className="inline-block w-5 shrink-0" />}
+            <span className="min-w-0 text-left text-[11px] leading-snug text-card-foreground sm:text-xs" title={row.itemsSummary}>
               {row.itemsSummary}
             </span>
           </div>
         </td>
-        <td className="px-1.5 py-2 text-center text-[10px] font-medium tabular-nums text-card-foreground sm:px-2 sm:py-2.5 sm:text-xs">
+        <td className="px-2 py-2.5 text-center text-[11px] font-medium tabular-nums text-card-foreground sm:px-2.5 sm:py-3 sm:text-xs">
           {row.totalQty.toLocaleString()}
         </td>
-        <td className="px-1.5 py-2 text-right text-[10px] font-bold tabular-nums text-primary sm:px-2 sm:py-2.5 sm:text-xs">
+        <td className="px-2 py-2.5 text-right text-[11px] font-semibold tabular-nums text-primary sm:px-2.5 sm:py-3 sm:text-sm">
           {row.totalAmt.toLocaleString()}
         </td>
       </tr>
       {isExpanded && hasDetails && (
         <tr>
           <td colSpan={11} className="px-0 py-0">
-            <div className="mx-2 my-1.5 overflow-x-auto rounded border border-border bg-muted/30">
+            <div className="mx-3 my-3 overflow-x-auto rounded-lg border border-border/80 bg-muted/40 shadow-sm">
               <table
                 className={cn(
-                  "max-w-full table-fixed border-collapse text-[10px] leading-tight sm:text-[11px] sm:leading-snug",
+                  "max-w-full table-fixed border-collapse text-xs leading-normal sm:text-[13px] sm:leading-normal",
                   allowPriceEdit ? "w-[96%]" : "w-[97%]"
                 )}
               >
@@ -619,9 +619,9 @@ function TableRow({
                   )}
                 </colgroup>
                 <thead>
-                  <tr className="bg-muted/50">
+                  <tr className="border-b border-border bg-muted/70">
                     <th
-                      className="px-1 py-1 text-center font-semibold text-card-foreground cursor-pointer hover:bg-muted/70 select-none"
+                      className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-card-foreground cursor-pointer hover:bg-muted/90 select-none sm:py-4 sm:text-[13px]"
                       onClick={toggleCodeSort}
                       title={t("outColCode") || "코드 (클릭 시 정렬)"}
                     >
@@ -629,17 +629,17 @@ function TableRow({
                       {codeSort === "asc" && "↑"}
                       {codeSort === "desc" && "↓"}
                     </th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outColStatus") || "상태"}</th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("spec")}</th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outWhWarehouseCol") || "출고지"}</th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("orderColDeliveryDate") || "배송일자"}</th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
-                    <th className="px-1 py-1 text-center font-semibold text-card-foreground">{t("inColAmount")}</th>
+                    <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColItem")}</th>
+                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColStatus") || "상태"}</th>
+                    <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("spec")}</th>
+                    <th className="px-2.5 py-3.5 text-left text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("outWhWarehouseCol") || "출고지"}</th>
+                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-muted-foreground sm:py-4 sm:text-[13px]">{t("orderColDeliveryDate") || "배송일자"}</th>
+                    <th className="px-2 py-3.5 text-center text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("outColQty")}</th>
+                    <th className="px-2 py-3.5 text-right text-xs font-semibold tracking-wide text-card-foreground sm:py-4 sm:text-[13px]">{t("inColAmount")}</th>
                     {allowPriceEdit ? (
                       <th
                         className={cn(
-                          "sticky right-0 z-[2] min-w-[36px] border-l border-border/60 bg-muted/95 px-0.5 py-1 text-center font-semibold text-card-foreground shadow-[-5px_0_6px_-3px_rgba(0,0,0,0.12)] backdrop-blur-[1px]"
+                          "sticky right-0 z-[2] min-w-[40px] border-l border-border/60 bg-muted px-1 py-3.5 text-center text-xs font-semibold text-card-foreground shadow-[-6px_0_8px_-4px_rgba(0,0,0,0.1)] backdrop-blur-[1px] sm:py-4 sm:text-[13px]"
                         )}
                       >
                         {t("outColEdit")}
@@ -647,30 +647,30 @@ function TableRow({
                     ) : null}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-border/80">
                   {sortedItems.map((d, i) => (
                     <tr
                       key={i}
                       className={cn(
-                        "group transition-colors hover:bg-primary/5",
-                        d.isUnreceived && "bg-red-50 dark:bg-red-950/20"
+                        "group transition-colors odd:bg-background/40 even:bg-muted/25 hover:bg-primary/[0.06]",
+                        d.isUnreceived && "bg-red-50 odd:bg-red-50 even:bg-red-50/90 dark:bg-red-950/20 dark:odd:bg-red-950/25 dark:even:bg-red-950/15"
                       )}
                     >
-                      <td className="max-w-0 px-1 py-1 text-center font-mono text-muted-foreground">
+                      <td className="max-w-0 px-2.5 py-3.5 text-left align-middle font-mono text-xs text-muted-foreground sm:py-4 sm:text-[13px]">
                         <span className="block truncate" title={d.code || ""}>
                           {d.code || "-"}
                         </span>
                       </td>
-                      <td className="max-w-0 px-1 py-1 text-center text-card-foreground">
-                        <span className="block truncate" title={d.name}>
+                      <td className="max-w-0 px-2.5 py-3.5 text-left align-middle text-sm font-medium leading-normal text-card-foreground sm:py-4">
+                        <span className="line-clamp-2" title={d.name}>
                           {d.name}
                         </span>
                       </td>
-                      <td className="px-0.5 py-1 text-center">
+                      <td className="px-2 py-3.5 text-center align-middle sm:py-4">
                         {d.isUnreceived ? (
                           <span
                             className={cn(
-                              "inline-flex max-w-full items-center justify-center rounded px-0.5 py-0.5 text-[9px] font-semibold leading-none sm:text-[10px]",
+                              "inline-flex max-w-full items-center justify-center rounded-md px-1.5 py-1 text-[10px] font-semibold leading-tight sm:text-xs",
                               unrecvBadgeStyle
                             )}
                           >
@@ -682,20 +682,20 @@ function TableRow({
                           <span className="text-muted-foreground">-</span>
                         )}
                       </td>
-                      <td className="max-w-0 px-1 py-1 text-center text-muted-foreground">
-                        <span className="block truncate" title={d.spec}>
+                      <td className="max-w-0 px-2.5 py-3.5 text-left align-middle text-xs text-muted-foreground sm:py-4 sm:text-[13px]">
+                        <span className="line-clamp-2" title={d.spec}>
                           {d.spec}
                         </span>
                       </td>
-                      <td className="max-w-0 px-1 py-1 text-center text-muted-foreground">
-                        <span className="block truncate" title={d.outboundLocation}>
+                      <td className="max-w-0 px-2.5 py-3.5 text-left align-middle text-xs text-muted-foreground sm:py-4 sm:text-[13px]">
+                        <span className="line-clamp-2" title={d.outboundLocation}>
                           {d.outboundLocation || "-"}
                         </span>
                       </td>
-                      <td className="px-0.5 py-1 text-center text-muted-foreground whitespace-nowrap tabular-nums">
+                      <td className="px-2 py-3.5 text-center align-middle text-xs tabular-nums text-muted-foreground sm:py-4 sm:text-[13px]">
                         {(d.deliveryDate || "-").slice(0, 10)}
                       </td>
-                      <td className="px-0.5 py-1 text-center font-medium tabular-nums">
+                      <td className="px-2 py-3.5 text-center align-middle text-sm font-medium tabular-nums text-card-foreground sm:py-4">
                         {d.qtyStages && d.qtyStages.length >= 2 ? (
                           <span className="text-card-foreground">
                             {d.qtyStages.map((stage, j) => (
@@ -717,11 +717,11 @@ function TableRow({
                           <span className="text-card-foreground">{d.qty.toLocaleString()}</span>
                         )}
                       </td>
-                      <td className="px-0.5 py-1 text-right text-card-foreground tabular-nums">{d.amount.toLocaleString()}</td>
+                      <td className="px-2 py-3.5 text-right align-middle text-sm font-semibold tabular-nums text-card-foreground sm:py-4">{d.amount.toLocaleString()}</td>
                       {allowPriceEdit ? (
                         <td
                           className={cn(
-                            "sticky right-0 z-[1] min-w-[36px] border-l border-border/60 bg-muted px-0.5 py-1 text-center align-middle shadow-[-5px_0_6px_-3px_rgba(0,0,0,0.1)] group-hover:bg-muted"
+                            "sticky right-0 z-[1] min-w-[40px] border-l border-border/60 bg-muted/90 px-1 py-3.5 text-center align-middle shadow-[-6px_0_8px_-4px_rgba(0,0,0,0.08)] group-hover:bg-muted sm:py-4"
                           )}
                         >
                           {d.stockLogId != null && d.stockLogId > 0 ? (

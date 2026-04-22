@@ -50,6 +50,7 @@ export const GRID_CLASSES = {
 
 export type POSTileType =
   | "dine-in"
+  | "table-order"
   | "takeout"
   | "delivery"
   | "receipt"
@@ -110,6 +111,7 @@ export const POS_SUBMENUS: Record<"business" | "operations", POSSubMenuItem[]> =
 /** 주문: 매장/포장/배달 → 터미널. 관리: 매출→영수증→근태→영업관리(세부: 영업시작/마감)→시재관리(입금/출금/돈통)→운영관리(새로고침/로그아웃/설정) */
 export const DEFAULT_TILES: POSTile[] = [
   { id: "1", type: "dine-in", label: "매장 주문", labelEn: "Dine In", labelKey: "posOrderTypeDineIn", icon: "utensils", variant: "primary", size: "large", enabled: true, order: 1, group: "order" },
+  { id: "1b", type: "table-order", label: "테이블 오더", labelEn: "Table Order", labelKey: "posTableOrderMenu", icon: "layout-grid", variant: "accent", size: "medium", enabled: true, order: 1.5, group: "order" },
   { id: "2", type: "takeout", label: "포장", labelEn: "Takeout", labelKey: "posOrderTypeTakeout", icon: "package", variant: "primary", size: "medium", enabled: true, order: 2, group: "order" },
   { id: "3", type: "delivery", label: "배달", labelEn: "Delivery", labelKey: "posOrderTypeDelivery", icon: "truck", variant: "accent", size: "medium", enabled: true, order: 3, group: "order" },
   { id: "m1", type: "sales", label: "매출 관리", labelEn: "Sales", labelKey: "posSalesManage", icon: "bar-chart", variant: "default", size: "medium", enabled: true, order: 10, group: "other" },

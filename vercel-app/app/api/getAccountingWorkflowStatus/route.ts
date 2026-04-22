@@ -3,6 +3,9 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { workflowStoreScopeFromStoreTb } from '@/lib/accounting-ledger-store-filter'
 import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function parsePeriodType(v: unknown): 'monthly' | 'half_year' | 'annual' {
   const raw = String(v || '').trim().toLowerCase()
@@ -23,10 +26,36 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
+  const userRole = String(auth.role || '').trim()
   const yearMonth = String(searchParams.get('yearMonth') || '').trim().slice(0, 7)
   const periodType = parsePeriodType(searchParams.get('periodType'))
-  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
+  const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(String(auth.store || '').trim())
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  let storeFilter = requestedStoreFilter
+  if (!isOfficeLevel) {
+    if (!requestedStoreFilter || requestedStoreFilter === 'All') {
+      storeFilter = String(allowedStores[0] || '').trim()
+      if (!storeFilter) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
+      if (!allowed) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    }
+  }
   const storeScope = workflowStoreScopeFromStoreTb(storeFilter || 'All')
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
     return NextResponse.json({ error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })

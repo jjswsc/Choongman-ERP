@@ -2,16 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestFilter, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'any')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startDate = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
-  const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
-  const employeeFilter = String(searchParams.get('employeeFilter') || searchParams.get('name') || '').trim()
-  const employeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const userRole = String(auth.role || '').trim()
+  const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+  const queryStoreFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  const queryEmployeeFilter = String(searchParams.get('employeeFilter') || searchParams.get('name') || '').trim()
+  const queryEmployeeIdRaw = String(searchParams.get('employeeId') || '').trim()
+  const storeFilter = String(isScopedRole ? auth.store : queryStoreFilter || auth.store || '').trim()
+  const employeeFilter = String(isScopedRole ? auth.name : queryEmployeeFilter || auth.name || '').trim()
+  const employeeIdRaw = String(
+    isScopedRole ? auth.employeeId || '' : queryEmployeeIdRaw || auth.employeeId || ''
+  ).trim()
   const employeeId =
     employeeIdRaw && Number.isFinite(Number(employeeIdRaw)) ? Math.floor(Number(employeeIdRaw)) : 0
   const employeeCodeNorm = normalizeEmployeeCodeForMatch(

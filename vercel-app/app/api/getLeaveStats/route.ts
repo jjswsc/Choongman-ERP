@@ -10,6 +10,9 @@ import {
   leaveDateInYmdRange,
   assignLeaveRowToEmployeeForStats,
 } from '@/lib/leave-request-utils'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
 const LAKIJ_DAYS_PER_YEAR = 3
@@ -27,17 +30,37 @@ const EMP_STATS_MAX_ROWS = 100_000
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
 
   if (storeFilter === 'All' || storeFilter === '전체') storeFilter = ''
 
-  const isManager = userRole === 'manager'
-  if (isManager && userStore) storeFilter = userStore
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  if (!isOfficeLevel) {
+    if (!storeFilter) {
+      storeFilter = String(allowedStores[0] || '').trim()
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) {
+        return NextResponse.json([], { status: 403, headers })
+      }
+    }
+  }
 
   const periodStart = /^\d{4}-\d{2}-\d{2}$/.test(startStr) ? startStr : '1900-01-01'
   const periodEnd = /^\d{4}-\d{2}-\d{2}$/.test(endStr) ? endStr : '2999-12-31'

@@ -164,7 +164,7 @@ function buildPayrollEmailHtml(p: Record<string, unknown>, monthStr: string): st
   const yearMonth = formatMonthEn(monthStr)
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:560px;margin:0 auto;">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Inter','Pretendard','Noto Sans KR','Segoe UI',Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:560px;margin:0 auto;">
 <div style="padding:20px;">
 <h2 style="color:#0f172a;margin-bottom:8px;">Payroll Statement</h2>
 <p style="color:#64748b;margin-bottom:20px;">${yearMonth} - ${p.name || ''} (${p.store || ''})</p>

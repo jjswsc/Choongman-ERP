@@ -575,7 +575,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     const fullHtml = `
       <!DOCTYPE html>
       <html><head><title>${t('posSettlementReport') || 'POS 결산 리포트'} - ${storeLabel} - ${settleDate}</title>
-      <style>body{font-family:sans-serif;padding:20px;max-width:400px;margin:0 auto}table{width:100%;border-collapse:collapse}.r{text-align:right}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:8px;margin-top:8px}</style>
+      <style>body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;padding:20px;max-width:400px;margin:0 auto}table{width:100%;border-collapse:collapse}.r{text-align:right}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:8px;margin-top:8px}</style>
       </head><body>
       <h2>${t('posSettlementReport') || 'POS 결산 리포트'}</h2>
       <p><strong>${t('store') || '매장'}</strong>: ${storeLabel} &nbsp;|&nbsp; <strong>${t('posSettleDate') || '결산일'}</strong>: ${settleDate}</p>

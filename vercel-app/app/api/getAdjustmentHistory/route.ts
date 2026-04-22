@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
 /** 재고 조정 내역 조회 - stock_logs log_type=Adjustment. 매니저는 자기 매장만 */
 export async function GET(request: NextRequest) {
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
   const userStore = (auth?.store || '').trim()
 
   try {
+    const resolveVendorName = await createVendorNameResolver()
     const { searchParams } = new URL(request.url)
     const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
     const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
         item: row.item_name || '-',
         spec: specMap[row.item_code || ''] || '-',
         diff: Number(row.qty) || 0,
-        reason: row.vendor_target || '',
+        reason: resolveVendorName(String(row.vendor_target || '')),
       })
       if (list.length >= 300) break
     }

@@ -68,7 +68,7 @@ export function getKitchenSlipPaperCss(
     height: auto;
     margin: 0 auto;
     box-sizing: border-box;
-    font-family: sans-serif;
+    font-family: Inter, Pretendard, "Noto Sans KR", "Sukhumvit Set", "Noto Sans Thai", "Malgun Gothic", Arial, sans-serif;
     font-size: ${tp.body}px;
     padding: ${KITCHEN_SLIP_PADDING_MM.t}mm ${KITCHEN_SLIP_PADDING_MM.r}mm ${KITCHEN_SLIP_PADDING_MM.b}mm ${KITCHEN_SLIP_PADDING_MM.l}mm;
     -webkit-print-color-adjust: ${color};

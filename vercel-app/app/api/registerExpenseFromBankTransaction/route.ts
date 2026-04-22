@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { postExpenseAccrualJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { requireAuth } from '@/lib/verify-auth'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 type BankTxRow = { id?: number; account_id?: number; trans_date?: string; trans_type?: string; amount?: number }
@@ -11,15 +12,16 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
+  const authResult = await requireAuth(request, 'office')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    authResult.errorResponse.headers.set('Content-Type', 'application/json')
+    return authResult.errorResponse
+  }
 
   try {
     const body = await request.json()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
-    const userName = String(body.userName || body.user_name || '').trim()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) {
-      return NextResponse.json({ success: false, message: '본사 권한만 등록할 수 있습니다.' }, { status: 403, headers })
-    }
+    const userName = String(authResult.auth.name || body.userName || body.user_name || '').trim()
 
     const bankTransactionId = Number(body.bankTransactionId ?? body.bank_transaction_id ?? 0)
     const payeeCode = String(body.payeeCode || body.payee_code || body.vendorCode || body.vendor_code || '').trim()

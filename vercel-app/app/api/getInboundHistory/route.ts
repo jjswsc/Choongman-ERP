@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purchase-synthetic'
+import { escapeIlikePattern } from '@/lib/postgrest-ilike'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole } from '@/lib/permissions'
+import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
 /** 입고 내역 조회 - stock_logs log_type=Inbound (From HQ 제외) + 통장 매입 지급(품목 입고 없음) 보조 행 */
 export async function GET(request: NextRequest) {
@@ -9,11 +13,44 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const resolveVendorName = await createVendorNameResolver()
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
+    const authRole = String(auth.role || '').toLowerCase()
+    const isDirector = authRole.includes('director') || authRole.includes('ceo') || authRole.includes('hr')
+    const isOfficeLevel = isDirector || authRole.includes('officer') || isAccountingRole(authRole)
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(String(auth.store || '').trim())
+    if (!isOfficeLevel && allowedStores.length === 0) {
+      return NextResponse.json({ success: false, message: '매장 접근 권한이 없습니다.' }, { status: 403, headers })
+    }
+
     const { searchParams } = new URL(request.url)
     let startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
     let endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
     const vendorFilter = String(searchParams.get('vendorFilter') || searchParams.get('vendor') || '').trim()
-    const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+    const vendorSearch = String(searchParams.get('vendorSearch') || '').trim()
+    const itemSearch = String(searchParams.get('itemSearch') || searchParams.get('item') || '').trim()
+    const requestedStoreFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+    const isAllStoreFilter = !requestedStoreFilter || requestedStoreFilter === 'All' || requestedStoreFilter === '전체 매장'
+    let storeFilter = requestedStoreFilter
+    if (!isOfficeLevel) {
+      if (isAllStoreFilter) {
+        storeFilter = String(allowedStores[0] || '').trim()
+      } else {
+        const requestedAllowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
+        if (!requestedAllowed) {
+          return NextResponse.json({ success: false, message: '허용되지 않은 매장 접근입니다.' }, { status: 403, headers })
+        }
+      }
+    }
 
     if (!startStr || !endStr) {
       const now = new Date()
@@ -42,12 +79,31 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const locationFilter = 'log_type=eq.Inbound'
-    const logs = (await supabaseSelectFilter(
-      'stock_logs',
-      locationFilter,
-      { order: 'log_date.desc', limit: 800, select: 'log_date,location,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id' }
-    )) as {
+    const gteIso = `${startStr}T00:00:00.000`
+    const lteIso = `${endStr}T23:59:59.999`
+
+    const parts: string[] = [
+      'log_type=eq.Inbound',
+      `log_date=gte.${encodeURIComponent(gteIso)}`,
+      `log_date=lte.${encodeURIComponent(lteIso)}`,
+      `vendor_target=neq.${encodeURIComponent('From HQ')}`,
+    ]
+    const exactVendorRaw =
+      vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' ? vendorFilter : ''
+    const exactVendor = resolveVendorName(exactVendorRaw)
+    if (vendorSearch) {
+      const p = `%${escapeIlikePattern(vendorSearch)}%`
+      parts.push(`vendor_target=ilike.${encodeURIComponent(p)}`)
+    }
+    /** 품목 검색은 코드·로그 품목명·마스터 규격(spec) 모두 대상 — DB or 만으로는 spec 불가해 루프에서 필터 */
+    const stockFilter = parts.join('&')
+
+    const logs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
+      order: 'log_date.desc',
+      select: 'log_date,location,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id',
+      pageSize: 8000,
+      maxRows: 80000,
+    })) as {
       log_date?: string
       location?: string
       vendor_target?: string
@@ -56,12 +112,7 @@ export async function GET(request: NextRequest) {
       qty?: number
       unit_cost?: number | null
       inbound_batch_id?: number | null
-    }[] | null
-
-    const startD = new Date(startStr)
-    const endD = new Date(endStr)
-    startD.setHours(0, 0, 0, 0)
-    endD.setHours(23, 59, 59, 999)
+    }[]
 
     const list: {
       date: string
@@ -88,13 +139,19 @@ export async function GET(request: NextRequest) {
       }
       const rowDate = row.log_date ? new Date(row.log_date) : null
       if (!rowDate || isNaN(rowDate.getTime())) continue
-      if (rowDate < startD || rowDate > endD) continue
 
-      const rowVendor = String(row.vendor_target || '').trim()
-      if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' && rowVendor !== vendorFilter) continue
+      const rowVendor = resolveVendorName(String(row.vendor_target || '').trim())
+      if (exactVendor && rowVendor !== exactVendor) continue
 
       const code = String(row.item_code || '').trim()
       const info = itemMap[code] || { spec: '-', cost: 0, purchaseSource: 'hq' as const }
+      if (itemSearch) {
+        const q = itemSearch.trim().toLowerCase()
+        const nm = String(row.item_name || '-').toLowerCase()
+        const cd = code.toLowerCase()
+        const sp = String(info.spec || '').toLowerCase()
+        if (!cd.includes(q) && !nm.includes(q) && !sp.includes(q)) continue
+      }
       const qty = Number(row.qty) || 0
       const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
       list.push({
@@ -109,22 +166,34 @@ export async function GET(request: NextRequest) {
         inbound_batch_id: row.inbound_batch_id ?? undefined,
         row_kind: 'stock',
       })
-      if (list.length >= 300) break
     }
 
     try {
       const bankSynth = await fetchInboundBankPurchaseSyntheticRows({
         startStr,
         endStr,
-        storeFilter:
-          storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장' ? storeFilter : undefined,
-        vendorFilter: vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' ? vendorFilter : undefined,
+        storeFilter: storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장' ? storeFilter : undefined,
+        vendorFilter: undefined,
         maxRows: 120,
       })
       for (const b of bankSynth) {
+        if (itemSearch) {
+          const q = itemSearch.toLowerCase()
+          const hit =
+            (b.name || '').toLowerCase().includes(q) ||
+            (b.spec || '').toLowerCase().includes(q) ||
+            (b.vendor || '').toLowerCase().includes(q)
+          if (!hit) continue
+        }
+        if (!exactVendor && vendorSearch) {
+          const vs = vendorSearch.toLowerCase()
+          if (!(b.vendor || '').toLowerCase().includes(vs)) continue
+        }
+        const normalizedBankVendor = resolveVendorName(String(b.vendor || ''))
+        if (exactVendor && normalizedBankVendor !== exactVendor) continue
         list.push({
           date: b.date,
-          vendor: b.vendor,
+          vendor: normalizedBankVendor,
           name: b.name,
           spec: b.spec,
           qty: b.qty,
@@ -137,6 +206,12 @@ export async function GET(request: NextRequest) {
       }
     } catch (e) {
       console.error('getInboundHistory bank synthetic:', e)
+    }
+
+    if (exactVendor) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (resolveVendorName(String(list[i].vendor || '')) !== exactVendor) list.splice(i, 1)
+      }
     }
 
     list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))

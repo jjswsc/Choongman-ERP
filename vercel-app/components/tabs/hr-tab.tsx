@@ -367,7 +367,7 @@ export function HrTab() {
     const displayCompany = payrollData.companyName || companyName || "CHOONGMAN"
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("payMyTitle")} - ${payrollData.name}</title>
 <style>
-body{font-family:'Malgun Gothic',Arial,sans-serif;font-size:11pt;color:#1e293b;padding:24px;max-width:480px;margin:0 auto;}
+body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;font-size:11pt;color:#1e293b;padding:24px;max-width:480px;margin:0 auto;}
 h1{font-size:16pt;text-align:center;margin-bottom:4px;color:#0f172a;}
 .company{text-align:center;font-size:12pt;font-weight:600;margin-bottom:20px;color:#374151;}
 .meta{display:grid;grid-template-columns:80px 1fr;gap:4px 12px;margin-bottom:16px;font-size:10pt;}

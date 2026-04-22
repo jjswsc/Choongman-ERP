@@ -6,6 +6,9 @@ import {
   resolveClockInApprovalLate,
   shouldRecordAdjustment,
 } from '@/lib/attendance-adjustment-utils'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -14,11 +17,25 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Headers', 'Content-Type')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const id = body?.id != null ? Number(body.id) : NaN
     const decision = String(body?.decision || body?.status || '').trim()
-    const userStore = String(body?.userStore || '').trim()
-    const userRole = String(body?.userRole || '').toLowerCase()
+    const userStore = String(auth.store || '').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(userStore)
+    const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
     const optOtMinutes = body?.optOtMinutes != null ? Number(body.optOtMinutes) : null
     const optEarlyMinutes = body && 'optEarlyMinutes' in body ? Number(body.optEarlyMinutes) : undefined
     const optLateMinutes = body && 'optLateMinutes' in body && body.optLateMinutes != null ? Number(body.optLateMinutes) : null
@@ -43,8 +60,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isManager = userRole === 'manager'
-    if (isManager && userStore && String(rows[0].store_name || '').trim() !== userStore) {
+    const targetStore = String(rows[0].store_name || '').trim()
+    const isScopedRole = !isOfficeLevel && (userRole.includes('manager') || userRole.includes('franchisee'))
+    if (isScopedRole && targetStore) {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, targetStore))
+      if (!allowed) {
+        return NextResponse.json(
+          { success: false, message: '해당 매장의 근태만 승인할 수 있습니다.' },
+          { headers }
+        )
+      }
+    }
+    if (isScopedRole && !targetStore) {
       return NextResponse.json(
         { success: false, message: '해당 매장의 근태만 승인할 수 있습니다.' },
         { headers }
@@ -164,11 +191,15 @@ export async function POST(request: NextRequest) {
       })) as { id: number; store_name?: string; log_type?: string; late_min?: number }[]
       const inRow = inRows?.[0]
       if (inRow && String(inRow.log_type || '').trim() === '출근') {
-        if (isManager && userStore && String(inRow.store_name || '').trim() !== userStore) {
-          return NextResponse.json(
-            { success: false, message: '해당 매장의 근태만 승인할 수 있습니다.' },
-            { headers }
-          )
+        if (isScopedRole) {
+          const inStore = String(inRow.store_name || '').trim()
+          const inAllowed = allowedStores.some((s) => storesMatchForGradeLookup(s, inStore))
+          if (!inAllowed) {
+            return NextResponse.json(
+              { success: false, message: '해당 매장의 근태만 승인할 수 있습니다.' },
+              { headers }
+            )
+          }
         }
         const lm = waiveLate ? 0 : clampNonNegativeMinutes(Number(optLateMinutes))
         const beforeLateIn = Number(inRow.late_min) || 0

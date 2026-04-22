@@ -460,3 +460,13 @@ export function eventsByDateForMonth(
 }
 
 export const CALENDAR_LAYER_IDS: CalendarLayerId[] = ["campaign", "promo", "ad", "influencer", "material", "collab"]
+
+/** 달력 셀·표시 유형 토글·범례에서 동일하게 사용 */
+export const CALENDAR_LAYER_CHIP_CLASS: Record<CalendarLayerId, string> = {
+  campaign: "bg-violet-500/15 text-violet-800 border-violet-200 dark:text-violet-200 dark:border-violet-800",
+  promo: "bg-indigo-500/15 text-indigo-800 border-indigo-200 dark:text-indigo-200 dark:border-indigo-800",
+  ad: "bg-emerald-500/15 text-emerald-800 border-emerald-200 dark:text-emerald-200 dark:border-emerald-800",
+  influencer: "bg-amber-500/15 text-amber-900 border-amber-200 dark:text-amber-200 dark:border-amber-800",
+  material: "bg-rose-500/15 text-rose-800 border-rose-200 dark:text-rose-200 dark:border-rose-800",
+  collab: "bg-sky-500/15 text-sky-900 border-sky-200 dark:text-sky-200 dark:border-sky-800",
+}

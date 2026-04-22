@@ -10,6 +10,7 @@ import {
   fetchCampaignMetaForExpenseMemo,
   syncMarketingExpenseAccrual,
 } from '@/lib/marketing-expense-accrual-sync'
+import { requireAuth } from '@/lib/verify-auth'
 
 function parseNum(val: unknown): number {
   if (val == null || val === '') return 0
@@ -40,6 +41,11 @@ function isColumnSchemaError(e: unknown): boolean {
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(req, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
 
   try {
     const { searchParams } = new URL(req.url)
@@ -99,6 +105,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(req, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
 
   try {
     const body = (await req.json()) as {
@@ -124,8 +136,8 @@ export async function POST(req: NextRequest) {
     const platform = String(body.platform ?? '').trim()
     const editingId = body.id?.trim()
     const campaignId = String(body.campaignId ?? '').trim()
-    const userRole = String(body.userRole ?? body.user_role ?? '')
-    const userName = String(body.userName ?? body.user_name ?? '').trim()
+    const userRole = String(auth.role || '')
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
 
     if (!platform) {
       return NextResponse.json(

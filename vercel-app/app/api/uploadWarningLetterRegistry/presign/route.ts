@@ -33,7 +33,7 @@ function slugStore(s: string): string {
     .slice(0, 80) || 'unknown'
 }
 
-/** 독립 경고장 첨부 — 서명 URL 발급 후 클라이언트가 PUT 업로드 */
+/** 직접 등록 경고서 첨부 — 서명 URL 발급 후 클라이언트가 PUT 업로드 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

@@ -15,7 +15,7 @@ export default function DepreciationPage() {
             <Calculator className="h-4 w-4 text-primary" />
           </div>
           <h1 className="text-xl font-bold tracking-tight">
-            {t("adminDepreciation") || "감가상각 관리"}
+            {t("adminDepreciation") || "자산 관리"}
           </h1>
         </div>
         <DepreciationTab />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
   id?: number
@@ -45,12 +46,14 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
     const { searchParams } = new URL(request.url)
     const bankTransactionId = Number(searchParams.get('bankTransactionId') || 0)
-    const userRole = String(searchParams.get('userRole') || '').toLowerCase()
     const storeFilter = String(searchParams.get('storeFilter') || '').trim()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) return NextResponse.json({ success: true, list: [] }, { headers })
     if (!bankTransactionId) {
       return NextResponse.json({ success: false, message: '통장 거래 ID가 필요합니다.', list: [] }, { status: 400, headers })
     }

@@ -7,6 +7,8 @@ import {
   postExpenseAccrualJournal,
 } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { requireAuth } from '@/lib/verify-auth'
 
 type ExpenseAccrualRow = {
   id?: number
@@ -94,12 +96,13 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
-    const body = await request.json()
-    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
-    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) {
-      return NextResponse.json({ success: false, message: '본사 권한만 수정/삭제할 수 있습니다.' }, { status: 403, headers })
+    const authResult = await requireAuth(request, 'office')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
     }
+    const body = await request.json()
 
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0)
     const action = String(body.action || 'update').trim().toLowerCase() // update | delete
@@ -131,6 +134,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'delete') {
+      await deleteExpenseAccrualInputVatLedger(expenseAccrualId)
       await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
       await supabaseDeleteByFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`)
       await supabaseDeleteByFilter('expense_accruals', `id=eq.${expenseAccrualId}`)
@@ -264,6 +268,12 @@ export async function POST(request: NextRequest) {
         { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
         { status: 500, headers }
       )
+    }
+
+    try {
+      await syncExpenseAccrualInputVatLedger(expenseAccrualId)
+    } catch (vatLedgerErr) {
+      console.error('updateExpenseAccrual vat input ledger:', vatLedgerErr)
     }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })

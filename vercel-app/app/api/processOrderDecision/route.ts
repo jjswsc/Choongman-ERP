@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
+import { requireAuth } from '@/lib/verify-auth'
 
 const ALLOWED_DECISIONS = ['Approved', 'Rejected', 'Hold']
 
@@ -23,6 +24,14 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      authResult.errorResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const orderId = Number(body.orderId ?? body.row ?? body.orderRowId)
     const decision = String(body.decision ?? '').trim()
@@ -35,8 +44,8 @@ export async function POST(request: NextRequest) {
       if (firstDate) deliveryDate = String(firstDate).trim()
     }
     const rejectReason = body.rejectReason != null ? String(body.rejectReason).trim() : ''
-    const userRole = String(body.userRole ?? '').toLowerCase()
-    const processorName = String(body.processorName ?? body.userName ?? '본사').trim()
+    const userRole = String(auth.role || '').toLowerCase()
+    const processorName = String(auth.name || body.processorName || body.userName || '본사').trim()
     const updatedCart = Array.isArray(body.updatedCart) ? body.updatedCart : null
 
     if (userRole.includes('manager')) {

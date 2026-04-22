@@ -9,6 +9,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 type PayableListRow = {
   id?: number
@@ -65,21 +68,37 @@ async function getStoreToVendorMap(): Promise<Map<string, { code: string; name: 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const auth = authResult.auth
   const { searchParams } = new URL(request.url)
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const vendorFilter = searchParams.get('vendorFilter') || searchParams.get('vendor') || ''
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = String(auth.store || '').trim()
+  const userRole = String(auth.role || '').toLowerCase()
+  const allowedStores =
+    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(userStore)
 
   // 본사/회계직원: 매장별 선택 가능. 매니저/가맹점주: receivable만 자기 매장, payable 조회 불가
-  const canSelectStores = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
-    || userRole.includes('accounting')
-    || userRole.includes('회계')
+  const canSelectStores = isOfficeRole(userRole) || isAccountingRole(userRole)
   const isManager = (userRole.includes('manager') || userRole.includes('franchisee')) && !canSelectStores
   if (type === 'receivable' && isManager && userStore) {
-    storeFilter = userStore
+    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
+      storeFilter = userStore
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
+      if (!allowed) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    }
   }
   if (type === 'payable' && isManager) {
     return NextResponse.json({ type: 'payable', list: [] }, { headers })

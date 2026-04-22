@@ -14,6 +14,7 @@ export function TaxFilingWhtTab(props: Props) {
     <AdminAccountingCompliance
       initialTab="summary"
       initialPp30SubView="wht"
+      pp30Mode="wht_only"
       hideTabBar
       filingYearMonth={props.filingYearMonth}
       onFilingYearMonthChange={props.onFilingYearMonthChange}

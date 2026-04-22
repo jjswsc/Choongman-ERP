@@ -1,30 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
-import { verifyToken } from '@/lib/jwt-auth'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
-
-/** Bearer JWT 우선(로그인 시 정규화된 role), 없으면 쿼리 파라미터 — 세션과 URL 불일치로 빈 목록 나오는 경우 방지 */
-async function resolveCaller(
-  request: NextRequest,
-  searchParams: URLSearchParams
-): Promise<{ role: string; store: string }> {
-  const auth = request.headers.get('authorization') || ''
-  const m = auth.match(/^Bearer\s+(\S+)/i)
-  if (m?.[1]) {
-    const payload = await verifyToken(m[1].trim())
-    if (payload?.role != null || payload?.store != null) {
-      return {
-        role: String(payload?.role ?? '').trim(),
-        store: String(payload?.store ?? '').trim(),
-      }
-    }
-  }
-  return {
-    role: String(searchParams.get('userRole') || '').trim(),
-    store: String(searchParams.get('userStore') || '').trim(),
-  }
-}
+import { requireAuth } from '@/lib/verify-auth'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function canViewExpensePaymentPlan(role: string): boolean {
   return (
@@ -123,12 +102,24 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const { searchParams } = new URL(request.url)
     const startStr = String(searchParams.get('startStr') || '').slice(0, 10)
     const endStr = String(searchParams.get('endStr') || '').slice(0, 10)
     const payeeFilter = String(searchParams.get('payeeFilter') || '').trim().toLowerCase()
     const vendorFilter = String(searchParams.get('vendorFilter') || '').trim().toLowerCase()
-    const { role: userRole, store: callerStore } = await resolveCaller(request, searchParams)
+    const userRole = String(auth.role || '').trim()
+    const callerStore = String(auth.store || '').trim()
+    const allowedStores =
+      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+        .concat(callerStore)
     if (!canViewExpensePaymentPlan(userRole)) {
       return NextResponse.json(
         {
@@ -141,8 +132,8 @@ export async function GET(request: NextRequest) {
         { headers }
       )
     }
-    const restrictToStore =
-      !callerSeesAllAccrualStores(userRole) ? String(callerStore || '').trim() : ''
+    const canSeeAllStores = callerSeesAllAccrualStores(userRole)
+    const scopedAllowedStores = canSeeAllStores ? [] : allowedStores
 
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'id=gt.0', {
@@ -167,9 +158,10 @@ export async function GET(request: NextRequest) {
 
     const mappedAccrualPlans = (accrualRows || [])
       .filter((r) => {
-        if (restrictToStore) {
+        if (scopedAllowedStores.length > 0) {
           const sn = String(r.store_name || '').trim()
-          if (sn !== restrictToStore) return false
+          const storeAllowed = scopedAllowedStores.some((s) => storesMatchForGradeLookup(s, sn))
+          if (!storeAllowed) return false
         }
         if ((startStr || endStr) && !accrualMatchesPlanDateRange(r, startStr, endStr)) return false
         if (payeeFilter || vendorFilter) {

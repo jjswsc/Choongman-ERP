@@ -3,13 +3,20 @@ import { supabaseUpsert } from '@/lib/supabase-server'
 import { assertCanWriteAccountingCompliance } from '@/lib/accounting-auth'
 import { normalizeResponsibilities, type ThaiFilingResponsibility, type ThaiFilingType } from '@/lib/thai-filing-scope'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const jwtUserRole = String(authResult.auth.role || '').trim()
   try {
     const body = await request.json().catch(() => ({}))
-    const userRole = String(body.userRole || '').trim()
+    const userRole = jwtUserRole
     assertCanWriteAccountingCompliance(userRole)
 
     const raw = body.responsibilities as Record<string, unknown> | undefined
@@ -43,10 +50,10 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     if (e instanceof Error && e.message === 'ACCOUNTING_FORBIDDEN') {
       try {
-        const body = await request.json().catch(() => ({}))
+        await request.json().catch(() => ({}))
         await writeAccountingComplianceAudit({
           actionType: 'accounting_filing_preferences_save',
-          userRole: String(body.userRole || '').trim(),
+          userRole: jwtUserRole,
           actor: null,
           decision: 'deny',
           reasonCode: 'FORBIDDEN_WRITE',

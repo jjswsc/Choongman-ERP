@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { canApproveExpenseAccrual } from '@/lib/expense-accrual-approve-policy'
+import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { requireAuth } from '@/lib/verify-auth'
 
 type ExpenseAccrualRow = {
   id?: number
@@ -14,12 +16,19 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const authResult = await requireAuth(request, 'any')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0)
     const action = String(body.action || '').trim().toLowerCase() // approve | reject
     const approvalNote = String(body.approvalNote || body.approval_note || '').trim()
-    const userRole = String(body.userRole || body.user_role || '').trim()
-    const userName = String(body.userName || body.user_name || '').trim()
+    const userRole = String(auth.role || '').trim()
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
     if (!expenseAccrualId) {
       return NextResponse.json({ success: false, message: '지급 예정 ID가 필요합니다.' }, { status: 400, headers })
     }
@@ -63,6 +72,11 @@ export async function POST(request: NextRequest) {
         rejection_note: null,
         updated_at: new Date().toISOString(),
       })
+      try {
+        await syncExpenseAccrualInputVatLedger(expenseAccrualId)
+      } catch (e) {
+        console.error('approveExpenseAccrual vat input ledger:', e)
+      }
       return NextResponse.json({ success: true, message: '승인되었습니다.' }, { headers })
     }
 
@@ -77,6 +91,11 @@ export async function POST(request: NextRequest) {
       rejection_note: approvalNote || null,
       updated_at: new Date().toISOString(),
     })
+    try {
+      await syncExpenseAccrualInputVatLedger(expenseAccrualId)
+    } catch (e) {
+      console.error('rejectExpenseAccrual vat input ledger:', e)
+    }
     return NextResponse.json({ success: true, message: '반려되었습니다.' }, { headers })
   } catch (e) {
     console.error('approveExpenseAccrual:', e)

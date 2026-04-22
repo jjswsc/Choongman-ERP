@@ -19,10 +19,9 @@ export async function POST(request: NextRequest) {
       spec?: string
       diffQty?: number
       memo?: string
-      userRole?: string
     }
 
-    const userRole = String(auth.role || body.userRole || '').toLowerCase()
+    const userRole = String(auth.role || '').toLowerCase()
     const userStore = (auth.store || '').trim()
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
     const isManager = userRole.includes('manager') || userRole.includes('franchisee')

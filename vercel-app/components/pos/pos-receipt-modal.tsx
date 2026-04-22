@@ -346,7 +346,7 @@ export function PosReceiptModal({
         <head>
           <title>${t('posReceipt') || '영수증'}</title>
           <style>
-            ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
+            ${getPosPaperBaseCss("'Inter', 'Pretendard', 'Noto Sans KR', 'Sukhumvit Set', 'Noto Sans Thai', 'Malgun Gothic', Arial, sans-serif", 12)}
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; -webkit-print-color-adjust: economy; print-color-adjust: economy; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; color: #000; break-inside: avoid; page-break-inside: avoid; }
             .receipt-brand-wrap { text-align: center; }
@@ -575,7 +575,7 @@ export function PosReceiptModal({
             <Button
               type="button"
               className="w-full sm:w-auto"
-              onClick={() => void handlePrintReceipt(false)}
+              onClick={() => void handlePrintReceipt(true)}
             >
               {tr('posPrintReceiptOnly', '영수증 인쇄')}
             </Button>
@@ -584,7 +584,7 @@ export function PosReceiptModal({
                 type="button"
                 variant="outline"
                 className="w-full sm:w-auto"
-                onClick={() => void handlePrintKitchenSlip(false)}
+                onClick={() => void handlePrintKitchenSlip(true)}
               >
                 {tr('posPrintKitchenOnly', '주방 주문서 인쇄')}
               </Button>

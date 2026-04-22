@@ -76,8 +76,11 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          "var(--font-inter)",
           "var(--font-pretendard)",
-          '"Noto Sans Thai"',
+          '"Sukhumvit Set"',
+          "var(--font-noto-sans-thai)",
+          '"Apple SD Gothic Neo"',
           "system-ui",
           "sans-serif",
         ],

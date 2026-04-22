@@ -571,9 +571,21 @@ export async function postDepreciationJournal(params: {
   assetName?: string
   storeName?: string
   memo?: string
+  depreciationExpenseAccountCode?: string | null
+  accumulatedDepreciationAccountCode?: string | null
 }) {
   const amount = Math.abs(Number(params.amount) || 0)
   if (amount <= 0) return null
+  const depExpense = accountLine(
+    String(params.depreciationExpenseAccountCode || '')
+      .trim()
+      .toUpperCase() || '5500'
+  )
+  const accumDep = accountLine(
+    String(params.accumulatedDepreciationAccountCode || '')
+      .trim()
+      .toUpperCase() || '1470'
+  )
   return postJournalEntry({
     accountingDate: params.accountingDate,
     sourceType: 'depreciation',
@@ -581,8 +593,8 @@ export async function postDepreciationJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || `감가상각 ${params.assetName || ''}`.trim(),
     lines: [
-      { ...GL.depreciationExpense(), side: 'debit', amount },
-      { ...GL.accumulatedDepreciation(), side: 'credit', amount },
+      { ...depExpense, side: 'debit', amount },
+      { ...accumDep, side: 'credit', amount },
     ],
   })
 }

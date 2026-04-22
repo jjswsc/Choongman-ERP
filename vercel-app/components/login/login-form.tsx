@@ -11,7 +11,6 @@ import {
   type FormEvent,
 } from "react"
 import Image from "next/image"
-import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Select,
@@ -653,7 +652,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "모바일",
-      viewProducts: "제품 안내 보기",
       offlineResumeStore: "매장",
       offlineResumeStaff: "담당자",
       offlineResumeSyncNote:
@@ -680,7 +678,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP (Admin)",
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
-      viewProducts: "Product guide",
       offlineResumeStore: "Store",
       offlineResumeStaff: "Staff",
       offlineResumeSyncNote:
@@ -707,7 +704,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "มือถือ",
-      viewProducts: "ดูข้อมูลสินค้า",
       offlineResumeStore: "สาขา",
       offlineResumeStaff: "พนักงาน",
       offlineResumeSyncNote:
@@ -734,7 +730,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "မိုဘိုင်း",
-      viewProducts: "ထုတ်ကုန်အချက်အလက်ကြည့်ရန်",
       offlineResumeStore: "ဆိုင်",
       offlineResumeStaff: "တာဝန်ခံ",
       offlineResumeSyncNote:
@@ -761,7 +756,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "ມືຖື",
-      viewProducts: "ເບິ່ງຂໍ້ມູນສິນຄ້າ",
       offlineResumeStore: "ສາຂາ",
       offlineResumeStaff: "ຜູ້ຮັບຜິດຊອບ",
       offlineResumeSyncNote:
@@ -829,12 +823,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   </button>
                 ))}
               </div>
-              <Link
-                href="/products"
-                className="block w-full rounded-lg bg-gradient-to-b from-orange-500 to-orange-600 px-3 py-2.5 text-center text-xs font-semibold text-white shadow-sm shadow-orange-900/25 transition duration-200 hover:from-orange-400 hover:to-orange-500 hover:shadow-md hover:shadow-orange-900/30"
-              >
-                {t.viewProducts}
-              </Link>
             </div>
           ) : null}
 

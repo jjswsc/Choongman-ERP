@@ -3,6 +3,9 @@ import { supabaseInsert } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { requireAuth } from '@/lib/verify-auth'
 import {
   upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
@@ -15,7 +18,27 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) {
+      authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      authResult.errorResponse.headers.set('Content-Type', 'application/json')
+      return authResult.errorResponse
+    }
+    const auth = authResult.auth
     const body = await request.json()
+    const userRole = String(auth.role || '').trim()
+    const userStore = String(auth.store || '').trim()
+    const allowedStores = Array.from(
+      new Set(
+        [...(Array.isArray(auth.allowedStores) ? auth.allowedStores : []), userStore]
+          .map((s) => String(s || '').trim())
+          .filter(Boolean)
+      )
+    )
+    const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
+    if (isScopedRole && allowedStores.length === 0) {
+      return NextResponse.json({ success: false, message: '접근 가능한 매장 정보가 없습니다.' }, { status: 403, headers })
+    }
     const idempotencyKey = String(
       request.headers.get('x-idempotency-key') ??
         body.idempotencyKey ??
@@ -47,14 +70,30 @@ export async function POST(request: NextRequest) {
     const amount = Number(body.amount) || 0
     const memo = String(body.memo || '').trim()
     const note = String(body.note || '').trim()
-    const store = String(body.store || '').trim()
-    const userName = String(body.userName || body.user_name || '').trim()
+    const requestedStore = String(body.store || '').trim()
+    const store = requestedStore || userStore
+    if (
+      isScopedRole &&
+      store &&
+      !allowedStores.some((s) => storesMatchForGradeLookup(s, store))
+    ) {
+      return NextResponse.json({ success: false, message: '허용되지 않은 매장입니다.' }, { status: 403, headers })
+    }
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const category = String(body.category || 'expense').toLowerCase()
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const salesDate = body.salesDate ?? body.sales_date
     const expenseDate = body.expenseDate ?? body.expense_date
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const storeNameForReceivable = String(body.storeName || body.store_name || '').trim()
+    if (
+      isScopedRole &&
+      category === 'receivable_receive' &&
+      storeNameForReceivable &&
+      !allowedStores.some((s) => storesMatchForGradeLookup(s, storeNameForReceivable))
+    ) {
+      return NextResponse.json({ success: false, message: '허용되지 않은 미수금 매장입니다.' }, { status: 403, headers })
+    }
     const refType = body.refType ?? body.ref_type
     const refId = body.refId ?? body.ref_id
 

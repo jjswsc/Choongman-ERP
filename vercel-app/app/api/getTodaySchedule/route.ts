@@ -5,7 +5,12 @@ import {
   employeeStorePostgrestVariantsFilter,
 } from '@/lib/attendance-utils'
 import { canonicalAreaFromText, primaryAreaForDisplay } from '@/lib/schedule-area'
-import { scheduleJoinMetaFromRow, type EmpRowForRealtimeJoin } from '@/lib/today-realtime-join'
+import {
+  canonicalStoreSegmentForJoinKey,
+  scheduleJoinMetaFromRow,
+  type EmpRowForRealtimeJoin,
+} from '@/lib/today-realtime-join'
+import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -27,6 +32,38 @@ function formatTime(v: string | null | undefined): string {
     }
   }
   return s.length >= 5 && s.charAt(2) === ':' ? s.substring(0, 5) : s
+}
+
+type TodayScheduleOutRow = {
+  date: string
+  store: string
+  name: string
+  nick: string
+  pIn: string
+  pOut: string
+  pBS: string
+  pBE: string
+  area: string
+  plan_in_prev_day: boolean
+  leaveType?: string
+  joinKey: string
+  employeeCode?: string
+  employeeId?: number
+}
+
+function todayScheduleMergeKey(row: TodayScheduleOutRow): string {
+  const day = String(row.date || '').trim().slice(0, 10)
+  const storeSeg = canonicalStoreSegmentForJoinKey(String(row.store || ''))
+  const code = normalizeEmployeeCodeForMatch(String(row.employeeCode ?? ''))
+  if (code) return `${day}|${storeSeg}|c:${code}`
+  const idNum =
+    row.employeeId != null && Number.isFinite(Number(row.employeeId))
+      ? Math.floor(Number(row.employeeId))
+      : 0
+  if (idNum > 0) return `${day}|${storeSeg}|id:${idNum}`
+  const rawName = String(row.name || row.nick || '').trim()
+  const normName = normalizeEmployeeNameForGradeMatch(rawName)
+  return `${day}|${storeSeg}|n:${normName || rawName}`
 }
 
 export async function GET(request: NextRequest) {
@@ -148,21 +185,7 @@ export async function GET(request: NextRequest) {
       leaveFilter,
       { order: 'leave_date.asc', limit: 100, select: 'store,name,leave_date,type' }
     )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
-    const leaveMerged: {
-      date: string
-      store: string
-      name: string
-      nick: string
-      pIn: string
-      pOut: string
-      pBS: string
-      pBE: string
-      area: string
-      plan_in_prev_day: boolean
-      leaveType: string
-      joinKey: string
-      employeeCode?: string
-    }[] = []
+    const leaveMerged: TodayScheduleOutRow[] = []
     for (const lr of leaveRows || []) {
       const storeVal = String(lr.store || '').trim()
       const nameVal = String(lr.name || '').trim()
@@ -188,7 +211,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const list = (scheduleRows || []).map((r) => {
+    const list: TodayScheduleOutRow[] = (scheduleRows || []).map((r) => {
       const st = String(r.store_name || '').trim()
       const nm = String(r.name || '').trim()
       const area = primaryAreaForDisplay(r.memo, storeNameToJob[st + '|' + nm])
@@ -214,7 +237,39 @@ export async function GET(request: NextRequest) {
     })
 
     const merged = [...list, ...leaveMerged]
-    return NextResponse.json(merged, { headers })
+    const dedup: Record<string, TodayScheduleOutRow> = {}
+    for (const row of merged) {
+      const k = todayScheduleMergeKey(row)
+      const prev = dedup[k]
+      if (!prev) {
+        dedup[k] = row
+        continue
+      }
+      const incomingIsLeave = !!row.leaveType
+      const prevIsLeave = !!prev.leaveType
+      if (incomingIsLeave && !prevIsLeave) {
+        dedup[k] = row
+        continue
+      }
+      if (!incomingIsLeave && prevIsLeave) {
+        continue
+      }
+      dedup[k] = {
+        ...prev,
+        ...row,
+        joinKey: row.joinKey || prev.joinKey,
+        employeeCode: row.employeeCode || prev.employeeCode,
+        employeeId: row.employeeId || prev.employeeId,
+        leaveType: row.leaveType || prev.leaveType,
+      }
+    }
+    const deduped = Object.values(dedup).sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date)
+      if (a.store !== b.store) return a.store.localeCompare(b.store)
+      if (!!a.leaveType !== !!b.leaveType) return a.leaveType ? -1 : 1
+      return String(a.name || '').localeCompare(String(b.name || ''))
+    })
+    return NextResponse.json(deduped, { headers })
   } catch (e) {
     console.error('getTodaySchedule:', e)
     return NextResponse.json([], { headers })

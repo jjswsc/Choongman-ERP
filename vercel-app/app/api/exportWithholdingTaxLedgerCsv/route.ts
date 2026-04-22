@@ -4,6 +4,9 @@ import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { withholdingTaxLedgerToCsv, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
+import { requireAuth } from '@/lib/verify-auth'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -18,14 +21,39 @@ function normalizeLedgerFilingStatus(v: unknown): 'draft' | 'submitted' {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
   const { searchParams } = new URL(request.url)
-  const userRole = String(searchParams.get('userRole') || '').trim()
+  const userRole = String(authResult.auth.role || '').trim()
   const taxMonth = String(searchParams.get('taxMonth') || '').trim().slice(0, 7)
   const yearMonth = String(searchParams.get('yearMonth') || taxMonth).trim().slice(0, 7)
   const periodTypeRaw = String(searchParams.get('periodType') || 'monthly').trim().toLowerCase()
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
-  const storeFilter = String(searchParams.get('storeFilter') || '').trim()
+  const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
+  const allowedStores =
+    (Array.isArray(authResult.auth.allowedStores) ? authResult.auth.allowedStores : [])
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .concat(String(authResult.auth.store || '').trim())
+  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  let storeFilter = requestedStoreFilter
+  if (!isOfficeLevel) {
+    if (!requestedStoreFilter || requestedStoreFilter === 'All') {
+      storeFilter = String(allowedStores[0] || '').trim()
+      if (!storeFilter) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    } else {
+      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreFilter))
+      if (!allowed) {
+        return NextResponse.json({ error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
+      }
+    }
+  }
 
   try {
     assertCanManageAccountingCompliance(userRole)

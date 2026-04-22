@@ -9,6 +9,7 @@ import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { DEFAULT_TILES, POS_SUBMENUS, type POSTile, type POSSubMenuItem } from '@/lib/pos-display'
 import { cn } from '@/lib/utils'
 import { Circle, RefreshCw } from 'lucide-react'
+import { isPosTableOrderEnabledStore } from '@/lib/pos-table-order-access'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
@@ -78,6 +79,7 @@ export default function POSMainPage() {
 
   const storeCode = auth?.store || stores[0] || ''
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
+  const canUseTableOrder = isPosTableOrderEnabledStore(storeCode)
 
   useEffect(() => {
     setCurrentTime(new Date())
@@ -96,6 +98,8 @@ export default function POSMainPage() {
   const visibleTiles = useMemo(() => {
     return DEFAULT_TILES.filter((tile) => {
       switch (tile.type) {
+        case 'table-order':
+          return canUseTableOrder
         case 'sales':
         case 'receipt':
         case 'members':
@@ -113,7 +117,7 @@ export default function POSMainPage() {
           return true
       }
     })
-  }, [auth?.role])
+  }, [auth?.role, canUseTableOrder])
 
   /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
   const handleSubAction = useCallback(
@@ -159,13 +163,16 @@ export default function POSMainPage() {
       }
       switch (tile.type) {
         case 'dine-in':
-          navigatePosOfflineAware('/pos/terminal?type=dine_in', (p) => router.push(p))
+          navigatePosOfflineAware('/pos/order?type=dine_in', (p) => router.push(p))
+          break
+        case 'table-order':
+          navigatePosOfflineAware('/pos/table-order', (p) => router.push(p))
           break
         case 'takeout':
-          navigatePosOfflineAware('/pos/terminal?type=takeout', (p) => router.push(p))
+          navigatePosOfflineAware('/pos/order?type=takeout', (p) => router.push(p))
           break
         case 'delivery':
-          navigatePosOfflineAware('/pos/terminal?type=delivery', (p) => router.push(p))
+          navigatePosOfflineAware('/pos/order?type=delivery', (p) => router.push(p))
           break
         case 'cash':
           navigatePosOfflineAware('/pos/local/cash', (p) => router.push(p))
