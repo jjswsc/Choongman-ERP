@@ -19,7 +19,7 @@ import {
   resolveEmployeeDisplayNameForAttendanceGrid,
 } from '@/lib/employee-display-name'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 const TZ = 'Asia/Bangkok'
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'no-store, max-age=0')
-  const authResult = await requireAuth(request, 'manager')
+  const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     authResult.errorResponse.headers.set('Cache-Control', 'no-store, max-age=0')
@@ -153,10 +153,10 @@ export async function GET(request: NextRequest) {
   const isAllEmployeesByName = !employeeFilter || employeeFilter === 'All' || employeeFilter === '전체 직원'
   const pendingOnly = statusFilter === 'pending'
 
-  const isScopedRole =
-    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
-    (userRole.includes('manager') || userRole.includes('franchisee'))
-  if (isScopedRole) {
+  /** 본사·회계: 쿼리(매장·직원) 필터 그대로. 매장 관리자: 허용 매장 내. 그 외(Staff 등): 본인만(로그인 session 기준) */
+  const isWideAccess = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const isManagerScope = !isWideAccess && isManagerOrFranchiseeRole(userRole)
+  if (isManagerScope) {
     const authEmployeeIdRaw = Number((auth as { employeeId?: unknown }).employeeId)
     const authEmployeeId =
       Number.isFinite(authEmployeeIdRaw) && authEmployeeIdRaw > 0 ? Math.floor(authEmployeeIdRaw) : 0
@@ -170,6 +170,16 @@ export async function GET(request: NextRequest) {
       const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
       if (!allowed) return NextResponse.json([], { status: 403, headers })
     }
+  } else if (!isWideAccess) {
+    const authEmployeeIdRaw = Number((auth as { employeeId?: unknown }).employeeId)
+    const authEmployeeId =
+      Number.isFinite(authEmployeeIdRaw) && authEmployeeIdRaw > 0 ? Math.floor(authEmployeeIdRaw) : 0
+    if (!String(auth.name || '').trim() || !userStore) {
+      return NextResponse.json([], { status: 403, headers })
+    }
+    employeeFilter = String(auth.name || '').trim()
+    employeeIdFilter = authEmployeeId
+    storeFilter = userStore
   }
   const hasEmployeeIdFilter = employeeIdFilter > 0
   const isAllEmployees = !hasEmployeeIdFilter && isAllEmployeesByName

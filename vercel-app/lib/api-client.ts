@@ -717,27 +717,66 @@ export interface LeaveHistoryItem {
   rejectReason?: string
 }
 
-export async function getMyLeaveInfo(params: { store: string; name: string; employeeId?: number }) {
+const DEFAULT_MY_LEAVE_INFO_STATS: {
+  usedAnn: number
+  usedSick: number
+  usedUnpaid: number
+  usedLakij: number
+  remain: number
+  remainLakij: number
+  remainSick: number
+  annualTotal: number
+  lakijTotal: number
+  sickTotal: number
+} = {
+  usedAnn: 0,
+  usedSick: 0,
+  usedUnpaid: 0,
+  usedLakij: 0,
+  remain: 15,
+  remainLakij: 3,
+  remainSick: 30,
+  annualTotal: 6,
+  lakijTotal: 3,
+  sickTotal: 30,
+}
+
+function normalizeMyLeaveInfoStats(raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_MY_LEAVE_INFO_STATS }
+  const s = raw as Record<string, unknown>
+  return {
+    usedAnn: Number(s.usedAnn) || 0,
+    usedSick: Number(s.usedSick) || 0,
+    usedUnpaid: Number(s.usedUnpaid) || 0,
+    usedLakij: Number(s.usedLakij) || 0,
+    remain: Number(s.remain) || 0,
+    remainLakij: Number(s.remainLakij) || 0,
+    remainSick: Number(s.remainSick) || 0,
+    annualTotal: Number(s.annualTotal) || 0,
+    lakijTotal: Number(s.lakijTotal) || 0,
+    sickTotal: Number(s.sickTotal) || 0,
+  }
+}
+
+export async function getMyLeaveInfo(params: { store: string; name: string; employeeId?: number }): Promise<{
+  history: LeaveHistoryItem[]
+  stats: typeof DEFAULT_MY_LEAVE_INFO_STATS
+}> {
   const q = new URLSearchParams()
   q.set('store', params.store)
   q.set('name', params.name)
   if (params.employeeId != null && params.employeeId > 0) q.set('employeeId', String(params.employeeId))
   const res = await apiFetchWithOffline(`/api/getMyLeaveInfo?${q}`)
-  return res.json() as Promise<{
-    history: LeaveHistoryItem[]
-    stats: {
-      usedAnn: number
-      usedSick: number
-      usedUnpaid: number
-      usedLakij: number
-      remain: number
-      remainLakij: number
-      remainSick: number
-      annualTotal: number
-      lakijTotal: number
-      sickTotal: number
-    }
-  }>
+  const raw: unknown = await res.json()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { history: [], stats: { ...DEFAULT_MY_LEAVE_INFO_STATS } }
+  }
+  const o = raw as Record<string, unknown>
+  const history = Array.isArray(o.history) ? (o.history as LeaveHistoryItem[]) : []
+  return {
+    history,
+    stats: normalizeMyLeaveInfoStats(o.stats),
+  }
 }
 
 export async function uploadLeaveCertificate(params: {
@@ -1115,7 +1154,11 @@ export async function getAttendanceRecordsAdmin(params: {
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetchWithOffline(`/api/getAttendanceRecordsAdmin?${q}`)
-  return res.json() as Promise<AttendanceDailyRow[]>
+  const raw: unknown = await res.json()
+  if (Array.isArray(raw)) {
+    return raw as AttendanceDailyRow[]
+  }
+  return []
 }
 
 // ─── 업무일지 (Work Log) ───

@@ -160,7 +160,9 @@ export function HrTab() {
       ...(auth.employeeCode ? { employeeCode: auth.employeeCode } : {}),
       userStore: auth.store,
       userRole: auth?.role,
-    }).then(setDailyRecords)
+    }).then((rows) => {
+      setDailyRecords(Array.isArray(rows) ? rows : [])
+    })
   }, [auth?.store, auth?.user, auth?.role, auth?.employeeId, auth?.employeeCode])
 
   const loadLeaveInfo = useCallback(() => {
@@ -171,7 +173,7 @@ export function HrTab() {
       ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
     }).then((r) => {
       setLeaveStats(r.stats)
-      setLeaveHistory(r.history)
+      setLeaveHistory(Array.isArray(r.history) ? r.history : [])
     })
   }, [auth?.store, auth?.user, auth?.employeeId])
 
