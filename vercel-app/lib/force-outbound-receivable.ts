@@ -24,6 +24,7 @@ type ForceOutboundLog = {
   item_name?: string
   qty?: number
   invoice_unit_price?: number | string | null
+  is_deleted?: boolean | null
 }
 
 async function loadItemMasterPrices(): Promise<Record<string, number>> {
@@ -47,7 +48,10 @@ export async function syncReceivableFromForceOutboundStockLogRow(
 ): Promise<void> {
   const stockLogId = Number(log.id)
   if (!stockLogId || Number.isNaN(stockLogId)) return
-  if (String(log.log_type || '') !== 'ForceOutbound') return
+  if (String(log.log_type || '') !== 'ForceOutbound' || Boolean(log.is_deleted)) {
+    await supabaseDeleteByFilter('receivable_transactions', `ref_type=eq.ForceOutbound&ref_id=eq.${stockLogId}`)
+    return
+  }
 
   const storeName = String(log.vendor_target || '').trim()
   const code = String(log.item_code || '').trim()
@@ -116,11 +120,13 @@ export async function syncReceivableFromForceOutboundStockLogById(stockLogId: nu
   if (!stockLogId || Number.isNaN(stockLogId)) return
   const rows = (await supabaseSelectFilter('stock_logs', `id=eq.${stockLogId}`, {
     limit: 1,
-    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price',
+    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
   })) as ForceOutboundLog[]
   const log = rows?.[0]
-  if (!log) return
-  if (String(log.log_type || '') !== 'ForceOutbound') return
+  if (!log || String(log.log_type || '') !== 'ForceOutbound' || Boolean(log.is_deleted)) {
+    await supabaseDeleteByFilter('receivable_transactions', `ref_type=eq.ForceOutbound&ref_id=eq.${stockLogId}`)
+    return
+  }
   await syncReceivableFromForceOutboundStockLogRow(log)
 }
 
@@ -133,11 +139,11 @@ export async function repairForceOutboundReceivablesRecentDays(days: number): Pr
   const startStr = new Date(Date.now() - d * 86400000).toLocaleDateString('en-CA', { timeZone: TZ })
   const rows = (await supabaseSelectFilter(
     'stock_logs',
-    `log_type=eq.ForceOutbound&log_date=gte.${startStr}`,
+    `log_type=eq.ForceOutbound&is_deleted=is.false&log_date=gte.${startStr}`,
     {
       order: 'id.asc',
       limit: 8000,
-      select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price',
+      select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
     }
   )) as ForceOutboundLog[]
   const priceByCode = await loadItemMasterPrices()
@@ -161,14 +167,14 @@ export async function repairForceOutboundReceivablesRecentDays(days: number): Pr
 export async function reconcileAllForceOutboundReceivables(params: {
   storeFilter?: string
 }): Promise<{ processed: number; errors: number }> {
-  let filter = 'log_type=eq.ForceOutbound'
+  let filter = 'log_type=eq.ForceOutbound&is_deleted=is.false'
   if (params.storeFilter?.trim()) {
     filter += `&vendor_target=ilike.${encodeURIComponent(params.storeFilter.trim())}`
   }
   const rows = (await supabaseSelectFilter('stock_logs', filter, {
     order: 'id.asc',
     limit: 8000,
-    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price',
+    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
   })) as ForceOutboundLog[]
   const priceByCode = await loadItemMasterPrices()
   let processed = 0

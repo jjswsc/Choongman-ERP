@@ -91,7 +91,17 @@ export async function POST(request: NextRequest) {
     if (decision === 'Rejected') patch.reject_reason = rejectReason || ''
 
     if (decision === 'Approved' && updatedCart && updatedCart.length > 0) {
-      type CartItem = { code?: string; name?: string; price?: number; qty?: number; spec?: string; checked?: boolean; originalQty?: number }
+      type CartItem = {
+        code?: string
+        name?: string
+        price?: number
+        qty?: number
+        spec?: string
+        line_remarks?: string
+        lineRemarks?: string
+        checked?: boolean
+        originalQty?: number
+      }
       const existingOrder = orders[0] as { cart_json?: string }
       let origCart: { qty?: number }[] = []
       try { origCart = JSON.parse(existingOrder.cart_json || '[]') } catch {}
@@ -106,6 +116,7 @@ export async function POST(request: NextRequest) {
             price: Number(i.price ?? 0),
             qty,
             spec: String(i.spec ?? ''),
+            line_remarks: String(i.line_remarks ?? i.lineRemarks ?? '').trim() || undefined,
             _origQty: origQty,
           }
         })
@@ -123,13 +134,21 @@ export async function POST(request: NextRequest) {
           if (it) subtotal += it.price * it.qty
         })
         const vat = Math.round(subtotal * 0.07)
-        type FullCartItem = { code: string; name: string; price: number; qty: number; spec: string }
+        type FullCartItem = {
+          code: string
+          name: string
+          price: number
+          qty: number
+          spec: string
+          line_remarks?: string
+        }
         const cartForStorage = fullCart.map((it: FullCartItem) => ({
           code: it.code,
           name: it.name,
           price: it.price,
           qty: it.qty,
           spec: it.spec,
+          ...(it.line_remarks ? { line_remarks: it.line_remarks } : {}),
         }))
         patch.cart_json = JSON.stringify(cartForStorage)
         patch.subtotal = subtotal

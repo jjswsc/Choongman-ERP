@@ -3,6 +3,8 @@
   "allowedOrigin": "https://choongman-erp.vercel.app",
   "openDevtools": false,
   "kiosk": "1",
+  "mainLoadTimeoutMs": 45000,
+  "posDomBlankCheckMs": 22000,
   "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest.json",
   "print": {
     "silent": true,

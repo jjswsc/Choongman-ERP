@@ -42,6 +42,11 @@ declare global {
         kitchen3DeviceName?: string | null
         kitchenDeviceName?: string | null
       } | null>
+      /**
+       * Windows 하이브리드: 영수증용 프린터( runtime-config `print.receiptDeviceName` 등 )로 ESC/POS 드로어 킥.
+       * 별도 `local-cash-drawer-bridge` 없이 동작.
+       */
+      openCashDrawer?: () => Promise<{ ok: boolean; reason?: string; usedDevice?: string }>
       /** SW·Cache Storage 비우고 캐시 무시 새로고침 (로그인 유지). 확인 대화상자는 셸에서 표시 */
       resetCacheAndReload?: () => Promise<{
         ok: boolean

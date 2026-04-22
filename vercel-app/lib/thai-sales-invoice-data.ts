@@ -7,6 +7,8 @@ export type ThaiSalesInvoiceLineInput = {
   code?: string
   name?: string
   spec?: string
+  /** 품목명 아래 표시(여러 줄은 \\n) */
+  lineRemarks?: string
   qty: number
   amount: number
 }
@@ -29,6 +31,9 @@ export function buildThaiSalesInvoiceData(params: {
   lines: ThaiSalesInvoiceLineInput[]
   /** 없으면 lines 공급가 합계로 VAT 계산 */
   orderInvoiceTotals?: OrderInvoiceTotals
+  /** 인쇄 편집값 영구 저장용 source 식별자 */
+  sourceRefType?: string
+  sourceRefId?: number
 }): InvoiceData {
   const { documentType, documentNo, issueDate, company, client, invSettings, lines } = params
   const dueDate = params.dueDate ?? issueDate
@@ -82,10 +87,12 @@ export function buildThaiSalesInvoiceData(params: {
       const amt = Math.round(Math.abs(it.amount || 0))
       const qty = Math.abs(it.qty || 0)
       const unitPrice = qty ? amt / qty : 0
+      const lr = (it.lineRemarks || "").trim()
       return {
         id: idx + 1,
         itemCode: it.code,
         description: (it.name || "-") + (it.spec ? ` ${it.spec}` : ""),
+        lineRemarks: lr || undefined,
         quantity: qty,
         unitPrice,
         discount: 0,
@@ -105,5 +112,7 @@ export function buildThaiSalesInvoiceData(params: {
     remarks: invSettings.remarks || "Please transfer payment to the bank account shown above.",
     termsAndConditions,
     stampImageUrl: stampBase ? `${stampBase}/company-stamp.png` : "/company-stamp.png",
+    sourceRefType: params.sourceRefType,
+    sourceRefId: params.sourceRefId,
   }
 }

@@ -62,8 +62,9 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     cookingDelayBadgeEnabled: s.cookingDelayBadgeEnabled !== false,
     cookingDelaySoundEnabled: Boolean(s.cookingDelaySoundEnabled),
     cookingDelayAlertOverMin: Math.max(0, Number(s.cookingDelayAlertOverMin ?? 0)),
-    cardAutoOpen: Boolean(s.cardAutoOpen),
-    checkAutoOpen: Boolean(s.checkAutoOpen),
+    // 레거시 컬럼: 과거 카드/수표 자동 열기 — 정책상 비활성(항상 false)
+    cardAutoOpen: false,
+    checkAutoOpen: false,
     drawerOpenOption,
     logoPrint: Boolean(s.logoPrint),
     receiptPrintTiming: (String(s.receiptPrintTiming || "per_payment") === "final_payment"

@@ -11,14 +11,23 @@ Windows 설치형 하이브리드 POS 셸(Electron)입니다.
 기본 설정 파일: `runtime-config.json`
 
 - **설치본(NSIS·포터블)**: `electron-builder` 가 `app.asar` 안에 이 파일을 **항상 포함**합니다(`package.json` → `build.files`). 별도로 복사할 필요 없이 설치되어 있습니다.
-- **첫 실행 시**: 아직 `%APPDATA%` 쪽에 사용자 파일이 없으면, 번들에 넣어 둔 `runtime-config.json`을 **그대로 복사**해 `userData/runtime-config.json`을 만들어 둡니다. 이후 매장은 이 경로만 메모장으로 열어 `print.receiptDeviceName` 등을 채우면 됩니다.
+- **첫 실행 시**: `userData` 아래 `runtime-config.json`이 없으면(또는 0바이트) 번들을 복사하거나 기본 JSON을 씁니다. **NSIS 설치 Windows 본(패키징)**은 기본 `userData`를 `…\Choongman POS\resources\choongman-pos-user-data\`로 잡아, 요청하신 것처럼 `resources` 안에 생성됩니다(쓰기 권한이 없으면 자동으로 AppData로 폴백). `CM_POS_USE_DEFAULT_USERDATA=1`이면 **항상** 기본 AppData를 씁니다.
 
 ### Windows에서 파일이 안 보일 때 (검색 안 됨)
 
 - 탐색기·시작 메뉴 검색은 **`AppData\Roaming` 아래를 잘 안 잡을** 수 있습니다. **앱을 한 번이라도 실행한 뒤**에는 위 자동 복사로 사용자 파일이 생깁니다.
 - 셸은 두 곳을 **병합**합니다: (1) 설치된 앱(번들) (2) **사용자 덮어쓰기** — 매장에서 고치는 건 보통 (2)입니다.
 
-**사용자 덮어쓰기 경로(일반적, `package.json`의 `name`이 `choongman-pos-windows`일 때):**
+**AppData는 필수가 아님.** Windows에서 권한·백업에 맞는 **기본 위치**로 Roaming을 쓰는 것뿐입니다. 전부 다른 폴더(예: `D:\cm-pos\data`)에 두려면 **앱이 처음 뜨기 전**에 환경 변수로 지정합니다.
+
+- `WINDOWS_POS_USER_DATA` 또는 `CM_POS_USER_DATA` = **폴더** 절대/상대 경로(이름 기준). 이 경로가 Electron `userData` 루트가 되며, 그 아래 `runtime-config.json`·캐시·세션이 같이 갑니다.
+- (위 미지정·Windows 설치 본) **기본**: `%ProgramFiles%\Choongman POS\resources\choongman-pos-user-data\` — `resources` 아래에 생성. 권한 오류 시 기본 AppData로 자동 전환.
+- `CM_POS_USE_DEFAULT_USERDATA=1` / `WINDOWS_POS_USE_DEFAULT_USERDATA=1` = `resources` 기본을 쓰지 않고 **Electron 기본 userData(보통 AppData)**만 사용.
+- `portable` / `next-to-exe` / `beside-exe` = **실행 파일 옆** `choongman-pos-user-data` 폴더(포터블·UAC 없는 경로 권장). `Program Files` 밑 설치본이면 쓰기 실패할 수 있어, 그때는 `D:\…` 등으로 `WINDOWS_POS_USER_DATA`를 쓰는 것이 낫습니다.
+
+(바로가기·배치 파일에서 `set WINDOWS_POS_USER_DATA=...` 후 `Choongman POS.exe` 실행 등으로 적용할 수 있습니다.)
+
+**사용자 덮어쓰기 경로(기본, `package.json`의 `name`이 `choongman-pos-windows`일 때):**
 
 `%APPDATA%\choongman-pos-windows\runtime-config.json`  
 → 전체 예: `C:\Users\<사용자이름>\AppData\Roaming\choongman-pos-windows\runtime-config.json`

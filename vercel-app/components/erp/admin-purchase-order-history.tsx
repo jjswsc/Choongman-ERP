@@ -35,6 +35,7 @@ import {
   Search,
   XCircle,
   FileCheck,
+  FileText,
 } from "lucide-react"
 import {
   isPoApprovedStatus,
@@ -44,6 +45,7 @@ import {
   formatPoDisplayDate,
   isAccountingPurchaseOrderByCartJson,
   parsePurchaseOrderCart,
+  poQuotationFromMeta,
 } from "@/lib/purchase-order-cart"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 
@@ -517,6 +519,7 @@ ${allRows.map((row, ri) => {
                 {filteredList.map((po) => {
                   const dateStr = formatPoDisplayDate(po, poDateLocale)
                   const isAcct = isAccountingPurchaseOrderByCartJson(po.cart_json)
+                  const quotation = poQuotationFromMeta(po.cart_json)
                   return (
                     <tr key={po.id} className="border-b border-border/60 last:border-0">
                       <td className="px-3 py-2">
@@ -557,6 +560,18 @@ ${allRows.map((row, ri) => {
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
                         <div className="flex items-center gap-0.5">
+                          {quotation && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" asChild>
+                              <a
+                                href={quotation.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={t("poQuotationView")}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          )}
                           {isPoApprovedStatus(po.status) && !isAcct && (
                             <Link href={`/admin/inbound?fromPo=${po.id}`}>
                               <Button

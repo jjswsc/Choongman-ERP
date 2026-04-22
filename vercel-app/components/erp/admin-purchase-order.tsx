@@ -30,6 +30,7 @@ import {
   getHqStockByLocation,
   getHeadOfficeInfo,
   savePurchaseOrder,
+  uploadPoQuotationFile,
   invalidatePurchaseOrdersListCache,
   getPoBillingDraft,
   type PurchaseLocation,
@@ -39,7 +40,7 @@ import {
 import { useStoreList } from "@/lib/use-store-list"
 import { useOrderCreate } from "@/lib/order-create-context"
 import { todayStrBangkok } from "@/lib/attendance-utils"
-import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator } from "lucide-react"
+import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip } from "lucide-react"
 
 function bangkokYearMonth(): string {
   try {
@@ -181,6 +182,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   /** 본사(회계) 발주일 — 방콕 달력 YYYY-MM-DD */
   const [poOrderDate, setPoOrderDate] = React.useState(todayStrBangkok)
   const [poReferenceNo, setPoReferenceNo] = React.useState("")
+  const [poQuotation, setPoQuotation] = React.useState<{ url: string; name: string } | null>(null)
+  const [poQuotationUploading, setPoQuotationUploading] = React.useState(false)
+  const quotationFileInputRef = React.useRef<HTMLInputElement>(null)
   const [withholdingTaxAmount, setWithholdingTaxAmount] = React.useState("")
   const [manualLineName, setManualLineName] = React.useState("")
   const [manualLinePrice, setManualLinePrice] = React.useState("")
@@ -457,6 +461,27 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     }
   }
 
+  const onQuotationPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ""
+    if (!f) return
+    setPoQuotationUploading(true)
+    try {
+      const res = await uploadPoQuotationFile({ file: f })
+      if (res.success && res.publicUrl) {
+        setPoQuotation({ url: res.publicUrl, name: f.name })
+      } else {
+        await appAlert(res.message || t("msg_upload_fail"))
+      }
+    } catch (err) {
+      await appAlert(
+        t("msg_upload_fail") + (err instanceof Error ? ": " + err.message : "")
+      )
+    } finally {
+      setPoQuotationUploading(false)
+    }
+  }
+
   const applyBillingMonthBangkok = () => {
     const { startStr, endStr } = monthBoundsFromYm(bangkokYearMonth())
     setBillingStart(startStr)
@@ -659,6 +684,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         billingKind: passBillingUpsert ? billingIntentMode! : undefined,
         orderDate: allowManualLines && poOrderDate ? poOrderDate : undefined,
         referenceNo: poReferenceNo.trim() || undefined,
+        ...(poQuotation
+          ? { quotationFileUrl: poQuotation.url, quotationFileName: poQuotation.name }
+          : {}),
       })
       if (res.success) {
         void invalidatePurchaseOrdersListCache()
@@ -672,6 +700,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         setCart([])
         setPoReferenceNo("")
         setWithholdingTaxAmount("")
+        setPoQuotation(null)
         setBillingIntentMode(null)
       } else {
         await appAlert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
@@ -856,6 +885,57 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
           maxLength={200}
         />
         <p className="text-xs text-muted-foreground">{t("poReferenceNoHint")}</p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card px-4 py-3 space-y-2">
+        <label className="text-xs font-medium text-foreground">{t("poQuotationLabel")}</label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={quotationFileInputRef}
+            type="file"
+            className="sr-only"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*,application/pdf"
+            onChange={(e) => void onQuotationPicked(e)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            disabled={poQuotationUploading}
+            onClick={() => quotationFileInputRef.current?.click()}
+          >
+            <Paperclip className="mr-1.5 h-3.5 w-3.5" />
+            {poQuotationUploading ? t("poQuotationUploading") : t("poQuotationChoose")}
+          </Button>
+          {poQuotation ? (
+            <span className="max-w-[200px] truncate text-xs text-muted-foreground" title={poQuotation.name}>
+              {poQuotation.name}
+            </span>
+          ) : null}
+          {poQuotation ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setPoQuotation(null)}
+            >
+              {t("poQuotationClear")}
+            </Button>
+          ) : null}
+          {poQuotation ? (
+            <a
+              href={poQuotation.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {t("poQuotationView")}
+            </a>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">{t("poQuotationHint")}</p>
       </div>
 
       {allowManualLines ? (

@@ -148,13 +148,22 @@ export async function GET(request: NextRequest) {
     }
 
     const list = combinedRows.map((o) => {
-      let items: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[] = []
+      let items: {
+        code?: string
+        name?: string
+        spec?: string
+        line_remarks?: string
+        lineRemarks?: string
+        qty?: number
+        price?: number
+      }[] = []
       try {
         items = JSON.parse(o.cart_json || '[]')
       } catch {}
       items = items.map((it) => ({
         ...it,
         spec: it.spec || itemSpecMap[it.code || ''] || '',
+        line_remarks: String(it.line_remarks ?? it.lineRemarks ?? '').trim() || undefined,
         category: (it as { category?: string }).category || itemCategoryMap[it.code || ''] || '',
         vendor: resolveVendorName(String((it as { vendor?: string }).vendor || itemVendorMap[it.code || ''] || '')),
         outboundLocation: itemOutboundMap[it.code || ''] || '',

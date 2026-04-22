@@ -4,6 +4,7 @@ import * as React from "react"
 import { Package, Truck, Pause, XCircle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n"
@@ -12,6 +13,7 @@ import { useLang } from "@/lib/lang-context"
 export interface OrderItem {
   name: string
   spec: string
+  lineRemarks?: string
   unitPrice: number
   qty: number
   originalQty: number
@@ -53,7 +55,11 @@ interface OrderApprovalDetailPanelProps {
   deliveryDatesByOutboundByOrder: Record<string, Record<string, string>>
   rejectReasonByOrderId: Record<string, string>
   onCycleCodeSort: () => void
-  onUpdateOrderItem: (orderId: string, itemRef: { code: string; name: string }, updates: Partial<Pick<OrderItem, "checked" | "qty">>) => void
+  onUpdateOrderItem: (
+    orderId: string,
+    itemRef: { code: string; name: string },
+    updates: Partial<Pick<OrderItem, "checked" | "qty" | "lineRemarks">>
+  ) => void
   onSetDeliveryDatesByOutbound: React.Dispatch<React.SetStateAction<Record<string, Record<string, string>>>>
   onSetRejectReason: React.Dispatch<React.SetStateAction<Record<string, string>>>
   onHandleDecision: (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => void | Promise<void>
@@ -214,9 +220,29 @@ export function OrderApprovalDetailPanel({
                                   {item.code || "-"}
                                 </td>
                                 <td className="px-3 py-2.5 text-xs font-medium min-w-[120px]">
-                                  <span className={item.qty !== item.originalQty ? "text-destructive" : "text-foreground"}>
-                                    {item.name}
-                                  </span>
+                                  <div className="space-y-1">
+                                    <span className={item.qty !== item.originalQty ? "text-destructive" : "text-foreground"}>
+                                      {item.name}
+                                    </span>
+                                    {canEdit ? (
+                                      <Textarea
+                                        value={item.lineRemarks || ""}
+                                        onChange={(e) =>
+                                          onUpdateOrderItem(
+                                            order.id,
+                                            { code: item.code || "", name: item.name || "" },
+                                            { lineRemarks: e.target.value }
+                                          )
+                                        }
+                                        placeholder={t("orderLineRemarksPh") || "비고 (무게/단가 등)"}
+                                        className="min-h-[46px] resize-y border-primary/20 bg-background text-[11px] leading-snug"
+                                      />
+                                    ) : item.lineRemarks?.trim() ? (
+                                      <div className="whitespace-pre-line rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] leading-snug text-slate-600">
+                                        {item.lineRemarks}
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </td>
                                 <td className="px-3 py-2.5 text-xs w-36 min-w-[80px] whitespace-nowrap">
                                   <span className={item.qty !== item.originalQty ? "text-destructive" : "text-muted-foreground"}>

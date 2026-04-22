@@ -24,7 +24,7 @@ export async function findDraftPurchaseOrderForBillingUpsert(params: {
   relatedStore: string
   billingMonthYm: string
   billingKind: PoBillingKind
-}): Promise<{ id: number; po_no: string } | null> {
+}): Promise<{ id: number; po_no: string; cart_json?: string } | null> {
   const ym = normalizeBillingMonthYm(params.billingMonthYm)
   if (ym.length !== 7) return null
   const filter = [
@@ -45,7 +45,7 @@ export async function findDraftPurchaseOrderForBillingUpsert(params: {
     if (String(meta.relatedStore || '').trim() !== storeWant) continue
     if (normalizeBillingMonthYm(String(meta.billingMonthYm || '')) !== ym) continue
     if ((meta as PoCartMeta).billingKind !== params.billingKind) continue
-    return { id: Number(r.id), po_no: String(r.po_no || '') }
+    return { id: Number(r.id), po_no: String(r.po_no || ''), cart_json: r.cart_json }
   }
   return null
 }

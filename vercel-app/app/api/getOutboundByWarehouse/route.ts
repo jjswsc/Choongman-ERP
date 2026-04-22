@@ -10,6 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
+export const dynamic = 'force-dynamic'
+
 export interface WarehouseOutboundRow {
   store: string
   code: string
@@ -30,6 +32,7 @@ export interface GetOutboundByWarehouseResult {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -125,7 +128,7 @@ export async function GET(request: NextRequest) {
     // 2. ForceOutbound stock_logs
     const allLogs = (await supabaseSelectFilter(
       'stock_logs',
-      'location=eq.본사&log_type=eq.ForceOutbound',
+      'location=eq.본사&log_type=eq.ForceOutbound&is_deleted=is.false',
       {
         order: 'log_date.desc',
         limit: 500,

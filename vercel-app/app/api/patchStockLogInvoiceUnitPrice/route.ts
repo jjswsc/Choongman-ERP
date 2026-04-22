@@ -41,15 +41,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '단가는 0 이상의 유효한 숫자여야 합니다.' }, { headers })
     }
 
-    const filter = `id=eq.${encodeURIComponent(String(stockLogId))}`
+    const filter = `id=eq.${encodeURIComponent(String(stockLogId))}&is_deleted=is.false`
     const rows = (await supabaseSelectFilter('stock_logs', filter, {
-      select: 'id,log_type,qty,order_id',
+      select: 'id,log_type,qty,order_id,is_deleted',
       limit: 1,
-    })) as { id?: number; log_type?: string; qty?: number | string; order_id?: number | null }[]
+    })) as { id?: number; log_type?: string; qty?: number | string; order_id?: number | null; is_deleted?: boolean }[]
 
     const row = rows?.[0]
     const lt = String(row?.log_type || '')
-    if (!row || (lt !== 'Outbound' && lt !== 'ForceOutbound')) {
+    if (!row || Boolean(row.is_deleted) || (lt !== 'Outbound' && lt !== 'ForceOutbound')) {
       return NextResponse.json(
         { success: false, message: '주문/강제 출고 로그만 수정할 수 있습니다.' },
         { headers }

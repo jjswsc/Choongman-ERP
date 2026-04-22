@@ -234,8 +234,6 @@ export default function PosTerminalPage() {
   const [signatureLine, setSignatureLine] = useState(false)
   const [receiptBarcode, setReceiptBarcode] = useState(false)
   const [itemBarcode, setItemBarcode] = useState(false)
-  const [cardAutoOpen, setCardAutoOpen] = useState(false)
-  const [checkAutoOpen, setCheckAutoOpen] = useState(false)
   const [drawerOpenOption, setDrawerOpenOption] = useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
   const [receiptPrintLang, setReceiptPrintLang] = useState<string>('')
   const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
@@ -401,8 +399,6 @@ export default function PosTerminalPage() {
         setSignatureLine(Boolean(s.signatureLine))
         setReceiptBarcode(Boolean(s.receiptBarcode))
         setItemBarcode(Boolean(s.itemBarcode))
-        setCardAutoOpen(Boolean(s.cardAutoOpen))
-        setCheckAutoOpen(Boolean(s.checkAutoOpen))
         setDrawerOpenOption(
           s.drawerOpenOption === 'password_and_reason'
             ? 'password_and_reason'
@@ -483,8 +479,6 @@ export default function PosTerminalPage() {
         setSignatureLine(false)
         setReceiptBarcode(false)
         setItemBarcode(false)
-        setCardAutoOpen(false)
-        setCheckAutoOpen(false)
         setDrawerOpenOption('reason_only')
         setReceiptPrintLang('')
         setVatRate(7)
@@ -1375,31 +1369,17 @@ export default function PosTerminalPage() {
   const tryOpenDrawerForPayment = useCallback(
     async (payment: CartPanelPaymentPayload | null | undefined) => {
       if (!payment || !currentStoreId) return
-      const cardAmt = Math.max(0, Number(payment.paymentCard || 0))
-      const checkLike =
-        String(payment.deliveryPaymentChannel || '')
-          .toLowerCase()
-          .includes('check') ||
-        String(payment.deliveryPaymentChannel || '')
-          .toLowerCase()
-          .includes('cheque')
-      const checkAmt = checkLike
-        ? Math.max(
-            0,
-            Number(payment.paymentOther || 0) +
-              Number(payment.paymentDeliveryApp || 0) +
-              Number(payment.paymentQr || 0)
-          )
-        : 0
-      const shouldOpen = (cardAutoOpen && cardAmt > 0) || (checkAutoOpen && checkAmt > 0)
-      if (!shouldOpen) return
-      const reason = cardAmt > 0 ? 'auto_card_payment' : 'auto_check_payment'
+      const cashAmt = Math.max(0, Number(payment.paymentCash || 0))
+      if (cashAmt <= 0) return
+      // drawerOpenOption=force 는 '수동 강제 열기'용 — 결제 자동 오픈과 섞이지 않게 payment_auto 에서는 사용하지 않음
+      const optionForAutoPayment: 'password_and_reason' | 'reason_only' =
+        drawerOpenOption === 'force' ? 'reason_only' : drawerOpenOption
       const res = await openPosCashDrawer({
-        reason,
+        reason: 'cash_payment',
         source: 'payment_auto',
         storeCode: currentStoreId,
         userName: auth?.user || '',
-        drawerOpenOption,
+        drawerOpenOption: optionForAutoPayment,
       })
       if (!res.success && !drawerOpenWarnedRef.current) {
         drawerOpenWarnedRef.current = true
@@ -1409,7 +1389,7 @@ export default function PosTerminalPage() {
         )
       }
     },
-    [currentStoreId, auth?.user, cardAutoOpen, checkAutoOpen, drawerOpenOption, t]
+    [currentStoreId, auth?.user, drawerOpenOption, t]
   )
 
   const runLinkposPaymentIfNeeded = useCallback(
@@ -1999,7 +1979,10 @@ export default function PosTerminalPage() {
                 }
                 let skipLocalAutoPrint = false
                 if (savedOrderId != null) {
-                  skipLocalAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
+                  // 추가 주문은 기존 orderId로 merge 저장이라 이미 seen에 있음. 여기서 skip하면 홀/주방 인쇄가 막힘(폴링·로컬 중복 방지는 신규 주문에만 적용).
+                  if (!isAddOrder) {
+                    skipLocalAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
+                  }
                   seenOrderIdsRef.current.add(savedOrderId)
                   if (savedOrderId > lastSeenOrderIdRef.current) {
                     lastSeenOrderIdRef.current = savedOrderId

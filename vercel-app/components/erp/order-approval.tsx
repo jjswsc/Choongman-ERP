@@ -41,6 +41,7 @@ const HQ_STORES = ["본사", "Office", "오피스", "본점"]
 interface OrderItem {
   name: string
   spec: string
+  lineRemarks?: string
   unitPrice: number
   qty: number
   originalQty: number
@@ -97,6 +98,7 @@ function mapApiToOrder(
     return {
       name: it.name || "-",
       spec: it.spec || "",
+      lineRemarks: String((it as { line_remarks?: string; lineRemarks?: string }).line_remarks ?? (it as { lineRemarks?: string }).lineRemarks ?? "").trim() || undefined,
       unitPrice: price,
       qty,
       originalQty: origQty,
@@ -270,7 +272,11 @@ export function OrderApproval() {
     setDetailSortByCode((prev) => (prev === null ? "asc" : prev === "asc" ? "desc" : null))
   }
 
-  const updateOrderItem = (orderId: string, itemRef: { code: string; name: string }, updates: Partial<Pick<OrderItem, "checked" | "qty">>) => {
+  const updateOrderItem = (
+    orderId: string,
+    itemRef: { code: string; name: string },
+    updates: Partial<Pick<OrderItem, "checked" | "qty" | "lineRemarks">>
+  ) => {
     setEditedItemsByOrderId((prev) => {
       const order = orders.find((o) => o.id === orderId)
       if (!order) return prev
@@ -322,6 +328,7 @@ export function OrderApproval() {
       code: it.code,
       name: it.name,
       spec: it.spec,
+      line_remarks: it.lineRemarks?.trim() || undefined,
       price: it.unitPrice,
       qty: it.qty,
       checked: it.checked,

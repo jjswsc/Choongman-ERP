@@ -27,6 +27,10 @@ export type PoCartMeta = {
   orderDate?: string
   /** 세금계산서·내부 문서 참조번호 */
   referenceNo?: string
+  /** 공급사 견적/제안서 (Supabase Storage public URL) */
+  quotationFileUrl?: string
+  /** 첨부 파일명(표시용) */
+  quotationFileName?: string
 }
 
 export type PoCartPayloadV1 = {
@@ -72,6 +76,15 @@ export function purchaseOrderMetaOrderDate(cartJson: string | undefined): string
   const { meta } = parsePurchaseOrderCart(cartJson)
   const s = String(meta?.orderDate ?? "").trim().slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+}
+
+/** cart_json 메타에 저장된 견적서 첨부 (없으면 빈 객체) */
+export function poQuotationFromMeta(cartJson: string | undefined): { url: string; name: string } | null {
+  const { meta } = parsePurchaseOrderCart(cartJson)
+  const url = String(meta?.quotationFileUrl ?? "").trim()
+  if (!url) return null
+  const name = String(meta?.quotationFileName ?? "").trim() || "quotation"
+  return { url, name }
 }
 
 /**

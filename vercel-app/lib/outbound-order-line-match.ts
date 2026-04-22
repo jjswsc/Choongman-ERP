@@ -1,7 +1,25 @@
 /**
  * 출고 이력(stock_logs) ↔ 주문 cart_json 매칭·단가 (getCombinedOutboundHistory 와 공통)
  */
-export type OrderCartLine = { code?: string; name?: string; spec?: string; qty?: number; price?: number }
+export type OrderCartLine = {
+  code?: string
+  name?: string
+  spec?: string
+  qty?: number
+  price?: number
+  /** 인보이스 품목명 아래 표시(무게·kg당가 등) — `line_remarks` 또는 `lineRemarks` */
+  line_remarks?: string
+  lineRemarks?: string
+}
+
+/** cart 줄에만 저장. 송장 Description 아래에 별도 블록으로 렌더 */
+export function getLineRemarksFromCartLine(line: OrderCartLine | undefined): string | undefined {
+  if (!line) return undefined
+  const raw = line.line_remarks ?? line.lineRemarks
+  if (raw == null) return undefined
+  const s = String(raw).trim()
+  return s ? s : undefined
+}
 
 const TZ_BANGKOK = 'Asia/Bangkok'
 
@@ -108,4 +126,29 @@ export function unitPriceFromOrderCart(
     }
   }
   return masterPrice
+}
+
+/** stock_logs → 주문 cart에서 동일 품목 줄의 line_remarks 조회 */
+export function findLineRemarksInOrderCart(
+  cart: OrderCartLine[] | undefined,
+  code: string,
+  itemName: string
+): string | undefined {
+  if (!cart?.length) return undefined
+  const cTrim = String(code || '').trim()
+  const rawName = String(itemName || '').trim()
+  const nNorm = normLineName(itemName)
+  if (!cTrim) return undefined
+  for (const line of cart) {
+    if (String(line.code || '').trim() !== cTrim) continue
+    if (rawName && String(line.name || '').trim() === rawName) return getLineRemarksFromCartLine(line)
+  }
+  for (const line of cart) {
+    if (String(line.code || '').trim() !== cTrim) continue
+    if (rawName && normLineName(String(line.name || '')) === nNorm) return getLineRemarksFromCartLine(line)
+  }
+  for (const line of cart) {
+    if (String(line.code || '').trim() === cTrim) return getLineRemarksFromCartLine(line)
+  }
+  return undefined
 }

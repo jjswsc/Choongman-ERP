@@ -117,6 +117,11 @@ export function canBulkReconcileOrderReceivables(role: string): boolean {
   return canManageReceivablePayableAllStores(role)
 }
 
+/** 출고(주문/강제) 소프트 삭제 */
+export function canDeleteOutbound(role: string): boolean {
+  return isOfficeRole(role)
+}
+
 /** 미수금 목록에서 주문 건 수금 확인(receive_checked) 수정 가능 */
 export function canUpdateReceivableReceiveCheck(
   role: string,

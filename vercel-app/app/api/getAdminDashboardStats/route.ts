@@ -24,8 +24,8 @@ export async function GET() {
     ] = await Promise.all([
       supabaseCountFilter('orders', 'status=eq.Pending'),
       supabaseCountFilter('stock_logs', `log_type=eq.Inbound&log_date=gte.${startStr}&log_date=lte.${endStr}`),
-      supabaseCountFilter('stock_logs', `log_type=eq.Outbound&log_date=gte.${startStr}&log_date=lte.${endStr}`),
-      supabaseCountFilter('stock_logs', `log_type=eq.ForceOutbound&log_date=gte.${startStr}&log_date=lte.${endStr}`),
+      supabaseCountFilter('stock_logs', `log_type=eq.Outbound&is_deleted=is.false&log_date=gte.${startStr}&log_date=lte.${endStr}`),
+      supabaseCountFilter('stock_logs', `log_type=eq.ForceOutbound&is_deleted=is.false&log_date=gte.${startStr}&log_date=lte.${endStr}`),
       supabaseCountFilter('leave_requests', 'status=eq.대기'),
       supabaseCountFilter('leave_requests', 'status=eq.Pending'),
       supabaseCountFilter('attendance_logs', 'approved=eq.대기'),

@@ -329,8 +329,9 @@ export async function GET(request: NextRequest) {
             : true,
       cookingDelaySoundEnabled: Boolean(raw?.cooking_delay_sound_enabled),
       cookingDelayAlertOverMin: Math.max(0, Number(raw?.cooking_delay_alert_over_min ?? 0)),
-      cardAutoOpen: Boolean(raw?.card_auto_open),
-      checkAutoOpen: Boolean(raw?.check_auto_open),
+      // 레거시 컬럼: 과거 카드/수표 자동 열기 — 정책상 비활성(클라이언트엔 항상 false)
+      cardAutoOpen: false,
+      checkAutoOpen: false,
       drawerOpenOption: String(raw?.drawer_open_option || 'reason_only') === 'password_and_reason'
         ? 'password_and_reason'
         : String(raw?.drawer_open_option || 'reason_only') === 'force'

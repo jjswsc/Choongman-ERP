@@ -26,7 +26,7 @@ import {
   invalidateAdminItemsCache,
 } from './offline/erp-offline'
 import { ERP_POS_CATALOG_MENUS_CACHE_KEY, fetchPosCatalogCached, notifyPosCatalogUpdated } from './offline/pos-catalog-offline'
-import { setErpCache } from './offline/cache'
+import { getFromErpCache, setErpCache } from './offline/cache'
 import type { PosMenuUpsertApiBody } from './pos-menu-upsert-server'
 import { readAutoTranslateEnabled } from './auto-translate'
 import {
@@ -322,7 +322,14 @@ export async function adjustStock(params: {
 export async function processOrder(params: {
   storeName: string
   userName: string
-  cart: { code?: string; name: string; price: number; qty: number }[]
+  cart: {
+    code?: string
+    name: string
+    price: number
+    qty: number
+    taxType?: string
+    line_remarks?: string
+  }[]
 }) {
   const res = await apiFetchWithOffline('/api/processOrder', {
     method: 'POST',
@@ -454,7 +461,19 @@ export interface AdminOrderItem {
   deliveryDate: string
   /** 출고지별 배송일 {"본사":"2025-02-25","JIDUBANG":"2025-02-26"} */
   deliveryDatesByOutbound?: Record<string, string>
-  items: { code?: string; name?: string; spec?: string; category?: string; vendor?: string; outboundLocation?: string; qty?: number; price?: number; originalQty?: number }[]
+  items: {
+    code?: string
+    name?: string
+    spec?: string
+    line_remarks?: string
+    lineRemarks?: string
+    category?: string
+    vendor?: string
+    outboundLocation?: string
+    qty?: number
+    price?: number
+    originalQty?: number
+  }[]
   summary: string
   receivedIndices?: number[]
   rejectReason?: string
@@ -539,7 +558,15 @@ export async function processOrderDecision(params: {
   rejectReason?: string
   userRole?: string
   processorName?: string
-  updatedCart?: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
+  updatedCart?: {
+    code?: string
+    name?: string
+    spec?: string
+    line_remarks?: string
+    lineRemarks?: string
+    price: number
+    qty: number
+  }[]
 }) {
   const res = await apiFetchWithOffline('/api/processOrderDecision', {
     method: 'POST',
@@ -582,7 +609,15 @@ export async function updateOrderDeliveryStatus(params: {
 
 export async function updateOrderCart(params: {
   orderId: number
-  updatedCart: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
+  updatedCart: {
+    code?: string
+    name?: string
+    spec?: string
+    line_remarks?: string
+    lineRemarks?: string
+    price: number
+    qty: number
+  }[]
   deliveryStatus?: string
   receivedIndices?: number[]
 }) {
@@ -1903,6 +1938,8 @@ export interface PayableTransactionItem {
   code?: string
   name?: string
   spec?: string
+  /** 인보이스 품목 하단 비고(무게·kg당가 등) */
+  line_remarks?: string
   qty: number
   unitCost?: number
   amount: number
@@ -7148,7 +7185,29 @@ export async function getPosPrinterSettings(params: { storeCode: string }) {
     kitchen1Categories: [],
     kitchen2Categories: [],
   }
-  return fetchPosCatalogCached<PosPrinterSettings>(cacheKey, url, fallback)
+  const readCachedOrFallback = async () => {
+    try {
+      const cached = await getFromErpCache<PosPrinterSettings>(cacheKey)
+      return cached ?? fallback
+    } catch {
+      return fallback
+    }
+  }
+
+  try {
+    const res = await apiFetch(url, { cache: 'no-store' })
+    if (!res.ok) return readCachedOrFallback()
+    const data = (await res.json()) as PosPrinterSettings
+    try {
+      await setErpCache(cacheKey, data)
+      notifyPosCatalogUpdated(cacheKey, data)
+    } catch {
+      /* ignore cache write errors */
+    }
+    return data
+  } catch {
+    return readCachedOrFallback()
+  }
 }
 
 export async function savePosPrinterSettings(params: {
@@ -7258,6 +7317,25 @@ export async function savePosPrinterSettings(params: {
       success: false,
       message: text ? text.slice(0, 240) : `HTTP ${res.status}`,
       queued,
+    }
+  }
+  const shouldWriteOptimisticCache = queued || res.ok
+  const cacheKey = `erp:posPrinterSettings:${String(params.storeCode || '').trim()}`
+  if (shouldWriteOptimisticCache && cacheKey !== 'erp:posPrinterSettings:') {
+    try {
+      const prev = await getFromErpCache<PosPrinterSettings>(cacheKey)
+      const p = params as Partial<PosPrinterSettings>
+      const kitchenMode: 1 | 2 | 3 = p.kitchenMode ?? prev?.kitchenMode ?? 1
+      const optimistic: PosPrinterSettings = {
+        ...(prev || ({} as PosPrinterSettings)),
+        ...p,
+        storeCode: params.storeCode,
+        kitchenMode,
+      }
+      await setErpCache(cacheKey, optimistic)
+      notifyPosCatalogUpdated(cacheKey, optimistic)
+    } catch {
+      /* ignore cache write errors */
     }
   }
   if (queued) return { success: true, queued: true }
@@ -8797,6 +8875,79 @@ export interface OutboundHistoryItem {
   isUnreceived?: boolean
   /** stock_logs.id — 출고 로그 단가 수정용 */
   stockLogId?: number
+  /** 주문 cart line_remarks — 송장 품목 하단 */
+  lineRemarks?: string
+}
+
+export type DeleteOutboundPreview = {
+  success: boolean
+  dryRun?: boolean
+  targetCount?: number
+  mode?: 'order' | 'force'
+  orderId?: number
+  referenceNo?: string
+  orderIds?: number[]
+  forceOutboundIds?: number[]
+  stores?: string[]
+  restoreByLocation?: Record<string, number>
+  receivableDeleteByStore?: Record<string, number>
+  projectedOutstandingByStore?: Record<string, number>
+  conflicts?: { kind: 'journal_exists' | 'over_receive'; message: string; store?: string; orderId?: number }[]
+  message?: string
+}
+
+export async function previewDeleteOutbound(params: {
+  mode: 'order' | 'force'
+  orderId?: number
+  referenceNo?: string
+  stockLogIds?: number[]
+}) {
+  const res = await apiFetchWithOffline('/api/deleteOutbound', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: params.mode,
+      ...(params.orderId ? { orderId: params.orderId } : {}),
+      ...(params.referenceNo ? { referenceNo: params.referenceNo } : {}),
+      ...(params.stockLogIds?.length ? { stockLogIds: params.stockLogIds } : {}),
+      dryRun: true,
+    }),
+  })
+  return res.json() as Promise<DeleteOutboundPreview>
+}
+
+export async function deleteOutbound(params: {
+  mode: 'order' | 'force'
+  reason: string
+  orderId?: number
+  referenceNo?: string
+  stockLogIds?: number[]
+  idempotencyKey?: string
+}) {
+  const res = await apiFetchWithOffline('/api/deleteOutbound', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(params.idempotencyKey ? { 'x-idempotency-key': params.idempotencyKey } : {}),
+    },
+    body: JSON.stringify({
+      mode: params.mode,
+      reason: params.reason,
+      ...(params.orderId ? { orderId: params.orderId } : {}),
+      ...(params.referenceNo ? { referenceNo: params.referenceNo } : {}),
+      ...(params.stockLogIds?.length ? { stockLogIds: params.stockLogIds } : {}),
+      ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    duplicated?: boolean
+    message?: string
+    deletedCount?: number
+    warnings?: string[]
+    preview?: DeleteOutboundPreview
+    conflicts?: { kind: 'journal_exists' | 'over_receive'; message: string; store?: string; orderId?: number }[]
+  }>
 }
 
 export async function forceOutboundBatch(
@@ -8984,6 +9135,52 @@ export async function updateInvoiceSettings(settings: InvoiceSettings) {
     body: JSON.stringify(settings),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export type InvoicePrintOverrideRef = {
+  refType: string
+  refId: number
+  docKind?: "invoice" | "tax"
+}
+
+export type InvoicePrintOverridePayload = InvoicePrintOverrideRef & {
+  issueDate?: string
+  dueDate?: string
+  referenceNo?: string
+  documentNo?: string
+  shipTo?: string
+}
+
+export async function getInvoicePrintOverrides(refs: InvoicePrintOverrideRef[]) {
+  const res = await apiFetchWithOffline('/api/getInvoicePrintOverrides', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refs }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    map: Record<
+      string,
+      {
+        issueDate?: string
+        dueDate?: string
+        referenceNo?: string
+        documentNo?: string
+        shipTo?: string
+        updatedAt?: string
+      }
+    >
+    message?: string
+  }>
+}
+
+export async function updateInvoicePrintOverrides(items: InvoicePrintOverridePayload[]) {
+  const res = await apiFetchWithOffline('/api/updateInvoicePrintOverrides', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+  return res.json() as Promise<{ success: boolean; saved?: number; message?: string }>
 }
 
 // ─── 직원 관리 (Employees) ───
@@ -10273,6 +10470,9 @@ export async function savePurchaseOrder(params: {
   orderDate?: string
   /** 세금계산서·내부 참조번호 — cart_json meta */
   referenceNo?: string
+  /** 공급사 견적/제안서 — cart_json meta (public URL) */
+  quotationFileUrl?: string
+  quotationFileName?: string
 }) {
   const res = await apiFetchWithOffline('/api/savePurchaseOrder', {
     method: 'POST',
@@ -10286,6 +10486,36 @@ export async function savePurchaseOrder(params: {
     updated?: boolean
     message?: string
   }>
+}
+
+/** 본사 PO 견적서: presign 후 Supabase Storage에 직접 PUT */
+export async function uploadPoQuotationFile(params: { file: File }) {
+  const { apiFetch } = await import('./api/fetch')
+  const pres = await apiFetch('/api/uploadPoQuotation/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: params.file.name,
+      contentType: params.file.type || 'application/octet-stream',
+      fileSize: params.file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return { success: false, publicUrl: undefined, message: pjson.message || '업로드 준비 실패' }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, params.file, { upsert: true })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return { success: false, publicUrl: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
+  }
+  return { success: true, publicUrl: pjson.publicUrl, message: undefined }
 }
 
 export type PoBillingSettingApiRow = {

@@ -46,7 +46,7 @@ export async function GET() {
         limit: 30,
         select: 'log_date,location,vendor_target,qty',
       }) as Promise<{ log_date?: string; location?: string; vendor_target?: string; qty?: number }[]>,
-      supabaseSelectFilter('stock_logs', 'log_type=eq.Outbound', {
+      supabaseSelectFilter('stock_logs', 'log_type=eq.Outbound&is_deleted=is.false', {
         order: 'log_date.desc',
         limit: 30,
         select: 'log_date,vendor_target,qty',

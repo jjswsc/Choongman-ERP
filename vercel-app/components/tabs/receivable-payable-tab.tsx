@@ -144,42 +144,64 @@ export function ReceivablePayableTab() {
       row: NonNullable<ReceivablePayableItem["items"]>[number],
       outletStoreName: string
     ) => {
-      if (row.ref_type !== "Order" || !row.receive_checked) return
-      const orderId = orderIdFromReceivableOrderRow(row)
-      if (orderId == null) {
-        await appAlert(tt("recTaxInvoiceNoOrderId", "주문을 식별할 수 없습니다."))
+      let refType: "Order" | "ForceOutbound" | null = null
+      let refId: number | null = null
+      if (row.ref_type === "Order") {
+        if (!row.receive_checked) return
+        const orderId = orderIdFromReceivableOrderRow(row)
+        if (orderId == null) {
+          await appAlert(tt("recTaxInvoiceNoOrderId", "주문을 식별할 수 없습니다."))
+          return
+        }
+        refType = "Order"
+        refId = orderId
+      } else if (row.ref_type === "ForceOutbound") {
+        const sid = Number(row.ref_id)
+        if (!Number.isFinite(sid) || sid <= 0) {
+          await appAlert(tt("recTaxInvoiceNoForceLog", "강제출고 로그를 식별할 수 없습니다."))
+          return
+        }
+        refType = "ForceOutbound"
+        refId = sid
+      } else {
         return
       }
-      const loadKey = `tax-${row.id ?? orderId}`
+
+      const loadKey =
+        refType === "Order" ? `tax-${row.id ?? refId}` : `tax-fo-${row.id ?? refId}`
       setTaxInvoiceLoadingKey(loadKey)
       try {
         const [{ items, orderInvoiceTotals }, invoiceDataRes, invSettings] = await Promise.all([
-          getPayableTransactionItems({ refType: "Order", refId: orderId }),
+          getPayableTransactionItems({ refType, refId }),
           getInvoiceData(),
           getInvoiceSettings(),
         ])
         if (!items.length) {
-          await appAlert(tt("recTaxInvoiceNoLines", "주문 품목이 없어 Tax Invoice를 만들 수 없습니다."))
+          await appAlert(tt("recTaxInvoiceNoLines", "표시할 품목이 없어 Tax Invoice를 만들 수 없습니다."))
           return
         }
         const { company, clients } = invoiceDataRes
         const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
         const client = resolveInvoiceClientForTarget(outletStoreName, company, clients)
         const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
-        const docNo = buildTaxInvoiceDocNo(dateStr, (row.invoice_no || "").trim() || String(row.ref_id || orderId || ""))
+        const refForDoc = (row.invoice_no || "").trim() || String(refId)
+        const docNo = buildTaxInvoiceDocNo(dateStr, refForDoc)
         const data: InvoiceData = buildThaiSalesInvoiceData({
           documentType: "Tax Invoice/Receipt",
           documentNo: docNo,
           issueDate: dateStr,
           dueDate: dateStr,
-          referenceNo: docNo,
+          referenceNo: refType === "ForceOutbound" && (row.invoice_no || "").trim() ? (row.invoice_no || "").trim() : docNo,
           company,
           client,
           invSettings: settings,
+          sourceRefType: refType,
+          sourceRefId: refId,
           lines: items.map((it) => ({
             code: it.code,
             name: it.name,
             spec: it.spec,
+            lineRemarks: it.line_remarks?.trim() || undefined,
             qty: Math.abs(it.qty || 0),
             amount: Math.round(Math.abs(it.amount || 0)),
           })),
@@ -688,7 +710,7 @@ export function ReceivablePayableTab() {
       let refId: number | undefined
       if (refType === "Order") {
         refId = orderIdFromReceivableOrderRow(row)
-      } else if (refType === "Inbound" || refType === "PO") {
+      } else if (refType === "Inbound" || refType === "PO" || refType === "ForceOutbound") {
         const rid = Number(row.ref_id)
         if (rid > 0 && !Number.isNaN(rid)) refId = rid
       }
@@ -1154,9 +1176,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   {tableItems.map((row) => {
                                     const rowOrderId =
                                       row.ref_type === "Order" ? orderIdFromReceivableOrderRow(row) : undefined
+                                    const rowForceLogId =
+                                      row.ref_type === "ForceOutbound"
+                                        ? (() => {
+                                            const n = Number(row.ref_id)
+                                            return n > 0 && Number.isFinite(n) ? n : undefined
+                                          })()
+                                        : undefined
                                     const recRowKey = transactionLineRowKey("rec", row)
                                     const canExpandRecLines =
-                                      row.ref_type === "Order" && rowOrderId != null && row.id != null
+                                      (row.ref_type === "Order" &&
+                                        rowOrderId != null &&
+                                        row.id != null) ||
+                                      (row.ref_type === "ForceOutbound" && rowForceLogId != null)
                                     const isRecExpanded = expandedPayableRowId === recRowKey
                                     const recLineEntry = payableItemsCache[recRowKey]
                                     const recLineItems = recLineEntry?.items ?? []
@@ -1224,7 +1256,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         )}
                                         title={
                                           canExpandRecLines
-                                            ? tt("recClickOrderForLines", "클릭하면 주문 품목 목록을 펼칩니다.")
+                                            ? row.ref_type === "ForceOutbound"
+                                              ? tt("recClickForceForLines", "클릭하면 강제출고 품목을 펼칩니다.")
+                                              : tt("recClickOrderForLines", "클릭하면 주문 품목 목록을 펼칩니다.")
                                             : undefined
                                         }
                                         onClick={() => {
@@ -1282,7 +1316,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         )}
                                       </td>
                                       <td className="py-1.5 px-1 w-[72px] text-center align-middle">
-                                        {row.ref_type === "Order" && row.receive_checked && rowOrderId != null ? (
+                                        {((row.ref_type === "Order" && row.receive_checked && rowOrderId != null) ||
+                                          (row.ref_type === "ForceOutbound" && rowForceLogId != null)) ? (
                                           <Button
                                             type="button"
                                             variant="ghost"
@@ -1296,7 +1331,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               void handleTaxInvoicePrint(row, item.storeName || "")
                                             }}
                                           >
-                                            {taxInvoiceLoadingKey === `tax-${row.id ?? rowOrderId}` ? (
+                                            {taxInvoiceLoadingKey ===
+                                            (row.ref_type === "Order"
+                                              ? `tax-${row.id ?? rowOrderId}`
+                                              : `tax-fo-${row.id ?? rowForceLogId}`) ? (
                                               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                             ) : (
                                               <FileText className="h-4 w-4" />

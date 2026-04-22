@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
-import { serializePurchaseOrderCart, type PoCartMeta } from '@/lib/purchase-order-cart'
+import { parsePurchaseOrderCart, serializePurchaseOrderCart, type PoCartMeta } from '@/lib/purchase-order-cart'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
@@ -99,6 +99,11 @@ export async function POST(request: NextRequest) {
     const referenceNoNorm = String(body.referenceNo ?? body.reference_no ?? '')
       .trim()
       .slice(0, 200)
+    const hasQuotationKey =
+      Object.prototype.hasOwnProperty.call(body, 'quotationFileUrl') ||
+      Object.prototype.hasOwnProperty.call(body, 'quotation_file_url')
+    const quotationIn = String(body.quotationFileUrl ?? body.quotation_file_url ?? '').trim().slice(0, 2000)
+    const quotationNameIn = String(body.quotationFileName ?? body.quotation_file_name ?? '').trim().slice(0, 200)
 
     const meta: PoCartMeta | undefined =
       relatedStore ||
@@ -107,7 +112,8 @@ export async function POST(request: NextRequest) {
       poFormatLabel ||
       billingUpsertEligible ||
       orderDateNorm ||
-      referenceNoNorm
+      referenceNoNorm ||
+      Boolean(quotationIn)
         ? {
             relatedStore: relatedStore || undefined,
             storeVendorCode: storeVendorCode || undefined,
@@ -117,6 +123,9 @@ export async function POST(request: NextRequest) {
             billingKind: billingUpsertEligible ? billingKindParsed! : undefined,
             orderDate: orderDateNorm || undefined,
             referenceNo: referenceNoNorm || undefined,
+            ...(quotationIn
+              ? { quotationFileUrl: quotationIn, quotationFileName: quotationNameIn || undefined }
+              : {}),
           }
         : undefined
 
@@ -141,7 +150,7 @@ export async function POST(request: NextRequest) {
     const vat = Math.round(taxableSubtotal * 0.07 * 100) / 100
     const total = Math.round((subtotal + vat) * 100) / 100
 
-    const cartJson = serializePurchaseOrderCart(cart, meta)
+    let cartJson = serializePurchaseOrderCart(cart, meta)
 
     if (billingUpsertEligible) {
       const existing = await findDraftPurchaseOrderForBillingUpsert({
@@ -152,6 +161,18 @@ export async function POST(request: NextRequest) {
         billingKind: billingKindParsed!,
       })
       if (existing) {
+        const prevMeta = parsePurchaseOrderCart(existing.cart_json).meta
+        const merged: PoCartMeta = { ...(meta || {}) }
+        if (!hasQuotationKey) {
+          if (prevMeta?.quotationFileUrl) {
+            merged.quotationFileUrl = prevMeta.quotationFileUrl
+            merged.quotationFileName = prevMeta.quotationFileName
+          }
+        } else if (!quotationIn) {
+          delete (merged as Record<string, unknown>).quotationFileUrl
+          delete (merged as Record<string, unknown>).quotationFileName
+        }
+        cartJson = serializePurchaseOrderCart(cart, merged)
         const patch: Record<string, unknown> = {
           cart_json: cartJson,
           subtotal,

@@ -39,6 +39,70 @@ if (process.platform === "win32") {
   app.setAppUserModelId(appId);
 }
 
+/**
+ * `userData` 루트(캐시·세션·runtime-config.json) — App **ready** 전, 첫 `getPath("userData")` 전에만.
+ * 순서: (1) `WINDOWS_POS_USER_DATA` / `CM_POS_USER_DATA` (2) 설치 본(Windows) 기본: `…\resources\choongman-pos-user-data` (3) 그 외: Electron 기본(보통 AppData)
+ * (2)는 `Program Files\…\resources`에 쓰기 권한이 없는 PC에선 자동으로 (3)으로 폴백.
+ * AppData로 고정하려면 `CM_POS_USE_DEFAULT_USERDATA=1` 또는 (2) 대신) `WINDOWS_POS_USER_DATA`에 원하는 경로.
+ */
+function applyUserDataPathEarly() {
+  if (!app || typeof app.setPath !== "function") return;
+  const raw = (process.env.WINDOWS_POS_USER_DATA ?? process.env.CM_POS_USER_DATA) ?? "";
+  const s = String(raw).trim();
+  if (s) {
+    let d = s;
+    const portables = new Set(["portable", "next-to-exe", "beside-exe"]);
+    if (portables.has(s.toLowerCase())) {
+      d = path.join(path.dirname(process.execPath), "choongman-pos-user-data");
+    } else {
+      d = path.isAbsolute(s) ? s : path.resolve(s);
+    }
+    try {
+      if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+      app.setPath("userData", d);
+      if (portables.has(String(raw).trim().toLowerCase()) && process.platform === "win32") {
+        try {
+          if (d.toLowerCase().includes("program files")) {
+            console.warn(
+              "[cm-pos] userData is next to exe but under Program Files — if writes fail, set WINDOWS_POS_USER_DATA to D:\\... or use a portable build outside Program Files"
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (e) {
+      console.warn("[cm-pos] WINDOWS_POS_USER_DATA ignored (use default AppData):", e && e.message ? e.message : e);
+    }
+    return;
+  }
+  if (String(process.env.CM_POS_USE_DEFAULT_USERDATA ?? process.env.WINDOWS_POS_USE_DEFAULT_USERDATA ?? "").trim() === "1") {
+    return;
+  }
+  if (process.platform === "win32" && app.isPackaged) {
+    const res = process.resourcesPath;
+    if (!res || !String(res).trim()) return;
+    const d = path.join(res, "choongman-pos-user-data");
+    try {
+      if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+      const test = path.join(d, ".cm-pos-write-test");
+      fs.writeFileSync(test, "1", "utf8");
+      try {
+        fs.unlinkSync(test);
+      } catch {
+        /* ignore */
+      }
+      app.setPath("userData", d);
+    } catch (e) {
+      console.warn(
+        "[cm-pos] could not use resources\\choongman-pos-user-data; using default AppData:",
+        e && e.message ? e.message : e
+      );
+    }
+  }
+}
+applyUserDataPathEarly();
+
 const DEFAULT_POS_URL = `${DEPLOY_ORIGIN}/pos/login`;
 
 /** 무인쇄 HTML 작업 직후 다음 invoke 전까지 — Windows 스풀·Zywell 등이 컷/배출을 끝내도록 */
@@ -55,18 +119,84 @@ function toOrigin(urlText) {
 }
 
 /**
- * 첫 실행 시에만: 번들에 포함된 runtime-config.json 을 userData 로 복사.
- * - 설치 직후에도 %APPDATA%\…\runtime-config.json 을 열어 프린터 이름을 넣을 수 있게 함.
- * - 병합 규칙(readRuntimeConfig)은 그대로 — 이후 사용자 파일만 수정하면 됨.
+ * 번들에 runtime-config.json 이 없거나 asar 복사에 실패해도 userData 쪽에 **항상** 기본본을 씀.
+ * - 설치 직후: Windows 설치 본이면 `…\Program Files\…\resources\choongman-pos-user-data\runtime-config.json` (권한 실패 시 AppData)
+ * - 0바이트 파일: 덮어써서 다시 씀
+ * - 이후 정상 JSON이 있으면 건드리지 않음(사용자 편집 보존)
+ */
+function buildDefaultUserRuntimeConfigText() {
+  const origin = String(DEPLOY_ORIGIN || "https://choongman-erp.vercel.app").replace(/\/+$/, "");
+  return (
+    JSON.stringify(
+      {
+        posUrl: `${origin}/pos/login`,
+        allowedOrigin: origin,
+        openDevtools: false,
+        updateManifestUrl: `${origin}/downloads/windows-pos/latest.json`,
+        kiosk: "1",
+        print: {
+          deviceName: "",
+          receiptDeviceName: "",
+          kitchenDeviceName: "",
+          kitchen1DeviceName: "",
+          kitchen2DeviceName: "",
+          kitchen3DeviceName: "",
+          silent: true,
+          escPosCutAfterKitchenHtml: true,
+          escPosCutAfterHallOrderHtml: false,
+          escPosCutAfterPaymentReceiptHtml: false,
+        },
+      },
+      null,
+      4
+    ) + "\n"
+  );
+}
+
+function userRuntimeConfigNeedsSeeding(userPath) {
+  try {
+    if (!fs.existsSync(userPath)) return true;
+    const st = fs.statSync(userPath);
+    if (st.isFile() && st.size === 0) return true;
+  } catch {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 첫 실행(또는 0바이트 복구): userData에 runtime-config.json이 반드시 생기게 함.
  */
 function ensureUserRuntimeConfigSeeded() {
   try {
-    const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
     const userPath = path.join(app.getPath("userData"), "runtime-config.json");
-    if (fs.existsSync(userPath)) return;
-    if (!fs.existsSync(bundledPath)) return;
+    if (!userRuntimeConfigNeedsSeeding(userPath)) return;
+    const bundledPath = path.join(app.getAppPath(), "runtime-config.json");
     fs.mkdirSync(path.dirname(userPath), { recursive: true });
-    fs.copyFileSync(bundledPath, userPath);
+    let written = false;
+    if (fs.existsSync(bundledPath)) {
+      try {
+        fs.copyFileSync(bundledPath, userPath);
+        written = true;
+      } catch (e1) {
+        try {
+          const raw = fs.readFileSync(bundledPath, "utf8");
+          fs.writeFileSync(userPath, raw, "utf8");
+          written = true;
+        } catch (e2) {
+          console.warn(
+            "[cm-pos] copy bundled runtime-config (asar→userData) failed, using generated default",
+            e1 && e1.message,
+            e2 && e2.message
+          );
+        }
+      }
+    } else {
+      console.warn("[cm-pos] packaged runtime-config.json not found, writing generated default to userData");
+    }
+    if (!written) {
+      fs.writeFileSync(userPath, buildDefaultUserRuntimeConfigText(), "utf8");
+    }
   } catch (e) {
     console.warn("[cm-pos] ensureUserRuntimeConfigSeeded:", e && e.message ? e.message : e);
   }
@@ -128,6 +258,19 @@ const POS_MAIN_LOAD_WATCHDOG_MS = readConfigInt(
   45000,
   5000,
   300000
+);
+
+/**
+ * 문서는 캐시·SW로 빨리 did-finish-load(워치독 취소) 되지만 JS 청크가 끊기면 흰 화면만 남는 경우.
+ * `runtime-config.json`의 `posDomBlankCheckMs` 또는 `WINDOWS_POS_DOM_BLANK_CHECK_MS`.
+ */
+const POS_DOM_BLANK_CHECK_MS = readConfigInt(
+  process.env.WINDOWS_POS_DOM_BLANK_CHECK_MS !== undefined && process.env.WINDOWS_POS_DOM_BLANK_CHECK_MS !== ""
+    ? process.env.WINDOWS_POS_DOM_BLANK_CHECK_MS
+    : runtimeConfig.posDomBlankCheckMs,
+  22000,
+  8000,
+  120000
 );
 
 const POS_URL = process.env.WINDOWS_POS_URL || runtimeConfig.posUrl || DEFAULT_POS_URL;
@@ -378,6 +521,7 @@ let mainWindow = null;
 let posMainLoadFailAttempts = 0;
 let posMainLoadRetryTimer = null;
 let posMainLoadWatchdogTimer = null;
+let posDomBlankWatchdogTimer = null;
 const POS_MAIN_LOAD_MAX_ATTEMPTS = 5;
 let customerDisplayWindow = null;
 let isCheckingUpdate = false;
@@ -562,6 +706,49 @@ function clearPosMainLoadWatchdog() {
   }
 }
 
+function clearPosDomBlankWatchdog() {
+  if (posDomBlankWatchdogTimer) {
+    try {
+      clearTimeout(posDomBlankWatchdogTimer);
+    } catch {
+      /* ignore */
+    }
+    posDomBlankWatchdogTimer = null;
+  }
+}
+
+/**
+ * 원격 origin 로드는 됐는데(메인 URL 워치독만으로는 누락) 클라이언트 번들 실패·무한 대기로 흰 화면만 이어질 때 offline.html
+ */
+function schedulePosDomBlankWatchdog() {
+  clearPosDomBlankWatchdog();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  posDomBlankWatchdogTimer = setTimeout(() => {
+    posDomBlankWatchdogTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      const u = mainWindow.webContents.getURL() || "";
+      if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) {
+        void mainWindow.webContents
+          .executeJavaScript(
+            "(() => { try { const b = document && document.body; if (!b) return true; if (b.querySelector('svg,img,button,input,select,form,main,nav,header,footer,textarea,canvas,iframe')) return false; const t = (b.innerText || '').replace(/\\s/g, ''); if (t.length > 0) return false; return ((b.textContent || '').replace(/\\s/g, '')).length === 0; } catch (e) { return true; } })()"
+          )
+          .then((isBlank) => {
+            if (isBlank) {
+              console.warn("[cm-pos] DOM blank watchdog: nothing rendered, showing offline fallback");
+              loadOfflineFallbackPage();
+            }
+          })
+          .catch(() => {
+            loadOfflineFallbackPage();
+          });
+      }
+    } catch (e) {
+      console.warn("[cm-pos] dom blank probe failed", e && e.message ? e.message : e);
+    }
+  }, POS_DOM_BLANK_CHECK_MS);
+}
+
 /** POS URL 로드 시작 후 일정 시간 안에 화면이 확정되지 않으면 offline.html 로 폴백 */
 function schedulePosMainLoadWatchdog() {
   clearPosMainLoadWatchdog();
@@ -584,6 +771,7 @@ function schedulePosMainLoadWatchdog() {
 function loadOfflineFallbackPage() {
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    clearPosDomBlankWatchdog();
     try {
       mainWindow.webContents.stop();
     } catch {
@@ -611,6 +799,7 @@ function schedulePosMainUrlRetryFromFailure() {
   posMainLoadRetryTimer = setTimeout(() => {
     posMainLoadRetryTimer = null;
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    clearPosDomBlankWatchdog();
     try {
       void mainWindow.loadURL(POS_URL, {
         extraHeaders: "Cache-Control: no-cache\r\nPragma: no-cache\r\n",
@@ -1146,8 +1335,43 @@ async function resolvePrintDeviceNameForJob() {
   return getWindowsDefaultPrinterName();
 }
 
+/**
+ * 프린터 점검 UI·IPC — 항상 readRuntimeConfig() 기준(파일 수정 후「다시 읽기」시 반영).
+ * 주의: 모듈 로드 시 캡처한 DEFAULT_PRINT_* 는 사용하지 말 것(재시작 전까지 갱신 안 됨).
+ */
+function getPrintConfigSnapshotForIpc() {
+  const cfg = readRuntimeConfig();
+  const p = cfg.print || {};
+  const legacyDefault = String(
+    process.env.WINDOWS_POS_PRINT_DEVICE ?? cfg.printDeviceName ?? p.deviceName ?? ""
+  ).trim();
+  const silent = readConfigBool(
+    process.env.WINDOWS_POS_PRINT_SILENT !== undefined && process.env.WINDOWS_POS_PRINT_SILENT !== ""
+      ? process.env.WINDOWS_POS_PRINT_SILENT
+      : cfg.printSilent ?? p.silent ?? true,
+    true
+  );
+  return {
+    silent,
+    deviceName: legacyDefault || null,
+    receiptDeviceName: String(p.receiptDeviceName || "").trim() || legacyDefault || null,
+    kitchen1DeviceName: String(p.kitchen1DeviceName || "").trim() || null,
+    kitchen2DeviceName: String(p.kitchen2DeviceName || "").trim() || null,
+    kitchen3DeviceName: String(p.kitchen3DeviceName || "").trim() || null,
+    kitchenDeviceName: String(p.kitchenDeviceName || "").trim() || null,
+  };
+}
+
 function getEscPosCutScriptPath() {
   const name = "send-thermal-escpos-cut.ps1";
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "scripts", name);
+  }
+  return path.join(__dirname, "scripts", name);
+}
+
+function getEscPosDrawerScriptPath() {
+  const name = "send-thermal-escpos-drawer-kick.ps1";
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "scripts", name);
   }
@@ -1175,6 +1399,38 @@ function sendEscPosCutForPrinter(printerName) {
       (err, _stdout, stderr) => {
         if (err) {
           console.warn("[cm-pos] ESC/POS cut failed:", err.message, stderr ? String(stderr) : "");
+          resolve({ ok: false, reason: String(err.message || err) });
+          return;
+        }
+        resolve({ ok: true });
+      }
+    );
+  });
+}
+
+/**
+ * 영수증(또는 동일 포트) ESC/POS 드로어 — 실패해도 주문/결제는 영향 없음
+ */
+function sendEscPosDrawerKickForPrinter(printerName) {
+  return new Promise((resolve) => {
+    const name = String(printerName || "").trim();
+    if (!name) {
+      resolve({ ok: false, reason: "no_printer" });
+      return;
+    }
+    const script = getEscPosDrawerScriptPath();
+    if (!fs.existsSync(script)) {
+      console.warn("[cm-pos] ESC/POS drawer script missing:", script);
+      resolve({ ok: false, reason: "no_script" });
+      return;
+    }
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PrinterName", name],
+      { windowsHide: true, timeout: 30000, maxBuffer: 256 * 1024 },
+      (err, _stdout, stderr) => {
+        if (err) {
+          console.warn("[cm-pos] ESC/POS drawer kick failed:", err.message, stderr ? String(stderr) : "");
           resolve({ ok: false, reason: String(err.message || err) });
           return;
         }
@@ -1299,6 +1555,22 @@ function buildAppMenu() {
             void clearRuntimeCacheAndReloadManual();
           },
         },
+        {
+          label: "Open runtime-config.json in Explorer",
+          click: () => {
+            try {
+              ensureUserRuntimeConfigSeeded();
+              const p = path.join(app.getPath("userData"), "runtime-config.json");
+              if (fs.existsSync(p)) {
+                shell.showItemInFolder(p);
+              } else {
+                void shell.openPath(path.dirname(p));
+              }
+            } catch (e) {
+              console.warn("[cm-pos] show runtime-config folder", e);
+            }
+          },
+        },
         { type: "separator" },
         { role: "quit", label: "Quit" },
       ],
@@ -1331,6 +1603,7 @@ function createWindow() {
     } catch {
       /* ignore */
     }
+    clearPosDomBlankWatchdog();
     schedulePosMainUrlRetryFromFailure();
   });
 
@@ -1338,15 +1611,18 @@ function createWindow() {
     try {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       const u = mainWindow.webContents.getURL() || "";
+      if (u.includes("offline.html")) {
+        clearPosDomBlankWatchdog();
+        clearPosMainLoadWatchdog();
+        clearPosMainLoadRetryTimer();
+        posMainLoadFailAttempts = 0;
+        return;
+      }
       if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) {
         posMainLoadFailAttempts = 0;
         clearPosMainLoadRetryTimer();
         clearPosMainLoadWatchdog();
-      }
-      if (u.includes("offline.html")) {
-        clearPosMainLoadWatchdog();
-        clearPosMainLoadRetryTimer();
-        posMainLoadFailAttempts = 0;
+        schedulePosDomBlankWatchdog();
       }
     } catch {
       /* ignore */
@@ -1421,6 +1697,7 @@ if (!gotLock) {
       }
       posMainLoadFailAttempts = 0;
       clearPosMainLoadRetryTimer();
+      clearPosDomBlankWatchdog();
       schedulePosMainLoadWatchdog();
       try {
         await mainWindow.loadURL(POS_URL, {
@@ -1497,17 +1774,24 @@ if (!gotLock) {
 
     ipcMain.handle("cm-pos-get-print-config", (event) => {
       if (!senderAllowedOrigin(event.sender)) return null;
-      const cfg = readRuntimeConfig();
-      const p = cfg.print || {};
-      return {
-        silent: DEFAULT_PRINT_SILENT,
-        deviceName: DEFAULT_PRINT_DEVICE || null,
-        receiptDeviceName: String(p.receiptDeviceName || "").trim() || DEFAULT_PRINT_DEVICE || null,
-        kitchen1DeviceName: String(p.kitchen1DeviceName || "").trim() || null,
-        kitchen2DeviceName: String(p.kitchen2DeviceName || "").trim() || null,
-        kitchen3DeviceName: String(p.kitchen3DeviceName || "").trim() || null,
-        kitchenDeviceName: String(p.kitchenDeviceName || "").trim() || null,
-      };
+      return getPrintConfigSnapshotForIpc();
+    });
+
+    ipcMain.handle("cm-pos-open-cash-drawer", async (event) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      let device = String(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" }) || "").trim();
+      if (!device) {
+        device = String((await resolvePrintDeviceNameForJob()) || "").trim();
+      }
+      if (!device) {
+        return { ok: false, reason: "no_printer" };
+      }
+      const r = await sendEscPosDrawerKickForPrinter(device);
+      return r.ok
+        ? { ok: true, usedDevice: device }
+        : { ok: false, reason: String(r.reason || "drawer_kick_failed") };
     });
 
     ipcMain.handle("cm-pos-print-dialog", async (event) => {

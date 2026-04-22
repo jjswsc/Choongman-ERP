@@ -637,6 +637,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [splitCount, setSplitCount] = useState(2)
   const [splitPaidSteps, setSplitPaidSteps] = useState(0)
   const [showSplit, setShowSplit] = useState(false)
+  const [splitMode, setSplitMode] = useState<'amount' | 'menu'>('amount')
+  const [menuSplitTargetPerson, setMenuSplitTargetPerson] = useState(0)
+  const [menuSplitAssigned, setMenuSplitAssigned] = useState<Record<string, number[]>>({})
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
   const [editingNoteItemId, setEditingNoteItemId] = useState<string | null>(null)
   const [editingCustomerMemo, setEditingCustomerMemo] = useState(false)
@@ -848,10 +851,82 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const effectiveDutchCount = showSplit
     ? Math.max(1, Number(splitCount) || 1)
     : Math.max(splitPaidSteps + 1, 2)
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const menuSplitQtyByPerson = useMemo(() => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    const qtyByPerson = Array.from({ length: count }, () => 0)
+    for (const item of cartItems) {
+      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      for (let i = 0; i < count; i += 1) {
+        qtyByPerson[i] += Math.max(0, Number(row[i] || 0))
+      }
+    }
+    return qtyByPerson
+  }, [cartItems, menuSplitAssigned, splitCount])
+  const menuSplitBaseByPerson = useMemo(() => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    const baseByPerson = Array.from({ length: count }, () => 0)
+    for (const item of cartItems) {
+      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      for (let i = 0; i < count; i += 1) {
+        const qty = Math.max(0, Number(row[i] || 0))
+        baseByPerson[i] += (Number(item.price) || 0) * qty
+      }
+    }
+    return baseByPerson.map((v) => round2(v))
+  }, [cartItems, menuSplitAssigned, splitCount])
+  const menuSplitDueByPerson = useMemo(() => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    const dueByPerson = Array.from({ length: count }, () => 0)
+    if (total <= 0 || subtotal <= 0) return dueByPerson
+    let acc = 0
+    for (let i = 0; i < count; i += 1) {
+      if (i === count - 1) {
+        dueByPerson[i] = round2(Math.max(0, total - acc))
+      } else {
+        const raw = (total * Math.max(0, menuSplitBaseByPerson[i] || 0)) / subtotal
+        const rounded = round2(raw)
+        dueByPerson[i] = rounded
+        acc = round2(acc + rounded)
+      }
+    }
+    return dueByPerson
+  }, [menuSplitBaseByPerson, splitCount, subtotal, total])
+  const menuSplitUnassignedQty = useMemo(() => {
+    let sum = 0
+    for (const item of cartItems) {
+      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
+      sum += Math.max(0, (Number(item.quantity) || 0) - assigned)
+    }
+    return round2(sum)
+  }, [cartItems, menuSplitAssigned])
+  const menuSplitUnassignedAmount = useMemo(() => {
+    let sum = 0
+    for (const item of cartItems) {
+      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
+      const remain = Math.max(0, (Number(item.quantity) || 0) - assigned)
+      sum += remain * (Number(item.price) || 0)
+    }
+    return round2(sum)
+  }, [cartItems, menuSplitAssigned])
   const dutchUnitAmount =
     total <= 0 ? 0 : Math.max(0, Math.round((total / Math.max(1, effectiveDutchCount)) * 100) / 100)
+  const currentSplitPersonIndex = Math.min(splitPaidSteps, Math.max(0, Math.max(1, Number(splitCount) || 1) - 1))
+  const menuSplitTargetPersonIndex = Math.min(
+    Math.max(0, Number(menuSplitTargetPerson) || 0),
+    Math.max(0, Math.max(1, Number(splitCount) || 1) - 1)
+  )
+  const currentSplitTargetAmount =
+    showSplit && splitMode === 'menu'
+      ? Math.max(0, Number(menuSplitDueByPerson[currentSplitPersonIndex] || 0))
+      : dutchUnitAmount
   const dutchRemainingPeople = showSplit ? Math.max(0, splitCount - splitPaidSteps) : 0
-  const partialPayDisabled = showSplit ? dutchRemainingPeople <= 0 : total <= 0 || paymentSumMatch
+  const partialPayDisabled = showSplit
+    ? dutchRemainingPeople <= 0 ||
+      (splitMode === 'menu' && (menuSplitUnassignedQty > 0 || currentSplitTargetAmount <= 0))
+    : total <= 0 || paymentSumMatch
   const DISCOUNT_PRESETS = [5, 10, 15, 20, 25, 30, 50]
   const paymentTabs: { id: PaymentMethodTab; label: string; icon: typeof Banknote }[] = [
     { id: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
@@ -1140,7 +1215,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 추가 (진행은 하단 「일부 결제」에서만 증가) */
   const addDutchAmountOnly = (target: MoveTarget) => {
     const count = effectiveDutchCount
-    const perPerson = dutchUnitAmount
+    const perPerson = currentSplitTargetAmount
     const adminLineSum = adminPaymentLines.reduce(
       (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
       0
@@ -1205,7 +1280,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const addDutchAmountToAdminLine = (lineId: string) => {
     const count = effectiveDutchCount
-    const perPerson = dutchUnitAmount
+    const perPerson = currentSplitTargetAmount
     const adminLineSum = adminPaymentLines.reduce(
       (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
       0
@@ -1236,11 +1311,45 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     })
   }
 
+  const adjustMenuSplitQty = (itemId: string, delta: number) => {
+    if (!showSplit || splitMode !== 'menu' || !Number.isFinite(delta) || delta === 0) return
+    const personIdx = menuSplitTargetPersonIndex
+    const targetItem = cartItems.find((it) => it.id === itemId)
+    if (!targetItem) return
+    const qtyTotal = Math.max(0, Number(targetItem.quantity) || 0)
+    setMenuSplitAssigned((prev) => {
+      const count = Math.max(1, Number(splitCount) || 1)
+      const currentRow = Array.from({ length: count }, (_, i) =>
+        Math.max(0, Number((prev[itemId] || [])[i] || 0))
+      )
+      const totalWithoutCurrent = currentRow.reduce(
+        (s, v, i) => s + (i === personIdx ? 0 : Math.max(0, Number(v || 0))),
+        0
+      )
+      const current = Math.max(0, Number(currentRow[personIdx] || 0))
+      const maxForCurrent = Math.max(0, qtyTotal - totalWithoutCurrent)
+      const next = Math.max(0, Math.min(maxForCurrent, current + delta))
+      currentRow[personIdx] = round2(next)
+      return { ...prev, [itemId]: currentRow }
+    })
+  }
+
+  useEffect(() => {
+    setMenuSplitTargetPerson((prev) => {
+      const maxIdx = Math.max(0, Math.max(1, Number(splitCount) || 1) - 1)
+      return Math.min(Math.max(0, prev), maxIdx)
+    })
+  }, [splitCount])
+
   /** 더치페이 「일부 결제」: 진행만 누적 (금액은 탭 클릭으로 이미 입력됨). 패널 없이도 일부 결제만으로 단계 증가 가능 */
   const confirmSplitStep = () => {
     if (showSplit) {
       const count = Math.max(1, Number(splitCount) || 1)
       if (splitPaidSteps >= count) return
+      if (splitMode === 'menu') {
+        if (menuSplitUnassignedQty > 0) return
+        if (currentSplitTargetAmount <= 0) return
+      }
       setSplitPaidSteps((prev) => Math.min(count, prev + 1))
     } else {
       setSplitPaidSteps((prev) => prev + 1)
@@ -1257,6 +1366,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!showPaymentModal) {
       setShowSplit(false)
       setSplitPaidSteps(0)
+      setSplitMode('amount')
+      setMenuSplitAssigned({})
     }
   }, [showPaymentModal])
 
@@ -1269,6 +1380,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     resetPaymentInputs()
     setSplitPaidSteps(0)
   }, [showPaymentModal, showSplit, splitCount])
+
+  useEffect(() => {
+    if (!showPaymentModal || !showSplit || splitMode !== 'menu') return
+    resetPaymentInputs()
+    setSplitPaidSteps(0)
+    setMenuSplitAssigned({})
+  }, [showPaymentModal, showSplit, splitMode, splitCount, cartItems])
 
   useEffect(() => {
     if (activePaymentTab !== 'other') {
@@ -2864,7 +2982,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                     className="h-8 shrink-0 px-2 text-xs"
                                     onClick={() => addDutchAmountToAdminLine(item.id)}
                                   >
-                                    +{formatBahtNum(dutchUnitAmount)} ฿
+                                    +{formatBahtNum(currentSplitTargetAmount)} ฿
                                   </Button>
                                 )}
                               </div>
@@ -2916,7 +3034,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                 className="h-8 shrink-0 px-2 text-xs"
                                 onClick={() => addDutchAmountOnly(moveKey)}
                               >
-                                +{formatBahtNum(dutchUnitAmount)} ฿
+                                +{formatBahtNum(currentSplitTargetAmount)} ฿
                               </Button>
                             )}
                           </div>
@@ -3115,6 +3233,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="flex flex-wrap items-center gap-2 pt-3">
+                  <div className="flex w-full items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={splitMode === 'amount' ? 'default' : 'outline'}
+                      className="h-9"
+                      onClick={() => setSplitMode('amount')}
+                    >
+                      {tr('posDutchSplitModeAmount', '금액 기준')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={splitMode === 'menu' ? 'default' : 'outline'}
+                      className="h-9"
+                      onClick={() => setSplitMode('menu')}
+                    >
+                      {tr('posDutchSplitModeMenu', '메뉴 기준')}
+                    </Button>
+                  </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-sm text-muted-foreground">{tr('posSplitPeople', '인원')}</span>
                     <Input
@@ -3126,15 +3264,120 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     />
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5">
-                    <span className="text-sm">{tr('posPerPersonAmount', '1인 금액')}</span>
-                    <span className="font-semibold tabular-nums">{formatBahtNum(dutchUnitAmount)}฿</span>
+                    <span className="text-sm">
+                      {splitMode === 'menu'
+                        ? tr('posCurrentPersonAmount', '현재 인원 금액')
+                        : tr('posPerPersonAmount', '1인 금액')}
+                    </span>
+                    <span className="font-semibold tabular-nums">{formatBahtNum(currentSplitTargetAmount)}฿</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5 text-sm">
                     <span>{tr('posProgress', '진행')} <span className="font-semibold tabular-nums">{splitPaidSteps}/{Math.max(1, splitCount)}{tr('posPeopleUnit', '명')}</span></span>
                     <span className="font-semibold tabular-nums text-muted-foreground">{formatBahtNum(paymentSum)}/{formatBahtNum(total)}฿</span>
                   </div>
+                  {splitMode === 'menu' && (
+                    <div className="w-full space-y-2 rounded-xl border border-violet-400/25 bg-violet-50/40 p-2.5 dark:bg-violet-900/10">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-md bg-violet-100 px-2 py-1 font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
+                          {tr('posCurrentPerson', '현재 인원')} {Math.min(splitPaidSteps + 1, Math.max(1, splitCount))}
+                        </span>
+                        <span className="rounded-md bg-primary/10 px-2 py-1 font-semibold text-primary">
+                          {tr('posAssignTargetPerson', '배정 대상 인원')} {menuSplitTargetPersonIndex + 1}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {tr('posUnassignedQty', '미배정 수량')}: {formatBahtNum(menuSplitUnassignedQty)}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {tr('posUnassignedAmount', '미배정 금액')}: {formatBahtNum(menuSplitUnassignedAmount)} ฿
+                        </span>
+                      </div>
+                      <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                        {Array.from({ length: Math.max(1, splitCount) }).map((_, idx) => (
+                          <div
+                            key={`split-person-${idx}`}
+                            className={cn(
+                              'rounded-lg border px-2 py-1.5 text-xs',
+                              idx === currentSplitPersonIndex
+                                ? 'border-violet-500/60 bg-violet-100/60 dark:bg-violet-900/30'
+                                : 'border-border/70 bg-card'
+                            )}
+                          >
+                            <div className="font-semibold">
+                              {tr('posPeopleUnit', '명')} {idx + 1}
+                            </div>
+                            <div className="tabular-nums text-muted-foreground">
+                              {tr('posAssignedQty', '배정 수량')}: {formatBahtNum(menuSplitQtyByPerson[idx] || 0)}
+                            </div>
+                            <div className="tabular-nums text-muted-foreground">
+                              {tr('posAssignedAmount', '배정 금액')}: {formatBahtNum(menuSplitDueByPerson[idx] || 0)} ฿
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={idx === menuSplitTargetPersonIndex ? 'default' : 'outline'}
+                              className="mt-1 h-7 w-full text-[11px]"
+                              onClick={() => setMenuSplitTargetPerson(idx)}
+                            >
+                              {tr('posSelectAssignTarget', '여기에 배정')}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-border/70 bg-card p-2">
+                        {cartItems.map((item) => {
+                          const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+                          const currentQty = Math.max(0, Number(row[menuSplitTargetPersonIndex] || 0))
+                          const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
+                          const remain = Math.max(0, (Number(item.quantity) || 0) - assigned)
+                          return (
+                            <div
+                              key={`split-item-${item.id}`}
+                              className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium">{item.name}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {tr('qty', '수량')}: {formatBahtNum(item.quantity)} · {tr('posUnassignedShort', '미배정')}: {formatBahtNum(remain)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => adjustMenuSplitQty(item.id, -1)}
+                                  disabled={currentQty <= 0}
+                                >
+                                  <Minus className="h-3.5 w-3.5" />
+                                </Button>
+                                <span className="w-8 text-center text-xs font-semibold tabular-nums">
+                                  {formatBahtNum(currentQty)}
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => adjustMenuSplitQty(item.id, 1)}
+                                  disabled={remain <= 0}
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <p className="w-full text-[11px] text-muted-foreground sm:w-auto sm:flex-1 sm:min-w-[12rem]">
-                    {tr('posDutchPayFooterHint', '수단을 탭해 금액을 넣은 뒤, 하단 「일부 결제」로 한 명씩 진행하세요.')}
+                    {splitMode === 'menu'
+                      ? tr(
+                          'posDutchPayMenuHint',
+                          '현재 인원에게 메뉴 수량을 배정한 뒤 결제 수단을 탭하고, 「일부 결제」로 다음 인원으로 진행하세요.'
+                        )
+                      : tr('posDutchPayFooterHint', '수단을 탭해 금액을 넣은 뒤, 하단 「일부 결제」로 한 명씩 진행하세요.')}
                   </p>
                 </CollapsibleContent>
               </div>

@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -70,6 +71,8 @@ interface CartItem {
   price: number
   qty: number
   taxType?: string
+  /** 인보이스 품목 하단 비고(무게·kg당가 등) */
+  lineRemarks?: string
 }
 
 export function AdminOrderCreate() {
@@ -173,6 +176,19 @@ export function AdminOrderCreate() {
     setCart((prev) => prev.filter((x) => x.code !== code))
   }
 
+  const updateLineRemarks = (code: string, value: string) => {
+    setCart((prev) =>
+      prev.map((x) =>
+        x.code === code
+          ? {
+              ...x,
+              lineRemarks: value,
+            }
+          : x
+      )
+    )
+  }
+
   const handlePlaceOrder = async () => {
     if (!storeSelect || !auth?.user || cart.length === 0) return
     setSubmitting(true)
@@ -180,7 +196,14 @@ export function AdminOrderCreate() {
       const res = await processOrder({
         storeName: storeSelect,
         userName: auth.user,
-        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, taxType: c.taxType })),
+        cart: cart.map((c) => ({
+          code: c.code,
+          name: c.name,
+          price: c.price,
+          qty: c.qty,
+          taxType: c.taxType,
+          line_remarks: c.lineRemarks?.trim() || undefined,
+        })),
       })
       if (res.success) {
         await appAlert(t("orderSuccess"))
@@ -358,22 +381,36 @@ export function AdminOrderCreate() {
                   </thead>
                   <tbody>
                     {cart.map((c) => (
-                      <tr key={c.code} className="border-b border-border/60 last:border-0">
-                        <td className="px-3 py-2 font-medium">{c.name}</td>
-                        <td className="px-3 py-2 text-right">{c.price}</td>
-                        <td className="px-3 py-2 text-right">{c.qty}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-primary">{c.price * c.qty}</td>
-                        <td className="px-1 py-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                            onClick={() => removeFromCart(c.code)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
+                      <React.Fragment key={c.code}>
+                        <tr className="border-b-0 border-border/60">
+                          <td className="px-3 py-2 font-medium align-top">{c.name}</td>
+                          <td className="px-3 py-2 text-right align-top">{c.price}</td>
+                          <td className="px-3 py-2 text-right align-top">{c.qty}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-primary align-top">{c.price * c.qty}</td>
+                          <td className="px-1 py-2 align-top">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              onClick={() => removeFromCart(c.code)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                        <tr className="border-b border-border/60 last:border-0 bg-muted/10">
+                          <td className="px-3 pb-2 pt-0" colSpan={4}>
+                            <Textarea
+                              value={c.lineRemarks || ""}
+                              onChange={(e) => updateLineRemarks(c.code, e.target.value)}
+                              placeholder={t("orderLineRemarksPh") || "비고 (예: TOTAL WEIGHT : 26KG./1BOX\\nPRICE : 600 THB./1 KG.)"}
+                              className="min-h-[56px] resize-y border-primary/20 bg-background text-xs leading-relaxed"
+                            />
+                          </td>
+                          <td className="px-1 pb-2 pt-0" />
+                        </tr>
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

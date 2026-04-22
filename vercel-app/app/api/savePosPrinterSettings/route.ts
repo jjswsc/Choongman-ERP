@@ -90,8 +90,9 @@ export async function POST(req: NextRequest) {
     const cookingDelayBadgeEnabled = parseBoolParam(body?.cookingDelayBadgeEnabled, true)
     const cookingDelaySoundEnabled = parseBoolParam(body?.cookingDelaySoundEnabled, false)
     const cookingDelayAlertOverMin = Math.max(0, parseCookingInt(body?.cookingDelayAlertOverMin, 0))
-    const cardAutoOpen = Boolean(body?.cardAutoOpen)
-    const checkAutoOpen = Boolean(body?.checkAutoOpen)
+    // 레거시 필드: 과거 카드/수표 자동 열기 — 정책상 비활성(요청값과 무관하게 false)
+    const cardAutoOpen = false
+    const checkAutoOpen = false
     const drawerOpt = String(body?.drawerOpenOption || 'reason_only')
     const drawerOpenOption = ['password_and_reason', 'reason_only', 'force'].includes(drawerOpt) ? drawerOpt : 'reason_only'
     const logoPrint = Boolean(body?.logoPrint)

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { appAlert } from '@/lib/app-message'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,12 +23,15 @@ import {
   getPosMenuCategories,
   getPosMenus,
   getPosOrders,
+  markPosOrderItemServed,
+  updatePosOrderStatus,
   type PosMenu,
   type PosOrder,
   type PosOrderItem,
 } from '@/lib/api-client'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { CheckCircle2 } from 'lucide-react'
 
 interface LiveMenuSearchDialogProps {
   open: boolean
@@ -38,6 +42,7 @@ interface LiveMenuSearchDialogProps {
 
 interface MatchedTarget {
   orderId: number
+  itemId: string
   orderNo: string
   orderType: string
   tableName: string
@@ -129,6 +134,8 @@ export function LiveMenuSearchDialog({
   const [selectedCategory, setSelectedCategory] = React.useState('')
   const [selectedMenuId, setSelectedMenuId] = React.useState('')
   const [menuKeyword, setMenuKeyword] = React.useState('')
+  const [servingMap, setServingMap] = React.useState<Record<string, boolean>>({})
+  const [servingBusyMap, setServingBusyMap] = React.useState<Record<string, boolean>>({})
 
   const getTypeLabel = React.useCallback((orderType: string) => {
     if (orderType === 'dine_in') return t('posOrderTypeDineIn') || 'Dine In'
@@ -229,6 +236,7 @@ export function LiveMenuSearchDialog({
         const isServed = isTable && (order.status === 'completed' || Boolean(it.servedAt))
         rows.push({
           orderId: order.id,
+          itemId: String(it.id ?? ''),
           orderNo: order.orderNo,
           orderType: order.orderType,
           tableName: order.tableName || '-',
@@ -243,6 +251,45 @@ export function LiveMenuSearchDialog({
     rows.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return rows
   }, [orders, selectedMenu])
+
+  const setItemServedFromSearch = React.useCallback(
+    async (target: MatchedTarget) => {
+      if (!target.isTable || target.isServed || !target.itemId) return
+      const key = `${target.orderId}:${target.itemId}`
+      if (servingBusyMap[key]) return
+      setServingBusyMap((prev) => ({ ...prev, [key]: true }))
+      try {
+        const res = await markPosOrderItemServed({
+          id: target.orderId,
+          itemId: target.itemId,
+          served: true,
+        })
+        if (!res.success) {
+          await appAlert(res.message || (t('processFail') || '처리 실패'))
+          return
+        }
+        setServingMap((prev) => ({ ...prev, [key]: true }))
+        if (
+          Number(res.totalCount ?? 0) > 0 &&
+          Number(res.servedCount ?? 0) >= Number(res.totalCount ?? 0)
+        ) {
+          const statusRes = await updatePosOrderStatus({
+            id: target.orderId,
+            status: 'ready',
+          })
+          if (!statusRes?.success) {
+            await appAlert(statusRes?.message || '서빙 완료 상태 반영에 실패했습니다.')
+          }
+        }
+        await loadAll()
+      } catch (e) {
+        await appAlert(String(e))
+      } finally {
+        setServingBusyMap((prev) => ({ ...prev, [key]: false }))
+      }
+    },
+    [loadAll, servingBusyMap, t]
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -308,46 +355,69 @@ export function LiveMenuSearchDialog({
             <div className="p-8 text-center text-sm text-muted-foreground">{t('itemsNoResults') || 'No matching orders.'}</div>
           ) : (
             <div className="divide-y">
-              {matchedTargets.map((r) => (
-                <div key={`${r.orderId}-${r.itemName}-${r.createdAt}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{r.itemName} × {r.qty}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatBangkokTime(r.createdAt)} · {(t('posOrderNo') || 'Order No')}: {r.orderType === 'delivery' ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo) : r.orderNo}
+              {matchedTargets.map((r) => {
+                const servingKey = `${r.orderId}:${r.itemId}`
+                const resolvedServed = Boolean(servingMap[servingKey]) || r.isServed
+                const servingBusy = Boolean(servingBusyMap[servingKey])
+                return (
+                  <div key={`${r.orderId}-${r.itemId}-${r.createdAt}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{r.itemName} × {r.qty}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatBangkokTime(r.createdAt)} · {(t('posOrderNo') || 'Order No')}: {r.orderType === 'delivery' ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo) : r.orderNo}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge
-                      className={cn(
-                        r.isTable && 'bg-blue-100 text-blue-700 hover:bg-blue-100',
-                        r.orderType === 'delivery' && 'bg-violet-100 text-violet-700 hover:bg-violet-100',
-                        r.orderType === 'takeout' && 'bg-amber-100 text-amber-700 hover:bg-amber-100'
-                      )}
-                      variant="secondary"
-                    >
-                      {r.isTable ? tableLabel : getTypeLabel(r.orderType)}
-                    </Badge>
-                    {r.isTable && (
+                    <div className="flex items-center gap-2 shrink-0">
                       <Badge
                         className={cn(
-                          !r.isServed && 'bg-rose-100 text-rose-700 hover:bg-rose-100',
-                          r.isServed && 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+                          r.isTable && 'bg-blue-100 text-blue-700 hover:bg-blue-100',
+                          r.orderType === 'delivery' && 'bg-violet-100 text-violet-700 hover:bg-violet-100',
+                          r.orderType === 'takeout' && 'bg-amber-100 text-amber-700 hover:bg-amber-100'
                         )}
                         variant="secondary"
                       >
-                        {r.isServed ? servedLabel : cookingLabel}
+                        {r.isTable ? tableLabel : getTypeLabel(r.orderType)}
                       </Badge>
-                    )}
-                    <Badge variant="outline">
-                      {r.isTable
-                        ? `${tableLabel} ${stripKoreanTableNumberSuffix(r.tableName)}`
-                        : r.orderType === 'delivery'
-                          ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo)
-                          : r.orderNo}
-                    </Badge>
+                      {r.isTable && (
+                        <Badge
+                          className={cn(
+                            !resolvedServed && 'bg-rose-100 text-rose-700 hover:bg-rose-100',
+                            resolvedServed && 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+                          )}
+                          variant="secondary"
+                        >
+                          {resolvedServed ? servedLabel : cookingLabel}
+                        </Badge>
+                      )}
+                      <Badge variant="outline">
+                        {r.isTable
+                          ? `${tableLabel} ${stripKoreanTableNumberSuffix(r.tableName)}`
+                          : r.orderType === 'delivery'
+                            ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo)
+                            : r.orderNo}
+                      </Badge>
+                      {r.isTable && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={resolvedServed ? 'default' : 'outline'}
+                          className={cn(
+                            'h-8 min-w-[88px] gap-1.5',
+                            resolvedServed && 'bg-emerald-600 hover:bg-emerald-600'
+                          )}
+                          disabled={resolvedServed || servingBusy || !r.itemId}
+                          onClick={() => {
+                            void setItemServedFromSearch(r)
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          {resolvedServed ? 'เสิร์ฟแล้ว' : 'เสิร์ฟ'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

@@ -44,22 +44,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let validCart: { code: string; name: string; price: number; qty: number; spec: string }[]
+    let validCart: { code: string; name: string; price: number; qty: number; spec: string; line_remarks?: string }[]
     if (receivedIndices && receivedIndices.length > 0) {
-      let origCart: { code?: string; name?: string; price?: number; qty?: number; spec?: string }[] = []
+      let origCart: { code?: string; name?: string; price?: number; qty?: number; spec?: string; line_remarks?: string; lineRemarks?: string }[] = []
       try {
         origCart = JSON.parse(o.cart_json || '[]')
       } catch {}
       const merged = [...origCart]
-      updatedCart.forEach((item: { code?: string; name?: string; price?: number; qty?: number; spec?: string }, i: number) => {
+      updatedCart.forEach((item: { code?: string; name?: string; price?: number; qty?: number; spec?: string; line_remarks?: string; lineRemarks?: string }, i: number) => {
         const idx = receivedIndices[i]
         if (idx !== undefined && idx >= 0 && idx < merged.length) {
+          const lineRemarks = String(item.line_remarks ?? item.lineRemarks ?? merged[idx].line_remarks ?? merged[idx].lineRemarks ?? '').trim()
           merged[idx] = {
             code: String(item.code ?? merged[idx].code ?? ''),
             name: String(item.name ?? merged[idx].name ?? ''),
             price: Number(item.price ?? merged[idx].price ?? 0),
             qty: Number(item.qty ?? merged[idx].qty ?? 0),
             spec: String(item.spec ?? merged[idx].spec ?? '-'),
+            ...(lineRemarks ? { line_remarks: lineRemarks } : {}),
           }
         }
       })
@@ -69,16 +71,18 @@ export async function POST(request: NextRequest) {
         price: Number(i.price ?? 0),
         qty: Number(i.qty ?? 0),
         spec: String(i.spec ?? '-'),
+        ...(String(i.line_remarks ?? i.lineRemarks ?? '').trim() ? { line_remarks: String(i.line_remarks ?? i.lineRemarks ?? '').trim() } : {}),
       }))
     } else {
       validCart = updatedCart
         .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
-        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string }) => ({
+        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string; line_remarks?: string; lineRemarks?: string }) => ({
           code: String(i.code ?? ''),
           name: String(i.name ?? ''),
           price: Number(i.price ?? 0),
           qty: Number(i.qty ?? 0),
           spec: String(i.spec ?? '-'),
+          ...(String(i.line_remarks ?? i.lineRemarks ?? '').trim() ? { line_remarks: String(i.line_remarks ?? i.lineRemarks ?? '').trim() } : {}),
         }))
     }
     let subtotal = 0

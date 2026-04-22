@@ -261,12 +261,17 @@ export default function PosPrintersPage() {
   const [copyWorking, setCopyWorking] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const loadRequestSeqRef = React.useRef(0)
+  const [easyMode, setEasyMode] = React.useState(true)
+  const [quickTesting, setQuickTesting] = React.useState(false)
+  const [saveStatus, setSaveStatus] = React.useState<"idle" | "saving" | "saved" | "queued" | "error">(
+    "idle"
+  )
+  const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
   const [previewKind, setPreviewKind] = React.useState<PreviewKind>("receipt")
   const [previewOpen, setPreviewOpen] = React.useState(false)
   const [activeTab, setActiveTab] = React.useState("printer")
 
-  const [cardAutoOpen, setCardAutoOpen] = React.useState(false)
-  const [checkAutoOpen, setCheckAutoOpen] = React.useState(false)
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
 
   const [logoPrint, setLogoPrint] = React.useState(false)
@@ -417,8 +422,6 @@ export default function PosPrintersPage() {
     setKitchenRouteByCategoryMain(
       normalizeKitchenRouteMapInput(settings.kitchenRouteByCategoryMain as unknown)
     )
-    setCardAutoOpen(Boolean(settings.cardAutoOpen))
-    setCheckAutoOpen(Boolean(settings.checkAutoOpen))
     setDrawerOpenOption(
       (["password_and_reason", "reason_only", "force"].includes(settings.drawerOpenOption || "")
         ? settings.drawerOpenOption
@@ -490,6 +493,7 @@ export default function PosPrintersPage() {
 
   const loadData = React.useCallback(() => {
     if (!effectiveStore) return
+    const requestSeq = ++loadRequestSeqRef.current
     setLoading(true)
     Promise.all([
       getPosPrinterSettings({ storeCode: effectiveStore }),
@@ -497,6 +501,7 @@ export default function PosPrintersPage() {
       getPosMenus(),
     ])
       .then(([settings, catRes, menus]) => {
+        if (requestSeq !== loadRequestSeqRef.current) return
         const cats = catRes.categories
         applyFromPosSettings(settings)
         setCategories(cats || [])
@@ -504,10 +509,30 @@ export default function PosPrintersPage() {
         setMenusList(Array.isArray(menus) ? menus : [])
       })
       .catch(() => {
+        if (requestSeq !== loadRequestSeqRef.current) return
         setCategories([])
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (requestSeq === loadRequestSeqRef.current) setLoading(false)
+      })
   }, [effectiveStore, applyFromPosSettings])
+
+  /** 저장 직후: 주방 설정 state 는 이번 merged 기준(위에서 반영)이므로 getPosPrinterSettings 를 다시 부르지 않는다(늦/빈 응답이 라우팅을 되돌리는 문제 방지). */
+  const refreshMenuCatalogOnly = React.useCallback(() => {
+    if (!effectiveStore) return
+    const requestSeq = ++loadRequestSeqRef.current
+    Promise.all([getPosMenuCategories(), getPosMenus()])
+      .then(([catRes, menus]) => {
+        if (requestSeq !== loadRequestSeqRef.current) return
+        setCategories(catRes.categories || [])
+        setMainCategories(Array.isArray(catRes.mainCategories) ? catRes.mainCategories : [])
+        setMenusList(Array.isArray(menus) ? menus : [])
+      })
+      .catch(() => {
+        if (requestSeq !== loadRequestSeqRef.current) return
+        setCategories([])
+      })
+  }, [effectiveStore])
 
   React.useEffect(() => {
     if (canSearchAll && stores.length && !storeCode) {
@@ -521,11 +546,79 @@ export default function PosPrintersPage() {
     loadData()
   }, [loadData])
 
+  React.useEffect(() => {
+    setSaveStatus("idle")
+    setLastSavedAt(null)
+  }, [effectiveStore])
+
+  React.useEffect(() => {
+    if (!easyMode) return
+    if (activeTab !== "printer" && activeTab !== "receipt") {
+      setActiveTab("printer")
+    }
+  }, [easyMode, activeTab])
+
+  const saveStatusUi = React.useMemo(() => {
+    if (saveStatus === "saving") {
+      return {
+        text: tr("posPrinterSaveStatusSaving", "저장 중"),
+        cn: "border-blue-200 bg-blue-50 text-blue-700",
+      }
+    }
+    if (saveStatus === "saved") {
+      return {
+        text: tr("posPrinterSaveStatusSaved", "서버 반영 완료"),
+        cn: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      }
+    }
+    if (saveStatus === "queued") {
+      return {
+        text: tr("posPrinterSaveStatusQueued", "오프라인 대기"),
+        cn: "border-amber-200 bg-amber-50 text-amber-700",
+      }
+    }
+    if (saveStatus === "error") {
+      return {
+        text: tr("posPrinterSaveStatusError", "저장 실패"),
+        cn: "border-red-200 bg-red-50 text-red-700",
+      }
+    }
+    return {
+      text: tr("posPrinterSaveStatusIdle", "저장 전"),
+      cn: "border-border bg-muted/40 text-muted-foreground",
+    }
+  }, [saveStatus, tr])
+
+  const runPrintTestHtml = React.useCallback(
+    (
+      fullHtml: string,
+      title: string,
+      thermal?: Pick<
+        PrintPosHtmlDocumentOptions,
+        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
+      >
+    ) =>
+      new Promise<void>((resolve, reject) => {
+        printPosHtmlDocument(fullHtml, {
+          title,
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
+          focusIframeBeforePrint: false,
+          preferSystemPrintDialog: true,
+          ...thermal,
+          onPrintUnavailable: () => reject(new Error("print_unavailable")),
+          onAfterCleanup: () => resolve(),
+        })
+      }),
+    []
+  )
+
   const handleSave = async (): Promise<boolean> => {
     if (!effectiveStore) {
       await appAlert(t("store") || "매장을 선택하세요.")
       return false
     }
+    setSaveStatus("saving")
     setSaving(true)
     try {
       const latest = await getPosPrinterSettings({ storeCode: effectiveStore })
@@ -539,8 +632,9 @@ export default function PosPrintersPage() {
         kitchenRouteByMenu: ensureRouteDefaults(allMenuRouteIds, kitchenRouteByMenu),
         kitchenRouteByCategory: ensureRouteDefaults(categories, kitchenRouteByCategory),
         kitchenRouteByCategoryMain: ensureRouteDefaults(mainCategories, kitchenRouteByCategoryMain),
-        cardAutoOpen,
-        checkAutoOpen,
+        // 레거시 필드: 서버/클라이언트 정책상 비활성(현금 결제 + 수동 강제 열기만 사용)
+        cardAutoOpen: false,
+        checkAutoOpen: false,
         drawerOpenOption,
         logoPrint,
         receiptPrintTiming,
@@ -587,24 +681,117 @@ export default function PosPrintersPage() {
       }
       const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
       if (res.success) {
+        setLastSavedAt(new Date())
         if (res.queued) {
+          setSaveStatus("queued")
           await appAlert(
             t("posPrinterSavedQueued") ||
               "저장 요청이 대기 중입니다. 네트워크가 복구되면 서버에 반영됩니다. 지금 새로고침하면 예전 설정이 보일 수 있습니다."
           )
         } else {
+          setSaveStatus("saved")
+          // 저장 직후 서버/캐시 응답이 한 박자 늦으면 loadData()만으로 주방 라우팅이 이전 값으로 돌아갈 수 있어,
+          // 먼저 이번에 보낸 merged 로 주방 관련 state 를 맞춘 뒤 백그라운드로 재조회한다.
+          const km = Math.min(3, Math.max(1, Number(merged.kitchenMode) || 1)) as 1 | 2 | 3
+          setKitchenMode(km)
+          setKitchen1Categories(
+            Array.isArray(merged.kitchen1Categories) ? [...merged.kitchen1Categories] : []
+          )
+          setKitchen2Categories(
+            Array.isArray(merged.kitchen2Categories) ? [...merged.kitchen2Categories] : []
+          )
+          setKitchen3Categories(
+            Array.isArray(merged.kitchen3Categories) ? [...merged.kitchen3Categories] : []
+          )
+          setKitchenRouteByMenu(
+            normalizeKitchenRouteMapInput(merged.kitchenRouteByMenu as unknown) as Record<
+              string,
+              KitchenRouteValue
+            >
+          )
+          setKitchenRouteByCategory(
+            normalizeKitchenRouteMapInput(merged.kitchenRouteByCategory as unknown) as Record<
+              string,
+              KitchenRouteValue
+            >
+          )
+          setKitchenRouteByCategoryMain(
+            normalizeKitchenRouteMapInput(merged.kitchenRouteByCategoryMain as unknown) as Record<
+              string,
+              KitchenRouteValue
+            >
+          )
           await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
-          loadData()
+          refreshMenuCatalogOnly()
         }
         return true
       }
+      setSaveStatus("error")
       await appAlert(res.message || t("msg_save_fail_detail"))
       return false
     } catch (e) {
+      setSaveStatus("error")
       await appAlert(String(e))
       return false
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleQuickPrintCheck = async () => {
+    if (quickTesting) return
+    setQuickTesting(true)
+    try {
+      const hwSettings =
+        effectiveStore.length > 0
+          ? await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
+          : null
+
+      const slips = kitchenSlipsForPreview
+      if (slips.length === 0) {
+        await appAlert(t("posKitchenNoItemsToPrint"))
+      } else {
+        for (let i = 0; i < slips.length; i++) {
+          const slip = slips[i]
+          const html = buildKitchenSlipHtmlForSlip(slip)
+          await runPrintTestHtml(html, slip.label, {
+            printRole: "kitchen",
+            kitchenStation: slip.station,
+            escPosCutOverride: resolveEscPosCutOverride(hwSettings, { printRole: "kitchen" }),
+          })
+          if (i + 1 < slips.length) {
+            await new Promise<void>((r) => setTimeout(() => r(), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+          }
+        }
+      }
+
+      const receiptHtml = buildReceiptHtml()
+      await runPrintTestHtml(receiptHtml, tr("posHallOrder", "홀 주문서"), {
+        printRole: "receipt",
+        printReceiptKind: "hall_order",
+        escPosCutOverride: resolveEscPosCutOverride(hwSettings, {
+          printRole: "receipt",
+          printReceiptKind: "hall_order",
+        }),
+      })
+      await runPrintTestHtml(receiptHtml, tr("posReceipt", "영수증"), {
+        printRole: "receipt",
+        printReceiptKind: "payment",
+        escPosCutOverride: resolveEscPosCutOverride(hwSettings, {
+          printRole: "receipt",
+          printReceiptKind: "payment",
+        }),
+      })
+      await appAlert(
+        tr(
+          "posPrinterQuickTestDone",
+          "원클릭 테스트를 완료했습니다. (주방 → 홀 주문서 → 결제 영수증)"
+        )
+      )
+    } catch (e) {
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
+    } finally {
+      setQuickTesting(false)
     }
   }
 
@@ -724,7 +911,7 @@ export default function PosPrintersPage() {
         ])
       }
       if (copyTabDrawer) {
-        copyKeys(["cardAutoOpen", "checkAutoOpen", "drawerOpenOption"])
+        copyKeys(["drawerOpenOption"])
       }
       if (copyTabDualMonitor) {
         copyKeys([
@@ -746,6 +933,8 @@ export default function PosPrintersPage() {
       if (copySaveImmediately) {
         const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
         if (res.success) {
+          setLastSavedAt(new Date())
+          setSaveStatus(res.queued ? "queued" : "saved")
           setCopyDialogOpen(false)
           if (res.queued) {
             await appAlert(
@@ -754,9 +943,10 @@ export default function PosPrintersPage() {
             )
           } else {
             await appAlert(t("posPrinterCopySuccess") || "다른 매장 설정을 복사해 저장했습니다.")
-            loadData()
+            refreshMenuCatalogOnly()
           }
         } else {
+          setSaveStatus("error")
           await appAlert(res.message || t("msg_save_fail_detail"))
         }
       } else {
@@ -1026,28 +1216,6 @@ export default function PosPrintersPage() {
   }
 
   const handleTestPrint = async (kind: PreviewKind) => {
-    /** `window.open` 대신 숨김 iframe — 팝업 차단과 무관, Windows 하이브리드는 OS 인쇄 대화상자 옵션 전달 */
-    const printTestHtml = (
-      fullHtml: string,
-      title: string,
-      thermal?: Pick<
-        PrintPosHtmlDocumentOptions,
-        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
-      >
-    ) =>
-      new Promise<void>((resolve, reject) => {
-        printPosHtmlDocument(fullHtml, {
-          title,
-          printDelayMs: 0,
-          fallbackCleanupMs: 120_000,
-          focusIframeBeforePrint: false,
-          preferSystemPrintDialog: true,
-          ...thermal,
-          onPrintUnavailable: () => reject(new Error("print_unavailable")),
-          onAfterCleanup: () => resolve(),
-        })
-      })
-
     try {
       const hwSettings =
         effectiveStore.length > 0
@@ -1055,7 +1223,7 @@ export default function PosPrintersPage() {
           : null
       if (kind === "receipt") {
         const html = buildReceiptHtml()
-        await printTestHtml(html, tr("posReceipt", "영수증"), {
+        await runPrintTestHtml(html, tr("posReceipt", "영수증"), {
           printRole: "receipt",
           printReceiptKind: "payment",
           escPosCutOverride: resolveEscPosCutOverride(hwSettings, {
@@ -1073,7 +1241,7 @@ export default function PosPrintersPage() {
       for (let i = 0; i < slips.length; i++) {
         const slip = slips[i]
         const html = buildKitchenSlipHtmlForSlip(slip)
-        await printTestHtml(html, slip.label, {
+        await runPrintTestHtml(html, slip.label, {
           printRole: "kitchen",
           kitchenStation: slip.station,
           escPosCutOverride: resolveEscPosCutOverride(hwSettings, { printRole: "kitchen" }),
@@ -1150,6 +1318,58 @@ export default function PosPrintersPage() {
               {tr("posPrinterCopySettings", "설정 복사")}
             </Button>
           ) : null}
+          <button
+            type="button"
+            className={cn(
+              "h-10 rounded-md border px-3 text-sm font-medium",
+              easyMode ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+            )}
+            onClick={() => setEasyMode((v) => !v)}
+          >
+            {easyMode ? tr("posEasyModeOn", "간편 모드 ON") : tr("posEasyModeOff", "간편 모드 OFF")}
+          </button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 gap-1.5"
+            type="button"
+            onClick={() => void handleQuickPrintCheck()}
+            disabled={!effectiveStore || loading || quickTesting}
+          >
+            <Printer className="h-4 w-4" />
+            {quickTesting
+              ? tr("posPrinterQuickTesting", "테스트 인쇄 중...")
+              : tr("posPrinterQuickTest", "원클릭 테스트")}
+          </Button>
+        </div>
+
+        <div className="mb-4 rounded-lg border bg-muted/20 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
+                saveStatusUi.cn
+              )}
+            >
+              {saveStatusUi.text}
+            </span>
+            <span className="text-muted-foreground">
+              {lastSavedAt
+                ? tr("posPrinterLastSavedAt", "마지막 저장: {{time}}").replace(
+                    "{{time}}",
+                    formatBangkokDateTime(lastSavedAt)
+                  )
+                : tr("posPrinterLastSavedAtEmpty", "저장 이력이 없습니다.")}
+            </span>
+          </div>
+          {easyMode ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {tr(
+                "posEasyModeHint",
+                "간편 모드에서는 매장 실사용 핵심 탭(주방 라우팅, 영수증/자동인쇄)만 먼저 보여줍니다."
+              )}
+            </p>
+          ) : null}
         </div>
 
         {loading && (
@@ -1172,22 +1392,30 @@ export default function PosPrintersPage() {
                     <Receipt className={adminTabsIconCn} aria-hidden />
                     {tr("posReceiptTabAutoPrint", "영수증/자동인쇄")}
                   </TabsTrigger>
-                  <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
-                    <Receipt className={adminTabsIconCn} aria-hidden />
-                    {tr("posReceiptDesignTab", "디자인")}
-                  </TabsTrigger>
-                  <TabsTrigger value="business" className={adminTabsTriggerCn}>
-                    <Building2 className={adminTabsIconCn} aria-hidden />
-                    {tr("posBizInfoTab", "사업자 정보")}
-                  </TabsTrigger>
-                  <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
-                    <Wallet className={adminTabsIconCn} aria-hidden />
-                    {tr("posDrawerTab", "돈통")}
-                  </TabsTrigger>
-                  <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
-                    <Monitor className={adminTabsIconCn} aria-hidden />
-                    {tr("posDualMonitorTab", "듀얼 모니터")}
-                  </TabsTrigger>
+                  {!easyMode ? (
+                    <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
+                      <Receipt className={adminTabsIconCn} aria-hidden />
+                      {tr("posReceiptDesignTab", "디자인")}
+                    </TabsTrigger>
+                  ) : null}
+                  {!easyMode ? (
+                    <TabsTrigger value="business" className={adminTabsTriggerCn}>
+                      <Building2 className={adminTabsIconCn} aria-hidden />
+                      {tr("posBizInfoTab", "사업자 정보")}
+                    </TabsTrigger>
+                  ) : null}
+                  {!easyMode ? (
+                    <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
+                      <Wallet className={adminTabsIconCn} aria-hidden />
+                      {tr("posDrawerTab", "돈통")}
+                    </TabsTrigger>
+                  ) : null}
+                  {!easyMode ? (
+                    <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
+                      <Monitor className={adminTabsIconCn} aria-hidden />
+                      {tr("posDualMonitorTab", "듀얼 모니터")}
+                    </TabsTrigger>
+                  ) : null}
                 </TabsList>
               </div>
             </div>
@@ -1422,7 +1650,7 @@ export default function PosPrintersPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
+            {!easyMode ? <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {tr("posReceiptDesignHint", "손님 영수증·주방 주문서 레이아웃을 설정합니다.")}
               </p>
@@ -1668,9 +1896,9 @@ export default function PosPrintersPage() {
                   </Button>
                 </div>
               </div>
-            </TabsContent>
+            </TabsContent> : null}
 
-            <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
+            {!easyMode ? <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-lg border p-4 space-y-3">
                 <p className="text-sm font-medium">{tr("posBizInfoTab", "사업자 정보")}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1701,18 +1929,16 @@ export default function PosPrintersPage() {
                 </div>
                 <p className="text-[11px] text-muted-foreground">{tr("posBizInfoHint", "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다.")}</p>
               </div>
-            </TabsContent>
+            </TabsContent> : null}
 
-            <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
+            {!easyMode ? <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
-                {tr("posDrawerHint", "결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다.")}
+                {tr("posDrawerHintV2", "돈통은 '현금 결제가 포함된 경우'에만 자동으로 열리며, 그 외에는 열지 않습니다. (수동 열기/강제 열기는 별도 동작)")}
               </p>
               <p className="text-xs text-muted-foreground">
                 {tr("posDrawerBridgeHint", "")}
               </p>
               <div className="space-y-3">
-                <ToggleRow label={tr("posCardAutoOpen", "카드결제 자동열기")} value={cardAutoOpen} onChange={setCardAutoOpen} t={t} />
-                <ToggleRow label={tr("posCheckAutoOpen", "체크결제 자동열기")} value={checkAutoOpen} onChange={setCheckAutoOpen} t={t} />
                 <div>
                   <label className="text-sm font-medium">{tr("posDrawerOpenOption", "돈통열기 옵션")}</label>
                   <p className="text-xs text-muted-foreground mb-1">
@@ -1744,14 +1970,14 @@ export default function PosPrintersPage() {
                   </div>
                 </div>
               </div>
-            </TabsContent>
+            </TabsContent> : null}
 
-            <TabsContent value="dual-monitor" className={cn(adminTabsContentCn, "space-y-4")}>
+            {!easyMode ? <TabsContent value="dual-monitor" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {tr("posDualMonitorDeviceTabDesc", "Windows POS 듀얼 모니터 감지/자동 배치 및 고객창 제어를 설정합니다.")}
               </p>
               <PosDualMonitorSettingsContent storeCode={effectiveStore} />
-            </TabsContent>
+            </TabsContent> : null}
           </Tabs>
             <div className="border-t border-border px-4 py-4 sm:px-6">
               <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving}>

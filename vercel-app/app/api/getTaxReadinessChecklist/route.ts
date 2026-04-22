@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
       }) as Promise<SimpleIdRow[] | null>,
       supabaseSelectFilter(
         'stock_logs',
-        `log_type=eq.Outbound&location=eq.${encodeURIComponent('본사')}&order_id=not.is.null&log_date=gte.${startStr}&log_date=lte.${endStr}${vendorTargetLike}`,
+        `log_type=eq.Outbound&is_deleted=is.false&location=eq.${encodeURIComponent('본사')}&order_id=not.is.null&log_date=gte.${startStr}&log_date=lte.${endStr}${vendorTargetLike}`,
         { select: 'order_id', limit: BASE_LIMIT }
       ) as Promise<OrderIdRow[] | null>,
       supabaseSelectFilter(

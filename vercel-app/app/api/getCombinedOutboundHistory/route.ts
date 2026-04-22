@@ -8,9 +8,13 @@ import {
   formatDateBangkok,
   formatDateHourMinBangkok,
   findReceivedCartLineIndex,
+  findLineRemarksInOrderCart,
+  getLineRemarksFromCartLine,
   frozenInvoiceUnitPriceFromLog,
   unitPriceFromOutboundLogSnapshot,
 } from '@/lib/outbound-order-line-match'
+
+export const dynamic = 'force-dynamic'
 
 export interface OutboundHistoryItem {
   date: string
@@ -42,6 +46,8 @@ export interface OutboundHistoryItem {
   isUnreceived?: boolean
   /** stock_logs 행 id — 출고 로그 단가 수정 API용 (실제 출고 로그에서 온 행만) */
   stockLogId?: number
+  /** 주문 cart line_remarks — 송장 품목 하단 */
+  lineRemarks?: string
   /** 출고 로그 스냅샷 단가 — 응답 전 제거 */
   frozenUnitPrice?: number
 }
@@ -49,6 +55,7 @@ export interface OutboundHistoryItem {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -84,13 +91,13 @@ export async function GET(request: NextRequest) {
     const baseFilter = dateRange + vendorPart + itemPart
 
     const [outboundLogs, forceLogs] = await Promise.all([
-      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.Outbound&${baseFilter}`, {
+      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.Outbound&is_deleted=is.false&${baseFilter}`, {
         order: 'log_date.desc',
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
         pageSize: 8000,
         maxRows: 100000,
       }),
-      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.ForceOutbound&${baseFilter}`, {
+      supabaseSelectFilterAllPages('stock_logs', `log_type=eq.ForceOutbound&is_deleted=is.false&${baseFilter}`, {
         order: 'log_date.desc',
         select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
         pageSize: 8000,
@@ -208,7 +215,7 @@ export async function GET(request: NextRequest) {
         const target = String(o.store_name || '').trim()
         if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처' && target !== vendorFilter) continue
 
-        let cart: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[] = []
+        let cart: OrderCartLine[] = []
         try {
           if (o.cart_json) cart = JSON.parse(o.cart_json) || []
         } catch {}
@@ -223,6 +230,7 @@ export async function GET(request: NextRequest) {
           const info = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
           const price = Number(p.price) ?? info.price
           const amount = price * qty
+          const lineRemarks = getLineRemarksFromCartLine(p)
           list.push({
             date: orderDateStr,
             target,
@@ -237,6 +245,7 @@ export async function GET(request: NextRequest) {
             deliveryDate: deliveryDateStr || undefined,
             orderDate: orderDateStr || undefined,
             outboundLocation: info.outboundLocation,
+            ...(lineRemarks ? { lineRemarks } : {}),
           })
         }
       }
@@ -290,6 +299,11 @@ export async function GET(request: NextRequest) {
       )
       const frozen = frozenInvoiceUnitPriceFromLog(row)
       const sid = row.id != null ? Number(row.id) : NaN
+      const fromCartLr = findLineRemarksInOrderCart(
+        cartForPrice,
+        code,
+        String(row.item_name || '').trim()
+      )
       list.push({
         date: dateStr,
         target,
@@ -305,6 +319,7 @@ export async function GET(request: NextRequest) {
         outboundLocation: info.outboundLocation,
         stockLogId: Number.isFinite(sid) && sid > 0 ? sid : undefined,
         frozenUnitPrice: frozen,
+        ...(fromCartLr ? { lineRemarks: fromCartLr } : {}),
       })
       if (list.length >= 500) break
     }
@@ -458,6 +473,8 @@ export async function GET(request: NextRequest) {
         }
         const finalQty = r.qty
         if (cartItem) {
+          const cartLr = getLineRemarksFromCartLine(cartItem)
+          if (cartLr) r.lineRemarks = cartLr
           const origAtReceive = o.original_order_qty_json?.[String(matchIdx)]
           const approvedOrig = o.approved_original_qty_json?.[String(matchIdx)]
           const cartQty = Number(cartItem?.qty ?? 0)
@@ -515,6 +532,7 @@ export async function GET(request: NextRequest) {
           const cartUnit = Number(c.price)
           const unitPrice = Number.isFinite(cartUnit) ? cartUnit : info.price
           const amount = unitPrice * qty
+          const uLr = getLineRemarksFromCartLine(c)
           filteredList.push({
             date: baseDate,
             target,
@@ -532,6 +550,7 @@ export async function GET(request: NextRequest) {
             outboundLocation: info.outboundLocation,
             originalOrderQty: qty,
             isUnreceived: true,
+            ...(uLr ? { lineRemarks: uLr } : {}),
           })
         }
       }

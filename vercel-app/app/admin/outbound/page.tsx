@@ -1,5 +1,5 @@
 "use client"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
 import { ArrowUpFromLine } from "lucide-react"
@@ -42,6 +42,8 @@ import {
   getStockStores,
   forceOutboundBatch,
   getCombinedOutboundHistory,
+  previewDeleteOutbound,
+  deleteOutbound,
   getOrderReceivePhoto,
   updateForceOutboundReceived,
   getMyUsageHistory,
@@ -173,6 +175,7 @@ export default function OutboundPage() {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
   const [saving, setSaving] = React.useState(false)
+  const [deletingOutbound, setDeletingOutbound] = React.useState(false)
 
   const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
@@ -723,6 +726,91 @@ export default function OutboundPage() {
     }
   }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store])
 
+  const handleDeleteOutboundRow = React.useCallback(
+    async (params: {
+      mode: "order" | "force"
+      orderId?: number
+      stockLogIds?: number[]
+      orderDate: string
+      target: string
+    }) => {
+      if (deletingOutbound) return
+      setDeletingOutbound(true)
+      try {
+        const preview = await previewDeleteOutbound({
+          mode: params.mode,
+          ...(params.mode === "order" && params.orderId ? { orderId: params.orderId } : {}),
+          ...(params.mode === "force" && params.stockLogIds?.length ? { stockLogIds: params.stockLogIds } : {}),
+        })
+        if (!preview?.success) {
+          await appAlert(translateApiMessage(preview?.message, t) || preview?.message || "삭제 대상 조회에 실패했습니다.")
+          return
+        }
+        const targetCount = Number(preview.targetCount || 0)
+        const conflictLines = (preview.conflicts || []).map((c) => `- ${c.message}`)
+        const receivableImpactLines = Object.entries(preview.receivableDeleteByStore || {})
+          .map(([store, amount]) => `- ${store}: ${Number(amount || 0).toLocaleString()}`)
+          .slice(0, 12)
+        const summaryLines = [
+          `대상 건수: ${targetCount.toLocaleString()}건`,
+          `유형: ${params.mode === "order" ? "주문출고" : "강제출고"}`,
+          `매장/수령처: ${params.target}`,
+          `기준일: ${params.orderDate || "-"}`,
+        ]
+        if (receivableImpactLines.length > 0) {
+          summaryLines.push("", "삭제 시 미수금 감소 예상:", ...receivableImpactLines)
+        }
+        if (conflictLines.length > 0) {
+          summaryLines.push("", "삭제 충돌:", ...conflictLines)
+          await appAlert(summaryLines.join("\n"))
+          return
+        }
+        const reason = (await appPrompt(`${summaryLines.join("\n")}\n\n삭제 사유를 입력해 주세요.`))?.trim()
+        if (!reason) return
+        const ok = await appConfirm(
+          `출고 소프트 삭제를 진행할까요?\n\n사유: ${reason}\n대상: ${targetCount.toLocaleString()}건`
+        )
+        if (!ok) return
+
+        const idempotencyKey =
+          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `delete-outbound-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+        const result = await deleteOutbound({
+          mode: params.mode,
+          reason,
+          ...(params.mode === "order" && params.orderId ? { orderId: params.orderId } : {}),
+          ...(params.mode === "force" && params.stockLogIds?.length ? { stockLogIds: params.stockLogIds } : {}),
+          idempotencyKey,
+        })
+        if (!result.success) {
+          const conflictMsg = (result.conflicts || []).map((c) => `- ${c.message}`).join("\n")
+          await appAlert(
+            [translateApiMessage(result.message, t) || result.message || "삭제 실패", conflictMsg]
+              .filter(Boolean)
+              .join("\n\n")
+          )
+          return
+        }
+        const warnText = (result.warnings || []).slice(0, 8).join("\n")
+        await appAlert(
+          [
+            translateApiMessage(result.message, t) || result.message || "삭제되었습니다.",
+            warnText ? `후속 점검 메시지:\n${warnText}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        )
+        await fetchHistory()
+      } catch (e) {
+        await appAlert(e instanceof Error ? e.message : String(e))
+      } finally {
+        setDeletingOutbound(false)
+      }
+    },
+    [deletingOutbound, fetchHistory, t]
+  )
+
   const fetchSummaryHistory = React.useCallback(async () => {
     let s = histStart
     let e = histEnd
@@ -1221,6 +1309,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   ): InvoiceData => {
     const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
     const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
+    const maybeOrderId = Number((group.items || [])[0]?.orderRowId || 0)
     return buildThaiSalesInvoiceData({
       documentType: "Invoice",
       documentNo: docNo,
@@ -1230,10 +1319,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       company,
       client,
       invSettings,
+      sourceRefType: Number.isFinite(maybeOrderId) && maybeOrderId > 0 ? "Order" : undefined,
+      sourceRefId: Number.isFinite(maybeOrderId) && maybeOrderId > 0 ? maybeOrderId : undefined,
       lines: (group.items || []).map((it) => ({
         code: it.code,
         name: it.name,
         spec: it.spec,
+        lineRemarks: it.lineRemarks?.trim() || undefined,
         qty: Math.abs(it.qty || 0),
         amount: Math.round(Math.abs(it.amount || 0)),
       })),
@@ -2054,6 +2146,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   }
                 }}
                 onReloadHistory={canEditOutboundLogUnitPrice ? fetchHistory : undefined}
+                onDeleteOutbound={isOffice ? handleDeleteOutboundRow : undefined}
                 usageRows={usageTableRows}
               />
             </div>

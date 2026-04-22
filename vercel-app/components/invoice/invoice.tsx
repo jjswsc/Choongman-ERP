@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   Hash,
   Building2,
@@ -17,11 +18,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 
 export interface InvoiceItem {
   id: number
   itemCode?: string
   description: string
+  /** 품목 행 바로 아래(무게·kg당가 등) — cart `line_remarks` */
+  lineRemarks?: string
   quantity: number
   unit?: string
   unitPrice: number
@@ -70,6 +74,9 @@ export interface InvoiceData {
   termsAndConditions?: string[]
   /** 회사 도장 이미지 URL (인쇄 시 사용) */
   stampImageUrl?: string
+  /** 인쇄 편집값 영구 저장용 source 식별자 */
+  sourceRefType?: string
+  sourceRefId?: number
 }
 
 function formatCurrency(amount: number): string {
@@ -283,30 +290,64 @@ export function Invoice({
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((item, index) => (
-                  <tr
-                    key={item.id}
-                    className={index % 2 === 0 ? "bg-background" : "bg-muted/30"}
-                  >
-                    <td className="py-3 px-4 text-center text-muted-foreground">{item.id}</td>
-                    <td className="py-3 px-4 text-left font-mono text-xs text-muted-foreground">
+                {(() => {
+                  const rowBlocks = data.items.map((item) => {
+                    const hasNote = Boolean(item.lineRemarks?.trim())
+                    return 1 + (hasNote ? 1 : 0)
+                  })
+                  const dataRowCount = rowBlocks.reduce((a, b) => a + b, 0)
+                  return (
+                    <>
+                {data.items.map((item, index) => {
+                  const remarkLines = (item.lineRemarks || "")
+                    .trim()
+                    .split(/\r?\n/)
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                  const stripe = index % 2 === 0 ? "bg-background" : "bg-muted/30"
+                  return (
+                    <React.Fragment key={item.id}>
+                  <tr className={cn(stripe, remarkLines.length > 0 && "border-b-0")}>
+                    <td className="py-3 px-4 text-center text-muted-foreground align-top">{item.id}</td>
+                    <td className="py-3 px-4 text-left font-mono text-xs text-muted-foreground align-top">
                       {item.itemCode || "-"}
                     </td>
-                    <td className="py-3 px-4 text-left">{item.description}</td>
-                    <td className="py-3 px-4 text-center font-medium">{item.quantity}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(item.unitPrice)}</td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{item.discount}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-[#1e4d8c]">
+                    <td className="py-3 px-4 text-left align-top text-foreground">{item.description}</td>
+                    <td className="py-3 px-4 text-center font-medium align-top">{item.quantity}</td>
+                    <td className="py-3 px-4 text-right align-top">{formatCurrency(item.unitPrice)}</td>
+                    <td className="py-3 px-4 text-right text-muted-foreground align-top">{item.discount}</td>
+                    <td className="py-3 px-4 text-right font-semibold text-[#1e4d8c] align-top">
                       {formatCurrency(item.amount)}
                     </td>
                   </tr>
-                ))}
-                {data.items.length < 6 &&
-                  Array.from({ length: 6 - data.items.length }).map((_, i) => (
+                  {remarkLines.length > 0 && (
+                    <tr className={cn(stripe, "border-t-0") }>
+                      <td className="p-0 border-t-0" />
+                      <td className="p-0 border-t-0" />
+                      <td className="py-1.5 pl-4 pr-4 pb-3 border-t-0 align-top" colSpan={1}>
+                        <div className="rounded-md border-l-[3px] border-[#1e4d8c]/35 border-y border-r border-slate-200/80 bg-gradient-to-b from-slate-50 to-slate-50/90 pl-3 pr-2.5 py-2 text-[11.5px] leading-snug text-slate-700 shadow-sm print:border-slate-300 print:from-white print:to-slate-50 print:shadow-none">
+                          {remarkLines.map((line, li) => (
+                            <div
+                              key={li}
+                              className={li > 0 ? "mt-0.5" : undefined}
+                            >
+                              {line}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-0 border-t-0" colSpan={4} />
+                    </tr>
+                  )}
+                    </React.Fragment>
+                  )
+                })}
+                {dataRowCount < 6 &&
+                  Array.from({ length: 6 - dataRowCount }).map((_, i) => (
                     <tr
                       key={`empty-${i}`}
                       className={
-                        (data.items.length + i) % 2 === 0 ? "bg-background" : "bg-muted/30"
+                        (dataRowCount + i) % 2 === 0 ? "bg-background" : "bg-muted/30"
                       }
                     >
                       <td className="py-3 px-4">&nbsp;</td>
@@ -318,6 +359,9 @@ export function Invoice({
                       <td className="py-3 px-4"></td>
                     </tr>
                   ))}
+                    </>
+                  )
+                })()}
               </tbody>
             </table>
           </div>

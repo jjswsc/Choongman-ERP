@@ -141,7 +141,7 @@ async function buildFilteredOutboundRowsForOrder(
 
   const logs = (await supabaseSelectFilter(
     'stock_logs',
-    `log_type=eq.Outbound&order_id=eq.${orderId}`,
+    `log_type=eq.Outbound&order_id=eq.${orderId}&is_deleted=is.false`,
     {
       order: 'log_date.asc',
       limit: 500,

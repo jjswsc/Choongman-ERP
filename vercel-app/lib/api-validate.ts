@@ -111,6 +111,8 @@ export const processOrderSchema = z.object({
     name: z.string(),
     price: z.number(),
     qty: z.number().min(1, '수량은 1 이상이어야 합니다.'),
+    taxType: z.string().optional(),
+    line_remarks: z.string().trim().max(500, '품목 비고는 500자 이하여야 합니다.').optional(),
   })).min(1, '장바구니가 비어 있습니다.'),
 })
 
