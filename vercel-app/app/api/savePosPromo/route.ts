@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     const categorySub = normalizePromotionSubcategory(String(body.category ?? 'Set').trim() || 'Set')
     const categoryMain = String(body.categoryMain ?? PROMOTION_MAIN_CATEGORY).trim() || PROMOTION_MAIN_CATEGORY
     const userRole = String(auth.role || '')
-    const userName = String(auth.name || body.userName ?? body.user_name ?? '').trim()
+    const userName = String(auth.name || (body.userName ?? body.user_name ?? '')).trim()
     const marketingActualCost =
       body.marketingActualCost != null && Number.isFinite(Number(body.marketingActualCost))
         ? Math.abs(Number(body.marketingActualCost))

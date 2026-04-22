@@ -2233,7 +2233,7 @@ export default function PosTerminalPage() {
                 const pay = payload.payment
                 const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
                 if (!linkpos.ok) return
-                const targetClose = resolveDineInCloseStatus(payload.isPrepaid)
+                const targetClose = resolveDineInCloseStatus(!!payload.isPrepaid)
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
                   await updatePosOrder({
