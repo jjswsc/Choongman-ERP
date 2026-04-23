@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { TrendingUp, Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
@@ -291,8 +293,7 @@ export default function FinancialStatementsPage() {
         </Card>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "income" | "balance")} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="income" className={adminTabsTriggerCn}>
                   {t("adminIncomeStatement")}
@@ -301,8 +302,7 @@ export default function FinancialStatementsPage() {
                   {t("adminBalanceSheet")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="income" className={cn(adminTabsContentCn, "space-y-3")}>
             <IncomeStatementTab

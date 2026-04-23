@@ -52,7 +52,7 @@ export function TimesheetTab() {
           {storeList.length > 0 && (
             <div className="mt-3">
               <label className="text-[11px] font-medium text-muted-foreground block mb-1.5">
-                {t("store") || "매장"}
+                {t("store") || "Store"}
               </label>
               <Select value={storeFilter} onValueChange={setStoreFilter}>
                 <SelectTrigger className="h-9 text-xs">

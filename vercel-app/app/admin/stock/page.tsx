@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
@@ -216,8 +218,7 @@ export default function StockPage() {
         </div>
 
         <Tabs defaultValue="list" className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("stockTabList")}
@@ -229,8 +230,7 @@ export default function StockPage() {
                   {t("stockTabHistory")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="list" className={adminTabsContentCn}>
             <StockTable
               list={list}

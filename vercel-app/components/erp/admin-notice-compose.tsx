@@ -13,6 +13,7 @@ import {
   FileText,
   Image as ImageIcon,
   File,
+  Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,18 +26,11 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getNoticeOptions, sendNotice, useStoreList } from "@/lib/api-client"
-
-interface AttachedFile {
-  id: string
-  name: string
-  size: string
-  type: "image" | "pdf" | "doc"
-  dataUrl: string
-  mime: string
-}
-
-const MAX_FILE_SIZE = 1024 * 1024
-const MAX_FILES = 3
+import {
+  MAX_NOTICE_FILES,
+  type NoticeAttachedFile,
+} from "@/lib/notice-attachments"
+import { uploadAndBuildNoticeAttachment } from "@/lib/notice-attachment-client"
 
 export function AdminNoticeCompose() {
   const { auth } = useAuth()
@@ -51,9 +45,10 @@ export function AdminNoticeCompose() {
   const [selectedPositions, setSelectedPositions] = React.useState<string[]>([])
   const [selectedPermissionGroups, setSelectedPermissionGroups] = React.useState<string[]>([])
   const [selectedRecipients, setSelectedRecipients] = React.useState<string[]>([])
-  const [files, setFiles] = React.useState<AttachedFile[]>([])
+  const [files, setFiles] = React.useState<NoticeAttachedFile[]>([])
   const { staffByStore } = useStoreList()
   const [sending, setSending] = React.useState(false)
+  const [fileUploading, setFileUploading] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
@@ -185,45 +180,36 @@ export function AdminNoticeCompose() {
     const input = e.target
     const selected = input.files
     if (!selected || selected.length === 0) return
-    const remaining = MAX_FILES - files.length
+    const remaining = MAX_NOTICE_FILES - files.length
     if (remaining <= 0) {
-      await appAlert(t("noticeFileLimit") || "파일당 5MB, 최대 10개")
+      await appAlert(t("noticeFileLimit"))
       input.value = ""
       return
     }
-    const newFiles: AttachedFile[] = []
-    const processNext = async (idx: number) => {
-      if (idx >= selected.length || newFiles.length >= remaining) {
-        if (newFiles.length > 0) setFiles((prev) => [...prev, ...newFiles])
-        input.value = ""
-        return
+    const fileArray = Array.from(selected)
+    setFileUploading(true)
+    const newFiles: NoticeAttachedFile[] = []
+    try {
+      for (let i = 0; i < fileArray.length; i++) {
+        if (newFiles.length >= remaining) {
+          await appAlert(t("noticeFileLimit"))
+          break
+        }
+        const file = fileArray[i]
+        try {
+          const id = `f-${Date.now()}-${i}-${newFiles.length}`
+          newFiles.push(await uploadAndBuildNoticeAttachment(file, id))
+        } catch (err) {
+          await appAlert(
+            `${file.name}: ` + (err instanceof Error ? err.message : String(err))
+          )
+        }
       }
-      const file = selected[idx]
-      if (file.size > MAX_FILE_SIZE) {
-        await appAlert(`${file.name}: ` + (t("noticeFileLimit") || "파일당 1MB, 최대 3개"))
-        void processNext(idx + 1)
-        return
-      }
-      const reader = new FileReader()
-      reader.onload = () => {
-        const dataUrl = reader.result as string
-        const mime = file.type || "application/octet-stream"
-        let typ: "image" | "pdf" | "doc" = "doc"
-        if (mime.startsWith("image/")) typ = "image"
-        else if (mime.includes("pdf")) typ = "pdf"
-        newFiles.push({
-          id: `f-${Date.now()}-${idx}`,
-          name: file.name,
-          size: `${(file.size / 1024).toFixed(1)} KB`,
-          type: typ,
-          dataUrl,
-          mime,
-        })
-        void processNext(idx + 1)
-      }
-      reader.readAsDataURL(file)
+      if (newFiles.length > 0) setFiles((prev) => [...prev, ...newFiles])
+    } finally {
+      setFileUploading(false)
+      input.value = ""
     }
-    void processNext(0)
   }
 
   const handleSend = async () => {
@@ -250,7 +236,7 @@ export function AdminNoticeCompose() {
         : undefined
     setSending(true)
     try {
-      const attachments = files.map((f) => ({ name: f.name, mime: f.mime, url: f.dataUrl }))
+      const attachments = files.map((f) => ({ name: f.name, mime: f.mime, url: f.url }))
       const res = await sendNotice({
         title: title.trim(),
         content: content.trim(),
@@ -544,6 +530,8 @@ export function AdminNoticeCompose() {
                 >
                   {file.type === "image" ? (
                     <ImageIcon className="h-4 w-4 shrink-0 text-primary" />
+                  ) : file.type === "video" ? (
+                    <Video className="h-4 w-4 shrink-0 text-violet-500" />
                   ) : file.type === "pdf" ? (
                     <FileText className="h-4 w-4 shrink-0 text-destructive" />
                   ) : (
@@ -570,18 +558,24 @@ export function AdminNoticeCompose() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
               multiple
               className="hidden"
+              disabled={fileUploading}
               onChange={handleFileSelect}
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/30 hover:border-muted-foreground/30"
+              disabled={fileUploading}
+              className="flex items-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/30 hover:border-muted-foreground/30 disabled:opacity-50"
             >
               <Paperclip className="h-4 w-4" />
-              <span>{t("noticeFileAdd").split("(")[0]?.trim() || t("noticeFileAdd")}</span>
+              <span>
+                {fileUploading
+                  ? t("loading")
+                  : t("noticeFileAdd").split("(")[0]?.trim() || t("noticeFileAdd")}
+              </span>
             </button>
             <p className="text-[11px] text-muted-foreground">{t("noticeFileLimit")}</p>
           </div>
@@ -591,7 +585,7 @@ export function AdminNoticeCompose() {
         <Button
           className="h-11 text-sm font-bold"
           onClick={handleSend}
-          disabled={sending}
+          disabled={sending || fileUploading}
         >
           <Send className="mr-2 h-4 w-4" />
           {sending ? t("loading") : t("adminSendNoticeBtn")}

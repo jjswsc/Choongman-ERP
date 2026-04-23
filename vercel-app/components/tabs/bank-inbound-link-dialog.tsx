@@ -121,7 +121,7 @@ export function BankInboundLinkDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("adminInbound") || "입고"} 연동</DialogTitle>
+          <DialogTitle>{tt("adminInbound", "Inbound")} Link</DialogTitle>
         </DialogHeader>
         {row && (
           <div className="space-y-4">

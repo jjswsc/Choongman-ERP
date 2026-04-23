@@ -40,18 +40,18 @@ function todayStrBkk() {
 
 function getCategoryLabel(cat: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
-    purchase_payment: t("bankCategoryPurchasePayment") || "매입 대금",
-    purchase_advance: t("wm_advance") || "선급",
-    expense: t("bankCategoryExpense") || "비용",
-    expense_advance: t("wm_advance") || "선급",
-    fixed: t("bankCategoryExpense") || "비용",
-    fixed_asset: t("wm_fixed_asset") || "고정자산",
-    transfer: t("bankCategoryTransfer") || "이체",
-    tax: t("wm_tax") || "세금",
-    loan_repayment: t("wm_loan_repayment") || "대출 상환",
-    loan_given: t("wm_loan_given") || "대여",
-    correction: t("bankCategoryCorrection") || "정정",
-    dividend: t("wm_dividend") || "배당",
+    purchase_payment: t("wm_purchase") || "Purchase Payment",
+    purchase_advance: t("wm_advance") || "Advance Payment",
+    expense: t("wm_expense") || "Expense",
+    expense_advance: t("wm_advance") || "Advance Payment",
+    fixed: t("wm_expense") || "Expense",
+    fixed_asset: t("wm_fixed_asset") || "Fixed Asset",
+    transfer: t("wm_transfer") || "Transfer",
+    tax: t("wm_tax") || "Tax",
+    loan_repayment: t("wm_loan_repayment") || "Loan Repayment",
+    loan_given: t("wm_loan_given") || "Loan Given",
+    correction: t("wm_correction") || "Correction",
+    dividend: t("wm_dividend") || "Dividend",
   }
   return map[cat] ?? cat
 }
@@ -64,7 +64,7 @@ function getLinkFlagsLabel(
   if (typeof bankLinked === "boolean" || typeof pettyLinked === "boolean") {
     const b = bankLinked ? "O" : "X"
     const p = pettyLinked ? "O" : "X"
-    return `${t("bankTitle") || "통장"} ${b} · ${t("adminPettyCash") || "패티캐쉬"} ${p}`
+    return `${t("bankTitle") || "Bank"} ${b} · ${t("adminPettyCash") || "Petty Cash"} ${p}`
   }
   return "-"
 }
@@ -72,6 +72,11 @@ function getLinkFlagsLabel(
 export function ExpenseRegisterSearchTab() {
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = React.useCallback((key: string, fallback: string) => {
+    const v = t(key)
+    if (!v || v === key) return fallback
+    return v
+  }, [t])
   const { auth } = useAuth()
   const router = useRouter()
   const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
@@ -241,10 +246,10 @@ export function ExpenseRegisterSearchTab() {
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger className="w-[200px] h-9">
-                <SelectValue placeholder={t("wm_searchAllAccounts") || "전체 계좌"} />
+                <SelectValue placeholder={tt("wm_searchAllAccounts", "All Accounts")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{t("wm_searchAllAccounts") || "전체 계좌"}</SelectItem>
+                <SelectItem value="__all__">{tt("wm_searchAllAccounts", "All Accounts")}</SelectItem>
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={String(a.id)}>
                     {a.bankName ? `[${a.bankName}] ` : ""}{a.name} {a.store ? `(${a.store})` : ""}
@@ -257,10 +262,10 @@ export function ExpenseRegisterSearchTab() {
             <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder={t("bankCategoryLabel") || "용도"} />
+                <SelectValue placeholder={tt("bankCategoryLabel", "Category")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{(t("all") || "전체")} {(t("bankCategoryLabel") || "용도")}</SelectItem>
+                <SelectItem value="__all__">{tt("all", "All")} {tt("bankCategoryLabel", "Category")}</SelectItem>
                 {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c.toLowerCase()}>
                     {getCategoryLabel(c, t)}
@@ -271,12 +276,12 @@ export function ExpenseRegisterSearchTab() {
             <Input
               value={vendorFilter}
               onChange={(e) => setVendorFilter(e.target.value)}
-              placeholder={t("vendor") || "매입처"}
+              placeholder={tt("vendor", "Vendor")}
               className="w-[180px] h-9"
             />
             <Button size="sm" onClick={loadData} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
-              {t("btn_query") || "조회"}
+              {tt("btn_query", "Query")}
             </Button>
           </div>
 
@@ -291,25 +296,25 @@ export function ExpenseRegisterSearchTab() {
             <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : filteredList.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("pettyNoData") || "조회된 지출 등록 내역이 없습니다."}
+              {tt("pettyNoData", "No expense registration records found.")}
             </p>
           ) : (
             <div className="rounded-lg border overflow-auto max-h-[500px]">
               <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
-                    <th className="p-2 text-center">{t("date") || "날짜"}</th>
-                    <th className="p-2 text-center">{t("bankCategoryLabel") || "용도"}</th>
-                    <th className="p-2 text-left">{t("vendor") || "거래처"}</th>
-                    <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
-                    <th className="p-2 text-center min-w-[160px]" title={t("poInvoice") || "인보이스"}>
-                      {t("poInvoice") || "인보이스"}
+                    <th className="p-2 text-center">{tt("date", "Date")}</th>
+                    <th className="p-2 text-center">{tt("bankCategoryLabel", "Category")}</th>
+                    <th className="p-2 text-left">{tt("vendor", "Vendor")}</th>
+                    <th className="p-2 text-right">{tt("pettyColAmount", "Amount")}</th>
+                    <th className="p-2 text-center min-w-[160px]" title={tt("poInvoice", "Invoice")}>
+                      {tt("poInvoice", "Invoice")}
                     </th>
-                    <th className="p-2 text-left">{t("memo") || "적요"}</th>
+                    <th className="p-2 text-left">{tt("memo", "Memo")}</th>
                     <th className="p-2 text-center">
-                      {(t("bankTitle") || "통장")}/{(t("adminPettyCash") || "패티캐쉬")} {(t("wl_status") || "상태")}
+                      {tt("bankTitle", "Bank")}/{tt("adminPettyCash", "Petty Cash")} {tt("wl_status", "Status")}
                     </th>
-                    <th className="p-2 text-center">{t("action") || "작업"}</th>
+                    <th className="p-2 text-center">{tt("action", "Action")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -332,7 +337,7 @@ export function ExpenseRegisterSearchTab() {
                               checked={r.invoiceReceived}
                               onCheckedChange={(c) => handleInvoiceCheckChange(r, c === true)}
                               disabled={updatingInvoiceId === r.id}
-                              title={t("poInvoiceReceived") || "인보이스 수령"}
+                              title={tt("poInvoiceReceived", "Invoice Received")}
                               className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 shrink-0"
                             />
                             {r.invoiceNo ? (
@@ -354,8 +359,8 @@ export function ExpenseRegisterSearchTab() {
                               className={`inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted shrink-0 overflow-hidden ${r.invoicePhotoUrl ? "text-green-600" : "text-muted-foreground"}`}
                               title={
                                 r.invoicePhotoUrl
-                                  ? (t("poInvoice") || "인보이스") + " (클릭하여 보기)"
-                                  : t("bankInvoicePhotoUpload") || "인보이스 사진 업로드"
+                                  ? `${tt("poInvoice", "Invoice")} (${tt("clickToView", "click to view")})`
+                                  : tt("bankInvoicePhotoUpload", "Upload invoice image")
                               }
                             >
                               {r.invoicePhotoUrl ? (
@@ -381,7 +386,7 @@ export function ExpenseRegisterSearchTab() {
                               size="icon"
                               variant="outline"
                               className="h-8 w-8"
-                              title={t("btnEdit") || "수정"}
+                              title={tt("btnEdit", "Edit")}
                               onClick={() => {
                                 if (!r.id) return
                                 const q = new URLSearchParams()
@@ -410,11 +415,11 @@ export function ExpenseRegisterSearchTab() {
                               size="icon"
                               variant="outline"
                               className="h-8 w-8 border-destructive/40 text-destructive"
-                              title={t("delete") || "삭제"}
+                              title={tt("delete", "Delete")}
                               disabled={!r.id || deletingId === r.id}
                               onClick={async () => {
                                 if (!r.id) return
-                                const ok = await appConfirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
+                                const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
                                 if (!ok) return
                                 setDeletingId(r.id)
                                 try {
@@ -423,12 +428,12 @@ export function ExpenseRegisterSearchTab() {
                                     userRole: auth?.role,
                                   })
                                   if (!res.success) {
-                                    await appAlert(res.message || t("msg_delete_fail") || "삭제 실패")
+                                    await appAlert(res.message || tt("msg_delete_fail", "Delete failed"))
                                     return
                                   }
                                   setList((prev) => prev.filter((x) => x.id !== r.id))
                                 } catch (e) {
-                                  await appAlert((t("msg_delete_fail") || "삭제 실패") + ": " + (e instanceof Error ? e.message : String(e)))
+                                  await appAlert(tt("msg_delete_fail", "Delete failed") + ": " + (e instanceof Error ? e.message : String(e)))
                                 } finally {
                                   setDeletingId(null)
                                 }
@@ -451,7 +456,7 @@ export function ExpenseRegisterSearchTab() {
       <Dialog open={!!invoicePhotoPreviewUrl} onOpenChange={(open) => !open && setInvoicePhotoPreviewUrl(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{t("poInvoice") || "인보이스"}</DialogTitle>
+            <DialogTitle>{tt("poInvoice", "Invoice")}</DialogTitle>
           </DialogHeader>
           <ImageViewerWithRotate
             src={invoicePhotoPreviewUrl || ""}

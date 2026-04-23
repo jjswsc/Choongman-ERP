@@ -56,7 +56,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   const auth = getAuthHeaders()
   Object.entries(auth).forEach(([k, v]) => headers.set(k, v))
   const url = resolveUrl(input)
-  const res = await fetch(url, { ...init, headers })
+  const res = await fetch(url, { ...init, headers, credentials: 'include' })
   if (res.status === 401 && typeof window !== 'undefined') {
     if (navigator.onLine === false) {
       // 오프라인 시 401 리다이렉트 방지 - 세션이 있으면 캐시된 데이터로 계속 사용 허용

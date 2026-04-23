@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
@@ -262,6 +264,8 @@ export default function PosPrintersPage() {
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const loadRequestSeqRef = React.useRef(0)
+  /** loadData 와 분리 — 저장 직후 메뉴/카테고리만 갱신할 때 loadData 시퀀스를 밟지 않음(로딩 플래그·무효화 레이스 방지) */
+  const catalogRequestSeqRef = React.useRef(0)
   const [easyMode, setEasyMode] = React.useState(true)
   const [quickTesting, setQuickTesting] = React.useState(false)
   const [saveStatus, setSaveStatus] = React.useState<"idle" | "saving" | "saved" | "queued" | "error">(
@@ -520,16 +524,16 @@ export default function PosPrintersPage() {
   /** 저장 직후: 주방 설정 state 는 이번 merged 기준(위에서 반영)이므로 getPosPrinterSettings 를 다시 부르지 않는다(늦/빈 응답이 라우팅을 되돌리는 문제 방지). */
   const refreshMenuCatalogOnly = React.useCallback(() => {
     if (!effectiveStore) return
-    const requestSeq = ++loadRequestSeqRef.current
+    const requestSeq = ++catalogRequestSeqRef.current
     Promise.all([getPosMenuCategories(), getPosMenus()])
       .then(([catRes, menus]) => {
-        if (requestSeq !== loadRequestSeqRef.current) return
+        if (requestSeq !== catalogRequestSeqRef.current) return
         setCategories(catRes.categories || [])
         setMainCategories(Array.isArray(catRes.mainCategories) ? catRes.mainCategories : [])
         setMenusList(Array.isArray(menus) ? menus : [])
       })
       .catch(() => {
-        if (requestSeq !== loadRequestSeqRef.current) return
+        if (requestSeq !== catalogRequestSeqRef.current) return
         setCategories([])
       })
   }, [effectiveStore])
@@ -1381,9 +1385,8 @@ export default function PosPrintersPage() {
         {effectiveStore && !loading && (
           <div className={adminTabsRootCn}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className={adminTabsBarCn}>
-              <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListRowCn}>
+            <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
                   <TabsTrigger value="printer" className={adminTabsTriggerCn}>
                     <Printer className={adminTabsIconCn} aria-hidden />
                     {tr("posPrinterTabKitchenRouting", "주방 라우팅")}
@@ -1417,8 +1420,7 @@ export default function PosPrintersPage() {
                     </TabsTrigger>
                   ) : null}
                 </TabsList>
-              </div>
-            </div>
+          </AdminTabsBarWithHelp>
 
             <TabsContent value="printer" className={cn(adminTabsContentCn, "space-y-6")}>
               <div>
@@ -1536,6 +1538,21 @@ export default function PosPrintersPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-amber-200/70 bg-amber-50/40 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                <p className="text-xs text-muted-foreground">
+                  {tr("posKitchenRoutingSaveHint", "Tap Save below or at the bottom of the page to save to the server.")}
+                </p>
+                <Button
+                  type="button"
+                  className="mt-3 w-full sm:w-auto"
+                  onClick={() => void handleSave()}
+                  disabled={saving}
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? t("posPrinterSaving") : t("itemsBtnSave")}
+                </Button>
               </div>
 
             <div className="grid gap-2 sm:grid-cols-2">

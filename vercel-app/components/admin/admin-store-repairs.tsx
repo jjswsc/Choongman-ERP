@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
@@ -393,8 +395,7 @@ export function AdminStoreRepairs() {
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="dash" className={adminTabsTriggerCn}>
                   {t("tab_repair_dashboard")}
@@ -409,8 +410,7 @@ export function AdminStoreRepairs() {
                   {t("tab_repair_new")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="dash" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="flex flex-wrap gap-2">

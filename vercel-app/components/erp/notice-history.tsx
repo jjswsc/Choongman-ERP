@@ -12,6 +12,7 @@ import {
   ChevronUp,
   Users,
   FileText,
+  BarChart2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
+import { NoticeReaderStatsDialog } from "@/components/erp/notice-reader-stats-dialog"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -68,6 +70,7 @@ export function NoticeHistory() {
   const [readDetailTitle, setReadDetailTitle] = React.useState("")
   const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
   const [readDetailLoading, setReadDetailLoading] = React.useState(false)
+  const [statsOpen, setStatsOpen] = React.useState(false)
 
   const loadNotices = React.useCallback(
     (page: number) => {
@@ -225,6 +228,16 @@ export function NoticeHistory() {
         >
           <Search className="mr-1 h-3.5 w-3.5" />
           {loading ? t("loading") : t("search")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 w-full min-[520px]:w-auto min-[520px]:ml-auto shrink-0 rounded-lg px-3 text-xs font-semibold"
+          onClick={() => setStatsOpen(true)}
+        >
+          <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
+          {t("noticeReaderStatsBtn")}
         </Button>
       </div>
 
@@ -418,6 +431,8 @@ export function NoticeHistory() {
         )}
       </div>
 
+      <NoticeReaderStatsDialog open={statsOpen} onOpenChange={setStatsOpen} />
+
       <Dialog open={readDetailOpen} onOpenChange={setReadDetailOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -471,6 +486,7 @@ export function NoticeHistory() {
           </div>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

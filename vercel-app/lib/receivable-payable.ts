@@ -232,6 +232,44 @@ export async function upsertReceivableFromOrder(params: {
 }
 
 /**
+ * Tax Invoice 인쇄 화면(Update)에서 저장한 날짜·문서번호를 미수금/엑셀에도 반영.
+ * (invoice_print_override는 invoice_settings에만 있고 receivable은 갱신되지 않던 문제)
+ */
+export async function applyTaxInvoiceOverrideToReceivable(params: {
+  refType: string
+  refId: number
+  issueDate: string
+  documentNo?: string
+}): Promise<void> {
+  const refType = String(params.refType || '').trim()
+  const refId = Number(params.refId)
+  if (refId <= 0 || !Number.isFinite(refId)) return
+  if (refType !== 'Order' && refType !== 'ForceOutbound') return
+
+  const transDate = String(params.issueDate || '')
+    .trim()
+    .slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) return
+
+  const existing = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `ref_type=eq.${refType}&ref_id=eq.${refId}`,
+    { limit: 1 }
+  )) as { id?: number }[]
+
+  if (!existing?.length || !existing[0].id) return
+
+  const docNo = String(params.documentNo || '').trim()
+  const patch: Record<string, string> = { trans_date: transDate }
+  if (docNo) {
+    patch.invoice_no = docNo
+    patch.memo = refType === 'Order' ? docNo : `강제출고 ${docNo}`
+  }
+
+  await supabaseUpdate('receivable_transactions', existing[0].id, patch)
+}
+
+/**
  * 통장 연동 매입 지급(ref Payment, 지출발생 미연동) — bank_transaction_id당 1행 유지.
  * CSV 재저장·출금관리 등으로 동일 통장 건에 insert가 반복되면 미지급 내역이 중복되어 보일 수 있어 upsert.
  */

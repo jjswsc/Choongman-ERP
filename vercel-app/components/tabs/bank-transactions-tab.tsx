@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -315,7 +317,7 @@ export function BankTransactionsTab() {
   const handleDeleteBankRow = async (r: (typeof list)[0]) => {
     if (!r.id || !isOffice) return
     if (r.transType !== "withdraw" && r.transType !== "deposit") return
-    const base = tt("bankTxRowDeleteConfirm", "이 통장 거래 한 건을 삭제할까요? (입·출금, CSV 중복 등)")
+    const base = tt("bankTxRowDeleteConfirm", "Delete this bank transaction row? (deposit/withdrawal/CSV duplicate, etc.)")
     const msg = base
     if (!(await appConfirm(msg))) return
     setDeletingBankTxId(r.id)
@@ -325,7 +327,7 @@ export function BankTransactionsTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_delete_fail", "삭제 실패"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_delete_fail", "Delete failed"))
         return
       }
       await Promise.all([
@@ -334,7 +336,7 @@ export function BankTransactionsTab() {
       ])
       await loadData()
     } catch (e) {
-      await appAlert(`${tt("msg_delete_fail", "삭제 실패")}: ${e instanceof Error ? e.message : String(e)}`)
+      await appAlert(`${tt("msg_delete_fail", "Delete failed")}: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setDeletingBankTxId(null)
     }
@@ -777,7 +779,7 @@ export function BankTransactionsTab() {
 
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) {
-      await appAlert(t("bankAddAccount") || "계좌명을 입력하세요.")
+      await appAlert(t("bankAddAccount") || "Please enter account name.")
       return
     }
     const store = isOffice && newAccountStore ? newAccountStore : auth?.store || ""
@@ -793,7 +795,7 @@ export function BankTransactionsTab() {
         setNewAccountBankName("")
         getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).then(setAccounts)
       } else {
-        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "Save failed"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -831,7 +833,7 @@ export function BankTransactionsTab() {
   }
 
   const handleDeleteAccount = async (id: number) => {
-    if (!await appConfirm(t("bankAccountDeleteConfirm") || "이 계좌와 관련된 모든 거래 내역이 삭제됩니다. 삭제하시겠습니까?")) return
+    if (!await appConfirm(t("bankAccountDeleteConfirm") || "All transactions linked to this account will be deleted. Continue?")) return
     setAccountDeletingId(id)
     try {
       const res = await deleteBankAccount({ id })
@@ -891,7 +893,7 @@ export function BankTransactionsTab() {
 
   const handleAddMemoRule = async () => {
     if (!newRuleKeyword.trim() || !newRuleCategory) {
-      await appAlert(t("bankMemoRuleKeywordRequired") || "키워드와 용도를 입력하세요.")
+      await appAlert(t("bankMemoRuleKeywordRequired") || "Please enter keyword and category.")
       return
     }
     setSavingMemoRule(true)
@@ -917,7 +919,7 @@ export function BankTransactionsTab() {
   }
 
   const handleDeleteMemoRule = async (id: number) => {
-    if (!await appConfirm(t("bankMemoRuleDeleteConfirm") || "이 규칙을 삭제하시겠습니까?")) return
+    if (!await appConfirm(t("bankMemoRuleDeleteConfirm") || "Delete this rule?")) return
     try {
       const res = await deleteBankMemoRule({ id })
       if (res.success) getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
@@ -980,32 +982,32 @@ export function BankTransactionsTab() {
 
   const getCategoryLabel = (cat: string, transType: string) => {
     const depositMap: Record<string, string> = {
-      revenue_delivery: t("bankRevenueDelivery") || "배달앱",
-      revenue_card: t("bankRevenueCard") || "카드",
-      revenue_qr: t("bankRevenueQr") || "QR/이체",
-      revenue_cash: t("bankRevenueCash") || "현금",
-      receivable_receive: t("bankCategoryReceivableReceive") || "매출 수령",
-      loan: t("bankCategoryLoan") || "대출",
-      advance: t("bankCategoryAdvance") || "선지급",
-      unclassified: t("bankCategoryUnclassified") || "미분류",
-      correction: t("bankCategoryCorrection") || "정정",
+      revenue_delivery: t("bankRevenueDelivery") || "Delivery App",
+      revenue_card: t("bankRevenueCard") || "Card",
+      revenue_qr: t("bankRevenueQr") || "QR/Transfer",
+      revenue_cash: t("bankRevenueCash") || "Cash",
+      receivable_receive: t("bankCategoryReceivableReceive") || "Sales Collection",
+      loan: t("bankCategoryLoan") || "Loan",
+      advance: t("bankCategoryAdvance") || "Advance",
+      unclassified: t("bankCategoryUnclassified") || "Unclassified",
+      correction: t("bankCategoryCorrection") || "Correction",
     }
     const withdrawMap: Record<string, string> = {
-      transfer: t("bankCategoryTransfer") || "이체",
-      expense: t("bankCategoryExpense") || "비용",
-      fixed: t("bankCategoryExpense") || "비용",
-      purchase_payment: t("bankCategoryPurchasePayment") || "매입 대금",
-      loan: t("bankCategoryLoan") || "대출",
-      advance: t("bankCategoryAdvance") || "선지급",
-      unclassified: t("bankCategoryUnclassified") || "미분류",
-      correction: t("bankCategoryCorrection") || "정정",
+      transfer: t("bankCategoryTransfer") || "Transfer",
+      expense: t("bankCategoryExpense") || "Expense",
+      fixed: t("bankCategoryExpense") || "Expense",
+      purchase_payment: t("bankCategoryPurchasePayment") || "Purchase Payment",
+      loan: t("bankCategoryLoan") || "Loan",
+      advance: t("bankCategoryAdvance") || "Advance",
+      unclassified: t("bankCategoryUnclassified") || "Unclassified",
+      correction: t("bankCategoryCorrection") || "Correction",
     }
     return transType === "deposit" ? (depositMap[cat] ?? cat) : (withdrawMap[cat] ?? cat)
   }
 
   const exportBankTransactionsExcel = React.useCallback(async () => {
     if (filteredList.length === 0) {
-      await appAlert(t("pettyNoData") || "내보낼 데이터가 없습니다.")
+      await appAlert(t("pettyNoData") || "No data to export.")
       return
     }
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -1326,9 +1328,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         onValueChange={setActiveBankTab}
         className={adminTabsRootCn}
       >
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
+        <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="input" className={adminTabsTriggerCn}>
                 <PenLine className={adminTabsIconCn} aria-hidden />
                 {t("bankTabInput") || "입력"}
@@ -1342,8 +1343,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 {t("bankTabExplanation") || "설명"}
               </TabsTrigger>
             </TabsList>
-          </div>
-        </div>
+          </AdminTabsBarWithHelp>
 
         <TabsContent value="query" className="mt-0">
           <Card>

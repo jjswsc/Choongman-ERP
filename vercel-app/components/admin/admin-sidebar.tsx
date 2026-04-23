@@ -28,6 +28,7 @@ const menuItems = [
   // 4. 인사 관리
   { header: "인사 관리" },
   { href: "/admin/employees", label: "직원 관리" },
+  { href: "/admin/hr-policies", label: "인사 규정" },
   { href: "/admin/attendance", label: "근태/스케줄 관리" },
   { href: "/admin/leave", label: "휴가 관리" },
   // 5. 물류 관리

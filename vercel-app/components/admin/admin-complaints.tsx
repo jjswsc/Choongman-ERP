@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
@@ -283,8 +285,7 @@ export function AdminComplaints() {
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "input" | "list")} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="input" className={adminTabsTriggerCn}>
                   {t("tab_complaint_input")}
@@ -293,8 +294,7 @@ export function AdminComplaints() {
                   {t("tab_complaint_list")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="input" className={adminTabsContentCn}>
             <Card>

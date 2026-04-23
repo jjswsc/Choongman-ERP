@@ -44,6 +44,8 @@ interface PosHeaderProps {
   onRefresh?: () => void
   title?: string
   className?: string
+  /** POS 터미널 데모 투어 `data-tour` (예: `pos-tour-header`) */
+  dataTour?: string
   /** 메인 포스 모드 (프린터 연결, 태블릿 주문 수신 인쇄) */
   isMainPosDevice?: boolean
   onMainPosDeviceChange?: (value: boolean) => void
@@ -67,6 +69,7 @@ export function POSHeader({
   onRefresh,
   title = "POS",
   className,
+  dataTour,
   isMainPosDevice,
   onMainPosDeviceChange,
 }: PosHeaderProps) {
@@ -89,6 +92,7 @@ export function POSHeader({
 
   return (
     <header
+      data-tour={dataTour}
       className={cn(
         "grid min-h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1 border-b border-border bg-card px-2 py-2 sm:gap-x-2 sm:px-3 md:px-4 lg:h-14 lg:gap-x-3 lg:py-0",
         className
@@ -165,6 +169,7 @@ export function POSHeader({
             variant={isMainPosDevice ? "default" : "outline"}
             size="sm"
             className="h-8 shrink-0 gap-1 sm:gap-1.5"
+            data-tour={dataTour ? 'pos-tour-main-device-toggle' : undefined}
             onClick={() => onMainPosDeviceChange(!isMainPosDevice)}
             title={isMainPosDevice ? (t('posMainDeviceOn') || '메인 포스 (프린터 연결)') : (t('posMainDeviceOff') || '주문 단말')}
           >

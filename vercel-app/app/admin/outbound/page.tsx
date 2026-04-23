@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
@@ -1464,8 +1466,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           </div>
         </div>
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice" | "summary")} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 {isOffice && (
                   <TabsTrigger value="new" className={adminTabsTriggerCn}>
@@ -1489,8 +1490,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   {t("outTabSummary")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           {isOffice && (
             <TabsContent value="new" className={adminTabsContentCn}>

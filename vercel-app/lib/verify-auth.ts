@@ -22,17 +22,32 @@ export type AuthLevel = 'any' | 'manager' | 'office' | 'director'
  */
 export async function getVerifiedAuth(req: NextRequest): Promise<JwtPayload | null> {
   const authHeader = req.headers.get('Authorization')
-  let token: string | null = null
-
+  let bearerToken: string | null = null
   if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.slice(7).trim()
-  } else {
-    const cookieToken = req.cookies.get('cm_token')?.value
-    if (cookieToken) token = cookieToken
+    const t = authHeader.slice(7).trim()
+    bearerToken = t || null
   }
+  const cookieRaw = req.cookies.get('cm_token')?.value
+  const cookieToken = cookieRaw && String(cookieRaw).trim() ? String(cookieRaw).trim() : null
 
-  if (!token) return null
-  return verifyToken(token)
+  // Bearer가 있어도 만료·불일치면 무시하고 HttpOnly 쿠키(cm_token)로 재시도 — 탭별 sessionStorage 만료와 쿠키 불일치 시 401 방지
+  if (bearerToken) {
+    const fromBearer = await verifyToken(bearerToken)
+    if (fromBearer) return fromBearer
+  }
+  if (cookieToken) {
+    const fromRaw = await verifyToken(cookieToken)
+    if (fromRaw) return fromRaw
+    try {
+      const decoded = decodeURIComponent(cookieToken)
+      if (decoded !== cookieToken) {
+        return verifyToken(decoded)
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
 }
 
 /**

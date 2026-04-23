@@ -6,12 +6,8 @@ import { useRouter } from 'next/navigation'
 import { Wallet, Save, RotateCw, Printer, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  adminTabsBarCn,
-  adminTabsListRowCn,
-  adminTabsScrollCn,
-  adminTabsTriggerCn,
-} from '@/lib/admin-tab-styles'
+import { adminTabsListRowCn, adminTabsTriggerCn } from '@/lib/admin-tab-styles'
+import { AdminTabsBarWithHelp } from '@/components/erp/admin-tabs-bar-with-help'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -735,18 +731,16 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
         {effectiveStore && !loading && !openMode && (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
-            <div className={cn(adminTabsBarCn, 'mb-4 overflow-hidden rounded-lg')}>
-              <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListRowCn}>
-                  <TabsTrigger value="entry" className={adminTabsTriggerCn}>
-                    결산 입력
-                  </TabsTrigger>
-                  <TabsTrigger value="history" className={adminTabsTriggerCn}>
-                    결산 조회
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-            </div>
+            <AdminTabsBarWithHelp className="mb-4 overflow-hidden rounded-lg">
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="entry" className={adminTabsTriggerCn}>
+                  결산 입력
+                </TabsTrigger>
+                <TabsTrigger value="history" className={adminTabsTriggerCn}>
+                  결산 조회
+                </TabsTrigger>
+              </TabsList>
+            </AdminTabsBarWithHelp>
 
             <TabsContent value="entry" className="space-y-4">
               <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3">

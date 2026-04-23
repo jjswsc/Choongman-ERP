@@ -7,6 +7,10 @@
 export const NOTICE_LIST_COLS =
   'id,title,content,sender,target_store,target_role,target_permission_group,target_recipients,created_at,attachments'
 
+/** 인사 규정 목록(본문·대상) */
+export const HR_POLICY_LIST_COLS =
+  'id,title,content,target_store,target_role,target_permission_group,target_recipients,content_version,created_at,updated_at,effective_at,is_active,attachments,sender'
+
 /** 관리자 주문 목록·상세 조합에 필요한 컬럼 */
 export const ORDERS_ADMIN_LIST_COLS =
   'id,order_date,store_name,user_name,cart_json,total,status,delivery_status,delivery_date,delivery_dates_by_outbound,received_indices,approved_indices,approved_original_qty_json,reject_reason'

@@ -516,6 +516,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const selectedTopicId = selectedTopicBySubMenu[currentSubMenu.id] ?? currentSubMenu.topics[0].id
   const selectedTopic = currentSubMenu.topics.find((topic) => topic.id === selectedTopicId) ?? currentSubMenu.topics[0]
   const selectedView = selectedTopic?.view ?? null
+  /** 하단 인사이트(총액 / TOP·LOW 메뉴 / TOP 채널)는 현재 주제에 맞는 것만 — 탭마다 전부 있으면 집중이 흐려짐 */
+  const insightShowTotals =
+    selectedView != null &&
+    (selectedView === "period" ||
+      selectedView === "store-period" ||
+      selectedView === "store" ||
+      selectedView === "store-category" ||
+      selectedView === "payment")
+  const insightShowMenu = selectedView === "menu"
+  const insightShowChannel = selectedView === "channel"
   const needsPeriodGroup = selectedView === "period" || selectedView === "store-period"
 
   const storesForCompareChart = React.useMemo(
@@ -646,6 +656,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   )
 
   const showSalesResults = fetchedAnalyticsKey !== "" && fetchedAnalyticsKey === analyticsParamKey
+
+  /** 상단(현재·직전동일·전주) — 기간/매장×기간 탐색 주제만 3칸 비교, 그 외 금액 위주는 현재만, 메뉴·채널·배달은 생략 */
+  const summaryRowShowFull =
+    showSalesResults &&
+    selectedView != null &&
+    (selectedView === "period" || selectedView === "store-period")
+  const summaryRowShowCurrentOnly =
+    showSalesResults &&
+    selectedView != null &&
+    (selectedView === "store" || selectedView === "store-category" || selectedView === "payment")
 
   const totalsSummary = React.useMemo(() => {
     const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
@@ -1538,7 +1558,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </div>
           </div>
 
-          {showSalesResults ? (
+          {summaryRowShowFull ? (
             <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
@@ -1553,61 +1573,74 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.prevWeek)}</p>
               </div>
             </div>
+          ) : summaryRowShowCurrentOnly ? (
+            <div className="mb-3 max-w-sm">
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">{tr("salesSummaryCurrent", "현재 기간 매출")}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums">{formatSalesAmount(summaryCards.current)}</p>
+              </div>
+            </div>
           ) : null}
 
-          {showSalesResults ? (
-            <div className="mb-3 grid grid-cols-1 gap-2 xl:grid-cols-3">
-              <div className="rounded-lg border bg-card p-3">
-                <p className="text-xs text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</p>
-                <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(totalsSummary.gross)}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
-                <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.discount)}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
-                <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(totalsSummary.total)}</p>
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopMenu", "TOP 메뉴")}</p>
-                {insightTopMenus.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
-                ) : (
-                  <ul className="space-y-1 text-sm">
-                    {insightTopMenus.map((row) => (
-                      <li key={`top-${row.name}`} className="flex items-center justify-between gap-2">
-                        <span className="truncate">{row.name}</span>
-                        <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="mb-2 mt-3 text-xs text-muted-foreground">{tr("salesInsightBottomMenu", "LOW 메뉴")}</p>
-                {insightBottomMenus.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
-                ) : (
-                  <ul className="space-y-1 text-sm">
-                    {insightBottomMenus.map((row) => (
-                      <li key={`low-${row.name}`} className="flex items-center justify-between gap-2">
-                        <span className="truncate">{row.name}</span>
-                        <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="rounded-lg border bg-card p-3">
-                <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopChannel", "TOP 채널")}</p>
-                {insightTopChannels.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
-                ) : (
-                  <ul className="space-y-1 text-sm">
-                    {insightTopChannels.map((row) => (
-                      <li key={`ch-${row.channelKey}`} className="flex items-center justify-between gap-2">
-                        <span className="truncate">{row.axisLabel}</span>
-                        <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+          {showSalesResults && (insightShowTotals || insightShowMenu || insightShowChannel) ? (
+            <div className="mb-3 max-w-2xl">
+              {insightShowTotals ? (
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="text-xs text-muted-foreground">{tr("salesNetGross", "총액(공급+세금)")}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(totalsSummary.gross)}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.discount)}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
+                  <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(totalsSummary.total)}</p>
+                </div>
+              ) : null}
+              {insightShowMenu ? (
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopMenu", "TOP 메뉴")}</p>
+                  {insightTopMenus.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {insightTopMenus.map((row) => (
+                        <li key={`top-${row.name}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{row.name}</span>
+                          <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mb-2 mt-3 text-xs text-muted-foreground">{tr("salesInsightBottomMenu", "LOW 메뉴")}</p>
+                  {insightBottomMenus.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {insightBottomMenus.map((row) => (
+                        <li key={`low-${row.name}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{row.name}</span>
+                          <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+              {insightShowChannel ? (
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="mb-2 text-xs text-muted-foreground">{tr("salesInsightTopChannel", "TOP 채널")}</p>
+                  {insightTopChannels.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {insightTopChannels.map((row) => (
+                        <li key={`ch-${row.channelKey}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{row.axisLabel}</span>
+                          <span className="shrink-0 tabular-nums font-medium">{formatSalesAmount(row.sales)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
 

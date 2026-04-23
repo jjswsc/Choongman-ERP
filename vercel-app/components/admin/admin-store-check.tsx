@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
@@ -411,8 +413,7 @@ export function AdminStoreCheck() {
           }}
           className={adminTabsRootCn}
         >
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="check" className={adminTabsTriggerCn}>
                   {t("tab_store_check")}
@@ -429,8 +430,7 @@ export function AdminStoreCheck() {
                   </TabsTrigger>
                 )}
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="check" className={adminTabsContentCn}>
             <Card>

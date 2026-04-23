@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -1168,8 +1170,7 @@ export default function PosOrdersPage() {
           onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed")}
           className={adminTabsRootCn}
         >
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="orders" className={adminTabsTriggerCn}>
                   {t("posOrderList") || "POS 주문 내역"}
@@ -1181,8 +1182,7 @@ export default function PosOrdersPage() {
                   LINKPOS 실패 관리
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="orders" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card overflow-hidden">

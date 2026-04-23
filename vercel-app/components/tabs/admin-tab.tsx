@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import React, { useState, useEffect, useCallback } from "react"
@@ -318,9 +320,8 @@ export function AdminTab() {
     <div className="flex flex-col gap-4 p-4">
       {/* 공지사항 (탭: 새 공지 보내기 | 발송 내역) */}
       <Tabs defaultValue="compose" className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
+        <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="compose" className={adminTabsTriggerCn}>
                 {t("noticeNewTitle")}
               </TabsTrigger>
@@ -328,8 +329,7 @@ export function AdminTab() {
                 {t("noticeHistoryTitle")}
               </TabsTrigger>
             </TabsList>
-          </div>
-        </div>
+          </AdminTabsBarWithHelp>
         <TabsContent value="compose" className={adminTabsContentCn}>
           <NoticeCompose />
         </TabsContent>

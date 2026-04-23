@@ -408,8 +408,8 @@ const PRINT_HTML_OFFSCREEN_WIDTH = Math.round((80 / 25.4) * 96);
 const PRINT_HTML_OFFSCREEN_HEIGHT = 4096;
 /** loadFile 직후 너무 빨리 print 하면 Windows에서 무인쇄가 실패·곧바로 대화상자로 떨어지는 경우가 있음 */
 const PRINT_HTML_SETTLE_MS = readConfigInt(
-  process.env.WINDOWS_POS_PRINT_HTML_SETTLE_MS || runtimeConfig.printHtmlSettleMs || 550,
-  550,
+  process.env.WINDOWS_POS_PRINT_HTML_SETTLE_MS || runtimeConfig.printHtmlSettleMs || 400,
+  400,
   150,
   5000
 );
@@ -1362,6 +1362,42 @@ function getPrintConfigSnapshotForIpc() {
   };
 }
 
+function normalizePrinterNameValue(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+/**
+ * POS 점검창에서 runtime-config print 설정을 바로 저장한다.
+ * - userData/runtime-config.json 에만 기록(매장별 로컬 오버라이드)
+ * - print 하위 알 수 없는 키는 보존
+ */
+function savePrintConfigSnapshotFromIpc(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("invalid_payload");
+  }
+  const cfg = readRuntimeConfig();
+  const prevPrint = cfg && typeof cfg.print === "object" && cfg.print ? cfg.print : {};
+  const nextPrint = {
+    ...prevPrint,
+    silent: readConfigBool(payload.silent, readConfigBool(prevPrint.silent, true)),
+    deviceName: normalizePrinterNameValue(payload.deviceName),
+    receiptDeviceName: normalizePrinterNameValue(payload.receiptDeviceName),
+    kitchenDeviceName: normalizePrinterNameValue(payload.kitchenDeviceName),
+    kitchen1DeviceName: normalizePrinterNameValue(payload.kitchen1DeviceName),
+    kitchen2DeviceName: normalizePrinterNameValue(payload.kitchen2DeviceName),
+    kitchen3DeviceName: normalizePrinterNameValue(payload.kitchen3DeviceName),
+  };
+  const nextCfg = {
+    ...cfg,
+    print: nextPrint,
+  };
+  const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+  fs.mkdirSync(path.dirname(userPath), { recursive: true });
+  fs.writeFileSync(userPath, JSON.stringify(nextCfg, null, 4) + "\n", "utf8");
+  return getPrintConfigSnapshotForIpc();
+}
+
 function getEscPosCutScriptPath() {
   const name = "send-thermal-escpos-cut.ps1";
   if (app.isPackaged) {
@@ -1775,6 +1811,18 @@ if (!gotLock) {
     ipcMain.handle("cm-pos-get-print-config", (event) => {
       if (!senderAllowedOrigin(event.sender)) return null;
       return getPrintConfigSnapshotForIpc();
+    });
+
+    ipcMain.handle("cm-pos-save-print-config", (event, payload) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      try {
+        const config = savePrintConfigSnapshotFromIpc(payload);
+        return { ok: true, config };
+      } catch (e) {
+        return { ok: false, reason: String(e && e.message ? e.message : e) };
+      }
     });
 
     ipcMain.handle("cm-pos-open-cash-drawer", async (event) => {

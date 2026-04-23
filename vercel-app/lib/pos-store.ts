@@ -119,6 +119,18 @@ function layoutToTables(
   })
 }
 
+type StoreSnapshot = {
+  storeCode: string
+  store: Store
+  layout: PosTableItem[]
+  activeOrders: PosOrder[]
+}
+
+type RefetchStoresOptions = {
+  scope?: 'all' | 'current'
+  storeCode?: string
+}
+
 export function usePosStore() {
   const { stores: storeCodes } = useStoreList()
   const { auth } = useAuth()
@@ -136,12 +148,48 @@ export function usePosStore() {
   const [layoutByStoreId, setLayoutByStoreId] = useState<Record<string, PosTableItem[]>>({})
   const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
-  const [orders, setOrders] = useState<Order[]>([])
+  const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     layoutByStoreIdRef.current = layoutByStoreId
   }, [layoutByStoreId])
+
+  const fetchStoreSnapshot = useCallback(async (storeCode: string, businessDate: string): Promise<StoreSnapshot> => {
+    const [layoutRes, ordersRes] = await Promise.all([
+      getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
+      getPosOrdersWithCache({
+        storeCode,
+        startStr: businessDate,
+        endStr: businessDate,
+      }).catch(() => []),
+    ])
+    const fetchedLayout = layoutRes.layout || []
+    const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
+    const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
+    const activeOrders = (ordersRes || []).filter(
+      (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
+    )
+    const dineInOrders = activeOrders.filter(
+      (o) =>
+        o.orderType === 'dine_in' &&
+        (o.tableName ?? '').trim() !== '' &&
+        !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
+    )
+    const tables = layoutToTables(layout, dineInOrders)
+    return {
+      storeCode,
+      store: {
+        id: storeCode,
+        name: storeCode,
+        gridCols: DEFAULT_GRID_COLS,
+        gridRows: DEFAULT_GRID_ROWS,
+        tables,
+      },
+      layout,
+      activeOrders,
+    }
+  }, [])
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {
@@ -152,51 +200,29 @@ export function usePosStore() {
     }
     setLoading(true)
     const businessDate = getPosBusinessDateStr()
-    Promise.all(
-      effectiveStoreCodes.map(async (storeCode) => {
-        const [layoutRes, ordersRes] = await Promise.all([
-          getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-          getPosOrdersWithCache({
-            storeCode,
-            startStr: businessDate,
-            endStr: businessDate,
-          }).catch(() => []),
-        ])
-        const fetchedLayout = layoutRes.layout || []
-        const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
-        const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
-        const activeOrders = (ordersRes || []).filter(
-          (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
-        )
-        /** 선불(paid): 결제 후에도 테이블·주문 유지. 후불은 completed 시 퇴장 처리로 비움 */
-        const dineInOrders = activeOrders.filter(
-          (o) =>
-            o.orderType === 'dine_in' &&
-            (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
-        )
-        const tables = layoutToTables(layout, dineInOrders)
-        return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
-      })
-    )
+    Promise.all(effectiveStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
       .then((results) => {
         const storeList = results.map((r) => r.store)
         const layouts: Record<string, PosTableItem[]> = {}
+        const nextOrdersByStore: Record<string, Order[]> = {}
         results.forEach((r) => { layouts[r.storeCode] = r.layout })
+        results.forEach((r) => {
+          nextOrdersByStore[r.storeCode] = (r.activeOrders || []).map(posOrderToOrder)
+        })
         setStores(storeList)
         setLayoutByStoreId(layouts)
-        const mergedOrders = results
-          .flatMap((r) => r.activeOrders || [])
-          .map(posOrderToOrder)
-        setOrders(mergedOrders)
+        setOrdersByStoreId(nextOrdersByStore)
         setCurrentStoreId((prev) => {
           const next = auth?.store && effectiveStoreCodes.includes(auth.store) ? auth.store : effectiveStoreCodes[0]
           return storeList.some((s) => s.id === prev) ? prev : next ?? effectiveStoreCodes[0] ?? ''
         })
       })
-      .catch(() => setStores([]))
+      .catch(() => {
+        setStores([])
+        setOrdersByStoreId({})
+      })
       .finally(() => setLoading(false))
-  }, [effectiveStoreCodes.join(','), auth?.store])
+  }, [effectiveStoreCodes.join(','), auth?.store, fetchStoreSnapshot])
 
   // effectiveStoreCodes 변경 시 currentStoreId가 목록에 없으면 첫 매장으로
   useEffect(() => {
@@ -284,60 +310,59 @@ export function usePosStore() {
   }, [])
 
   const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const refetchStoresImmediate = useCallback(() => {
+  const refetchStoresImmediate = useCallback((options?: RefetchStoresOptions) => {
     if (!effectiveStoreCodes?.length) return Promise.resolve()
+    const requestedStore = String(options?.storeCode ?? '').trim()
+    const targetStoreCodes =
+      requestedStore && effectiveStoreCodes.includes(requestedStore)
+        ? [requestedStore]
+        : options?.scope === 'current' && currentStoreId && effectiveStoreCodes.includes(currentStoreId)
+          ? [currentStoreId]
+          : effectiveStoreCodes
+    if (!targetStoreCodes.length) return Promise.resolve()
     setLoading(true)
     const businessDate = getPosBusinessDateStr()
-    return Promise.all(
-      effectiveStoreCodes.map(async (storeCode) => {
-        const [layoutRes, ordersRes] = await Promise.all([
-          getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-          getPosOrdersWithCache({
-            storeCode,
-            startStr: businessDate,
-            endStr: businessDate,
-          }).catch(() => []),
-        ])
-        const fetchedLayout = layoutRes.layout || []
-        const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
-        const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
-        const activeOrders = (ordersRes || []).filter(
-          (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
-        )
-        /** 선불(paid): 결제 후에도 테이블·주문 유지. 후불은 completed 시 퇴장 처리로 비움 */
-        const dineInOrders = activeOrders.filter(
-          (o) =>
-            o.orderType === 'dine_in' &&
-            (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
-        )
-        const tables = layoutToTables(layout, dineInOrders)
-        return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
-      })
-    )
+    return Promise.all(targetStoreCodes.map((storeCode) => fetchStoreSnapshot(storeCode, businessDate)))
       .then((results) => {
-        const storeList = results.map((r) => r.store)
-        const layouts: Record<string, PosTableItem[]> = {}
-        results.forEach((r) => { layouts[r.storeCode] = r.layout })
-        setStores(storeList)
-        setLayoutByStoreId(layouts)
-        const mergedOrders = results
-          .flatMap((r) => r.activeOrders || [])
-          .map(posOrderToOrder)
-        setOrders(mergedOrders)
+        const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
+        const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
+        const resultOrdersMap = new Map(results.map((r) => [r.storeCode, (r.activeOrders || []).map(posOrderToOrder)]))
+
+        setStores((prev) => {
+          if (targetStoreCodes.length === effectiveStoreCodes.length) {
+            return effectiveStoreCodes.map((code) => resultStoreMap.get(code)).filter(Boolean) as Store[]
+          }
+          return prev.map((store) => resultStoreMap.get(store.id) ?? store)
+        })
+        setLayoutByStoreId((prev) => {
+          const next = { ...prev }
+          for (const code of targetStoreCodes) {
+            next[code] = resultLayoutMap.get(code) ?? []
+          }
+          return next
+        })
+        setOrdersByStoreId((prev) => {
+          const next = { ...prev }
+          for (const code of targetStoreCodes) {
+            next[code] = resultOrdersMap.get(code) ?? []
+          }
+          return next
+        })
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [effectiveStoreCodes.join(',')])
+  }, [effectiveStoreCodes.join(','), currentStoreId, fetchStoreSnapshot])
 
   /** refetchStores 디바운스 (600ms) - 연속 호출 시 API 부하 감소 */
-  const refetchStores = useCallback(() => {
+  const refetchStores = useCallback((options?: RefetchStoresOptions) => {
     if (refetchTimeoutRef.current) clearTimeout(refetchTimeoutRef.current)
     refetchTimeoutRef.current = setTimeout(() => {
       refetchTimeoutRef.current = null
-      refetchStoresImmediate()
+      refetchStoresImmediate(options)
     }, 600)
   }, [refetchStoresImmediate])
+
+  const orders = useMemo(() => Object.values(ordersByStoreId).flat(), [ordersByStoreId])
 
   const deliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed')
   const packagedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'ready')
@@ -347,9 +372,13 @@ export function usePosStore() {
   const completedTakeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status === 'completed')
 
   const updateOrderStatus = useCallback((orderId: string, status: Order['status']) => {
-    setOrders((prev) =>
-      prev.map((order) => (order.id === orderId ? { ...order, status } : order))
-    )
+    setOrdersByStoreId((prev) => {
+      const next: Record<string, Order[]> = {}
+      Object.entries(prev).forEach(([storeCode, list]) => {
+        next[storeCode] = list.map((order) => (order.id === orderId ? { ...order, status } : order))
+      })
+      return next
+    })
   }, [])
 
   const currentLayout = (currentStoreId && layoutByStoreId[currentStoreId]) || []

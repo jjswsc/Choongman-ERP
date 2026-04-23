@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -208,9 +210,8 @@ export function TaxFilingShell() {
   return (
     <div className="space-y-3">
       <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
+        <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="vat" className={adminTabsTriggerCn}>
                 {t("taxFilingTabVat")}
               </TabsTrigger>
@@ -230,8 +231,7 @@ export function TaxFilingShell() {
                 {t("taxFilingTabWorkflow")}
               </TabsTrigger>
             </TabsList>
-          </div>
-        </div>
+          </AdminTabsBarWithHelp>
 
         <TabsContent value="vat" className={cn(adminTabsContentCn, "space-y-3")}>
           <TaxFilingVatTab {...tabProps.vat} />

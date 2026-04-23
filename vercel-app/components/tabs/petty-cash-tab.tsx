@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect, useRef } from "react"
@@ -208,7 +210,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     ? monthlyData.filter((r) => (r.accountSubjectId ?? r.account_subject_id) == null || (r.accountSubjectId ?? r.account_subject_id) === 0)
     : monthlyData
   const formatStoreLabel = (store: string) =>
-    store.startsWith("Office-") ? `${t("pettyScopeOffice") || "본사"} (${store.slice(7)})` : store
+    store.startsWith("Office-") ? `${t("pettyScopeOffice") || "Office"} (${store.slice(7)})` : store
 
   const loadList = (page?: number) => {
     if (!auth?.store) return
@@ -288,7 +290,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       ? (addDepartment ? "Office-" + addDepartment : null)
       : (addStore || (stores.includes("All") ? stores.find((s) => s !== "All") : stores[0]))
     if (!store || store === "All") {
-      await appAlert(addTargetType === "office" ? (t("pettySelectDepartment") || "부서를 선택하세요.") : t("pettyAlertStore"))
+      await appAlert(addTargetType === "office" ? (t("pettySelectDepartment") || "Please select department.") : t("pettyAlertStore"))
       return
     }
     const amt = parseInt(addAmount, 10) || 0
@@ -378,10 +380,10 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
         loadMonthly()
         loadList()
       } else {
-        await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
+        await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "Update failed")
       }
     } catch {
-      await appAlert(t("msg_modify_fail") || "수정 실패")
+      await appAlert(t("msg_modify_fail") || "Update failed")
     } finally {
       setInlineSavingId(null)
     }
@@ -435,15 +437,15 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       loadMonthly()
       loadList()
       closeEditModal()
-      await appAlert(t("msg_updated") || "수정되었습니다.")
+      await appAlert(t("msg_updated") || "Updated.")
     } else {
-      await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
+      await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "Update failed")
     }
   }
 
   const handleDeleteMonthlyRow = async (r: PettyCashItem) => {
     if (!auth?.store) return
-    const ok = await appConfirm(t("pettyDeleteConfirm") || "이 내역을 삭제하시겠습니까?")
+    const ok = await appConfirm(t("pettyDeleteConfirm") || "Delete this entry?")
     if (!ok) return
     setDeletingMonthlyId(r.id)
     try {
@@ -461,12 +463,12 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
         })
         loadMonthly()
         loadList()
-        await appAlert(t("pettyDeleted") || t("delete") || "삭제되었습니다.")
+        await appAlert(t("pettyDeleted") || t("delete") || "Deleted.")
       } else {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "실패")
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "Failed")
       }
     } catch {
-      await appAlert(t("processFail") || "실패")
+      await appAlert(t("processFail") || "Failed")
     } finally {
       setDeletingMonthlyId(null)
     }
@@ -483,22 +485,22 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
     const cols = [
-      t("pettyColDate") || "날짜",
-      t("store") || "매장",
-      t("pettyColType") || "유형",
-      t("pettyColAmount") || "금액",
-      t("pettyColBalance") || "잔액",
-      t("accountSubject") || "계정과목",
-      t("pettyColMemo") || "내용",
-      t("pettyColUser") || "등록자",
+      t("pettyColDate") || "Date",
+      t("store") || "Store",
+      t("pettyColType") || "Type",
+      t("pettyColAmount") || "Amount",
+      t("pettyColBalance") || "Balance",
+      t("accountSubject") || "Account Subject",
+      t("pettyColMemo") || "Memo",
+      t("pettyColUser") || "User",
     ]
     const storeLabel = monthlyScope === "office"
-      ? (monthlyDepartment === "All" ? `${t("pettyScopeOffice") || "본사"} ${t("all") || "전체"}` : `${t("pettyScopeOffice") || "본사"} (${monthlyDepartment})`)
-      : (monthlyStore === "All" ? t("all") || "전체" : monthlyStore)
+      ? (monthlyDepartment === "All" ? `${t("pettyScopeOffice") || "Office"} ${t("all") || "All"}` : `${t("pettyScopeOffice") || "Office"} (${monthlyDepartment})`)
+      : (monthlyStore === "All" ? t("all") || "All" : monthlyStore)
     const rows: string[][] = [
-      [t("pettyTabMonthly") || "월별 현황", "", "", "", "", "", "", ""],
-      [t("pettyYearMonth") || "기간", monthlyYm, "", "", "", "", "", ""],
-      [t("store") || "매장", storeLabel, "", "", "", "", "", ""],
+      [t("pettyTabMonthly") || "Monthly Status", "", "", "", "", "", "", ""],
+      [t("pettyYearMonth") || "Period", monthlyYm, "", "", "", "", "", ""],
+      [t("store") || "Store", storeLabel, "", "", "", "", "", ""],
       [],
       cols,
     ]
@@ -556,9 +558,8 @@ ${rows.map((row, ri) => {
       <Card className="shadow-md ring-1 ring-border/40">
         <CardContent className="pt-5 sm:pt-6">
           <Tabs defaultValue="list" className="w-full">
-            <div className={adminTabsBarCn}>
-              <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListRowCn}>
+            <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
                   <TabsTrigger value="list" className={adminTabsTriggerCn}>
                     {t("pettyTabList")}
                   </TabsTrigger>
@@ -566,8 +567,7 @@ ${rows.map((row, ri) => {
                     {t("pettyTabMonthly")}
                   </TabsTrigger>
                 </TabsList>
-              </div>
-            </div>
+          </AdminTabsBarWithHelp>
 
             <TabsContent value="list" className={cn("space-y-5 px-3 pb-6 pt-1 sm:px-5 sm:pb-8 sm:pt-2", adminTabsContentFlushCn)}>
               <section

@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { Suspense } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Wallet } from "lucide-react"
@@ -22,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { isOfficeRole, isManagerRole, isFranchiseeRole } from "@/lib/permissions"
+import { PayrollHelpContent } from "@/components/admin/payroll-help-content"
 
 const PAYROLL_TABS = ["calc", "records", "salary_history", "holidays", "rules", "help"] as const
 type PayrollTab = (typeof PAYROLL_TABS)[number]
@@ -76,8 +79,7 @@ function PayrollPageInner() {
           </div>
         </div>
         <Tabs value={tabValue} onValueChange={setTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="calc" className={adminTabsTriggerCn}>
                   {t("pay_tab_calc")}
@@ -98,8 +100,7 @@ function PayrollPageInner() {
                   {t("pay_tab_help")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="calc" className={adminTabsContentCn}>
             <AdminPayrollCalc />
           </TabsContent>
@@ -116,27 +117,7 @@ function PayrollPageInner() {
             <AdminPayrollRules />
           </TabsContent>
           <TabsContent value="help" className={cn(adminTabsContentCn, "space-y-4")}>
-            <div className="rounded-lg border border-border bg-card p-5 space-y-4">
-              <h2 className="text-base font-semibold">{t("pay_help_title")}</h2>
-              <p className="text-xs text-muted-foreground">{t("pay_help_intro")}</p>
-              <section>
-                <h3 className="text-sm font-medium mb-2">{t("pay_help_table_caption")}</h3>
-                <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
-                  <li>{t("pay_help_late")}</li>
-                  <li>{t("pay_help_early")}</li>
-                  <li>{t("pay_help_ot")}</li>
-                  <li>{t("pay_help_late_3")}</li>
-                  <li>{t("pay_help_waive")}</li>
-                  <li>{t("pay_help_absence")}</li>
-                  <li>{t("pay_help_holiday")}</li>
-                  <li>{t("pay_help_haz_grade")}</li>
-                </ul>
-              </section>
-              <section>
-                <h3 className="text-sm font-medium mb-1">{t("pay_help_flow_title")}</h3>
-                <p className="text-xs text-muted-foreground">{t("pay_help_flow")}</p>
-              </section>
-            </div>
+            <PayrollHelpContent />
           </TabsContent>
         </Tabs>
       </div>

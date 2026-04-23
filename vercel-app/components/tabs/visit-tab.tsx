@@ -189,7 +189,7 @@ export function VisitTab() {
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <MapPin className="h-12 w-12 text-muted-foreground/50" />
         <p className="text-center text-sm text-muted-foreground">
-          {t("visitOfficeOnly") || "본사/Office 로그인 시 매장 방문을 기록할 수 있습니다."}
+          {t("visitOfficeOnly") || "You can log store visits when signed in as Office/HQ."}
         </p>
       </div>
     )
@@ -202,40 +202,41 @@ export function VisitTab() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
             <MapPin className="h-3.5 w-3.5 text-primary" />
           </div>
-          <CardTitle className="text-base font-semibold">{t("visitTitle") || "매장 방문"}</CardTitle>
+          <CardTitle className="text-base font-semibold">{t("visitTitle") || "Store Visit"}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="text-xs text-muted-foreground">
-            {t("visitSub") || "현장 지원 및 교육 활동을 기록하세요."}
+            {t("visitSub") || "Record field support and training activities."}
           </p>
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5" />
-              {t("visitStore") || "방문 매장"}
+              {t("visitStore") || "Store"}
             </label>
-            <Select
+            <select
               value={selectedStore}
-              onValueChange={setSelectedStore}
+              onChange={(e) => setSelectedStore(e.target.value)}
               disabled={!!activeVisit}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder={t("visitStorePlaceholder") || "매장 선택"} />
-              </SelectTrigger>
-              <SelectContent>
-                {storeList.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {!selectedStore && (
+                <option value="" disabled>
+                  {t("visitStorePlaceholder") || "Select Store"}
+                </option>
+              )}
+              {storeList.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <Target className="h-3.5 w-3.5" />
-              {t("visitPurpose") || "방문 목적"}
+              {t("visitPurpose") || "Visit Purpose"}
             </label>
             <Select value={purpose} onValueChange={(v) => { setPurpose(v); if (v !== "기타") setPurposeEtcReason("") }} disabled={!!activeVisit}>
               <SelectTrigger className="h-9">
@@ -252,12 +253,12 @@ export function VisitTab() {
             {purpose === "기타" && (
               <div className="mt-2 flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-muted-foreground">
-                  {t("visitPurposeEtcLabel") || "기타 사유 (선택)"}
+                  {t("visitPurposeEtcLabel") || "Other Reason (Optional)"}
                 </label>
                 <Input
                   value={purposeEtcReason}
                   onChange={(e) => setPurposeEtcReason(e.target.value)}
-                  placeholder={t("visitPurposeEtcPlaceholder") || "사유 입력 (선택)"}
+                  placeholder={t("visitPurposeEtcPlaceholder") || "Enter reason (optional)"}
                   className="h-9 text-sm min-h-[2.25rem]"
                   disabled={!!activeVisit}
                   autoComplete="off"
@@ -274,7 +275,7 @@ export function VisitTab() {
               disabled={!!activeVisit || submitting !== null}
             >
               <LogIn className="mr-1.5 h-3.5 w-3.5" />
-              {submitting === "방문시작" ? t("loading") : t("visitStart") || "방문 시작"}
+              {submitting === "방문시작" ? t("loading") : t("visitStart") || "Start Visit"}
             </Button>
             <Button
               size="sm"
@@ -284,14 +285,14 @@ export function VisitTab() {
               disabled={!activeVisit || submitting !== null}
             >
               <LogOut className="mr-1.5 h-3.5 w-3.5" />
-              {submitting === "방문종료" ? t("loading") : t("visitEnd") || "방문 종료"}
+              {submitting === "방문종료" ? t("loading") : t("visitEnd") || "End Visit"}
             </Button>
           </div>
 
           {activeVisit && (
             <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 px-3 py-2.5 text-center text-sm text-primary">
               📍 <strong>[{activeVisit.storeName}]</strong>{" "}
-              {t("visitSupporting") || "방문 중"}
+              {t("visitSupporting") || "Visiting"}
             </div>
           )}
         </CardContent>
@@ -300,7 +301,7 @@ export function VisitTab() {
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center gap-2 pb-3">
           <CardTitle className="text-base font-semibold">
-            {t("todayVisitLog") || "오늘 방문 기록"}
+            {t("todayVisitLog") || "Today's Visit Log"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -309,7 +310,7 @@ export function VisitTab() {
           ) : visitLog.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border py-8 text-center">
               <p className="text-xs text-muted-foreground">
-                {t("visitLogEmpty") || "오늘 방문 기록이 없습니다."}
+                {t("visitLogEmpty") || "No visit records today."}
               </p>
             </div>
           ) : (
@@ -317,10 +318,10 @@ export function VisitTab() {
               <table className="w-full min-w-[280px] border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="px-2 py-2 text-center font-medium">{t("time") || "시간"}</th>
-                    <th className="px-2 py-2 text-center font-medium">{t("store") || "매장"}</th>
-                    <th className="px-2 py-2 text-center font-medium">{t("visitType") || "구분"}</th>
-                    <th className="px-2 py-2 text-center font-medium">{t("visitDuration") || "체류"}</th>
+                    <th className="px-2 py-2 text-center font-medium">{t("time") || "Time"}</th>
+                    <th className="px-2 py-2 text-center font-medium">{t("store") || "Store"}</th>
+                    <th className="px-2 py-2 text-center font-medium">{t("visitType") || "Type"}</th>
+                    <th className="px-2 py-2 text-center font-medium">{t("visitDuration") || "Duration"}</th>
                   </tr>
                 </thead>
                 <tbody>

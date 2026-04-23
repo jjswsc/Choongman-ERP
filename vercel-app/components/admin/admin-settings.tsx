@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
@@ -68,7 +70,7 @@ type SettingsTab = "office" | "permission" | "notification" | "dataLimits" | "fr
 
 const MENU_IDS = [
   "dashboard", "notices", "work-log", "item-manage", "vendor-manage",
-  "outbound", "stock", "inbound", "force", "hr-employee", "attendance-manage",
+  "outbound", "stock", "inbound", "force", "hr-employee", "hr-policy", "attendance-manage",
   "payroll", "hr-leave", "petty-cash", "store-manage", "store-visit",
   "store-complaint", "store-repair", "settings",
 ]
@@ -84,6 +86,7 @@ const MENU_TO_TKEY: Record<string, string> = {
   inbound: "adminInbound",
   force: "adminForce",
   "hr-employee": "adminEmployees",
+  "hr-policy": "adminHrPolicies",
   "attendance-manage": "adminAttendance",
   payroll: "adminPayroll",
   "hr-leave": "adminLeave",
@@ -399,8 +402,7 @@ export function AdminSettings() {
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="office" className={adminTabsTriggerCn}>
                   {t("settings_head_office")}
@@ -421,8 +423,7 @@ export function AdminSettings() {
                   {t("settings_permission_title")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="office" className={adminTabsContentCn}>
             <Card>
@@ -840,6 +841,7 @@ export function AdminSettings() {
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminOutbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminForce")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployees")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_employees_note")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminHrPolicies")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_employees_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployeeEval")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_eval_list_only")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminAttendance")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminLeave")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>

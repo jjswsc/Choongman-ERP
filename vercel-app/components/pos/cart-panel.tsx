@@ -144,6 +144,23 @@ function deliveryAppBrandClasses(app: string | undefined) {
 
 type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'
 
+function paymentTabTourTarget(tab: PaymentMethodTab): string {
+  switch (tab) {
+    case 'cash':
+      return 'pos-tour-payment-tab-cash'
+    case 'card':
+      return 'pos-tour-payment-tab-card'
+    case 'qr':
+      return 'pos-tour-payment-tab-qr'
+    case 'delivery_app':
+      return 'pos-tour-payment-tab-delivery-app'
+    case 'other':
+      return 'pos-tour-payment-tab-other'
+    default:
+      return 'pos-tour-payment-tab-cash'
+  }
+}
+
 /** printReceiptNow 첫 인자와 동일 스냅샷 (결제 모달 직전 홀 주문서 자동 인쇄 등) */
 export type CartPanelBeforePaymentReceiptPayload = {
   orderNo: string
@@ -366,6 +383,16 @@ interface CartPanelProps {
   onCustomerDisplayPaymentDraftChange?: (draft: CartPanelPaymentPayload | null) => void
   /** 결제 모달을 열기 직전 (최종 홀 주문서 자동 인쇄 등) */
   onBeforeOpenPayment?: (payload: CartPanelBeforePaymentReceiptPayload) => void | Promise<void>
+  /** 터미널 투어: 결제 Dialog 열림 (데모) */
+  onPaymentModalOpenChange?: (open: boolean) => void
+  /** 터미널 투어: 결제 모달의 현재 탭 */
+  onPaymentTabChange?: (tab: PaymentMethodTab) => void
+  /** 터미널 투어: 세금계산서 토글 상태 */
+  onTaxInvoiceToggleChange?: (enabled: boolean) => void
+  /** 터미널 투어: 결제 완료 버튼이 실제 실행됨 */
+  onPaymentComplete?: () => void
+  /** 터미널 데모: 홀에서 손님 수가 0이면 지정 값으로(투어 주문 버튼) */
+  posDineInDemoDefaultGuestCount?: number
 }
 
 type CartItem = OrderItem
@@ -527,6 +554,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   posMenus,
   onCustomerDisplayPaymentDraftChange,
   onBeforeOpenPayment,
+  onPaymentModalOpenChange,
+  onPaymentTabChange,
+  onTaxInvoiceToggleChange,
+  onPaymentComplete,
+  posDineInDemoDefaultGuestCount,
 }, ref) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -559,7 +591,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const orderType = lockOrderType && orderTypeProp != null ? orderTypeProp : orderTypeInternal
   const canSubmit =
     !lockOrderType ||
-    (orderType === 'dine-in' ? !!selectedTable : orderType === 'delivery' ? !!deliveryAppProp : true)
+    (orderType === 'dine-in'
+      ? !!selectedTable
+      : orderType === 'delivery'
+        ? !!deliveryAppProp && !!String(deliveryOrderNoProp || '').trim()
+        : true)
   const tableIdForCartSessionKey =
     orderType === 'dine-in'
       ? (cartSessionTableIdProp ?? selectedTable?.id ?? '')
@@ -604,6 +640,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   >([])
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  useEffect(() => {
+    onPaymentModalOpenChange?.(showPaymentModal)
+  }, [showPaymentModal, onPaymentModalOpenChange])
   const [activePaymentTab, setActivePaymentTab] = useState<PaymentMethodTab>('cash')
   const [payCash, setPayCash] = useState('')
   const [payCard, setPayCard] = useState('')
@@ -649,6 +688,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const instanceIdRef = useRef(`cart-${Math.random().toString(36).slice(2, 10)}`)
   const cartItemsRef = useRef<CartItem[]>(cartItems)
   cartItemsRef.current = cartItems
+
+  useEffect(() => {
+    if (!showPaymentModal) return
+    onPaymentTabChange?.(activePaymentTab)
+  }, [showPaymentModal, activePaymentTab, onPaymentTabChange])
+
+  useEffect(() => {
+    if (!showPaymentModal) return
+    onTaxInvoiceToggleChange?.(needTaxInvoice)
+  }, [showPaymentModal, needTaxInvoice, onTaxInvoiceToggleChange])
 
   const adminQrLines = useMemo(
     () =>
@@ -1714,6 +1763,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     } else if (orderType !== 'dine-in' && onNonDineOrderComplete) {
       submitNonDineOrder(true)
     }
+    onPaymentComplete?.()
     setShowPaymentModal(false)
     handleClearCart()
   }
@@ -1924,9 +1974,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     prevSelectedTableIdRef.current = nextTableId
   }, [orderType, selectedTable?.id, selectedTable?.order?.id, selectedTable?.order?.guestCount])
 
+  useEffect(() => {
+    if (posDineInDemoDefaultGuestCount == null) return
+    if (orderType !== 'dine-in' || !selectedTable?.id) return
+    if (selectedTable?.order?.id) return
+    if (guestCount > 0) return
+    setGuestCount(posDineInDemoDefaultGuestCount)
+  }, [posDineInDemoDefaultGuestCount, orderType, selectedTable?.id, selectedTable?.order?.id, guestCount])
+
   return (
     <>
-    <Card className="h-full flex flex-col min-w-0 overflow-hidden">
+    <Card className="h-full flex flex-col min-w-0 overflow-hidden" data-tour="pos-tour-cart">
       <CardHeader className="border-b px-3 py-2.5">
         <div className="flex items-center gap-2">
           {orderType === 'dine-in' && typeof onBackToTableSelection === 'function' && (
@@ -2495,9 +2553,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           </div>
         </div>
 
-        <div className="px-3 flex gap-2">
+        <div className="px-3 flex flex-col gap-2">
+          {orderType === 'dine-in' && selectedTable && guestCount <= 0 && (
+            <p className="text-xs text-amber-700">
+              {t('posTourTableGuestRequired') || '테이블 주문은 인원을 먼저 선택해야 주문할 수 있습니다.'}
+            </p>
+          )}
           {orderType === 'dine-in' && selectedTable && (
             <Button
+              data-tour="pos-tour-cart-order"
               className="w-full h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
               disabled={total <= 0 || cartItems.length === 0 || guestCount <= 0}
               onClick={() => {
@@ -2534,6 +2598,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </Button>
               <Button
                 className="h-12 text-lg font-semibold bg-primary hover:bg-primary/90"
+                data-tour="pos-tour-cart-pay"
                 disabled={total <= 0 || !canSubmit}
                 onClick={openPaymentModal}
               >
@@ -2547,6 +2612,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
     <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
       <DialogContent
+        data-tour="pos-tour-payment-dialog"
         hideCloseButton
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
       >
@@ -2782,7 +2848,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <div className="space-y-2">
               <p className="text-sm font-semibold">{tr('posPaymentMethodSection', '결제 수단')}</p>
             {/* 결제 수단 탭 */}
-            <div className="grid grid-cols-5 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner">
+            <div className="grid grid-cols-5 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner" data-tour="pos-tour-payment-tabs">
               {paymentTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -2812,6 +2878,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         }
                       }
                     }}
+                    data-tour={paymentTabTourTarget(tab.id)}
                   >
                     <Icon className={cn('h-5 w-5 shrink-0', activePaymentTab === tab.id ? 'text-primary' : '')} />
                     <span className="text-[11px] font-medium leading-tight text-center">{tab.label}</span>
@@ -3070,6 +3137,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       size="sm"
                       variant={needTaxInvoice ? 'default' : 'outline'}
                       className="h-8"
+                      data-tour="pos-tour-tax-invoice-toggle"
                       onClick={() => setNeedTaxInvoice((v) => !v)}
                     >
                       {needTaxInvoice ? t('posTaxInvoiceOn') : t('posTaxInvoiceOff')}
@@ -3083,7 +3151,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
                 <CollapsibleContent>
                   {needTaxInvoice && (
-                    <div className="grid gap-2 pt-1">
+                    <div className="grid gap-2 pt-1" data-tour="pos-tour-tax-invoice-fields">
                   <div className="grid gap-2 lg:grid-cols-[auto_auto_1fr_auto] items-center">
                     <Button
                       type="button"
@@ -3169,6 +3237,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       value={taxId}
                       onChange={(e) => setTaxId(e.target.value.replace(/\D/g, '').slice(0, 13))}
                       inputMode="numeric"
+                      data-tour="pos-tour-tax-id-input"
                     />
                     <Input
                       className="h-12 rounded-xl"
@@ -3176,6 +3245,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       value={taxBranchNo}
                       onChange={(e) => setTaxBranchNo(e.target.value.replace(/\D/g, '').slice(0, 5))}
                       inputMode="numeric"
+                      data-tour="pos-tour-tax-branch-input"
                     />
                     <Input
                       className="h-12 rounded-xl"
@@ -3183,6 +3253,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       value={taxPhone}
                       onChange={(e) => setTaxPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       inputMode="numeric"
+                      data-tour="pos-tour-tax-phone-input"
                     />
                     <Input
                       className="h-12 rounded-xl"
@@ -3195,6 +3266,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       placeholder={t('posTaxAddressPlaceholder')}
                       value={taxAddress}
                       onChange={(e) => setTaxAddress(e.target.value)}
+                      data-tour="pos-tour-tax-address-input"
                     />
                   </div>
                   {taxInvoiceInvalid && (
@@ -3222,6 +3294,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     type="button"
                     variant="ghost"
                     className="h-auto min-h-11 w-full justify-between rounded-xl px-2 py-2"
+                    data-tour="pos-tour-dutch-pay-toggle"
                   >
                     <span className="flex items-center gap-2">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/15 text-violet-700 dark:text-violet-300">
@@ -3248,6 +3321,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       size="sm"
                       variant={splitMode === 'menu' ? 'default' : 'outline'}
                       className="h-9"
+                      data-tour="pos-tour-dutch-mode-menu"
                       onClick={() => setSplitMode('menu')}
                     >
                       {tr('posDutchSplitModeMenu', '메뉴 기준')}
@@ -3276,7 +3350,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     <span className="font-semibold tabular-nums text-muted-foreground">{formatBahtNum(paymentSum)}/{formatBahtNum(total)}฿</span>
                   </div>
                   {splitMode === 'menu' && (
-                    <div className="w-full space-y-2 rounded-xl border border-violet-400/25 bg-violet-50/40 p-2.5 dark:bg-violet-900/10">
+                    <div
+                      className="w-full space-y-2 rounded-xl border border-violet-400/25 bg-violet-50/40 p-2.5 dark:bg-violet-900/10"
+                      data-tour="pos-tour-dutch-menu-panel"
+                    >
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="rounded-md bg-violet-100 px-2 py-1 font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
                           {tr('posCurrentPerson', '현재 인원')} {Math.min(splitPaidSteps + 1, Math.max(1, splitCount))}
@@ -3448,6 +3525,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 )}
                 disabled={partialPayDisabled}
                 onClick={confirmSplitStep}
+                data-tour="pos-tour-payment-partial"
               >
                 {tr('posPartialPaymentButton', '일부 결제')}
               </Button>
@@ -3460,6 +3538,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 )}
                 disabled={!paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))}
                 onClick={handlePaymentComplete}
+                data-tour="pos-tour-payment-confirm"
               >
                 {t('posPayConfirm') || '결제 완료'}
               </Button>

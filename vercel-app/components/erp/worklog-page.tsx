@@ -1,5 +1,6 @@
 "use client"
 
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { ClipboardList, User, ShieldCheck, BarChart3 } from "lucide-react"
 import {
@@ -44,24 +45,22 @@ export function WorklogPage() {
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
-              <TabsTrigger value="my" className={adminTabsTriggerCn}>
-                <User className={adminTabsIconCn} aria-hidden />
-                {t("workLogTabMy")}
-              </TabsTrigger>
-              <TabsTrigger value="approval" className={adminTabsTriggerCn}>
-                <ShieldCheck className={adminTabsIconCn} aria-hidden />
-                {t("workLogTabApproval")}
-              </TabsTrigger>
-              <TabsTrigger value="weekly" className={adminTabsTriggerCn}>
-                <BarChart3 className={adminTabsIconCn} aria-hidden />
-                {t("workLogTabWeekly")}
-              </TabsTrigger>
-            </TabsList>
-          </div>
-        </div>
+        <AdminTabsBarWithHelp>
+          <TabsList className={adminTabsListRowCn}>
+            <TabsTrigger value="my" className={adminTabsTriggerCn}>
+              <User className={adminTabsIconCn} aria-hidden />
+              {t("workLogTabMy")}
+            </TabsTrigger>
+            <TabsTrigger value="approval" className={adminTabsTriggerCn}>
+              <ShieldCheck className={adminTabsIconCn} aria-hidden />
+              {t("workLogTabApproval")}
+            </TabsTrigger>
+            <TabsTrigger value="weekly" className={adminTabsTriggerCn}>
+              <BarChart3 className={adminTabsIconCn} aria-hidden />
+              {t("workLogTabWeekly")}
+            </TabsTrigger>
+          </TabsList>
+        </AdminTabsBarWithHelp>
 
         <TabsContent value="my" className={adminTabsContentFlushCn}>
           {auth?.user ? (

@@ -81,7 +81,7 @@ function purchaseAmountForVendor(data: IncomeStatementData | undefined, vendorKe
 }
 
 function salesCustomerRowLabel(row: { key: string; label?: string }, t: (k: string) => string): string {
-  if (row.key === "__pl_sales_customer_unknown__") return t("pL_salesCustomerUnknown") || "매출처 미지정"
+  if (row.key === "__pl_sales_customer_unknown__") return t("pL_salesCustomerUnknown") || "Unspecified customer"
   const n = String(row.label || "").trim()
   return n || row.key
 }
@@ -667,7 +667,7 @@ function IncomePlDetailTableContent({
         <thead>
           <tr className="border-b text-muted-foreground">
             <th className="py-2 text-left font-medium"></th>
-            <th className="py-2 text-right font-medium pr-2">{t("pL_colAmount") || "금액"}</th>
+            <th className="py-2 text-right font-medium pr-2">{t("pL_colAmount") || "Amount"}</th>
             <th className="py-2 text-right font-medium w-14">{t("pL_pctOfSales")}</th>
           </tr>
         </thead>
@@ -770,7 +770,7 @@ function IncomePlDetailTableContent({
           {expandPurchases && !(data.purchaseByVendor?.length || 0) && (
             <tr className="border-b bg-muted/20">
               <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
-                {t("inNoData") || "조회된 내역이 없습니다."}
+                {t("inNoData") || "No data found."}
               </td>
             </tr>
           )}
@@ -824,7 +824,7 @@ function IncomePlDetailTableContent({
               <tr key={`${row.accountSubjectId ?? "u"}-${idx}`} className="border-b bg-muted/20">
                 <td className="py-1.5 text-muted-foreground pl-10 text-xs">
                   {row.accountSubjectId == null
-                    ? t("pL_accountUnclassified") || "계정 미지정"
+                    ? t("pL_accountUnclassified") || "Unclassified account"
                     : formatAccountSubjectLabel(lang, {
                         code: row.code,
                         name: row.name,
@@ -841,14 +841,14 @@ function IncomePlDetailTableContent({
           {expandExpenseAccounts && !(data.expenseByAccountSubject?.length || 0) && (
             <tr className="border-b bg-muted/20">
               <td colSpan={3} className="py-2 pl-10 text-xs text-muted-foreground">
-                {t("inNoData") || "조회된 내역이 없습니다."}
+                {t("inNoData") || "No data found."}
               </td>
             </tr>
           )}
           {showExpenseDetails && (
             <>
               <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourcePetty") || "현금시재(패티캐시)"}</td>
+                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourcePetty") || "Petty Cash"}</td>
                 <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                   {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
                 </td>
@@ -857,7 +857,7 @@ function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceBank") || "통장 출금"}</td>
+                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceBank") || "Bank Withdrawal"}</td>
                 <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                   {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
                 </td>
@@ -866,7 +866,7 @@ function IncomePlDetailTableContent({
                 </td>
               </tr>
               <tr className="border-b">
-                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceFixed") || "고정비"}</td>
+                <td className="py-2 text-muted-foreground pl-4">- {t("pL_expenseSourceFixed") || "Fixed Cost"}</td>
                 <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                   {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
                 </td>
@@ -1416,9 +1416,9 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   const storeLabel =
     storeFilter === "All"
-      ? t("all") || "전체"
+      ? t("all") || "All"
       : ["본사", "Office", "오피스", "본점"].includes(storeFilter) || storeFilter.toLowerCase().includes("office")
-        ? t("pettyScopeOffice") || "본사"
+        ? t("pettyScopeOffice") || "Office"
         : storeFilter
 
   const buildXlsxRows = React.useCallback((): IncomeStatementXlsxRow[] => {
@@ -1478,7 +1478,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       for (const row of data.expenseByAccountSubject!) {
         const label =
           row.accountSubjectId == null
-            ? t("pL_accountUnclassified") || "계정 미지정"
+            ? t("pL_accountUnclassified") || "Unclassified account"
             : formatAccountSubjectLabel(lang, {
                 code: row.code,
                 name: row.name,
@@ -1493,17 +1493,17 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       }
     }
     rows.push({
-      label: `    - ${t("pL_expenseSourcePetty") || "현금시재(패티캐시)"}`,
+      label: `    - ${t("pL_expenseSourcePetty") || "Petty Cash"}`,
       amount: q(data.expenseBreakdown?.pettyCash ?? 0),
       pct: view.pct(data.expenseBreakdown?.pettyCash ?? 0),
     })
     rows.push({
-      label: `    - ${t("pL_expenseSourceBank") || "통장 출금"}`,
+      label: `    - ${t("pL_expenseSourceBank") || "Bank Withdrawal"}`,
       amount: q(data.expenseBreakdown?.bankWithdraw ?? 0),
       pct: view.pct(data.expenseBreakdown?.bankWithdraw ?? 0),
     })
     rows.push({
-      label: `    - ${t("pL_expenseSourceFixed") || "고정비"}`,
+      label: `    - ${t("pL_expenseSourceFixed") || "Fixed Cost"}`,
       amount: q(data.expenseBreakdown?.fixedExpenses ?? 0),
       pct: view.pct(data.expenseBreakdown?.fixedExpenses ?? 0),
     })
@@ -1528,7 +1528,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         : []),
     ]
     const fname = `income-statement-${sanitizeFilenamePart(data.yearMonth)}-${sanitizeFilenamePart(storeFilter)}.xlsx`
-    downloadIncomeStatementXlsx(fname, headerLines, [t("pL_colItem"), t("pL_colAmount") || "금액", t("pL_pctOfSales")], buildXlsxRows())
+    downloadIncomeStatementXlsx(fname, headerLines, [t("pL_colItem"), t("pL_colAmount") || "Amount", t("pL_pctOfSales")], buildXlsxRows())
   }, [data, view, storeLabel, storeFilter, t, buildXlsxRows])
 
   const handleDownloadPdf = React.useCallback(async () => {
@@ -1649,7 +1649,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                       <SelectValue placeholder={t("pL_store")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {isOffice && <SelectItem value="All">{t("all") || "전체"}</SelectItem>}
+                      {isOffice && <SelectItem value="All">{t("all") || "All"}</SelectItem>}
                       {storeOptions.map((s) => (
                         <SelectItem key={s} value={s}>
                           {s}
@@ -1695,7 +1695,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
           {loading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("loadingItems") || "불러오는 중..."}
+              {t("loadingItems") || "Loading..."}
             </p>
           ) : (
             <>
@@ -1735,7 +1735,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                   </div>
                   {incomeCompareCols.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      {t("inNoData") || "조회된 내역이 없습니다."}
+                      {t("inNoData") || "No data found."}
                     </p>
                   ) : (
                     <>
@@ -2071,7 +2071,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         >
                                           <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                             {sub.accountSubjectId == null
-                                              ? t("pL_accountUnclassified") || "계정 미지정"
+                                              ? t("pL_accountUnclassified") || "Unclassified account"
                                               : formatAccountSubjectLabel(lang, {
                                                   code: sub.code,
                                                   name: sub.name,
@@ -2383,7 +2383,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                     <tr key={String(sub.accountSubjectId ?? "u")} className="border-b bg-muted/10">
                                       <td className="p-1.5 pl-10 text-xs text-muted-foreground sticky left-0 bg-muted/10 z-10">
                                         {sub.accountSubjectId == null
-                                          ? t("pL_accountUnclassified") || "계정 미지정"
+                                          ? t("pL_accountUnclassified") || "Unclassified account"
                                           : formatAccountSubjectLabel(lang, {
                                               code: sub.code,
                                               name: sub.name,
@@ -2504,7 +2504,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 !loading &&
                 incomeCompareFetchId > 0 && (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    {t("inNoData") || "조회된 내역이 없습니다."}
+                    {t("inNoData") || "No data found."}
                   </p>
                 )}
               {isRangeCompare &&
@@ -2513,7 +2513,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 incomeCompareFetchId === 0 &&
                 !props.hideControls && (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
+                    {t("msg_click_query") || "Click Query button."}
                   </p>
                 )}
               {!isRangeCompare && (
@@ -2641,7 +2641,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                 </div>
               ) : !isRangeCompare ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
+                  {t("msg_click_query") || "Click Query button."}
                 </p>
               ) : null}
             </>

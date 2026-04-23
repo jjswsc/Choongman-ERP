@@ -11,14 +11,15 @@ import { requireAuth } from '@/lib/verify-auth'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import {
   franchiseeQueryStoreAllowed,
-  getFranchiseeMultiStoreSettings,
   normalizedAllowedStoresFromJwt,
   rowRoleLooksFranchisee,
 } from '@/lib/franchisee-multi-store'
+import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameFields } from '@/lib/employee-display-name'
 import { effectiveHazardAllowanceForJob } from '@/lib/employee-job-rules'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
+const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
 
 function toDateStr(val: unknown): string | null {
   if (!val) return null
@@ -28,6 +29,18 @@ function toDateStr(val: unknown): string | null {
   }
   const d = new Date(val as string)
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+}
+
+function normalizeEmploymentStatus(val: unknown, resignDate: unknown): 'active' | 'leave' | 'resigned' | 'suspended' {
+  const raw = String(val || '')
+    .trim()
+    .toLowerCase()
+  if (EMPLOYMENT_STATUS_VALUES.has(raw)) return raw as 'active' | 'leave' | 'resigned' | 'suspended'
+  return String(resignDate || '').trim() ? 'resigned' : 'active'
+}
+
+function normalizePhoneForMatch(raw: unknown): string {
+  return String(raw || '').replace(/\D/g, '')
 }
 
 function storePrefixFromName(storeName: string): string {
@@ -254,9 +267,18 @@ export async function POST(req: NextRequest) {
       String(d.name || '').trim(),
       String(d.nameTitle ?? d.name_title ?? '').trim()
     )
+    const requiredStore = String(d.store || '').trim()
+    const requiredJob = String(d.job || '').trim()
+    if (!requiredStore || !nameNorm.name || !requiredJob) {
+      return NextResponse.json(
+        { success: false, code: 'VALIDATION_ERROR', message: '❌ 매장·이름·직무는 필수입니다.' },
+        { status: 400, headers }
+      )
+    }
+    const changeReason = String((d as { changeReason?: unknown }).changeReason ?? body.changeReason ?? '').trim()
     const codeRaw = normalizeEmployeeCodeInput((d as { employeeCode?: unknown }).employeeCode ?? d.employee_code)
     const payload: Record<string, unknown> = {
-      store: String(d.store || '').trim(),
+      store: requiredStore,
       name: nameNorm.name,
       name_title: nameNorm.nameTitle,
       nick: String(d.nick || '').trim(),
@@ -290,6 +312,13 @@ export async function POST(req: NextRequest) {
       })(),
       grade: d.grade != null ? String(d.grade).trim() : '',
       photo: d.photo != null ? String(d.photo).trim() : '',
+    }
+    const employmentStatus = normalizeEmploymentStatus((d as { employmentStatus?: unknown }).employmentStatus, payload.resign_date)
+    payload.employment_status = employmentStatus
+    if (employmentStatus === 'resigned') {
+      if (!payload.resign_date) payload.resign_date = new Date().toISOString().slice(0, 10)
+    } else {
+      payload.resign_date = null
     }
     if (codeRaw) {
       if (!EMPLOYEE_CODE_RE.test(codeRaw)) {
@@ -325,6 +354,58 @@ export async function POST(req: NextRequest) {
       payload.employee_code = codeRaw
     }
 
+    const rowId = Number(d.row)
+    const inputPhoneNorm = normalizePhoneForMatch(d.phone)
+    if (inputPhoneNorm) {
+      try {
+        const rows = (await supabaseSelect('employees', {
+          select: 'id,phone,deleted_at,employment_status,resign_date',
+          limit: 5000,
+          order: 'id.asc',
+        })) as {
+          id?: number
+          phone?: string | null
+          deleted_at?: string | null
+          employment_status?: string | null
+          resign_date?: string | null
+        }[]
+        const hasDup = (rows || []).some((r) => {
+          const rid = Number(r.id || 0)
+          if (rowId > 0 && rid === rowId) return false
+          if (String(r.deleted_at || '').trim()) return false
+          const status = normalizeEmploymentStatus(r.employment_status, r.resign_date)
+          if (status === 'resigned') return false
+          return normalizePhoneForMatch(r.phone) === inputPhoneNorm
+        })
+        if (hasDup) {
+          return NextResponse.json(
+            { success: false, code: 'PHONE_DUPLICATE', message: '❌ 이미 사용 중인 전화번호입니다.' },
+            { status: 409, headers }
+          )
+        }
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/deleted_at|employment_status|42703|column/i.test(em)) throw e
+        const rows = (await supabaseSelect('employees', {
+          select: 'id,phone,resign_date',
+          limit: 5000,
+          order: 'id.asc',
+        })) as { id?: number; phone?: string | null; resign_date?: string | null }[]
+        const hasDupFallback = (rows || []).some((r) => {
+          const rid = Number(r.id || 0)
+          if (rowId > 0 && rid === rowId) return false
+          if (String(r.resign_date || '').trim()) return false
+          return normalizePhoneForMatch(r.phone) === inputPhoneNorm
+        })
+        if (hasDupFallback) {
+          return NextResponse.json(
+            { success: false, code: 'PHONE_DUPLICATE', message: '❌ 이미 사용 중인 전화번호입니다.' },
+            { status: 409, headers }
+          )
+        }
+      }
+    }
+
     const multiSettings = await getFranchiseeMultiStoreSettings()
     const roleStr = String(d.role || '').trim()
     const franchiseeRow = rowRoleLooksFranchisee(roleStr)
@@ -354,7 +435,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const rowId = Number(d.row)
     const newStore = String(d.store || '').trim()
     const newName = String(d.name || '').trim()
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
@@ -381,9 +461,22 @@ export async function POST(req: NextRequest) {
             toInsert = rest
             continue
           }
+          if (/employment_status|42703|column/i.test(em) && 'employment_status' in toInsert) {
+            const { employment_status: _es, ...rest } = toInsert
+            toInsert = rest
+            continue
+          }
+          if (/extra_stores|42703|column/i.test(em) && 'extra_stores' in toInsert) {
+            const { extra_stores: _xs, ...rest } = toInsert
+            toInsert = rest
+            continue
+          }
           if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
             if (codeRaw) {
-              return NextResponse.json({ success: false, message: '❌ 이미 사용 중인 직원 코드입니다.' }, { headers })
+              return NextResponse.json(
+                { success: false, code: 'EMPLOYEE_CODE_DUPLICATE', message: '❌ 이미 사용 중인 직원 코드입니다.' },
+                { status: 409, headers }
+              )
             }
             toInsert = { ...toInsert, employee_code: await buildNextEmployeeCodeForStore(newStore) }
             continue
@@ -395,10 +488,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 직원 수정 시: 기존 데이터 조회 (급여 변경 이력·attendance 갱신용)
-    const existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
-      limit: 1,
-      select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code',
-    })) as {
+    let existing: {
       store?: string
       name?: string
       sal_type?: string
@@ -406,7 +496,40 @@ export async function POST(req: NextRequest) {
       position_allowance?: number
       haz_allow?: number
       employee_code?: string | null
-    }[]
+      job?: string | null
+      role?: string | null
+      phone?: string | null
+      resign_date?: string | null
+      employment_status?: string | null
+    }[] = []
+    try {
+      existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
+        limit: 1,
+        select:
+          'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date,employment_status',
+      })) as typeof existing
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (!/employment_status|42703|column/i.test(em)) throw e
+    }
+    if (!existing || existing.length === 0) {
+      existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
+        limit: 1,
+        select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date',
+      })) as {
+        store?: string
+        name?: string
+        sal_type?: string
+        sal_amt?: number
+        position_allowance?: number
+        haz_allow?: number
+        employee_code?: string | null
+        job?: string | null
+        role?: string | null
+        phone?: string | null
+        resign_date?: string | null
+      }[]
+    }
     const old = existing?.[0]
     const oldStore = old ? String(old.store || '').trim() : ''
     const oldName = old ? String(old.name || '').trim() : ''
@@ -417,10 +540,20 @@ export async function POST(req: NextRequest) {
     const oldSalAmt = old ? Number(old.sal_amt) || 0 : 0
     const oldPosAllow = old ? Number(old.position_allowance) || 0 : 0
     const oldHazAllow = old ? Number(old.haz_allow) || 0 : 0
+    const oldJob = old ? String(old.job || '').trim() : ''
+    const oldRole = old ? String(old.role || '').trim() : ''
+    const oldPhone = old ? String(old.phone || '').trim() : ''
+    const oldResignDate = old ? toDateStr(old.resign_date) || '' : ''
+    const oldEmploymentStatus = normalizeEmploymentStatus(old?.employment_status, old?.resign_date)
     const newSalType = String(d.salType || 'Monthly').trim()
     const newSalAmt = Number(d.salAmt) || 0
     const newPosAllow = d.positionAllowance != null ? Number(d.positionAllowance) : 0
     const newHazAllow = Number(payload.haz_allow) || 0
+    const newJob = String(payload.job || '').trim()
+    const newRole = String(payload.role || '').trim()
+    const newPhone = String(payload.phone || '').trim()
+    const newResignDate = toDateStr(payload.resign_date) || ''
+    const newEmploymentStatus = normalizeEmploymentStatus(payload.employment_status, payload.resign_date)
     const salaryChanged =
       oldSalType !== newSalType ||
       oldSalAmt !== newSalAmt ||
@@ -435,8 +568,14 @@ export async function POST(req: NextRequest) {
       if (/attendance_allowance|42703|column/i.test(em)) {
         const { attendance_allowance: _aa, ...withoutAa } = payload
         await supabaseUpdate('employees', rowId, withoutAa)
+      } else if (/employment_status|42703|column/i.test(em)) {
+        const { employment_status: _es, ...withoutStatus } = payload
+        await supabaseUpdate('employees', rowId, withoutStatus)
       } else if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
-        return NextResponse.json({ success: false, message: '❌ 이미 사용 중인 직원 코드입니다.' }, { headers })
+        return NextResponse.json(
+          { success: false, code: 'EMPLOYEE_CODE_DUPLICATE', message: '❌ 이미 사용 중인 직원 코드입니다.' },
+          { status: 409, headers }
+        )
       } else {
         throw updErr
       }
@@ -501,6 +640,43 @@ export async function POST(req: NextRequest) {
         await patchAttendanceLogs(attFilter, syncAttPatch)
       } catch (_) {
         // 레거시(NULL id) 행 갱신 실패는 무시
+      }
+    }
+
+    const changeEntries: { field: string; oldValue: string; newValue: string }[] = []
+    const pushIfChanged = (field: string, oldValue: unknown, newValue: unknown) => {
+      const oldStr = String(oldValue ?? '').trim()
+      const newStr = String(newValue ?? '').trim()
+      if (oldStr === newStr) return
+      changeEntries.push({ field, oldValue: oldStr, newValue: newStr })
+    }
+    pushIfChanged('store', oldStore, newStore)
+    pushIfChanged('name', oldName, newName)
+    pushIfChanged('job', oldJob, newJob)
+    pushIfChanged('role', oldRole, newRole)
+    pushIfChanged('phone', oldPhone, newPhone)
+    pushIfChanged('employee_code', oldCode, String(payload.employee_code || oldCode || ''))
+    pushIfChanged('sal_type', oldSalType, newSalType)
+    pushIfChanged('sal_amt', oldSalAmt, newSalAmt)
+    pushIfChanged('position_allowance', oldPosAllow, newPosAllow)
+    pushIfChanged('haz_allow', oldHazAllow, newHazAllow)
+    pushIfChanged('resign_date', oldResignDate, newResignDate)
+    pushIfChanged('employment_status', oldEmploymentStatus, newEmploymentStatus)
+
+    if (changeEntries.length > 0) {
+      for (const c of changeEntries) {
+        try {
+          await supabaseInsert('employee_change_logs', {
+            employee_id: rowId,
+            field_name: c.field,
+            old_value: c.oldValue || null,
+            new_value: c.newValue || null,
+            changed_by: userName || null,
+            change_reason: changeReason || null,
+          })
+        } catch {
+          // 이력 저장 실패해도 직원 저장은 완료됨
+        }
       }
     }
 

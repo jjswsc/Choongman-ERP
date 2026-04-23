@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { ShoppingCart } from "lucide-react"
@@ -8,11 +10,9 @@ import { AdminOrderHistory } from "@/components/erp/admin-order-history"
 import { AdminPurchaseOrder } from "@/components/erp/admin-purchase-order"
 import { AdminPurchaseOrderHistory } from "@/components/erp/admin-purchase-order-history"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -37,8 +37,7 @@ function OrderCreateTabs() {
     <>
       {showHqTab ? (
         <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="store" className={adminTabsTriggerCn}>
                   {t("orderTabStore")}
@@ -53,8 +52,7 @@ function OrderCreateTabs() {
                   {t("orderTabPoHistory")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="store" className={adminTabsContentCn}>
             <AdminOrderCreate />
           </TabsContent>
@@ -70,8 +68,7 @@ function OrderCreateTabs() {
         </Tabs>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="store" className={adminTabsTriggerCn}>
                   {t("orderTabStore")}
@@ -80,8 +77,7 @@ function OrderCreateTabs() {
                   {t("orderTabStoreOrderHist")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="store" className={adminTabsContentCn}>
             <AdminOrderCreate />
           </TabsContent>

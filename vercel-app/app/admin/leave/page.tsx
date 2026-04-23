@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Calendar } from "lucide-react"
@@ -42,8 +44,7 @@ function AdminLeavePageInner() {
           </div>
         </div>
         <Tabs value={tab} onValueChange={(v) => setTab(v as "approval" | "stats")} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="approval" className={adminTabsTriggerCn}>
                   {t("adminLeaveApproval")}
@@ -52,8 +53,7 @@ function AdminLeavePageInner() {
                   {t("leave_tab_stats")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="approval" className={adminTabsContentCn}>
             <AdminLeaveApproval />
           </TabsContent>

@@ -131,38 +131,41 @@ export function MarketingMonthlyReportPanel({ campaignIdFromQuery = "" }: Market
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={campaignFilter}
-            onChange={(e) => setCampaignFilter(e.target.value)}
-            className="h-9 max-w-[220px] rounded border border-input bg-background px-2 text-sm"
-          >
-            <option value="">{t("marketingMonthlyAllCampaigns")}</option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>
-                {campaignListLabel(c)}
-              </option>
-            ))}
-          </select>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="h-9 rounded border border-input bg-background px-3 text-sm"
-          />
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            {loading ? t("marketingSavingShort") : t("marketingMonthlyBtnLoad")}
-          </Button>
-          <Button size="sm" onClick={handleDownload} disabled={!summary}>
-            <Download className="mr-1 h-4 w-4" />
-            {t("marketingMonthlyCsvDownload")}
-          </Button>
-        </div>
+    <div className="space-y-4 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={campaignFilter}
+          onChange={(e) => setCampaignFilter(e.target.value)}
+          className="h-9 min-w-0 max-w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-[min(100%,16rem)]"
+        >
+          <option value="">{t("marketingMonthlyAllCampaigns")}</option>
+          {campaigns.map((c) => (
+            <option key={c.id} value={c.id}>
+              {campaignListLabel(c)}
+            </option>
+          ))}
+        </select>
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="h-9 w-[min(100%,10.5rem)] min-w-0 shrink-0 rounded-md border border-input bg-background px-3 text-sm [color-scheme:light] dark:[color-scheme:dark]"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void load()}
+          disabled={loading}
+        >
+          {loading ? t("marketingSavingShort") : t("marketingMonthlyBtnLoad")}
+        </Button>
+        <Button type="button" onClick={handleDownload} disabled={!summary}>
+          <Download className="h-4 w-4" />
+          {t("marketingMonthlyCsvDownload")}
+        </Button>
       </div>
 
-      <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+      <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
         {t("marketingMonthlyNotePart1")}
         <strong className="text-foreground">{t("marketingMonthlyNoteStrong1")}</strong>
         {t("marketingMonthlyNotePart2")}
@@ -171,47 +174,47 @@ export function MarketingMonthlyReportPanel({ campaignIdFromQuery = "" }: Market
       </div>
 
       {summary && (
-        <div className="space-y-4 rounded-xl border bg-card p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded bg-muted/50 p-3">
-              <div className="text-xs text-muted-foreground">{t("marketingMonthlyStatCampaigns")}</div>
+        <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <div className="rounded-lg border border-border bg-card px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMonthlyStatCampaigns")}</div>
               <div className="text-lg font-semibold">
                 {summary.campaigns}
                 {t("marketingCountUnit")}
               </div>
             </div>
-            <div className="rounded bg-muted/50 p-3">
-              <div className="text-xs text-muted-foreground">{t("marketingMonthlyStatAds")}</div>
-              <div className="text-lg font-semibold">฿{summary.adsSpend.toLocaleString()}</div>
+            <div className="rounded-lg border border-border bg-card px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMonthlyStatAds")}</div>
+              <div className="text-lg font-semibold tabular-nums">฿{summary.adsSpend.toLocaleString()}</div>
             </div>
-            <div className="rounded bg-muted/50 p-3">
-              <div className="text-xs text-muted-foreground">{t("marketingMonthlyStatInfluencers")}</div>
-              <div className="text-lg font-semibold">฿{summary.influencerSpend.toLocaleString()}</div>
+            <div className="rounded-lg border border-border bg-card px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMonthlyStatInfluencers")}</div>
+              <div className="text-lg font-semibold tabular-nums">฿{summary.influencerSpend.toLocaleString()}</div>
             </div>
-            <div className="rounded bg-primary/10 p-3">
-              <div className="text-xs text-muted-foreground">{t("marketingMonthlyStatTotalCosts")}</div>
-              <div className="text-lg font-semibold">฿{summary.totalCosts.toLocaleString()}</div>
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMonthlyStatTotalCosts")}</div>
+              <div className="text-lg font-semibold tabular-nums">฿{summary.totalCosts.toLocaleString()}</div>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="py-2 text-left">{t("marketingMonthlyColCampaignNo")}</th>
-                  <th className="py-2 text-left">{t("marketingMonthlyColCampaign")}</th>
-                  <th className="py-2 text-right">{t("marketingMonthlyColBudget")}</th>
-                  <th className="py-2 text-right">{t("marketingMonthlyColCosts")}</th>
-                  <th className="py-2 text-right">{t("marketingMonthlyColCostRatio")}</th>
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="py-2.5 pl-0 pr-2 text-left font-medium">{t("marketingMonthlyColCampaignNo")}</th>
+                  <th className="py-2.5 pl-0 pr-2 text-left font-medium">{t("marketingMonthlyColCampaign")}</th>
+                  <th className="py-2.5 pl-0 pr-2 text-right font-medium">{t("marketingMonthlyColBudget")}</th>
+                  <th className="py-2.5 pl-0 pr-2 text-right font-medium">{t("marketingMonthlyColCosts")}</th>
+                  <th className="py-2.5 pl-0 pr-0 text-right font-medium">{t("marketingMonthlyColCostRatio")}</th>
                 </tr>
               </thead>
               <tbody>
                 {summary.rows.map((r) => (
-                  <tr key={r.id} className="border-b">
-                    <td className="py-2 font-mono text-xs text-muted-foreground">{r.campaignNo || "—"}</td>
-                    <td className="py-2">{r.topic}</td>
-                    <td className="py-2 text-right font-mono">฿{r.budget.toLocaleString()}</td>
-                    <td className="py-2 text-right font-mono">฿{r.costs.toLocaleString()}</td>
-                    <td className="py-2 text-right">
+                  <tr key={r.id} className="border-b border-border last:border-0">
+                    <td className="py-2.5 pl-0 pr-2 font-mono text-xs text-muted-foreground">{r.campaignNo || "—"}</td>
+                    <td className="py-2.5 pl-0 pr-2">{r.topic}</td>
+                    <td className="py-2.5 pl-0 pr-2 text-right font-mono">฿{r.budget.toLocaleString()}</td>
+                    <td className="py-2.5 pl-0 pr-2 text-right font-mono">฿{r.costs.toLocaleString()}</td>
+                    <td className="py-2.5 pl-0 pr-0 text-right">
                       {r.budget > 0 ? (
                         <span
                           className={

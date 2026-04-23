@@ -4,7 +4,6 @@ import { useMemo, useState, useEffect } from 'react'
 import { Users, Armchair } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PosTableItem } from '@/lib/api-client'
-import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 
 const FLOOR_W = 720
 const FLOOR_H = 480
@@ -385,7 +384,7 @@ export function TableFloorView({
         )
 
         const labelTextClass = cn(
-          'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-0.5 pointer-events-none px-1 text-center antialiased',
+          'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-0.5 pointer-events-none overflow-hidden rounded-sm px-0.5 text-center antialiased',
           /** 밝은 테이블 면 위에서도 글자가 잘 보이도록 */
           '[text-shadow:0_1px_2px_rgba(0,0,0,0.45)]',
           isSquare && !isOccupied && 'text-white',
@@ -399,6 +398,8 @@ export function TableFloorView({
         )
 
         const rot = Number(tab.rotation) || 0
+        /** 바닥 카드: `번` 제거 시 `1`+`2`+`3`이 한 덩어리처럼 보일 수 있어 저장명 그대로 */
+        const floorTableLabel = String(tab.name ?? '').trim() || tab.id
 
         return (
           <div
@@ -461,34 +462,32 @@ export function TableFloorView({
               className={labelTextClass}
               style={{ writingMode: 'horizontal-tb' }}
             >
-              {/* 1줄: 테이블명 + 정원(좌석) 칩을 오른쪽에 붙임 · 2줄: 손님 수 */}
-              <div className="flex min-w-0 max-w-full flex-col items-center gap-1 px-0.5 leading-none">
-                <div className="flex max-w-full items-center justify-center gap-1">
+              {/* 테이블명(한 줄·truncate) → 좌석 칩: 가로 한 줄은 좁은 칸에서 이웃과 겹침 유발 */}
+              <div className="flex min-w-0 max-w-full flex-col items-center gap-0.5 px-0.5 leading-none">
+                <span
+                  className="min-w-0 w-full max-w-full truncate border-b border-current/30 pb-0.5 text-center text-sm font-extrabold tracking-tight sm:text-base"
+                  title={floorTableLabel}
+                >
+                  {floorTableLabel}
+                </span>
+                {tab.seats > 0 && (
                   <span
-                    className="min-w-0 max-w-[min(100%,7.5rem)] truncate border-b border-current/30 pb-0.5 text-base font-extrabold tracking-tight sm:text-lg"
-                    title={translateReceiptTableDisplayName(tab.name, t)}
+                    className={cn(
+                      'inline-flex max-w-full shrink-0 items-center justify-center gap-0.5 rounded-full border px-1 py-0.5 tabular-nums shadow-sm',
+                      isOccupied
+                        ? 'border-amber-200/50 bg-amber-950/70 text-[9px] font-bold text-amber-50 ring-1 ring-amber-700/35 sm:text-[10px]'
+                        : 'border-amber-600/85 bg-amber-950/65 text-[9px] font-extrabold text-amber-50 ring-1 ring-amber-800/40 sm:text-[10px]'
+                    )}
+                    title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
                   >
-                    {translateReceiptTableDisplayName(tab.name, t)}
+                    <Armchair
+                      className={cn('shrink-0 opacity-95', isOccupied ? 'h-2.5 w-2.5 sm:h-3 sm:w-3' : 'h-2.5 w-2.5 sm:h-3 sm:w-3')}
+                      strokeWidth={2.25}
+                      aria-hidden
+                    />
+                    <span className="leading-none tabular-nums">{tab.seats}</span>
                   </span>
-                  {tab.seats > 0 && (
-                    <span
-                      className={cn(
-                        'inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 tabular-nums shadow-sm',
-                        isOccupied
-                          ? 'border-amber-200/50 bg-amber-950/70 text-[9px] font-bold text-amber-50 ring-1 ring-amber-700/35 sm:text-[10px]'
-                          : 'border-amber-600/85 bg-amber-950/65 text-[10px] font-extrabold text-amber-50 ring-1 ring-amber-800/40 sm:text-xs'
-                      )}
-                      title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
-                    >
-                      <Armchair
-                        className={cn('shrink-0 opacity-95', isOccupied ? 'h-2.5 w-2.5 sm:h-3 sm:w-3' : 'h-3 w-3')}
-                        strokeWidth={2.25}
-                        aria-hidden
-                      />
-                      <span className="leading-none tabular-nums">{tab.seats}</span>
-                    </span>
-                  )}
-                </div>
+                )}
                 {isOccupied && (tableGuestCount > 0 || createdAt) && (
                   <div className="flex max-w-full flex-wrap items-center justify-center gap-1">
                     {tableGuestCount > 0 && (

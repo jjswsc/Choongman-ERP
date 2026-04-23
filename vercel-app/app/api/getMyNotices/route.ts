@@ -3,6 +3,7 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
+import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
 
 export interface NoticeItem {
   id: number
@@ -40,21 +41,11 @@ async function getMyNoticesHandler(
     rangeEnd?: string
   }
 ): Promise<MyNoticesPageResult> {
-  let myJob = ''
-  let myRole = ''
   const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as
     | { store?: string; name?: string; job?: string; role?: string }[]
     | null
     | undefined
-  for (let i = 0; i < (empList || []).length; i++) {
-    const s = String(empList![i].store || '').trim()
-    const n = String(empList![i].name || '').trim()
-    if (s === store && n === name) {
-      myJob = String(empList![i].job || empList![i].role || '').trim()
-      myRole = String(empList![i].role || '').trim().toLowerCase()
-      break
-    }
-  }
+  const { myJob, myRole } = findEmployeeContextFromRoster(empList || [], store, name)
 
   const readMap: Record<number, string> = {}
   try {
@@ -90,35 +81,7 @@ async function getMyNoticesHandler(
 
   for (let i = 0; i < (rows || []).length; i++) {
     const row = rows![i]
-    const recipientsRaw = row.target_recipients
-    if (recipientsRaw) {
-      try {
-        const recipients = JSON.parse(recipientsRaw) as string[]
-        if (Array.isArray(recipients) && recipients.length > 0) {
-          const myKey = `${store}|${name}`
-          if (!recipients.includes(myKey)) continue
-        }
-      } catch {
-        /* fall through */
-      }
-    } else {
-      const targetStores = String(row.target_store || '전체').trim()
-      const targetJobs = String(row.target_role || '전체').trim()
-      const targetPerms = String(row.target_permission_group || '').trim()
-      const storeMatch = targetStores === '전체' || targetStores.indexOf(store) > -1
-      const jobList = String(targetJobs || '전체')
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean)
-      const jobMatch =
-        !targetJobs ||
-        targetJobs.trim() === '전체' ||
-        jobList.length === 0 ||
-        (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
-      const permList = targetPerms ? targetPerms.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : []
-      const permMatch = permList.length === 0 || (myRole && permList.includes(myRole))
-      if (!storeMatch || !jobMatch || !permMatch) continue
-    }
+    if (!employeeIsTargetedForRow(store, name, myJob, myRole, row)) continue
 
     let att: unknown[] = []
     if (row.attachments) {

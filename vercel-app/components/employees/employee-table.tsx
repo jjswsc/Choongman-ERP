@@ -35,6 +35,14 @@ export interface EmployeeTableRow extends AdminEmployeeItem {
   managerGrade?: string
 }
 
+function resolveRowStatus(e: AdminEmployeeItem): "active" | "leave" | "resigned" | "suspended" {
+  const raw = String((e as { employmentStatus?: unknown }).employmentStatus || "")
+    .trim()
+    .toLowerCase()
+  if (raw === "active" || raw === "leave" || raw === "resigned" || raw === "suspended") return raw
+  return String(e.resign || "").trim() ? "resigned" : "active"
+}
+
 interface EmployeeTableProps {
   rows: EmployeeTableRow[]
   loading?: boolean
@@ -93,8 +101,11 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
               const resignStr = String(e.resign || "").trim()
               const resignDate = resignStr ? resignStr.slice(0, 10) : ""
               const todayStr = new Date().toISOString().slice(0, 10)
+              const status = resolveRowStatus(e)
               const isAfterResignDate = resignDate && todayStr > resignDate
-              const showResignedHighlight = (statusFilter === "" || statusFilter === "all") && isAfterResignDate
+              const showResignedHighlight =
+                (statusFilter === "" || statusFilter === "all") &&
+                (status === "resigned" || isAfterResignDate)
               return (
                 <tr
                   key={e.row}
@@ -148,7 +159,7 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                       <button
                         type="button"
                         onClick={() => onDelete(e.row)}
-                        title={t("delete")}
+                        title={t("emp_status_resigned")}
                         className="rounded p-1.5 text-destructive hover:bg-destructive/10 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

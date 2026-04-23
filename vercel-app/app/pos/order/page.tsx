@@ -173,6 +173,9 @@ export default function PosOrderPage() {
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
   const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = React.useState(false)
   const posPrinterSettingsRef = React.useRef<PosPrinterSettings | null>(null)
+  const posPrinterSettingsStoreCodeRef = React.useRef("")
+  const posPrinterSettingsInFlightStoreCodeRef = React.useRef("")
+  const posPrinterSettingsInFlightRef = React.useRef<Promise<PosPrinterSettings> | null>(null)
   const [receiptBizName, setReceiptBizName] = React.useState("")
   const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
   const [receiptBizAbn, setReceiptBizAbn] = React.useState("")
@@ -258,6 +261,7 @@ export default function PosOrderPage() {
     getPosPrinterSettings({ storeCode })
       .then((s) => {
         posPrinterSettingsRef.current = s
+        posPrinterSettingsStoreCodeRef.current = storeCode
         setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 })
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
@@ -293,6 +297,7 @@ export default function PosOrderPage() {
       })
       .catch(() => {
         posPrinterSettingsRef.current = null
+        posPrinterSettingsStoreCodeRef.current = ""
         setStoreFees({ deliveryFee: 0, packagingFee: 0 })
         setAutoPrintReceiptOnPayment(false)
         setAutoPrintKitchenSlipOnOrder(false)
@@ -319,6 +324,38 @@ export default function PosOrderPage() {
   React.useEffect(() => {
     loadStoreFees()
   }, [loadStoreFees])
+
+  const getPrinterSettingsForStore = React.useCallback(async (targetStoreCode: string): Promise<PosPrinterSettings> => {
+    const normalizedStoreCode = String(targetStoreCode || "").trim()
+    if (!normalizedStoreCode) throw new Error("missing_store_code")
+    if (
+      posPrinterSettingsRef.current &&
+      posPrinterSettingsStoreCodeRef.current === normalizedStoreCode
+    ) {
+      return posPrinterSettingsRef.current
+    }
+    if (
+      posPrinterSettingsInFlightRef.current &&
+      posPrinterSettingsInFlightStoreCodeRef.current === normalizedStoreCode
+    ) {
+      return posPrinterSettingsInFlightRef.current
+    }
+    const request = getPosPrinterSettings({ storeCode: normalizedStoreCode })
+      .then((settings) => {
+        posPrinterSettingsRef.current = settings
+        posPrinterSettingsStoreCodeRef.current = normalizedStoreCode
+        return settings
+      })
+      .finally(() => {
+        if (posPrinterSettingsInFlightStoreCodeRef.current === normalizedStoreCode) {
+          posPrinterSettingsInFlightRef.current = null
+          posPrinterSettingsInFlightStoreCodeRef.current = ""
+        }
+      })
+    posPrinterSettingsInFlightStoreCodeRef.current = normalizedStoreCode
+    posPrinterSettingsInFlightRef.current = request
+    return request
+  }, [])
 
   const loadMenusAndPromos = React.useCallback(() => {
     setLoading(true)
@@ -957,7 +994,7 @@ export default function PosOrderPage() {
   const handlePrintKitchenSlip = async () => {
     if (!receiptData || !receiptData.storeCode) return
     try {
-      const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
+      const settings = await getPrinterSettingsForStore(receiptData.storeCode)
       const kLabels = {
         unified: t("posKitchenOrder") || "주방 주문서",
         kitchen1: `${t("posKitchen1") || "주방 1"}`,

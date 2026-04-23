@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -2753,8 +2755,7 @@ export function AdminAccountingCompliance({
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={setTab} className={tabsRootClass}>
         {!hideTabBar && (
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="scope" className={adminTabsTriggerCn}>
                   {t("accCompTabScope")}
@@ -2787,8 +2788,7 @@ export function AdminAccountingCompliance({
                   {t("accCompTabWorkflow")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
         )}
 
         <TabsContent value="scope" className={cn(tabsContentClass, "space-y-3")}>

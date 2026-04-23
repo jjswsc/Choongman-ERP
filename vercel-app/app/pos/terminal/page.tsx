@@ -1,5 +1,5 @@
 'use client'
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -36,11 +36,11 @@ import {
   getPosDeliveryApps,
   executeLinkposPayment,
   updatePosOrder,
-  updatePosOrderStatus,
   type PosMenu,
   type PosDeliveryApp,
   type LinkposPaymentSummary,
   type PosOrder,
+  type PosTableItem,
   type PosPrinterSettings,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
@@ -53,7 +53,7 @@ import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import type { Order, OrderItem } from '@/lib/pos-types'
+import type { Order, OrderItem, Table } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
@@ -85,6 +85,17 @@ import {
   publishPosCustomerDisplayState,
   type PosCustomerDisplayPayload,
 } from '@/lib/pos-customer-display-state'
+import {
+  applyPosOrderStatusWithRetry,
+  notifyQueuedPosSave,
+} from '@/app/pos/terminal/lib/terminal-order-actions'
+import {
+  getPosTourScenarioIdFromQuery,
+  isPosDemoFromQuery,
+  PosTerminalTourController,
+  PosTourOverlay,
+  PosTourProvider,
+} from '@/lib/pos-tour'
 
 function buildCustomerDisplayPaymentLines(
   draft: CartPanelPaymentPayload | null,
@@ -130,6 +141,12 @@ type PendingPayRequest = {
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
 const FLOOR_PREF_KEY = 'pos-terminal-floor:'
+/** 720×480 바닥 기준 3×3. `TableFloorView`의 표시 배율(1.55)까지 고려해 간격·여백을 둠 */
+const DEMO_FLOOR_3X3_SLOTS = [
+  { x: 44, y: 48 }, { x: 276, y: 48 }, { x: 508, y: 48 },
+  { x: 44, y: 196 }, { x: 276, y: 196 }, { x: 508, y: 196 },
+  { x: 44, y: 344 }, { x: 276, y: 344 }, { x: 508, y: 344 },
+] as const
 
 export default function PosTerminalPage() {
   const searchParams = useSearchParams()
@@ -143,7 +160,21 @@ export default function PosTerminalPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const isPosDemo = isPosDemoFromQuery(searchParams)
+  const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams)
+  const [tourMainDeviceTouched, setTourMainDeviceTouched] = useState(false)
+  const posDemoRef = useRef(false)
   const cartRef = useRef<CartPanelHandle>(null)
+  useEffect(() => {
+    posDemoRef.current = isPosDemo
+  }, [isPosDemo])
+  useEffect(() => {
+    if (!isPosDemo) {
+      setTourMainDeviceTouched(false)
+      return
+    }
+    setTourMainDeviceTouched(false)
+  }, [isPosDemo, tourScenarioId])
   const [terminalCartLines, setTerminalCartLines] = useState<OrderItem[]>([])
   const bindCartImperative = useCallback((api: CartPanelHandle | null) => {
     cartRef.current = api
@@ -170,11 +201,36 @@ export default function PosTerminalPage() {
     loadingTables,
   } = usePosStore()
 
-  /** 오프라인 큐 적재 시 별도 확인 팝업 없음 — 상단 OfflineBanner가 대기 건수·동기화를 안내 */
-  const notifyQueuedSave = useCallback(async (_orderNo?: string, _queued?: boolean) => {}, [])
+  const notifyQueuedSave = useCallback(async (orderNo?: string, queued?: boolean) => {
+    await notifyQueuedPosSave({
+      orderNo,
+      queued,
+      onAlert: appAlert,
+    })
+  }, [])
+
+  const applyOrderStatusWithRetry = useCallback(
+    async (params: { id: number; status: 'ready' | 'paid' | 'completed' | 'cancelled' | 'refunded' }) => {
+      if (isPosDemo) return true
+      return applyPosOrderStatusWithRetry({
+        id: params.id,
+        status: params.status,
+        onAlert: appAlert,
+        onConfirm: appConfirm,
+        failMessageFallback: t('processFail') || '처리 실패',
+      })
+    },
+    [isPosDemo, t]
+  )
+
+  const refetchCurrentStore = useCallback(() => {
+    return refetchStores({ scope: 'current' })
+  }, [refetchStores])
 
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [servingTableId, setServingTableId] = useState<string | null>(null)
+  /** 데모 홀: 저장 API 없이 서빙 패널용 주문만 오버레이 */
+  const [demoDineInOrder, setDemoDineInOrder] = useState<{ tableId: string; order: Order } | null>(null)
   const [activeFloor, setActiveFloor] = useState<1 | 2 | 3>(1)
   const [deliveryApp, setDeliveryApp] = useState<DeliveryApp | null>(null)
   const [deliveryOrderNo, setDeliveryOrderNo] = useState('')
@@ -186,6 +242,10 @@ export default function PosTerminalPage() {
   const [selectedDeliveryTargetLabel, setSelectedDeliveryTargetLabel] = useState<string>('')
   const [selectedTakeoutTargetId, setSelectedTakeoutTargetId] = useState<string | null>(null)
   const [selectedTakeoutTargetLabel, setSelectedTakeoutTargetLabel] = useState<string>('')
+  const [tourPaymentModalOpen, setTourPaymentModalOpen] = useState(false)
+  const [tourPaymentTab, setTourPaymentTab] = useState<'cash' | 'card' | 'qr' | 'delivery_app' | 'other'>('cash')
+  const [tourTaxInvoiceEnabled, setTourTaxInvoiceEnabled] = useState(false)
+  const [tourPaymentCompletedCount, setTourPaymentCompletedCount] = useState(0)
   const [activeTab, setActiveTab] = useState<'tables' | 'delivery' | 'takeout'>(
     orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'tables'
   )
@@ -260,6 +320,10 @@ export default function PosTerminalPage() {
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
   const [customerDisplayIdleMediaUrl, setCustomerDisplayIdleMediaUrl] = useState('')
   const [customerDisplayPaymentDraft, setCustomerDisplayPaymentDraft] = useState<CartPanelPaymentPayload | null>(null)
+  const tourPaymentCardAmount = Number(customerDisplayPaymentDraft?.paymentCard ?? 0)
+  const tourPaymentQrAmount = Number(customerDisplayPaymentDraft?.paymentQr ?? 0)
+  const tourPaymentDeliveryAppAmount = Number(customerDisplayPaymentDraft?.paymentDeliveryApp ?? 0)
+  const tourPaymentOtherAmount = Number(customerDisplayPaymentDraft?.paymentOther ?? 0)
   /** 결제 완료 직후 고객 모니터에 설정된 QR을 잠시 표시(ms 기준 타임스탬프) */
   const [postPaymentQrUntil, setPostPaymentQrUntil] = useState(0)
   /** 기존 주문 결제 시 영수증 orderNo (pendingPayRequest/pendingTakeoutPayRequest에 있던 값) */
@@ -309,6 +373,41 @@ export default function PosTerminalPage() {
   usePosMenusCatalogLiveRefresh(applyPosMenusList)
   const drawerOpenWarnedRef = useRef(false)
   const posPrinterSettingsRef = useRef<PosPrinterSettings | null>(null)
+  const posPrinterSettingsStoreCodeRef = useRef("")
+  const posPrinterSettingsInFlightStoreCodeRef = useRef("")
+  const posPrinterSettingsInFlightRef = useRef<Promise<PosPrinterSettings> | null>(null)
+
+  const getPrinterSettingsForStore = useCallback(async (targetStoreCode: string): Promise<PosPrinterSettings> => {
+    const normalizedStoreCode = String(targetStoreCode || "").trim()
+    if (!normalizedStoreCode) throw new Error("missing_store_code")
+    if (
+      posPrinterSettingsRef.current &&
+      posPrinterSettingsStoreCodeRef.current === normalizedStoreCode
+    ) {
+      return posPrinterSettingsRef.current
+    }
+    if (
+      posPrinterSettingsInFlightRef.current &&
+      posPrinterSettingsInFlightStoreCodeRef.current === normalizedStoreCode
+    ) {
+      return posPrinterSettingsInFlightRef.current
+    }
+    const request = getPosPrinterSettings({ storeCode: normalizedStoreCode })
+      .then((settings) => {
+        posPrinterSettingsRef.current = settings
+        posPrinterSettingsStoreCodeRef.current = normalizedStoreCode
+        return settings
+      })
+      .finally(() => {
+        if (posPrinterSettingsInFlightStoreCodeRef.current === normalizedStoreCode) {
+          posPrinterSettingsInFlightRef.current = null
+          posPrinterSettingsInFlightStoreCodeRef.current = ""
+        }
+      })
+    posPrinterSettingsInFlightStoreCodeRef.current = normalizedStoreCode
+    posPrinterSettingsInFlightRef.current = request
+    return request
+  }, [])
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -346,9 +445,10 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!currentStoreId) return
-    getPosPrinterSettings({ storeCode: currentStoreId })
+    getPrinterSettingsForStore(currentStoreId)
       .then((s) => {
         posPrinterSettingsRef.current = s
+        posPrinterSettingsStoreCodeRef.current = currentStoreId
         const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
         const warning = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
         const warnDiff = Math.max(0, Number(s.cookingRecipeWarningDiffMin ?? 0))
@@ -439,6 +539,7 @@ export default function PosTerminalPage() {
       })
       .catch(() => {
         posPrinterSettingsRef.current = null
+        posPrinterSettingsStoreCodeRef.current = ""
         setCookingRules({
           freshMaxMin: 10,
           warningMaxMin: 15,
@@ -508,7 +609,7 @@ export default function PosTerminalPage() {
         setMenus([])
         setMenuTargets({ byId: new Map(), byName: new Map() })
       })
-  }, [currentStoreId, applyPosMenusList])
+  }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore])
 
   useEffect(() => {
     if (!pendingPayRequest) return
@@ -561,11 +662,127 @@ export default function PosTerminalPage() {
   const totalSales = todaySales?.completedTotal ?? 0
   const getTableFloor = (tableId: string | null | undefined): 1 | 2 | 3 => {
     if (!tableId) return 1
-    const raw = currentLayout.find((tbl) => tbl.id === tableId)?.floor
+    const raw = floorLayoutForView.find((tbl) => tbl.id === tableId)?.floor
     return Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
   }
-  const selectedTable = currentStore?.tables.find(tbl => tbl.id === selectedTableId)
-  const servingTable = currentStore?.tables.find(tbl => tbl.id === servingTableId)
+
+  const floorLayoutForView = useMemo<PosTableItem[]>(() => {
+    if (!isPosDemo) return currentLayout
+    /** 레이아웃 API·매장 테이블을 id만으로 합치면 이름은 `1번`~`3번`이 반복될 수 있음 → 데모 바닥은 항상 1~9번 고정 */
+    return Array.from({ length: 9 }, (_, idx) => {
+      const slot = DEMO_FLOOR_3X3_SLOTS[idx] ?? DEMO_FLOOR_3X3_SLOTS[DEMO_FLOOR_3X3_SLOTS.length - 1]
+      return {
+        id: `demo-table-${idx + 1}`,
+        name: `${idx + 1}번`,
+        x: slot.x,
+        y: slot.y,
+        w: 120,
+        h: 76,
+        floor: 1,
+        shape: idx === 4 ? 'round' : 'rect',
+        seats: Math.max(2, idx % 3 === 0 ? 4 : idx % 3 === 1 ? 2 : 6),
+        rotation: 0,
+      } satisfies PosTableItem
+    })
+  }, [isPosDemo, currentLayout])
+
+  const demoTableVisualStatusById = useMemo(() => {
+    if (!isPosDemo) return new Map<string, { status: 'preparing' | 'partial_served' | 'completed'; createdAt: string; guestCount: number }>()
+    // 데모에서는 9개 중 6개만 점유 상태로 보여 빈 테이블 주문 테스트가 가능해야 합니다.
+    const minutes = [4, 11, 19, 7, 22, 14]
+    const statuses: Array<'preparing' | 'partial_served' | 'completed'> = [
+      'preparing', 'preparing', 'preparing',
+      'partial_served', 'completed', 'partial_served',
+    ]
+    const map = new Map<string, { status: 'preparing' | 'partial_served' | 'completed'; createdAt: string; guestCount: number }>()
+    floorLayoutForView.slice(0, 6).forEach((tbl, idx) => {
+      const minAgo = minutes[idx] ?? 6
+      map.set(tbl.id, {
+        status: statuses[idx] ?? 'preparing',
+        createdAt: new Date(Date.now() - minAgo * 60_000).toISOString(),
+        guestCount: idx % 3 === 0 ? 4 : idx % 3 === 1 ? 2 : 6,
+      })
+    })
+    return map
+  }, [isPosDemo, floorLayoutForView])
+
+  useEffect(() => {
+    if (!isPosDemo) return
+    // 데모 시작 시 전체 보기로 맞춰 빈 테이블(주문 테스트용)이 항상 보이게 합니다.
+    setTableListMode('all')
+  }, [isPosDemo, tourScenarioId])
+  const selectedTable = useMemo(() => {
+    if (!selectedTableId) return undefined
+    const base = currentStore?.tables?.find((tbl) => tbl.id === selectedTableId)
+    const fallbackLayout = floorLayoutForView.find((tbl) => tbl.id === selectedTableId)
+    const fallbackTable: Table | undefined = fallbackLayout
+      ? {
+          id: fallbackLayout.id,
+          name: fallbackLayout.name,
+          seats: Math.max(1, Number(fallbackLayout.seats ?? 2) || 2),
+          x: Number(fallbackLayout.x ?? 0) || 0,
+          y: Number(fallbackLayout.y ?? 0) || 0,
+          width: Number(fallbackLayout.w ?? 132) || 132,
+          height: Number(fallbackLayout.h ?? 82) || 82,
+          shape:
+            fallbackLayout.shape === 'round'
+              ? 'round'
+              : fallbackLayout.shape === 'square'
+                ? 'square'
+                : 'rectangle',
+          rotation: Number(fallbackLayout.rotation ?? 0) || 0,
+          isOccupied: false,
+        }
+      : undefined
+    const resolved = base ?? fallbackTable
+    if (!resolved) return undefined
+    if (demoDineInOrder?.tableId === selectedTableId) {
+      return { ...resolved, order: demoDineInOrder.order, isOccupied: true }
+    }
+    return resolved
+  }, [currentStore?.tables, selectedTableId, demoDineInOrder, floorLayoutForView])
+
+  const servingTable = useMemo(() => {
+    if (!servingTableId) return undefined
+    const base = currentStore?.tables?.find((tbl) => tbl.id === servingTableId)
+    const fallbackLayout = floorLayoutForView.find((tbl) => tbl.id === servingTableId)
+    const fallbackTable: Table | undefined = fallbackLayout
+      ? {
+          id: fallbackLayout.id,
+          name: fallbackLayout.name,
+          seats: Math.max(1, Number(fallbackLayout.seats ?? 2) || 2),
+          x: Number(fallbackLayout.x ?? 0) || 0,
+          y: Number(fallbackLayout.y ?? 0) || 0,
+          width: Number(fallbackLayout.w ?? 132) || 132,
+          height: Number(fallbackLayout.h ?? 82) || 82,
+          shape:
+            fallbackLayout.shape === 'round'
+              ? 'round'
+              : fallbackLayout.shape === 'square'
+                ? 'square'
+                : 'rectangle',
+          rotation: Number(fallbackLayout.rotation ?? 0) || 0,
+          isOccupied: false,
+        }
+      : undefined
+    const resolved = base ?? fallbackTable
+    if (!resolved) return undefined
+    if (demoDineInOrder?.tableId === servingTableId) {
+      return { ...resolved, order: demoDineInOrder.order, isOccupied: true }
+    }
+    return resolved
+  }, [currentStore?.tables, servingTableId, demoDineInOrder, floorLayoutForView])
+
+  useEffect(() => {
+    setDemoDineInOrder(null)
+  }, [currentStoreId])
+
+  const tourServingOrder = useMemo(() => {
+    if (!servingTableId) return null
+    if (demoDineInOrder?.tableId === servingTableId) return demoDineInOrder.order
+    return currentStore?.tables.find((t) => t.id === servingTableId)?.order ?? null
+  }, [servingTableId, demoDineInOrder, currentStore?.tables])
+
   const selectedDeliveryOrderId = selectedDeliveryTargetId?.startsWith('delivery-order-')
     ? selectedDeliveryTargetId.replace('delivery-order-', '')
     : null
@@ -805,6 +1022,7 @@ export default function PosTerminalPage() {
     /** directPrint 일 때만: 영수증 인쇄 정리 후 호출(연속 인쇄 합침 방지용으로 내부에서 추가 지연) */
     onAfterDirectPrint?: () => void
   ) {
+    if (posDemoRef.current) return
     const esc = (value: string) =>
       value
         .replace(/&/g, '&amp;')
@@ -983,7 +1201,7 @@ export default function PosTerminalPage() {
         total,
       }
       const runKitchenFromRealtimeOrderInsert = () => {
-        getPosPrinterSettings({ storeCode })
+        getPrinterSettingsForStore(storeCode)
           .then((settings) => {
             const orderTypeLabels: Record<string, string> = {
               dine_in: t('posOrderTypeDineIn') ?? '매장',
@@ -1248,7 +1466,7 @@ export default function PosTerminalPage() {
           const runKitchenForPolledOrder = () => {
             void (async () => {
               try {
-                const settings = await getPosPrinterSettings({ storeCode: order.storeCode ?? currentStoreId })
+                const settings = await getPrinterSettingsForStore(order.storeCode ?? currentStoreId)
                 const orderTypeLabels: Record<string, string> = {
                   dine_in: t('posOrderTypeDineIn') ?? '매장',
                   takeout: t('posOrderTypeTakeout') ?? '포장',
@@ -1350,24 +1568,25 @@ export default function PosTerminalPage() {
     } else if (servingTableId) {
       setActiveFloor(getTableFloor(servingTableId))
     }
-  }, [selectedTableId, servingTableId, currentLayout])
+  }, [selectedTableId, servingTableId, floorLayoutForView])
 
   useEffect(() => {
     if (selectedTableId || servingTableId) return
-    const hasActiveFloorTable = currentLayout.some(
+    const hasActiveFloorTable = floorLayoutForView.some(
       (tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor
     )
-    if (hasActiveFloorTable || currentLayout.length === 0) return
+    if (hasActiveFloorTable || floorLayoutForView.length === 0) return
     const floors = Array.from(
-      new Set(currentLayout.map((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as 1 | 2 | 3))
+      new Set(floorLayoutForView.map((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as 1 | 2 | 3))
     ).sort((a, b) => a - b)
     if (floors[0] && floors[0] !== activeFloor) {
       setActiveFloor(floors[0])
     }
-  }, [currentLayout, activeFloor, selectedTableId, servingTableId])
+  }, [floorLayoutForView, activeFloor, selectedTableId, servingTableId])
 
   const tryOpenDrawerForPayment = useCallback(
     async (payment: CartPanelPaymentPayload | null | undefined) => {
+      if (isPosDemo) return
       if (!payment || !currentStoreId) return
       const cashAmt = Math.max(0, Number(payment.paymentCash || 0))
       if (cashAmt <= 0) return
@@ -1389,11 +1608,12 @@ export default function PosTerminalPage() {
         )
       }
     },
-    [currentStoreId, auth?.user, drawerOpenOption, t]
+    [isPosDemo, currentStoreId, auth?.user, drawerOpenOption, t]
   )
 
   const runLinkposPaymentIfNeeded = useCallback(
     async (payment: CartPanelPaymentPayload | null | undefined) => {
+      if (isPosDemo) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
       if (!currentStoreId) {
@@ -1421,7 +1641,7 @@ export default function PosTerminalPage() {
       }
       return { ok: true as const, linkposPayment: result.payment as LinkposPaymentSummary | null }
     },
-    [currentStoreId, auth?.user, t]
+    [isPosDemo, currentStoreId, auth?.user, t]
   )
 
   const deliveryApps = deliveryAppsFromApi
@@ -1710,7 +1930,8 @@ export default function PosTerminalPage() {
       clearCartFromTerminal()
     }
     const table = currentStore?.tables.find((t) => t.id === tableId)
-    if (table?.order) {
+    const order = demoDineInOrder?.tableId === tableId ? demoDineInOrder.order : table?.order
+    if (order) {
       setSelectedTableId(null)
       setServingTableId(tableId)
       return
@@ -1742,6 +1963,19 @@ export default function PosTerminalPage() {
             selectedTable={selectedTable}
             onStoreChange={setCurrentStoreId}
             t={t}
+            onPaymentModalOpenChange={(open) => {
+              setTourPaymentModalOpen(open)
+              if (open) {
+                setTourPaymentCompletedCount(0)
+              } else {
+                setTourPaymentTab('cash')
+                setTourTaxInvoiceEnabled(false)
+              }
+            }}
+            onPaymentTabChange={setTourPaymentTab}
+            onTaxInvoiceToggleChange={setTourTaxInvoiceEnabled}
+            onPaymentComplete={() => setTourPaymentCompletedCount((v) => v + 1)}
+            posDineInDemoDefaultGuestCount={undefined}
             lockOrderType
             orderType={cartOrderType}
             onBackToTableSelection={
@@ -1760,6 +1994,17 @@ export default function PosTerminalPage() {
             }}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               try {
+                if (isPosDemo) {
+                  setPendingReceiptOrderNo(null)
+                  setPendingDeliveryOrderId(null)
+                  setSelectedDeliveryTargetId(null)
+                  setSelectedDeliveryTargetLabel('')
+                  setDeliveryApp(null)
+                  setDeliveryOrderNo('')
+                  clearCartFromTerminal()
+                  await refetchCurrentStore()
+                  return
+                }
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return
@@ -1784,7 +2029,11 @@ export default function PosTerminalPage() {
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
-                  await updatePosOrderStatus({ id: existingOrderId, status: 'completed' })
+                  const completedOk = await applyOrderStatusWithRetry({
+                    id: existingOrderId,
+                    status: 'completed',
+                  })
+                  if (!completedOk) return
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -1821,7 +2070,7 @@ export default function PosTerminalPage() {
                 setSelectedDeliveryTargetLabel('')
                 setDeliveryApp(null)
                 setDeliveryOrderNo('')
-                await refetchStores()
+                await refetchCurrentStore()
                 if (payload.payment != null) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
@@ -1829,6 +2078,15 @@ export default function PosTerminalPage() {
             }}
             onTakeoutOrderComplete={async (payload, existingOrderId) => {
               try {
+                if (isPosDemo) {
+                  setPendingReceiptOrderNo(null)
+                  setPendingTakeoutOrderId(null)
+                  setSelectedTakeoutTargetId(null)
+                  setSelectedTakeoutTargetLabel('')
+                  clearCartFromTerminal()
+                  await refetchCurrentStore()
+                  return
+                }
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return
@@ -1853,7 +2111,11 @@ export default function PosTerminalPage() {
                     linkposPayment: linkpos.linkposPayment,
                     pricingAdjustments,
                   })
-                  await updatePosOrderStatus({ id: existingOrderId, status: 'completed' })
+                  const completedOk = await applyOrderStatusWithRetry({
+                    id: existingOrderId,
+                    status: 'completed',
+                  })
+                  if (!completedOk) return
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -1888,7 +2150,7 @@ export default function PosTerminalPage() {
                 setPendingTakeoutOrderId(null)
                 setSelectedTakeoutTargetId(null)
                 setSelectedTakeoutTargetLabel('')
-                await refetchStores()
+                await refetchCurrentStore()
                 if (payload.payment != null) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('updatePosOrder/updatePosOrderStatus:', e)
@@ -1900,6 +2162,57 @@ export default function PosTerminalPage() {
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
               const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
               try {
+                if (isPosDemo) {
+                  const tid = selectedTableId
+                  /** 데모 바닥 id(`demo-table-*`)는 매장 `tables`에 없을 수 있음 — `selectedTable`과 동일하게 해석 */
+                  const tbl = tid ? selectedTable : undefined
+                  if (activeTab === 'tables' && tid && tbl) {
+                    const subtotal = payload.items.reduce(
+                      (s, it) => s + it.price * Math.max(1, Number(it.quantity) || 1),
+                      0
+                    )
+                    const discountAmt = payload.discountAmt ?? 0
+                    const pricing = computePosPricing({
+                      subtotal,
+                      discountAmt,
+                      cardPaymentAmount: 0,
+                      adjustments: pricingAdjustments,
+                    })
+                    const orderItems: OrderItem[] = payload.items.map((it, idx) => ({
+                      id: String(it.id || `demo-line-${idx}`),
+                      name: it.name,
+                      quantity: Math.max(1, Number(it.quantity) || 1),
+                      price: it.price,
+                      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+                    }))
+                    const order: Order = {
+                      id: '900001',
+                      tableId: tid,
+                      type: 'dine-in',
+                      items: orderItems,
+                      total: pricing.finalTotal,
+                      status: 'preparing',
+                      createdAt: new Date(),
+                      orderNo: `DEMO-${Date.now()}`,
+                      guestCount: Math.max(1, Math.trunc(Number(payload.guestCount ?? 1) || 1)),
+                      ...(String(payload.memo ?? '').trim() ? { memo: String(payload.memo).trim() } : {}),
+                    }
+                    setDemoDineInOrder({ tableId: tid, order })
+                    setPendingDineInOrderId(null)
+                    setServingTableId(tid)
+                    setSelectedTableId(null)
+                    clearCartFromTerminal()
+                    await refetchCurrentStore()
+                    return
+                  }
+                  setPendingDineInOrderId(null)
+                  setDemoDineInOrder(null)
+                  setServingTableId(null)
+                  setSelectedTableId(null)
+                  clearCartFromTerminal()
+                  await refetchCurrentStore()
+                  return
+                }
                 const incomingItems = cartLinesToPosOrderItems(payload.items)
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
@@ -2067,7 +2380,7 @@ export default function PosTerminalPage() {
                       ? { note: String((i as { note?: string }).note).trim() }
                       : {}),
                   }))
-                  getPosPrinterSettings({ storeCode: currentStoreId })
+                  getPrinterSettingsForStore(currentStoreId)
                     .then((settings) => {
                       const orderTypeLabels: Record<string, string> = {
                         dine_in: t('posOrderTypeDineIn') ?? '매장',
@@ -2194,13 +2507,24 @@ export default function PosTerminalPage() {
                 if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
                 setServingTableId(null)
                 setSelectedTableId(null)
-                await refetchStores()
+                await refetchCurrentStore()
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
               }
             }}
             onDineInOrderComplete={async (payload, existingOrderId) => {
               try {
+                if (isPosDemo) {
+                  setPendingReceiptOrderNo(null)
+                  setPendingDineInOrderId(null)
+                  setDemoDineInOrder(null)
+                  setServingTableId(null)
+                  setSelectedTableId(null)
+                  clearCartFromTerminal()
+                  setReceiptData(null)
+                  await refetchCurrentStore()
+                  return
+                }
                 let orderIdToComplete: number | null = null
                 let orderNo: string = ''
                 const pay = payload.payment
@@ -2305,7 +2629,11 @@ export default function PosTerminalPage() {
                 }
                 if (orderIdToComplete != null) {
                   const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
-                  await updatePosOrderStatus({ id: orderIdToComplete, status: targetStatus })
+                  const statusOk = await applyOrderStatusWithRetry({
+                    id: orderIdToComplete,
+                    status: targetStatus,
+                  })
+                  if (!statusOk) return
                   /** 후불(완료)만 즉시 테이블 비움. 선불(paid)은 테이블·내역 유지 */
                   if (!payload.isPrepaid && payload.tableName) {
                     clearTableOrder(currentStoreId, payload.tableName)
@@ -2347,7 +2675,7 @@ export default function PosTerminalPage() {
                 setPendingDineInOrderId(null)
                 setServingTableId(null)
                 setSelectedTableId(null)
-                await refetchStores()
+                await refetchCurrentStore()
                 if (pay) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
@@ -2355,6 +2683,20 @@ export default function PosTerminalPage() {
             }}
             onNonDineOrderComplete={async (payload) => {
               try {
+                if (isPosDemo) {
+                  if (payload.orderType === 'delivery') {
+                    setSelectedDeliveryTargetId(null)
+                    setSelectedDeliveryTargetLabel('')
+                    setDeliveryApp(null)
+                    setDeliveryOrderNo('')
+                  } else if (payload.orderType === 'takeout') {
+                    setSelectedTakeoutTargetId(null)
+                    setSelectedTakeoutTargetLabel('')
+                  }
+                  clearCartFromTerminal()
+                  await refetchCurrentStore()
+                  return
+                }
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                 if (!linkpos.ok) return
                 const res = await savePosOrderWithOffline({
@@ -2435,7 +2777,7 @@ export default function PosTerminalPage() {
                   setSelectedTakeoutTargetId(null)
                   setSelectedTakeoutTargetLabel('')
                 }
-                await refetchStores()
+                await refetchCurrentStore()
                 if (payload.payment) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)
@@ -2444,21 +2786,55 @@ export default function PosTerminalPage() {
           />
   )
   return (
-    <div className="h-full flex flex-col bg-background">
+    <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
+      <PosTerminalTourController
+        activeTab={activeTab}
+        selectedTableId={selectedTableId}
+        servingTableId={servingTableId}
+        cartLineCount={terminalCartLines.length}
+        selectedDeliveryTargetId={selectedDeliveryTargetId}
+        selectedTakeoutTargetId={selectedTakeoutTargetId}
+        paymentModalOpen={tourPaymentModalOpen}
+        paymentTab={tourPaymentTab}
+        paymentCardAmount={tourPaymentCardAmount}
+        paymentQrAmount={tourPaymentQrAmount}
+        paymentDeliveryAppAmount={tourPaymentDeliveryAppAmount}
+        paymentOtherAmount={tourPaymentOtherAmount}
+        needTaxInvoice={tourTaxInvoiceEnabled}
+        paymentCompletedCount={tourPaymentCompletedCount}
+        mainDeviceModeChanged={tourMainDeviceTouched}
+        servingOrderReady={tourServingOrder?.status === 'ready'}
+        liveMenuSearchOpen={liveSearchOpen}
+      />
+      <PosTourOverlay />
+      <div className="flex h-full min-h-0 flex-col">
+        {isPosDemo && (
+          <div
+            className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-3 py-2 text-center text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+          >
+            {t('posDemoBanner')}
+          </div>
+        )}
+        <div className="bg-background flex h-full min-h-0 flex-1 flex-col">
       <POSHeader
+        dataTour={isPosDemo ? 'pos-tour-header' : undefined}
         stores={stores}
         currentStoreId={currentStoreId}
         onStoreChange={setCurrentStoreId}
-        onRefresh={refetchStores}
+        onRefresh={refetchCurrentStore}
         todayCompleted={todayCompleted}
         totalSales={totalSales}
         showBackButton
         canChangeStore={stores.length > 0}
         canAccessAdmin={false}
         isMainPosDevice={isMainPosDevice}
-        onMainPosDeviceChange={setIsMainPosDevice}
+        onMainPosDeviceChange={(v) => {
+          setTourMainDeviceTouched(true)
+          setIsMainPosDevice(v)
+        }}
       />
-      <OfflineBanner onSyncComplete={refetchStores} />
+      <OfflineBanner onSyncComplete={refetchCurrentStore} />
       <div
         className={cn(
           'flex-1 flex min-h-0 min-w-0',
@@ -2499,22 +2875,40 @@ export default function PosTerminalPage() {
               isNarrowViewport && "sticky top-0 z-10"
             )}>
               <div className="flex h-12 min-[640px]:h-10 min-h-[44px] items-center justify-between gap-1 min-[640px]:gap-2 flex-wrap">
-                <TabsList className="h-12 min-[640px]:h-10 min-h-[44px] bg-transparent shrink-0">
-                  <TabsTrigger value="tables" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
+                <TabsList
+                  className="h-12 min-[640px]:h-10 min-h-[44px] bg-transparent shrink-0"
+                  data-tour="pos-tour-tabs-all"
+                >
+                  <TabsTrigger
+                    value="tables"
+                    data-tour="pos-tour-tab-tables"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                  >
                     <LayoutGrid className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posTableStatus')}</span>
                   </TabsTrigger>
-                  <TabsTrigger value="delivery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
+                  <TabsTrigger
+                    value="delivery"
+                    data-tour="pos-tour-tab-delivery"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                  >
                     <Bike className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posOrderTypeDelivery') || '배달'}</span>
                   </TabsTrigger>
-                  <TabsTrigger value="takeout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
+                  <TabsTrigger
+                    value="takeout"
+                    data-tour="pos-tour-tab-takeout"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                  >
                     <Package className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posOrderTypeTakeout') || '포장'}</span>
                   </TabsTrigger>
                 </TabsList>
                 {/* 오른쪽 영역: 탭별 필터(준비중/결제완료/전체) + 실시간 메뉴 검색 — 배달/포장/테이블 동일 UI, 밑줄 정렬 */}
-                <div className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0 w-[min(100%,theme(spacing.52))] min-[640px]:w-44 justify-end self-stretch min-h-0">
+                <div
+                  className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0 w-[min(100%,theme(spacing.52))] min-[640px]:w-44 justify-end self-stretch min-h-0"
+                  data-tour="pos-tour-toolbar-filters"
+                >
                   {activeTab === 'tables' && (
                     <Select
                       value={tableListMode}
@@ -2566,7 +2960,15 @@ export default function PosTerminalPage() {
                       </SelectContent>
                     </Select>
                   )}
-                  <Button size="sm" variant="outline" className="h-9 min-[640px]:h-8 gap-1.5 px-2 min-[640px]:px-3 touch-manipulation shrink-0 rounded-md" onClick={() => setLiveSearchOpen(true)} title={t('posLiveMenuSearch') || '실시간 메뉴 검색'}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 min-[640px]:h-8 gap-1.5 px-2 min-[640px]:px-3 touch-manipulation shrink-0 rounded-md"
+                    onClick={() => setLiveSearchOpen(true)}
+                    title={t('posLiveMenuSearch') || '실시간 메뉴 검색'}
+                    data-tour={isPosDemo ? 'pos-tour-live-menu-search' : undefined}
+                  >
                     <Search className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
                   </Button>
@@ -2587,29 +2989,37 @@ export default function PosTerminalPage() {
                     {app.name}
                   </Button>
                 ))}
-                <span className="text-sm font-medium text-muted-foreground ml-2">{t('posDeliveryOrderNo') || '주문 번호'}</span>
-                <Input
-                  type="text"
-                  placeholder={t('posDeliveryOrderNoPh') || '배달 플랫폼 주문번호'}
-                  value={deliveryOrderNo}
-                  onChange={(e) => setDeliveryOrderNo(e.target.value)}
-                  onFocus={scrollIntoViewOnFocus}
-                  className="h-8 w-32 max-w-full text-sm"
-                />
-                <Button
-                  size="sm"
-                  className="h-8"
-                  onClick={() => {
-                    if (!deliveryApp) return
-                    setDeliveryOrderNo('')
-                    setSelectedDeliveryTargetId('delivery-draft')
-                    const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
-                    setSelectedDeliveryTargetLabel(appLabelEn)
-                  }}
-                  disabled={!deliveryApp}
+                <div
+                  className="flex min-w-0 flex-wrap items-center gap-2 min-[640px]:gap-2"
+                  data-tour={isPosDemo ? 'pos-tour-delivery-order-draft' : undefined}
                 >
-                  + {t('posNewOrder') || '새 주문'}
-                </Button>
+                  <span className="text-sm font-medium text-muted-foreground shrink-0">
+                    {t('posDeliveryOrderNo') || '주문 번호'}
+                  </span>
+                  <Input
+                    type="text"
+                    placeholder={t('posDeliveryOrderNoPh') || '배달 플랫폼 주문번호'}
+                    value={deliveryOrderNo}
+                    onChange={(e) => setDeliveryOrderNo(e.target.value)}
+                    onFocus={scrollIntoViewOnFocus}
+                    className="h-8 w-32 max-w-full text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={() => {
+                      if (!deliveryApp) return
+                      const orderNo = deliveryOrderNo.trim()
+                      if (!orderNo) return
+                      setSelectedDeliveryTargetId('delivery-draft')
+                      const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
+                      setSelectedDeliveryTargetLabel(`${appLabelEn} #${orderNo}`)
+                    }}
+                    disabled={!deliveryApp || !deliveryOrderNo.trim()}
+                  >
+                    + {t('posNewOrder') || '새 주문'}
+                  </Button>
+                </div>
                 <Button
                   size="sm"
                   variant="outline"
@@ -2630,7 +3040,10 @@ export default function PosTerminalPage() {
               </div>
             )}
             {activeTab === 'takeout' && (
-              <div className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0">
+              <div
+                className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0"
+                data-tour="pos-tour-takeout-toolbar"
+              >
                 <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
                   {Array.from({ length: 7 }, (_, i) => i + 1).map((slotNo) => (
                     <Button
@@ -2671,6 +3084,7 @@ export default function PosTerminalPage() {
                   <Button
                     size="sm"
                     className="h-8"
+                    data-tour="pos-tour-takeout-new"
                     onClick={() => {
                       setSelectedTakeoutTargetId('takeout-draft')
                       setSelectedTakeoutTargetLabel(baseTakeoutLabel)
@@ -2715,20 +3129,36 @@ export default function PosTerminalPage() {
                       {t('loading')}
                     </div>
                   )}
-                  {(!loadingTables && currentLayout.length > 0) && (
-                    <div className="h-full min-h-[min(420px,50vh)] min-w-0">
+                  {(!loadingTables && floorLayoutForView.length > 0) && (
+                    <div
+                      className="h-full min-h-[min(420px,50vh)] min-w-0"
+                      data-tour="pos-tour-floor"
+                    >
                       <TableFloorView
-                        layout={currentLayout}
+                        layout={floorLayoutForView}
                         tableListMode={tableListMode}
                         gridCols={30}
                         gridRows={20}
                         getTableStatus={(id, name) => {
                           const tbl = currentStore?.tables.find((t) => t.id === id || t.name === name)
-                          if (!tbl?.order) return null
-                          const items = Array.isArray(tbl.order.items) ? tbl.order.items : []
+                          const order =
+                            demoDineInOrder?.tableId === id ? demoDineInOrder.order : tbl?.order
+                          if (!order) {
+                            const demoVisual = demoTableVisualStatusById.get(id)
+                            if (demoVisual) {
+                              return {
+                                status: demoVisual.status,
+                                createdAt: demoVisual.createdAt,
+                                targetMin: demoVisual.status === 'preparing' ? 12 : 0,
+                                guestCount: demoVisual.guestCount,
+                              }
+                            }
+                            return null
+                          }
+                          const items = Array.isArray(order.items) ? order.items : []
                           const servedCount = items.filter((item) => Boolean(item.servedAt)).length
                           const status: 'preparing' | 'partial_served' | 'completed' =
-                            (tbl.order.status === 'completed' || tbl.order.status === 'ready')
+                            (order.status === 'completed' || order.status === 'ready')
                               ? 'completed'
                               : servedCount > 0
                                 ? 'partial_served'
@@ -2749,12 +3179,12 @@ export default function PosTerminalPage() {
                                 ...items.map((it) => getItemTarget({ id: String(it.id || ''), name: String(it.name || '') }))
                               )
                             : 0
-                          const createdAt = tbl.order.createdAt
-                            ? (tbl.order.createdAt instanceof Date
-                                ? tbl.order.createdAt.toISOString()
-                                : String(tbl.order.createdAt))
+                          const createdAt = order.createdAt
+                            ? (order.createdAt instanceof Date
+                                ? order.createdAt.toISOString()
+                                : String(order.createdAt))
                             : undefined
-                          const guestCount = Math.max(0, Math.trunc(Number(tbl.order.guestCount ?? 0) || 0))
+                          const guestCount = Math.max(0, Math.trunc(Number(order.guestCount ?? 0) || 0))
                           return { status, createdAt, targetMin, guestCount: guestCount > 0 ? guestCount : undefined }
                         }}
                         selectedTableId={selectedTableId ?? servingTableId}
@@ -2774,7 +3204,7 @@ export default function PosTerminalPage() {
                       />
                     </div>
                   )}
-                  {!loadingTables && currentLayout.length === 0 && currentStore && (
+                  {!loadingTables && floorLayoutForView.length === 0 && currentStore && (
                     <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm p-4 text-center">
                       {t('posTableLayoutEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 설정 > 테이블 구성에서 배치해 주세요.'}
                     </div>
@@ -2886,8 +3316,8 @@ export default function PosTerminalPage() {
               orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
               deliveryApps={deliveryAppsFromApi}
               order={selectedDeliveryOrder}
-              onPackaged={refetchStores}
-              onCancel={refetchStores}
+              onPackaged={refetchCurrentStore}
+              onCancel={refetchCurrentStore}
               onPay={() => {
                 if (!selectedDeliveryOrder) return
                 setPendingDeliveryOrderId(Number(selectedDeliveryOrder.id))
@@ -2921,13 +3351,23 @@ export default function PosTerminalPage() {
               tableName={servingTable.name}
               order={servingTable.order}
               allTables={currentStore?.tables ?? []}
-              onServed={refetchStores}
+              isDemo={isPosDemo}
+              onDemoOrderReplace={
+                isPosDemo && demoDineInOrder?.tableId === servingTableId && servingTableId
+                  ? (next) => setDemoDineInOrder({ tableId: servingTableId, order: next })
+                  : undefined
+              }
+              onServed={refetchCurrentStore}
               onAddOrder={() => {
                 if (!servingTableId) return
                 setServingTableId(null)
                 setSelectedTableId(servingTableId)
               }}
               onPay={() => {
+                if (isPosDemo && demoDineInOrder?.tableId === servingTableId) {
+                  void appAlert(t('posDemoTablePaySkipped') || '')
+                  return
+                }
                 if (!servingTableId || !servingTable?.order) return
                 setPendingDineInOrderId(Number(servingTable.order.id))
                 setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
@@ -2948,18 +3388,21 @@ export default function PosTerminalPage() {
                 if (!servingTable?.order || !servingTable?.name) return
                 clearTableOrder(currentStoreId, servingTable.name)
                 setServingTableId(null)
-                await refetchStores()
+                await refetchCurrentStore()
               }}
-              onCancel={refetchStores}
-              onClose={() => setServingTableId(null)}
+              onCancel={refetchCurrentStore}
+              onClose={() => {
+                setServingTableId(null)
+                setDemoDineInOrder(null)
+              }}
               t={t}
             />
           ) : activeTab === 'takeout' && selectedTakeoutOrder ? (
             <TakeoutOrderPanel
               orderLabel={selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id)}
               order={selectedTakeoutOrder}
-              onPackaged={refetchStores}
-              onCancel={refetchStores}
+              onPackaged={refetchCurrentStore}
+              onCancel={refetchCurrentStore}
               onPay={() => {
                 if (!selectedTakeoutOrder) return
                 setPendingTakeoutOrderId(Number(selectedTakeoutOrder.id))
@@ -2998,11 +3441,13 @@ export default function PosTerminalPage() {
             </div>
           )
         })()}
+      </div>
       <LiveMenuSearchDialog
         open={liveSearchOpen}
         onOpenChange={setLiveSearchOpen}
         storeCode={currentStoreId}
         t={t}
+        isDemo={isPosDemo}
       />
       <PosReceiptModal
         onOpenChange={(open) => !open && setReceiptData(null)}
@@ -3057,12 +3502,13 @@ export default function PosTerminalPage() {
         onValueChange={setDeliveryEditOrderNoValue}
         onSaved={async (newTableName) => {
           setSelectedDeliveryTargetLabel(newTableName)
-          await refetchStores()
+          await refetchCurrentStore()
         }}
         t={t}
         deliveryApps={deliveryAppsFromApi}
       />
+        </div>
       </div>
-    </div>
+    </PosTourProvider>
   )
 }

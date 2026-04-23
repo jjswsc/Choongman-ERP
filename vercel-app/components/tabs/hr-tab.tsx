@@ -724,7 +724,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                     </div>
                     {(h.status === "반려" || h.status === "Rejected") && h.rejectReason && (
                       <p className="text-xs text-destructive/90 mt-1.5 border-l-2 border-destructive/50 pl-2">
-                        {t("leaveRejectReasonLabel") || "반려 사유"}: {h.rejectReason}
+                        {t("leaveRejectReasonLabel") || "Reject Reason"}: {h.rejectReason}
                       </p>
                     )}
                   </div>
@@ -867,8 +867,8 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                 src={certPreviewUrl}
                 alt={t("leaveCertView")}
                 imgClassName="w-full h-auto max-h-[70vh] object-contain"
-                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-                rotateRightLabel={t("imageRotateRight") || "시계"}
+                rotateLeftLabel={t("imageRotateLeft") || "Rotate Left"}
+                rotateRightLabel={t("imageRotateRight") || "Rotate Right"}
               />
             </div>
           )}

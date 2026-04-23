@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -517,9 +519,8 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
 export function InteriorExpenseContent({ projectId, t }: InteriorExpenseContentProps) {
   return (
     <Tabs defaultValue="expense" className={adminTabsRootCn}>
-      <div className={adminTabsBarCn}>
-        <div className={adminTabsScrollCn}>
-          <TabsList className={adminTabsListRowCn}>
+      <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="expense" className={adminTabsTriggerCn}>
               <Banknote className={adminTabsIconCn} aria-hidden />
               {t("interiorExpenseTab")}
@@ -529,8 +530,7 @@ export function InteriorExpenseContent({ projectId, t }: InteriorExpenseContentP
               {t("interiorDirectPurchase")}
             </TabsTrigger>
           </TabsList>
-        </div>
-      </div>
+          </AdminTabsBarWithHelp>
       <TabsContent value="expense" className={adminTabsContentCn}>
         <InteriorExpenseTab projectId={projectId} t={t} />
       </TabsContent>

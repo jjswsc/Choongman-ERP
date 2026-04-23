@@ -16,6 +16,7 @@ import {
   markPosOrderItemServed,
   posDineInTableMerge,
   posDineInTableMove,
+  type PosOrderStatusUpdateResult,
   updatePosOrderStatus,
 } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ import { Check, CheckCircle, Users, XCircle, ArrowRightLeft, Combine, LayoutGrid
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
+import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 
 export interface TableOrderPanelProps {
   tableName: string
@@ -41,6 +43,9 @@ export interface TableOrderPanelProps {
   onCancel?: () => void
   onClose?: () => void
   t?: (key: string) => string
+  /** 데모: 서빙 API 없이 부모 state만 갱신 */
+  isDemo?: boolean
+  onDemoOrderReplace?: (order: Order) => void
 }
 
 export function TableOrderPanel({
@@ -54,6 +59,8 @@ export function TableOrderPanel({
   onCancel,
   onClose,
   t: tProp,
+  isDemo,
+  onDemoOrderReplace,
 }: TableOrderPanelProps) {
   const { lang } = useLang()
   const tDefault = useT(lang)
@@ -83,6 +90,20 @@ export function TableOrderPanel({
 
   const toggleItemServed = async (itemId: string) => {
     if (!order) return
+    if (isDemo && onDemoOrderReplace) {
+      const nextServed = !itemServed[itemId]
+      const nextItems = order.items.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              servedAt: nextServed ? new Date().toISOString() : null,
+              servedBy: nextServed ? 'demo' : null,
+            }
+          : it
+      )
+      onDemoOrderReplace({ ...order, items: nextItems })
+      return
+    }
     const id = Number(order.id)
     if (Number.isNaN(id)) return
     if (!posOrderHasServerId(order.id)) {
@@ -164,7 +185,29 @@ export function TableOrderPanel({
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
     setCancelling(true)
     try {
-      await updatePosOrderStatus({ id: Number(order.id), status: 'cancelled' })
+      const first = await updatePosOrderStatus({ id: Number(order.id), status: 'cancelled' })
+      const resolved = await (async () => {
+        if (first.success) return first
+        const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
+        const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+        if (!canRetry) {
+          await appAlert(msg)
+          return null
+        }
+        const retryAsk = `${msg}\n\n후속 처리를 다시 시도할까요?`
+        if (!await appConfirm(retryAsk)) return null
+        const retried = await updatePosOrderStatus({
+          id: Number(order.id),
+          status: 'cancelled',
+          retrySideEffects: true,
+        })
+        if (!retried.success) {
+          await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+          return null
+        }
+        return retried
+      })()
+      if (!resolved) return
       onCancel?.()
       onClose?.()
     } catch (e) {
@@ -180,13 +223,39 @@ export function TableOrderPanel({
 
   const handleServeComplete = async () => {
     if (!order || order.status === 'completed') return
+    if (isDemo && onDemoOrderReplace) {
+      onDemoOrderReplace({ ...order, status: 'ready' })
+      onServed?.()
+      return
+    }
     const id = Number(order.id)
     if (Number.isNaN(id)) return
     try {
-      await updatePosOrderStatus({ id, status: 'ready' })
+      const first = await updatePosOrderStatus({ id, status: 'ready' })
+      const resolved: PosOrderStatusUpdateResult | null = await (async () => {
+        if (first.success) return first
+        const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
+        const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+        if (!canRetry) {
+          await appAlert(msg)
+          return null
+        }
+        if (!await appConfirm(`${msg}\n\n후속 처리를 다시 시도할까요?`)) return null
+        const retried = await updatePosOrderStatus({
+          id,
+          status: 'ready',
+          retrySideEffects: true,
+        })
+        if (!retried.success) {
+          await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+          return null
+        }
+        return retried
+      })()
+      if (!resolved) return
       onServed?.()
     } catch (e) {
-      console.error('updatePosOrderStatus:', e)
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }
 
@@ -254,7 +323,7 @@ export function TableOrderPanel({
   const tableDisplayName = translateReceiptTableDisplayName(tableName, t)
 
   return (
-    <div className="h-full flex flex-col border-l border-border bg-card">
+    <div className="h-full flex flex-col border-l border-border bg-card" data-tour="pos-tour-serving-panel">
       <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span
@@ -363,7 +432,26 @@ export function TableOrderPanel({
                 onClick={async () => {
                   if (!order) return
                   try {
-                    await updatePosOrderStatus({ id: Number(order.id), status: 'completed' })
+                    const id = Number(order.id)
+                    const first = await updatePosOrderStatus({ id, status: 'completed' })
+                    if (!first.success) {
+                      const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
+                      const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+                      if (!canRetry) {
+                        await appAlert(msg)
+                        return
+                      }
+                      if (!await appConfirm(`${msg}\n\n후속 처리를 다시 시도할까요?`)) return
+                      const retried = await updatePosOrderStatus({
+                        id,
+                        status: 'completed',
+                        retrySideEffects: true,
+                      })
+                      if (!retried.success) {
+                        await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+                        return
+                      }
+                    }
                     await onLeaveTable?.()
                   } catch (e) {
                     await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
@@ -405,7 +493,7 @@ export function TableOrderPanel({
             </>
           ) : (
             <>
-              <ScrollArea className="flex-1 max-h-[min(360px,45vh)] rounded-md border">
+              <ScrollArea className="flex-1 max-h-[min(360px,45vh)] rounded-md border" data-tour="pos-tour-serving-items">
                 <ul className="p-1.5 space-y-1">
                   {order.items.map((item) => {
                     const served = itemServed[item.id]
@@ -492,7 +580,12 @@ export function TableOrderPanel({
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
 
-              <Button onClick={handleServeComplete} className="w-full h-11 text-base font-semibold" disabled={!allServed}>
+              <Button
+                data-tour="pos-tour-serving-complete"
+                onClick={handleServeComplete}
+                className="w-full h-11 text-base font-semibold"
+                disabled={!allServed}
+              >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 {allServed
                   ? t('posTableStatusServed') || '서빙 완료'

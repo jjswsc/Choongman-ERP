@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessSettings } from '@/lib/permissions'
+import { normalizeFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store'
 import {
   getFranchiseeMultiStoreSettings,
   saveFranchiseeMultiStoreSettings,
-  normalizeFranchiseeMultiStoreSettings,
-} from '@/lib/franchisee-multi-store'
+} from '@/lib/franchisee-multi-store-settings-server'
 
 /** 가맹점주 복수 매장 전역 설정 조회 (로그인한 관리자) */
 export async function GET(request: NextRequest) {

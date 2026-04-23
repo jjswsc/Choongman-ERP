@@ -181,6 +181,15 @@ CREATE TABLE IF NOT EXISTS public.fixed_assets (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 기존 DB에 fixed_assets가 이미 있으면 CREATE TABLE IF NOT EXISTS가 컬럼을 추가하지 않으므로 보강
+ALTER TABLE IF EXISTS public.fixed_assets
+  ADD COLUMN IF NOT EXISTS asset_account_code TEXT NULL DEFAULT '1460',
+  ADD COLUMN IF NOT EXISTS accumulated_depreciation_account_code TEXT NULL DEFAULT '1470',
+  ADD COLUMN IF NOT EXISTS depreciation_expense_account_code TEXT NULL DEFAULT '5500',
+  ADD COLUMN IF NOT EXISTS disposed_proceeds NUMERIC(14,2) NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS disposal_gain_loss_amount NUMERIC(14,2) NULL,
+  ADD COLUMN IF NOT EXISTS disposal_journal_entry_id BIGINT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_fixed_assets_store ON public.fixed_assets(store_name);
 CREATE INDEX IF NOT EXISTS idx_fixed_assets_status ON public.fixed_assets(status);
 CREATE INDEX IF NOT EXISTS idx_fixed_assets_acquisition_date ON public.fixed_assets(acquisition_date);
@@ -870,3 +879,424 @@ COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_hall_order_html 
   'Windows 설치형 POS: 홀/터미널 주문서 인쇄 후 절단';
 COMMENT ON COLUMN public.pos_printer_settings.esc_pos_cut_after_payment_receipt_html IS
   'Windows 설치형 POS: 결제 영수증 인쇄 후 절단';
+
+-- ============================================================
+-- Employees: 안전 소프트삭제/재직상태 업그레이드 (42710 방어 포함)
+-- ============================================================
+begin;
+
+alter table if exists public.employees
+  add column if not exists employment_status text,
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_by text,
+  add column if not exists delete_reason text;
+
+update public.employees
+set employment_status = case
+  when coalesce(trim(employment_status), '') <> '' then employment_status
+  when resign_date is not null then 'resigned'
+  else 'active'
+end;
+
+alter table if exists public.employees
+  alter column employment_status set default 'active';
+
+do $$
+  declare
+    cname constant text := 'employees_employment_status_chk';
+    have_chk boolean;
+  begin
+    have_chk :=
+      exists (
+        select 1
+        from information_schema.table_constraints tc
+        where tc.constraint_type = 'CHECK'
+          and tc.constraint_schema = 'public'
+          and tc.table_name = 'employees'
+          and tc.constraint_name = cname
+      )
+      or exists (
+        select 1
+        from pg_constraint c
+        where c.conname = cname
+          and c.conrelid = 'public.employees'::regclass
+      );
+
+    if not have_chk then
+      begin
+        alter table public.employees
+          add constraint employees_employment_status_chk
+          check (employment_status in ('active', 'leave', 'resigned', 'suspended'))
+          not valid;
+        have_chk := true;
+      exception
+        when sqlstate '42710' then
+          raise notice 'Constraint % already on employees; skip add.', cname;
+          have_chk := true;
+      end;
+    end if;
+
+    if have_chk then
+      alter table public.employees
+        validate constraint employees_employment_status_chk;
+    end if;
+  end
+$$;
+
+create table if not exists public.employee_change_logs (
+  id bigserial primary key,
+  employee_id bigint not null,
+  field_name text not null,
+  old_value text,
+  new_value text,
+  changed_by text,
+  change_reason text,
+  changed_at timestamptz not null default now()
+);
+
+create index if not exists idx_employee_change_logs_employee_id
+  on public.employee_change_logs(employee_id, changed_at desc);
+
+commit;
+
+-- ============================================================
+-- Logistics: 하드닝 + 무결성 점검 + KPI
+-- ============================================================
+begin;
+
+do $$
+begin
+  if to_regclass('public.stock_logs') is null then
+    raise notice 'public.stock_logs table does not exist. Skip stock_logs hardening.';
+    return;
+  end if;
+
+  create index if not exists idx_stock_logs_outbound_active_vendor_date
+    on public.stock_logs(log_type, is_deleted, vendor_target, log_date desc)
+    where log_type in ('Outbound', 'ForceOutbound', 'ForcePush');
+
+  create index if not exists idx_stock_logs_force_outbound_active_id
+    on public.stock_logs(id)
+    where log_type = 'ForceOutbound' and coalesce(is_deleted, false) = false;
+end
+$$;
+
+do $$
+begin
+  if to_regclass('public.outbound_delete_events') is null then
+    raise notice 'public.outbound_delete_events table does not exist. Skip request_key hardening.';
+    return;
+  end if;
+
+  create index if not exists idx_outbound_delete_events_request_key
+    on public.outbound_delete_events(request_key)
+    where request_key is not null and btrim(request_key) <> '';
+
+  if not exists (
+    select 1
+    from pg_indexes
+    where schemaname = 'public'
+      and indexname = 'ux_outbound_delete_events_request_key_norm'
+  ) then
+    if exists (
+      select 1
+      from public.outbound_delete_events e
+      where e.request_key is not null and btrim(e.request_key) <> ''
+      group by lower(btrim(e.request_key))
+      having count(*) > 1
+    ) then
+      raise notice 'Skip unique request_key index: duplicated normalized request_key exists.';
+    else
+      execute '
+        create unique index ux_outbound_delete_events_request_key_norm
+          on public.outbound_delete_events ((lower(btrim(request_key))))
+          where request_key is not null and btrim(request_key) <> ''''
+      ';
+    end if;
+  end if;
+end
+$$;
+
+do $$
+begin
+  if to_regclass('public.receivable_transactions') is null then
+    raise notice 'public.receivable_transactions table does not exist. Skip receivable guard.';
+    return;
+  end if;
+  if to_regclass('public.stock_logs') is null then
+    raise notice 'public.stock_logs table does not exist. Skip receivable guard.';
+    return;
+  end if;
+
+  execute $fn$
+    create or replace function public.guard_receivable_force_outbound_active()
+    returns trigger
+    language plpgsql
+    as $body$
+    declare
+      v_ref_type text := upper(btrim(coalesce(new.ref_type, '')));
+      v_ref_id bigint := coalesce(new.ref_id, 0);
+      v_ok boolean := false;
+    begin
+      if v_ref_type <> 'FORCEOUTBOUND' then
+        return new;
+      end if;
+
+      if v_ref_id <= 0 then
+        raise exception 'ForceOutbound receivable requires positive ref_id';
+      end if;
+
+      select exists (
+        select 1
+        from public.stock_logs s
+        where s.id = v_ref_id
+          and s.log_type = 'ForceOutbound'
+          and coalesce(s.is_deleted, false) = false
+      ) into v_ok;
+
+      if not v_ok then
+        raise exception 'Cannot reference deleted/non-existing ForceOutbound stock_log (ref_id=%)', v_ref_id;
+      end if;
+
+      return new;
+    end
+    $body$;
+  $fn$;
+
+  execute 'alter function public.guard_receivable_force_outbound_active() set search_path = public';
+  execute 'drop trigger if exists trg_receivable_force_outbound_active_guard on public.receivable_transactions';
+  execute '
+    create trigger trg_receivable_force_outbound_active_guard
+    before insert or update of ref_type, ref_id
+    on public.receivable_transactions
+    for each row
+    execute function public.guard_receivable_force_outbound_active()
+  ';
+end
+$$;
+
+commit;
+
+-- [Q1] 삭제된 ForceOutbound인데 미수금(ref ForceOutbound)이 남아있는 건
+select
+  s.id as stock_log_id,
+  s.vendor_target as store_name,
+  s.log_date,
+  rt.id as receivable_id,
+  rt.amount
+from public.stock_logs s
+join public.receivable_transactions rt
+  on rt.ref_type = 'ForceOutbound'
+ and rt.ref_id = s.id
+where s.log_type = 'ForceOutbound'
+  and coalesce(s.is_deleted, false) = true
+order by s.id desc
+limit 200;
+
+-- [Q2] ForceOutbound 미수금이 삭제/미존재 stock_logs를 참조하는 고아 레코드
+select
+  rt.id as receivable_id,
+  rt.store_name,
+  rt.ref_id as stock_log_id,
+  rt.amount,
+  case
+    when s.id is null then 'missing_stock_log'
+    when coalesce(s.is_deleted, false) = true then 'deleted_stock_log'
+    when s.log_type <> 'ForceOutbound' then 'wrong_log_type'
+    else 'ok'
+  end as issue
+from public.receivable_transactions rt
+left join public.stock_logs s
+  on s.id = rt.ref_id
+where rt.ref_type = 'ForceOutbound'
+  and (
+    s.id is null
+    or coalesce(s.is_deleted, false) = true
+    or s.log_type <> 'ForceOutbound'
+  )
+order by rt.id desc
+limit 200;
+
+-- [Q3] 주문 출고가 모두 삭제됐는데 Order 미수가 남아있는 건
+select
+  o.id as order_id,
+  o.store_name,
+  sum(rt.amount) as receivable_amount,
+  count(s.id) as active_outbound_log_count
+from public.orders o
+join public.receivable_transactions rt
+  on rt.ref_type = 'Order'
+ and rt.ref_id = o.id
+left join public.stock_logs s
+  on s.order_id = o.id
+ and s.log_type = 'Outbound'
+ and coalesce(s.is_deleted, false) = false
+group by o.id, o.store_name
+having count(s.id) = 0
+order by o.id desc
+limit 200;
+
+-- [Q4] 매장별 미수 잔액 음수 (수금 초과 의심)
+select
+  rt.store_name,
+  sum(rt.amount) as outstanding
+from public.receivable_transactions rt
+group by rt.store_name
+having sum(rt.amount) < 0
+order by outstanding asc;
+
+-- [Q5] 삭제 이벤트 request_key 중복(재시도 충돌/중복처리 위험)
+select
+  lower(btrim(e.request_key)) as normalized_request_key,
+  count(*) as cnt,
+  min(e.created_at) as first_seen_at,
+  max(e.created_at) as last_seen_at
+from public.outbound_delete_events e
+where e.request_key is not null
+  and btrim(e.request_key) <> ''
+group by lower(btrim(e.request_key))
+having count(*) > 1
+order by cnt desc, last_seen_at desc
+limit 200;
+
+-- [Q6] 오늘(방콕) 삭제 처리 요약
+with bkk_now as (
+  select timezone('Asia/Bangkok', now()) as now_bkk
+),
+bkk_window as (
+  select
+    date_trunc('day', now_bkk) as start_bkk,
+    date_trunc('day', now_bkk) + interval '1 day' as end_bkk
+  from bkk_now
+)
+select
+  e.mode,
+  count(*) as event_count,
+  coalesce(sum(e.deleted_count), 0) as deleted_row_count
+from public.outbound_delete_events e
+cross join bkk_window w
+where timezone('Asia/Bangkok', e.created_at) >= w.start_bkk
+  and timezone('Asia/Bangkok', e.created_at) < w.end_bkk
+group by e.mode
+order by event_count desc;
+
+-- [KPI-1] 일자별 출고 처리량(건수/수량) + 강제출고 비율
+with params as (
+  select
+    (timezone('Asia/Bangkok', now())::date - 29)::date as start_date_bkk,
+    timezone('Asia/Bangkok', now())::date as end_date_bkk
+),
+days as (
+  select generate_series(
+    (select start_date_bkk from params),
+    (select end_date_bkk from params),
+    interval '1 day'
+  )::date as biz_date
+),
+base as (
+  select
+    s.log_date::date as biz_date,
+    s.log_type,
+    count(*) as row_count,
+    sum(abs(coalesce(s.qty, 0)))::numeric as qty_sum
+  from public.stock_logs s
+  cross join params p
+  where s.log_date::date between p.start_date_bkk and p.end_date_bkk
+    and s.log_type in ('Outbound', 'ForceOutbound', 'ForcePush')
+    and coalesce(s.is_deleted, false) = false
+  group by s.log_date::date, s.log_type
+),
+pivoted as (
+  select
+    b.biz_date,
+    sum(b.row_count) as outbound_count,
+    sum(b.qty_sum) as outbound_qty,
+    sum(case when b.log_type in ('ForceOutbound', 'ForcePush') then b.row_count else 0 end) as force_outbound_count
+  from base b
+  group by b.biz_date
+)
+select
+  d.biz_date,
+  coalesce(p.outbound_count, 0) as outbound_count,
+  coalesce(p.outbound_qty, 0)::numeric as outbound_qty,
+  coalesce(p.force_outbound_count, 0) as force_outbound_count,
+  case
+    when coalesce(p.outbound_count, 0) = 0 then 0::numeric
+    else round((p.force_outbound_count::numeric / p.outbound_count::numeric) * 100, 2)
+  end as force_outbound_ratio_pct
+from days d
+left join pivoted p on p.biz_date = d.biz_date
+order by d.biz_date asc;
+
+-- [KPI-2] 매장별 미수 잔액 TOP (현재 스냅샷)
+select
+  rt.store_name,
+  sum(rt.amount)::numeric as outstanding_amount
+from public.receivable_transactions rt
+group by rt.store_name
+order by outstanding_amount desc
+limit 30;
+
+-- [KPI-3] 매장별 출고 삭제율 (최근 30일)
+with params as (
+  select
+    (timezone('Asia/Bangkok', now())::date - 29)::date as start_date_bkk,
+    timezone('Asia/Bangkok', now())::date as end_date_bkk
+),
+agg as (
+  select
+    coalesce(nullif(btrim(s.vendor_target), ''), '미지정') as store_name,
+    count(*) filter (
+      where s.log_type in ('Outbound', 'ForceOutbound', 'ForcePush')
+    ) as total_outbound_rows,
+    count(*) filter (
+      where s.log_type in ('Outbound', 'ForceOutbound', 'ForcePush')
+        and coalesce(s.is_deleted, false) = true
+    ) as deleted_outbound_rows
+  from public.stock_logs s
+  cross join params p
+  where s.log_date::date between p.start_date_bkk and p.end_date_bkk
+  group by coalesce(nullif(btrim(s.vendor_target), ''), '미지정')
+)
+select
+  a.store_name,
+  a.total_outbound_rows,
+  a.deleted_outbound_rows,
+  case
+    when a.total_outbound_rows = 0 then 0::numeric
+    else round((a.deleted_outbound_rows::numeric / a.total_outbound_rows::numeric) * 100, 2)
+  end as delete_ratio_pct
+from agg a
+where a.total_outbound_rows > 0
+order by delete_ratio_pct desc, a.total_outbound_rows desc;
+
+-- [KPI-4] 삭제 이벤트 일자별 건수/삭제행수 (최근 30일, 방콕 기준)
+with params as (
+  select
+    (timezone('Asia/Bangkok', now())::date - 29)::date as start_date_bkk,
+    timezone('Asia/Bangkok', now())::date as end_date_bkk
+),
+days as (
+  select generate_series(
+    (select start_date_bkk from params),
+    (select end_date_bkk from params),
+    interval '1 day'
+  )::date as biz_date
+),
+events as (
+  select
+    timezone('Asia/Bangkok', e.created_at)::date as biz_date,
+    count(*) as event_count,
+    coalesce(sum(e.deleted_count), 0) as deleted_row_count
+  from public.outbound_delete_events e
+  cross join params p
+  where timezone('Asia/Bangkok', e.created_at)::date between p.start_date_bkk and p.end_date_bkk
+  group by timezone('Asia/Bangkok', e.created_at)::date
+)
+select
+  d.biz_date,
+  coalesce(e.event_count, 0) as event_count,
+  coalesce(e.deleted_row_count, 0) as deleted_row_count
+from days d
+left join events e on e.biz_date = d.biz_date
+order by d.biz_date asc;

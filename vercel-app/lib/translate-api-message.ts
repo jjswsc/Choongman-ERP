@@ -134,6 +134,12 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "지급 처리되었습니다.": "paymentProcessed",
   [ACCOUNT_SUBJECT_HEADER_MESSAGE_KO]: "accountSubjectHeaderNotAllowed",
   "존재하지 않는 계정과목입니다.": "accountSubjectNotFound",
+  "yearMonth(YYYY-MM)가 필요합니다.": "depYearMonthRequired",
+  "자산 ID가 필요합니다.": "fixedAssetIdRequired",
+  "해당 자산이 없습니다.": "fixedAssetNotFound",
+  "자산이 처분 처리되었습니다.": "fixedAssetDisposedSuccess",
+  "자산이 복구되었습니다.": "fixedAssetRestoredSuccess",
+  "동일한 자산코드가 이미 있습니다.": "fixedAssetCodeDuplicate",
 
   // 매장 수리 사진 Storage
   "수리 사진 저장소가 설정되지 않았습니다.": "repair_photo_storage_not_configured",
@@ -146,6 +152,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // verify-auth / 공통 API
   "인증이 필요합니다. 다시 로그인해 주세요.": "msg_auth_required_relogin",
+  "매장(store)을 지정하세요.": "companyHybridErrStoreRequired",
+  "이 매장에 대한 권한이 없습니다.": "companyHybridErrStoreForbidden",
+  "전체 문서 조회 권한이 없습니다.": "companyHybridErrListAllForbidden",
   "본사 권한이 필요합니다.": "msg_office_permission_required",
   "매니저 이상 권한이 필요합니다.": "msg_manager_or_higher_required",
   "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
@@ -190,6 +199,16 @@ export function translateApiMessage(
     return t("inSaveSuccess")
   if (/^✅ \d+건의 강제 출고/.test(trimmed))
     return t("outSaveSuccess")
+  // 감가상각: "12건 분개되었습니다."
+  const depPostedMatch = trimmed.match(/^(\d+)건 분개되었습니다\.$/)
+  if (depPostedMatch)
+    return t("dep_runResultPosted").replace("{count}", depPostedMatch[1]!)
+  // 감가상각 미리보기: "12건 예상 (합계 ฿1,234)"
+  const depPreviewMatch = trimmed.match(/^(\d+)건 예상 \(합계 ฿(.+)\)$/)
+  if (depPreviewMatch)
+    return t("dep_runResultPreview")
+      .replace("{count}", depPreviewMatch[1]!)
+      .replace("{amount}", depPreviewMatch[2]!)
   // 방문: "✅ 방문시작 완료!" / "✅ 방문종료 완료! (30분 체류)"
   const visitMatch = trimmed.match(/^✅ (방문시작|방문종료) 완료!( \((\d+)분 체류\))?$/)
   if (visitMatch)

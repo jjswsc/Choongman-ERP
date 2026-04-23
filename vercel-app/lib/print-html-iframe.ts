@@ -126,9 +126,20 @@ export function printHtmlInHiddenIframe(
   if (printDelayMs > 0) {
     setTimeout(invokePrint, printDelayMs)
   } else {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(invokePrint)
-    })
+    /**
+     * Capacitor(안드로이드) WebView 등: 이중 rAF는 대기만 늘릴 뿐 안정성 이득이 작은 경우가 많아 1회로 줄임.
+     * 데스크톱 Chromium은 기존처럼 2프레임 대기(레이아웃·폰트 안정).
+     */
+    const prePrintRafPasses =
+      typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent) ? 1 : 2
+    const schedulePrePrint = (remaining: number) => {
+      if (remaining <= 0) {
+        invokePrint()
+        return
+      }
+      requestAnimationFrame(() => schedulePrePrint(remaining - 1))
+    }
+    schedulePrePrint(prePrintRafPasses)
   }
   setTimeout(() => {
     clearTimeout(startGuardTimer)

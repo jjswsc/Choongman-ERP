@@ -1,0 +1,33 @@
+---
+description: 사이드바/관리자 메뉴 변경 시 인앱 도움말(helpSum·레지스트리) 동기화
+alwaysApply: true
+---
+
+# ERP 인앱 도움말 동기화
+
+관리자 UI를 **바꿀 때마다** 아래를 같은 작업(같은 PR) 안에서 함께 갱신한다. 사이드바만 올리고 도움말을 비우지 않는다.
+
+**UI 위치(요약)**: **(1) 상단 바** `[이 화면]`(책 아이콘) 시트 + **(2) `/admin/help`**(전체 메뉴 목록·검색). **각 사이드바 메뉴마다** `helpSum_*`(이 메뉴) + `helpHow_*`(사용 방법)이 i18n에 있어야 하고, 그 **해당 경로**에서만 [`HelpSumHowBlocks`](vercel-app/components/erp/help-sum-how-blocks.tsx)로 시트·(있다면)화면 `도움말` 탭에 보인다. **한 화면에 사이드바 전체를 나열하지 않는다**(예: 업무일지 `도움말`은 `helpSum_admin_work_log`만). 전체 목록은 `ErpSidebarHelpPanel`·도움말 센터용. (입고/급여 `embedded`는 전용 가이드.) 1줄 힌트: `AdminHelpHintLine`.
+
+## 1) 메뉴(경로)를 추가·이동·이름(키) 변경·제거할 때
+
+- **소스**: [`vercel-app/components/erp/erp-sidebar.tsx`](vercel-app/components/erp/erp-sidebar.tsx)의 `mainItems` / `menuSections` 및 `getErpNavItemsForHelp()`(같은 파일)가 “단일 목록”이다.
+- **제거한 `href`**: i18n의 해당 `helpSum_*` 키를 정리할 수 있으면 정리한다(또는 팀 정책에 따라 deprecated 주석/남김).
+- **새 `href`**: `hrefToHelpSummaryKey` 규칙에 맞는 `helpSum_*` 키를 **최소 `ko` + `en`** in [`vercel-app/lib/i18n.ts`](vercel-app/lib/i18n.ts)에 추가한다. (다른 UI 언어는 `useT`가 en에 폴백할 수 있으나, 팀에서 다국어를 쓰면 동일 키를 그 언어 블록에도 넣는다.) `helpHow_*`도 동일 키 규칙. **사이드바·도움말 센터 항목 수**는 `getErpNavItemsForHelp().length`와 같아야 하며(현재 [`ERP_NAV_HELP_ITEM_COUNT`](vercel-app/components/erp/erp-sidebar.tsx)), 메뉴를 늘리면 i18n 쌍을 그만큼 늘린다(도움말 센터 1행 = 사이드바 1행).
+- **본사 vs 가맹(매장)**: 문구가 다르면 [`resolveHelpSummary`](vercel-app/lib/admin-help-registry.ts)가 `helpSum_<경로>_office` / `helpSum_<경로>_franchise`를 먼저 쓰고, 없으면 기본 `helpSum_<경로>`로 떨어진다. 역할: `getAdminHelpAudienceFromRole`(본사/회계=office, 그 외=franchise). 센터 상단은 `adminHelpCenterSub_office` / `adminHelpCenterSub_franchise`도 동일 규칙.
+- **요약 문구**: 한 화면의 역할·주의를 **한~몇 문장**으로 쓴다(긴 매뉴얼은 입고/급여처럼 전용 가이드 컴포넌트 또는 `embedded` 분기).
+
+## 2) 도움말 레지스트리·UI
+
+- [`vercel-app/lib/admin-help-registry.ts`](vercel-app/lib/admin-help-registry.ts): `EXTRA_HELP_ONLY_ITEMS`(예: `/admin/help`), `EMBEDDED_BY_HREF`(입고·급여 등)와 맞는지 확인한다. 새 “긴 가이드” 화면이면 동일 패턴으로 `getEmbeddedForHref` 분기와 [`vercel-app/components/erp/erp-page-help.tsx`](vercel-app/components/erp/erp-page-help.tsx)에 렌더만 추가하는 것을 우선한다(중복 문구 금지).
+- **헬프 센터** [`vercel-app/app/admin/help/`](vercel-app/app/admin/help/): `getErpNavItemsForHelp` + 레지스트리로 목록이 나오므로, **1)만 지키면** 별도 수동 목록을 늘리지 않는다.
+
+## 3) 권한·접근이 바뀔 때
+
+- `canManagerAccessPath` / `canPosStaffAccessPath` 등으로 메뉴 노출이 바뀌면, 도움말 문구에 “권한에 따라 안 보일 수 있음” 같은 **한 줄**을 넣을지 팀에 맡기되, **새로 생긴 경로**는 1)의 `helpSum_*`는 여전히 유지해도 된다(검색·권한 있는 사용자용).
+
+## 4) PR 체크리스트 (에이전트/리뷰)
+
+- [ ] `erp-sidebar`에 메뉴 변경이 있으면 `helpSum_*`(ko+en) 추가/수정/삭제 반영; 본사/가맹이 다르면 `*_office` / `*_franchise`도
+- [ ] 임베드형 가이드(입고/급여급)면 `admin-help-registry` + `erp-page-help` 분기 확인
+- [ ] 불필요한 중복 설명(페이지 본문 vs 시트) 없음

@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useLayoutEffect } from "react"
+import { useEffect, useLayoutEffect, Suspense } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
+import { AdminContentHelpTabShell } from "@/components/erp/admin-content-help-tab-shell"
 import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
@@ -127,7 +128,9 @@ export default function AdminLayout({
         <SidebarInset>
           <ErpHeader />
           <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
-          {children}
+          <Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
+            <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>
+          </Suspense>
         </SidebarInset>
       </SidebarProvider>
     </StoreViewProvider>

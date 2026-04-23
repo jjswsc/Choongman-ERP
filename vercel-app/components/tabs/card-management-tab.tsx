@@ -39,6 +39,11 @@ function todayStrBkk() {
 export function CardManagementTab() {
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = React.useCallback((key: string, fallback: string) => {
+    const v = t(key)
+    if (!v || v === key) return fallback
+    return v
+  }, [t])
   const { stores: rawStores, loading: storesLoading } = useStoreList()
   const stores = React.useMemo(
     () =>
@@ -213,7 +218,7 @@ export function CardManagementTab() {
   }
 
   const handleDeleteAccount = async (id: number) => {
-    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(tt("msg_delete_confirm_check_item", "Delete this item?"))) return
     try {
       const res = await deleteCardAccount({ id })
       if (res.success) {
@@ -247,7 +252,7 @@ export function CardManagementTab() {
     const cardId = transFormCardId && transFormCardId !== "__all__" ? Number(transFormCardId) : 0
     const amt = Number(String(transFormAmount).replace(/,/g, ""))
     if (!cardId || !transFormDate || amt <= 0) {
-      await appAlert(t("cardManagementAlertAmount") || "카드, 날짜, 금액을 입력해 주세요.")
+      await appAlert(tt("cardManagementAlertAmount", "Please enter card, date, and amount."))
       return
     }
     setTransSaving(true)
@@ -277,7 +282,7 @@ export function CardManagementTab() {
   }
 
   const handleDeleteTrans = async (id: number) => {
-    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(tt("msg_delete_confirm_check_item", "Delete this item?"))) return
     setDeletingId(id)
     try {
       const res = await deleteCardTransaction({ id })
@@ -300,14 +305,14 @@ export function CardManagementTab() {
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="font-semibold">{t("cardManagementAccounts") || "카드 계정"}</div>
+            <div className="font-semibold">{tt("cardManagementAccounts", "Card Accounts")}</div>
             <Button size="sm" onClick={() => openAccountForm()} className="gap-1">
               <Plus className="h-4 w-4" />
-              {t("btn_add") || "추가"}
+              {tt("btn_add", "Add")}
             </Button>
           </div>
           {filteredCardAccounts.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">{t("cardManagementNoAccounts") || "등록된 카드가 없습니다. 추가 버튼으로 카드를 등록하세요."}</p>
+            <p className="text-sm text-muted-foreground py-4">{tt("cardManagementNoAccounts", "No cards registered. Add a card with the Add button.")}</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {filteredCardAccounts.map((a) => (
@@ -335,13 +340,13 @@ export function CardManagementTab() {
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-end gap-2 mb-4">
             <div>
-              <label className="text-xs text-muted-foreground block mb-0.5">{t("store") || "매장"}</label>
+              <label className="text-xs text-muted-foreground block mb-0.5">{tt("store", "Store")}</label>
               <Select value={filterStore} onValueChange={setFilterStore} disabled={storesLoading}>
                 <SelectTrigger className="w-[160px] h-9">
-                  <SelectValue placeholder={storesLoading ? (t("loading") || "로딩...") : (t("cardManagementAllStores") || "전체 매장")} />
+                  <SelectValue placeholder={storesLoading ? tt("loading", "Loading...") : tt("cardManagementAllStores", "All Stores")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">{t("cardManagementAllStores") || "전체 매장"}</SelectItem>
+                  <SelectItem value="__all__">{tt("cardManagementAllStores", "All Stores")}</SelectItem>
                   {stores.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
@@ -349,13 +354,13 @@ export function CardManagementTab() {
               </Select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-0.5">{t("cardManagementSelectCard") || "카드"}</label>
+              <label className="text-xs text-muted-foreground block mb-0.5">{tt("cardManagementSelectCard", "Card")}</label>
               <Select value={filterCardId} onValueChange={setFilterCardId}>
                 <SelectTrigger className="w-[180px] h-9">
-                  <SelectValue placeholder={t("cardManagementSelectCard") || "카드 선택"} />
+                  <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">{t("cardManagementAllCards") || "전체 카드"}</SelectItem>
+                  <SelectItem value="__all__">{tt("cardManagementAllCards", "All Cards")}</SelectItem>
                   {filteredCardAccounts.map((a) => (
                     <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
                   ))}
@@ -367,25 +372,25 @@ export function CardManagementTab() {
             <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
             <Button size="sm" onClick={loadTransactions} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
-              {t("btn_query") || "조회"}
+              {tt("btn_query", "Query")}
             </Button>
             <Button size="sm" onClick={() => openTransForm()} disabled={filteredCardAccounts.length === 0} className="h-9 gap-1">
               <Plus className="h-4 w-4" />
-              {t("cardManagementAddTransaction") || "거래 추가"}
+              {tt("cardManagementAddTransaction", "Add Transaction")}
             </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{t("cardManagementTotalCharge") || "총 충전액"}</div>
+              <div className="text-xs text-muted-foreground">{tt("cardManagementTotalCharge", "Total Charge")}</div>
               <div className="text-lg font-semibold tabular-nums text-green-600">{fmt(summary.totalCharge)}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{t("cardManagementTotalExpense") || "총 사용액"}</div>
+              <div className="text-xs text-muted-foreground">{tt("cardManagementTotalExpense", "Total Expense")}</div>
               <div className="text-lg font-semibold tabular-nums text-orange-600">{fmt(summary.totalExpense)}</div>
             </div>
             <div className="rounded-lg border p-3 bg-primary/5">
-              <div className="text-xs text-muted-foreground">{t("cardManagementBalance") || "미정리 잔액"}</div>
+              <div className="text-xs text-muted-foreground">{tt("cardManagementBalance", "Unsettled Balance")}</div>
               <div className={`text-lg font-bold tabular-nums ${summary.balance >= 0 ? "text-primary" : "text-destructive"}`}>{fmt(summary.balance)}</div>
             </div>
           </div>
@@ -393,18 +398,18 @@ export function CardManagementTab() {
           {loading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
           ) : transactions.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t("pettyNoData") || "조회된 거래가 없습니다."}</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{tt("pettyNoData", "No transactions found.")}</p>
           ) : (
             <div className="rounded-lg border overflow-auto max-h-[400px]">
               <table className="w-full text-sm min-w-[640px]">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
-                    <th className="p-2 text-center">{t("date") || "날짜"}</th>
-                    <th className="p-2 text-center">{t("cardManagementType") || "유형"}</th>
-                    <th className="p-2 text-left">{t("vendor") || "거래처"}</th>
-                    <th className="p-2 text-left">{t("accountSubject") || "계정과목"}</th>
-                    <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
-                    <th className="p-2 text-left">{t("memo") || "메모"}</th>
+                    <th className="p-2 text-center">{tt("date", "Date")}</th>
+                    <th className="p-2 text-center">{tt("cardManagementType", "Type")}</th>
+                    <th className="p-2 text-left">{tt("vendor", "Vendor")}</th>
+                    <th className="p-2 text-left">{tt("accountSubject", "Account Subject")}</th>
+                    <th className="p-2 text-right">{tt("pettyColAmount", "Amount")}</th>
+                    <th className="p-2 text-left">{tt("memo", "Memo")}</th>
                     <th className="p-2 w-16"></th>
                   </tr>
                 </thead>
@@ -418,7 +423,7 @@ export function CardManagementTab() {
                         <td className="p-2 text-center">{tx.transDate}</td>
                         <td className="p-2 text-center">
                           <span className={tx.transType === "charge" ? "text-green-600" : "text-orange-600"}>
-                            {tx.transType === "charge" ? (t("cardManagementCharge") || "충전") : (t("cardManagementExpense") || "사용")}
+                            {tx.transType === "charge" ? tt("cardManagementCharge", "Charge") : tt("cardManagementExpense", "Expense")}
                           </span>
                           {filterCardId === "__all__" && <span className="text-xs text-muted-foreground ml-1">({cardName})</span>}
                         </td>
@@ -452,14 +457,14 @@ export function CardManagementTab() {
       <Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingAccount ? (t("cardManagementEditAccount") || "카드 수정") : (t("cardManagementAddAccount") || "카드 추가")}</DialogTitle>
+            <DialogTitle>{editingAccount ? tt("cardManagementEditAccount", "Edit Card") : tt("cardManagementAddAccount", "Add Card")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
             <div>
-              <label className="text-sm font-medium">{t("store") || "매장"}</label>
+              <label className="text-sm font-medium">{tt("store", "Store")}</label>
               <Select value={accountFormStore} onValueChange={setAccountFormStore}>
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder={t("optional") || "선택"} />
+                  <SelectValue placeholder={tt("optional", "Optional")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">—</SelectItem>
@@ -470,27 +475,27 @@ export function CardManagementTab() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium">{t("cardManagementAccountName") || "카드명"}</label>
+              <label className="text-sm font-medium">{tt("cardManagementAccountName", "Card Name")}</label>
               <Input value={accountFormName} onChange={(e) => setAccountFormName(e.target.value)} className="mt-1" placeholder={t("cardManagementAccountNamePlaceholder")} />
             </div>
             <div>
-              <label className="text-sm font-medium">{t("cardManagementCardNumber") || "카드 번호"}</label>
+              <label className="text-sm font-medium">{tt("cardManagementCardNumber", "Card Number")}</label>
               <Input value={accountFormCardNumber} onChange={(e) => setAccountFormCardNumber(e.target.value)} className="mt-1" placeholder={t("cardManagementCardNumberPlaceholder")} type="text" inputMode="numeric" autoComplete="off" />
             </div>
             <div>
-              <label className="text-sm font-medium">{t("cardManagementHolderName") || "직원명"}</label>
+              <label className="text-sm font-medium">{tt("cardManagementHolderName", "Holder Name")}</label>
               <Input value={accountFormHolderName} onChange={(e) => setAccountFormHolderName(e.target.value)} className="mt-1" placeholder={t("cardManagementHolderNamePlaceholder")} />
             </div>
             <div>
-              <label className="text-sm font-medium">{t("cardManagementCardCompany") || "카드사(은행명)"}</label>
+              <label className="text-sm font-medium">{tt("cardManagementCardCompany", "Card Company (Bank)")}</label>
               <Input value={accountFormCardCompany} onChange={(e) => setAccountFormCardCompany(e.target.value)} className="mt-1" placeholder={t("cardManagementCardCompanyPlaceholder")} />
             </div>
             <div>
-              <label className="text-sm font-medium">{t("memo") || "메모"}</label>
-              <Input value={accountFormMemo} onChange={(e) => setAccountFormMemo(e.target.value)} className="mt-1" placeholder={t("optional") || "선택"} />
+              <label className="text-sm font-medium">{tt("memo", "Memo")}</label>
+              <Input value={accountFormMemo} onChange={(e) => setAccountFormMemo(e.target.value)} className="mt-1" placeholder={tt("optional", "Optional")} />
             </div>
             <Button onClick={handleSaveAccount} disabled={accountSaving || !accountFormName.trim()} className="w-full">
-              {accountSaving ? "..." : (t("btn_save") || "저장")}
+              {accountSaving ? "..." : tt("btn_save", "Save")}
             </Button>
           </div>
         </DialogContent>
@@ -499,11 +504,11 @@ export function CardManagementTab() {
       <Dialog open={transDialogOpen} onOpenChange={setTransDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingTrans ? (t("cardManagementEditTransaction") || "거래 수정") : (t("cardManagementAddTransaction") || "거래 추가")}</DialogTitle>
+            <DialogTitle>{editingTrans ? tt("cardManagementEditTransaction", "Edit Transaction") : tt("cardManagementAddTransaction", "Add Transaction")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
             <div>
-              <label className="text-sm font-medium">{t("cardManagementSelectCard") || "카드"}</label>
+              <label className="text-sm font-medium">{tt("cardManagementSelectCard", "Card")}</label>
               <Select value={transFormCardId} onValueChange={setTransFormCardId}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -516,31 +521,31 @@ export function CardManagementTab() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium">{t("cardManagementTransType") || "유형"}</label>
+              <label className="text-sm font-medium">{tt("cardManagementTransType", "Type")}</label>
               <Select value={transFormType} onValueChange={(v) => setTransFormType(v as "charge" | "expense")}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="charge">{t("cardManagementChargeFull") || "충전 (통장→카드 이체)"}</SelectItem>
-                  <SelectItem value="expense">{t("cardManagementExpenseFull") || "사용 (카드 지출)"}</SelectItem>
+                  <SelectItem value="charge">{tt("cardManagementChargeFull", "Charge (Bank -> Card Transfer)")}</SelectItem>
+                  <SelectItem value="expense">{tt("cardManagementExpenseFull", "Expense (Card Spending)")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-sm font-medium">{t("date") || "날짜"}</label>
+                <label className="text-sm font-medium">{tt("date", "Date")}</label>
                 <Input type="date" value={transFormDate} onChange={(e) => setTransFormDate(e.target.value)} className="mt-1" />
               </div>
               <div>
-                <label className="text-sm font-medium">{t("pettyColAmount") || "금액"}</label>
+                <label className="text-sm font-medium">{tt("pettyColAmount", "Amount")}</label>
                 <Input value={transFormAmount} onChange={(e) => setTransFormAmount(e.target.value)} className="mt-1" type="number" placeholder="0" />
               </div>
             </div>
             {transFormType === "expense" && (
               <>
                 <div>
-                  <label className="text-sm font-medium">{t("vendor") || "거래처"}</label>
+                  <label className="text-sm font-medium">{tt("vendor", "Vendor")}</label>
                   <Select value={transFormVendor} onValueChange={setTransFormVendor}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="—" />
@@ -554,7 +559,7 @@ export function CardManagementTab() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t("accountSubject") || "계정과목"}</label>
+                  <label className="text-sm font-medium">{tt("accountSubject", "Account Subject")}</label>
                   <Select value={transFormSubjectId} onValueChange={setTransFormSubjectId}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="—" />
@@ -568,17 +573,17 @@ export function CardManagementTab() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">{t("bankNoteLabel") || "상세 내용"}</label>
-                  <Input value={transFormNote} onChange={(e) => setTransFormNote(e.target.value)} className="mt-1" placeholder={t("optional") || "선택"} />
+                  <label className="text-sm font-medium">{tt("bankNoteLabel", "Details")}</label>
+                  <Input value={transFormNote} onChange={(e) => setTransFormNote(e.target.value)} className="mt-1" placeholder={tt("optional", "Optional")} />
                 </div>
               </>
             )}
             <div>
-              <label className="text-sm font-medium">{t("memo") || "메모"}</label>
+              <label className="text-sm font-medium">{tt("memo", "Memo")}</label>
               <Input value={transFormMemo} onChange={(e) => setTransFormMemo(e.target.value)} className="mt-1" placeholder={transFormType === "charge" ? t("cardManagementMemoChargePlaceholder") : undefined} />
             </div>
             <Button onClick={handleSaveTrans} disabled={transSaving || !transFormCardId || !transFormAmount || Number(transFormAmount) <= 0} className="w-full">
-              {transSaving ? "..." : (t("btn_save") || "저장")}
+              {transSaving ? "..." : tt("btn_save", "Save")}
             </Button>
           </div>
         </DialogContent>

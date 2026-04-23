@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -276,8 +278,7 @@ export function PosMenuCategorySettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="main" className="flex-1 min-h-0 flex flex-col">
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="main" className={adminTabsTriggerCn}>
                   {t("posMenuCategoryMain") || "대분류"}
@@ -286,8 +287,7 @@ export function PosMenuCategorySettingsDialog({
                   {t("posMenuCategory") || "카테고리"}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="main" className={cn(adminTabsContentFlushCn, "mt-4 space-y-4 flex-1 min-h-0 overflow-y-auto")}>
             {editingMain !== null ? (
               <div className="space-y-3 rounded-lg border bg-muted/30 p-4">

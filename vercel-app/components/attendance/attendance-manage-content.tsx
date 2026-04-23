@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
@@ -479,8 +481,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
         </div>
 
         <Tabs value={attTab} onValueChange={setAttTab} className={adminTabsRootScrollableCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="status" className={adminTabsTriggerCn}>
                   {t("tab_att_status")}
@@ -500,8 +501,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                   </TabsTrigger>
                 )}
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="help" className={cn(adminTabsContentFlushCn, "space-y-4")}>
             <div className="rounded-lg border border-border bg-card p-5 space-y-4">

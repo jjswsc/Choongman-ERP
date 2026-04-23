@@ -59,10 +59,14 @@ const files = walk(root)
 const used = new Set()
 // \b so encodeURIComponent('pos_order') does not match ...Componen + t('pos_order')
 const keyRe = /\bt\(\s*["'](pos[A-Za-z0-9_]+)["']\s*\)/g
+const tourScenarioRe = /(?:titleKey|bodyKey)\s*:\s*['"](pos[A-Za-z0-9_]+)['"]/g
 for (const f of files) {
   const c = fs.readFileSync(f, "utf8")
   let m
   while ((m = keyRe.exec(c))) used.add(m[1])
+  if (f.replace(/\\/g, "/").includes("lib/pos-tour/scenarios/") && f.endsWith(".ts")) {
+    while ((m = tourScenarioRe.exec(c))) used.add(m[1])
+  }
 }
 
 const usedList = [...used].sort()

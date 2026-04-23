@@ -26,6 +26,25 @@ export function POSMainGrid({
   const orderTiles = sortedTiles.filter((t) => t.group === "order")
   const otherTiles = sortedTiles.filter((t) => t.group !== "order")
 
+  const tourDataTourForTile = (type: string | undefined) => {
+    switch (type) {
+      case "dine-in":
+        return "pos-tour-tile-dine-in"
+      case "takeout":
+        return "pos-tour-tile-takeout"
+      case "delivery":
+        return "pos-tour-tile-delivery"
+      case "business":
+        return "pos-tour-tile-business"
+      case "cash":
+        return "pos-tour-tile-cash"
+      case "operations":
+        return "pos-tour-tile-operations"
+      default:
+        return undefined
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -37,6 +56,7 @@ export function POSMainGrid({
     >
       {orderTiles.length > 0 && (
         <section
+          data-tour="pos-tour-main-order-section"
           className={cn(
             "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl",
             "border-2 border-emerald-200/90 bg-white shadow-lg shadow-emerald-500/[0.07]",
@@ -61,6 +81,7 @@ export function POSMainGrid({
                 return (
                   <div
                     key={tile.id}
+                    data-tour={tourDataTourForTile(tile.type)}
                     className={cn(
                       "min-h-0 min-w-0",
                       isLarge ? "col-span-2 row-span-2" : "col-span-1 row-span-1"
@@ -87,6 +108,7 @@ export function POSMainGrid({
 
       {otherTiles.length > 0 && (
         <section
+          data-tour="pos-tour-main-manage-section"
           className={cn(
             "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl",
             "border-2 border-slate-300/85 bg-gradient-to-b from-slate-50/95 to-slate-100/80",
@@ -109,6 +131,7 @@ export function POSMainGrid({
               {otherTiles.map((tile) => (
                 <div
                   key={tile.id}
+                  data-tour={tourDataTourForTile(tile.type)}
                   className="min-h-[76px] min-w-0 min-[420px]:min-h-[88px] min-[420px]:h-full min-[1025px]:min-h-[96px]"
                 >
                   <POSTile

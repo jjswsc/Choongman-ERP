@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import Link from "next/link"
 import { FileText } from "lucide-react"
@@ -54,8 +56,7 @@ export default function AccountingPurchaseOrderPage() {
           </div>
         </div>
         <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="hq" className={adminTabsTriggerCn}>
                   {t("orderTabHq")}
@@ -67,8 +68,7 @@ export default function AccountingPurchaseOrderPage() {
                   {t("orderTabPoHistory")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="hq" className={adminTabsContentCn}>
             <AdminPurchaseOrder allowManualLines />
           </TabsContent>

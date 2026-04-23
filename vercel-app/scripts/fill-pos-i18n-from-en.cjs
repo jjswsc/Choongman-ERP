@@ -52,10 +52,14 @@ function collectUsedPosKeys() {
   walk(root)
   const used = new Set()
   const re = /t\(\s*["'](pos[A-Za-z0-9_]+)["']\s*\)/g
+  const tourScenarioRe = /(?:titleKey|bodyKey)\s*:\s*['"](pos[A-Za-z0-9_]+)['"]/g
   for (const f of files) {
     const c = fs.readFileSync(f, "utf8")
     let m
     while ((m = re.exec(c))) used.add(m[1])
+    if (f.replace(/\\/g, "/").includes("lib/pos-tour/scenarios/") && f.endsWith(".ts")) {
+      while ((m = tourScenarioRe.exec(c))) used.add(m[1])
+    }
   }
   return used
 }

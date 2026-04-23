@@ -38,6 +38,7 @@ interface LiveMenuSearchDialogProps {
   onOpenChange: (open: boolean) => void
   storeCode: string
   t: (key: string) => string
+  isDemo?: boolean
 }
 
 interface MatchedTarget {
@@ -51,6 +52,96 @@ interface MatchedTarget {
   qty: number
   isTable: boolean
   isServed: boolean
+  isSample?: boolean
+}
+
+const DEMO_SAMPLE_MEMO = '__live_menu_demo_sample__'
+const DEMO_FALLBACK_MENU_ID = '__live_menu_demo_fallback__'
+
+/** 카탈로그가 비었을 때(오프라인·빈 매장)에도 실시간 검색 데모 줄을 만들기 위한 최소 메뉴 */
+function buildDemoFallbackMenu(params: { categoryMain: string; category: string }): PosMenu {
+  const { categoryMain, category } = params
+  return {
+    id: DEMO_FALLBACK_MENU_ID,
+    code: 'DEMO-LIVE',
+    name: '(데모) 실시간 메뉴 검색용',
+    category,
+    categoryMain: categoryMain || undefined,
+    price: 10000,
+    imageUrl: '',
+    vatIncluded: true,
+    isActive: true,
+    sortOrder: 0,
+  }
+}
+
+/**
+ * 홀 1~6번: **동일 메뉴 1줄**, 테이블마다 수량만 다름(1~6) → 검색·정렬·합산 설명용.
+ * 오늘 실주문이 있어도 데모 다이얼로그에서는 이 샘플만 쓰므로 목록이 항상 채워짐.
+ */
+function buildDemoSampleOrders(menuList: PosMenu[], storeCode: string): PosOrder[] {
+  const active = (menuList || []).filter((m) => m?.isActive && String(m.id || '').trim())
+  if (active.length === 0) return []
+  const m = active[0]!
+  const id = String(m.id)
+  const name = String(m.name || '').trim() || '(메뉴)'
+  const price = Math.max(0, Number(m.price ?? 0) || 0)
+  const now = Date.now()
+  const dineInRows = Array.from({ length: 6 }, (_, i) => {
+    const tableNo = i + 1
+    const qty = tableNo
+    const perTableItems = [{ id, name, price, qty }]
+    const subtotal = price * qty
+    return {
+      id: -9100 - tableNo,
+      orderNo: `DEMO-DINE-${String(tableNo).padStart(3, '0')}`,
+      storeCode,
+      orderType: 'dine_in',
+      tableName: `${tableNo}번`,
+      memo: DEMO_SAMPLE_MEMO,
+      items: perTableItems,
+      subtotal,
+      vat: 0,
+      total: subtotal,
+      status: 'preparing',
+      createdAt: new Date(now - (36 - tableNo * 4) * 60_000).toISOString(),
+    } satisfies PosOrder
+  })
+  return [
+    ...dineInRows,
+    {
+      id: -9003,
+      orderNo: 'DEMO-DEL-003',
+      storeCode,
+      orderType: 'delivery',
+      tableName: 'Grab #A102',
+      memo: DEMO_SAMPLE_MEMO,
+      items: [{ id, name, price, qty: 1 }],
+      subtotal: price,
+      vat: 0,
+      total: price,
+      status: 'preparing',
+      createdAt: new Date(now - 4 * 60_000).toISOString(),
+    },
+  ]
+}
+
+function pickInitialMenuIdForRows(menuList: PosMenu[], orderList: PosOrder[]): string {
+  const normalizedIds = new Set<string>()
+  for (const order of orderList) {
+    for (const item of order.items || []) {
+      const raw = normalizeItemId(String(item.id || '').trim())
+      if (!raw) continue
+      const base = raw.split('-')[0]
+      if (base) normalizedIds.add(base)
+      normalizedIds.add(raw)
+    }
+  }
+  const matched = menuList.find((m) => {
+    const id = String(m.id || '').trim()
+    return id && normalizedIds.has(id)
+  })
+  return String(matched?.id ?? '').trim()
 }
 
 function detectDeliveryApp(text: string): 'grab' | 'lineman' | 'shopee' | null {
@@ -125,6 +216,7 @@ export function LiveMenuSearchDialog({
   onOpenChange,
   storeCode,
   t,
+  isDemo = false,
 }: LiveMenuSearchDialogProps) {
   const [loading, setLoading] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
@@ -136,6 +228,7 @@ export function LiveMenuSearchDialog({
   const [menuKeyword, setMenuKeyword] = React.useState('')
   const [servingMap, setServingMap] = React.useState<Record<string, boolean>>({})
   const [servingBusyMap, setServingBusyMap] = React.useState<Record<string, boolean>>({})
+  const [demoSeeded, setDemoSeeded] = React.useState(false)
 
   const getTypeLabel = React.useCallback((orderType: string) => {
     if (orderType === 'dine_in') return t('posOrderTypeDineIn') || 'Dine In'
@@ -162,13 +255,40 @@ export function LiveMenuSearchDialog({
           endStr: today,
         }),
       ])
-      setMenus((menuList || []).filter((m) => m.isActive))
-      setMainCategories(normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY]))
-      setOrders((orderList || []).filter((o) => o.status !== 'cancelled'))
+      const mains = normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY])
+      let activeMenus = (menuList || []).filter((m) => m.isActive)
+      if (isDemo && activeMenus.length === 0) {
+        const firstMain = mains[0] ?? ''
+        const firstCat = (catCfg.categories && catCfg.categories[0]) || '데모'
+        activeMenus = [buildDemoFallbackMenu({ categoryMain: firstMain, category: firstCat })]
+      }
+      setMenus(activeMenus)
+      setMainCategories(mains)
+      const realOrders = (orderList || []).filter((o) => o.status !== 'cancelled')
+      if (isDemo) {
+        const seeded = buildDemoSampleOrders(activeMenus, storeCode)
+        if (seeded.length > 0) {
+          setOrders(seeded)
+          setDemoSeeded(true)
+          const initialMenuId = pickInitialMenuIdForRows(activeMenus, seeded)
+          if (initialMenuId) {
+            setSelectedMenuId((prev) => {
+              if (prev && activeMenus.some((m) => String(m.id) === String(prev))) return prev
+              return initialMenuId
+            })
+          }
+        } else {
+          setOrders(realOrders)
+          setDemoSeeded(false)
+        }
+      } else {
+        setOrders(realOrders)
+        setDemoSeeded(false)
+      }
     } finally {
       setLoading(false)
     }
-  }, [storeCode])
+  }, [isDemo, storeCode])
 
   React.useEffect(() => {
     if (!open) return
@@ -221,7 +341,7 @@ export function LiveMenuSearchDialog({
   }, [menus, selectedMain, selectedCategory, menuKeyword])
 
   const selectedMenu = React.useMemo(
-    () => filteredMenus.find((m) => m.id === selectedMenuId) ?? null,
+    () => filteredMenus.find((m) => String(m.id) === String(selectedMenuId)) ?? null,
     [filteredMenus, selectedMenuId]
   )
 
@@ -234,6 +354,7 @@ export function LiveMenuSearchDialog({
         if (!itemMatchesMenu(it, selectedMenu)) continue
         const isTable = order.orderType === 'dine_in'
         const isServed = isTable && (order.status === 'completed' || Boolean(it.servedAt))
+        const isSample = String(order.memo || '').includes(DEMO_SAMPLE_MEMO) || order.id < 0
         rows.push({
           orderId: order.id,
           itemId: String(it.id ?? ''),
@@ -245,6 +366,7 @@ export function LiveMenuSearchDialog({
           qty: Number(it.qty ?? 1) || 1,
           isTable,
           isServed,
+          isSample,
         })
       }
     }
@@ -254,7 +376,7 @@ export function LiveMenuSearchDialog({
 
   const setItemServedFromSearch = React.useCallback(
     async (target: MatchedTarget) => {
-      if (!target.isTable || target.isServed || !target.itemId) return
+      if (!target.isTable || target.isServed || !target.itemId || target.isSample) return
       const key = `${target.orderId}:${target.itemId}`
       if (servingBusyMap[key]) return
       setServingBusyMap((prev) => ({ ...prev, [key]: true }))
@@ -293,7 +415,7 @@ export function LiveMenuSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl" data-tour="pos-tour-live-menu-search-dialog">
         <DialogHeader>
           <DialogTitle>{t('search') || 'Search'}</DialogTitle>
         </DialogHeader>
@@ -334,6 +456,11 @@ export function LiveMenuSearchDialog({
             {loading ? (t('loading') || '불러오는 중...') : (t('posRefresh') || '새로고침')}
           </Button>
         </div>
+        {demoSeeded && (
+          <p className="text-xs text-muted-foreground">
+            {t('posDemoBanner') || 'Demo mode'} · 홀 1~6번에 같은 메뉴가 테이블마다 수량 1~6으로 들어가 있습니다(배달 샘플 1건 포함). 위 메뉴 선택란에서 해당 메뉴를 고르면 줄이 쌓이고, 같은 메뉴는 주문 시각이 더 이른 줄부터 처리하는 흐름을 연습해 보세요.
+          </p>
+        )}
 
         <Select value={selectedMenuId} onValueChange={setSelectedMenuId}>
           <SelectTrigger className="h-9">
@@ -396,6 +523,11 @@ export function LiveMenuSearchDialog({
                             ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo)
                             : r.orderNo}
                       </Badge>
+                      {r.isSample && (
+                        <Badge variant="outline" className="border-dashed">
+                          DEMO
+                        </Badge>
+                      )}
                       {r.isTable && (
                         <Button
                           type="button"
@@ -405,7 +537,7 @@ export function LiveMenuSearchDialog({
                             'h-8 min-w-[88px] gap-1.5',
                             resolvedServed && 'bg-emerald-600 hover:bg-emerald-600'
                           )}
-                          disabled={resolvedServed || servingBusy || !r.itemId}
+                          disabled={resolvedServed || servingBusy || !r.itemId || Boolean(r.isSample)}
                           onClick={() => {
                             void setItemServedFromSearch(r)
                           }}

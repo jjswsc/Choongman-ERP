@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -129,11 +131,11 @@ export function DepreciationTab() {
   const accountOptions = React.useMemo(() => {
     const uniq = new Map<string, AccountSubjectItem>()
     const defaults: AccountSubjectItem[] = [
-      { code: "1460", name: "고정자산", type: "asset", sortOrder: 0 },
-      { code: "1470", name: "감가상각누계액", type: "asset", sortOrder: 0 },
-      { code: "5500", name: "감가상각비", type: "expense", sortOrder: 0 },
-      { code: "4110", name: "매출", type: "revenue", sortOrder: 0 },
-      { code: "5520", name: "일반관리비", type: "expense", sortOrder: 0 },
+      { code: "1460", name: tt("dep_defaultAccountFixedAsset", "Fixed Assets"), type: "asset", sortOrder: 0 },
+      { code: "1470", name: tt("dep_defaultAccountAccumDep", "Accumulated Depreciation"), type: "asset", sortOrder: 0 },
+      { code: "5500", name: tt("dep_defaultAccountDepExpense", "Depreciation Expense"), type: "expense", sortOrder: 0 },
+      { code: "4110", name: tt("dep_defaultAccountRevenue", "Revenue"), type: "revenue", sortOrder: 0 },
+      { code: "5520", name: tt("dep_defaultAccountGeneralAdmin", "General Administrative Expense"), type: "expense", sortOrder: 0 },
     ]
     for (const d of defaults) uniq.set(d.code, d)
     for (const s of accountSubjects || []) {
@@ -207,13 +209,13 @@ export function DepreciationTab() {
         dryRun,
       })
       if (res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || (dryRun ? tt("deprPreviewDone", "미리보기 완료") : tt("deprPostingDone", "분개 완료")))
+        await appAlert(translateApiMessage(res.message, t) || res.message || (dryRun ? tt("deprPreviewDone", "Preview completed") : tt("deprPostingDone", "Journal posting completed")))
         if (!dryRun) {
           loadEntries()
           loadAssets()
         }
       } else {
-        await appAlert(`${tt("msg_error_prefix", "오류: ")}${(res as { error?: string }).error || ""}`)
+        await appAlert(`${tt("msg_error_prefix", "Error: ")}${(res as { error?: string }).error || ""}`)
       }
     } catch (e) {
       await appAlert(String(e))
@@ -224,16 +226,16 @@ export function DepreciationTab() {
 
   const handleSaveAsset = async () => {
     if (!form.name.trim()) {
-      await appAlert(tt("deprAssetNameRequired", "자산명을 입력하세요."))
+      await appAlert(tt("deprAssetNameRequired", "Please enter asset name."))
       return
     }
     if (!form.acquisitionDate || !/^\d{4}-\d{2}-\d{2}$/.test(form.acquisitionDate)) {
-      await appAlert(tt("deprAcquisitionDateRequired", "취득일을 입력하세요 (YYYY-MM-DD)."))
+      await appAlert(tt("deprAcquisitionDateRequired", "Please enter acquisition date (YYYY-MM-DD)."))
       return
     }
     const cost = Number(String(form.acquisitionCost).replace(/,/g, ""))
     if (isNaN(cost) || cost < 0) {
-      await appAlert(tt("deprAcquisitionCostRequired", "취득가를 입력하세요."))
+      await appAlert(tt("deprAcquisitionCostRequired", "Please enter acquisition cost."))
       return
     }
     setSaving(true)
@@ -270,7 +272,7 @@ export function DepreciationTab() {
         loadAssets()
         loadDisposedAssets()
       } else {
-        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "Save failed"))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -283,10 +285,10 @@ export function DepreciationTab() {
     const id = Number(asset.id || 0)
     if (!id) return
     const ok = await appConfirm({
-      title: "자산 처분 처리",
-      description: `${asset.name || "해당 자산"}을(를) 처분 처리하시겠습니까?`,
-      confirmText: "처분 처리",
-      cancelText: "취소",
+      title: tt("dep_disposeConfirmTitle", "Dispose Asset"),
+      description: `${asset.name || tt("dep_thisAsset", "this asset")}${tt("dep_disposeConfirmQuestion", " - proceed with disposal?")}`,
+      confirmText: tt("dep_dispose", "Dispose"),
+      cancelText: t("cancel"),
     })
     if (!ok) return
     setStatusUpdating(true)
@@ -302,7 +304,7 @@ export function DepreciationTab() {
         memo: disposalMemo.trim() || asset.memo || undefined,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || "처분 처리에 실패했습니다.")
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("dep_disposeFailed", "Failed to process disposal."))
       }
       loadAssets()
       loadDisposedAssets()
@@ -317,17 +319,17 @@ export function DepreciationTab() {
     const id = Number(asset.id || 0)
     if (!id) return
     const ok = await appConfirm({
-      title: "자산 복구",
-      description: `${asset.name || "해당 자산"}을(를) 활성 자산으로 복구할까요?`,
-      confirmText: "복구",
-      cancelText: "취소",
+      title: tt("dep_restoreConfirmTitle", "Restore Asset"),
+      description: `${asset.name || tt("dep_thisAsset", "this asset")}${tt("dep_restoreConfirmQuestion", " - restore to active assets?")}`,
+      confirmText: tt("dep_restore", "Restore"),
+      cancelText: t("cancel"),
     })
     if (!ok) return
     setStatusUpdating(true)
     try {
       const res = await setFixedAssetStatus({ id, action: "restore", memo: asset.memo || undefined })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || "자산 복구에 실패했습니다.")
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("dep_restoreFailed", "Failed to restore asset."))
       }
       loadAssets()
       loadDisposedAssets()
@@ -345,21 +347,19 @@ export function DepreciationTab() {
       <Card>
         <CardContent className="pt-4">
           <Tabs defaultValue="assets">
-            <div className={adminTabsBarCn}>
-              <div className={adminTabsScrollCn}>
-                <TabsList className={adminTabsListRowCn}>
+            <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
                   <TabsTrigger value="assets" className={adminTabsTriggerCn}>
-                    자산대장
+                    {tt("dep_assetLedgerTab", "Asset Ledger")}
                   </TabsTrigger>
                   <TabsTrigger value="depreciation" className={adminTabsTriggerCn}>
-                    감가상각 실행
+                    {t("dep_runDepreciation")}
                   </TabsTrigger>
                   <TabsTrigger value="disposal" className={adminTabsTriggerCn}>
-                    자산처분
+                    {tt("dep_disposalTab", "Asset Disposal")}
                   </TabsTrigger>
                 </TabsList>
-              </div>
-            </div>
+          </AdminTabsBarWithHelp>
 
             <TabsContent value="assets" className={cn(adminTabsContentFlushCn, "space-y-4 pt-4")}>
               <div className="flex flex-wrap items-center gap-3">
@@ -379,7 +379,7 @@ export function DepreciationTab() {
                 </Button>
               </div>
               <div className="text-xs text-muted-foreground">
-                자산대장 등록/수정 화면입니다. 자산/감가상각누계액/감가상각비 계정 매핑으로 분개 계정을 제어합니다.
+                {tt("dep_assetLedgerDesc", "Register or edit assets. Journal accounts are controlled by asset/accumulated depreciation/depreciation expense mappings.")}
               </div>
 
               <div className="border rounded-lg p-4 space-y-3">
@@ -410,7 +410,7 @@ export function DepreciationTab() {
                     onChange={(e) => setForm((f) => ({ ...f, acquisitionDate: e.target.value }))}
                   />
                   <Input
-                    placeholder="취득가 (฿)"
+                    placeholder={t("dep_acquisitionCost")}
                     value={form.acquisitionCost}
                     onChange={(e) => setForm((f) => ({ ...f, acquisitionCost: e.target.value }))}
                   />
@@ -429,7 +429,7 @@ export function DepreciationTab() {
                     onValueChange={(v) => setForm((f) => ({ ...f, assetAccountCode: v }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="자산 계정코드" />
+                      <SelectValue placeholder={tt("dep_assetAccountCode", "Asset account code")} />
                     </SelectTrigger>
                     <SelectContent>
                       {accountOptions.map((a) => (
@@ -444,7 +444,7 @@ export function DepreciationTab() {
                     onValueChange={(v) => setForm((f) => ({ ...f, accumulatedDepreciationAccountCode: v }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="감가상각누계액 계정코드" />
+                      <SelectValue placeholder={tt("dep_accumDepAccountCode", "Accumulated depreciation account code")} />
                     </SelectTrigger>
                     <SelectContent>
                       {accountOptions.map((a) => (
@@ -459,7 +459,7 @@ export function DepreciationTab() {
                     onValueChange={(v) => setForm((f) => ({ ...f, depreciationExpenseAccountCode: v }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="감가상각비 계정코드" />
+                      <SelectValue placeholder={tt("dep_expenseAccountCode", "Depreciation expense account code")} />
                     </SelectTrigger>
                     <SelectContent>
                       {accountOptions.map((a) => (
@@ -493,7 +493,7 @@ export function DepreciationTab() {
                       <th className="py-2 text-right">{t("dep_acquisitionDate")}</th>
                       <th className="py-2 text-right">{t("dep_acquisitionCost")}</th>
                       <th className="py-2 text-right">{t("dep_usefulLifeMonths")}</th>
-                      <th className="py-2 text-left">계정 매핑</th>
+                      <th className="py-2 text-left">{tt("dep_accountMapping", "Account Mapping")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -539,7 +539,7 @@ export function DepreciationTab() {
                   </tbody>
                 </table>
                 {!loading && assets.length === 0 && (
-                  <p className="py-4 text-center text-muted-foreground text-sm">등록된 고정자산이 없습니다.</p>
+                  <p className="py-4 text-center text-muted-foreground text-sm">{t("dep_noAssets")}</p>
                 )}
               </div>
             </TabsContent>
@@ -584,7 +584,7 @@ export function DepreciationTab() {
                   onClick={() => handleRunDepreciation(false)}
                   disabled={running}
                 >
-                  감가상각 실행 (자동분개)
+                  {t("dep_runWithPosting")}
                 </Button>
               </div>
 
@@ -636,11 +636,11 @@ export function DepreciationTab() {
                   </SelectContent>
                 </Select>
                 <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">처분일</div>
+                  <div className="text-xs text-muted-foreground">{tt("dep_disposalDate", "Disposal Date")}</div>
                   <Input type="date" value={disposeDate} onChange={(e) => setDisposeDate(e.target.value)} className="w-[170px]" />
                 </div>
                 <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">처분가(입금액)</div>
+                  <div className="text-xs text-muted-foreground">{tt("dep_disposalProceeds", "Disposal Proceeds")}</div>
                   <Input
                     className="w-[160px]"
                     placeholder="0"
@@ -649,7 +649,7 @@ export function DepreciationTab() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">처분이익 계정</div>
+                  <div className="text-xs text-muted-foreground">{tt("dep_disposalGainAccount", "Disposal Gain Account")}</div>
                   <Select value={disposalGainAccountCode} onValueChange={setDisposalGainAccountCode}>
                     <SelectTrigger className="w-[210px]">
                       <SelectValue />
@@ -664,7 +664,7 @@ export function DepreciationTab() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">처분손실 계정</div>
+                  <div className="text-xs text-muted-foreground">{tt("dep_disposalLossAccount", "Disposal Loss Account")}</div>
                   <Select value={disposalLossAccountCode} onValueChange={setDisposalLossAccountCode}>
                     <SelectTrigger className="w-[210px]">
                       <SelectValue />
@@ -679,12 +679,12 @@ export function DepreciationTab() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground">처분 메모(선택)</div>
+                  <div className="text-xs text-muted-foreground">{tt("dep_disposalMemoOptional", "Disposal Memo (Optional)")}</div>
                   <Input
                     className="w-[240px]"
                     value={disposalMemo}
                     onChange={(e) => setDisposalMemo(e.target.value)}
-                    placeholder="자동분개 메모"
+                    placeholder={tt("dep_autoPostingMemo", "Auto-posting memo")}
                   />
                 </div>
                 <Button
@@ -697,13 +697,13 @@ export function DepreciationTab() {
                   disabled={loading}
                 >
                   <Search className="h-4 w-4 mr-1" />
-                  목록 새로고침
+                  {tt("dep_refreshList", "Refresh List")}
                 </Button>
               </div>
 
               <Card>
                 <CardContent className="pt-4 space-y-2">
-                  <div className="text-sm font-medium">활성 자산 (처분 가능)</div>
+                  <div className="text-sm font-medium">{tt("dep_activeAssetsDisposable", "Active Assets (Disposal Available)")}</div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -712,8 +712,8 @@ export function DepreciationTab() {
                           <th className="py-2 text-left">{t("dep_assetName")}</th>
                           <th className="py-2 text-left">{t("pL_store")}</th>
                           <th className="py-2 text-right">{t("dep_acquisitionCost")}</th>
-                          <th className="py-2 text-left">매핑계정</th>
-                          <th className="py-2 text-right">작업</th>
+                          <th className="py-2 text-left">{tt("dep_mappingAccount", "Mapped Account")}</th>
+                          <th className="py-2 text-right">{t("actions")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -735,7 +735,7 @@ export function DepreciationTab() {
                                 disabled={statusUpdating}
                               >
                                 <Trash2 className="h-4 w-4 mr-1" />
-                                처분
+                                {tt("dep_dispose", "Dispose")}
                               </Button>
                             </td>
                           </tr>
@@ -743,7 +743,7 @@ export function DepreciationTab() {
                       </tbody>
                     </table>
                     {!loading && assets.length === 0 ? (
-                      <div className="py-4 text-center text-muted-foreground text-sm">처분 가능한 활성 자산이 없습니다.</div>
+                      <div className="py-4 text-center text-muted-foreground text-sm">{tt("dep_noDisposableAssets", "No active assets available for disposal.")}</div>
                     ) : null}
                   </div>
                 </CardContent>
@@ -751,7 +751,7 @@ export function DepreciationTab() {
 
               <Card>
                 <CardContent className="pt-4 space-y-2">
-                  <div className="text-sm font-medium">처분 자산 (복구 가능)</div>
+                  <div className="text-sm font-medium">{tt("dep_disposedAssetsRestorable", "Disposed Assets (Restorable)")}</div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -759,11 +759,11 @@ export function DepreciationTab() {
                           <th className="py-2 text-left">{t("dep_code")}</th>
                           <th className="py-2 text-left">{t("dep_assetName")}</th>
                           <th className="py-2 text-left">{t("pL_store")}</th>
-                          <th className="py-2 text-right">처분일</th>
-                          <th className="py-2 text-right">처분가</th>
-                          <th className="py-2 text-right">처분손익</th>
-                          <th className="py-2 text-center">분개</th>
-                          <th className="py-2 text-right">작업</th>
+                          <th className="py-2 text-right">{tt("dep_disposedDate", "Disposed Date")}</th>
+                          <th className="py-2 text-right">{tt("dep_disposalPrice", "Disposal Price")}</th>
+                          <th className="py-2 text-right">{tt("dep_disposalGainLoss", "Disposal Gain/Loss")}</th>
+                          <th className="py-2 text-center">{t("dep_journalEntry")}</th>
+                          <th className="py-2 text-right">{t("actions")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -784,7 +784,7 @@ export function DepreciationTab() {
                                 disabled={statusUpdating}
                               >
                                 <RotateCcw className="h-4 w-4 mr-1" />
-                                복구
+                                {tt("dep_restore", "Restore")}
                               </Button>
                             </td>
                           </tr>
@@ -792,7 +792,7 @@ export function DepreciationTab() {
                       </tbody>
                     </table>
                     {!loading && disposedAssets.length === 0 ? (
-                      <div className="py-4 text-center text-muted-foreground text-sm">처분된 자산이 없습니다.</div>
+                      <div className="py-4 text-center text-muted-foreground text-sm">{tt("dep_noDisposedAssets", "No disposed assets.")}</div>
                     ) : null}
                   </div>
                 </CardContent>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseUpsert } from "@/lib/supabase-server"
 import { requireAuth } from "@/lib/verify-auth"
+import { applyTaxInvoiceOverrideToReceivable } from "@/lib/receivable-payable"
 
 type OverrideInput = {
   refType?: string
@@ -68,6 +69,27 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpsert("invoice_settings", rows, "code")
+
+    for (const it of items) {
+      const refType = String(it?.refType || "").trim()
+      const refId = Number(it?.refId || 0)
+      const docKind = normalizeDocKind(String(it?.docKind || ""))
+      if (docKind !== "tax" || !refType || !Number.isFinite(refId) || refId <= 0) continue
+      const issueDate = String(it.issueDate || "").trim()
+      if (!issueDate) continue
+      const documentNo = it.documentNo !== undefined ? String(it.documentNo) : undefined
+      try {
+        await applyTaxInvoiceOverrideToReceivable({
+          refType,
+          refId,
+          issueDate,
+          documentNo,
+        })
+      } catch (syncErr) {
+        console.error("applyTaxInvoiceOverrideToReceivable:", refType, refId, syncErr)
+      }
+    }
+
     return NextResponse.json({ success: true, saved: rows.length }, { headers })
   } catch (e) {
     console.error("updateInvoicePrintOverrides:", e)

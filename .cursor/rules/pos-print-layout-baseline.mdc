@@ -11,6 +11,7 @@ alwaysApply: true
 |------|------|
 | **같음** | 영수증·주방 HTML/CSS는 **동일 TypeScript 소스**에서 생성됨. 웹 브라우저 인쇄든, Windows Electron `printHtml` 이든 **본문 레이아웃 수치는 같다.** |
 | **다름** | **인쇄 엔진**: 브라우저 `window.print` vs Electron `webContents.print` + 숨김 창 폭·`printableArea` 등 (`windows-pos/main.js`). |
+| **Android(Capacitor) 웹뷰** | `lib/print-html-iframe.ts`: `print()` 직전 `requestAnimationFrame` **1회**(데스크톱 Chromium은 **2회**). |
 | **기록 위치** | 레이아웃 숫자 → 아래 표 + `lib/pos-receipt-layout.ts`, `lib/pos-kitchen-slip-html.ts`, `lib/pos-receipt-paper.ts`. Electron 전용 → `windows-pos/main.js` + `windows-pos/README.md`(런타임 설정). |
 
 ---
@@ -57,7 +58,7 @@ alwaysApply: true
 | `scaleFactor` | **100** |
 | `pagesPerSheet` | **1** |
 | `margins` | **`printableArea`** (`none`이면 열전사 우측 비인쇄영역에서 잘리기 쉬움) |
-| 숨김 인쇄 창 | 폭 **80mm ≈ 302 CSS px** (`PRINT_HTML_OFFSCREEN_WIDTH`), 높이 4096, `loadFile` 후 **약 550ms** (`PRINT_HTML_SETTLE_MS`) 뒤 print |
+| 숨김 인쇄 창 | 폭 **80mm ≈ 302 CSS px** (`PRINT_HTML_OFFSCREEN_WIDTH`), 높이 4096, `loadFile` 후 **약 400ms** (`PRINT_HTML_SETTLE_MS`, `runtimeConfig.printHtmlSettleMs`·`WINDOWS_POS_PRINT_HTML_SETTLE_MS`로 조정) 뒤 print |
 | 실패 시 폴백 | ① 커스텀 용지 무인쇄 → ② `print.silent` 이면 드라이버 기본 용지 무인쇄 → ③ 인쇄 대화상자 |
 | 런타임 | `runtime-config.json` / `windows-pos/README.md` — `print.silent`, `print.deviceName` 등 |
 

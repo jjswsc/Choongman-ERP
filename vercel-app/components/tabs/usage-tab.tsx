@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useState, useMemo, useCallback } from "react"
@@ -193,7 +195,7 @@ export function UsageTab() {
     if (!selectedItem) return
     const qtyToAdd = Math.round(totalUsageSpecQty * 1e6) / 1e6
     if (qtyToAdd <= 0) {
-      await appAlert(t("stockAdjustQtyRequired") || "수량을 입력해 주세요.")
+      await appAlert(t("stockAdjustQtyRequired") || "Please enter quantity.")
       return
     }
     setCart((prev) => {
@@ -267,8 +269,8 @@ export function UsageTab() {
                 imgClassName="max-w-full max-h-[80vh] rounded-lg object-contain"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
-                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-                rotateRightLabel={t("imageRotateRight") || "시계"}
+                rotateLeftLabel={t("imageRotateLeft") || "Rotate Left"}
+                rotateRightLabel={t("imageRotateRight") || "Rotate Right"}
               />
             )}
             <p className="mt-2 text-center text-sm text-white">{imageModal.name}</p>
@@ -293,9 +295,8 @@ export function UsageTab() {
       )}
 
       <Tabs defaultValue="input" className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
+        <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="input" className={adminTabsTriggerCn}>
                 {t('useInput')}
               </TabsTrigger>
@@ -303,8 +304,7 @@ export function UsageTab() {
                 {t('useHistory')}
               </TabsTrigger>
             </TabsList>
-          </div>
-        </div>
+          </AdminTabsBarWithHelp>
 
         <TabsContent value="input" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <Card className="shadow-sm">
@@ -379,7 +379,7 @@ export function UsageTab() {
                                           e.stopPropagation()
                                           setDescriptionModal({ name: item.name, description: item.description! })
                                         }}
-                                        title={t("itemsDescription") || "설명"}
+                                        title={t("itemsDescription") || "Description"}
                                       >
                                         <Info className="h-3.5 w-3.5" />
                                       </button>
@@ -402,10 +402,10 @@ export function UsageTab() {
             <Card className="shrink-0 border-2 border-primary/40 bg-primary/5 shadow-md">
               <CardHeader className="pb-2 pt-4 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base font-bold text-foreground">{t("useQtyLabel") || "사용 수량"}</CardTitle>
+                  <CardTitle className="text-base font-bold text-foreground">{t("useQtyLabel") || "Usage Quantity"}</CardTitle>
                   <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1 border-primary/50 bg-background" onClick={addUsageRow}>
                     <Plus className="h-3.5 w-3.5" />
-                    {t("itemsAdd") || "추가"}
+                    {t("itemsAdd") || "Add"}
                   </Button>
                 </div>
               </CardHeader>
@@ -415,14 +415,14 @@ export function UsageTab() {
                     <div key={idx} className="flex gap-2 items-center flex-nowrap">
                       <Select value={row.unitKey} onValueChange={(v) => setUsageRow(idx, { unitKey: v })}>
                         <SelectTrigger className="w-[180px] min-w-[180px] shrink-0 text-sm h-10 overflow-hidden text-left border-primary/30 bg-background">
-                          <SelectValue placeholder={t("stockAdjustUnit") || "단위"} />
+                          <SelectValue placeholder={t("stockAdjustUnit") || "Unit"} />
                         </SelectTrigger>
                         <SelectContent>
                           {usageUnitOptions.map((o) => {
                             const val = o.kind === "spec" ? "spec" : `${o.unit}::${o.totalQuantity}`
                             const label = o.kind === "spec"
-                              ? (t("stockAdjustUnitSpec") || "규격 (1개)")
-                              : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit") || "규격"})`
+                              ? (t("stockAdjustUnitSpec") || "Spec (1 unit)")
+                              : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit") || "spec"})`
                             return (
                               <SelectItem key={val} value={val}>
                                 {label}
@@ -435,7 +435,7 @@ export function UsageTab() {
                         type="number"
                         min={0}
                         step="any"
-                        placeholder={t("stockAdjustDiffPh") || "수량"}
+                        placeholder={t("stockAdjustDiffPh") || "Quantity"}
                         value={row.qty}
                         onChange={(e) => {
                           const v = e.target.value
@@ -460,7 +460,7 @@ export function UsageTab() {
                 </div>
                 {usageRows.length >= 2 && (
                   <p className="text-sm font-semibold text-foreground">
-                    {t("stockAdjustTotalLabel") || "합계"}: <span className="tabular-nums font-bold text-primary">{Math.round(totalUsageSpecQty * 1e4) / 1e4}</span> {t("specUnit") || "규격"}
+                    {t("stockAdjustTotalLabel") || "Total"}: <span className="tabular-nums font-bold text-primary">{Math.round(totalUsageSpecQty * 1e4) / 1e4}</span> {t("specUnit") || "spec"}
                   </p>
                 )}
                 <Button className="h-12 w-full font-bold text-base" size="lg" onClick={addToCart} disabled={!selectedItem}>

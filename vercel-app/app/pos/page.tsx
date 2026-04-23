@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useCallback, useEffect, useMemo, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
 import { POSHeader } from '@/components/pos/pos-header'
 import { POSMainGrid } from '@/components/pos/pos-main-grid'
@@ -22,6 +22,13 @@ import {
   isManagerOrFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
+import {
+  DEFAULT_POS_HOME_TOUR_SCENARIO_ID,
+  getPosTourScenarioIdFromQuery,
+  isPosDemoFromQuery,
+  PosTourOverlay,
+  PosTourProvider,
+} from '@/lib/pos-tour'
 import { formatPosClockDate, formatPosClockTime } from '@/lib/pos-datetime-locale'
 import {
   Dialog,
@@ -41,7 +48,10 @@ import {
 } from '@/components/ui/select'
 
 /** POS 첫 화면: 주문(매장/포장/배달), 영수증, 결산, 근태 등 타일 */
-export default function POSMainPage() {
+function POSMainPageInner() {
+  const searchParams = useSearchParams()
+  const isPosDemo = isPosDemoFromQuery(searchParams)
+  const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams, DEFAULT_POS_HOME_TOUR_SCENARIO_ID)
   const router = useRouter()
   const { auth, logout, setAuth } = useAuth()
   const { lang } = useLang()
@@ -95,6 +105,11 @@ export default function POSMainPage() {
 
   const visibleTiles = useMemo(() => {
     return DEFAULT_TILES.filter((tile) => {
+      if (isPosDemo) {
+        // 데모 홈 투어(h8/h9)가 역할 권한에 막혀 사라지지 않도록
+        // 영업/시재/운영 타일은 항상 노출합니다.
+        if (tile.type === 'business' || tile.type === 'cash' || tile.type === 'operations') return true
+      }
       switch (tile.type) {
         case 'sales':
         case 'receipt':
@@ -113,7 +128,7 @@ export default function POSMainPage() {
           return true
       }
     })
-  }, [auth?.role])
+  }, [auth?.role, isPosDemo])
 
   /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
   const handleSubAction = useCallback(
@@ -157,15 +172,16 @@ export default function POSMainPage() {
         setSubmenuParent(tile.type)
         return
       }
+      const demoQ = isPosDemo ? '&demo=1&scenario=terminal-full-walkthrough' : ''
       switch (tile.type) {
         case 'dine-in':
-          navigatePosOfflineAware('/pos/terminal?type=dine_in', (p) => router.push(p))
+          navigatePosOfflineAware(`/pos/terminal?type=dine_in${demoQ}`, (p) => router.push(p))
           break
         case 'takeout':
-          navigatePosOfflineAware('/pos/terminal?type=takeout', (p) => router.push(p))
+          navigatePosOfflineAware(`/pos/terminal?type=takeout${demoQ}`, (p) => router.push(p))
           break
         case 'delivery':
-          navigatePosOfflineAware('/pos/terminal?type=delivery', (p) => router.push(p))
+          navigatePosOfflineAware(`/pos/terminal?type=delivery${demoQ}`, (p) => router.push(p))
           break
         case 'cash':
           navigatePosOfflineAware('/pos/local/cash', (p) => router.push(p))
@@ -189,7 +205,7 @@ export default function POSMainPage() {
           break
       }
     },
-    [router]
+    [router, isPosDemo]
   )
 
   const onSubmenuSelect = useCallback(
@@ -270,24 +286,35 @@ export default function POSMainPage() {
   const formatTime = (date: Date) => formatPosClockTime(date, lang)
 
   return (
-    <div
-      className={cn(
-        'flex flex-col h-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 overflow-hidden select-none'
-      )}
-    >
-      <POSHeader
-        title={t('posTerminalTitle')}
-        showBackButton={false}
-        showAdminNavButton={canNavigateFromPosToAdmin(auth?.role || '')}
-        onAdminNav={() => navigatePosOfflineAware('/admin', (p) => router.push(p))}
-        canAccessAdmin={canAccessAdmin(auth?.role || '')}
-        todayOrders={todayOrders}
-        totalAmount={totalAmount}
-        isMainPosDevice={isMainPosDevice}
-        onMainPosDeviceChange={setIsMainPosDevice}
-      />
+    <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
+      <PosTourOverlay />
+      <div
+        className={cn(
+          'flex flex-col h-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 overflow-hidden select-none'
+        )}
+      >
+        {isPosDemo && (
+          <div
+            className="shrink-0 border-b border-amber-200/80 bg-amber-50 px-3 py-2 text-center text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+          >
+            {t('posDemoBanner')}
+          </div>
+        )}
+        <POSHeader
+          dataTour={isPosDemo ? 'pos-tour-header' : undefined}
+          title={t('posTerminalTitle')}
+          showBackButton={false}
+          showAdminNavButton={canNavigateFromPosToAdmin(auth?.role || '')}
+          onAdminNav={() => navigatePosOfflineAware('/admin', (p) => router.push(p))}
+          canAccessAdmin={canAccessAdmin(auth?.role || '')}
+          todayOrders={todayOrders}
+          totalAmount={totalAmount}
+          isMainPosDevice={isMainPosDevice}
+          onMainPosDeviceChange={setIsMainPosDevice}
+        />
 
-      <POSMainGrid tiles={visibleTiles} onTileClick={handleTileClick} isKorean={lang === 'ko'} />
+        <POSMainGrid tiles={visibleTiles} onTileClick={handleTileClick} isKorean={lang === 'ko'} />
 
       <Dialog open={submenuOpen} onOpenChange={(open) => !open && setSubmenuParent(null)}>
         <DialogContent className="max-w-xs sm:max-w-sm">
@@ -396,6 +423,7 @@ export default function POSMainPage() {
               type="button"
               variant="outline"
               size="sm"
+              data-tour={isPosDemo ? 'pos-tour-switch-user' : undefined}
               onClick={openSwitchUser}
               className="h-8 whitespace-nowrap px-2 text-[11px] font-medium border-emerald-400 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-500 sm:px-3 sm:text-xs"
             >
@@ -426,5 +454,20 @@ export default function POSMainPage() {
         )}
       </footer>
     </div>
+    </PosTourProvider>
+  )
+}
+
+export default function POSMainPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full min-h-[200px] flex-1 items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 text-slate-600">
+          Loading...
+        </div>
+      }
+    >
+      <POSMainPageInner />
+    </Suspense>
   )
 }

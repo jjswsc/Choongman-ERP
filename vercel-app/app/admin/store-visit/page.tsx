@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { MapPin } from "lucide-react"
 import {
   adminTabsBarCn,
@@ -35,8 +37,7 @@ export default function Page() {
         </div>
 
         <Tabs defaultValue="list" className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_visit_list")}
@@ -48,8 +49,7 @@ export default function Page() {
                   {t("tab_visit_stats")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
             <VisitListTab />
           </TabsContent>

@@ -1,14 +1,26 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
-import { Calculator, ChevronDown, ChevronRight, Search, X, List, FlaskConical } from "lucide-react"
 import {
-  adminTabsBarCn,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Calculator,
+  ChevronDown,
+  ChevronRight,
+  FlaskConical,
+  List,
+  RotateCcw,
+  Search,
+  X,
+} from "lucide-react"
+import {
   adminTabsContentCn,
   adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -41,6 +53,36 @@ import {
 } from "@/lib/pos-cost-analysis-keys"
 
 const MISE_RATE_DEFAULT = 3
+
+type PosCostListSortKey =
+  | "code"
+  | "mainCat"
+  | "category"
+  | "name"
+  | "cook"
+  | "priceHall"
+  | "priceDel"
+  | "costHall"
+  | "costDel"
+  | "ratioH"
+  | "ratioD"
+
+function posCostListRowMiseAndRatios(r: PosMenuCostAnalysisRow) {
+  const miseMult = 1 + MISE_RATE_DEFAULT / 100
+  const m = (c: number) => Math.round(c * miseMult * 10) / 10
+  const priceH = (r.priceHall ?? 0) || 1
+  const priceD = (r.priceDelivery ?? r.priceHall ?? 0) || 1
+  const costHMise = m(r.costHall ?? 0)
+  const costDMise = m(r.costDelivery ?? 0)
+  return {
+    priceH,
+    priceD,
+    costHMise,
+    costDMise,
+    costRatioH: (costHMise / priceH) * 100,
+    costRatioD: (costDMise / priceD) * 100,
+  }
+}
 
 /**
  * React Strict Mode(dev)에서 마운트→언마운트→재마운트 시,
@@ -77,8 +119,16 @@ export default function PosCostAnalysisPage() {
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = React.useState("list")
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
+  const [listSort, setListSort] = React.useState<{ key: PosCostListSortKey; dir: "asc" | "desc" } | null>(null)
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const allowed = canAccessPosCostAnalysis(auth?.role || "")
+
+  const setListSortKey = React.useCallback((key: PosCostListSortKey) => {
+    setListSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: "asc" }
+      return { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+    })
+  }, [])
 
   /**
    * 목록·저장 후 갱신 공통. 저장 직후 `getPosMenuCostAnalysis()`만 호출하면,
@@ -211,36 +261,112 @@ export default function PosCostAnalysisPage() {
   const rowKey = (r: RowWithDisplayCode) =>
     isCostAnalysisBaseRow(r) ? costAnalysisMenuIdKey(r.menuId) : `${costAnalysisMenuIdKey(r.menuId)}:${r.optionId}`
 
-  const withMise = (cost: number) =>
-    Math.round(cost * (1 + MISE_RATE_DEFAULT / 100) * 10) / 10
+  const sortedFlatList = React.useMemo((): RowWithDisplayCode[] => {
+    if (!listSort) return flatList
+    const dir = listSort.dir === "asc" ? 1 : -1
+    const cookVal = (r: RowWithDisplayCode) => {
+      const v = r.cookingTimeMin
+      if (v == null || !Number.isFinite(v) || v < 0) return null
+      return v
+    }
+    const nameKey = (r: RowWithDisplayCode) =>
+      `${r.menuName ?? ""}\0${r.optionName ?? ""}`
+    return [...flatList].sort((a, b) => {
+      const cmp = (n: number) => dir * n
+      const ma = posCostListRowMiseAndRatios(a)
+      const mb = posCostListRowMiseAndRatios(b)
+      switch (listSort.key) {
+        case "code":
+          return cmp(a.displayCode.localeCompare(b.displayCode, "ko", { numeric: true }))
+        case "mainCat":
+          return cmp((a.categoryMain ?? "").localeCompare(b.categoryMain ?? "", "ko", { numeric: true }))
+        case "category":
+          return cmp((a.category ?? "").localeCompare(b.category ?? "", "ko", { numeric: true }))
+        case "name":
+          return cmp(nameKey(a).localeCompare(nameKey(b), "ko", { numeric: true }))
+        case "cook": {
+          const va = cookVal(a)
+          const vb = cookVal(b)
+          if (va == null && vb == null) return 0
+          if (va == null) return 1
+          if (vb == null) return -1
+          return cmp(va - vb)
+        }
+        case "priceHall":
+          return cmp((a.priceHall ?? 0) - (b.priceHall ?? 0))
+        case "priceDel":
+          return cmp(
+            (a.priceDelivery ?? a.priceHall ?? 0) - (b.priceDelivery ?? b.priceHall ?? 0)
+          )
+        case "costHall":
+          return cmp(ma.costHMise - mb.costHMise)
+        case "costDel":
+          return cmp(ma.costDMise - mb.costDMise)
+        case "ratioH":
+          return cmp(ma.costRatioH - mb.costRatioH)
+        case "ratioD":
+          return cmp(ma.costRatioD - mb.costRatioD)
+        default:
+          return 0
+      }
+    })
+  }, [flatList, listSort])
 
-  /** 현재 목록(flatList) 기준 평균 — 한눈에 원가 파악용 */
+  /** 현재 목록(flatList) 기준 평균 — 한눈에 원가 파악용(원가율 0%는 홀/배달 각각 집계에서 제외) */
   const listSummary = React.useMemo(() => {
     if (flatList.length === 0) return null
-    const miseMult = 1 + MISE_RATE_DEFAULT / 100
+    const rowsH: PosMenuCostAnalysisRow[] = []
+    const rowsD: PosMenuCostAnalysisRow[] = []
+    for (const r of flatList) {
+      const m = posCostListRowMiseAndRatios(r)
+      if (m.costRatioH > 0) rowsH.push(r)
+      if (m.costRatioD > 0) rowsD.push(r)
+    }
+    const nH = rowsH.length
+    const nD = rowsD.length
     let sumPriceH = 0
     let sumPriceD = 0
     let sumCostHMise = 0
     let sumCostDMise = 0
-    for (const r of flatList) {
-      const priceH = r.priceHall ?? 0
-      const priceD = (r.priceDelivery ?? r.priceHall ?? 0) || 1
-      const costHMise = Math.round((r.costHall ?? 0) * miseMult * 10) / 10
-      const costDMise = Math.round((r.costDelivery ?? 0) * miseMult * 10) / 10
-      sumPriceH += priceH
-      sumPriceD += priceD
-      sumCostHMise += costHMise
-      sumCostDMise += costDMise
+    for (const r of rowsH) {
+      sumPriceH += r.priceHall ?? 0
+      const m = posCostListRowMiseAndRatios(r)
+      sumCostHMise += m.costHMise
     }
-    const n = flatList.length
-    const avgPriceH = sumPriceH / n
-    const avgPriceD = sumPriceD / n
-    const avgCostH = sumCostHMise / n
-    const avgCostD = sumCostDMise / n
+    for (const r of rowsD) {
+      sumPriceD += r.priceDelivery ?? r.priceHall ?? 0
+      const m = posCostListRowMiseAndRatios(r)
+      sumCostDMise += m.costDMise
+    }
+    const avgPriceH = nH > 0 ? sumPriceH / nH : 0
+    const avgCostH = nH > 0 ? sumCostHMise / nH : 0
+    const avgPriceD = nD > 0 ? sumPriceD / nD : 0
+    const avgCostD = nD > 0 ? sumCostDMise / nD : 0
     const avgRatioH = avgPriceH > 0 ? (avgCostH / avgPriceH) * 100 : 0
     const avgRatioD = avgPriceD > 0 ? (avgCostD / avgPriceD) * 100 : 0
-    return { n, avgPriceH, avgPriceD, avgCostH, avgCostD, avgRatioH, avgRatioD }
+    return {
+      n: flatList.length,
+      nHall: nH,
+      nDelivery: nD,
+      avgPriceH,
+      avgPriceD,
+      avgCostH,
+      avgCostD,
+      avgRatioH,
+      avgRatioD,
+    }
   }, [flatList])
+
+  const listSortIcon = (col: PosCostListSortKey) => {
+    if (!listSort || listSort.key !== col) {
+      return <ArrowUpDown className="inline h-3.5 w-3.5 shrink-0 opacity-45" aria-hidden />
+    }
+    return listSort.dir === "asc" ? (
+      <ArrowUp className="inline h-3.5 w-3.5 shrink-0" aria-hidden />
+    ) : (
+      <ArrowDown className="inline h-3.5 w-3.5 shrink-0" aria-hidden />
+    )
+  }
 
   if (!allowed) {
     return (
@@ -273,8 +399,7 @@ export default function PosCostAnalysisPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   <List className={adminTabsIconCn} aria-hidden />
@@ -289,8 +414,7 @@ export default function PosCostAnalysisPage() {
                   {t("posCostCalculator") || "원가 계산기"}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
           <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -362,6 +486,18 @@ export default function PosCostAnalysisPage() {
               <Search className={cn("h-3.5 w-3.5", loading && "animate-pulse")} />
               {loading ? (t("loading") || "조회 중...") : (t("posCostBtnQuery") || "조회")}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 px-3 gap-1.5 text-xs"
+              onClick={() => setListSort(null)}
+              disabled={!listQueried || !listSort}
+              title={t("posCostSortResetHint")}
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              {t("posCostSortReset")}
+            </Button>
           </div>
         </div>
 
@@ -376,28 +512,40 @@ export default function PosCostAnalysisPage() {
         ) : (
           <>
         {listSummary && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-            <span className="font-semibold text-amber-700">
-              {t("posCostListAverage") || "조회 품목 평균"} ({listSummary.n}{t("posCostItemsUnit") || "건"})
-            </span>
-            <span className="text-muted-foreground">
-              {t("posCostPriceHall") || "홀"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceH.toFixed(0)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              {t("posCostPriceDelivery") || "배달앱"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceD.toFixed(0)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              {t("posCostCostHall") || "홀 원가"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostH.toFixed(1)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              {t("posCostCostDelivery") || "배달앱 원가"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostD.toFixed(1)}</span>
-            </span>
-            <span className="text-amber-600 font-medium tabular-nums">
-              {t("posCostRatioHall") || "원가율(홀)"}: {listSummary.avgRatioH.toFixed(1)}%
-            </span>
-            <span className="text-amber-600 font-medium tabular-nums">
-              {t("posCostRatioDelivery") || "원가율(배달앱)"}: {listSummary.avgRatioD.toFixed(1)}%
-            </span>
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-1.5 text-sm">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+              <span className="font-semibold text-amber-700">
+                {t("posCostListAverage") || "조회 품목 평균"} ({listSummary.n}
+                {t("posCostItemsUnit") || "건"})
+              </span>
+              <span className="text-muted-foreground">
+                {t("posCostPriceHall") || "홀"}:{" "}
+                <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceH.toFixed(0)}</span>
+              </span>
+              <span className="text-muted-foreground">
+                {t("posCostPriceDelivery") || "배달앱"}:{" "}
+                <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceD.toFixed(0)}</span>
+              </span>
+              <span className="text-muted-foreground">
+                {t("posCostCostHall") || "홀 원가"}:{" "}
+                <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostH.toFixed(1)}</span>
+              </span>
+              <span className="text-muted-foreground">
+                {t("posCostCostDelivery") || "배달앱 원가"}:{" "}
+                <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostD.toFixed(1)}</span>
+              </span>
+              <span className="text-amber-600 font-medium tabular-nums">
+                {t("posCostRatioHall") || "원가율(홀)"}: {listSummary.avgRatioH.toFixed(1)}%
+              </span>
+              <span className="text-amber-600 font-medium tabular-nums">
+                {t("posCostRatioDelivery") || "원가율(배달앱)"}: {listSummary.avgRatioD.toFixed(1)}%
+              </span>
+            </div>
+            {(listSummary.nHall < listSummary.n || listSummary.nDelivery < listSummary.n) && (
+              <p className="text-xs text-muted-foreground leading-snug">
+                {`원가율이 0%인 메뉴는 홀·배달 각각 객가·원가·원가율 평균에서 제외되었습니다. (홀 ${listSummary.nHall}건, 배달앱 ${listSummary.nDelivery}건 기준)`}
+              </p>
+            )}
           </div>
         )}
 
@@ -406,36 +554,132 @@ export default function PosCostAnalysisPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="w-8 px-2 py-3"></th>
-                  <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCode") || "코드"}</th>
-                  <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategoryMain") || "대분류"}</th>
-                  <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategory") || "카테고리"}</th>
-                  <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuName") || "메뉴명"}</th>
+                  <th className="w-8 px-2 py-3" aria-hidden />
+                  <th className="px-2 py-2.5 text-left text-xs">
+                    <button
+                      type="button"
+                      className="inline-flex w-full min-w-0 items-center justify-start gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("code")}
+                    >
+                      {t("posMenuCode") || "코드"}
+                      {listSortIcon("code")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-left text-xs">
+                    <button
+                      type="button"
+                      className="inline-flex w-full min-w-0 items-center justify-start gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("mainCat")}
+                    >
+                      {t("posMenuCategoryMain") || "대분류"}
+                      {listSortIcon("mainCat")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-left text-xs">
+                    <button
+                      type="button"
+                      className="inline-flex w-full min-w-0 items-center justify-start gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("category")}
+                    >
+                      {t("posMenuCategory") || "카테고리"}
+                      {listSortIcon("category")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-left text-xs">
+                    <button
+                      type="button"
+                      className="inline-flex w-full min-w-0 items-center justify-start gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("name")}
+                    >
+                      {t("posMenuName") || "메뉴명"}
+                      {listSortIcon("name")}
+                    </button>
+                  </th>
                   <th
-                    className="px-3 py-3 text-right font-semibold text-xs whitespace-nowrap"
+                    className="px-2 py-2.5 text-right text-xs whitespace-nowrap"
                     title={t("posMenuCookingTimeMin") || "조리 시간"}
                   >
-                    {t("posCostTableHdrCook") || t("posMenuCookingTimeMin") || "조리"}
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 max-w-full items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("cook")}
+                    >
+                      {t("posCostTableHdrCook") || t("posMenuCookingTimeMin") || "조리"}
+                      {listSortIcon("cook")}
+                    </button>
                   </th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceHall") || "홀"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceDelivery") || "배달앱"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostCostHall") || "홀 원가"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostCostDelivery") || "배달앱 원가"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostRatioHall") || "원가율(홀)"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostRatioDelivery") || "원가율(배달앱)"}</th>
+                  <th className="px-2 py-2.5 text-right text-xs">
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("priceHall")}
+                    >
+                      {t("posCostPriceHall") || "홀"}
+                      {listSortIcon("priceHall")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-right text-xs">
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("priceDel")}
+                    >
+                      {t("posCostPriceDelivery") || "배달앱"}
+                      {listSortIcon("priceDel")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-right text-xs">
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("costHall")}
+                    >
+                      {t("posCostCostHall") || "홀 원가"}
+                      {listSortIcon("costHall")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-right text-xs">
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("costDel")}
+                    >
+                      {t("posCostCostDelivery") || "배달앱 원가"}
+                      {listSortIcon("costDel")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-right text-xs">
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("ratioH")}
+                    >
+                      {t("posCostRatioHall") || "원가율(홀)"}
+                      {listSortIcon("ratioH")}
+                    </button>
+                  </th>
+                  <th className="px-2 py-2.5 text-right text-xs">
+                    <button
+                      type="button"
+                      className="ml-auto flex w-full min-w-0 items-center justify-end gap-0.5 rounded font-semibold text-foreground/90 hover:text-foreground hover:underline"
+                      onClick={() => setListSortKey("ratioD")}
+                    >
+                      {t("posCostRatioDelivery") || "원가율(배달앱)"}
+                      {listSortIcon("ratioD")}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {flatList.map((r) => {
+                {sortedFlatList.map((r) => {
                   const key = rowKey(r)
                   const expanded = expandedIds.has(key)
                   const hasBreakdown = (r.breakdown ?? []).length > 0
-                  const priceH = (r.priceHall ?? 0) || 1
-                  const priceD = (r.priceDelivery ?? r.priceHall ?? 1) || 1
-                  const costHMise = withMise(r.costHall ?? 0)
-                  const costDMise = withMise(r.costDelivery ?? 0)
-                  const costRatioH = priceH > 0 ? (costHMise / priceH) * 100 : 0
-                  const costRatioD = priceD > 0 ? (costDMise / priceD) * 100 : 0
+                  const m = posCostListRowMiseAndRatios(r)
+                  const costHMise = m.costHMise
+                  const costDMise = m.costDMise
+                  const costRatioH = m.costRatioH
+                  const costRatioD = m.costRatioD
                   const optionPartLabel = (n: string) => {
                     if (!n?.trim()) return n ?? ""
                     let s = String(n)

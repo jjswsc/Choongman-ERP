@@ -57,6 +57,16 @@ function parseDate(ddMmYy: string): string {
   return `${year}-${m[2]}-${m[1]}`
 }
 
+/** K-DEPOSIT CSV는 상세(참조·QR 정보 등)가 11·12열에 나뉘어 들어가는 경우가 많아, 이후 열까지 이어 붙인다. */
+function joinStatementDetailColumns(cols: string[]): string {
+  return cols
+    .slice(11)
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0)
+    .join(" ")
+    .trim()
+}
+
 export function parseKDepositCsv(content: string): KDepositParsedResult {
   const lines = content.split(/\r?\n/)
   let beginningBalance = 0
@@ -102,7 +112,7 @@ export function parseKDepositCsv(content: string): KDepositParsedResult {
     const desc = (cols[3] || "").trim()
     const withdrawalStr = (cols[4] || "").replace(/"/g, "")
     const depositStr = (cols[6] || "").replace(/"/g, "")
-    const details = (cols[11] || cols[12] || "").trim()
+    const details = joinStatementDetailColumns(cols)
 
     if (!dateStr || !/^\d{2}-\d{2}-\d{2}$/.test(dateStr)) continue
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
@@ -22,8 +22,10 @@ export async function POST(req: NextRequest) {
     const auth = authResult.auth
     const body = await req.json()
     const r = Number(body.r != null ? body.r : body.row)
+    const reason = String(body.reason ?? '').trim()
     const userStore = String(auth.store || '').trim()
     const userRole = String(auth.role || '').toLowerCase()
+    const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const jwt = auth
     const effectiveRole = String(jwt?.role || userRole).toLowerCase()
     const franchiseeJwtList =
@@ -33,7 +35,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '❌ 잘못된 행' }, { headers })
     }
 
-    const rows = (await supabaseSelectFilter('employees', `id=eq.${r}`, { select: 'store', limit: 1 })) as { store?: string }[] | null
+    const rows = (await supabaseSelectFilter('employees', `id=eq.${r}`, {
+      select: 'store,resign_date',
+      limit: 1,
+    })) as { store?: string; resign_date?: string | null }[] | null
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: '❌ 해당 직원을 찾을 수 없습니다.' }, { headers })
     }
@@ -56,8 +61,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await supabaseDeleteByFilter('employees', `id=eq.${r}`)
-    return NextResponse.json({ success: true, message: '✅ 삭제되었습니다.' }, { headers })
+    const today = new Date().toISOString().slice(0, 10)
+    const patch: Record<string, unknown> = {
+      employment_status: 'resigned',
+      deleted_at: new Date().toISOString(),
+      deleted_by: userName || null,
+      delete_reason: reason || null,
+      resign_date: rows[0].resign_date ? String(rows[0].resign_date).slice(0, 10) : today,
+    }
+    try {
+      await supabaseUpdateByFilter('employees', `id=eq.${r}`, patch)
+    } catch (e) {
+      const em = e instanceof Error ? e.message : String(e)
+      if (!/employment_status|deleted_at|deleted_by|delete_reason|42703|column/i.test(em)) throw e
+      await supabaseUpdateByFilter('employees', `id=eq.${r}`, { resign_date: patch.resign_date })
+    }
+    return NextResponse.json({ success: true, message: '✅ 퇴사/비활성 처리되었습니다.' }, { headers })
   } catch (e) {
     console.error('deleteAdminEmployee:', e)
     return NextResponse.json(

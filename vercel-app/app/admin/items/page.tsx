@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -462,8 +464,7 @@ export default function ItemsPage() {
           </div>
         )}
         <Tabs value={itemsTab} onValueChange={(v) => setItemsTab(v as "list" | "priceHistory")} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   <Tags className={adminTabsIconCn} aria-hidden />
@@ -474,8 +475,7 @@ export default function ItemsPage() {
                   {t("itemsTabPriceHistory") || "품목 가격이력"}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="list" className={adminTabsContentCn}>
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <div className="lg:sticky lg:top-0 lg:self-start">

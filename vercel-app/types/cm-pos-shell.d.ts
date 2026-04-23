@@ -42,6 +42,27 @@ declare global {
         kitchen3DeviceName?: string | null
         kitchenDeviceName?: string | null
       } | null>
+      savePrintConfig?: (payload: {
+        silent?: boolean
+        deviceName?: string | null
+        receiptDeviceName?: string | null
+        kitchen1DeviceName?: string | null
+        kitchen2DeviceName?: string | null
+        kitchen3DeviceName?: string | null
+        kitchenDeviceName?: string | null
+      }) => Promise<{
+        ok: boolean
+        reason?: string
+        config?: {
+          silent: boolean
+          deviceName: string | null
+          receiptDeviceName?: string | null
+          kitchen1DeviceName?: string | null
+          kitchen2DeviceName?: string | null
+          kitchen3DeviceName?: string | null
+          kitchenDeviceName?: string | null
+        } | null
+      }>
       /**
        * Windows 하이브리드: 영수증용 프린터( runtime-config `print.receiptDeviceName` 등 )로 ESC/POS 드로어 킥.
        * 별도 `local-cash-drawer-bridge` 없이 동작.

@@ -110,13 +110,13 @@ function StoreSalesBody() {
     const onInsert = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new
       if (!row || !rowMatchesPosStore(row, currentStoreId)) return
-      void refetchStores()
+      void refetchStores({ scope: "current" })
       loadTodaySales()
     }
     const onUpdate = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new
       if (!row || !rowMatchesPosStore(row, currentStoreId)) return
-      void refetchStores()
+      void refetchStores({ scope: "current" })
       loadTodaySales()
     }
     const ch1 = subscribePosOrdersInsert(onInsert)
@@ -146,7 +146,7 @@ function StoreSalesBody() {
   }, [currentStore?.tables, tableSortMode])
 
   const handleManualRefresh = useCallback(() => {
-    void refetchStores()
+    void refetchStores({ scope: "current" })
     loadTodaySales()
   }, [refetchStores, loadTodaySales])
 

@@ -260,9 +260,9 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
 
   const storeLabel =
     storeFilter === "All"
-      ? t("all") || "전체"
+      ? t("all") || "All"
       : ["본사", "Office", "오피스", "본점"].includes(storeFilter) || storeFilter.toLowerCase().includes("office")
-        ? t("pettyScopeOffice") || "본사"
+        ? t("pettyScopeOffice") || "Office"
         : storeFilter
 
   return (
@@ -324,7 +324,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                       <SelectValue placeholder={t("pL_store")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {isOffice && <SelectItem value="All">{t("all") || "전체"}</SelectItem>}
+                      {isOffice && <SelectItem value="All">{t("all") || "All"}</SelectItem>}
                       {storeOptions.map((s) => (
                         <SelectItem key={s} value={s}>
                           {s}
@@ -382,7 +382,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                   </div>
                   {balanceCompareCols.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      {t("inNoData") || "조회된 내역이 없습니다."}
+                      {t("inNoData") || "No data found."}
                     </p>
                   ) : (
                     <div className="overflow-x-auto rounded-md border">
@@ -440,7 +440,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                 !loading &&
                 balanceCompareFetchId > 0 && (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    {t("inNoData") || "조회된 내역이 없습니다."}
+                    {t("inNoData") || "No data found."}
                   </p>
                 )}
               {isRangeCompare &&

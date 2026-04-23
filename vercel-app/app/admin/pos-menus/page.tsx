@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -1437,8 +1439,7 @@ export default function PosMenusPage() {
           </div>
         )}
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="screen" className={adminTabsTriggerCn}>
                   <LayoutGrid className={adminTabsIconCn} aria-hidden />
@@ -1469,8 +1470,7 @@ export default function PosMenusPage() {
                   {t("posPricingTab") || "최종가격"}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="screen" className={adminTabsContentCn}>
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           {/* Form */}

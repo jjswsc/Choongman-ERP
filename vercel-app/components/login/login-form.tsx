@@ -212,11 +212,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     [pathname, isAdminPage, redirectTo]
   )
 
+  const posLoginPreserveQuery = useMemo(() => {
+    if (loginApp !== "pos" || !searchParams) return ""
+    const p = new URLSearchParams()
+    const demo = String(searchParams.get("demo") || "").trim()
+    const scenario = String(searchParams.get("scenario") || "").trim()
+    if (demo) p.set("demo", demo)
+    if (scenario) p.set("scenario", scenario)
+    const s = p.toString()
+    return s ? `?${s}` : ""
+  }, [loginApp, searchParams])
+
   const effectiveRedirectTo = useMemo(() => {
     if (loginApp === "mobile") return "/"
-    if (loginApp === "pos") return "/pos"
+    if (loginApp === "pos") return `/pos${posLoginPreserveQuery}`
     return erpLandingPath
-  }, [loginApp, erpLandingPath])
+  }, [loginApp, erpLandingPath, posLoginPreserveQuery])
 
   /** SaaS 관리 로그인은 탭과 무관하게 항상 관리자 권한 검증 — 이전: mobile/POS 탭이면 isAdminPage false로 잘못 전달됨 */
   const effectiveIsAdminPage =
@@ -887,6 +898,28 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </div>
           ) : (
           <form onSubmit={handleSubmit}>
+            <div className="mb-3 w-full max-w-sm space-y-1.5" data-login-step="language">
+              <p className="text-center text-xs font-medium tracking-wide text-white/90" id="login-form-lang-hint">
+                {tMsg("posLanguage")}
+              </p>
+              <Select
+                value={lang}
+                onValueChange={handleLangChange}
+                aria-labelledby="login-form-lang-hint"
+              >
+                <SelectTrigger type="button" className="login-select-trigger ring-1 ring-white/20" style={{ color: "white" }}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="login-select-content">
+                  {ADMIN_UI_LANG_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {showServerUnreachableBanner ? (
               <div className="mb-3 space-y-2">
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
@@ -948,18 +981,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 </button>
               </div>
             ) : null}
-            <Select value={lang} onValueChange={handleLangChange}>
-              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="login-select-content">
-                {ADMIN_UI_LANG_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
 
             <Select value={company} onValueChange={handleCompanyChange} disabled={companies.length === 0}>
               <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>

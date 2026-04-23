@@ -861,6 +861,31 @@ export async function sendNotice(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function presignNoticeAttachment(params: {
+  fileName: string
+  contentType: string
+  fileSize: number
+}): Promise<{
+  success: boolean
+  message?: string
+  signedUrl?: string
+  publicUrl?: string
+  storagePath?: string
+}> {
+  const res = await apiFetchWithOffline('/api/uploadNoticeAttachment/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+    storagePath?: string
+  }>
+}
+
 export interface SentNoticeItem {
   id: string
   sender?: string
@@ -933,6 +958,249 @@ export async function getNoticeReadDetail(params: { noticeId: number }) {
   const data = (await res.json()) as { items?: NoticeReadDetailItem[]; success?: boolean; message?: string }
   if (!res.ok || data.success === false) throw new Error(data.message || 'Failed')
   return { items: data.items ?? [] }
+}
+
+export interface NoticeReaderStatsRow {
+  store: string
+  name: string
+  job: string
+  targeted: number
+  confirmed: number
+  missed: number
+  missRate: number
+}
+
+export async function getNoticeReaderStats(params: {
+  startDate: string
+  endDate: string
+  store?: string
+  searchType?: 'all' | 'notice' | 'order'
+  minMissed?: number
+}): Promise<{
+  success: boolean
+  message?: string
+  items: NoticeReaderStatsRow[]
+  truncated: boolean
+  noticeInRange: number
+}> {
+  const q = new URLSearchParams({
+    startDate: params.startDate,
+    endDate: params.endDate,
+  })
+  if (params.store) q.set('store', params.store)
+  if (params.searchType && params.searchType !== 'all') q.set('searchType', params.searchType)
+  if (params.minMissed != null && params.minMissed > 0) q.set('minMissed', String(params.minMissed))
+  const res = await apiFetchWithOffline(`/api/getNoticeReaderStats?${q}`)
+  const data = (await res.json()) as {
+    success?: boolean
+    message?: string
+    items?: NoticeReaderStatsRow[]
+    truncated?: boolean
+    noticeInRange?: number
+  }
+  if (!res.ok) {
+    return {
+      success: false,
+      message: data?.message,
+      items: [],
+      truncated: false,
+      noticeInRange: 0,
+    }
+  }
+  return {
+    success: data.success !== false,
+    message: data.message,
+    items: Array.isArray(data.items) ? data.items : [],
+    truncated: Boolean(data.truncated),
+    noticeInRange: data.noticeInRange ?? 0,
+  }
+}
+
+// --- HR policies (인사 규정) ---
+
+export type HrPolicyRow = {
+  id: number
+  title?: string
+  content?: string
+  target_store?: string
+  target_role?: string
+  target_permission_group?: string | null
+  target_recipients?: string | null
+  content_version?: number
+  created_at?: string
+  updated_at?: string
+  effective_at?: string | null
+  is_active?: boolean
+  attachments?: string
+  sender?: string
+}
+
+export async function getHrPolicies(params?: { activeOnly?: boolean }): Promise<{
+  success: boolean
+  items: HrPolicyRow[]
+  message?: string
+}> {
+  const q = new URLSearchParams()
+  if (params?.activeOnly) q.set('activeOnly', '1')
+  const res = await apiFetchWithOffline(`/api/getHrPolicies?${q}`)
+  return (await res.json()) as { success: boolean; items: HrPolicyRow[]; message?: string }
+}
+
+export async function saveHrPolicy(body: {
+  id?: number
+  title: string
+  content: string
+  targetStore: string
+  targetRole: string
+  targetPermissionGroup?: string
+  targetRecipients?: Array<{ store: string; name: string }>
+  effectiveAt?: string | null
+  is_active?: boolean
+  attachments?: Array<{ name: string; mime: string; url: string }>
+}): Promise<{ success: boolean; message?: string; id?: number; content_version?: number }> {
+  const res = await apiFetchWithOffline('/api/saveHrPolicy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: body.id,
+      title: body.title,
+      content: body.content,
+      targetStore: body.targetStore,
+      targetRole: body.targetRole,
+      targetPermissionGroup: body.targetPermissionGroup,
+      targetRecipients: body.targetRecipients,
+      effective_at: body.effectiveAt,
+      is_active: body.is_active,
+      attachments: body.attachments,
+    }),
+  })
+  return (await res.json()) as { success: boolean; message?: string; id?: number; content_version?: number }
+}
+
+export type HrPolicyListItem = {
+  id: number
+  date: string
+  title: string
+  content: string
+  status: string
+  needsReconfirm: boolean
+  attachments: unknown[]
+  contentVersion: number
+  effectiveAt: string
+}
+
+export async function getMyHrPolicies(params: {
+  store: string
+  name: string
+  page?: number
+  pageSize?: number
+  status?: 'all' | 'unread' | 'read'
+}): Promise<{
+  items: HrPolicyListItem[]
+  total: number
+  page: number
+  pageSize: number
+  truncated: boolean
+}> {
+  const q = new URLSearchParams({ store: params.store, name: params.name })
+  if (params.page != null) q.set('page', String(params.page))
+  if (params.pageSize != null) q.set('pageSize', String(params.pageSize))
+  if (params.status && params.status !== 'all') q.set('status', params.status)
+  const res = await apiFetchWithOffline(`/api/getMyHrPolicies?${q}`)
+  return (await res.json()) as {
+    items: HrPolicyListItem[]
+    total: number
+    page: number
+    pageSize: number
+    truncated: boolean
+  }
+}
+
+export async function confirmHrPolicyRead(params: {
+  policyId: number
+  store: string
+  name: string
+  action?: string
+}): Promise<{ success: boolean; message?: string }> {
+  const res = await apiFetchWithOffline('/api/confirmHrPolicyRead', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      policyId: params.policyId,
+      store: params.store,
+      name: params.name,
+      action: params.action,
+    }),
+  })
+  return (await res.json()) as { success: boolean; message?: string }
+}
+
+export type HrPolicyReadDetailItem = {
+  store: string
+  name: string
+  read_at: string
+  status: string
+  acknowledged: boolean
+}
+
+export async function getHrPolicyReadDetail(params: { policyId: number }): Promise<{
+  items: HrPolicyReadDetailItem[]
+  contentVersion: number
+}> {
+  const q = new URLSearchParams({ policyId: String(params.policyId) })
+  const res = await apiFetchWithOffline(`/api/getHrPolicyReadDetail?${q}`)
+  const data = (await res.json()) as {
+    items?: HrPolicyReadDetailItem[]
+    success?: boolean
+    contentVersion?: number
+    message?: string
+  }
+  if (!res.ok || data.success === false) throw new Error(data.message || 'Failed')
+  return { items: data.items ?? [], contentVersion: data.contentVersion ?? 1 }
+}
+
+export async function getHrPolicyReaderStats(params: {
+  startDate: string
+  endDate: string
+  store?: string
+  minMissed?: number
+}): Promise<{
+  success: boolean
+  message?: string
+  items: NoticeReaderStatsRow[]
+  truncated: boolean
+  policyInRange: number
+}> {
+  const q = new URLSearchParams({
+    startDate: params.startDate,
+    endDate: params.endDate,
+  })
+  if (params.store) q.set('store', params.store)
+  if (params.minMissed != null && params.minMissed > 0) q.set('minMissed', String(params.minMissed))
+  const res = await apiFetchWithOffline(`/api/getHrPolicyReaderStats?${q}`)
+  const data = (await res.json()) as {
+    success?: boolean
+    message?: string
+    items?: NoticeReaderStatsRow[]
+    truncated?: boolean
+    policyInRange?: number
+  }
+  if (!res.ok) {
+    return {
+      success: false,
+      message: data?.message,
+      items: [],
+      truncated: false,
+      policyInRange: 0,
+    }
+  }
+  return {
+    success: data.success !== false,
+    message: data.message,
+    items: Array.isArray(data.items) ? data.items : [],
+    truncated: Boolean(data.truncated),
+    policyInRange: data.policyInRange ?? 0,
+  }
 }
 
 export async function deleteNoticeAdmin(params: { id: number }) {
@@ -8068,13 +8336,25 @@ export async function posDineInTableMerge(params: { keepOrderId: number; absorbO
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function updatePosOrderStatus(params: { id: number; status: string }) {
+export type PosOrderStatusUpdateResult = {
+  success: boolean
+  message?: string
+  retryAfterQueue?: boolean
+  statusAlreadyApplied?: boolean
+  failedSideEffects?: string[]
+}
+
+export async function updatePosOrderStatus(params: {
+  id: number
+  status: string
+  retrySideEffects?: boolean
+}) {
   const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<PosOrderStatusUpdateResult>
 }
 
 export async function markPosOrderItemServed(params: {
@@ -9199,6 +9479,10 @@ export interface AdminEmployeeItem {
   nation: string
   join: string
   resign: string
+  /** 재직 상태. 미전달 시 resign 기준으로 서버 추론 */
+  employmentStatus?: 'active' | 'leave' | 'resigned' | 'suspended'
+  /** 소프트 삭제 시각 (있으면 목록에서 제외) */
+  deletedAt?: string
   salType: string
   salAmt: number
   pw: string
@@ -9261,12 +9545,28 @@ export async function saveFranchiseeMultiStoreSettings(settings: FranchiseeMulti
   return res.json() as Promise<{ success?: boolean; settings?: FranchiseeMultiStoreSettings; message?: string }>
 }
 
-export async function getAdminEmployeeList(params: { userStore: string; userRole: string; forPettyTransfer?: boolean }) {
+export async function getAdminEmployeeList(params: {
+  userStore: string
+  userRole: string
+  forPettyTransfer?: boolean
+  search?: string
+  status?: string
+  store?: string
+  job?: string
+  page?: number
+  pageSize?: number
+}) {
   const q = new URLSearchParams({
     userStore: params.userStore,
     userRole: params.userRole,
   })
   if (params.forPettyTransfer) q.set('forPettyTransfer', '1')
+  if (params.search) q.set('search', params.search)
+  if (params.status) q.set('status', params.status)
+  if (params.store) q.set('store', params.store)
+  if (params.job) q.set('job', params.job)
+  if (params.page && Number.isFinite(params.page)) q.set('page', String(Math.trunc(params.page)))
+  if (params.pageSize && Number.isFinite(params.pageSize)) q.set('pageSize', String(Math.trunc(params.pageSize)))
   const res = await apiFetchWithOffline(`/api/getAdminEmployeeList?${q}`)
   const data = await res.json()
   return {
@@ -9294,7 +9594,7 @@ export async function getEmployeeLatestGrades() {
 }
 
 export async function saveAdminEmployee(params: {
-  d: Partial<AdminEmployeeItem> & { row: number }
+  d: (Partial<AdminEmployeeItem> & { row: number }) & { changeReason?: string }
   userStore: string
   userRole: string
   userName?: string
@@ -9313,6 +9613,7 @@ export async function deleteAdminEmployee(params: {
   r: number
   userStore: string
   userRole: string
+  reason?: string
 }) {
   const res = await apiFetchWithOffline('/api/deleteAdminEmployee', {
     method: 'POST',
@@ -10681,4 +10982,179 @@ export async function setMenuPermission(
     body: JSON.stringify({ store, name, perm: permissions }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export type CompanyHybridDocumentListItem = {
+  id: number
+  store: string
+  related_type: string
+  related_id: string | null
+  doc_type: string | null
+  category_id: number | null
+  title: string
+  source: string
+  external_url: string | null
+  public_url: string | null
+  storage_path: string | null
+  file_name: string | null
+  file_size: number | null
+  mime: string | null
+  valid_from: string | null
+  valid_to: string | null
+  note: string | null
+  created_by_name: string | null
+  created_by_store: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+export type CompanyHybridDocumentCategory = {
+  id: number
+  store: string
+  name: string
+  sort_order: number
+  created_at?: string
+}
+
+/** 문서 관리 API: UI에서 401 시 알림 대신 로그인 이동용 */
+type CompanyHybridHttpMeta = { httpStatus: number }
+
+export async function getCompanyHybridDocuments(params: {
+  store: string
+  relatedType?: string
+  relatedId?: string
+  /** 생략·'all' = 전체, 'uncategorized' = 미분류, 숫자 문자열 = 해당 카테고리 */
+  categoryId?: string
+  searchTitle?: string
+  /** 제목 정렬 — 미지정 시 등록일 최신순 */
+  sortTitle?: 'asc' | 'desc'
+}): Promise<
+  { success: boolean; list: CompanyHybridDocumentListItem[]; message?: string } & CompanyHybridHttpMeta
+> {
+  const q = new URLSearchParams({ store: params.store })
+  if (params.relatedType) q.set('relatedType', params.relatedType)
+  if (params.relatedId) q.set('relatedId', params.relatedId)
+  if (params.categoryId && params.categoryId !== 'all') {
+    const c = params.categoryId
+    q.set('categoryId', c === 'uncategorized' ? 'none' : c)
+  }
+  if (params.searchTitle?.trim()) q.set('searchTitle', params.searchTitle.trim())
+  if (params.sortTitle === 'asc' || params.sortTitle === 'desc') q.set('sortTitle', params.sortTitle)
+  const res = await apiFetchWithOffline(`/api/getCompanyHybridDocuments?${q}`)
+  const data = (await res.json()) as { success: boolean; list: CompanyHybridDocumentListItem[]; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function getCompanyHybridDocumentCategories(params: {
+  store: string
+}): Promise<
+  { success: boolean; list: CompanyHybridDocumentCategory[]; message?: string } & CompanyHybridHttpMeta
+> {
+  const res = await apiFetchWithOffline(
+    `/api/getCompanyHybridDocumentCategories?${new URLSearchParams({ store: params.store })}`
+  )
+  const data = (await res.json()) as { success: boolean; list: CompanyHybridDocumentCategory[]; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function saveCompanyHybridDocumentCategory(
+  body: { store: string; name: string; sortOrder?: number; id?: number }
+): Promise<{ success: boolean; id?: number; message?: string } & CompanyHybridHttpMeta> {
+  const res = await apiFetchWithOffline('/api/saveCompanyHybridDocumentCategory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = (await res.json()) as { success: boolean; id?: number; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function deleteCompanyHybridDocumentCategory(
+  body: { id: number }
+): Promise<{ success: boolean; message?: string } & CompanyHybridHttpMeta> {
+  const res = await apiFetchWithOffline('/api/deleteCompanyHybridDocumentCategory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = (await res.json()) as { success: boolean; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function saveCompanyHybridDocument(
+  body: Record<string, unknown>
+): Promise<{ success: boolean; id?: number; message?: string } & CompanyHybridHttpMeta> {
+  const res = await apiFetchWithOffline('/api/saveCompanyHybridDocument', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = (await res.json()) as { success: boolean; id?: number; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function deleteCompanyHybridDocument(params: {
+  id: number
+}): Promise<{ success: boolean; message?: string } & CompanyHybridHttpMeta> {
+  const res = await apiFetchWithOffline('/api/deleteCompanyHybridDocument', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json()) as { success: boolean; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function presignCompanyHybridDocumentUpload(params: {
+  store: string
+  fileName: string
+  contentType: string
+  fileSize: number
+}): Promise<
+  {
+    success: boolean
+    signedUrl?: string
+    publicUrl?: string
+    storagePath?: string
+    message?: string
+  } & CompanyHybridHttpMeta
+> {
+  const res = await apiFetchWithOffline('/api/uploadCompanyHybridDocument/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json()) as {
+    success: boolean
+    signedUrl?: string
+    publicUrl?: string
+    storagePath?: string
+    message?: string
+  }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function completeCompanyHybridDocumentUpload(
+  body: Record<string, unknown>
+): Promise<{ success: boolean; id?: number; url?: string; message?: string } & CompanyHybridHttpMeta> {
+  const res = await apiFetchWithOffline('/api/uploadCompanyHybridDocument/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = (await res.json()) as { success: boolean; id?: number; url?: string; message?: string }
+  return { ...data, httpStatus: res.status }
+}
+
+export async function recordCompanyHybridDocumentView(params: {
+  id: number
+}): Promise<{ success: boolean; message?: string } & CompanyHybridHttpMeta> {
+  const res = await apiFetchWithOffline('/api/recordCompanyHybridDocumentView', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json()) as { success: boolean; message?: string }
+  return { ...data, httpStatus: res.status }
 }

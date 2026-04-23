@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useState, useMemo, useRef } from "react"
@@ -593,8 +595,8 @@ export function OrderTab() {
                 imgClassName="max-w-full max-h-[80vh] rounded-lg object-contain"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
-                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
-                rotateRightLabel={t("imageRotateRight") || "시계"}
+                rotateLeftLabel={t("imageRotateLeft") || "Rotate Left"}
+                rotateRightLabel={t("imageRotateRight") || "Rotate Right"}
               />
             )}
             <p className="mt-2 text-center text-sm text-white">{imageModal.name}</p>
@@ -711,9 +713,8 @@ export function OrderTab() {
         document.body
       )}
       <Tabs defaultValue="new" className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
+        <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="new" className={adminTabsTriggerCn}>
                 {t('ordNew')}
               </TabsTrigger>
@@ -721,8 +722,7 @@ export function OrderTab() {
                 {t('ordHistory')}
               </TabsTrigger>
             </TabsList>
-          </div>
-        </div>
+          </AdminTabsBarWithHelp>
 
         <TabsContent value="new" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <Card className="shadow-sm">
@@ -801,7 +801,7 @@ export function OrderTab() {
                                           e.stopPropagation()
                                           setDescriptionModal({ name: item.name, description: item.description! })
                                         }}
-                                        title={t("itemsDescription") || "설명"}
+                                        title={t("itemsDescription") || "Description"}
                                       >
                                         <Info className="h-3.5 w-3.5" />
                                       </button>
@@ -961,14 +961,14 @@ export function OrderTab() {
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-sm font-semibold">{t("orderDate")} {o.date}</span>
                               {(o.userNick || o.userName) && (
-                                <span className="text-xs text-muted-foreground">({t("orderOrderedBy") || "발주자"} {o.userNick || o.userName})</span>
+                                <span className="text-xs text-muted-foreground">({t("orderOrderedBy") || "Ordered By"} {o.userNick || o.userName})</span>
                               )}
                               {o.deliveryDate && (
                                 <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
                               )}
                               {o.isForceOutbound && (
                                 <Badge variant="outline" className="text-sm px-2.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300">
-                                  {t("outTypeForce") || "강제출고"}
+                                  {t("outTypeForce") || "Forced Outbound"}
                                 </Badge>
                               )}
                               <Badge
@@ -996,7 +996,7 @@ export function OrderTab() {
                               const items = o.items || []
                               const byLocation = new Map<string, typeof items>()
                               for (const it of items) {
-                                const loc = it.outboundLocation || "(미지정)"
+                                const loc = it.outboundLocation || "(Unspecified)"
                                 if (!byLocation.has(loc)) byLocation.set(loc, [])
                                 byLocation.get(loc)!.push(it)
                               }
@@ -1005,7 +1005,7 @@ export function OrderTab() {
                               return groups.map(([loc, locItems]) => (
                                 <div key={loc} className="space-y-1.5">
                                   <div className="text-xs font-semibold text-primary/90 border-b border-border/60 pb-1">
-                                    {t("outWhWarehouseCol") || "출고지"}: {loc}
+                                    {t("outWhWarehouseCol") || "Outbound Location"}: {loc}
                                     {(o.deliveryDatesByOutbound?.[loc] || o.deliveryDate) && (
                                       <span className="ml-1.5 text-muted-foreground font-normal">
                                         · {t("deliveryDate")} {(o.deliveryDatesByOutbound?.[loc] || o.deliveryDate)}
@@ -1034,14 +1034,14 @@ export function OrderTab() {
                                           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white dark:bg-emerald-600" title={t("itemReceived")}>✓</span>
                                         )}
                                         {!showCheck && !isReceived && (o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
-                                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0" title={t("outItemUnreceived") || "미수령"}>
-                                            {t("outItemUnreceived") || "미수령"}
+                                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0" title={t("outItemUnreceived") || "Unreceived"}>
+                                            {t("outItemUnreceived") || "Unreceived"}
                                           </span>
                                         )}
                                         <span className={`flex-1 min-w-0 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
                                         {showCheck && checked ? (
                                           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                                            <span className="text-muted-foreground text-xs">{t("orderReceivedQty") || "받은 수량"}:</span>
+                                            <span className="text-muted-foreground text-xs">{t("orderReceivedQty") || "Received Qty"}:</span>
                                             <Input
                                               type="number"
                                               min={0}
@@ -1098,7 +1098,7 @@ export function OrderTab() {
       <Dialog open={!!rejectReasonModal} onOpenChange={(open) => !open && setRejectReasonModal(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{t("reasonPh") || "사유"}</DialogTitle>
+            <DialogTitle>{t("reasonPh") || "Reason"}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{rejectReasonModal?.order?.rejectReason || "-"}</p>
         </DialogContent>

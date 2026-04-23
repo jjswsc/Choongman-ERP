@@ -1,4 +1,3 @@
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { isFranchiseeRole } from '@/lib/permissions'
 import { storeMatches } from '@/lib/admin-employee-store-access'
@@ -26,37 +25,6 @@ export function normalizeFranchiseeMultiStoreSettings(raw: unknown): FranchiseeM
   const enabled = o.enabled === true
   const maxStores = clampMaxStores(Number(o.maxStores))
   return { enabled, maxStores: enabled ? maxStores : DEFAULT_SETTINGS.maxStores }
-}
-
-export async function getFranchiseeMultiStoreSettings(): Promise<FranchiseeMultiStoreSettings> {
-  try {
-    const rows = (await supabaseSelectFilter(
-      'system_settings',
-      `key=eq.${encodeURIComponent(FRANCHISEE_MULTI_STORE_SETTINGS_KEY)}`,
-      { limit: 1 }
-    )) as { value_json?: unknown }[] | null
-    const raw = rows?.[0]?.value_json
-    return normalizeFranchiseeMultiStoreSettings(raw)
-  } catch {
-    return { ...DEFAULT_SETTINGS }
-  }
-}
-
-export async function saveFranchiseeMultiStoreSettings(
-  settings: FranchiseeMultiStoreSettings
-): Promise<void> {
-  const normalized = normalizeFranchiseeMultiStoreSettings(settings)
-  await supabaseUpsert(
-    'system_settings',
-    [
-      {
-        key: FRANCHISEE_MULTI_STORE_SETTINGS_KEY,
-        value_json: normalized,
-        updated_at: new Date().toISOString(),
-      },
-    ],
-    'key'
-  )
 }
 
 export { parseExtraStoresColumn } from '@/lib/extra-stores-column'

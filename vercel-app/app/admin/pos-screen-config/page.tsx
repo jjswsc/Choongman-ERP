@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone, Save } from "lucide-react"
@@ -92,8 +94,7 @@ export default function PosScreenConfigPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="tables" className={adminTabsTriggerCn}>
                   <LayoutGrid className={adminTabsIconCn} aria-hidden />
@@ -124,8 +125,7 @@ export default function PosScreenConfigPage() {
                   {t("posDualMonitorTab") || "듀얼 모니터"}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="tables" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">

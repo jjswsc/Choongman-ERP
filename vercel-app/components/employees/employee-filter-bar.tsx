@@ -78,6 +78,8 @@ export function EmployeeFilterBar({
       >
         <option value="all">{t("emp_status_all")}</option>
         <option value="active">{t("emp_status_active")}</option>
+        <option value="leave">{t("leaveStatusApproved")}</option>
+        <option value="suspended">{t("warningStatusSuspended") || "Suspended"}</option>
         <option value="resigned">{t("emp_status_resigned")}</option>
       </select>
       <div className="relative flex-1 min-w-[120px] max-w-[200px]">

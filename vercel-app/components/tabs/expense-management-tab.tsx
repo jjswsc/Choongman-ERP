@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
@@ -255,15 +257,15 @@ export function ExpenseManagementTab() {
     const amountRaw = payAmountById[row.id] || String(row.remainingAmount || "")
     const payAmt = Number(String(amountRaw).replace(/,/g, ""))
     if (!payAmt || payAmt <= 0) {
-      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
     }
     if (method === "bank" && !payBankById[row.id]) {
-      await appAlert(t("bankAccount") || "계좌")
+      await appAlert(tt("bankAccount", "Account"))
       return
     }
     if (method === "petty" && !payStoreById[row.id]) {
-      await appAlert(t("recFilterStoreSelect") || "매장 선택")
+      await appAlert(tt("recFilterStoreSelect", "Select Store"))
       return
     }
     setPayingId(row.id)
@@ -293,21 +295,21 @@ export function ExpenseManagementTab() {
   const renderWithdrawalType = (cat?: string) => {
     const c = String(cat || "").toLowerCase()
     const map: Record<string, string> = {
-      purchase_payment: t("wm_purchase") || "매입 대금",
-      purchase_advance: t("wm_advance") || "매입 선급",
-      expense: t("wm_expense") || "경비",
-      expense_advance: t("wm_advance") || "경비 선급",
-      fixed_asset: t("wm_fixed_asset") || "고정자산",
-      transfer: t("wm_transfer") || "이체",
-      tax_vat: t("wm_tax_vat") || "부가세",
-      tax_withholding: t("wm_tax_withholding") || "원천세",
-      tax_corporate: t("wm_tax_corporate") || "법인세",
-      loan_repayment: t("wm_loan_repayment") || "대출 상환",
-      loan_given: t("wm_loan_given") || "대여",
-      correction: t("wm_correction") || "정정",
-      dividend: t("wm_dividend") || "배당/사유 인출",
+      purchase_payment: tt("wm_purchase", "Purchase Payment"),
+      purchase_advance: tt("wm_advance", "Advance Payment"),
+      expense: tt("wm_expense", "Expense"),
+      expense_advance: tt("wm_advance", "Advance Payment"),
+      fixed_asset: tt("wm_fixed_asset", "Fixed Asset"),
+      transfer: tt("wm_transfer", "Transfer"),
+      tax_vat: tt("wm_tax_vat", "VAT"),
+      tax_withholding: tt("wm_tax_withholding", "Withholding Tax"),
+      tax_corporate: tt("wm_tax_corporate", "Corporate Tax"),
+      loan_repayment: tt("wm_loan_repayment", "Loan Repayment"),
+      loan_given: tt("wm_loan_given", "Loan Given"),
+      correction: tt("wm_correction", "Correction"),
+      dividend: tt("wm_dividend", "Dividend/Owner Draw"),
     }
-    return map[c] || (t("wm_expense") || "경비")
+    return map[c] || tt("wm_expense", "Expense")
   }
 
   const accountSubjectLabel = React.useCallback((id?: number | null) => {
@@ -394,11 +396,11 @@ export function ExpenseManagementTab() {
 
   const handleApprove = React.useCallback(async (row: ExpenseAccrualPlanItem, action: "approve" | "reject") => {
     const note = action === "reject"
-      ? await appPrompt(t("memo") || "메모", "") || ""
+      ? await appPrompt(tt("memo", "Memo"), "") || ""
       : ""
     const ok = action === "approve"
-      ? await appConfirm(t("confirmApprove") || "승인하시겠습니까?")
-      : await appConfirm(t("confirmReject") || "반려하시겠습니까?")
+      ? await appConfirm(tt("confirmApprove", "Approve this item?"))
+      : await appConfirm(tt("confirmReject", "Reject this item?"))
     if (!ok) return
     setPayingId(row.id)
     try {
@@ -445,7 +447,7 @@ export function ExpenseManagementTab() {
 
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
     if (!row?.id) return
-    const ok = await appConfirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
+    const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
     if (!ok) return
     setDeletingPlanId(row.id)
     try {
@@ -464,7 +466,7 @@ export function ExpenseManagementTab() {
   }, [auth?.role, loadPlans])
 
   const handleCleanNoStore = React.useCallback(async () => {
-    const ok = await appConfirm(t("expenseCleanNoStoreConfirm") || "매장 미선택인 지급예정을 모두 삭제합니다. 진행할까요?")
+    const ok = await appConfirm(tt("expenseCleanNoStoreConfirm", "Delete all payment plans with no store selected?"))
     if (!ok) return
     setCleaningNoStore(true)
     try {
@@ -482,11 +484,11 @@ export function ExpenseManagementTab() {
 
   const handleApproveAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
-      await appAlert(t("payableEmpty") || "승인할 항목이 없습니다.")
+      await appAlert(tt("payableEmpty", "No items to approve."))
       return
     }
     const ok = await appConfirm(
-      `${startStr} ${t("expenseApproveAllDay") || "당일 전체 승인"} (${approvablePlansForDay.length}${t("receivPayCount") || "건"})`
+      `${startStr} ${tt("expenseApproveAllDay", "Approve all for day")} (${approvablePlansForDay.length}${tt("receivPayCount", "items")})`
     )
     if (!ok) return
     setApprovingAll(true)
@@ -511,11 +513,11 @@ export function ExpenseManagementTab() {
 
   const handleRejectAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
-      await appAlert(t("payableEmpty") || "반려할 항목이 없습니다.")
+      await appAlert(tt("payableEmpty", "No items to reject."))
       return
     }
     const ok = await appConfirm(
-      `${startStr} ${t("expenseRejectAllDay") || "당일 전체 반려"} (${approvablePlansForDay.length}${t("receivPayCount") || "건"})`
+      `${startStr} ${tt("expenseRejectAllDay", "Reject all for day")} (${approvablePlansForDay.length}${tt("receivPayCount", "items")})`
     )
     if (!ok) return
     setRejectingAll(true)
@@ -541,24 +543,22 @@ export function ExpenseManagementTab() {
   return (
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={(v) => setTab(v as "plan" | "expenseRegister" | "expenseSearch" | "card")} className={adminTabsRootCn}>
-        <div className={adminTabsBarCn}>
-          <div className={adminTabsScrollCn}>
-            <TabsList className={adminTabsListRowCn}>
+        <AdminTabsBarWithHelp>
+              <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="plan" className={adminTabsTriggerCn}>
-                {t("expensePlanTab") || "지급예정"}
+                {tt("expensePlanTab", "Payment Plan")}
               </TabsTrigger>
               <TabsTrigger value="expenseRegister" className={adminTabsTriggerCn}>
-                {t("expenseRegisterTabTitle") || "지출 등록"}
+                {tt("expenseRegisterTabTitle", "Expense Register")}
               </TabsTrigger>
               <TabsTrigger value="expenseSearch" className={adminTabsTriggerCn}>
-                {t("expenseRegisterSearchTab") || "지출 검색"}
+                {tt("expenseRegisterSearchTab", "Expense Search")}
               </TabsTrigger>
               <TabsTrigger value="card" className={adminTabsTriggerCn}>
-                {t("cardManagementTab") || "카드 관리"}
+                {tt("cardManagementTab", "Card Management")}
               </TabsTrigger>
             </TabsList>
-          </div>
-        </div>
+          </AdminTabsBarWithHelp>
 
         <TabsContent value="plan" className={cn(adminTabsContentCn, "space-y-4")}>
           <div className="flex flex-wrap items-end gap-2">
@@ -567,10 +567,10 @@ export function ExpenseManagementTab() {
             <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
             <Select value={planTypeFilter} onValueChange={setPlanTypeFilter}>
               <SelectTrigger className="w-[200px] h-9">
-                <SelectValue placeholder={t("bankCategoryLabel") || "유형"} />
+                <SelectValue placeholder={tt("bankCategoryLabel", "Category")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{(t("all") || "전체")} {(t("bankCategoryLabel") || "유형")}</SelectItem>
+                <SelectItem value="__all__">{tt("all", "All")} {tt("bankCategoryLabel", "Category")}</SelectItem>
                 {withdrawalTypeOptions.map((cat) => (
                   <SelectItem key={cat} value={cat.toLowerCase()}>
                     {renderWithdrawalType(cat)}
@@ -580,10 +580,10 @@ export function ExpenseManagementTab() {
             </Select>
             <Select value={planStoreFilter} onValueChange={setPlanStoreFilter}>
               <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder={t("recFilterStoreSelect") || "매장 선택"} />
+                <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{(t("all") || "전체")} {(t("store") || "매장")}</SelectItem>
+                <SelectItem value="__all__">{tt("all", "All")} {tt("store", "Store")}</SelectItem>
                 {planStoreOptions.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
@@ -600,7 +600,7 @@ export function ExpenseManagementTab() {
               onClick={handleApproveAllForDay}
               disabled={approvingAll || approvablePlansForDay.length === 0}
             >
-              {approvingAll ? (t("loading") || "...") : (t("expenseApproveAllDay") || "당일 전체 승인")}
+              {approvingAll ? tt("loading", "...") : tt("expenseApproveAllDay", "Approve all for day")}
             </Button>
             <Button
               size="sm"
@@ -609,7 +609,7 @@ export function ExpenseManagementTab() {
               onClick={handleRejectAllForDay}
               disabled={rejectingAll || approvablePlansForDay.length === 0}
             >
-              {rejectingAll ? (t("loading") || "...") : (t("expenseRejectAllDay") || "당일 전체 반려")}
+              {rejectingAll ? tt("loading", "...") : tt("expenseRejectAllDay", "Reject all for day")}
             </Button>
             <Button
               size="sm"
@@ -617,43 +617,43 @@ export function ExpenseManagementTab() {
               className="h-9 border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15"
               onClick={handleCleanNoStore}
               disabled={cleaningNoStore}
-              title={t("expenseCleanNoStoreHint") || "매장이 선택되지 않은 지급예정을 강제 삭제"}
+              title={tt("expenseCleanNoStoreHint", "Force delete payment plans with no store selected")}
             >
-              {cleaningNoStore ? (t("loading") || "...") : (t("expenseCleanNoStore") || "매장 미선택 정리")}
+              {cleaningNoStore ? tt("loading", "...") : tt("expenseCleanNoStore", "Clean No-Store Plans")}
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{t("expensePlannedTotal") || "일반지출 발생합계"}</div>
+              <div className="text-xs text-muted-foreground">{tt("expensePlannedTotal", "General Expense Planned Total")}</div>
               <div className="text-lg font-semibold tabular-nums">฿{(totals.expensePlanned || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{t("expenseLogisticsPlanTotal") || "물류 지출 지급예정"}</div>
+              <div className="text-xs text-muted-foreground">{tt("expenseLogisticsPlanTotal", "Logistics Expense Payment Plan")}</div>
               <div className="text-lg font-semibold tabular-nums">฿{(totals.logisticsRemaining || 0).toLocaleString()}</div>
             </div>
           </div>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm font-semibold mb-2">{t("expenseNonLogisticsSection") || "일반 지출 지급예정"}</div>
+              <div className="text-sm font-semibold mb-2">{tt("expenseNonLogisticsSection", "General Expense Payment Plan")}</div>
               {filteredExpensePlans.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
+                <p className="text-sm text-muted-foreground py-6">{tt("payableEmpty", "No payable items found.")}</p>
               ) : (
                 <div className="overflow-x-auto rounded-md border border-border/60">
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
-                        <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
-                        <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
-                        <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
-                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "원천징수 차감 후 실제 지급액")}>
-                          {tt("expensePlanPayAmount", "지급액")}
+                        <th className="w-[88px] text-center py-2 px-2">{tt("bankCategoryLabel", "Category")}</th>
+                        <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
+                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
+                        <th className="w-[92px] text-center py-2 px-2">{tt("date", "Date")}</th>
+                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}>
+                          {tt("expensePlanPayAmount", "Pay Amount")}
                         </th>
-                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
-                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
-                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
+                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{tt("memo", "Memo")}</th>
+                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "Attachment")}</th>
+                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "Action")}</th>
                         <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
-                          {tt("att_approval", "승인")}
+                          {tt("att_approval", "Approval")}
                         </th>
                       </tr>
                     </thead>
@@ -662,7 +662,7 @@ export function ExpenseManagementTab() {
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
                             <td colSpan={9} className="py-2 px-3 text-sm font-medium">
-                              {(t("store") || "매장")}: {storeLabel}
+                              {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
                           {rows.map((r) => (
@@ -688,7 +688,7 @@ export function ExpenseManagementTab() {
                                   size="icon"
                                   variant="ghost"
                                   className="h-8 w-8 shrink-0 text-primary"
-                                  title={tt("expenseViewAttachment", "첨부 보기")}
+                                  title={tt("expenseViewAttachment", "View Attachment")}
                                   onClick={() =>
                                     setAttachmentPreview({
                                       urls: r.attachmentUrls!,
@@ -708,7 +708,7 @@ export function ExpenseManagementTab() {
                                   size="icon"
                                   variant="outline"
                                   className="h-7 w-7"
-                                  title={tt("btnEdit", "수정")}
+                                  title={tt("btnEdit", "Edit")}
                                   onClick={() => navigateToEditInRegister(r)}
                                   disabled={payingId === r.id || deletingPlanId === r.id}
                                 >
@@ -724,14 +724,14 @@ export function ExpenseManagementTab() {
                                   }
                                   disabled={payingId === r.id}
                                 >
-                                  {payEditorOpenById[r.id] ? tt("btnClose", "닫기") : tt("payBtn", "지급")}
+                                  {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
                                 </Button>
                               ) : !String(r.storeName || "").trim() ? (
                                 <Button
                                   size="icon"
                                   variant="outline"
                                   className="h-7 w-7 border-destructive/40 text-destructive"
-                                  title={t("delete") || "삭제"}
+                                  title={tt("delete", "Delete")}
                                   onClick={() => handleDeletePlan(r)}
                                   disabled={payingId === r.id || deletingPlanId === r.id}
                                 >
@@ -753,7 +753,7 @@ export function ExpenseManagementTab() {
                                         className="h-7 w-7 shrink-0 border-primary/40 text-primary"
                                         onClick={() => handleApprove(r, "approve")}
                                         disabled={payingId === r.id}
-                                        title={tt("att_approve", "승인")}
+                                        title={tt("att_approve", "Approve")}
                                       >
                                         <Check className="h-3.5 w-3.5" />
                                       </Button>
@@ -763,7 +763,7 @@ export function ExpenseManagementTab() {
                                         className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
                                         onClick={() => handleApprove(r, "reject")}
                                         disabled={payingId === r.id}
-                                        title={tt("att_reject", "반려")}
+                                        title={tt("att_reject", "Reject")}
                                       >
                                         <X className="h-3.5 w-3.5" />
                                       </Button>
@@ -771,7 +771,7 @@ export function ExpenseManagementTab() {
                                         size="icon"
                                         variant="outline"
                                         className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
-                                        title={t("delete") || "삭제"}
+                                        title={tt("delete", "Delete")}
                                         onClick={() => handleDeletePlan(r)}
                                         disabled={payingId === r.id || deletingPlanId === r.id}
                                       >
@@ -783,30 +783,30 @@ export function ExpenseManagementTab() {
                                     (r.status === "approved" || r.status === "rejected") && (
                                       <div className="flex flex-col items-center gap-1 w-full">
                                         {r.status === "approved" ? (
-                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>
+                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>
                                         ) : (
-                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>
+                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
                                         )}
                                         <div className="flex flex-wrap items-center justify-center gap-1">
                                           <Button
                                             size="sm"
                                             variant="outline"
                                             className="h-6 px-1.5 text-[10px]"
-                                            title={tt("btnEdit", "수정")}
+                                            title={tt("btnEdit", "Edit")}
                                             onClick={() =>
                                               setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))
                                             }
                                             disabled={payingId === r.id}
                                           >
                                             <Pencil className="h-3 w-3 mr-0.5" />
-                                            {tt("btnEdit", "수정")}
+                                            {tt("btnEdit", "Edit")}
                                           </Button>
                                           {r.status === "rejected" && (
                                             <Button
                                               size="icon"
                                               variant="outline"
                                               className="h-7 w-7 shrink-0 border-destructive/40 text-destructive"
-                                              title={t("delete") || "삭제"}
+                                              title={tt("delete", "Delete")}
                                               onClick={() => handleDeletePlan(r)}
                                               disabled={payingId === r.id || deletingPlanId === r.id}
                                             >
@@ -819,9 +819,9 @@ export function ExpenseManagementTab() {
                                   )
                                 )}
                                 {!canApproveByPolicy(r) && r.status === "approved" ? (
-                                  <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>
+                                  <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>
                                 ) : !canApproveByPolicy(r) && r.status === "rejected" ? (
-                                  <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>
+                                  <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
                                 ) : r.status === "planned" && !approvalEditById[r.id] && !canApproveByPolicy(r) ? (
                                   <span className="text-xs text-muted-foreground">-</span>
                                 ) : null}
@@ -840,8 +840,8 @@ export function ExpenseManagementTab() {
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="bank">{t("bankTitle") || "통장"}</SelectItem>
-                                      <SelectItem value="petty">{t("adminPettyCash") || "패티캐쉬"}</SelectItem>
+                                      <SelectItem value="bank">{tt("bankTitle", "Bank")}</SelectItem>
+                                      <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
                                     </SelectContent>
                                   </Select>
 
@@ -851,7 +851,7 @@ export function ExpenseManagementTab() {
                                       onValueChange={(v) => setPayBankById((p) => ({ ...p, [r.id]: v }))}
                                     >
                                       <SelectTrigger className="w-[220px] h-9">
-                                        <SelectValue placeholder={t("bankAccount") || "계좌"} />
+                                        <SelectValue placeholder={tt("bankAccount", "Account")} />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {bankAccounts.map((a) => (
@@ -867,7 +867,7 @@ export function ExpenseManagementTab() {
                                       onValueChange={(v) => setPayStoreById((p) => ({ ...p, [r.id]: v }))}
                                     >
                                       <SelectTrigger className="w-[180px] h-9">
-                                        <SelectValue placeholder={t("recFilterStoreSelect") || "매장 선택"} />
+                                        <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {(stores || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -891,11 +891,11 @@ export function ExpenseManagementTab() {
                                     value={payMemoById[r.id] || ""}
                                     onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))}
                                     className="w-[220px] h-9"
-                                    placeholder={t("memo") || "메모"}
+                                    placeholder={tt("memo", "Memo")}
                                   />
                                   <Button size="sm" onClick={() => handlePay(r)} disabled={payingId === r.id} className="h-9">
                                     <Wallet className="h-4 w-4 mr-1" />
-                                    {t("addPayment") || "지급 입력"}
+                                    {tt("addPayment", "Add Payment")}
                                   </Button>
                                   {(payMethodById[r.id] || "bank") === "bank" && payBankById[r.id] && (
                                     <Button
@@ -906,7 +906,7 @@ export function ExpenseManagementTab() {
                                       className="h-9"
                                     >
                                       <Link2 className="h-4 w-4 mr-1" />
-                                      {t("expenseLinkBank") || "통장 거래와 연결"}
+                                      {tt("expenseLinkBank", "Link with Bank Transaction")}
                                     </Button>
                                   )}
                                 </div>
@@ -926,26 +926,26 @@ export function ExpenseManagementTab() {
 
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm font-semibold mb-2">{t("expenseLogisticsPlanSection") || "물류 지출 지급예정"}</div>
+              <div className="text-sm font-semibold mb-2">{tt("expenseLogisticsPlanSection", "Logistics Expense Payment Plan")}</div>
               {filteredPurchasePlans.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 물류 지출 지급예정이 없습니다."}</p>
+                <p className="text-sm text-muted-foreground py-6">{tt("payableEmpty", "No logistics payable plans found.")}</p>
               ) : (
                 <div className="overflow-x-auto rounded-md border border-border/60">
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
-                        <th className="w-[88px] text-center py-2 px-2">{t("bankCategoryLabel") || "유형"}</th>
-                        <th className="w-[120px] text-center py-2 px-2">{t("accountSubject") || "계정과목"}</th>
-                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "매입처")}</th>
-                        <th className="w-[92px] text-center py-2 px-2">{t("date") || "날짜"}</th>
-                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "원천징수 차감 후 실제 지급액")}>
-                          {tt("expensePlanPayAmount", "지급액")}
+                        <th className="w-[88px] text-center py-2 px-2">{tt("bankCategoryLabel", "Category")}</th>
+                        <th className="w-[120px] text-center py-2 px-2">{tt("accountSubject", "Account Subject")}</th>
+                        <th className="min-w-[160px] max-w-[224px] w-[224px] text-center py-2 px-2">{tt("vendor", "Vendor")}</th>
+                        <th className="w-[92px] text-center py-2 px-2">{tt("date", "Date")}</th>
+                        <th className="w-[100px] text-center py-2 px-2" title={tt("expensePlanPayAmountHint", "Actual payout after withholding tax deduction")}>
+                          {tt("expensePlanPayAmount", "Pay Amount")}
                         </th>
-                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{t("memo") || "메모"}</th>
-                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "첨부")}</th>
-                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "실행")}</th>
+                        <th className="min-w-[148px] max-w-[188px] text-center py-2 px-2">{tt("memo", "Memo")}</th>
+                        <th className="w-12 text-center py-2 px-1">{tt("expenseAccrualAttachCol", "Attachment")}</th>
+                        <th className="w-[84px] text-center py-2 px-1">{tt("pay_actions", "Action")}</th>
                         <th className="w-[108px] text-center py-2 px-1 sticky right-0 z-[2] bg-muted/95 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm">
-                          {tt("att_approval", "승인")}
+                          {tt("att_approval", "Approval")}
                         </th>
                       </tr>
                     </thead>
@@ -954,7 +954,7 @@ export function ExpenseManagementTab() {
                         <React.Fragment key={storeLabel}>
                           <tr className="border-b bg-muted/30">
                             <td colSpan={9} className="py-2 px-3 text-sm font-medium">
-                              {(t("store") || "매장")}: {storeLabel}
+                              {tt("store", "Store")}: {storeLabel}
                             </td>
                           </tr>
                           {rows.map((r) => (
@@ -978,7 +978,7 @@ export function ExpenseManagementTab() {
                                       size="icon"
                                       variant="ghost"
                                       className="h-8 w-8 shrink-0 text-primary"
-                                      title={tt("expenseViewAttachment", "첨부 보기")}
+                                      title={tt("expenseViewAttachment", "View Attachment")}
                                       onClick={() =>
                                         setAttachmentPreview({
                                           urls: r.attachmentUrls!,
@@ -994,15 +994,15 @@ export function ExpenseManagementTab() {
                                 </td>
                                 <td className="py-2 px-1 text-center align-top">
                                   {r.status === "planned" ? (
-                                    <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "수정")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                    <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "Edit")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
                                   ) : r.status === "approved" && r.remainingAmount > 0 ? (
                                     <Button size="sm" variant={payEditorOpenById[r.id] ? "outline" : "default"} className="h-7 px-2 text-xs" onClick={() => setPayEditorOpenById((prev) => ({ ...prev, [r.id]: !prev[r.id] }))} disabled={payingId === r.id}>
-                                      {payEditorOpenById[r.id] ? tt("btnClose", "닫기") : tt("payBtn", "지급")}
+                                      {payEditorOpenById[r.id] ? tt("btnClose", "Close") : tt("payBtn", "Pay")}
                                     </Button>
                                   ) : !String(r.storeName || "").trim() ? (
-                                    <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                    <Button size="icon" variant="outline" className="h-7 w-7 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                       {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                     </Button>
                                   ) : (
@@ -1013,38 +1013,38 @@ export function ExpenseManagementTab() {
                                   <div className="flex flex-col items-center justify-start gap-1 max-w-[6.5rem] mx-auto">
                                     {canApproveByPolicy(r) && (r.status === "planned" || approvalEditById[r.id]) && r.status !== "paid" ? (
                                       <div className="flex flex-wrap items-center justify-center gap-1">
-                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-primary/40 text-primary" onClick={() => handleApprove(r, "approve")} disabled={payingId === r.id} title={tt("att_approve", "승인")}>
+                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-primary/40 text-primary" onClick={() => handleApprove(r, "approve")} disabled={payingId === r.id} title={tt("att_approve", "Approve")}>
                                           <Check className="h-3.5 w-3.5" />
                                         </Button>
-                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" onClick={() => handleApprove(r, "reject")} disabled={payingId === r.id} title={tt("att_reject", "반려")}>
+                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" onClick={() => handleApprove(r, "reject")} disabled={payingId === r.id} title={tt("att_reject", "Reject")}>
                                           <X className="h-3.5 w-3.5" />
                                         </Button>
-                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                        <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                           {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                         </Button>
                                       </div>
                                     ) : (r.status === "approved" || r.status === "rejected") && (
                                       <div className="flex flex-col items-center gap-1 w-full">
                                         {r.status === "approved" ? (
-                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>
+                                          <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>
                                         ) : (
-                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>
+                                          <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>
                                         )}
                                         <div className="flex flex-wrap items-center justify-center gap-1">
-                                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" title={tt("btnEdit", "수정")} onClick={() => setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))} disabled={payingId === r.id}>
+                                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" title={tt("btnEdit", "Edit")} onClick={() => setApprovalEditById((prev) => ({ ...prev, [r.id]: true }))} disabled={payingId === r.id}>
                                             <Pencil className="h-3 w-3 mr-0.5" />
-                                            {tt("btnEdit", "수정")}
+                                            {tt("btnEdit", "Edit")}
                                           </Button>
                                           {r.status === "rejected" && (
-                                            <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={t("delete") || "삭제"} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                            <Button size="icon" variant="outline" className="h-7 w-7 shrink-0 border-destructive/40 text-destructive" title={tt("delete", "Delete")} onClick={() => handleDeletePlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                               {deletingPlanId === r.id ? <span className="text-[10px]">...</span> : <Trash2 className="h-3.5 w-3.5" />}
                                             </Button>
                                           )}
                                         </div>
                                       </div>
                                     )}
-                                    {!canApproveByPolicy(r) && r.status === "approved" && <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "승인 완료")}</span>}
-                                    {!canApproveByPolicy(r) && r.status === "rejected" && <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "반려")}</span>}
+                                    {!canApproveByPolicy(r) && r.status === "approved" && <span className="text-[11px] text-primary text-center leading-tight">{tt("att_approved", "Approved")}</span>}
+                                    {!canApproveByPolicy(r) && r.status === "rejected" && <span className="text-[11px] text-destructive text-center leading-tight">{tt("att_rejected", "Rejected")}</span>}
                                     {r.status === "planned" && !canApproveByPolicy(r) && !approvalEditById[r.id] && <span className="text-xs text-muted-foreground">-</span>}
                                   </div>
                                 </td>
@@ -1058,14 +1058,14 @@ export function ExpenseManagementTab() {
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="bank">{t("bankTitle") || "통장"}</SelectItem>
-                                          <SelectItem value="petty">{t("adminPettyCash") || "패티캐쉬"}</SelectItem>
+                                          <SelectItem value="bank">{tt("bankTitle", "Bank")}</SelectItem>
+                                          <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
                                         </SelectContent>
                                       </Select>
                                       {(payMethodById[r.id] || "bank") === "bank" ? (
                                         <Select value={payBankById[r.id] || ""} onValueChange={(v) => setPayBankById((p) => ({ ...p, [r.id]: v }))}>
                                           <SelectTrigger className="w-[220px] h-9">
-                                            <SelectValue placeholder={t("bankAccount") || "계좌"} />
+                                            <SelectValue placeholder={tt("bankAccount", "Account")} />
                                           </SelectTrigger>
                                           <SelectContent>
                                             {bankAccounts.map((a) => (
@@ -1076,7 +1076,7 @@ export function ExpenseManagementTab() {
                                       ) : (
                                         <Select value={payStoreById[r.id] || ""} onValueChange={(v) => setPayStoreById((p) => ({ ...p, [r.id]: v }))}>
                                           <SelectTrigger className="w-[180px] h-9">
-                                            <SelectValue placeholder={t("recFilterStoreSelect") || "매장 선택"} />
+                                            <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
                                           </SelectTrigger>
                                           <SelectContent>
                                             {(stores || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -1085,15 +1085,15 @@ export function ExpenseManagementTab() {
                                       )}
                                       <Input value={payAmountById[r.id] ?? String(r.remainingAmount)} onChange={(e) => setPayAmountById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[120px] h-9 text-right" type="number" />
                                       <Input type="date" value={payDateById[r.id] || todayStrBkk()} onChange={(e) => setPayDateById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[140px] h-9" />
-                                      <Input value={payMemoById[r.id] || ""} onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[220px] h-9" placeholder={t("memo") || "메모"} />
+                                      <Input value={payMemoById[r.id] || ""} onChange={(e) => setPayMemoById((p) => ({ ...p, [r.id]: e.target.value }))} className="w-[220px] h-9" placeholder={tt("memo", "Memo")} />
                                       <Button size="sm" onClick={() => handlePay(r)} disabled={payingId === r.id} className="h-9">
                                         <Wallet className="h-4 w-4 mr-1" />
-                                        {t("addPayment") || "지급 입력"}
+                                        {tt("addPayment", "Add Payment")}
                                       </Button>
                                       {(payMethodById[r.id] || "bank") === "bank" && payBankById[r.id] && (
                                         <Button size="sm" variant="outline" onClick={() => openLinkBank(r)} disabled={payingId === r.id} className="h-9">
                                           <Link2 className="h-4 w-4 mr-1" />
-                                          {t("expenseLinkBank") || "통장 거래와 연결"}
+                                          {tt("expenseLinkBank", "Link with Bank Transaction")}
                                         </Button>
                                       )}
                                     </div>
@@ -1115,7 +1115,7 @@ export function ExpenseManagementTab() {
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
-                  {tt("expenseAttachmentTitle", "첨부")}
+                  {tt("expenseAttachmentTitle", "Attachment")}
                   {attachmentPreview?.title ? ` — ${attachmentPreview.title}` : ""}
                 </DialogTitle>
               </DialogHeader>
@@ -1129,7 +1129,7 @@ export function ExpenseManagementTab() {
                       <iframe title={`pdf-${i}`} src={url} className="h-[min(70vh,520px)] w-full rounded border-0" />
                     ) : (
                       <a href={url} target="_blank" rel="noreferrer" className="text-primary underline break-all text-sm">
-                        {tt("expenseOpenFile", "파일 열기")} #{i + 1}
+                        {tt("expenseOpenFile", "Open File")} #{i + 1}
                       </a>
                     )}
                   </div>
@@ -1155,15 +1155,15 @@ export function ExpenseManagementTab() {
       <Dialog open={!!linkBankRow} onOpenChange={(open) => !open && setLinkBankRow(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("expenseLinkBankTitle") || "통장 거래 선택"}</DialogTitle>
+            <DialogTitle>{tt("expenseLinkBankTitle", "Select Bank Transaction")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground mb-3">
-            {t("expenseLinkBankHint") || "금액·날짜가 일치하는 미연결 출금 거래를 선택하세요."}
+            {tt("expenseLinkBankHint", "Select an unlinked withdrawal transaction with matching amount/date.")}
           </p>
           {unlinkedLoading ? (
             <p className="text-sm py-4">{t("loading")}</p>
           ) : unlinkedList.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">{t("expenseLinkBankEmpty") || "일치하는 미연결 통장 거래가 없습니다."}</p>
+            <p className="text-sm text-muted-foreground py-4">{tt("expenseLinkBankEmpty", "No matching unlinked bank transactions found.")}</p>
           ) : (
             <div className="max-h-[280px] overflow-y-auto space-y-2">
               {unlinkedList.map((b) => (

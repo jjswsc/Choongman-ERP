@@ -17,6 +17,28 @@ import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
+type SideEffectStep = 'stock' | 'journal' | 'vat_draft' | 'reversal_stock' | 'reversal_journal'
+
+function pushFailedStep(target: SideEffectStep[], step: SideEffectStep) {
+  if (!target.includes(step)) target.push(step)
+}
+
+function hasPositivePaymentAmount(order: {
+  payment_cash?: number
+  payment_card?: number
+  payment_qr?: number
+  payment_other?: number
+  payment_delivery_app?: number
+}) {
+  const total =
+    Number(order.payment_cash ?? 0) +
+    Number(order.payment_card ?? 0) +
+    Number(order.payment_qr ?? 0) +
+    Number(order.payment_other ?? 0) +
+    Number(order.payment_delivery_app ?? 0)
+  return total > 0
+}
+
 /** POS 주문 상태 변경 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -31,6 +53,7 @@ export async function POST(req: NextRequest) {
     }
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
+    const retrySideEffects = body.retrySideEffects === true || String(body.retrySideEffects ?? '') === '1'
     const id = body.id != null ? Number(body.id) : NaN
     const status = String(body.status ?? '').trim()
 
@@ -72,8 +95,103 @@ export async function POST(req: NextRequest) {
     const prev = existing[0]
     const prevStatus = String(prev?.status ?? '').trim().toLowerCase()
     const nextStatus = String(status).trim().toLowerCase()
+    const failedSideEffects: SideEffectStep[] = []
 
     if (prevStatus === nextStatus) {
+      if (!retrySideEffects && !fromOfflineQueueSync) {
+        return NextResponse.json({ success: true, noop: true }, { headers })
+      }
+      if (isPosCompletionStatus(nextStatus)) {
+        const storeCode = String(prev?.store_code ?? '').trim()
+        const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))
+        if (storeCode) {
+          try {
+            const settings = (await supabaseSelectFilter(
+              'pos_printer_settings',
+              `store_code=eq.${encodeURIComponent(storeCode)}`,
+              { limit: 1, select: 'auto_stock_deduction' }
+            )) as { auto_stock_deduction?: boolean }[] | null
+            if (settings?.[0]?.auto_stock_deduction) {
+              await processPosStockDeduction(id)
+            }
+          } catch (e) {
+            pushFailedStep(failedSideEffects, 'stock')
+            console.error('processPosStockDeduction(retry):', e)
+          }
+        }
+        const total = Number(prev?.total || 0)
+        const vat = Number(prev?.vat || 0)
+        const subtotal = Number(prev?.subtotal || Math.max(0, total - vat))
+        const orderNo = String(prev?.order_no || `POS-${id}`)
+        try {
+          const alreadyPosted = await hasJournalForSource('pos_order', id)
+          if (!alreadyPosted) {
+            await postPosOrderJournal({
+              posOrderId: id,
+              salesDate,
+              total,
+              vatAmount: vat,
+              paymentCash: Number(prev?.payment_cash || 0),
+              paymentCard: Number(prev?.payment_card || 0),
+              paymentQr: Number(prev?.payment_qr || 0),
+              paymentOther: Number(prev?.payment_other || 0),
+              paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
+              storeName: storeCode || undefined,
+              memo: 'POS 주문 완료 자동분개',
+            })
+          }
+        } catch (postingErr) {
+          pushFailedStep(failedSideEffects, 'journal')
+          console.error('updatePosOrderStatus posting(retry):', postingErr)
+        }
+        try {
+          await upsertPosVatLedgerDraft({
+            posOrderId: id,
+            orderNo,
+            storeCode,
+            createdAtIso: String(prev?.created_at ?? ''),
+            subtotal,
+            total,
+            vatAmount: vat,
+            createdBy: String(prev?.created_by ?? ''),
+          })
+        } catch (vatErr) {
+          pushFailedStep(failedSideEffects, 'vat_draft')
+          console.error('updatePosOrderStatus vat draft(retry):', vatErr)
+        }
+      } else if (isPosReversalStatus(nextStatus) && hasPositivePaymentAmount(prev)) {
+        const storeCode = String(prev?.store_code ?? '').trim()
+        const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))
+        try {
+          await reversePosStockDeduction(id)
+        } catch (e) {
+          pushFailedStep(failedSideEffects, 'reversal_stock')
+          console.error('reversePosStockDeduction(retry):', e)
+        }
+        try {
+          await postPosOrderReversalJournal({
+            posOrderId: id,
+            salesDate,
+            storeName: storeCode || undefined,
+            memo: `POS 주문 ${nextStatus === 'refunded' ? '환불' : '취소'} 역분개`,
+          })
+        } catch (postingErr) {
+          pushFailedStep(failedSideEffects, 'reversal_journal')
+          console.error('updatePosOrderStatus reversal posting(retry):', postingErr)
+        }
+      }
+      if (failedSideEffects.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            statusAlreadyApplied: true,
+            retryAfterQueue: true,
+            failedSideEffects,
+            message: '상태는 이미 반영됐지만 후속 처리에 실패했습니다. 다시 시도해 주세요.',
+          },
+          { headers }
+        )
+      }
       return NextResponse.json({ success: true, noop: true }, { headers })
     }
 
@@ -113,6 +231,7 @@ export async function POST(req: NextRequest) {
             await processPosStockDeduction(id)
           }
         } catch (e) {
+          pushFailedStep(failedSideEffects, 'stock')
           console.error('processPosStockDeduction:', e)
         }
       }
@@ -139,6 +258,7 @@ export async function POST(req: NextRequest) {
           })
         }
       } catch (postingErr) {
+        pushFailedStep(failedSideEffects, 'journal')
         console.error('updatePosOrderStatus posting:', postingErr)
       }
       try {
@@ -153,12 +273,14 @@ export async function POST(req: NextRequest) {
           createdBy: String(prev?.created_by ?? ''),
         })
       } catch (vatErr) {
+        pushFailedStep(failedSideEffects, 'vat_draft')
         console.error('updatePosOrderStatus vat draft:', vatErr)
       }
     } else if (isPosReversalStatus(nextStatus) && isPosPaidLikeStatus(prevStatus)) {
       try {
         await reversePosStockDeduction(id)
       } catch (e) {
+        pushFailedStep(failedSideEffects, 'reversal_stock')
         console.error('reversePosStockDeduction:', e)
       }
       try {
@@ -169,8 +291,22 @@ export async function POST(req: NextRequest) {
           memo: `POS 주문 ${nextStatus === 'refunded' ? '환불' : '취소'} 역분개`,
         })
       } catch (postingErr) {
+        pushFailedStep(failedSideEffects, 'reversal_journal')
         console.error('updatePosOrderStatus reversal posting:', postingErr)
       }
+    }
+
+    if (failedSideEffects.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          statusAlreadyApplied: true,
+          retryAfterQueue: true,
+          failedSideEffects,
+          message: '주문 상태는 변경됐지만 후속 처리 일부가 실패했습니다. 재시도해 주세요.',
+        },
+        { headers }
+      )
     }
 
     return NextResponse.json({ success: true }, { headers })

@@ -169,8 +169,8 @@ export function WithdrawalManagementTab() {
   >([])
 
   const pettyTransferFirstSelectLabel = React.useMemo(
-    () => (isOfficeStore(storeName) ? t("wm_transferToJob") || "직무" : t("wm_transferToDept") || "부서"),
-    [storeName, t]
+    () => (isOfficeStore(storeName) ? tt("wm_transferToJob", "Job") : tt("wm_transferToDept", "Department")),
+    [storeName, tt]
   )
 
   const searchParams = useSearchParams()
@@ -472,22 +472,22 @@ export function WithdrawalManagementTab() {
 
   const getAutoPayeeName = React.useCallback((withdrawalCategory: string): string => {
     const map: Record<string, string> = {
-      purchase_payment: t("wm_purchase") || "매입 대금",
-      purchase_advance: t("wm_advance") || "매입 선급",
-      expense: t("wm_expense") || "경비",
-      expense_advance: t("wm_advance") || "경비 선급",
-      fixed_asset: t("wm_fixed_asset") || "고정자산",
-      transfer: t("wm_transfer") || "이체",
-      tax_vat: t("wm_tax_vat") || "부가세",
-      tax_withholding: t("wm_tax_withholding") || "원천세",
-      tax_corporate: t("wm_tax_corporate") || "법인세",
-      loan_repayment: t("wm_loan_repayment") || "대출 상환",
-      loan_given: t("wm_loan_given") || "대여",
-      correction: t("wm_correction") || "정정",
-      dividend: t("wm_dividend") || "배당/사유 인출",
+      purchase_payment: tt("wm_purchase", "Purchase Payment"),
+      purchase_advance: tt("wm_advance", "Advance Payment"),
+      expense: tt("wm_expense", "Expense"),
+      expense_advance: tt("wm_advance", "Advance Payment"),
+      fixed_asset: tt("wm_fixed_asset", "Fixed Asset"),
+      transfer: tt("wm_transfer", "Transfer"),
+      tax_vat: tt("wm_tax_vat", "VAT"),
+      tax_withholding: tt("wm_tax_withholding", "Withholding Tax"),
+      tax_corporate: tt("wm_tax_corporate", "Corporate Tax"),
+      loan_repayment: tt("wm_loan_repayment", "Loan Repayment"),
+      loan_given: tt("wm_loan_given", "Loan Given"),
+      correction: tt("wm_correction", "Correction"),
+      dividend: tt("wm_dividend", "Dividend/Owner Draw"),
     }
-    return map[withdrawalCategory] || (t("wm_expense") || "지출")
-  }, [t])
+    return map[withdrawalCategory] || tt("wm_expense", "Expense")
+  }, [tt])
 
   const handleRegisterAccrual = async () => {
     const amt = Number(String(amount).replace(/,/g, ""))
@@ -496,7 +496,7 @@ export function WithdrawalManagementTab() {
     let name = payeeName.trim()
     if (categoryMain === "purchase") {
       if (!vendorCode.trim()) {
-        await appAlert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+        await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
         return
       }
       code = vendorCode.trim()
@@ -506,7 +506,7 @@ export function WithdrawalManagementTab() {
       }
     } else if (categoryMain === "expense") {
       if (!code && !name) {
-        await appAlert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
+        await appAlert(tt("expensePayeeRequired", "Please select or enter a payee."))
         return
       }
       if (!code) code = name
@@ -516,11 +516,11 @@ export function WithdrawalManagementTab() {
       name = name || getAutoPayeeName(withdrawalCategory)
     }
     if (!amt || amt <= 0) {
-      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
     }
     if (!storeName) {
-      await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
+      await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
     const vatV =
@@ -532,7 +532,7 @@ export function WithdrawalManagementTab() {
         ? Math.max(0, Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0)
         : 0
     if ((categoryMain === "purchase" || categoryMain === "expense") && amt - whtV <= 0) {
-      await appAlert(t("expenseAccrualNetPositiveRequired") || "실제 지급액이 0보다 커야 합니다. 총액·원천징수를 확인해 주세요.")
+      await appAlert(tt("expenseAccrualNetPositiveRequired", "Net payable amount must be greater than 0. Check total and withholding tax."))
       return
     }
     let attachmentUrls: string[] | undefined
@@ -549,8 +549,8 @@ export function WithdrawalManagementTab() {
       } catch (e) {
         const msg =
           e instanceof Error && e.message === "FILE_TOO_LARGE"
-            ? t("expenseAccrualAttachTooLarge") || "첨부 파일이 너무 큽니다. PDF는 1.5MB 이하로 올려 주세요."
-            : t("expenseAccrualAttachFail") || "첨부 처리에 실패했습니다."
+            ? tt("expenseAccrualAttachTooLarge", "Attachment is too large. Please upload PDF files under 1.5MB.")
+            : tt("expenseAccrualAttachFail", "Failed to process attachment.")
         await appAlert(msg)
         return
       }
@@ -593,7 +593,7 @@ export function WithdrawalManagementTab() {
         setAccrualWithholdingTax("")
         hasAppliedParams.current = false
         router.replace("/admin/expense-management?tab=plan")
-        await appAlert(t("wm_accrualUpdateSuccess") || "수정되었습니다. 지급예정 탭에서 확인하세요.")
+        await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
       } else {
         const res = await addExpenseAccrual({
           payeeCode: code || name,
@@ -624,7 +624,7 @@ export function WithdrawalManagementTab() {
         setAccrualAttachmentFiles([])
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
-        await appAlert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
+        await appAlert(tt("wm_accrualSuccess", "Saved. Please check in the payment plan tab."))
       }
     } finally {
       setSaving(false)
@@ -635,23 +635,23 @@ export function WithdrawalManagementTab() {
     if (!bankTransactionIdParam) return
     const amt = Number(String(amount).replace(/,/g, ""))
     if (!amt || amt <= 0) {
-      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
     }
     if (!categoryMain) {
-      await appAlert(t("wm_selectCategory") || "출금 유형을 선택해 주세요.")
+      await appAlert(tt("wm_selectCategory", "Please select a withdrawal category."))
       return
     }
     if (!accountId) {
-      await appAlert(t("bankAccount") || "계좌를 선택하세요.")
+      await appAlert(tt("bankAccount", "Please select an account."))
       return
     }
     if (categoryMain === "purchase" && !vendorCode) {
-      await appAlert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+      await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
       return
     }
     if (categoryMain === "expense" && !accountSubjectId) {
-      await appAlert(t("wm_accountSubjectPlaceholder") || "계정과목을 선택해 주세요.")
+      await appAlert(tt("wm_accountSubjectPlaceholder", "Please select an account subject."))
       return
     }
 
@@ -686,7 +686,7 @@ export function WithdrawalManagementTab() {
         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
-      await appAlert(t("saved") || "수정되었습니다.")
+      await appAlert(tt("saved", "Saved."))
     } finally {
       setSaving(false)
     }
@@ -707,40 +707,40 @@ export function WithdrawalManagementTab() {
     }
     const amt = Number(String(amount).replace(/,/g, ""))
     if (!amt || amt <= 0) {
-      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
     }
     if (!categoryMain) {
-      await appAlert(t("wm_selectCategory") || "출금 유형을 선택해 주세요.")
+      await appAlert(tt("wm_selectCategory", "Please select a withdrawal category."))
       return
     }
     if (effectivePaymentMethod === "bank" && !accountId) {
-      await appAlert(t("bankAccount") || "계좌를 선택하세요.")
+      await appAlert(tt("bankAccount", "Please select an account."))
       return
     }
     if (effectivePaymentMethod === "petty" && !storeName) {
-      await appAlert(t("recFilterStoreSelect") || "매장을 선택하세요.")
+      await appAlert(tt("recFilterStoreSelect", "Please select a store."))
       return
     }
     if (!storeName) {
-      await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
+      await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && (!transferBankAccountNo.trim() || !transferBankRecipientName.trim())) {
-      await appAlert(t("wm_transferBankRequired") || "계좌번호와 받는 사람을 입력하세요.")
+      await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
-      await appAlert(t("wm_transferCardRequired") || "충전할 카드를 선택하세요.")
+      await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "petty") {
       if (!transferToDept || !transferToEmployee) {
-        await appAlert(t("wm_pettyTransferRecipientRequired") || "부서와 직원명을 선택하세요.")
+        await appAlert(tt("wm_pettyTransferRecipientRequired", "Please select department and employee."))
         return
       }
       if (!transferToAccountNo.trim()) {
-        await appAlert((t("inv_account_no") || "계좌번호") + "를 입력하세요.")
+        await appAlert(tt("inv_account_no", "Account Number") + tt("msg_enter_required_suffix", " is required."))
         return
       }
     }
@@ -827,9 +827,9 @@ export function WithdrawalManagementTab() {
       setInvoicePhotoFile(null)
       setInboundLinkAmounts({})
       if (res.fixedAssetId) {
-        await appAlert(t("wm_successWithAsset") || "등록되었습니다. 감가상각 메뉴에서 자동 연동 확인하세요.")
+        await appAlert(tt("wm_successWithAsset", "Saved. Check auto-linking in the depreciation menu."))
       } else {
-        await appAlert(t("success") || "등록되었습니다.")
+        await appAlert(tt("success", "Saved."))
       }
     } finally {
       setSaving(false)
@@ -876,7 +876,7 @@ export function WithdrawalManagementTab() {
     if (categoryMain === "purchase") {
       const vendor = vendorCode.trim()
       if (!vendor) {
-        await appAlert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+        await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
         return
       }
       setSaving(true)
@@ -904,7 +904,7 @@ export function WithdrawalManagementTab() {
       const code = payeeCode.trim()
       const name = payeeName.trim()
       if (!code && !name) {
-        await appAlert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
+        await appAlert(tt("expensePayeeRequired", "Please select or enter a payee."))
         return
       }
       setSaving(true)
@@ -934,33 +934,33 @@ export function WithdrawalManagementTab() {
 
     const amt = Number(String(amount).replace(/,/g, ""))
     if (!amt || amt <= 0) {
-      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(tt("pettyAlertAmount", "Please enter amount."))
       return
     }
     if (!accountId) {
-      await appAlert(t("bankAccount") || "계좌를 선택하세요.")
+      await appAlert(tt("bankAccount", "Please select an account."))
       return
     }
     if (!storeName) {
-      await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
+      await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "petty") {
       if (!transferToDept || transferToDept === "__none__" || !transferToEmployee || transferToEmployee === "__none__") {
-        await appAlert(t("wm_pettyTransferRecipientRequired") || "부서와 직원명을 선택하세요.")
+        await appAlert(tt("wm_pettyTransferRecipientRequired", "Please select department and employee."))
         return
       }
       if (!transferToAccountNo.trim()) {
-        await appAlert(`${t("inv_account_no") || "계좌번호"}를 입력하세요.`)
+        await appAlert(`${tt("inv_account_no", "Account Number")}${tt("msg_enter_required_suffix", " is required.")}`)
         return
       }
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && (!transferBankAccountNo.trim() || !transferBankRecipientName.trim())) {
-      await appAlert(t("wm_transferBankRequired") || "계좌번호와 받는 사람을 입력하세요.")
+      await appAlert(tt("wm_transferBankRequired", "Please enter account number and recipient."))
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
-      await appAlert(t("wm_transferCardRequired") || "충전할 카드를 선택하세요.")
+      await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
       return
     }
 
@@ -1014,7 +1014,7 @@ export function WithdrawalManagementTab() {
       <Card>
         <CardContent className="pt-4 space-y-4">
           <div className="flex items-center gap-3">
-            <Label className="font-semibold whitespace-nowrap">{t("expenseStoreSelect") || "매장"}</Label>
+            <Label className="font-semibold whitespace-nowrap">{tt("expenseStoreSelect", "Store")}</Label>
             <Select
               value={storeName || sortedStores[0] || ""}
               onValueChange={(v) => {
@@ -1026,7 +1026,7 @@ export function WithdrawalManagementTab() {
               }}
             >
               <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder={t("expenseStoreSelect") || "매장 선택"} />
+                <SelectValue placeholder={tt("expenseStoreSelect", "Select Store")} />
               </SelectTrigger>
               <SelectContent>
                 {sortedStores.map((s) => (
@@ -1036,7 +1036,7 @@ export function WithdrawalManagementTab() {
             </Select>
           </div>
 
-          <div className="text-sm font-semibold">{t("wm_title") || "출금 유형"}</div>
+          <div className="text-sm font-semibold">{tt("wm_title", "Withdrawal Type")}</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {CATEGORY_MAIN_OPTIONS.map((opt) => (
               <Button
@@ -1057,7 +1057,7 @@ export function WithdrawalManagementTab() {
 
           {categoryMain && !isBankLinkMode && !isEditMode && (
             <div className="flex items-end gap-2">
-              <Label className="pb-2.5 shrink-0">{t("wm_payMode") || "지급 방식"}</Label>
+              <Label className="pb-2.5 shrink-0">{tt("wm_payMode", "Payment Mode")}</Label>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -1066,7 +1066,7 @@ export function WithdrawalManagementTab() {
                   className="h-9"
                   onClick={() => setExpensePayMode("immediate")}
                 >
-                  {t("wm_payImmediate") || "즉시 지급"}
+                  {tt("wm_payImmediate", "Pay Now")}
                 </Button>
                 <Button
                   type="button"
@@ -1075,7 +1075,7 @@ export function WithdrawalManagementTab() {
                   className="h-9"
                   onClick={() => setExpensePayMode("later")}
                 >
-                  {t("wm_payLater") || "나중에 지급"}
+                  {tt("wm_payLater", "Pay Later")}
                 </Button>
               </div>
             </div>
@@ -1083,29 +1083,29 @@ export function WithdrawalManagementTab() {
 
           {hasTaxSub && (
             <div className="flex items-center gap-2">
-              <Label>{t("wm_subType") || "세부"}</Label>
+              <Label>{tt("wm_subType", "Detail")}</Label>
               <Select value={categorySub} onValueChange={setCategorySub}>
                 <SelectTrigger className="w-[180px] h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="vat">{t("wm_tax_vat") || "부가세 납부"}</SelectItem>
-                  <SelectItem value="withholding">{t("wm_tax_withholding") || "원천세 납부"}</SelectItem>
-                  <SelectItem value="corporate">{t("wm_tax_corporate") || "법인세 납부"}</SelectItem>
+                  <SelectItem value="vat">{tt("wm_tax_vat", "VAT Payment")}</SelectItem>
+                  <SelectItem value="withholding">{tt("wm_tax_withholding", "Withholding Tax Payment")}</SelectItem>
+                  <SelectItem value="corporate">{tt("wm_tax_corporate", "Corporate Tax Payment")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           )}
           {hasLoanSub && (
             <div className="flex items-center gap-2">
-              <Label>{t("wm_subType") || "세부"}</Label>
+              <Label>{tt("wm_subType", "Detail")}</Label>
               <Select value={categorySub} onValueChange={setCategorySub}>
                 <SelectTrigger className="w-[160px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="repayment">{t("wm_loan_repayment") || "대출 상환"}</SelectItem>
-                  <SelectItem value="given">{t("wm_loan_given") || "대여"}</SelectItem>
+                  <SelectItem value="repayment">{tt("wm_loan_repayment", "Loan Repayment")}</SelectItem>
+                  <SelectItem value="given">{tt("wm_loan_given", "Loan Given")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1114,22 +1114,22 @@ export function WithdrawalManagementTab() {
           <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
             <div className="flex items-end gap-2">
-              <Label className="pb-2.5">{t("wm_subType") || "세부"}</Label>
+              <Label className="pb-2.5">{tt("wm_subType", "Detail")}</Label>
               <Select value={categorySub} onValueChange={setCategorySub}>
                 <SelectTrigger className="w-[120px] h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="normal">{t("wm_normal") || "일반"}</SelectItem>
-                  <SelectItem value="advance">{t("wm_advance") || "선급"}</SelectItem>
+                  <SelectItem value="normal">{tt("wm_normal", "Normal")}</SelectItem>
+                  <SelectItem value="advance">{tt("wm_advance", "Advance")}</SelectItem>
                 </SelectContent>
               </Select>
               {showAdvanceInstallments && (
                 <>
-                  <Label className="text-sm pb-2.5">{t("wm_advanceInstallments") || "분할 횟수"}</Label>
+                  <Label className="text-sm pb-2.5">{tt("wm_advanceInstallments", "Installments")}</Label>
                   <Input type="number" min={1} value={advanceInstallments} onChange={(e) => setAdvanceInstallments(e.target.value)} className="w-[70px] h-9" />
                   <span className="text-muted-foreground pb-2.5">/</span>
-                  <Label className="text-sm pb-2.5">{t("wm_advanceInstallmentCurrent") || "이번 회차"}</Label>
+                  <Label className="text-sm pb-2.5">{tt("wm_advanceInstallmentCurrent", "Current Installment")}</Label>
                   <Input type="number" min={1} value={advanceInstallmentCurrent} onChange={(e) => setAdvanceInstallmentCurrent(e.target.value)} className="w-[70px] h-9" />
                   <span className="text-sm font-medium tabular-nums pb-2.5">({advanceInstallmentCurrent}/{advanceInstallments})</span>
                 </>
@@ -1141,10 +1141,10 @@ export function WithdrawalManagementTab() {
               {categoryMain === "purchase" && (
                 <div className="flex items-end gap-2">
                   <div className="flex items-end gap-2">
-                    <Label className="pb-2.5 shrink-0">{t("vendor") || "매입처"}</Label>
+                    <Label className="pb-2.5 shrink-0">{tt("vendor", "Vendor")}</Label>
                     <Select value={vendorCode} onValueChange={(v) => setVendorCode(v)}>
                       <SelectTrigger className="h-9 w-[220px]">
-                        <SelectValue placeholder={t("vendor") || "매입처 선택"} />
+                        <SelectValue placeholder={tt("vendor", "Select Vendor")} />
                       </SelectTrigger>
                       <SelectContent>
                         {vendors.map((v) => (
@@ -1157,7 +1157,7 @@ export function WithdrawalManagementTab() {
                   </div>
                   {vendorCode && (
                     <div className="text-sm text-muted-foreground pb-2">
-                      {t("inv_account_no") || "계좌"}: {vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"}
+                      {tt("inv_account_no", "Account")}: {vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"}
                     </div>
                   )}
                 </div>
@@ -1229,7 +1229,7 @@ export function WithdrawalManagementTab() {
                       <>
                         {isBankLinkMode && (
                           <div className="flex items-end gap-2">
-                            <Label className="pb-2.5 shrink-0">{t("vendor") || "지급처"}</Label>
+                            <Label className="pb-2.5 shrink-0">{tt("vendor", "Payee")}</Label>
                             <Select
                               value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
                               onValueChange={(v) => {
@@ -1243,10 +1243,10 @@ export function WithdrawalManagementTab() {
                               }}
                             >
                               <SelectTrigger className="h-9 w-[180px]">
-                                <SelectValue placeholder={t("vendor") || "지급처"} />
+                                <SelectValue placeholder={tt("vendor", "Payee")} />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__manual__">{t("bankRegisterPayeeManual") || "직접 입력"}</SelectItem>
+                                <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
                                 <SelectItem value="__none__">-</SelectItem>
                                 {vendors.map((v) => (
                                   <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
@@ -1255,19 +1255,19 @@ export function WithdrawalManagementTab() {
                             </Select>
                             {payeeManual ? (
                               <>
-                                <Input value={payeeCode} onChange={(e) => setPayeeCode(e.target.value)} placeholder={t("expensePayeeCode") || "코드"} className="h-9 w-[100px]" />
-                                <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder={t("expensePayeeName") || "지급처명"} className="h-9 w-[140px]" />
+                                <Input value={payeeCode} onChange={(e) => setPayeeCode(e.target.value)} placeholder={tt("expensePayeeCode", "Code")} className="h-9 w-[100px]" />
+                                <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder={tt("expensePayeeName", "Payee Name")} className="h-9 w-[140px]" />
                               </>
                             ) : (
-                              <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder={t("expensePayeeName") || "지급처명"} className="h-9 w-[140px]" />
+                              <Input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder={tt("expensePayeeName", "Payee Name")} className="h-9 w-[140px]" />
                             )}
                           </div>
                         )}
                         <div className="flex items-end gap-2">
-                          <Label className="pb-2.5 shrink-0">{t("wm_accountSubject") || "계정과목"}</Label>
+                          <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>
                           <Select value={accountSubjectId} onValueChange={setAccountSubjectId}>
                             <SelectTrigger className="h-9 w-[200px]">
-                              <SelectValue placeholder={t("wm_accountSubjectPlaceholder") || "계정과목 선택"} />
+                              <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
                             </SelectTrigger>
                             <SelectContent>
                               {subjects.map((s) => (
@@ -1283,7 +1283,7 @@ export function WithdrawalManagementTab() {
                     {expensePayMode === "later" && (
                       <>
                         <div className="flex items-end gap-2">
-                          <Label className="pb-2.5 shrink-0">{t("vendor") || "지급처"}</Label>
+                          <Label className="pb-2.5 shrink-0">{tt("vendor", "Payee")}</Label>
                           <Select
                             value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
                             onValueChange={(v) => {
@@ -1300,10 +1300,10 @@ export function WithdrawalManagementTab() {
                             }}
                           >
                             <SelectTrigger className="w-[180px] h-9">
-                              <SelectValue placeholder={t("vendor") || "지급처"} />
+                              <SelectValue placeholder={tt("vendor", "Payee")} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="__manual__">{t("bankRegisterPayeeManual") || "직접 입력"}</SelectItem>
+                              <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
                               <SelectItem value="__none__">-</SelectItem>
                               {vendors.map((v) => (
                                 <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
@@ -1316,13 +1316,13 @@ export function WithdrawalManagementTab() {
                                 className="w-[120px] h-9"
                                 value={payeeCode}
                                 onChange={(e) => setPayeeCode(e.target.value)}
-                                placeholder={t("expensePayeeCode") || "코드"}
+                                placeholder={tt("expensePayeeCode", "Code")}
                               />
                               <Input
                                 className="w-[160px] h-9"
                                 value={payeeName}
                                 onChange={(e) => setPayeeName(e.target.value)}
-                                placeholder={t("expensePayeeName") || "지급처명"}
+                                placeholder={tt("expensePayeeName", "Payee Name")}
                               />
                             </>
                           ) : (
@@ -1330,15 +1330,15 @@ export function WithdrawalManagementTab() {
                               className="w-[160px] h-9"
                               value={payeeName}
                               onChange={(e) => setPayeeName(e.target.value)}
-                              placeholder={t("expensePayeeName") || "지급처명"}
+                              placeholder={tt("expensePayeeName", "Payee Name")}
                             />
                           )}
                         </div>
                         <div className="flex items-end gap-2">
-                          <Label className="pb-2.5 shrink-0">{t("wm_accountSubject") || "계정과목"}</Label>
+                          <Label className="pb-2.5 shrink-0">{tt("wm_accountSubject", "Account Subject")}</Label>
                           <Select value={accountSubjectId || "__none__"} onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}>
                             <SelectTrigger className="h-9 w-[200px]">
-                              <SelectValue placeholder={t("wm_accountSubjectPlaceholder") || "계정과목 선택"} />
+                              <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__none__">-</SelectItem>
@@ -1360,15 +1360,15 @@ export function WithdrawalManagementTab() {
 
           {categoryMain === "transfer" && (
             <div className="flex items-center gap-2">
-              <Label>{t("wm_paymentMethod") || "지급 수단"}</Label>
+              <Label>{tt("wm_paymentMethod", "Payment Method")}</Label>
               <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v as "bank" | "petty" | "card"); if (v !== "card") setTransferToCardAccountId(""); }}>
                 <SelectTrigger className="w-[120px] h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bank">{t("wm_paymentMethodBank") || "통장"}</SelectItem>
-                  <SelectItem value="petty">{t("adminPettyCash") || "패티캐쉬"}</SelectItem>
-                  <SelectItem value="card">{t("wm_paymentMethodCard") || "카드"}</SelectItem>
+                  <SelectItem value="bank">{tt("wm_paymentMethodBank", "Bank")}</SelectItem>
+                  <SelectItem value="petty">{tt("adminPettyCash", "Petty Cash")}</SelectItem>
+                  <SelectItem value="card">{tt("wm_paymentMethodCard", "Card")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1378,25 +1378,25 @@ export function WithdrawalManagementTab() {
           {categoryMain === "fixed_asset" && (
             <div className="flex flex-wrap items-end gap-3">
               <div>
-                <Label className="block mb-2">{t("wm_assetName") || "자산명"}</Label>
+                <Label className="block mb-2">{tt("wm_assetName", "Asset Name")}</Label>
                 <Input
                   value={assetName}
                   onChange={(e) => setAssetName(e.target.value)}
-                  placeholder={t("wm_assetNamePlaceholder") || "차량, 장비 등"}
+                  placeholder={tt("wm_assetNamePlaceholder", "Vehicle, equipment, etc.")}
                   className="h-9 w-[160px]"
                 />
               </div>
               <div>
-                <Label className="block mb-2">{t("wm_assetCode") || "자산코드"}</Label>
+                <Label className="block mb-2">{tt("wm_assetCode", "Asset Code")}</Label>
                 <Input
                   value={assetCode}
                   onChange={(e) => setAssetCode(e.target.value)}
-                  placeholder={t("wm_assetCodePlaceholder") || "FA-001 (선택)"}
+                  placeholder={tt("wm_assetCodePlaceholder", "FA-001 (optional)")}
                   className="h-9 w-[120px]"
                 />
               </div>
               <div>
-                <Label className="block mb-2">{t("wm_usefulLife") || "내용연수(개월)"}</Label>
+                <Label className="block mb-2">{tt("wm_usefulLife", "Useful Life (months)")}</Label>
                 <Input
                   value={usefulLifeMonths}
                   onChange={(e) => setUsefulLifeMonths(e.target.value)}
@@ -1410,23 +1410,23 @@ export function WithdrawalManagementTab() {
 
           {categoryMain === "transfer" && effectivePaymentMethod === "bank" && (
             <div className="space-y-2">
-              <Label>{t("wm_transferTo") || "이체 대상"}</Label>
+              <Label>{tt("wm_transferTo", "Transfer To")}</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
                 <div>
-                  <Label className="text-xs text-muted-foreground block mb-1">{t("inv_account_no") || "계좌번호"}</Label>
+                  <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "Account Number")}</Label>
                   <Input
                     value={transferBankAccountNo}
                     onChange={(e) => setTransferBankAccountNo(e.target.value)}
-                    placeholder={t("wm_transferAccountNoPlaceholder") || "계좌번호 직접 입력"}
+                    placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
                     className="h-9"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground block mb-1">{t("wm_transferRecipient") || "받는 사람"}</Label>
+                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "Recipient")}</Label>
                   <Input
                     value={transferBankRecipientName}
                     onChange={(e) => setTransferBankRecipientName(e.target.value)}
-                    placeholder={t("wm_transferRecipientPlaceholder") || "받는 사람 수기 입력"}
+                    placeholder={tt("wm_transferRecipientPlaceholder", "Enter recipient name")}
                     className="h-9"
                   />
                 </div>
@@ -1435,12 +1435,12 @@ export function WithdrawalManagementTab() {
           )}
           {categoryMain === "transfer" && effectivePaymentMethod === "card" && (
             <div className="space-y-2">
-              <Label>{t("wm_transferTo") || "이체 대상"}</Label>
+              <Label>{tt("wm_transferTo", "Transfer To")}</Label>
               <div className="max-w-md">
-                <Label className="text-xs text-muted-foreground block mb-1.5">{t("wm_transferToCardCharge") || "충전할 카드"}</Label>
+                <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToCardCharge", "Card to Charge")}</Label>
                 <Select value={transferToCardAccountId || "__none__"} onValueChange={(v) => setTransferToCardAccountId(v === "__none__" ? "" : v)}>
                   <SelectTrigger className="h-9 w-full">
-                    <SelectValue placeholder={t("cardManagementSelectCard") || "카드 선택"} />
+                    <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">—</SelectItem>
@@ -1456,7 +1456,7 @@ export function WithdrawalManagementTab() {
           )}
           {categoryMain === "transfer" && effectivePaymentMethod === "petty" && (
             <div className="space-y-2">
-              <Label>{t("wm_transferTo") || "이체 대상"}</Label>
+              <Label>{tt("wm_transferTo", "Transfer To")}</Label>
               <div className="grid grid-cols-[160px_180px_200px_240px] gap-3 items-end max-w-3xl">
                 <div>
                   <Label className="text-xs text-muted-foreground block mb-1.5">{pettyTransferFirstSelectLabel}</Label>
@@ -1477,7 +1477,7 @@ export function WithdrawalManagementTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{t("wm_transferToEmployee") || "직원명"}</Label>
+                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployee", "Employee")}</Label>
                   <Select
                     value={transferToEmployee || "__none__"}
                     onValueChange={(v) => {
@@ -1492,7 +1492,7 @@ export function WithdrawalManagementTab() {
                     disabled={!transferToDept}
                   >
                     <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={t("wm_transferToEmployee") || "직원명"} />
+                      <SelectValue placeholder={tt("wm_transferToEmployee", "Employee")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
@@ -1505,13 +1505,13 @@ export function WithdrawalManagementTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{t("wm_transferToEmployeeAccount") || "직원 계좌"}</Label>
+                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployeeAccount", "Employee Account")}</Label>
                   {transferToEmployee && transferToEmployee !== "__none__" ? (() => {
                     const emp = employeeList.find((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept && e.name === transferToEmployee)
                     const hasAccount = emp?.accountNumber
                     return (
                       <div className="h-9 flex items-center text-sm font-medium">
-                        {hasAccount ? (emp?.bankName ? `[${emp.bankName}] ` : "") + (emp?.accountNumber || "") : (t("wm_noAccountNumber") || "계좌번호 없음")}
+                        {hasAccount ? (emp?.bankName ? `[${emp.bankName}] ` : "") + (emp?.accountNumber || "") : tt("wm_noAccountNumber", "No Account Number")}
                       </div>
                     )
                   })() : (
@@ -1519,17 +1519,17 @@ export function WithdrawalManagementTab() {
                   )}
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{t("wm_transferAccountDirectInput") || "계좌번호 (직접 입력)"}</Label>
+                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferAccountDirectInput", "Account Number (Manual Input)")}</Label>
                   <Input
                     value={transferToAccountNo}
                     onChange={(e) => setTransferToAccountNo(e.target.value)}
-                    placeholder={t("wm_transferAccountNoPlaceholder") || "계좌번호 직접 입력"}
+                    placeholder={tt("wm_transferAccountNoPlaceholder", "Enter account number")}
                     className="h-9"
                   />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                {t("wm_pettyTransferStoreNote") || "매장은 상단 매장 선택과 연동됩니다."}
+                {tt("wm_pettyTransferStoreNote", "Store follows the selected store above.")}
               </p>
             </div>
           )}
@@ -1538,10 +1538,10 @@ export function WithdrawalManagementTab() {
             <div className="flex flex-wrap items-end gap-3 max-w-6xl">
               {!isLaterPayment && showBankAccountForTransfer && (
                 <div className="w-[220px]">
-                  <Label>{effectivePaymentMethod === "card" ? (t("wm_transferFromBank") || "출금 통장") : (t("bankAccount") || "계좌")}</Label>
+                  <Label>{effectivePaymentMethod === "card" ? tt("wm_transferFromBank", "Source Bank Account") : tt("bankAccount", "Account")}</Label>
                   <Select value={accountId} onValueChange={setAccountId} disabled={isBankLinkMode}>
                     <SelectTrigger className="w-[220px] h-9 mt-1">
-                      <SelectValue placeholder={t("bankAccount") || "계좌 선택"} />
+                      <SelectValue placeholder={tt("bankAccount", "Select Account")} />
                     </SelectTrigger>
                     <SelectContent>
                       {bankAccounts.map((a) => (
@@ -1555,7 +1555,7 @@ export function WithdrawalManagementTab() {
               )}
               {!isLaterPayment && effectivePaymentMethod === "petty" && (
                 <div className="w-[140px]">
-                  <Label>{t("recFilterStoreSelect") || "매장"}</Label>
+                  <Label>{tt("recFilterStoreSelect", "Store")}</Label>
                   <Select value={storeName} onValueChange={setStoreName}>
                     <SelectTrigger className="w-[140px] h-9 mt-1">
                       <SelectValue />
@@ -1571,8 +1571,8 @@ export function WithdrawalManagementTab() {
               <div className="w-[120px]">
                 <Label>
                   {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense")
-                    ? tt("expenseAccrualGrossTotal", "총액(세금포함)")
-                    : t("amount") || "금액"}
+                    ? tt("expenseAccrualGrossTotal", "Total (incl. tax)")
+                    : tt("amount", "Amount")}
                 </Label>
                 <Input
                   value={amount}
@@ -1589,7 +1589,7 @@ export function WithdrawalManagementTab() {
                 />
               </div>
               <div className="w-[140px]">
-                <Label>{t("date") || "날짜"}</Label>
+                <Label>{tt("date", "Date")}</Label>
                 <Input
                   type="date"
                   value={transDate}
@@ -1599,15 +1599,15 @@ export function WithdrawalManagementTab() {
                 />
               </div>
               <div className="w-[280px]">
-                <Label>{t("memo") || "적요"}</Label>
-                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t("memo") || "적요"} className="h-9 w-[280px] mt-1" />
+                <Label>{tt("memo", "Memo")}</Label>
+                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={tt("memo", "Memo")} className="h-9 w-[280px] mt-1" />
               </div>
               <div className="w-[320px]" title={bankMemo || undefined}>
-                <Label>{t("bankMemoLabel") || "은행 적요"}</Label>
+                <Label>{tt("bankMemoLabel", "Bank Memo")}</Label>
                 <Input
                   value={bankMemo}
                   readOnly
-                  placeholder={t("bankMemoFromBank") || "통장에서 가져온 적요"}
+                  placeholder={tt("bankMemoFromBank", "Memo from bank transaction")}
                   className="h-9 w-[320px] mt-1 bg-muted/50 cursor-default"
                 />
               </div>
@@ -1615,7 +1615,7 @@ export function WithdrawalManagementTab() {
             {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
               <div className="flex flex-wrap items-end gap-3 max-w-6xl rounded-lg border border-border/50 bg-muted/10 p-3">
                 <div className="w-[110px]">
-                  <Label className="text-xs text-muted-foreground">{tt("expenseAccrualVat", "부가세(VAT)")}</Label>
+                  <Label className="text-xs text-muted-foreground">{tt("expenseAccrualVat", "VAT")}</Label>
                   <Input
                     value={accrualVatAmount}
                     onChange={(e) => {
@@ -1630,7 +1630,7 @@ export function WithdrawalManagementTab() {
                   />
                 </div>
                 <div className="w-[110px]">
-                  <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "원천징수세")}</Label>
+                  <Label className="text-xs text-muted-foreground">{tt("expenseAccrualWithholding", "Withholding Tax")}</Label>
                   <Input
                     value={accrualWithholdingTax}
                     onChange={(e) => {
@@ -1645,7 +1645,7 @@ export function WithdrawalManagementTab() {
                   />
                 </div>
                 <div className="min-w-[160px] pb-0.5">
-                  <span className="text-xs text-muted-foreground block">{tt("expenseAccrualNetPayableLabel", "실제 지급액")}</span>
+                  <span className="text-xs text-muted-foreground block">{tt("expenseAccrualNetPayableLabel", "Net Payable")}</span>
                   <span className="text-sm font-semibold tabular-nums">
                     ฿{(accrualNetPreview ?? 0).toLocaleString()}
                   </span>
@@ -1655,10 +1655,10 @@ export function WithdrawalManagementTab() {
             {isLaterPayment && (categoryMain === "purchase" || categoryMain === "expense") && (
               <div className="max-w-xl space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
                 <Label className="text-sm font-medium">
-                  {tt("expenseAccrualAttachLabel", "인보이스·영수증 첨부")}
+                  {tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {tt("expenseAccrualAttachHint", "이미지 또는 PDF, 최대 3개(비이미지는 파일당 1.5MB 이하 권장)")}
+                  {tt("expenseAccrualAttachHint", "Images or PDF, up to 3 files (non-image files recommended under 1.5MB each)")}
                 </p>
                 <input
                   type="file"
@@ -1678,18 +1678,18 @@ export function WithdrawalManagementTab() {
             )}
             {(categoryMain === "purchase" || categoryMain === "expense") && !isLaterPayment && effectivePaymentMethod === "bank" && (
               <div className="space-y-2 p-3 rounded-lg border bg-muted/20">
-                <div className="text-sm font-medium">{t("poInvoice") || "인보이스"}</div>
+                <div className="text-sm font-medium">{tt("poInvoice", "Invoice")}</div>
                 <div className="flex flex-wrap items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox checked={invoiceReceived} onCheckedChange={(c) => setInvoiceReceived(c === true)} />
-                    <span className="text-sm">{t("poInvoiceReceived") || "인보이스 수령"}</span>
+                    <span className="text-sm">{tt("poInvoiceReceived", "Invoice Received")}</span>
                   </label>
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm">{t("wm_invoiceNoLabel") || "인보이스 번호"}</Label>
+                    <Label className="text-sm">{tt("wm_invoiceNoLabel", "Invoice Number")}</Label>
                     <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"} className="w-[140px] h-9" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm">{t("bankInvoicePhotoUpload") || "인보이스 사진"}</Label>
+                    <Label className="text-sm">{tt("bankInvoicePhotoUpload", "Invoice Image")}</Label>
                     <input
                       type="file"
                       accept="image/*"
@@ -1699,7 +1699,7 @@ export function WithdrawalManagementTab() {
                     />
                     <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("wm-invoice-photo")?.click()} className="h-9">
                       <Camera className="h-4 w-4 mr-1" />
-                      {invoicePhotoFile ? invoicePhotoFile.name.slice(0, 12) + "..." : (t("wm_invoicePhotoSelect") || "선택")}
+                      {invoicePhotoFile ? invoicePhotoFile.name.slice(0, 12) + "..." : tt("wm_invoicePhotoSelect", "Select")}
                     </Button>
                   </div>
                 </div>
@@ -1719,14 +1719,14 @@ export function WithdrawalManagementTab() {
               >
                 <Wallet className="h-4 w-4 mr-1" />
                 {saving
-                  ? (t("loading") || "처리 중...")
+                  ? tt("loading", "Processing...")
                   : isEditMode
-                    ? (t("btnSave") || "저장")
+                    ? tt("btnSave", "Save")
                     : isBankLinkMode
-                    ? (t("btnSave") || "저장")
+                    ? tt("btnSave", "Save")
                     : isLaterPayment
-                      ? (t("wm_registerAccrual") || "발생 등록")
-                      : (t("wm_execute") || "출금 등록")}
+                      ? tt("wm_registerAccrual", "Register Accrual")
+                      : tt("wm_execute", "Register Withdrawal")}
               </Button>
               <Button
                 type="button"
@@ -1746,7 +1746,7 @@ export function WithdrawalManagementTab() {
                 }}
               >
                 <ArrowLeft className="h-4 w-4 mr-1" />
-                {t("wm_backToBank") || "통장 화면으로 돌아가기"}
+                {tt("wm_backToBank", "Back to Bank Screen")}
               </Button>
             </div>
           </div>

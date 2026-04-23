@@ -12,6 +12,8 @@ import {
   mergeJobOptionsFromCatalogAndEmployees,
 } from '@/lib/employee-job-catalog'
 
+export const dynamic = 'force-dynamic'
+
 function toDateStr(val: unknown): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
@@ -19,10 +21,19 @@ function toDateStr(val: unknown): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
+function normalizedEmployeeStatus(val: unknown, resignDate: unknown): 'active' | 'leave' | 'resigned' | 'suspended' {
+  const raw = String(val || '')
+    .trim()
+    .toLowerCase()
+  if (raw === 'active' || raw === 'leave' || raw === 'resigned' || raw === 'suspended') return raw
+  return String(resignDate || '').trim() ? 'resigned' : 'active'
+}
+
 /** 직원 관리용 직원 목록. userStore/userRole로 필터링 */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
 
   try {
     const authResult = await requireAuth(req, 'manager')
@@ -36,6 +47,14 @@ export async function GET(req: NextRequest) {
     const userRole = String(auth.role || '').toLowerCase()
     const forPettyTransfer =
       searchParams.get('forPettyTransfer') === '1' || searchParams.get('forPettyTransfer') === 'true'
+    const rawSearch = String(searchParams.get('search') || '').trim().toLowerCase()
+    const statusFilter = String(searchParams.get('status') || '').trim().toLowerCase()
+    const storeFilter = String(searchParams.get('store') || '').trim()
+    const jobFilter = String(searchParams.get('job') || '').trim()
+    const page = Math.max(1, Number(searchParams.get('page') || 1) || 1)
+    const pageSizeRaw = Number(searchParams.get('pageSize') || 0) || 0
+    const pageSize = Math.max(1, Math.min(pageSizeRaw, 500))
+    const usePagination = pageSizeRaw > 0
 
     const jwt = auth
     const effectiveRole = String(jwt?.role || userRole || '')
@@ -51,7 +70,8 @@ export async function GET(req: NextRequest) {
       jwt && isFranchiseeRole(jwt.role || '') ? normalizedAllowedStoresFromJwt(jwt) : undefined
 
     const empSelectFull =
-      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code'
+      'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,sso_exempt,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,photo,extra_stores,employee_code,employment_status,deleted_at'
+    const empSelectFullNoStatus = empSelectFull.replace(',employment_status,deleted_at', '')
     const empSelectFallback =
       'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo,employee_code'
     /** employee_code 컬럼 미배포 DB용 */
@@ -61,11 +81,16 @@ export async function GET(req: NextRequest) {
     const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
     const empSelectFullNoSsoExempt = empSelectFull.replace(',sso_exempt', '')
     const empSelectFullNoExtraNoSsoExempt = empSelectFullNoExtra.replace(',sso_exempt', '')
+    const empSelectFullNoStatusNoSsoExempt = empSelectFullNoStatus.replace(',sso_exempt', '')
+    const empSelectFullNoStatusNoExtra = empSelectFullNoStatus.replace(',extra_stores', '')
     const empSelectCandidates = [
       empSelectFull,
+      empSelectFullNoStatus,
       empSelectFullNoSsoExempt,
       empSelectFullNoExtra,
       empSelectFullNoExtraNoSsoExempt,
+      empSelectFullNoStatusNoSsoExempt,
+      empSelectFullNoStatusNoExtra,
       empSelectFallback,
       empSelectFallbackNoEmpCode,
     ]
@@ -89,6 +114,8 @@ export async function GET(req: NextRequest) {
 
     for (const r of rows || []) {
       if (!r.store && !r.name) continue
+      const deletedAt = r.deleted_at != null ? String(r.deleted_at).trim() : ''
+      if (deletedAt) continue
       const empStore = String(r.store || '').trim()
       if (
         !userCanAccessEmployeeStore(role, userStore, empStore, {
@@ -101,15 +128,27 @@ export async function GET(req: NextRequest) {
       const rawName = r.name != null ? String(r.name).trim() : ''
       const rawTitle = r.name_title != null ? String(r.name_title).trim() : ''
       const { name: normName, nameTitle: normTitle } = normalizeEmployeeNameFields(rawName, rawTitle)
+      const employmentStatus = normalizedEmployeeStatus(r.employment_status, r.resign_date)
+      const employeeCode = r.employee_code != null ? String(r.employee_code).trim() : ''
+      const phone = r.phone != null ? String(r.phone).trim() : ''
+      const nick = r.nick != null ? String(r.nick).trim() : ''
+      const job = r.job != null ? String(r.job).trim() : ''
+      if (storeFilter && storeFilter !== 'All' && empStore !== storeFilter) continue
+      if (jobFilter && jobFilter !== 'All' && job !== jobFilter) continue
+      if (statusFilter && statusFilter !== 'all' && employmentStatus !== statusFilter) continue
+      if (rawSearch) {
+        const haystack = [normName || rawName, nick, employeeCode, phone].join(' ').toLowerCase()
+        if (!haystack.includes(rawSearch)) continue
+      }
       list.push({
         row: r.id,
         store: empStore,
         name: normName || rawName,
         nameTitle: normTitle,
-        employeeCode: r.employee_code != null ? String(r.employee_code).trim() : '',
-        nick: r.nick || '',
-        phone: r.phone || '',
-        job: r.job || '',
+        employeeCode,
+        nick,
+        phone,
+        job,
         birth: toDateStr(r.birth),
         nation: r.nation || '',
         join: toDateStr(r.join_date),
@@ -136,6 +175,7 @@ export async function GET(req: NextRequest) {
         grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
         photo: r.photo != null && r.photo !== '' ? String(r.photo).trim() : '',
         extraStores: parseExtraStoresColumn(r.extra_stores),
+        employmentStatus,
       })
     }
 
@@ -168,10 +208,24 @@ export async function GET(req: NextRequest) {
       allStores = allStores.filter((st) => !isOfficeStore(st))
     }
 
-    const body: { list: Record<string, unknown>[]; stores: string[]; jobOptions?: string[]; _debug?: Record<string, unknown> } = {
-      list,
+    const total = list.length
+    const pagedList = usePagination ? list.slice((page - 1) * pageSize, page * pageSize) : list
+    const body: {
+      list: Record<string, unknown>[]
+      stores: string[]
+      jobOptions?: string[]
+      pageInfo?: { page: number; pageSize: number; total: number; hasNext: boolean }
+      _debug?: Record<string, unknown>
+    } = {
+      list: pagedList,
       stores: allStores,
       jobOptions: allJobOptions,
+      pageInfo: {
+        page: usePagination ? page : 1,
+        pageSize: usePagination ? pageSize : total,
+        total,
+        hasNext: usePagination ? page * pageSize < total : false,
+      },
     }
     if (list.length === 0 && rows && rows.length > 0) {
       body._debug = {

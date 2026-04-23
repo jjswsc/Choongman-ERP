@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   quitApp: () => ipcRenderer.invoke("cm-pos-quit-app"),
   listPrinters: () => ipcRenderer.invoke("cm-pos-list-printers"),
   getPrintConfig: () => ipcRenderer.invoke("cm-pos-get-print-config"),
+  savePrintConfig: (payload) => ipcRenderer.invoke("cm-pos-save-print-config", payload || {}),
   /** 영수증 프린터( runtime-config `print.receiptDeviceName` 등과 동일 해석)로 ESC/POS 드로어 킥 */
   openCashDrawer: () => ipcRenderer.invoke("cm-pos-open-cash-drawer"),
   printWithDialog: () => ipcRenderer.invoke("cm-pos-print-dialog"),

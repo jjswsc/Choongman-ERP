@@ -1,5 +1,7 @@
 "use client"
 
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { FileText } from "lucide-react"
@@ -65,8 +67,7 @@ export default function MarketingReportHubPage() {
         <MarketingPageHero icon={FileText} title={t("adminMarketingReportHubTitle")} />
 
         <Tabs value={activeTab} onValueChange={(v) => setTab(normalizeTab(v))} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="monthly" className={adminTabsTriggerCn}>
                   {t("marketingReportTabMonthly")}
@@ -81,8 +82,7 @@ export default function MarketingReportHubPage() {
                   {t("marketingReportTabCosts")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
           <TabsContent value="monthly" className={adminTabsContentFlushCn}>
             <MarketingMonthlyReportPanel campaignIdFromQuery={campaignIdFromQuery} />
           </TabsContent>

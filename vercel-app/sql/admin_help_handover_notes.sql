@@ -1,0 +1,8 @@
+-- 인수인계 메모는 별도 테이블 없이 API가 `system_settings` 행
+--   key = 'admin_help_handover_bundle_v1'
+--   value_json = { "v": 1, "entries": [
+--       { tenant_id, store_code, help_href, body, updated_at, updated_by_*,
+--         "history": [ { body, updated_at, updated_by_* }, ... ] },
+--       ...
+--     ] }
+-- `history`: 내용이 바뀔 때마다 직전 본문이 앞에 쌓임(메뉴당 최대 80건).

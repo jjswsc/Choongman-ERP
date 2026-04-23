@@ -46,6 +46,7 @@ import {
   LayoutPanelTop,
   PackageSearch,
   UtensilsCrossed,
+  BookOpen,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -88,6 +89,7 @@ const mainItems: MenuItem[] = [
   { titleKey: "adminDashboard", icon: LayoutDashboard, href: "/admin" },
   { titleKey: "aiCenter", icon: Bot, href: "/admin/ai-center" },
   { titleKey: "adminNotices", icon: Megaphone, href: "/admin/notices" },
+  { titleKey: "companyHybridDocuments", icon: FileText, href: "/admin/company-documents" },
   { titleKey: "adminWorkLog", icon: ClipboardList, href: "/admin/work-log" },
   { titleKey: "posCostAnalysis", icon: Calculator, href: "/admin/pos-cost-analysis" },
 ]
@@ -148,6 +150,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionHr",
     items: [
       { titleKey: "adminEmployees", icon: Users, href: "/admin/employees" },
+      { titleKey: "adminHrPolicies", icon: BookOpen, href: "/admin/hr-policies" },
       { titleKey: "adminHrCalendar", icon: CalendarDays, href: "/admin/hr-calendar" },
       { titleKey: "adminAttendance", icon: CalendarClock, href: "/admin/attendance" },
       { titleKey: "adminLeave", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
@@ -193,6 +196,27 @@ const menuSections: MenuSection[] = [
     ],
   },
 ]
+
+export type ErpNavHelpItem = { href: string; titleKey: string; sectionTitleKey?: string }
+
+/** 사이드바 메뉴 기준 — 도움말 센터·PageHelp가 동일 href/titleKey를 쓰도록 한다. */
+export function getErpNavItemsForHelp(): ErpNavHelpItem[] {
+  const items: ErpNavHelpItem[] = mainItems.map((m) => ({ href: m.href, titleKey: m.titleKey }))
+  for (const s of menuSections) {
+    for (const it of s.items) {
+      items.push({ href: it.href, titleKey: it.titleKey, sectionTitleKey: s.titleKey })
+    }
+  }
+  items.push({
+    href: "/admin/settings",
+    titleKey: "adminSettings",
+    sectionTitleKey: "adminHelpGroupSettings",
+  })
+  return items
+}
+
+/** `getErpNavItemsForHelp()` 개수 = 사이드바(상단+섹션+설정)과 1:1. 도움말 `helpSum_*`·도움말 센터 항목 수와 맞출 것. */
+export const ERP_NAV_HELP_ITEM_COUNT = getErpNavItemsForHelp().length
 
 const SIDEBAR_SECTIONS_STORAGE_KEY = "erp_sidebar_expanded_sections_v1"
 
@@ -247,7 +271,6 @@ export function ErpSidebar() {
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
   const brand = useAppBrandConfig()
-
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>(buildCollapsedSections)
   const [interiorDashTotals, setInteriorDashTotals] = React.useState<InteriorDashboardTotals | null>(null)
 

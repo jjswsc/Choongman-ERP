@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
@@ -118,6 +120,14 @@ function JobCountSummary({
       </div>
     </div>
   )
+}
+
+function resolveEmploymentStatus(e: AdminEmployeeItem): "active" | "leave" | "resigned" | "suspended" {
+  const raw = String((e as { employmentStatus?: unknown }).employmentStatus || "")
+    .trim()
+    .toLowerCase()
+  if (raw === "active" || raw === "leave" || raw === "resigned" || raw === "suspended") return raw
+  return String(e.resign || "").trim() ? "resigned" : "active"
 }
 
 function toFormData(e: AdminEmployeeItem): EmployeeFormData {
@@ -362,17 +372,26 @@ export default function EmployeesPage() {
       const eJob = String(e.job || "").trim()
       const eName = String(e.name || "").toLowerCase()
       const eNick = String(e.nick || "").toLowerCase()
+      const eEmployeeCode = String(e.employeeCode || "").toLowerCase()
+      const ePhone = String(e.phone || "").toLowerCase()
       const eGrade = String(e.finalGrade || "").trim()
-      const hasResign = Boolean(String(e.resign || "").trim())
+      const eStatus = resolveEmploymentStatus(e)
       const matchStore = s === "" || s === "All" || eStore === s
       const matchJob = j === "" || j === "All" || eJob === j
       const matchGrade = g === "" || g === "All" || eGrade === g
       const matchStatus =
         st === "" ||
         st === "all" ||
-        (st === "active" && !hasResign) ||
-        (st === "resigned" && hasResign)
-      const matchKey = k === "" || eName.includes(k) || eNick.includes(k)
+        (st === "active" && eStatus === "active") ||
+        (st === "leave" && eStatus === "leave") ||
+        (st === "suspended" && eStatus === "suspended") ||
+        (st === "resigned" && eStatus === "resigned")
+      const matchKey =
+        k === "" ||
+        eName.includes(k) ||
+        eNick.includes(k) ||
+        eEmployeeCode.includes(k) ||
+        ePhone.includes(k)
       return matchStore && matchJob && matchGrade && matchStatus && matchKey
     })
     // 매장 → 직무 → 이름 순으로 정렬
@@ -400,7 +419,7 @@ export default function EmployeesPage() {
   }
 
   const handleDelete = async (rowId: number) => {
-    if (!await appConfirm(t("emp_confirm_delete"))) return
+    if (!await appConfirm("퇴사/비활성 처리하시겠습니까?")) return
     setLoading(true)
     try {
       const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })
@@ -513,8 +532,7 @@ export default function EmployeesPage() {
         </div>
 
         <Tabs value={hrMainTab} onValueChange={setHrMainTab} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   <ClipboardList className={adminTabsIconCn} aria-hidden />
@@ -563,8 +581,7 @@ export default function EmployeesPage() {
                   </TabsTrigger>
                 )}
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="list" className={adminTabsContentCn}>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

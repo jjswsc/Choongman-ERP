@@ -1,4 +1,6 @@
 "use client"
+
+import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
@@ -208,8 +210,7 @@ export function AdminStoreVisit() {
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "stats")} className={adminTabsRootCn}>
-          <div className={adminTabsBarCn}>
-            <div className={adminTabsScrollCn}>
+          <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   {t("tab_visit_list")}
@@ -218,8 +219,7 @@ export function AdminStoreVisit() {
                   {t("tab_visit_stats")}
                 </TabsTrigger>
               </TabsList>
-            </div>
-          </div>
+          </AdminTabsBarWithHelp>
 
           <TabsContent value="list" className={adminTabsContentCn}>
             <Card>
