@@ -2313,6 +2313,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 className="flex items-center gap-1.5 shrink-0 rounded-lg border border-sky-500/45 bg-sky-500/[0.08] px-2 py-1 shadow-sm dark:bg-sky-950/25"
                 title={t('posOrderGuestCount') || '홀 주문 손님 수(매출·통계용)'}
                 aria-label={t('posOrderGuestCount') || undefined}
+                data-tour="pos-tour-cart-guest-count"
               >
                 <Users className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
                 <Select

@@ -18,5 +18,9 @@ export const POS_TOUR_KNOWN_SCENARIOS = [
   'pos-main-walkthrough',
   'terminal-full-walkthrough',
   'terminal-tables-intro',
+  'pos-business-cash-home',
+  'pos-business-open-tour',
+  'pos-cash-management-tour',
+  'pos-business-close-tour',
 ] as const
 export type PosTourKnownScenarioId = (typeof POS_TOUR_KNOWN_SCENARIOS)[number]

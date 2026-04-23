@@ -1,8 +1,19 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
 import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
 
+export type PosPrinterSettingsToSaveParamsOptions = {
+  /**
+   * true: kitchenRoute* 필드를 본문에서 제외 → API가 해당 JSON 컬럼을 갱신하지 않음.
+   * (프린터 탭 미저장 주방 라우트가 듀얼모니터·고객화면만 저장할 때 서버값으로 덮이는 것 방지)
+   */
+  omitKitchenRoutes?: boolean
+}
+
 /** GET 응답(PosPrinterSettings)을 savePosPrinterSettings POST 본문으로 변환 */
-export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
+export function posPrinterSettingsToSaveParams(
+  s: PosPrinterSettings,
+  options?: PosPrinterSettingsToSaveParamsOptions
+) {
   const km = Math.min(3, Math.max(1, Number(s.kitchenMode) || 1)) as 1 | 2 | 3
   const drawerOpt = String(s.drawerOpenOption || "reason_only")
   const drawerOpenOption = (["password_and_reason", "reason_only", "force"].includes(drawerOpt)
@@ -42,6 +53,8 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
   const customerDisplayDefaultState = (
     rawDisplayDefaultState === "qr" ? "qr" : "idle"
   ) as "idle" | "qr"
+
+  const omitKitchenRoutes = Boolean(options?.omitKitchenRoutes)
 
   return {
     storeCode: s.storeCode,
@@ -144,8 +157,12 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
       return 'none'
     })(),
     customerDisplayIdleMediaUrl: String(s.customerDisplayIdleMediaUrl ?? '').trim(),
-    kitchenRouteByMenu: normalizeKitchenRouteMapInput(s.kitchenRouteByMenu),
-    kitchenRouteByCategory: normalizeKitchenRouteMapInput(s.kitchenRouteByCategory),
-    kitchenRouteByCategoryMain: normalizeKitchenRouteMapInput(s.kitchenRouteByCategoryMain),
+    ...(omitKitchenRoutes
+      ? {}
+      : {
+          kitchenRouteByMenu: normalizeKitchenRouteMapInput(s.kitchenRouteByMenu),
+          kitchenRouteByCategory: normalizeKitchenRouteMapInput(s.kitchenRouteByCategory),
+          kitchenRouteByCategoryMain: normalizeKitchenRouteMapInput(s.kitchenRouteByCategoryMain),
+        }),
   }
 }

@@ -15,17 +15,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
-import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
+import {
+  resolveInvoiceClientForTarget,
+  resolveInvoiceClientFromBillToCandidates,
+} from "@/lib/invoice-client-resolve"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -38,6 +39,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
+import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import {
   getAdminItems,
   getAdminVendors,
@@ -50,6 +52,7 @@ import {
   updateForceOutboundReceived,
   getMyUsageHistory,
   getInvoiceData,
+  getInvoiceOrderBillToCandidates,
   getInvoiceSettings,
   updateInvoiceSettings,
   getOutboundByWarehouse,
@@ -201,8 +204,8 @@ export default function OutboundPage() {
   const [saving, setSaving] = React.useState(false)
   const [deletingOutbound, setDeletingOutbound] = React.useState(false)
 
-  const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
-  const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [histStart, setHistStart] = React.useState(() => getBangkokTodayDateString())
+  const [histEnd, setHistEnd] = React.useState(() => getBangkokTodayDateString())
   const [histMonth, setHistMonth] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
   const [histTargetType, setHistTargetType] = React.useState<"" | "store" | "sales">("")
@@ -252,20 +255,38 @@ export default function OutboundPage() {
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice" | "summary">("hist")
 
   React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getBangkokTodayDateString()
     setOutDate(today)
   }, [])
 
   React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getBangkokTodayDateString()
     setHistStart(today)
     setHistEnd(today)
   }, [])
 
   React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getBangkokTodayDateString()
     setWhStart((p) => p || today)
     setWhEnd((p) => p || today)
+  }, [])
+
+  const handleHistStartChange = React.useCallback((next: string) => {
+    setHistStart(next)
+    if (next && histMonth) setHistMonth("")
+  }, [histMonth])
+
+  const handleHistEndChange = React.useCallback((next: string) => {
+    setHistEnd(next)
+    if (next && histMonth) setHistMonth("")
+  }, [histMonth])
+
+  const handleHistMonthChange = React.useCallback((next: string) => {
+    setHistMonth(next)
+    if (!next) return
+    const { startStr, endStr } = getBangkokMonthRange(next)
+    setHistStart(startStr)
+    setHistEnd(endStr)
   }, [])
 
   React.useEffect(() => {
@@ -706,11 +727,9 @@ export default function OutboundPage() {
     let s = histStart
     let e = histEnd
     if (histMonth) {
-      const [y, m] = histMonth.split("-").map(Number)
-      const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
-      const last = new Date(y, m, 0).toISOString().slice(0, 10)
-      s = first
-      e = last
+      const { startStr, endStr } = getBangkokMonthRange(histMonth)
+      s = startStr
+      e = endStr
     }
     if (!s || !e) return
     setHistoryLoading(true)
@@ -754,11 +773,9 @@ export default function OutboundPage() {
     let s = histStart
     let e = histEnd
     if (histMonth) {
-      const [y, m] = histMonth.split("-").map(Number)
-      const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
-      const last = new Date(y, m, 0).toISOString().slice(0, 10)
-      s = first
-      e = last
+      const { startStr, endStr } = getBangkokMonthRange(histMonth)
+      s = startStr
+      e = endStr
     }
     if (!s || !e) return
     setHistoryLoading(true)
@@ -1416,8 +1433,27 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
       const { company, clients } = invoiceDataRes
       const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
+      const orderIdsForBillTo = [
+        ...new Set(
+          checked
+            .map((g) => Math.floor(Number((g.items || [])[0]?.orderRowId || 0)))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        ),
+      ]
+      const billToCandRes =
+        orderIdsForBillTo.length > 0 ? await getInvoiceOrderBillToCandidates(orderIdsForBillTo) : { map: {} }
+      const billToMap = billToCandRes?.map && typeof billToCandRes.map === "object" ? billToCandRes.map : {}
       const invoiceDatas: InvoiceData[] = checked.map((g) => {
-        const client = resolveInvoiceClientForTarget(g.target || "", company, clients)
+        const oid = Math.floor(Number((g.items || [])[0]?.orderRowId || 0))
+        const fromOrder = Number.isFinite(oid) && oid > 0 ? billToMap[String(oid)] : undefined
+        const candidates =
+          Array.isArray(fromOrder) && fromOrder.length > 0
+            ? fromOrder
+            : [String(g.target || "").trim()].filter(Boolean)
+        const client =
+          candidates.length > 0
+            ? resolveInvoiceClientFromBillToCandidates(candidates, company, clients)
+            : resolveInvoiceClientForTarget(g.target || "", company, clients)
         return buildInvoiceData(g, company, client, settings)
       })
       sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))
@@ -1953,19 +1989,19 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   <Input
                     type="date"
                     value={histStart}
-                    onChange={(e) => setHistStart(e.target.value)}
+                    onChange={(e) => handleHistStartChange(e.target.value)}
                     className="w-[140px] h-9"
                   />
                   <Input
                     type="date"
                     value={histEnd}
-                    onChange={(e) => setHistEnd(e.target.value)}
+                    onChange={(e) => handleHistEndChange(e.target.value)}
                     className="w-[140px] h-9"
                   />
                   <Input
                     type="month"
                     value={histMonth}
-                    onChange={(e) => setHistMonth(e.target.value)}
+                    onChange={(e) => handleHistMonthChange(e.target.value)}
                     className="w-[140px] h-9"
                     title={t("inMonthHint")}
                   />
@@ -2151,12 +2187,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               histStart={histStart}
               histEnd={histEnd}
               histMonth={histMonth}
-              onHistStartChange={setHistStart}
-              onHistEndChange={setHistEnd}
-              onHistMonthChange={setHistMonth}
+              onHistStartChange={handleHistStartChange}
+              onHistEndChange={handleHistEndChange}
+              onHistMonthChange={handleHistMonthChange}
               onMonthClick={() => {
-                const now = new Date()
-                setHistMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
+                const { yearMonth } = getBangkokMonthRange()
+                handleHistMonthChange(yearMonth)
               }}
               histType={histType}
               histDeliveryStatus={histDeliveryStatus}
@@ -2173,7 +2209,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               onInvoiceSearchChange={setInvoiceSearch}
               itemSearch={itemSearch}
               onItemSearchChange={setItemSearch}
-              onSearch={fetchHistory}
+                onSearch={fetchHistory}
               onPrintInvoice={handlePrintInvoice}
               onExcelDownload={isOffice ? handleExcelDownload : undefined}
               onEtaxXmlDownload={isOffice ? handleEtaxXmlDownload : undefined}

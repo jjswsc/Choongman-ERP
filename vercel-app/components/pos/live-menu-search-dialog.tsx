@@ -56,15 +56,16 @@ interface MatchedTarget {
 }
 
 const DEMO_SAMPLE_MEMO = '__live_menu_demo_sample__'
-const DEMO_FALLBACK_MENU_ID = '__live_menu_demo_fallback__'
+const DEMO_TRAINING_MENU_ID = '__live_menu_demo_training__'
+const DEMO_TRAINING_MENU_NAME = '[DEMO] 공통 테스트 메뉴'
 
-/** 카탈로그가 비었을 때(오프라인·빈 매장)에도 실시간 검색 데모 줄을 만들기 위한 최소 메뉴 */
-function buildDemoFallbackMenu(params: { categoryMain: string; category: string }): PosMenu {
+/** 데모 다이얼로그에서 항상 고정으로 노출할 학습용 메뉴 */
+function buildDemoTrainingMenu(params: { categoryMain: string; category: string }): PosMenu {
   const { categoryMain, category } = params
   return {
-    id: DEMO_FALLBACK_MENU_ID,
+    id: DEMO_TRAINING_MENU_ID,
     code: 'DEMO-LIVE',
-    name: '(데모) 실시간 메뉴 검색용',
+    name: DEMO_TRAINING_MENU_NAME,
     category,
     categoryMain: categoryMain || undefined,
     price: 10000,
@@ -82,7 +83,7 @@ function buildDemoFallbackMenu(params: { categoryMain: string; category: string 
 function buildDemoSampleOrders(menuList: PosMenu[], storeCode: string): PosOrder[] {
   const active = (menuList || []).filter((m) => m?.isActive && String(m.id || '').trim())
   if (active.length === 0) return []
-  const m = active[0]!
+  const m = active.find((row) => String(row.id) === DEMO_TRAINING_MENU_ID) ?? active[0]!
   const id = String(m.id)
   const name = String(m.name || '').trim() || '(메뉴)'
   const price = Math.max(0, Number(m.price ?? 0) || 0)
@@ -257,10 +258,11 @@ export function LiveMenuSearchDialog({
       ])
       const mains = normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY])
       let activeMenus = (menuList || []).filter((m) => m.isActive)
-      if (isDemo && activeMenus.length === 0) {
+      if (isDemo) {
         const firstMain = mains[0] ?? ''
         const firstCat = (catCfg.categories && catCfg.categories[0]) || '데모'
-        activeMenus = [buildDemoFallbackMenu({ categoryMain: firstMain, category: firstCat })]
+        const demoTrainingMenu = buildDemoTrainingMenu({ categoryMain: firstMain, category: firstCat })
+        activeMenus = [demoTrainingMenu, ...activeMenus.filter((m) => String(m.id) !== DEMO_TRAINING_MENU_ID)]
       }
       setMenus(activeMenus)
       setMainCategories(mains)
@@ -270,7 +272,7 @@ export function LiveMenuSearchDialog({
         if (seeded.length > 0) {
           setOrders(seeded)
           setDemoSeeded(true)
-          const initialMenuId = pickInitialMenuIdForRows(activeMenus, seeded)
+          const initialMenuId = pickInitialMenuIdForRows(activeMenus, seeded) || DEMO_TRAINING_MENU_ID
           if (initialMenuId) {
             setSelectedMenuId((prev) => {
               if (prev && activeMenus.some((m) => String(m.id) === String(prev))) return prev
@@ -317,12 +319,10 @@ export function LiveMenuSearchDialog({
   React.useEffect(() => {
     if (!selectedMain) {
       setSelectedCategory('')
-      setSelectedMenuId('')
       return
     }
     if (!categoriesForMain.includes(selectedCategory)) {
       setSelectedCategory(categoriesForMain[0] ?? '')
-      setSelectedMenuId('')
     }
   }, [selectedMain, categoriesForMain, selectedCategory])
 
@@ -344,6 +344,16 @@ export function LiveMenuSearchDialog({
     () => filteredMenus.find((m) => String(m.id) === String(selectedMenuId)) ?? null,
     [filteredMenus, selectedMenuId]
   )
+
+  React.useEffect(() => {
+    if (filteredMenus.length === 0) {
+      if (selectedMenuId) setSelectedMenuId('')
+      return
+    }
+    if (filteredMenus.some((m) => String(m.id) === String(selectedMenuId))) return
+    const preferred = filteredMenus.find((m) => String(m.id) === DEMO_TRAINING_MENU_ID)
+    setSelectedMenuId(String(preferred?.id ?? filteredMenus[0]!.id))
+  }, [filteredMenus, selectedMenuId])
 
   const matchedTargets = React.useMemo<MatchedTarget[]>(() => {
     if (!selectedMenu) return []
@@ -376,9 +386,13 @@ export function LiveMenuSearchDialog({
 
   const setItemServedFromSearch = React.useCallback(
     async (target: MatchedTarget) => {
-      if (!target.isTable || target.isServed || !target.itemId || target.isSample) return
+      if (!target.isTable || target.isServed || !target.itemId) return
       const key = `${target.orderId}:${target.itemId}`
       if (servingBusyMap[key]) return
+      if (target.isSample) {
+        setServingMap((prev) => ({ ...prev, [key]: true }))
+        return
+      }
       setServingBusyMap((prev) => ({ ...prev, [key]: true }))
       try {
         const res = await markPosOrderItemServed({
@@ -458,7 +472,7 @@ export function LiveMenuSearchDialog({
         </div>
         {demoSeeded && (
           <p className="text-xs text-muted-foreground">
-            {t('posDemoBanner') || 'Demo mode'} · 홀 1~6번에 같은 메뉴가 테이블마다 수량 1~6으로 들어가 있습니다(배달 샘플 1건 포함). 위 메뉴 선택란에서 해당 메뉴를 고르면 줄이 쌓이고, 같은 메뉴는 주문 시각이 더 이른 줄부터 처리하는 흐름을 연습해 보세요.
+            {t('posDemoBanner') || 'Demo mode'} · 메뉴 선택에서 {DEMO_TRAINING_MENU_NAME}를 선택하세요. 홀 1~6번에 같은 메뉴가 수량 1~6으로 준비되어 있어, 목록 위쪽(더 이른 주문)부터 확인하고 서빙 버튼까지 학습할 수 있습니다.
           </p>
         )}
 
@@ -537,7 +551,7 @@ export function LiveMenuSearchDialog({
                             'h-8 min-w-[88px] gap-1.5',
                             resolvedServed && 'bg-emerald-600 hover:bg-emerald-600'
                           )}
-                          disabled={resolvedServed || servingBusy || !r.itemId || Boolean(r.isSample)}
+                          disabled={resolvedServed || servingBusy || !r.itemId}
                           onClick={() => {
                             void setItemServedFromSearch(r)
                           }}

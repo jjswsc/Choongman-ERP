@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
  * 등록 예: https://<host>/api/webhooks/grab/pushGrabMenu
  */
 export async function POST(req: NextRequest) {
-  const denied = grabWebhookUnauthorized(req, 'push_grab_menu')
+  const denied = await grabWebhookUnauthorized(req, 'push_grab_menu')
   if (denied) return denied
 
   try {

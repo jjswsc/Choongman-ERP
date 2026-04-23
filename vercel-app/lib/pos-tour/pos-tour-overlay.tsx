@@ -106,6 +106,9 @@ export function PosTourOverlay() {
   const showNext = advance === 'manual'
   const floatingZ = dimBackground ? OVERLAY_Z + 1 : TOOLTIP_ABOVE_DIALOG_Z
   const navOnNext = currentStep?.navigateOnNext
+  const nextNavLabel = t('posTourNextNavigate')
+  const resolvedNextNavLabel =
+    nextNavLabel === 'posTourNextNavigate' ? t('posTourNextToTerminal') : nextNavLabel
 
   const content = (
     <div
@@ -215,7 +218,7 @@ export function PosTourOverlay() {
                 navigatePosOfflineAware(navOnNext, (p) => router.push(p))
               }}
             >
-              {t('posTourNextToTerminal')}
+              {resolvedNextNavLabel}
             </Button>
           )}
           {showNext && isLast && !navOnNext && (

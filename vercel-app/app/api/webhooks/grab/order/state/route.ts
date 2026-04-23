@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * 등록 예: https://<host>/api/webhooks/grab/order/state
  */
 export async function PUT(req: NextRequest) {
-  const denied = grabWebhookUnauthorized(req, 'push_order_state')
+  const denied = await grabWebhookUnauthorized(req, 'push_order_state')
   if (denied) return denied
 
   let body: Record<string, unknown>

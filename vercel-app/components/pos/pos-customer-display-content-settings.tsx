@@ -140,7 +140,9 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
         customerDisplayIdleMediaType: idleMediaType,
         customerDisplayIdleMediaUrl: idleMediaUrl.trim(),
       }
-      const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
+      const res = await savePosPrinterSettings(
+        posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
+      )
       if (!res.success) {
         await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
         return

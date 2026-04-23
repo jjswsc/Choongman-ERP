@@ -266,7 +266,6 @@ export default function PosPrintersPage() {
   const loadRequestSeqRef = React.useRef(0)
   /** loadData 와 분리 — 저장 직후 메뉴/카테고리만 갱신할 때 loadData 시퀀스를 밟지 않음(로딩 플래그·무효화 레이스 방지) */
   const catalogRequestSeqRef = React.useRef(0)
-  const [easyMode, setEasyMode] = React.useState(true)
   const [quickTesting, setQuickTesting] = React.useState(false)
   const [saveStatus, setSaveStatus] = React.useState<"idle" | "saving" | "saved" | "queued" | "error">(
     "idle"
@@ -554,13 +553,6 @@ export default function PosPrintersPage() {
     setSaveStatus("idle")
     setLastSavedAt(null)
   }, [effectiveStore])
-
-  React.useEffect(() => {
-    if (!easyMode) return
-    if (activeTab !== "printer" && activeTab !== "receipt") {
-      setActiveTab("printer")
-    }
-  }, [easyMode, activeTab])
 
   const saveStatusUi = React.useMemo(() => {
     if (saveStatus === "saving") {
@@ -969,8 +961,8 @@ export default function PosPrintersPage() {
 
   const previewData = React.useMemo(() => {
     const items = [
-      { name: tr("posPrinterPreviewSampleMenu1", "Sample: Fried chicken"), qty: 1, price: 199 },
-      { name: tr("posPrinterPreviewSampleMenu2", "Sample: Cola 1.25L"), qty: 1, price: 45 },
+      { name: tr("posPrinterPreviewSampleMenu1", "예시: 후라이드 치킨"), qty: 1, price: 199 },
+      { name: tr("posPrinterPreviewSampleMenu2", "예시: 콜라 1.25L"), qty: 1, price: 45 },
     ]
     const subtotal = items.reduce((sum, it) => sum + it.qty * it.price, 0)
     const delivery = receiptPreviewDelivery
@@ -993,7 +985,7 @@ export default function PosPrintersPage() {
       delivery,
       packaging,
       total,
-      memo: tr("posPrinterPreviewSampleMemo", "Less spicy, please. (sample)"),
+      memo: tr("posPrinterPreviewSampleMemo", "덜 맵게 부탁드려요. (예시)"),
     }
   }, [
     receiptPreviewDelivery,
@@ -1012,7 +1004,7 @@ export default function PosPrintersPage() {
       id: `pv${i}`,
       name: it.name,
       qty: it.qty,
-      note: i === 0 ? tr("posPrinterPreviewKitchenLineNote", "Line note (sample)") : undefined,
+      note: i === 0 ? tr("posPrinterPreviewKitchenLineNote", "품목 메모 (예시)") : undefined,
     }))
     const previewMenus: PosMenu[] = items.map((_, i) => ({
       id: `pv${i}`,
@@ -1138,17 +1130,17 @@ export default function PosPrintersPage() {
           <div class="text-xs">
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderNo", "주문번호"))}</span><span class="receipt-meta-value">${escapeHtml(formatPosOrderNoForPrint(previewData.orderNo))}</span></div>
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posTable", "테이블"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.tableName)}</span></div>
-            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("date", "Date"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.now)}</span></div>
-            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "Order Type"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
+            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("date", "일시"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.now)}</span></div>
+            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "주문 유형"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
           </div>
           <div class="receipt-divider"></div>
           ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ""}
           ${receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
-          ${receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "Tax ID"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
+          ${receiptBizTaxId ? `<div class="biz-line">${escapeHtml(tr("posTaxIdLabel", "사업자번호"))}: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
           ${receiptBizAbn ? `<div class="biz-line">ABN: ${escapeHtml(receiptBizAbn)}</div>` : ""}
           ${receiptBizOwner ? `<div class="biz-line">${escapeHtml(tr("posOwner", "대표"))}: ${escapeHtml(receiptBizOwner)}</div>` : ""}
           ${receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
-          ${receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "TEL"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
+          ${receiptBizPhone ? `<div class="biz-line">${escapeHtml(tr("posTelLabel", "전화"))}: ${escapeHtml(receiptBizPhone)}</div>` : ""}
           ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? "</div>" : ""}
           <div class="receipt-divider-strong"></div>
           <div class="receipt-item-head"><span>${escapeHtml(tr("posMenuName", "품목"))}</span><span>${escapeHtml(tr("amount", "금액"))}</span></div>
@@ -1322,16 +1314,6 @@ export default function PosPrintersPage() {
               {tr("posPrinterCopySettings", "설정 복사")}
             </Button>
           ) : null}
-          <button
-            type="button"
-            className={cn(
-              "h-10 rounded-md border px-3 text-sm font-medium",
-              easyMode ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-            )}
-            onClick={() => setEasyMode((v) => !v)}
-          >
-            {easyMode ? tr("posEasyModeOn", "간편 모드 ON") : tr("posEasyModeOff", "간편 모드 OFF")}
-          </button>
           <Button
             variant="outline"
             size="sm"
@@ -1366,14 +1348,6 @@ export default function PosPrintersPage() {
                 : tr("posPrinterLastSavedAtEmpty", "저장 이력이 없습니다.")}
             </span>
           </div>
-          {easyMode ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {tr(
-                "posEasyModeHint",
-                "간편 모드에서는 매장 실사용 핵심 탭(주방 라우팅, 영수증/자동인쇄)만 먼저 보여줍니다."
-              )}
-            </p>
-          ) : null}
         </div>
 
         {loading && (
@@ -1395,30 +1369,22 @@ export default function PosPrintersPage() {
                     <Receipt className={adminTabsIconCn} aria-hidden />
                     {tr("posReceiptTabAutoPrint", "영수증/자동인쇄")}
                   </TabsTrigger>
-                  {!easyMode ? (
-                    <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
-                      <Receipt className={adminTabsIconCn} aria-hidden />
-                      {tr("posReceiptDesignTab", "디자인")}
-                    </TabsTrigger>
-                  ) : null}
-                  {!easyMode ? (
-                    <TabsTrigger value="business" className={adminTabsTriggerCn}>
-                      <Building2 className={adminTabsIconCn} aria-hidden />
-                      {tr("posBizInfoTab", "사업자 정보")}
-                    </TabsTrigger>
-                  ) : null}
-                  {!easyMode ? (
-                    <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
-                      <Wallet className={adminTabsIconCn} aria-hidden />
-                      {tr("posDrawerTab", "돈통")}
-                    </TabsTrigger>
-                  ) : null}
-                  {!easyMode ? (
-                    <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
-                      <Monitor className={adminTabsIconCn} aria-hidden />
-                      {tr("posDualMonitorTab", "듀얼 모니터")}
-                    </TabsTrigger>
-                  ) : null}
+                  <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
+                    <Receipt className={adminTabsIconCn} aria-hidden />
+                    {tr("posReceiptDesignTab", "디자인")}
+                  </TabsTrigger>
+                  <TabsTrigger value="business" className={adminTabsTriggerCn}>
+                    <Building2 className={adminTabsIconCn} aria-hidden />
+                    {tr("posBizInfoTab", "사업자 정보")}
+                  </TabsTrigger>
+                  <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
+                    <Wallet className={adminTabsIconCn} aria-hidden />
+                    {tr("posDrawerTab", "돈통")}
+                  </TabsTrigger>
+                  <TabsTrigger value="dual-monitor" className={adminTabsTriggerCn}>
+                    <Monitor className={adminTabsIconCn} aria-hidden />
+                    {tr("posDualMonitorTab", "듀얼 모니터")}
+                  </TabsTrigger>
                 </TabsList>
           </AdminTabsBarWithHelp>
 
@@ -1542,7 +1508,7 @@ export default function PosPrintersPage() {
 
               <div className="rounded-lg border border-amber-200/70 bg-amber-50/40 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
                 <p className="text-xs text-muted-foreground">
-                  {tr("posKitchenRoutingSaveHint", "Tap Save below or at the bottom of the page to save to the server.")}
+                  {tr("posKitchenRoutingSaveHint", "아래 저장 버튼(또는 페이지 하단 저장 버튼)을 눌러 서버에 반영하세요.")}
                 </p>
                 <Button
                   type="button"
@@ -1667,7 +1633,7 @@ export default function PosPrintersPage() {
               </div>
             </TabsContent>
 
-            {!easyMode ? <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
+            <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {tr("posReceiptDesignHint", "손님 영수증·주방 주문서 레이아웃을 설정합니다.")}
               </p>
@@ -1783,7 +1749,7 @@ export default function PosPrintersPage() {
                   </div>
                 </div>
                 <ToggleRow label={tr("posReceiptShowTitle", "영수증 제목 표시")} value={receiptShowTitle} onChange={setReceiptShowTitle} t={t} />
-                <ToggleRow label={tr("posReceiptShowPaidStamp", "PAID 스탬프 표시")} value={receiptShowPaidStamp} onChange={setReceiptShowPaidStamp} t={t} />
+                <ToggleRow label={tr("posReceiptShowPaidStamp", "결제완료(PAID) 스탬프 표시")} value={receiptShowPaidStamp} onChange={setReceiptShowPaidStamp} t={t} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="text-xs text-muted-foreground">
@@ -1913,9 +1879,9 @@ export default function PosPrintersPage() {
                   </Button>
                 </div>
               </div>
-            </TabsContent> : null}
+            </TabsContent>
 
-            {!easyMode ? <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
+            <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-lg border p-4 space-y-3">
                 <p className="text-sm font-medium">{tr("posBizInfoTab", "사업자 정보")}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1946,9 +1912,9 @@ export default function PosPrintersPage() {
                 </div>
                 <p className="text-[11px] text-muted-foreground">{tr("posBizInfoHint", "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다.")}</p>
               </div>
-            </TabsContent> : null}
+            </TabsContent>
 
-            {!easyMode ? <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
+            <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {tr("posDrawerHintV2", "돈통은 '현금 결제가 포함된 경우'에만 자동으로 열리며, 그 외에는 열지 않습니다. (수동 열기/강제 열기는 별도 동작)")}
               </p>
@@ -1987,14 +1953,14 @@ export default function PosPrintersPage() {
                   </div>
                 </div>
               </div>
-            </TabsContent> : null}
+            </TabsContent>
 
-            {!easyMode ? <TabsContent value="dual-monitor" className={cn(adminTabsContentCn, "space-y-4")}>
+            <TabsContent value="dual-monitor" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {tr("posDualMonitorDeviceTabDesc", "Windows POS 듀얼 모니터 감지/자동 배치 및 고객창 제어를 설정합니다.")}
               </p>
               <PosDualMonitorSettingsContent storeCode={effectiveStore} />
-            </TabsContent> : null}
+            </TabsContent>
           </Tabs>
             <div className="border-t border-border px-4 py-4 sm:px-6">
               <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving}>
@@ -2153,11 +2119,11 @@ export default function PosPrintersPage() {
                   {(receiptBizName || receiptBizTaxId || receiptBizAbn || receiptBizOwner || receiptBizAddress || receiptBizPhone) && (
                     <div className="space-y-0.5 text-black">
                       {receiptBizName && <div className="font-semibold">{receiptBizName}</div>}
-                      {receiptBizTaxId && <div>{tr("posTaxIdLabel", "Tax ID")}: {receiptBizTaxId}</div>}
+                      {receiptBizTaxId && <div>{tr("posTaxIdLabel", "사업자번호")}: {receiptBizTaxId}</div>}
                       {receiptBizAbn && <div>ABN: {receiptBizAbn}</div>}
                       {receiptBizOwner && <div>{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
                       {receiptBizAddress && <div>{receiptBizAddress}</div>}
-                      {receiptBizPhone && <div>{tr("posTelLabel", "TEL")}: {receiptBizPhone}</div>}
+                      {receiptBizPhone && <div>{tr("posTelLabel", "전화")}: {receiptBizPhone}</div>}
                     </div>
                   )}
                   <div className="my-2 border-t-2 border-black" />

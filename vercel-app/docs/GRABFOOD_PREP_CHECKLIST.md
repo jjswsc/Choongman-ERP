@@ -201,6 +201,13 @@
 - `GRAB_CLIENT_ID`
 - `GRAB_CLIENT_SECRET`
 - `GRAB_API_ENV` (`staging` | `production`)
+- Grab → 파트너 `/oauth/token` 검증용(Developer Portal OAuth client와 별도 자격증명):
+  - `GRAB_INBOUND_OAUTH_CLIENT_ID`
+  - `GRAB_INBOUND_OAUTH_CLIENT_SECRET`
+  - 레거시(기존 코드/문서): `GRAB_OAUTH_CLIENT_ID`, `GRAB_OAUTH_CLIENT_SECRET` (위 값이 없을 때만 fallback)
+- Grab 웹훅 `Authorization: Bearer ...` 검증용(우리 `/oauth/token`에서 발급한 access_token과 동일해야 함):
+  - 권장: `GRAB_PARTNER_WEBHOOK_JWT_SECRET` (HS256 서명용 비밀값; 길고 랜덤한 문자열)
+  - 레거시: `GRAB_PARTNER_ISSUED_ACCESS_TOKEN` (구명칭; HS256 secret로도 사용 가능. opaque 고정 bearer 모드도 호환)
 - 선택:
   - `GRAB_PARTNER_API_BASE_URL` (기본 `partner-api.grab.com` override)
   - `GRAB_AUTH_BASE_URL` (기본 `https://api.grab.com` override)

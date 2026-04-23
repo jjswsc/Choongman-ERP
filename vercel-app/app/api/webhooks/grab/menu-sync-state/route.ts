@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * 등록 예: https://<host>/api/webhooks/grab/menu-sync-state
  */
 export async function POST(req: NextRequest) {
-  const denied = grabWebhookUnauthorized(req, 'menu_sync_state')
+  const denied = await grabWebhookUnauthorized(req, 'menu_sync_state')
   if (denied) return denied
 
   try {

@@ -40,5 +40,5 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
     })
   }
-  return grabPartnerOauthTokenResponse()
+  return await grabPartnerOauthTokenResponse()
 }

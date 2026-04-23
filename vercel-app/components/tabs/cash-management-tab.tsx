@@ -300,7 +300,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
       : null
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="pos-tour-cash-shell">
       <OfflineBanner
         offlineOnly={offlineAware}
         onSyncComplete={loadList}
@@ -529,7 +529,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </table>
           </div>
 
-          <div className="mt-6 border-t pt-6">
+          <div className="mt-6 border-t pt-6" data-tour="pos-tour-cash-add-form">
             <p className="mb-3 text-sm font-medium">{t('pettyAddTitle') || '등록'}</p>
             <form onSubmit={handleAdd} className="flex flex-col gap-3 w-full">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -603,7 +603,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   />
                 </div>
               </div>
-              <Button type="submit" disabled={addSaving} className="w-full sm:w-auto">
+              <Button type="submit" disabled={addSaving} className="w-full sm:w-auto" data-tour="pos-tour-cash-add-save">
                 <Plus className="mr-2 h-4 w-4" />
                 {addSaving ? t('loading') : t('btnSave') || '저장'}
               </Button>

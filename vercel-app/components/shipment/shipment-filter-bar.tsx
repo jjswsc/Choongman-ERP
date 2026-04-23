@@ -361,6 +361,11 @@ export function ShipmentFilterBar({
           </span>
         </div>
       </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        {histMonth
+          ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
+          : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
+      </p>
     </div>
   )
 }

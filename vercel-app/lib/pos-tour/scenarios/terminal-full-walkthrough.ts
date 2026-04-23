@@ -41,7 +41,7 @@ const steps: PosTourStep[] = [
     // 메뉴 터치/선택으로 자동 진행되는 단계라 딤을 끄고 상호작용 가능하게 유지
     overlayDim: false,
   },
-  { id: 'w12_cart', target: 'pos-tour-cart', titleKey: 'posTourFullW12Title', bodyKey: 'posTourFullW12Body', advance: 'manual' },
+  { id: 'w12_cart', target: 'pos-tour-cart-guest-count', titleKey: 'posTourFullW12Title', bodyKey: 'posTourFullW12Body', advance: 'manual' },
   { id: 'w13_order', target: 'pos-tour-cart-order', titleKey: 'posTourFullW13Title', bodyKey: 'posTourFullW13Body', advance: 'serving_panel_open' },
   { id: 'w13a_serving_panel', target: 'pos-tour-serving-panel', titleKey: 'posTourFullW13aTitle', bodyKey: 'posTourFullW13aBody', advance: 'manual' },
   { id: 'w13b_serving_items', target: 'pos-tour-serving-items', titleKey: 'posTourFullW13bTitle', bodyKey: 'posTourFullW13bBody', advance: 'manual' },
@@ -85,7 +85,7 @@ const steps: PosTourStep[] = [
   { id: 'w19a_dutch_toggle', target: 'pos-tour-dutch-pay-toggle', titleKey: 'posTourFullW19aTitle', bodyKey: 'posTourFullW19aBody', advance: 'manual', overlayDim: false },
   { id: 'w19b_partial_pay', target: 'pos-tour-payment-partial', titleKey: 'posTourFullW19bTitle', bodyKey: 'posTourFullW19bBody', advance: 'manual', overlayDim: false },
   { id: 'w19c_dutch_menu_mode', target: 'pos-tour-dutch-mode-menu', titleKey: 'posTourFullW19cTitle', bodyKey: 'posTourFullW19cBody', advance: 'manual', overlayDim: false },
-  { id: 'w19d_dutch_menu_panel', target: 'pos-tour-dutch-menu-panel', titleKey: 'posTourFullW19dTitle', bodyKey: 'posTourFullW19dBody', advance: 'manual', overlayDim: false },
+  { id: 'w19d_dutch_menu_panel', target: 'pos-tour-dutch-mode-menu', titleKey: 'posTourFullW19dTitle', bodyKey: 'posTourFullW19dBody', advance: 'manual', overlayDim: false },
   { id: 'w20_payment_tabs', target: 'pos-tour-payment-tabs', titleKey: 'posTourFullW20Title', bodyKey: 'posTourFullW20Body', advance: 'manual', overlayDim: false },
   { id: 'w21_payment_card', target: 'pos-tour-payment-tab-card', titleKey: 'posTourFullW21Title', bodyKey: 'posTourFullW21Body', advance: 'manual', overlayDim: false },
   { id: 'w22_payment_qr', target: 'pos-tour-payment-tab-qr', titleKey: 'posTourFullW22Title', bodyKey: 'posTourFullW22Body', advance: 'manual', overlayDim: false },

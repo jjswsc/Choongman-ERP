@@ -321,7 +321,6 @@ export async function GET(request: NextRequest) {
         frozenUnitPrice: frozen,
         ...(fromCartLr ? { lineRemarks: fromCartLr } : {}),
       })
-      if (list.length >= 500) break
     }
 
     list.sort((a, b) => {

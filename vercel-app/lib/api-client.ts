@@ -9401,6 +9401,16 @@ export async function getInvoiceData() {
   return res.json() as Promise<{ company: InvoiceDataCompany; clients: Record<string, InvoiceDataClient> }>
 }
 
+/** 출고 인보이스: 주문별 BILL TO 매칭용 후보 문자열(store_name + cart vendor) */
+export async function getInvoiceOrderBillToCandidates(orderIds: number[]) {
+  const res = await apiFetchWithOffline('/api/getInvoiceOrderBillToCandidates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderIds }),
+  })
+  return res.json() as Promise<{ map: Record<string, string[]> }>
+}
+
 export type InvoiceSettings = Record<string, string>
 
 export async function getInvoiceSettings() {

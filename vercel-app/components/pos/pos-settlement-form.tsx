@@ -610,7 +610,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const maxWClass = compact ? '' : 'max-w-2xl mx-auto'
 
   return (
-    <div className={cn('w-full min-w-0 shrink-0', maxWClass)}>
+    <div className={cn('w-full min-w-0 shrink-0', maxWClass)} data-tour="pos-tour-settlement-shell">
       <div className={paddingClass}>
         <OfflineBanner
           offlineOnly={offlineAware}
@@ -674,7 +674,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         )}
 
         {effectiveStore && !loading && openMode && (
-          <div className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
+          <div className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')} data-tour="pos-tour-open-cash-counts">
             <div className="space-y-4">
               <div className="rounded-lg bg-muted/50 px-4 py-3">
                 <p className="text-sm text-muted-foreground mb-1">{t('posPrevDayCash') || '전날 시재'}</p>
@@ -714,7 +714,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <div className="text-sm text-muted-foreground mb-1">{t('posCashActual') || '현금 시제 합계'}</div>
                 <div className="text-2xl font-bold tabular-nums">{denomTotal.toLocaleString()} ฿</div>
               </div>
-              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked}>
+              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked} data-tour="pos-tour-open-save">
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? '...' : t('itemsBtnSave') || '저장'}
               </Button>
@@ -730,7 +730,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         )}
 
         {effectiveStore && !loading && !openMode && (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')} data-tour="pos-tour-close-entry">
             <AdminTabsBarWithHelp className="mb-4 overflow-hidden rounded-lg">
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="entry" className={adminTabsTriggerCn}>
@@ -794,7 +794,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
               <div className="space-y-3">
                 {/* 돈통 시제: 화폐 단위 입력 (영업시작과 동일) */}
-                <div>
+                <div data-tour="pos-tour-close-cash-actual">
                   <p className="mb-2 text-sm font-medium">{t('posCashActual') || '돈통 시제'}</p>
                   {settlement?.cashActual != null && Number(settlement.cashActual) > 0 && (
                     <p className="mb-2 text-xs text-muted-foreground">
@@ -1099,7 +1099,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between" data-tour="pos-tour-close-checkbox">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -1116,7 +1116,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 )}
               </div>
 
-              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked}>
+              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked} data-tour="pos-tour-close-save">
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? '...' : t('itemsBtnSave') || '저장'}
               </Button>

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
  * 등록 예: https://<host>/api/webhooks/grab/merchant/menu
  */
 export async function GET(req: NextRequest) {
-  const denied = grabWebhookUnauthorized(req, 'get_menu')
+  const denied = await grabWebhookUnauthorized(req, 'get_menu')
   if (denied) return denied
 
   const url = new URL(req.url)
