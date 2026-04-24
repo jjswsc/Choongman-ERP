@@ -15,6 +15,18 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
 
+/** 루트 `categories` 또는 `sections[].categories`(메뉴 시뮬/Partner 샘플 형) */
+function collectCategoriesFromPayload(payload: Record<string, unknown>): unknown[] {
+  const top = asArray(payload.categories)
+  if (top.length) return top
+  const out: unknown[] = []
+  for (const sec of asArray(payload.sections)) {
+    const s = asRecord(sec)
+    out.push(...asArray(s.categories))
+  }
+  return out
+}
+
 function toMajor(value: unknown, exponent: number): number {
   const n = Number(value ?? 0)
   if (!Number.isFinite(n)) return 0
@@ -89,7 +101,7 @@ export async function importGrabMenuToPos(payload: Record<string, unknown>): Pro
   const merchantID = String(payload.merchantID ?? '').trim()
   const currency = asRecord(payload.currency)
   const exponent = Math.max(0, Math.min(4, Math.trunc(Number(currency.exponent ?? 2) || 2)))
-  const categories = asArray(payload.categories)
+  const categories = collectCategoriesFromPayload(payload)
 
   const result: ImportResult = {
     menusUpserted: 0,

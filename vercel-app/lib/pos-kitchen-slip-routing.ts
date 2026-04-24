@@ -1,3 +1,5 @@
+import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
+
 /**
  * 주방 주문서 분할
  * - kitchenMode: 주방 프린터 대수(1~3). 1대여도 품목별 "주방 미인쇄(0)"는 제외됨.
@@ -301,4 +303,19 @@ export function parseKitchenRouteMapDb(raw: unknown): Record<string, KitchenRout
     }
   }
   return normalizeKitchenRouteMapInput(obj)
+}
+
+/**
+ * getPosMenuCategories()와 동일한 규칙으로 대/소분류 키를 맞춤 (예: '프로모션' → 'Promotion')
+ * — DB·레거시 json 키와 UI 목록 불일치 시 저장·새로고침 후 전부 '주방 1'로 보이는 현상 방지
+ */
+export function alignKitchenCategoryRouteKeyMap(
+  m: Record<string, KitchenRouteValue>
+): Record<string, KitchenRouteValue> {
+  const out: Record<string, KitchenRouteValue> = {}
+  for (const [k, v] of Object.entries(m)) {
+    const key = normalizePromotionCategoryMain(String(k).trim())
+    if (key) out[key] = v
+  }
+  return out
 }

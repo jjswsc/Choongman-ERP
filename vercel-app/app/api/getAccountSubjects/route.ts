@@ -109,15 +109,10 @@ export async function GET(request: NextRequest) {
       list = list.filter((x) => {
         if (x.type !== 'expense') return false
         const code = String(x.code || '').trim()
-        const nameNorm = norm(String(x.name || ''))
-        // 매입: 식품원재료(5111), 포장재(5112)만
-        const isAllowedCost =
-          x.pAndLSection === 'cost' &&
-          (code === '5111' || code === '5112' || nameNorm === norm('식품원재료') || nameNorm === norm('포장재'))
-        // 비용: 소모품비만
-        const isAllowedExpense =
-          x.pAndLSection === 'expense' &&
-          (nameNorm === norm('소모품비') || nameNorm.includes(norm('소모품비')))
+        // 매입: 식품원재료(5111), 포장재(5112)만 (코드 고정)
+        const isAllowedCost = x.pAndLSection === 'cost' && (code === '5111' || code === '5112')
+        // 비용: 소모품비(5521)만 (코드 고정)
+        const isAllowedExpense = x.pAndLSection === 'expense' && code === '5521'
         return isAllowedCost || isAllowedExpense
       })
     }

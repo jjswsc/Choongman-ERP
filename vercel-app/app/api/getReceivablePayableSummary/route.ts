@@ -71,19 +71,27 @@ function matchesReceivableStoreByVendorLink(
 
 async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
   const vendors = (await supabaseSelect('vendors', {
-    select: 'code,name,gps_name',
+    select: 'code,name,gps_name,sales_outlet',
     limit: 10000,
-  })) as { code?: string; name?: string; gps_name?: string }[] | null
+  })) as { code?: string; name?: string; gps_name?: string; sales_outlet?: string }[] | null
   const storeToVendor = new Map<string, ReceivableVendorEntry>()
   const vendorCodeToStores = new Map<string, Set<string>>()
   for (const v of vendors || []) {
     const code = String(v.code || '').trim().toLowerCase()
     const name = String(v.name || '').trim() || String(v.code || '').trim()
     const gpsName = String(v.gps_name || '').trim()
+    const salesOutlet = String(v.sales_outlet || '').trim()
     if (!code) continue
     const entry = { code, name }
+    if (salesOutlet) addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet, entry)
     if (gpsName) addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName, entry)
     if (name) addVendorStoreAlias(storeToVendor, vendorCodeToStores, name, entry)
+    if (salesOutlet && salesOutlet.startsWith('CM ')) {
+      addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet.slice(3).trim(), entry)
+    }
+    if (salesOutlet && !salesOutlet.startsWith('CM ')) {
+      addVendorStoreAlias(storeToVendor, vendorCodeToStores, `CM ${salesOutlet}`, entry)
+    }
     if (gpsName && gpsName.startsWith('CM ')) {
       addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName.slice(3).trim(), entry)
     }

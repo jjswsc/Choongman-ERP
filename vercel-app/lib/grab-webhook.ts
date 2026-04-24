@@ -186,9 +186,8 @@ export async function grabPartnerOauthTokenResponse(): Promise<Response> {
   })
 }
 
-/** GET menu 스텁 — Grab 검증용 최소 구조(실연동 시 DB에서 조립). */
+/** GET menu 스텁 — Grab 검증용 최소 구조(실연동 시 DB에서 조립). `sections` 형(메뉴 시뮬레이터 샘플)과 맞춤. */
 export function grabStubMenuJson(merchantID: string, partnerMerchantID: string): unknown {
-  const sellingTimeId = 'grab-stub-selling-time'
   const openAllDay = {
     openPeriodType: 'OpenAllDay' as const,
     periods: [] as { startTime: string; endTime: string }[],
@@ -206,39 +205,33 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
     merchantID,
     partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
-    sellingTimes: [
+    sections: [
       {
-        startTime: '2022-01-01 00:00:00',
-        endTime: '2035-12-31 23:59:59',
-        id: sellingTimeId,
-        name: 'Default',
-        serviceHours,
-      },
-    ],
-    categories: [
-      {
-        id: 'grab-stub-category',
-        name: 'Stub',
-        nameTranslation: {},
-        availableStatus: 'AVAILABLE',
-        sellingTimeID: sellingTimeId,
+        id: 'SECTION-01',
+        name: 'Menu',
         sequence: 1,
-        items: [
+        serviceHours,
+        categories: [
           {
-            id: 'grab-stub-item',
-            name: 'POS 연동 전 스텁 메뉴',
-            nameTranslation: {},
-            availableStatus: 'UNAVAILABLE',
-            description: 'Replace with real menu from POS.',
-            descriptionTranslation: {},
-            price: 100,
-            photos: [] as string[],
-            specialType: null,
-            taxable: false,
-            sellingTimeID: sellingTimeId,
-            maxStock: 0,
+            id: 'grab-stub-category',
+            name: 'Stub',
+            nameTranslation: {} as Record<string, string>,
             sequence: 1,
-            modifierGroups: [] as unknown[],
+            availableStatus: 'AVAILABLE' as const,
+            items: [
+              {
+                id: 'grab-stub-item',
+                name: 'POS 연동 전 스텁 메뉴',
+                nameTranslation: {} as Record<string, string>,
+                sequence: 1,
+                availableStatus: 'UNAVAILABLE' as const,
+                price: 100,
+                campaignInfo: null,
+                description: 'Replace with real menu from POS.',
+                photos: [] as string[],
+                modifierGroups: [] as unknown[],
+              },
+            ],
           },
         ],
       },

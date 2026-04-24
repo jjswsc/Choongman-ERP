@@ -109,12 +109,11 @@ export async function buildGrabMenuFromPos(params: {
     optionByMenuId.set(menuId, list)
   }
 
-  const sellingTimeId = 'grab-default-selling-time'
   const openAllDay = {
     openPeriodType: 'OpenAllDay' as const,
     periods: [] as { startTime: string; endTime: string }[],
   }
-  const serviceHours = {
+  const serviceHoursForSection = {
     mon: openAllDay,
     tue: openAllDay,
     wed: openAllDay,
@@ -149,11 +148,10 @@ export async function buildGrabMenuFromPos(params: {
               {
                 id: `${itemId}-mods`,
                 name: 'Options',
-                nameTranslation: {},
-                availableStatus: 'AVAILABLE',
+                sequence: 1,
+                availableStatus: 'AVAILABLE' as const,
                 selectionRangeMin: 0,
                 selectionRangeMax: Math.max(1, Math.min(10, menuOptions.length)),
-                sequence: 1,
                 modifiers: menuOptions.map((opt, idx) => {
                   const modId = normalizeId(String(opt.id ?? ''), `${itemId}-mod-${idx + 1}`)
                   const modPrice =
@@ -163,10 +161,9 @@ export async function buildGrabMenuFromPos(params: {
                   return {
                     id: modId,
                     name: String(opt.name ?? `Option ${idx + 1}`),
-                    nameTranslation: {},
-                    availableStatus: 'AVAILABLE',
-                    price: toMinorUnit(modPrice ?? 0),
                     sequence: idx + 1,
+                    availableStatus: 'AVAILABLE' as const,
+                    price: toMinorUnit(modPrice ?? 0),
                   }
                 }),
               },
@@ -181,16 +178,12 @@ export async function buildGrabMenuFromPos(params: {
         id: itemId,
         name: String(menu.name ?? menu.code ?? 'Menu'),
         nameTranslation: {},
-        availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
-        description: '',
-        descriptionTranslation: {},
-        price: toMinorUnit(deliveryPrice ?? 0),
-        photos: isValidPhotoUrl(menu.image) ? [menu.image] : [],
-        specialType: null,
-        taxable: menu.vat_included === true,
-        sellingTimeID: sellingTimeId,
-        maxStock: available ? 9999 : 0,
         sequence: itemIndex + 1,
+        availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
+        price: toMinorUnit(deliveryPrice ?? 0),
+        campaignInfo: null,
+        description: '',
+        photos: isValidPhotoUrl(menu.image) ? [menu.image] : [],
         modifierGroups,
       }
     })
@@ -199,29 +192,28 @@ export async function buildGrabMenuFromPos(params: {
     return {
       id: categoryId,
       name: categoryName,
-      nameTranslation: {},
-      availableStatus: 'AVAILABLE',
-      sellingTimeID: sellingTimeId,
+      nameTranslation: {} as Record<string, string>,
       sequence: catIndex + 1,
+      availableStatus: 'AVAILABLE' as const,
       items,
     }
   })
 
   if (!categories.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 
+  /** Grab Menu Simulator / Partner 샘플과 동일: 최상위 `sections` (루트 `sellingTimes`+`categories` 대신) */
   return {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
-    sellingTimes: [
+    sections: [
       {
-        startTime: '2022-01-01 00:00:00',
-        endTime: '2035-12-31 23:59:59',
-        id: sellingTimeId,
-        name: 'Default',
-        serviceHours,
+        id: 'SECTION-01',
+        name: 'Menu',
+        sequence: 1,
+        serviceHours: serviceHoursForSection,
+        categories,
       },
     ],
-    categories,
   }
 }

@@ -49,6 +49,7 @@ import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
 import { cn, escapeHtml } from "@/lib/utils"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import {
+  alignKitchenCategoryRouteKeyMap,
   buildKitchenSlipGroupOpts,
   buildKitchenSlipGroups,
   normalizeKitchenRouteMapInput,
@@ -356,6 +357,15 @@ export default function PosPrintersPage() {
     []
   )
 
+  /** 키 목록이 아직 없으면(초기 로딩·API 실패) `ensureRouteDefaults([], …) === {}` 가 되어 DB json 을 싹 지우는 일이 생기지 않게 함 */
+  const routeMapForSave = React.useCallback(
+    (keys: string[], src: Record<string, KitchenRouteValue>) => {
+      if (keys.length > 0) return ensureRouteDefaults(keys, src)
+      return src
+    },
+    [ensureRouteDefaults]
+  )
+
   const readAsDataUrl = React.useCallback((file: File) => {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
@@ -421,9 +431,11 @@ export default function PosPrintersPage() {
     setReceiptPreviewDelivery(Math.max(0, Number(settings.deliveryFee ?? 0)))
     setReceiptPreviewPackaging(Math.max(0, Number(settings.packagingFee ?? 0)))
     setKitchenRouteByMenu(normalizeKitchenRouteMapInput(settings.kitchenRouteByMenu as unknown))
-    setKitchenRouteByCategory(normalizeKitchenRouteMapInput(settings.kitchenRouteByCategory as unknown))
+    setKitchenRouteByCategory(
+      alignKitchenCategoryRouteKeyMap(normalizeKitchenRouteMapInput(settings.kitchenRouteByCategory as unknown))
+    )
     setKitchenRouteByCategoryMain(
-      normalizeKitchenRouteMapInput(settings.kitchenRouteByCategoryMain as unknown)
+      alignKitchenCategoryRouteKeyMap(normalizeKitchenRouteMapInput(settings.kitchenRouteByCategoryMain as unknown))
     )
     setDrawerOpenOption(
       (["password_and_reason", "reason_only", "force"].includes(settings.drawerOpenOption || "")
@@ -625,9 +637,9 @@ export default function PosPrintersPage() {
         kitchen1Categories,
         kitchen2Categories,
         kitchen3Categories,
-        kitchenRouteByMenu: ensureRouteDefaults(allMenuRouteIds, kitchenRouteByMenu),
-        kitchenRouteByCategory: ensureRouteDefaults(categories, kitchenRouteByCategory),
-        kitchenRouteByCategoryMain: ensureRouteDefaults(mainCategories, kitchenRouteByCategoryMain),
+        kitchenRouteByMenu: routeMapForSave(allMenuRouteIds, kitchenRouteByMenu),
+        kitchenRouteByCategory: routeMapForSave(categories, kitchenRouteByCategory),
+        kitchenRouteByCategoryMain: routeMapForSave(mainCategories, kitchenRouteByCategoryMain),
         // 레거시 필드: 서버/클라이언트 정책상 비활성(현금 결제 + 수동 강제 열기만 사용)
         cardAutoOpen: false,
         checkAutoOpen: false,
@@ -1514,7 +1526,7 @@ export default function PosPrintersPage() {
                   type="button"
                   className="mt-3 w-full sm:w-auto"
                   onClick={() => void handleSave()}
-                  disabled={saving}
+                  disabled={saving || loading}
                 >
                   <Save className="mr-2 h-4 w-4" />
                   {saving ? t("posPrinterSaving") : t("itemsBtnSave")}
@@ -1963,7 +1975,12 @@ export default function PosPrintersPage() {
             </TabsContent>
           </Tabs>
             <div className="border-t border-border px-4 py-4 sm:px-6">
-              <Button type="button" className="w-full" onClick={() => void handleSave()} disabled={saving}>
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => void handleSave()}
+                disabled={saving || loading}
+              >
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? t("posPrinterSaving") : t("itemsBtnSave")}
               </Button>
@@ -2284,7 +2301,7 @@ export default function PosPrintersPage() {
             </Button>
             <Button
               type="button"
-              disabled={saving || !effectiveStore}
+              disabled={saving || loading || !effectiveStore}
               onClick={async () => {
                 const ok = await handleSave()
                 if (ok) setPreviewOpen(false)

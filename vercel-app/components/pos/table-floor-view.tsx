@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Users, Armchair } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getPosTableAabb } from '@/lib/pos-table-layout-aabb'
 import type { PosTableItem } from '@/lib/api-client'
 
 const FLOOR_W = 720
@@ -204,10 +205,19 @@ export function TableFloorView({
         return true
       })
       .map((item) => {
-        const baseLeft = ((Number(item.x ?? 0) || 0) / FLOOR_W) * 100
-        const baseTop = ((Number(item.y ?? 0) || 0) / FLOOR_H) * 100
-        const baseW = ((Number(item.w ?? 80) || 80) / FLOOR_W) * 100
-        const baseH = ((Number(item.h ?? 60) || 60) / FLOOR_H) * 100
+        const wpx = Number(item.w ?? 80) || 80
+        const hpx = Number(item.h ?? 60) || 60
+        const aabb = getPosTableAabb(
+          Number(item.x ?? 0) || 0,
+          Number(item.y ?? 0) || 0,
+          wpx,
+          hpx,
+          Number(item.rotation) || 0
+        )
+        const baseLeft = (aabb.x / FLOOR_W) * 100
+        const baseTop = (aabb.y / FLOOR_H) * 100
+        const baseW = (aabb.w / FLOOR_W) * 100
+        const baseH = (aabb.h / FLOOR_H) * 100
         const cx = baseLeft + baseW / 2
         const cy = baseTop + baseH / 2
         const widthPct = Math.min(100, baseW * TABLE_FLOOR_DISPLAY_SCALE)
@@ -221,8 +231,10 @@ export function TableFloorView({
           topPct,
           widthPct,
           heightPct,
-          w: Number(item.w ?? 80) || 80,
-          h: Number(item.h ?? 60) || 60,
+          aabbWpx: aabb.w,
+          aabbHpx: aabb.h,
+          w: wpx,
+          h: hpx,
           rotation: Number(item.rotation) || 0,
           shape: String(item.shape ?? 'rect'),
           seats: Number(item.seats ?? 0) || 0,
@@ -413,6 +425,8 @@ export function TableFloorView({
         )
 
         const rot = Number(tab.rotation) || 0
+        const surfWofAabb = tab.w / tab.aabbWpx
+        const surfHofAabb = tab.h / tab.aabbHpx
         /** 바닥 카드: `번` 제거 시 `1`+`2`+`3`이 한 덩어리처럼 보일 수 있어 저장명 그대로 */
         const floorTableLabel = String(tab.name ?? '').trim() || tab.id
 
@@ -444,15 +458,24 @@ export function TableFloorView({
               boxSizing: 'border-box',
             }}
           >
-            {/* 테이블 면·좌석만 회전 (관리자에서 설정한 각도) */}
+            {/* AABB(바깥) + w×h 논리 면(안): 회전 90/270이어도 보이는 점유 면·그리드와 맞음 */}
             <div
-              className={tableSurfaceClass}
+              className="absolute"
               style={{
-                transform: `rotate(${rot}deg)`,
+                left: '50%',
+                top: '50%',
+                width: `${surfWofAabb * 100}%`,
+                height: `${surfHofAabb * 100}%`,
+                transform: `translate(-50%, -50%) rotate(${rot}deg)`,
                 transformOrigin: 'center center',
-                boxShadow: !isSquare ? 'inset 0 1px 2px rgba(255,255,255,0.3)' : undefined,
               }}
             >
+              <div
+                className={tableSurfaceClass}
+                style={{
+                  boxShadow: !isSquare ? 'inset 0 1px 2px rgba(255,255,255,0.3)' : undefined,
+                }}
+              >
               {tab.seats > 0 &&
                 getSeatPositions(tab.w, tab.h, tab.seats).map((pos, idx) => (
                   <div
@@ -471,6 +494,7 @@ export function TableFloorView({
                     }}
                   />
                 ))}
+              </div>
             </div>
             {/* 글자는 항상 가로 유지 (테이블 면만 회전) */}
             <div

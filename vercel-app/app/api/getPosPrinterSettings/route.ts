@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
-import { parseKitchenRouteMapDb } from '@/lib/pos-kitchen-slip-routing'
+import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, isOfficeRole } from '@/lib/permissions'
 
@@ -420,8 +420,12 @@ export async function GET(request: NextRequest) {
       mainDeviceTokens,
       mainDeviceToken: mainDeviceTokenResolved,
       kitchenRouteByMenu: parseKitchenRouteMapDb(raw?.kitchen_route_by_menu),
-      kitchenRouteByCategory: parseKitchenRouteMapDb(raw?.kitchen_route_by_category),
-      kitchenRouteByCategoryMain: parseKitchenRouteMapDb(raw?.kitchen_route_by_category_main),
+      kitchenRouteByCategory: alignKitchenCategoryRouteKeyMap(
+        parseKitchenRouteMapDb(raw?.kitchen_route_by_category)
+      ),
+      kitchenRouteByCategoryMain: alignKitchenCategoryRouteKeyMap(
+        parseKitchenRouteMapDb(raw?.kitchen_route_by_category_main)
+      ),
       dualMonitorEnabled: Boolean(raw?.dual_monitor_enabled),
       customerDisplayAutoOpen: raw?.customer_display_auto_open !== false,
       customerDisplayMonitorPreference:

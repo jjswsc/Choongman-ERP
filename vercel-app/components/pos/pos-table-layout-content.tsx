@@ -40,6 +40,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { getPosTableAabb } from "@/lib/pos-table-layout-aabb"
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 
 const FLOOR_W = 720
@@ -965,33 +966,64 @@ export function PosTableLayoutContent() {
           const isSquare = item.shape === "square"
           const hasSeats = (item.seats ?? 0) > 0
           const seatPositions = getSeatPositions(item.w, item.h, item.seats ?? 0)
+          const aabb = getPosTableAabb(
+            item.x,
+            item.y,
+            item.w,
+            item.h,
+            item.rotation ?? 0
+          )
+          const rot = item.rotation ?? 0
+          const surfWofAabb = item.w / aabb.w
+          const surfHofAabb = item.h / aabb.h
           return (
           <div
             key={item.id}
             data-table-id={item.id}
             className={cn(
               "absolute flex flex-col items-center justify-center cursor-move select-none transition-all overflow-visible",
-              "rounded-xl shadow-sm",
-              "border-2 border-dashed",
-              isSquare
-                ? "bg-stone-500/90 border-stone-600 text-white"
-                : "bg-[#d4a574] border-amber-800/40 text-stone-800",
+              "rounded-sm",
               "hover:shadow-md",
-              selectedId === item.id && "ring-2 ring-emerald-500 ring-offset-2 border-solid border-amber-700/60 z-10",
-              selectedIds.includes(item.id) && "ring-2 ring-sky-500 ring-offset-2 border-solid border-sky-700/80 z-10 bg-sky-200/35",
+              selectedId === item.id && "z-10",
+              selectedIds.includes(item.id) && "z-10",
               draggingId === item.id && "z-20 shadow-lg scale-[1.02]"
             )}
             style={{
-              left: `${(item.x / FLOOR_W) * 100}%`,
-              top: `${(item.y / FLOOR_H) * 100}%`,
-              width: `${(item.w / FLOOR_W) * 100}%`,
-              height: `${(item.h / FLOOR_H) * 100}%`,
-              transform: `rotate(${item.rotation ?? 0}deg)`,
-              transformOrigin: "center center",
-              boxShadow: !isSquare ? "inset 0 1px 2px rgba(255,255,255,0.3)" : undefined,
+              left: `${(aabb.x / FLOOR_W) * 100}%`,
+              top: `${(aabb.y / FLOOR_H) * 100}%`,
+              width: `${(aabb.w / FLOOR_W) * 100}%`,
+              height: `${(aabb.h / FLOOR_H) * 100}%`,
             }}
             onMouseDown={(e) => handleMouseDown(e, item.id)}
           >
+            <div
+              className="absolute"
+              style={{
+                left: "50%",
+                top: "50%",
+                width: `${surfWofAabb * 100}%`,
+                height: `${surfHofAabb * 100}%`,
+                transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+                transformOrigin: "center center",
+              }}
+            >
+            <div
+              className={cn(
+                "absolute inset-0 flex flex-col items-center justify-center overflow-visible",
+                "rounded-xl shadow-sm",
+                "border-2 border-dashed",
+                isSquare
+                  ? "bg-stone-500/90 border-stone-600 text-white"
+                  : "bg-[#d4a574] border-amber-800/40 text-stone-800",
+                "hover:shadow-md",
+                selectedId === item.id && "ring-2 ring-emerald-500 ring-offset-2 border-solid border-amber-700/60",
+                selectedIds.includes(item.id) && "ring-2 ring-sky-500 ring-offset-2 border-solid border-sky-700/80 bg-sky-200/35",
+                draggingId === item.id && "shadow-lg"
+              )}
+              style={{
+                boxShadow: !isSquare ? "inset 0 1px 2px rgba(255,255,255,0.3)" : undefined,
+              }}
+            >
             {hasSeats && seatPositions.map((pos, i) => (
               <div
                 key={i}
@@ -1044,6 +1076,8 @@ export function PosTableLayoutContent() {
                 title={t("posTableResize") || "크기 조절"}
               />
             )}
+            </div>
+            </div>
           </div>
         )})}
         {selectBox && (
