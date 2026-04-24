@@ -33,6 +33,7 @@ export async function GET() {
         const gpsName = String(row.gps_name || '').trim()
         const fullName = String(row.name || '').trim()
         return {
+          code: String(row.code || '').trim(),
           name: salesOutlet || gpsName || fullName || String(row.code),
         }
       })

@@ -23,7 +23,9 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -38,7 +40,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { getVendorsForPurchase, getItemVendors, saveItemVendors, type ItemVendorRow } from "@/lib/api-client"
+import {
+  getVendorsForPurchase,
+  getItemVendors,
+  saveItemVendors,
+  getAccountSubjects,
+  type ItemVendorRow,
+  type AccountSubjectItem,
+} from "@/lib/api-client"
 const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', 'ea', 'pack', 'oz', 'lb']
 
 export interface ItemFormData {
@@ -66,6 +75,8 @@ export interface ItemFormData {
   stockUnitOptions: { unit: string; factor: number }[]
   /** 표준 단위 목록. (총 수량) [단위] = 1 규격. 재고/사용/원가에서 선택 */
   standardUnits: { unit: string; totalQuantity: number }[]
+  /** 품목별 기본 계정과목 (선택). 미지정이면 기존 재고/매입 흐름 */
+  accountSubjectId: string
 }
 
 export interface ItemFormProps {
@@ -82,12 +93,90 @@ export interface ItemFormProps {
 export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, onNewRegister, categories = [], outboundLocations = [] }: ItemFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = React.useCallback((key: string, fallback: string) => {
+    const v = t(key)
+    if (!v || v === key) return fallback
+    return v
+  }, [t])
   const [vendorList, setVendorList] = React.useState<{ code: string; name: string; address: string }[]>([])
   const [vendorOpen, setVendorOpen] = React.useState(false)
   const [categoryOpen, setCategoryOpen] = React.useState(false)
   const [itemVendorsOpen, setItemVendorsOpen] = React.useState(false)
   const [itemVendorsList, setItemVendorsList] = React.useState<ItemVendorRow[]>([])
   const [itemVendorsSaving, setItemVendorsSaving] = React.useState(false)
+  const [accountSubjects, setAccountSubjects] = React.useState<AccountSubjectItem[]>([])
+  const accountSubjectDisplayName = React.useCallback(
+    (s: AccountSubjectItem) => {
+      if (lang === "en") return (s.nameEn || s.name || "").trim()
+      if (lang === "th") return (s.nameTh || s.nameEn || s.name || "").trim()
+      return (s.name || s.nameEn || s.nameTh || "").trim()
+    },
+    [lang]
+  )
+  const accountSubjectSectionLabel = React.useCallback(
+    (s: AccountSubjectItem) => {
+      if (s.pAndLSection === "cost") return tt("itemsAccountSubjectSectionCost", "매입")
+      if (s.pAndLSection === "expense") return tt("itemsAccountSubjectSectionExpense", "비용")
+      return tt("itemsAccountSubjectSectionOther", "기타")
+    },
+    [tt]
+  )
+  const costSubjects = React.useMemo(
+    () => accountSubjects.filter((s) => s.pAndLSection === "cost"),
+    [accountSubjects]
+  )
+  const expenseSubjects = React.useMemo(
+    () => accountSubjects.filter((s) => s.pAndLSection === "expense" || !s.pAndLSection),
+    [accountSubjects]
+  )
+
+  const normalizeKey = React.useCallback((v: string) => String(v || "").trim().toLowerCase().replace(/\s+/g, ""), [])
+  const isPackingCategory = React.useCallback((category: string) => {
+    const c = normalizeKey(category)
+    if (!c) return false
+    return /packing|package|packaging|pkg|포장|패킹|포장재|포장자재|포장부자재|부자재/.test(c)
+  }, [normalizeKey])
+  const inferPreferredSection = React.useCallback(
+    (category: string): "cost" | "expense" => {
+      const c = normalizeKey(category)
+      if (!c) return "cost"
+      if (/food|raw|ingredient|원재료|재료|식품|packing|package|packaging|pkg|포장|패킹|자재/.test(c)) {
+        return "cost"
+      }
+      if (/royalty|fee|commission|expense|소모품|비품|잡비|로얄티|수수료|경비/.test(c)) {
+        return "expense"
+      }
+      return "cost"
+    },
+    [normalizeKey]
+  )
+
+  const findSubjectIdByKeywords = React.useCallback(
+    (keywords: string[]): string => {
+      const keywordSet = keywords.map((k) => normalizeKey(k)).filter(Boolean)
+      for (const s of accountSubjects) {
+        const merged = [s.name, s.nameEn || "", s.code || ""].map((x) => normalizeKey(String(x || ""))).join(" ")
+        if (!merged) continue
+        if (keywordSet.some((k) => merged.includes(k))) return String(s.id || "")
+      }
+      return ""
+    },
+    [accountSubjects, normalizeKey]
+  )
+  const preferredSection = React.useMemo(
+    () => inferPreferredSection(formData.category),
+    [formData.category, inferPreferredSection]
+  )
+  const primarySubjects = preferredSection === "cost" ? costSubjects : expenseSubjects
+  const secondarySubjects = preferredSection === "cost" ? expenseSubjects : costSubjects
+  const primaryLabel =
+    preferredSection === "cost"
+      ? tt("itemsAccountSubjectSectionCost", "매입")
+      : tt("itemsAccountSubjectSectionExpense", "비용")
+  const secondaryLabel =
+    preferredSection === "cost"
+      ? tt("itemsAccountSubjectSectionExpense", "비용")
+      : tt("itemsAccountSubjectSectionCost", "매입")
 
   const update = (key: keyof ItemFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }))
@@ -107,6 +196,35 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
       getItemVendors(formData.code).then((list) => setItemVendorsList(list || []))
     }
   }, [isEditing, formData.code, itemVendorsOpen])
+
+  React.useEffect(() => {
+    getAccountSubjects({ forItem: true, excludeHeaders: true })
+      .then((list) => {
+        const filtered = (list || []).filter((x) => (x.id ?? 0) > 0)
+        filtered.sort((a, b) => {
+          const rank = (x: AccountSubjectItem) => (x.pAndLSection === "cost" ? 0 : x.pAndLSection === "expense" ? 1 : 2)
+          const ra = rank(a)
+          const rb = rank(b)
+          if (ra !== rb) return ra - rb
+          return String(a.code || "").localeCompare(String(b.code || ""))
+        })
+        setAccountSubjects(filtered)
+      })
+      .catch(() => setAccountSubjects([]))
+  }, [])
+
+  React.useEffect(() => {
+    if ((formData.accountSubjectId || "").trim()) return
+    if (accountSubjects.length === 0) return
+    const packagingSubjectId = findSubjectIdByKeywords(["포장재", "packaging", "packing material"])
+    const foodRawSubjectId = findSubjectIdByKeywords(["식품원재료", "food raw material", "ingredient raw material"])
+    const nextId = isPackingCategory(formData.category) ? packagingSubjectId : foodRawSubjectId
+    if (!nextId) return
+    setFormData((prev) => {
+      if ((prev.accountSubjectId || "").trim()) return prev
+      return { ...prev, accountSubjectId: nextId }
+    })
+  }, [accountSubjects, findSubjectIdByKeywords, formData.accountSubjectId, formData.category, isPackingCategory, setFormData])
 
   const handleSaveItemVendors = async () => {
     if (!formData.code) return
@@ -305,6 +423,54 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
           </Select>
         </div>
 
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold text-foreground">
+            {tt("itemsAccountSubject", "계정과목(손익 분류, 선택)")}
+          </label>
+          <Select
+            value={formData.accountSubjectId || "__none__"}
+            onValueChange={(v) => update("accountSubjectId", v === "__none__" ? "" : v)}
+          >
+            <SelectTrigger className="h-10 text-sm">
+              <SelectValue placeholder={tt("itemsAccountSubjectPlaceholder", "미지정(기본: 재고/매입)")} />
+            </SelectTrigger>
+            <SelectContent>
+              {primarySubjects.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>{primaryLabel}</SelectLabel>
+                  {primarySubjects.map((s) => (
+                    <SelectItem key={String(s.id)} value={String(s.id)}>
+                      {s.code} {accountSubjectDisplayName(s)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {secondarySubjects.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>{secondaryLabel}</SelectLabel>
+                  {secondarySubjects.map((s) => (
+                    <SelectItem key={String(s.id)} value={String(s.id)}>
+                      {s.code} {accountSubjectDisplayName(s)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              <SelectItem value="__none__">
+                {tt("itemsAccountSubjectNone", "미지정 (기본: 재고/매입)")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">
+            {tt(
+              "itemsAccountSubjectHint",
+              "선택 시 손익계산서 매입 집계에서 해당 품목을 분리해 지정 계정 비용으로 반영합니다."
+            )}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {tt("itemsAccountSubjectRecommended", "추천 그룹")}: {primaryLabel}
+          </p>
+        </div>
+
         {isEditing && formData.code && (
           <Collapsible open={itemVendorsOpen} onOpenChange={setItemVendorsOpen} className="col-span-2">
             <CollapsibleTrigger asChild>
@@ -449,7 +615,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-[11px] text-muted-foreground shrink-0">Total</span>
+                <span className="text-[11px] text-muted-foreground shrink-0">{t("itemsTotalQuantity")}</span>
                 <Input
                   type="number"
                   min="0.0001"

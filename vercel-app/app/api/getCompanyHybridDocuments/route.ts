@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { isCompanyHybridRelatedType } from '@/lib/company-hybrid-documents'
-import { resolveCompanyHybridListScope } from '@/lib/company-hybrid-documents-access'
+import { companyHybridDocVisibilityFromDocType } from '@/lib/company-hybrid-documents'
+import { canViewCompanyHybridDocument, resolveCompanyHybridListScope } from '@/lib/company-hybrid-documents-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,10 +27,6 @@ export async function GET(request: NextRequest) {
     }
     const listScope = scopeRes.scope
 
-    const relatedTypeRaw = String(searchParams.get('relatedType') || '').trim()
-    const relatedId = String(searchParams.get('relatedId') || '').trim()
-    const relatedType =
-      relatedTypeRaw && isCompanyHybridRelatedType(relatedTypeRaw) ? relatedTypeRaw : ''
     const categoryIdRaw = String(searchParams.get('categoryId') || '').trim()
     const titleSearch = String(searchParams.get('searchTitle') || '').trim().slice(0, 200)
 
@@ -49,13 +45,6 @@ export async function GET(request: NextRequest) {
         filterParts.push(`title=ilike.${encodeURIComponent(pat)}`)
       }
     }
-    if (relatedType) {
-      filterParts.push(`related_type=eq.${encodeURIComponent(relatedType)}`)
-      if (relatedId) {
-        filterParts.push(`related_id=eq.${encodeURIComponent(relatedId)}`)
-      }
-    }
-
     const sortTitleRaw = String(searchParams.get('sortTitle') || '').trim().toLowerCase()
     const order =
       sortTitleRaw === 'asc'
@@ -69,8 +58,15 @@ export async function GET(request: NextRequest) {
       filterParts.join('&'),
       { order, limit: 500 }
     )) as Record<string, unknown>[]
+    const visibleRows = (rows || []).filter((row) => {
+      const rowStore = String((row as { store?: string | null }).store || '')
+      const visibility = companyHybridDocVisibilityFromDocType(
+        (row as { doc_type?: string | null }).doc_type
+      )
+      return canViewCompanyHybridDocument(auth, rowStore, visibility)
+    })
 
-    return NextResponse.json({ success: true, list: rows || [] }, { headers })
+    return NextResponse.json({ success: true, list: visibleRows }, { headers })
   } catch (e) {
     console.error('getCompanyHybridDocuments:', e)
     return NextResponse.json(

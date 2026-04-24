@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getGrabStoreIntegrations, type GrabStoreIntegrationSnapshot } from "@/lib/api-client"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 function formatBangkokDateTime(value: string | null | undefined) {
@@ -31,6 +33,8 @@ function formatBangkokDateTime(value: string | null | undefined) {
 }
 
 export default function GrabIntegrationPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [loading, setLoading] = React.useState(false)
   const [rows, setRows] = React.useState<GrabStoreIntegrationSnapshot[]>([])
   const [status, setStatus] = React.useState("all")
@@ -74,9 +78,9 @@ export default function GrabIntegrationPage() {
             <Link2 className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Grab 연동 상태</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminGrabIntegrationTitle")}</h1>
             <p className="text-xs text-muted-foreground">
-              Grab 매장 연동 상태(Active/Syncing/Failed)를 조회합니다.
+              {t("adminGrabIntegrationSub")}
             </p>
           </div>
         </div>
@@ -84,10 +88,10 @@ export default function GrabIntegrationPage() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger className="h-9 w-36 text-sm">
-              <SelectValue placeholder="Status" />
+              <SelectValue placeholder={t("adminGrabStatus")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">전체</SelectItem>
+              <SelectItem value="all">{t("all")}</SelectItem>
               <SelectItem value="ACTIVE">ACTIVE</SelectItem>
               <SelectItem value="INACTIVE">INACTIVE</SelectItem>
               <SelectItem value="SYNCING">SYNCING</SelectItem>
@@ -95,14 +99,14 @@ export default function GrabIntegrationPage() {
             </SelectContent>
           </Select>
           <Input
-            placeholder="partnerMerchantID 검색"
+            placeholder={t("adminGrabPartnerMerchantSearchPh")}
             value={partnerMerchantID}
             onChange={(e) => setPartnerMerchantID(e.target.value)}
             className="h-9 w-[300px] max-w-full text-sm"
           />
           <Button size="sm" className="h-9 gap-1.5 px-4" onClick={load} disabled={loading}>
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-            조회
+            {t("btn_query")}
           </Button>
           <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
             <input
@@ -110,10 +114,10 @@ export default function GrabIntegrationPage() {
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
             />
-            15초 자동 새로고침
+            {t("adminGrabAutoRefresh15s")}
           </label>
           <span className="text-xs text-muted-foreground">
-            마지막 갱신: {formatBangkokDateTime(lastRefreshedAt)}
+            {t("adminLastUpdated")}: {formatBangkokDateTime(lastRefreshedAt)}
           </span>
         </div>
 
@@ -122,19 +126,19 @@ export default function GrabIntegrationPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="px-4 py-3 text-[11px] font-bold text-center w-24">상태</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("status")}</th>
                   <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">grabMerchantID</th>
                   <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">partnerMerchantID</th>
                   <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">lastRequestID</th>
                   <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[240px]">lastMessage</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-center w-44">updatedAt (BKK)</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-center w-44">{t("adminUpdatedAtBkk")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
-                      조회된 Grab 연동 상태가 없습니다.
+                      {t("adminGrabNoRows")}
                     </td>
                   </tr>
                 ) : (

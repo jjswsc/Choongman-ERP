@@ -5,6 +5,7 @@ import {
   ArrowDownUp,
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
+  CircleHelp,
   FileStack,
   FileUp,
   Link2,
@@ -53,6 +54,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import {
   adminTabsContentCn,
@@ -64,17 +66,11 @@ import {
 import { cn } from "@/lib/utils"
 import {
   COMPANY_HYBRID_DOCS_STORE_ALL,
-  COMPANY_HYBRID_RELATED_TYPES,
+  companyHybridDocVisibilityFromDocType,
+  isCompanyHybridDocTypePermissionMeta,
+  type CompanyHybridDocVisibility,
   isCompanyHybridDocsListAllStoresParam,
-  type CompanyHybridRelatedType,
 } from "@/lib/company-hybrid-documents"
-
-const RELATED_OPTIONS: { value: CompanyHybridRelatedType; k: string }[] = [
-  { value: "none", k: "companyHybridDocRelatedNone" },
-  { value: "employee", k: "companyHybridDocRelatedEmployee" },
-  { value: "store", k: "companyHybridDocRelatedStore" },
-  { value: "interior_project", k: "companyHybridDocRelatedInterior" },
-]
 
 const FORM_CAT_NONE = "0"
 
@@ -190,16 +186,6 @@ function authToJwtPayload(auth: {
   }
 }
 
-function relatedLabel(
-  t: (k: string) => string,
-  row: { related_type: string; related_id: string | null }
-) {
-  const f = RELATED_OPTIONS.find((o) => o.value === row.related_type)
-  const name = f ? t(f.k) : row.related_type
-  if (row.related_id) return `${name} · ${row.related_id}`
-  return name
-}
-
 type MainTab = "list" | "register" | "categories"
 
 export function CompanyHybridDocumentsPanel() {
@@ -210,8 +196,6 @@ export function CompanyHybridDocumentsPanel() {
 
   const [mainTab, setMainTab] = React.useState<MainTab>("list")
   const [selectedStore, setSelectedStore] = React.useState("")
-  const [relatedType, setRelatedType] = React.useState<CompanyHybridRelatedType>("none")
-  const [relatedIdFilter, setRelatedIdFilter] = React.useState("")
 
   const [listCategoryFilter, setListCategoryFilter] = React.useState("all")
   const [listTitleSearch, setListTitleSearch] = React.useState("")
@@ -225,8 +209,7 @@ export function CompanyHybridDocumentsPanel() {
   const [driveTitle, setDriveTitle] = React.useState("")
   const [formCategoryId, setFormCategoryId] = React.useState(FORM_CAT_NONE)
   const [externalUrl, setExternalUrl] = React.useState("")
-  const [formRelatedType, setFormRelatedType] = React.useState<CompanyHybridRelatedType>("none")
-  const [formRelatedId, setFormRelatedId] = React.useState("")
+  const [formVisibility, setFormVisibility] = React.useState<CompanyHybridDocVisibility>("all")
   const [validFrom, setValidFrom] = React.useState("")
   const [validTo, setValidTo] = React.useState("")
   const [note, setNote] = React.useState("")
@@ -257,10 +240,20 @@ export function CompanyHybridDocumentsPanel() {
       if (row.category_id != null && categoryNameById.has(row.category_id)) {
         return categoryNameById.get(row.category_id) || "—"
       }
-      if (row.doc_type) return row.doc_type
+      if (row.doc_type && !isCompanyHybridDocTypePermissionMeta(row.doc_type)) return row.doc_type
       return t("companyHybridDocCategoryFilterUncat")
     },
     [categoryNameById, t]
+  )
+
+  const labelForVisibility = React.useCallback(
+    (row: CompanyHybridDocumentListItem) => {
+      const vis = companyHybridDocVisibilityFromDocType(row.doc_type)
+      if (vis === "office") return t("companyHybridDocPermissionOffice")
+      if (vis === "store_admin") return t("companyHybridDocPermissionStoreAdmin")
+      return t("companyHybridDocPermissionAll")
+    },
+    [t]
   )
 
   const visibleStores = React.useMemo(() => {
@@ -343,12 +336,6 @@ export function CompanyHybridDocumentsPanel() {
     setLoading(true)
     try {
       const q: Parameters<typeof getCompanyHybridDocuments>[0] = { store: selectedStore }
-      if (relatedType && relatedType !== "none") {
-        q.relatedType = relatedType
-        if (relatedIdFilter.trim()) {
-          q.relatedId = relatedIdFilter.trim()
-        }
-      }
       q.categoryId = listCategoryFilter
       if (listTitleSearch.trim()) q.searchTitle = listTitleSearch.trim()
       if (titleSort) q.sortTitle = titleSort
@@ -371,8 +358,6 @@ export function CompanyHybridDocumentsPanel() {
     }
   }, [
     selectedStore,
-    relatedType,
-    relatedIdFilter,
     listCategoryFilter,
     listTitleSearch,
     titleSort,
@@ -392,8 +377,7 @@ export function CompanyHybridDocumentsPanel() {
     setDriveTitle("")
     setFormCategoryId(FORM_CAT_NONE)
     setExternalUrl("")
-    setFormRelatedType("none")
-    setFormRelatedId("")
+    setFormVisibility("all")
     setValidFrom("")
     setValidTo("")
     setNote("")
@@ -408,8 +392,7 @@ export function CompanyHybridDocumentsPanel() {
         : FORM_CAT_NONE
     )
     setExternalUrl(row.external_url || "")
-    setFormRelatedType((row.related_type as CompanyHybridRelatedType) || "none")
-    setFormRelatedId(row.related_id || "")
+    setFormVisibility(companyHybridDocVisibilityFromDocType(row.doc_type))
     setValidFrom(row.valid_from ? String(row.valid_from).slice(0, 10) : "")
     setValidTo(row.valid_to ? String(row.valid_to).slice(0, 10) : "")
     setNote(row.note || "")
@@ -436,8 +419,7 @@ export function CompanyHybridDocumentsPanel() {
     const body: Record<string, unknown> = {
       store: ws,
       title: driveTitle.trim(),
-      relatedType: formRelatedType,
-      relatedId: formRelatedType === "none" ? "" : formRelatedId.trim(),
+      visibility: formVisibility,
       source: "drive",
       externalUrl: externalUrl.trim(),
       validFrom: validFrom || undefined,
@@ -516,8 +498,7 @@ export function CompanyHybridDocumentsPanel() {
       const done = await completeCompanyHybridDocumentUpload({
         store: ws,
         title: driveTitle.trim(),
-        relatedType: formRelatedType,
-        relatedId: formRelatedType === "none" ? "" : formRelatedId.trim(),
+        visibility: formVisibility,
         note: note.trim() || undefined,
         validFrom: validFrom || undefined,
         validTo: validTo || undefined,
@@ -633,27 +614,24 @@ export function CompanyHybridDocumentsPanel() {
           </TabsList>
         </AdminTabsBarWithHelp>
 
-        <div className="mt-1 flex flex-wrap items-end gap-3 border-b border-border/40 pb-3">
-          <CompanyHybridDocumentsStoreField
-            labelStore={t("companyHybridDocFilterStore")}
-            labelAllStores={t("companyHybridDocStoreAll")}
-            canPickStore={canPickStore}
-            storeSelectOptions={storeSelectOptions}
-            selectedStore={selectedStore}
-            formatStoreLabel={formatStoreLabel}
-            onStoreChange={(v) => {
-              setSelectedStore(v)
-              setTitleSort(null)
-              resetForm()
-            }}
-          />
-        </div>
-
         <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
           <p className="text-sm text-muted-foreground">{t("companyHybridDocListFilterHint")}</p>
           <Card>
             <CardHeader className="py-3">
               <div className="flex flex-wrap items-end gap-3">
+                <CompanyHybridDocumentsStoreField
+                  labelStore={t("companyHybridDocFilterStore")}
+                  labelAllStores={t("companyHybridDocStoreAll")}
+                  canPickStore={canPickStore}
+                  storeSelectOptions={storeSelectOptions}
+                  selectedStore={selectedStore}
+                  formatStoreLabel={formatStoreLabel}
+                  onStoreChange={(v) => {
+                    setSelectedStore(v)
+                    setTitleSort(null)
+                    resetForm()
+                  }}
+                />
                 <div className="min-w-[150px] space-y-1.5">
                   <Label>{t("companyHybridDocColCategory")}</Label>
                   <Select value={listCategoryFilter} onValueChange={setListCategoryFilter}>
@@ -681,37 +659,6 @@ export function CompanyHybridDocumentsPanel() {
                     placeholder="…"
                   />
                 </div>
-                <div className="min-w-[160px] space-y-1.5">
-                  <Label>{t("companyHybridDocRelated")}</Label>
-                  <Select
-                    value={relatedType}
-                    onValueChange={(v) => setRelatedType(v as CompanyHybridRelatedType)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COMPANY_HYBRID_RELATED_TYPES.map((rt) => {
-                        const opt = RELATED_OPTIONS.find((o) => o.value === rt)
-                        return (
-                          <SelectItem key={rt} value={rt}>
-                            {opt ? t(opt.k) : rt}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {relatedType !== "none" && (
-                  <div className="min-w-[200px] flex-1 space-y-1.5">
-                    <Label>{t("companyHybridDocFilterRelated")}</Label>
-                    <Input
-                      value={relatedIdFilter}
-                      onChange={(e) => setRelatedIdFilter(e.target.value)}
-                      placeholder={t("companyHybridDocRelatedIdPh")}
-                    />
-                  </div>
-                )}
                 <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
                   {t("stockBtnSearch")}
                 </Button>
@@ -765,8 +712,8 @@ export function CompanyHybridDocumentsPanel() {
                           </button>
                         </TableHead>
                         <TableHead>{t("companyHybridDocColCategory")}</TableHead>
+                        <TableHead>{t("companyHybridDocColPermission")}</TableHead>
                         <TableHead>{t("companyHybridDocSource")}</TableHead>
-                        <TableHead>{t("companyHybridDocColRelated")}</TableHead>
                         <TableHead className="whitespace-nowrap">{t("companyHybridDocColIssued")}</TableHead>
                         <TableHead>{t("companyHybridDocColCreated")}</TableHead>
                         <TableHead className="text-right">{t("stockColAction")}</TableHead>
@@ -784,6 +731,9 @@ export function CompanyHybridDocumentsPanel() {
                           <TableCell className="text-sm text-muted-foreground">
                             {labelForDocumentCategory(row)}
                           </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {labelForVisibility(row)}
+                          </TableCell>
                           <TableCell>
                             <span
                               className={cn(
@@ -795,9 +745,6 @@ export function CompanyHybridDocumentsPanel() {
                                 ? t("companyHybridDocSourceDrive")
                                 : t("companyHybridDocSourceStorage")}
                             </span>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {relatedLabel(t, row)}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                             {formatHybridDocumentIssueDate(row.valid_from, lang)}
@@ -861,6 +808,25 @@ export function CompanyHybridDocumentsPanel() {
           <p className="mb-4 text-sm text-muted-foreground">
             {t("companyHybridDocRegisterTabHint")}
           </p>
+          <Card className="mb-4">
+            <CardHeader className="py-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <CompanyHybridDocumentsStoreField
+                  labelStore={t("companyHybridDocFilterStore")}
+                  labelAllStores={t("companyHybridDocStoreAll")}
+                  canPickStore={canPickStore}
+                  storeSelectOptions={storeSelectOptions}
+                  selectedStore={selectedStore}
+                  formatStoreLabel={formatStoreLabel}
+                  onStoreChange={(v) => {
+                    setSelectedStore(v)
+                    setTitleSort(null)
+                    resetForm()
+                  }}
+                />
+              </div>
+            </CardHeader>
+          </Card>
           <Card className="mb-6">
             <CardHeader className="py-4">
               <CardTitle className="text-base">{t("companyHybridDocRegisterMetaTitle")}</CardTitle>
@@ -897,39 +863,39 @@ export function CompanyHybridDocumentsPanel() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>{t("companyHybridDocRelated")}</Label>
-                  <Select
-                    value={formRelatedType}
-                    onValueChange={(v) => {
-                      setFormRelatedType(v as CompanyHybridRelatedType)
-                      if (v === "none") setFormRelatedId("")
-                    }}
-                  >
+                  <div className="flex items-center gap-1">
+                    <Label>{t("companyHybridDocPermission")}</Label>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground hover:text-foreground"
+                            aria-label={t("companyHybridDocPermissionHelpTitle")}
+                          >
+                            <CircleHelp className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[min(24rem,90vw)] text-left whitespace-normal">
+                          <p className="font-medium">{t("companyHybridDocPermissionHelpTitle")}</p>
+                          <p className="mt-1">- {t("companyHybridDocPermissionHelpAll")}</p>
+                          <p>- {t("companyHybridDocPermissionHelpOffice")}</p>
+                          <p>- {t("companyHybridDocPermissionHelpStoreAdmin")}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Select value={formVisibility} onValueChange={(v) => setFormVisibility(v as CompanyHybridDocVisibility)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {COMPANY_HYBRID_RELATED_TYPES.map((rt) => {
-                        const opt = RELATED_OPTIONS.find((o) => o.value === rt)
-                        return (
-                          <SelectItem key={rt} value={rt}>
-                            {opt ? t(opt.k) : rt}
-                          </SelectItem>
-                        )
-                      })}
+                      <SelectItem value="all">{t("companyHybridDocPermissionAll")}</SelectItem>
+                      <SelectItem value="office">{t("companyHybridDocPermissionOffice")}</SelectItem>
+                      <SelectItem value="store_admin">{t("companyHybridDocPermissionStoreAdmin")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                {formRelatedType !== "none" && (
-                  <div className="space-y-1.5">
-                    <Label>{t("companyHybridDocFilterRelated")}</Label>
-                    <Input
-                      value={formRelatedId}
-                      onChange={(e) => setFormRelatedId(e.target.value)}
-                      placeholder={t("companyHybridDocRelatedIdPh")}
-                    />
-                  </div>
-                )}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -1006,6 +972,25 @@ export function CompanyHybridDocumentsPanel() {
         </TabsContent>
 
         <TabsContent value="categories" className={cn(adminTabsContentCn, "space-y-4")}>
+          <Card>
+            <CardHeader className="py-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <CompanyHybridDocumentsStoreField
+                  labelStore={t("companyHybridDocFilterStore")}
+                  labelAllStores={t("companyHybridDocStoreAll")}
+                  canPickStore={canPickStore}
+                  storeSelectOptions={storeSelectOptions}
+                  selectedStore={selectedStore}
+                  formatStoreLabel={formatStoreLabel}
+                  onStoreChange={(v) => {
+                    setSelectedStore(v)
+                    setTitleSort(null)
+                    resetForm()
+                  }}
+                />
+              </div>
+            </CardHeader>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("companyHybridCategoryManageTitle")}</CardTitle>

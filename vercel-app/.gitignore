@@ -54,6 +54,12 @@ public/swe-worker*
 android/keystore.properties
 *.jks
 *.keystore
+# Android local/gradle build outputs (generated)
+android/.gradle/
+android/build/
+android/**/build/
+android/.cxx/
+android/local.properties
 
 # Windows POS local outputs/secrets
 windows-pos/node_modules/

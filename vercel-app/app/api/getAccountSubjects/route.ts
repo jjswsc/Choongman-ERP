@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
+export const dynamic = 'force-dynamic'
+
+function norm(v: string): string {
+  return String(v || '').trim().toLowerCase().replace(/\s+/g, '')
+}
+
 /** 계정과목 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const typeFilter = String(searchParams.get('type') || '').trim()
   const forExpense = searchParams.get('forExpense') === 'true'
@@ -13,6 +20,7 @@ export async function GET(request: NextRequest) {
   const forTransfer = searchParams.get('forTransfer') === 'true'
   const forRevenue = searchParams.get('forRevenue') === 'true'
   const forCard = searchParams.get('forCard') === 'true'
+  const forItem = searchParams.get('forItem') === 'true'
   const excludeHeaders = searchParams.get('excludeHeaders') === 'true'
 
   try {
@@ -91,6 +99,27 @@ export async function GET(request: NextRequest) {
     }
     if (forCard) {
       list = list.filter((x) => x.type === 'expense' && (x.pAndLSection === 'expense' || x.pAndLSection === 'cost' || !x.pAndLSection))
+    }
+    /**
+     * 품목 관리용 계정과목:
+     * - 물류/품목에서 실제 사용하는 원가(cost)·비용(expense) 계정만 노출
+     * - 자산/부채/자본/수익/이체 계정 숨김
+     */
+    if (forItem) {
+      list = list.filter((x) => {
+        if (x.type !== 'expense') return false
+        const code = String(x.code || '').trim()
+        const nameNorm = norm(String(x.name || ''))
+        // 매입: 식품원재료(5111), 포장재(5112)만
+        const isAllowedCost =
+          x.pAndLSection === 'cost' &&
+          (code === '5111' || code === '5112' || nameNorm === norm('식품원재료') || nameNorm === norm('포장재'))
+        // 비용: 소모품비만
+        const isAllowedExpense =
+          x.pAndLSection === 'expense' &&
+          (nameNorm === norm('소모품비') || nameNorm.includes(norm('소모품비')))
+        return isAllowedCost || isAllowedExpense
+      })
     }
 
     if (excludeHeaders) {

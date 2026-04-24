@@ -6,6 +6,10 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole } from '@/lib/permissions'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
+function normalizeVendorCode(v: string): string {
+  return String(v || '').trim().toLowerCase()
+}
+
 /** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) + 통장 매입 지급 행 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -104,6 +108,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const vendorFilterCode = normalizeVendorCode(vendorFilter)
+    let exactVendorAliases = new Set<string>()
+    if (vendorFilterCode && vendorFilterCode !== 'all') {
+      const vendorRows = (await supabaseSelectFilterAllPages(
+        'vendors',
+        `code=eq.${encodeURIComponent(vendorFilterCode)}`,
+        { select: 'name,gps_name,sales_outlet', pageSize: 1, maxRows: 1 }
+      )) as { name?: string; gps_name?: string; sales_outlet?: string }[] | null
+      const v = vendorRows?.[0]
+      if (v) {
+        const aliases = [
+          resolveVendorName(String(v.name || '').trim()),
+          resolveVendorName(String(v.gps_name || '').trim()),
+          resolveVendorName(String(v.sales_outlet || '').trim()),
+        ].filter(Boolean)
+        exactVendorAliases = new Set(aliases)
+      } else {
+        exactVendorAliases = new Set(['__no_match__'])
+      }
+    }
+
     const locVariants = [...new Set(expandStoreVariantsForGrade(storeName).filter(Boolean))]
     const orLoc =
       locVariants.length === 0
@@ -130,10 +155,6 @@ export async function GET(request: NextRequest) {
       qty?: number
       unit_cost?: number | null
     }[]
-
-    const exactVendorRaw =
-      vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' ? vendorFilter : ''
-    const exactVendor = resolveVendorName(exactVendorRaw)
 
     const list: {
       date: string
@@ -162,8 +183,8 @@ export async function GET(request: NextRequest) {
 
       const rowVendorRaw = isForcePushFromHq || note === 'From HQ' ? 'From HQ' : note || '-'
       const rowVendor = resolveVendorName(rowVendorRaw)
-      if (exactVendor && rowVendor !== exactVendor) continue
-      if (!exactVendor && vendorSearch) {
+      if (exactVendorAliases.size > 0 && !exactVendorAliases.has(rowVendor)) continue
+      if (exactVendorAliases.size === 0 && vendorSearch) {
         const vs = vendorSearch.toLowerCase()
         if (!rowVendor.toLowerCase().includes(vs)) continue
       }
@@ -212,12 +233,12 @@ export async function GET(request: NextRequest) {
             (b.vendor || '').toLowerCase().includes(q)
           if (!hit) continue
         }
-        if (!exactVendor && vendorSearch) {
+        if (exactVendorAliases.size === 0 && vendorSearch) {
           const vs = vendorSearch.toLowerCase()
           if (!(b.vendor || '').toLowerCase().includes(vs)) continue
         }
         const normalizedBankVendor = resolveVendorName(String(b.vendor || ''))
-        if (exactVendor && normalizedBankVendor !== exactVendor) continue
+        if (exactVendorAliases.size > 0 && !exactVendorAliases.has(normalizedBankVendor)) continue
         list.push({
           date: b.date,
           vendor: normalizedBankVendor,
@@ -235,9 +256,9 @@ export async function GET(request: NextRequest) {
       console.error('getInboundForStore bank synthetic:', e)
     }
 
-    if (exactVendor) {
+    if (exactVendorAliases.size > 0) {
       for (let i = list.length - 1; i >= 0; i--) {
-        if (resolveVendorName(String(list[i].vendor || '')) !== exactVendor) list.splice(i, 1)
+        if (!exactVendorAliases.has(resolveVendorName(String(list[i].vendor || '')))) list.splice(i, 1)
       }
     }
 

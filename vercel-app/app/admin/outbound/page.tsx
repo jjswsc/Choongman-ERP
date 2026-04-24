@@ -1649,17 +1649,26 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         ),
       ]
       const billToCandRes =
-        orderIdsForBillTo.length > 0 ? await getInvoiceOrderBillToCandidates(orderIdsForBillTo) : { map: {} }
+        orderIdsForBillTo.length > 0
+          ? await getInvoiceOrderBillToCandidates(orderIdsForBillTo)
+          : { map: {}, taxInvoiceClientMap: {} }
       const billToMap = billToCandRes?.map && typeof billToCandRes.map === "object" ? billToCandRes.map : {}
+      const taxInvoiceClientMap =
+        billToCandRes?.taxInvoiceClientMap && typeof billToCandRes.taxInvoiceClientMap === "object"
+          ? billToCandRes.taxInvoiceClientMap
+          : {}
       const invoiceDatas: InvoiceData[] = checked.map((g) => {
         const oid = Math.floor(Number((g.items || [])[0]?.orderRowId || 0))
+        const memoClient =
+          Number.isFinite(oid) && oid > 0 ? taxInvoiceClientMap[String(oid)] : undefined
         const fromOrder = Number.isFinite(oid) && oid > 0 ? billToMap[String(oid)] : undefined
         const candidates =
           Array.isArray(fromOrder) && fromOrder.length > 0
             ? fromOrder
             : [String(g.target || "").trim()].filter(Boolean)
-        const client =
-          candidates.length > 0
+        const client = memoClient
+          ? memoClient
+          : candidates.length > 0
             ? resolveInvoiceClientFromBillToCandidates(candidates, company, clients)
             : resolveInvoiceClientForTarget(g.target || "", company, clients)
         return buildInvoiceData(g, company, client, settings)

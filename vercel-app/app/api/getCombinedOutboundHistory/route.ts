@@ -334,11 +334,15 @@ export async function GET(request: NextRequest) {
       return (b.orderRowId || '').localeCompare(a.orderRowId || '')
     })
 
-    // 인보이스 번호: IV{yyyymmdd}-{orderId} (미수금 탭과 동일, 물류·회계 혼동 방지)
+    // 인보이스 번호
+    // - 주문 연동 출고: IV{yyyymmdd}-{orderId} (승인 주문·로그 Outbound, 미수금(주문)과 동일)
+    // - 강제출고(주문 없음): orderRowId 없음 → 강제출고 미수금(IVF…)과 맞추기 위해 IVF{yyyymmdd}-{stockLogId}
     for (const r of list) {
-      if (r.orderRowId) {
-        const datePart = r.date.replace(/\D/g, '').slice(0, 8)
+      const datePart = (r.date || "").replace(/\D/g, "").slice(0, 8)
+      if (r.orderRowId && datePart.length >= 8) {
         r.invoiceNo = `IV${datePart}-${r.orderRowId}`
+      } else if (r.type === "Force" && r.stockLogId != null && r.stockLogId > 0 && datePart.length >= 8) {
+        r.invoiceNo = `IVF${datePart}-${r.stockLogId}`
       }
     }
 

@@ -27,6 +27,66 @@ type PayableListRow = {
   petty_cash_transaction_id?: number | null
 }
 
+type ReceivableVendorEntry = { code: string; name: string }
+type ReceivableVendorMaps = {
+  storeToVendor: Map<string, ReceivableVendorEntry>
+  vendorCodeToStores: Map<string, Set<string>>
+}
+
+function normalizeReceivableStoreKey(v: string): string {
+  const raw = String(v || '').trim().toLowerCase()
+  if (!raw) return ''
+  const noSpace = raw.replace(/\s+/g, ' ')
+  const noCmPrefix = noSpace.startsWith('cm ') ? noSpace.slice(3).trim() : noSpace
+  return noCmPrefix
+}
+
+function isAllFilterToken(v: string): boolean {
+  const n = normalizeReceivableStoreKey(v)
+  return !n || n === 'all'
+}
+
+function normalizeVendorCode(v: string): string {
+  return String(v || '').trim().toLowerCase()
+}
+
+function matchesReceivableStoreNorm(storeName: string | null | undefined, storeFilter: string): boolean {
+  const filterNorm = normalizeReceivableStoreKey(storeFilter)
+  if (isAllFilterToken(filterNorm)) return true
+  const storeNorm = normalizeReceivableStoreKey(storeName || '')
+  if (!storeNorm) return false
+  return storeNorm === filterNorm
+}
+
+function addVendorStoreAlias(
+  storeToVendor: Map<string, ReceivableVendorEntry>,
+  vendorCodeToStores: Map<string, Set<string>>,
+  aliasRaw: string,
+  entry: ReceivableVendorEntry
+): void {
+  const alias = normalizeReceivableStoreKey(aliasRaw)
+  if (!alias) return
+  storeToVendor.set(alias, entry)
+  const byCode = vendorCodeToStores.get(entry.code) || new Set<string>()
+  byCode.add(alias)
+  vendorCodeToStores.set(entry.code, byCode)
+}
+
+function matchesReceivableStoreByVendorLink(
+  storeName: string | null | undefined,
+  vendorCodeFilter: string,
+  maps: ReceivableVendorMaps
+): boolean {
+  const vendorCode = normalizeVendorCode(vendorCodeFilter)
+  if (isAllFilterToken(vendorCode)) return true
+  const storeNorm = normalizeReceivableStoreKey(storeName || '')
+  if (!storeNorm) return false
+
+  const aliasesByCode = maps.vendorCodeToStores.get(vendorCode)
+  if (!aliasesByCode || aliasesByCode.size === 0) return false
+  return aliasesByCode.has(storeNorm)
+}
+
 function matchesPayableStoreNorm(resolved: string | null | undefined, storeFilter: string): boolean {
   const f = storeFilter.trim().toLowerCase()
   if (!f || f === 'all') return true
@@ -45,24 +105,29 @@ function poAttributedStore(po: { location_name?: string; cart_json?: string }): 
   return loc || null
 }
 
-async function getStoreToVendorMap(): Promise<Map<string, { code: string; name: string }>> {
+async function getReceivableVendorMaps(): Promise<ReceivableVendorMaps> {
   const vendors = (await supabaseSelect('vendors', {
     select: 'code,name,gps_name',
     limit: 5000,
   })) as { code?: string; name?: string; gps_name?: string }[] | null
-  const map = new Map<string, { code: string; name: string }>()
+  const storeToVendor = new Map<string, ReceivableVendorEntry>()
+  const vendorCodeToStores = new Map<string, Set<string>>()
   for (const v of vendors || []) {
-    const code = String(v.code || '').trim()
-    const name = String(v.name || '').trim() || code
+    const code = String(v.code || '').trim().toLowerCase()
+    const name = String(v.name || '').trim() || String(v.code || '').trim()
     const gpsName = String(v.gps_name || '').trim()
     if (!code) continue
     const entry = { code, name }
-    if (gpsName) map.set(gpsName, entry)
-    if (name && !map.has(name)) map.set(name, entry)
-    if (gpsName && gpsName.startsWith('CM ')) map.set(gpsName.slice(3).trim(), entry)
-    if (gpsName && !gpsName.startsWith('CM ')) map.set('CM ' + gpsName, entry)
+    if (gpsName) addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName, entry)
+    if (name) addVendorStoreAlias(storeToVendor, vendorCodeToStores, name, entry)
+    if (gpsName && gpsName.startsWith('CM ')) {
+      addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName.slice(3).trim(), entry)
+    }
+    if (gpsName && !gpsName.startsWith('CM ')) {
+      addVendorStoreAlias(storeToVendor, vendorCodeToStores, `CM ${gpsName}`, entry)
+    }
   }
-  return map
+  return { storeToVendor, vendorCodeToStores }
 }
 
 export async function GET(request: NextRequest) {
@@ -317,11 +382,10 @@ export async function GET(request: NextRequest) {
 
     // receivable
     const parts: string[] = []
-    if (storeFilter) parts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
     // 잔액/누적 조회 기준: endStr(조회 종료일)까지 누적
     if (endStr) parts.push(`trans_date=lte.${endStr}`)
     const filter = parts.length ? parts.join('&') : 'id=gt.0'
-    const rows = (await supabaseSelectFilter(
+    let rows = (await supabaseSelectFilter(
       'receivable_transactions',
       filter,
       { order: 'trans_date.desc', limit: 20000 }
@@ -338,6 +402,16 @@ export async function GET(request: NextRequest) {
       receive_checked?: boolean
     }[]
 
+    const receivableVendorMaps = await getReceivableVendorMaps()
+    const storeFilterActive = Boolean(storeFilter?.trim()) && !isAllFilterToken(storeFilter)
+    if (storeFilterActive) {
+      rows = rows.filter((r) =>
+        canSelectStores
+          ? matchesReceivableStoreByVendorLink(r.store_name, storeFilter, receivableVendorMaps)
+          : matchesReceivableStoreNorm(r.store_name, storeFilter)
+      )
+    }
+
     const byStore: Record<string, { total: number; items: typeof rows }> = {}
     for (const r of rows || []) {
       const sn = String(r.store_name || '').trim()
@@ -347,9 +421,8 @@ export async function GET(request: NextRequest) {
       byStore[sn].total += Number(r.amount ?? 0)
     }
 
-    const storeToVendor = await getStoreToVendorMap()
     const list = Object.entries(byStore).map(([storeName, v]) => {
-      const vendor = storeToVendor.get(storeName)
+      const vendor = receivableVendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
       return {
         storeName,
         vendorCode: vendor?.code,

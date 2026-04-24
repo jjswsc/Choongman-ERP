@@ -169,7 +169,7 @@ export function canAccessAiCenter(role: string): boolean {
 
 /** AI 제안 실행 승인 가능 (매장 관리자 이상 + 본사/회계) */
 export function canApproveAiActions(role: string): boolean {
-  return canAccessAiCenter(role)
+  return isOfficeRole(role) || isManagerRole(role) || isAccountingRole(role)
 }
 
 /** 설정 페이지 접근 가능 (Director, Officer만) */

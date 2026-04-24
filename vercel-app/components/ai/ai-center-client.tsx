@@ -15,14 +15,17 @@ import {
   getAiMetrics,
   syncExternalContext,
   proposeAiAction,
+  AiApiError,
   type AiActionType,
   type AiAskResponse,
   type AiActionRequestRow,
+  type AiAskPolicyMeta,
   type AiIntent,
   type AiMetrics,
+  type AiScopeMeta,
 } from "@/lib/ai-center-client"
 import { useAuth } from "@/lib/auth-context"
-import { canApproveAiActions } from "@/lib/permissions"
+import { canApproveAiActions, isAccountingRole, isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -88,18 +91,73 @@ function statusBadge(status: string) {
   return "bg-blue-100 text-blue-700"
 }
 
+function hasDatePolicyMeta(meta: AiScopeMeta | AiAskPolicyMeta): meta is AiAskPolicyMeta {
+  return "isDateRangeClamped" in meta
+}
+
+function renderPolicySummaryCard(
+  t: (k: string) => string,
+  meta: AiScopeMeta | AiAskPolicyMeta | null,
+  options?: { includeDatePolicy?: boolean }
+) {
+  if (!meta) return null
+  const includeDatePolicy = Boolean(options?.includeDatePolicy)
+  const shouldShow = includeDatePolicy && hasDatePolicyMeta(meta)
+    ? meta.isStoreCoerced || meta.isDateRangeClamped
+    : meta.isStoreCoerced
+  if (!shouldShow) return null
+
+  const hasDateMeta = includeDatePolicy && hasDatePolicyMeta(meta)
+  return (
+    <div className="rounded border bg-amber-50/60 p-2 text-xs text-amber-900">
+      <p className="font-medium">{t("aiCenterPolicyAppliedSummaryTitle")}</p>
+      <p className="mt-1">
+        {t("aiCenterPolicyAppliedStoreLine")} {meta.requestedStore || t("aiCenterPlaceholderAll")}{" "}
+        → {meta.resolvedStore || t("aiCenterPlaceholderAll")}
+      </p>
+      {hasDateMeta && (
+        <>
+          <p>
+            {t("aiCenterPolicyAppliedDateLine")} {(meta.requestedStart || "-")} ~ {(meta.requestedEnd || "-")} →{" "}
+            {(meta.resolvedStart || "-")} ~ {(meta.resolvedEnd || "-")}
+          </p>
+          <p className="mt-1 text-[11px] text-amber-800">
+            {t("aiCenterPolicyAppliedLimitLine")} {meta.maxDateRangeDays}
+            {t("aiCenterPolicyAppliedDaysSuffix")}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+function normalizeAiActionErrorMessage(t: (k: string) => string, err: unknown): string {
+  const code = err instanceof AiApiError ? err.code : null
+  if (code === "AI_RATE_LIMITED") return t("aiCenterRateLimit")
+  if (code === "AI_APPROVAL_CONFLICT") return t("aiCenterApprovalConflict")
+  if (code === "AI_APPROVER_REQUIRED") return t("aiCenterApproverOnlyHint")
+  if (code === "AI_SCOPE_VIOLATION") return t("aiCenterScopeViolation")
+  if (code === "AI_OFFICE_REQUIRED") return t("aiCenterOfficeOnlyHint")
+  const raw = err instanceof Error ? err.message : String(err || "")
+  if (raw.includes("request is not pending approval")) return t("aiCenterApprovalConflict")
+  if (raw.includes("Approver role required")) return t("aiCenterApproverOnlyHint")
+  return raw
+}
+
 export function AiCenterClient() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const sp = useSearchParams()
+  const initialStore = sp.get("store") || auth?.store || "All"
   const canApprove = canApproveAiActions(auth?.role || "")
+  const canSelectCrossStore = isOfficeRole(auth?.role || "") || isAccountingRole(auth?.role || "")
 
   const defaultPayloads = React.useMemo(() => buildDefaultAiPayloads(t), [t])
 
   const [intent, setIntent] = React.useState<AiIntent>((sp.get("intent") as AiIntent) || "qa")
   const [query, setQuery] = React.useState(sp.get("q") || "")
-  const [store, setStore] = React.useState(sp.get("store") || auth?.store || "All")
+  const [store, setStore] = React.useState(initialStore)
   const [start, setStart] = React.useState(sp.get("start") || "")
   const [end, setEnd] = React.useState(sp.get("end") || "")
   const [askLoading, setAskLoading] = React.useState(false)
@@ -114,36 +172,48 @@ export function AiCenterClient() {
   const [actionError, setActionError] = React.useState("")
 
   const [history, setHistory] = React.useState<AiActionRequestRow[]>([])
+  const [historyMeta, setHistoryMeta] = React.useState<AiScopeMeta | null>(null)
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [approveLoadingId, setApproveLoadingId] = React.useState<number | null>(null)
+  const [opsStoreDraft, setOpsStoreDraft] = React.useState(initialStore)
+  const [opsStoreFilter, setOpsStoreFilter] = React.useState(initialStore)
 
   const [metrics, setMetrics] = React.useState<AiMetrics | null>(null)
   const [metricsLoading, setMetricsLoading] = React.useState(false)
   const [syncLoading, setSyncLoading] = React.useState(false)
   const [syncMsg, setSyncMsg] = React.useState("")
 
+  React.useEffect(() => {
+    if (!canSelectCrossStore && auth?.store) {
+      setOpsStoreDraft(auth.store)
+      setOpsStoreFilter(auth.store)
+      setStore(auth.store)
+    }
+  }, [canSelectCrossStore, auth?.store])
+
   const reloadHistory = React.useCallback(async () => {
     setHistoryLoading(true)
     try {
-      const data = await getAiActionHistory(40)
+      const data = await getAiActionHistory(40, canSelectCrossStore ? opsStoreFilter : (auth?.store || "All"))
       setHistory(data.items || [])
+      setHistoryMeta(data.meta || null)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e))
     } finally {
       setHistoryLoading(false)
     }
-  }, [])
+  }, [auth?.store, canSelectCrossStore, opsStoreFilter])
 
   const reloadMetrics = React.useCallback(async () => {
     setMetricsLoading(true)
     try {
-      setMetrics(await getAiMetrics())
+      setMetrics(await getAiMetrics(canSelectCrossStore ? opsStoreFilter : (auth?.store || "All")))
     } catch {
       // ignore
     } finally {
       setMetricsLoading(false)
     }
-  }, [])
+  }, [auth?.store, canSelectCrossStore, opsStoreFilter])
 
   React.useEffect(() => {
     void reloadHistory()
@@ -163,7 +233,7 @@ export function AiCenterClient() {
       setAskRes(res)
     } catch (e) {
       setAskRes(null)
-      setAskError(e instanceof Error ? e.message : String(e))
+      setAskError(normalizeAiActionErrorMessage(t, e))
     } finally {
       setAskLoading(false)
     }
@@ -192,7 +262,7 @@ export function AiCenterClient() {
       await reloadMetrics()
     } catch (e) {
       setProposalResult(null)
-      setActionError(e instanceof Error ? e.message : String(e))
+      setActionError(normalizeAiActionErrorMessage(t, e))
     } finally {
       setProposalLoading(false)
     }
@@ -206,7 +276,7 @@ export function AiCenterClient() {
       await reloadHistory()
       await reloadMetrics()
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : String(e))
+      setActionError(normalizeAiActionErrorMessage(t, e))
     } finally {
       setApproveLoadingId(null)
     }
@@ -220,10 +290,22 @@ export function AiCenterClient() {
       setSyncMsg(`${t("aiCenterSyncComplete")}: ${res.synced}${t("aiCenterSyncCountSuffix")}`)
       await reloadMetrics()
     } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : String(e))
+      setSyncMsg(normalizeAiActionErrorMessage(t, e))
     } finally {
       setSyncLoading(false)
     }
+  }
+
+  const applyOpsStoreFilter = () => {
+    const next = String(opsStoreDraft || "").trim() || "All"
+    setOpsStoreFilter(next)
+    setStore(next)
+  }
+
+  const onOpsStoreDraftKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return
+    e.preventDefault()
+    applyOpsStoreFilter()
   }
 
   const pending = history.filter((h) => h.status === "pending_approval")
@@ -275,7 +357,15 @@ export function AiCenterClient() {
                 </div>
                 <div>
                   <p className="mb-1 text-xs text-muted-foreground">{t("stockFilterStore")}</p>
-                  <Input value={store} onChange={(e) => setStore(e.target.value)} placeholder={t("aiCenterPlaceholderAll")} />
+                  <Input
+                    value={store}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setStore(next)
+                      setOpsStoreDraft(next)
+                    }}
+                    placeholder={t("aiCenterPlaceholderAll")}
+                  />
                 </div>
                 <div>
                   <p className="mb-1 text-xs text-muted-foreground">{t("aiCenterStartDateBangkok")}</p>
@@ -302,6 +392,7 @@ export function AiCenterClient() {
               {askError && <p className="text-sm text-red-600">{askError}</p>}
               {askRes && (
                 <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                  {renderPolicySummaryCard(t, askRes.meta || null, { includeDatePolicy: true })}
                   <div>
                     <p className="mb-1 text-xs text-muted-foreground">{t("aiCenterAnswer")}</p>
                     <pre className="whitespace-pre-wrap text-sm leading-6">{askRes.answer}</pre>
@@ -404,6 +495,31 @@ export function AiCenterClient() {
                 <p className="text-sm font-medium">
                   {t("aiCenterPendingQueue")} ({pending.length})
                 </p>
+                {renderPolicySummaryCard(t, historyMeta)}
+                {canSelectCrossStore && (
+                  <div className="mt-2 flex flex-wrap items-end gap-2">
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">{t("stockFilterStore")}</p>
+                      <Input
+                        value={opsStoreDraft}
+                        onChange={(e) => {
+                          const next = e.target.value
+                          setOpsStoreDraft(next)
+                          setStore(next)
+                        }}
+                        onKeyDown={onOpsStoreDraftKeyDown}
+                        placeholder={t("aiCenterPlaceholderAll")}
+                        className="h-8 w-44"
+                      />
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={applyOpsStoreFilter}>
+                      {t("aiCenterApplyStoreFilter")}
+                    </Button>
+                  </div>
+                )}
+                {!canApprove && (
+                  <p className="mt-1 text-xs text-muted-foreground">{t("aiCenterApproverOnlyHint")}</p>
+                )}
                 <div className="mt-2 space-y-2">
                   {historyLoading && <p className="text-sm text-muted-foreground">{t("loading")}</p>}
                   {!historyLoading && pending.length === 0 && (
@@ -472,12 +588,34 @@ export function AiCenterClient() {
           <TabsContent value="metrics">
             <div className="rounded-lg border bg-card p-4 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
+                {canSelectCrossStore && (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">{t("stockFilterStore")}</p>
+                      <Input
+                        value={opsStoreDraft}
+                        onChange={(e) => {
+                          const next = e.target.value
+                          setOpsStoreDraft(next)
+                          setStore(next)
+                        }}
+                        onKeyDown={onOpsStoreDraftKeyDown}
+                        placeholder={t("aiCenterPlaceholderAll")}
+                        className="h-8 w-44"
+                      />
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={applyOpsStoreFilter}>
+                      {t("aiCenterApplyStoreFilter")}
+                    </Button>
+                  </div>
+                )}
                 <Button type="button" size="sm" variant="outline" onClick={() => void onSyncExternal()} disabled={syncLoading}>
                   {syncLoading && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
                   {t("aiCenterSyncWeatherHoliday")}
                 </Button>
                 {!!syncMsg && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
               </div>
+              {renderPolicySummaryCard(t, metrics?.meta || null)}
               {metricsLoading && <p className="text-sm text-muted-foreground">{t("aiCenterMetricsLoading")}</p>}
               {metrics && (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

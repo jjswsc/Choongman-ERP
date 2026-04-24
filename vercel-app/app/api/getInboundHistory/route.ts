@@ -7,6 +7,10 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole } from '@/lib/permissions'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
+function normalizeVendorCode(v: string): string {
+  return String(v || '').trim().toLowerCase()
+}
+
 /** 입고 내역 조회 - stock_logs log_type=Inbound (From HQ 제외) + 통장 매입 지급(품목 입고 없음) 보조 행 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -107,6 +111,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const vendorFilterCode = normalizeVendorCode(vendorFilter)
+    let exactVendorAliases = new Set<string>()
+    if (vendorFilterCode && vendorFilterCode !== 'all') {
+      const vendorRows = (await supabaseSelectFilter(
+        'vendors',
+        `code=eq.${encodeURIComponent(vendorFilterCode)}`,
+        { select: 'name,gps_name,sales_outlet', limit: 1 }
+      )) as { name?: string; gps_name?: string; sales_outlet?: string }[] | null
+      const v = vendorRows?.[0]
+      if (v) {
+        const aliases = [
+          resolveVendorName(String(v.name || '').trim()),
+          resolveVendorName(String(v.gps_name || '').trim()),
+          resolveVendorName(String(v.sales_outlet || '').trim()),
+        ].filter(Boolean)
+        exactVendorAliases = new Set(aliases)
+      } else {
+        exactVendorAliases = new Set(['__no_match__'])
+      }
+    }
+
     const gteIso = `${startStr}T00:00:00.000`
     const lteIso = `${endStr}T23:59:59.999`
 
@@ -116,9 +141,6 @@ export async function GET(request: NextRequest) {
       `log_date=lte.${encodeURIComponent(lteIso)}`,
       `vendor_target=neq.${encodeURIComponent('From HQ')}`,
     ]
-    const exactVendorRaw =
-      vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' ? vendorFilter : ''
-    const exactVendor = resolveVendorName(exactVendorRaw)
     if (vendorSearch) {
       const p = `%${escapeIlikePattern(vendorSearch)}%`
       parts.push(`vendor_target=ilike.${encodeURIComponent(p)}`)
@@ -170,7 +192,7 @@ export async function GET(request: NextRequest) {
       if (!rowDate || isNaN(rowDate.getTime())) continue
 
       const rowVendor = resolveVendorName(String(row.vendor_target || '').trim())
-      if (exactVendor && rowVendor !== exactVendor) continue
+      if (exactVendorAliases.size > 0 && !exactVendorAliases.has(rowVendor)) continue
 
       const code = String(row.item_code || '').trim()
       const info = itemMap[code] || { spec: '-', cost: 0, purchaseSource: 'hq' as const, taxRate: 0.07 }
@@ -217,12 +239,12 @@ export async function GET(request: NextRequest) {
             (b.vendor || '').toLowerCase().includes(q)
           if (!hit) continue
         }
-        if (!exactVendor && vendorSearch) {
+        if (exactVendorAliases.size === 0 && vendorSearch) {
           const vs = vendorSearch.toLowerCase()
           if (!(b.vendor || '').toLowerCase().includes(vs)) continue
         }
         const normalizedBankVendor = resolveVendorName(String(b.vendor || ''))
-        if (exactVendor && normalizedBankVendor !== exactVendor) continue
+        if (exactVendorAliases.size > 0 && !exactVendorAliases.has(normalizedBankVendor)) continue
         list.push({
           date: b.date,
           vendor: normalizedBankVendor,
@@ -241,9 +263,9 @@ export async function GET(request: NextRequest) {
       console.error('getInboundHistory bank synthetic:', e)
     }
 
-    if (exactVendor) {
+    if (exactVendorAliases.size > 0) {
       for (let i = list.length - 1; i >= 0; i--) {
-        if (resolveVendorName(String(list[i].vendor || '')) !== exactVendor) list.splice(i, 1)
+        if (!exactVendorAliases.has(resolveVendorName(String(list[i].vendor || '')))) list.splice(i, 1)
       }
     }
 

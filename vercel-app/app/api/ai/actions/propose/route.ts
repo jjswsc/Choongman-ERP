@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAiAccess } from "@/lib/ai/auth"
 import { aiRateLimit } from "@/lib/ai/rate-limit"
-import { validateAiActionInput } from "@/lib/ai/action-catalog"
+import { sanitizeAiActionPayloadScope, validateAiActionInput } from "@/lib/ai/action-catalog"
 import type { AiActionType } from "@/lib/ai/types"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
 import { supabaseInsert } from "@/lib/supabase-server"
 import { logAiUsage } from "@/lib/ai/audit"
+import { isAiRouteError } from "@/lib/ai/errors"
 
 function toResponseRow(row: Record<string, unknown>) {
   return {
@@ -33,20 +34,27 @@ export async function POST(req: NextRequest) {
 
   const rl = aiRateLimit(`ai:propose:${access.scoped.name}:${access.scoped.store}`, 80, 60 * 60 * 1000)
   if (!rl.ok) {
-    return NextResponse.json({ error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs }, { status: 429, headers })
+    return NextResponse.json(
+      { error: "Rate limit exceeded", code: "AI_RATE_LIMITED", retryAfterMs: rl.retryAfterMs },
+      { status: 429, headers }
+    )
   }
 
   let body: Record<string, unknown> = {}
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers })
+    return NextResponse.json({ error: "Invalid JSON", code: "AI_INVALID_JSON" }, { status: 400, headers })
   }
 
   try {
     const actionType = String(body.actionType || "").trim() as AiActionType
     const reason = String(body.reason || "").trim()
-    const payload = (body.payload as Record<string, unknown>) || {}
+    const payload = sanitizeAiActionPayloadScope({
+      actionType,
+      payload: ((body.payload as Record<string, unknown>) || {}),
+      scoped: access.scoped,
+    })
     const validated = validateAiActionInput({ actionType, reason, payload })
     const now = getBangkokDateTimeString()
 
@@ -84,6 +92,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ request: toResponseRow(row) }, { headers })
   } catch (e) {
+    const code = isAiRouteError(e) ? e.code : "AI_VALIDATION_ERROR"
+    const status = isAiRouteError(e) ? e.status : 400
     await logAiUsage({
       scoped: access.scoped,
       route: "/api/ai/actions/propose",
@@ -91,8 +101,8 @@ export async function POST(req: NextRequest) {
       note: e instanceof Error ? e.message : String(e),
     })
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status: 400, headers }
+      { error: e instanceof Error ? e.message : String(e), code },
+      { status, headers }
     )
   }
 }

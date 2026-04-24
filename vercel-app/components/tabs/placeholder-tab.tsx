@@ -1,11 +1,18 @@
+'use client'
+
 import { Card, CardContent } from "@/components/ui/card"
 import { Construction } from "lucide-react"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 interface PlaceholderTabProps {
   title: string
 }
 
 export function PlaceholderTab({ title }: PlaceholderTabProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <Card className="shadow-sm">
@@ -14,7 +21,7 @@ export function PlaceholderTab({ title }: PlaceholderTabProps) {
             <Construction className="h-7 w-7 text-muted-foreground" />
           </div>
           <h3 className="mt-4 text-base font-semibold text-foreground">{title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">준비 중입니다</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("placeholderPreparing")}</p>
         </CardContent>
       </Card>
     </div>

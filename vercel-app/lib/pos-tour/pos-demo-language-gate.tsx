@@ -47,9 +47,6 @@ export function PosDemoLanguageGate() {
         <p className="mt-1 text-base font-semibold leading-tight">
           {t('posDemoLanguageGateTitle')}
         </p>
-        <p className="mt-2 text-sm text-muted-foreground leading-snug">
-          {t('posDemoLanguageGateBody')}
-        </p>
         <div className="mt-3">
           <p className="mb-1.5 text-xs font-medium text-foreground" id="pos-demo-lang-label">
             {t('posLanguage')}

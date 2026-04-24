@@ -165,13 +165,48 @@ export function WithdrawalManagementTab() {
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const [employeeList, setEmployeeList] = React.useState<
-    { store: string; job: string; name: string; nameTitle?: string; accountNumber: string; bankName: string }[]
+    {
+      rowId?: number
+      employeeCode?: string
+      store: string
+      job: string
+      name: string
+      nameTitle?: string
+      accountNumber: string
+      bankName: string
+    }[]
   >([])
 
   const pettyTransferFirstSelectLabel = React.useMemo(
     () => (isOfficeStore(storeName) ? tt("wm_transferToJob", "Job") : tt("wm_transferToDept", "Department")),
     [storeName, tt]
   )
+
+  const employeeSelectKey = React.useCallback((e: { employeeCode?: string; rowId?: number }) => {
+    const code = String(e.employeeCode || "").trim()
+    if (code) return `code:${code}`
+    const rowId = Number(e.rowId)
+    if (Number.isFinite(rowId) && rowId > 0) return `row:${rowId}`
+    return ""
+  }, [])
+
+  const selectedTransferEmployeeRow = React.useMemo(() => {
+    if (!transferToEmployee || transferToEmployee === "__none__") return null
+    return (
+      employeeList.find(
+        (e) =>
+          storeMatchesForPettyTransfer(e.store, storeName) &&
+          e.job === transferToDept &&
+          employeeSelectKey(e) === transferToEmployee
+      ) || null
+    )
+  }, [employeeList, storeName, transferToDept, transferToEmployee, employeeSelectKey])
+
+  const selectedTransferEmployeeLabel = React.useMemo(() => {
+    const e = selectedTransferEmployeeRow
+    if (!e) return transferToEmployee
+    return formatEmployeeDisplayName(e.name, e.nameTitle)
+  }, [selectedTransferEmployeeRow, transferToEmployee])
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -402,6 +437,8 @@ export function WithdrawalManagementTab() {
             (r.list || [])
               .filter((e) => isActiveEmployeeByResignBangkok(e.resign))
               .map((e) => ({
+                rowId: Number.isFinite(Number(e.row)) ? Number(e.row) : undefined,
+                employeeCode: String(e.employeeCode || "").trim() || undefined,
                 store: e.store || "",
                 job: pettyTransferGroupKey({
                   store: e.store || "",
@@ -765,7 +802,7 @@ export function WithdrawalManagementTab() {
               memoText,
               storeName && `매장: ${storeName}`,
               transferToDept && transferToDept !== "__none__" && `${pettyTransferFirstSelectLabel}: ${transferToDept}`,
-              transferToEmployee && transferToEmployee !== "__none__" && `직원: ${transferToEmployee}`,
+              transferToEmployee && transferToEmployee !== "__none__" && `직원: ${selectedTransferEmployeeLabel}`,
             ]
             .filter(Boolean)
             .join(" ")
@@ -972,7 +1009,7 @@ export function WithdrawalManagementTab() {
           memoText,
           storeName && `매장: ${storeName}`,
           transferToDept && transferToDept !== "__none__" && `${pettyTransferFirstSelectLabel}: ${transferToDept}`,
-          transferToEmployee && transferToEmployee !== "__none__" && `직원: ${transferToEmployee}`,
+          transferToEmployee && transferToEmployee !== "__none__" && `직원: ${selectedTransferEmployeeLabel}`,
           transferToAccountNo.trim() && `입금계좌: ${transferToAccountNo.trim()}`,
         ]
           .filter(Boolean)
@@ -1483,7 +1520,12 @@ export function WithdrawalManagementTab() {
                     onValueChange={(v) => {
                       setTransferToEmployee(v === "__none__" ? "" : v)
                       if (v && v !== "__none__") {
-                        const emp = employeeList.find((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept && e.name === v)
+                        const emp = employeeList.find(
+                          (e) =>
+                            storeMatchesForPettyTransfer(e.store, storeName) &&
+                            e.job === transferToDept &&
+                            employeeSelectKey(e) === v
+                        )
                         setTransferToAccountNo(emp?.accountNumber || "")
                       } else {
                         setTransferToAccountNo("")
@@ -1496,18 +1538,22 @@ export function WithdrawalManagementTab() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
-                      {employeeList.filter((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept).map((e) => (
-                        <SelectItem key={`${e.store}-${e.job}-${e.name}`} value={e.name}>
-                          {formatEmployeeDisplayName(e.name, e.nameTitle)}
-                        </SelectItem>
-                      ))}
+                      {employeeList
+                        .filter((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept)
+                        .map((e) => ({ e, key: employeeSelectKey(e) }))
+                        .filter((x) => Boolean(x.key))
+                        .map(({ e, key }) => (
+                          <SelectItem key={key} value={key}>
+                            {formatEmployeeDisplayName(e.name, e.nameTitle)}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToEmployeeAccount", "Employee Account")}</Label>
                   {transferToEmployee && transferToEmployee !== "__none__" ? (() => {
-                    const emp = employeeList.find((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept && e.name === transferToEmployee)
+                    const emp = selectedTransferEmployeeRow
                     const hasAccount = emp?.accountNumber
                     return (
                       <div className="h-9 flex items-center text-sm font-medium">

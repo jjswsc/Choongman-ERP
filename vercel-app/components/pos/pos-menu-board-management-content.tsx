@@ -18,11 +18,11 @@ import { useLang } from '@/lib/lang-context'
 import { useT, tr } from '@/lib/i18n'
 
 const TYPE_OPTIONS = [
-  { value: 'dine_in', label: 'Dine in' },
-  { value: 'delivery', label: 'Deli' },
-  { value: 'table_order', label: 'Table order' },
-  { value: 'tablet', label: 'Tablet' },
-  { value: 'kiosk', label: 'Kiosk' },
+  { value: 'dine_in', labelKey: 'posMenuBoardTypeDineIn' },
+  { value: 'delivery', labelKey: 'posMenuBoardTypeDelivery' },
+  { value: 'table_order', labelKey: 'posMenuBoardTypeTableOrder' },
+  { value: 'tablet', labelKey: 'posMenuBoardTypeTablet' },
+  { value: 'kiosk', labelKey: 'posMenuBoardTypeKiosk' },
 ] as const
 
 type BoardType = (typeof TYPE_OPTIONS)[number]['value']
@@ -92,7 +92,8 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
     )
   }, [rows, queryKeyword])
 
-  const typeLabel = (v: string) => TYPE_OPTIONS.find((o) => o.value === v)?.label || v
+  const typeLabel = (v: string) =>
+    t(TYPE_OPTIONS.find((o) => o.value === v)?.labelKey || '') || v
 
   const openNew = () => {
     setEditingId(null)
@@ -170,7 +171,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
         <div>
           <h3 className="text-sm font-bold">{t('posMenuTabMenuBoard') || '메뉴판 관리'}</h3>
           <p className="text-xs text-muted-foreground">
-            타입/해상도별로 메뉴판 구성을 관리합니다.
+            {t('posMenuBoardManageDesc')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -188,7 +189,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-3">
           <Select value={queryStore} onValueChange={setQueryStore}>
             <SelectTrigger className="h-8 w-44 text-xs">
-              <SelectValue placeholder="매장" />
+              <SelectValue placeholder={t('posMenuBoardFieldStore')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('posMenuCategoryAll') || '전체'}</SelectItem>
@@ -199,19 +200,19 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
           </Select>
           <Select value={queryType} onValueChange={setQueryType}>
             <SelectTrigger className="h-8 w-40 text-xs">
-              <SelectValue placeholder="타입" />
+              <SelectValue placeholder={t('posMenuBoardFieldType')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('posMenuCategoryAll') || '전체'}</SelectItem>
               {TYPE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                <SelectItem key={o.value} value={o.value}>{typeLabel(o.value)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Input
             value={queryKeyword}
             onChange={(e) => setQueryKeyword(e.target.value)}
-            placeholder="메뉴판 이름"
+            placeholder={t('posMenuBoardFieldName')}
             className="h-8 w-56 text-xs"
           />
         </div>
@@ -220,16 +221,16 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/30">
-                <th className="px-3 py-2 text-left">매장명</th>
-                <th className="px-3 py-2 text-left">타입</th>
-                <th className="px-3 py-2 text-left">메뉴판 이름</th>
-                <th className="px-3 py-2 text-center">그룹 격자</th>
-                <th className="px-3 py-2 text-center">메뉴 격자</th>
-                <th className="px-3 py-2 text-center">해상도</th>
-                <th className="px-3 py-2 text-right">그룹 수</th>
-                <th className="px-3 py-2 text-right">목록 수</th>
-                <th className="px-3 py-2 text-center">사용</th>
-                <th className="px-3 py-2 text-center">관리</th>
+                <th className="px-3 py-2 text-left">{t('posMenuBoardColStore')}</th>
+                <th className="px-3 py-2 text-left">{t('posMenuBoardColType')}</th>
+                <th className="px-3 py-2 text-left">{t('posMenuBoardColName')}</th>
+                <th className="px-3 py-2 text-center">{t('posMenuBoardColGroupGrid')}</th>
+                <th className="px-3 py-2 text-center">{t('posMenuBoardColMenuGrid')}</th>
+                <th className="px-3 py-2 text-center">{t('posMenuBoardColResolution')}</th>
+                <th className="px-3 py-2 text-right">{t('posMenuBoardColGroupCount')}</th>
+                <th className="px-3 py-2 text-right">{t('posMenuBoardColMenuCount')}</th>
+                <th className="px-3 py-2 text-center">{t('posMenuBoardColEnabled')}</th>
+                <th className="px-3 py-2 text-center">{t('posMenuBoardColManage')}</th>
               </tr>
             </thead>
             <tbody>
@@ -252,13 +253,13 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
                   <td className="px-3 py-2 text-center">{r.isActive ? 'Y' : 'N'}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-center gap-1">
-                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => openEdit(r)} title="편집">
+                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => openEdit(r)} title={t('edit')}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => { setPreviewTarget(r); setPreviewOpen(true) }} title="미리보기">
+                      <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => { setPreviewTarget(r); setPreviewOpen(true) }} title={t('posMenuBoardActionPreview')}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="icon" variant="outline" className="h-7 w-7 text-destructive" onClick={() => handleDelete(r)} title="삭제">
+                      <Button size="icon" variant="outline" className="h-7 w-7 text-destructive" onClick={() => handleDelete(r)} title={t('delete')}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -273,11 +274,11 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editingId ? '메뉴판 수정' : '메뉴판 신규'}</DialogTitle>
+            <DialogTitle>{editingId ? t('posMenuBoardDialogEditTitle') : t('posMenuBoardDialogNewTitle')}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium">매장명</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldStore')}</label>
               <Select value={form.storeCode} onValueChange={(v) => setForm((p) => ({ ...p, storeCode: v }))}>
                 <SelectTrigger className="mt-1 h-9 text-xs">
                   <SelectValue />
@@ -290,45 +291,45 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium">타입</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldType')}</label>
               <Select value={form.boardType} onValueChange={(v) => setForm((p) => ({ ...p, boardType: v as BoardType }))}>
                 <SelectTrigger className="mt-1 h-9 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {TYPE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value} value={o.value}>{typeLabel(o.value)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="col-span-2">
-              <label className="text-xs font-medium">메뉴판 이름</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldName')}</label>
               <Input className="mt-1 h-9 text-xs" value={form.boardName} onChange={(e) => setForm((p) => ({ ...p, boardName: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs font-medium">그룹 격자 (열 x 행)</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldGroupGrid')}</label>
               <div className="mt-1 flex gap-2">
                 <Input className="h-9 text-xs" type="number" value={form.groupGridCols} onChange={(e) => setForm((p) => ({ ...p, groupGridCols: toNum(e.target.value, p.groupGridCols) }))} />
                 <Input className="h-9 text-xs" type="number" value={form.groupGridRows} onChange={(e) => setForm((p) => ({ ...p, groupGridRows: toNum(e.target.value, p.groupGridRows) }))} />
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium">메뉴 격자 (열 x 행)</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldMenuGrid')}</label>
               <div className="mt-1 flex gap-2">
                 <Input className="h-9 text-xs" type="number" value={form.menuGridCols} onChange={(e) => setForm((p) => ({ ...p, menuGridCols: toNum(e.target.value, p.menuGridCols) }))} />
                 <Input className="h-9 text-xs" type="number" value={form.menuGridRows} onChange={(e) => setForm((p) => ({ ...p, menuGridRows: toNum(e.target.value, p.menuGridRows) }))} />
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium">해상도 (가로 x 세로)</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldResolution')}</label>
               <div className="mt-1 flex gap-2">
                 <Input className="h-9 text-xs" type="number" value={form.resolutionWidth} onChange={(e) => setForm((p) => ({ ...p, resolutionWidth: toNum(e.target.value, p.resolutionWidth) }))} />
                 <Input className="h-9 text-xs" type="number" value={form.resolutionHeight} onChange={(e) => setForm((p) => ({ ...p, resolutionHeight: toNum(e.target.value, p.resolutionHeight) }))} />
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium">개수 (그룹 / 목록)</label>
+              <label className="text-xs font-medium">{t('posMenuBoardFieldCount')}</label>
               <div className="mt-1 flex gap-2">
                 <Input className="h-9 text-xs" type="number" value={form.groupCount} onChange={(e) => setForm((p) => ({ ...p, groupCount: toNum(e.target.value, p.groupCount) }))} />
                 <Input className="h-9 text-xs" type="number" value={form.menuCount} onChange={(e) => setForm((p) => ({ ...p, menuCount: toNum(e.target.value, p.menuCount) }))} />
@@ -336,8 +337,8 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
             </div>
           </div>
           <div className="mt-3 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>취소</Button>
-            <Button onClick={handleSave}>저장</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t('cancel')}</Button>
+            <Button onClick={handleSave}>{t('commonSave')}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -345,16 +346,21 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>메뉴판 미리보기</DialogTitle>
+            <DialogTitle>{t('posMenuBoardPreviewTitle')}</DialogTitle>
           </DialogHeader>
           {previewTarget && (
             <div className="space-y-2 text-sm">
-              <div><b>매장</b>: {previewTarget.storeCode}</div>
-              <div><b>타입</b>: {typeLabel(previewTarget.boardType)}</div>
-              <div><b>메뉴판 이름</b>: {previewTarget.boardName}</div>
-              <div><b>해상도</b>: {previewTarget.resolutionWidth} x {previewTarget.resolutionHeight}</div>
+              <div><b>{t('posMenuBoardPreviewStore')}</b>: {previewTarget.storeCode}</div>
+              <div><b>{t('posMenuBoardPreviewType')}</b>: {typeLabel(previewTarget.boardType)}</div>
+              <div><b>{t('posMenuBoardPreviewName')}</b>: {previewTarget.boardName}</div>
+              <div><b>{t('posMenuBoardPreviewResolution')}</b>: {previewTarget.resolutionWidth} x {previewTarget.resolutionHeight}</div>
               <div className="rounded border bg-muted/20 p-3 text-xs text-muted-foreground">
-                그룹 격자 {previewTarget.groupGridCols} x {previewTarget.groupGridRows}, 메뉴 격자 {previewTarget.menuGridCols} x {previewTarget.menuGridRows}
+                {tr(t, 'posMenuBoardPreviewGridSummary', {
+                  groupCols: previewTarget.groupGridCols,
+                  groupRows: previewTarget.groupGridRows,
+                  menuCols: previewTarget.menuGridCols,
+                  menuRows: previewTarget.menuGridRows,
+                })}
               </div>
             </div>
           )}

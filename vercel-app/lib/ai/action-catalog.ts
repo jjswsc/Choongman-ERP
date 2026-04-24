@@ -1,6 +1,8 @@
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from "@/lib/supabase-server"
 import type { AiActionType, AiScopedAuth } from "@/lib/ai/types"
+import { isOfficeRole } from "@/lib/permissions"
+import { AiRouteError } from "@/lib/ai/errors"
 
 type CatalogInput = {
   actionType: AiActionType
@@ -10,6 +12,62 @@ type CatalogInput = {
 
 type CatalogResult = {
   preview: string
+}
+
+function normalizeStoreScope(value: unknown, fallback: string): string {
+  const v = String(value || "").trim()
+  if (v) return v.slice(0, 120)
+  return String(fallback || "All").trim().slice(0, 120) || "All"
+}
+
+/**
+ * 액션 payload의 매장 스코프를 서버에서 강제한다.
+ * - 본사 권한: 요청 payload를 신뢰(값만 정규화)
+ * - 비본사 권한: 자신의 매장만 허용 (All/타매장 금지)
+ */
+export function sanitizeAiActionPayloadScope(input: {
+  actionType: AiActionType
+  payload: Record<string, unknown>
+  scoped: Pick<AiScopedAuth, "role" | "store">
+}): Record<string, unknown> {
+  const payload = { ...input.payload }
+  const userStore = String(input.scoped.store || "").trim()
+  const office = isOfficeRole(input.scoped.role)
+  if (!office && !userStore) {
+    throw new AiRouteError(
+      "AI_SCOPE_VIOLATION",
+      "사용자 매장 스코프가 없어 AI 액션을 생성할 수 없습니다.",
+      403
+    )
+  }
+
+  const enforceStore = (key: "targetStore" | "storeScope") => {
+    const requested = normalizeStoreScope(payload[key], office ? "All" : userStore)
+    if (!office && requested !== userStore) {
+      throw new AiRouteError(
+        "AI_SCOPE_VIOLATION",
+        `해당 액션의 ${key}는 본인 매장(${userStore})만 허용됩니다.`,
+        403
+      )
+    }
+    payload[key] = office ? requested : userStore
+  }
+
+  switch (input.actionType) {
+    case "create_notice_draft":
+    case "create_weather_campaign_draft":
+      enforceStore("targetStore")
+      break
+    case "create_followup_task":
+    case "create_shift_adjustment_draft":
+    case "save_accounting_workflow_status":
+      enforceStore("storeScope")
+      break
+    default:
+      break
+  }
+
+  return payload
 }
 
 export function validateAiActionInput(input: CatalogInput): CatalogResult {

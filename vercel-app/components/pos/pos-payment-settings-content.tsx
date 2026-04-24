@@ -32,10 +32,10 @@ function isSyntheticPaymentMethodId(id: string | undefined): boolean {
 }
 
 const CATEGORIES = [
-  { value: 'card', label: '카드' },
-  { value: 'qr', label: 'QR/모바일' },
-  { value: 'delivery', label: '배달앱' },
-  { value: 'other', label: '기타' },
+  { value: 'card', labelKey: 'posPaymentCategoryCard' },
+  { value: 'qr', labelKey: 'posPaymentCategoryQrMobile' },
+  { value: 'delivery', labelKey: 'posPaymentCategoryDeliveryApp' },
+  { value: 'other', labelKey: 'posPaymentCategoryOther' },
 ] as const
 
 export function PosPaymentSettingsContent() {
@@ -168,6 +168,11 @@ export function PosPaymentSettingsContent() {
   }
 
   const tr = (key: string, fallback: string) => t(key) || fallback
+  const categoryLabel = React.useCallback(
+    (value: string, fallback?: string) =>
+      t(CATEGORIES.find((c) => c.value === value)?.labelKey || '') || fallback || value,
+    [t]
+  )
   const code = String(effectiveStore || '').trim()
   const showCopy = Boolean(code) && stores.filter((s) => s && s !== code).length > 0
 
@@ -197,7 +202,7 @@ export function PosPaymentSettingsContent() {
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-semibold mb-4">
           <CreditCard className="h-4 w-4" />
-          {t('posScreenConfigTabPayment') || '결제 관리'} — 카드수기입력 항목관리
+          {t('posScreenConfigTabPayment') || '결제 관리'} — {t('posPaymentSettingsManageSuffix')}
         </div>
 
         {loading ? (
@@ -214,7 +219,7 @@ export function PosPaymentSettingsContent() {
                     <SelectItem value="__all__">{t('posPaymentCategoryAll') || '전체'}</SelectItem>
                     {CATEGORIES.map((c) => (
                       <SelectItem key={c.value} value={c.value}>
-                        {c.label}
+                        {categoryLabel(c.value)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -258,7 +263,7 @@ export function PosPaymentSettingsContent() {
                         >
                           <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
                           <td className="px-2 py-1.5 text-muted-foreground">
-                            {CATEGORIES.find((c) => c.value === item.category)?.label ?? item.category}
+                            {categoryLabel(item.category, item.category)}
                           </td>
                           <td className="px-2 py-1.5">
                             {item.name}
@@ -268,7 +273,7 @@ export function PosPaymentSettingsContent() {
                               </span>
                             )}
                             {item.hidden && (
-                              <span className="ml-1 text-xs text-muted-foreground">(숨김)</span>
+                              <span className="ml-1 text-xs text-muted-foreground">({t('posHidden')})</span>
                             )}
                           </td>
                         </tr>
@@ -286,7 +291,7 @@ export function PosPaymentSettingsContent() {
                   className="mt-1"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Visa, Master, Grab..."
+                  placeholder={t('posPaymentMethodNamePlaceholder')}
                 />
               </div>
               <div>
@@ -298,7 +303,7 @@ export function PosPaymentSettingsContent() {
                   <SelectContent>
                     {CATEGORIES.map((c) => (
                       <SelectItem key={c.value} value={c.value}>
-                        {c.label}
+                        {categoryLabel(c.value)}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -10,6 +10,18 @@ import {
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
 
+function isMissingIdentityColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('user_employee_id') || msg.includes('user_employee_code')
+}
+
+function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.user_employee_id
+  delete next.user_employee_code
+  return next
+}
+
 const EXISTING_FETCH_LIMIT = 25000
 
 function normMemoForDedup(memo: string): string {
@@ -75,6 +87,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '허용되지 않은 매장입니다.' }, { status: 403, headers })
     }
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userEmployeeId =
+      auth.employeeId != null && Number.isFinite(Number(auth.employeeId))
+        ? Math.floor(Number(auth.employeeId))
+        : null
+    const userEmployeeCode = String(auth.employeeCode || '').trim() || null
     type BulkItem = { transDate?: string; trans_date?: string; transType?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; accountSubjectId?: number; account_subject_id?: number; salesDate?: string; sales_date?: string; expenseDate?: string; expense_date?: string; vendorCode?: string; vendor_code?: string; storeName?: string; store_name?: string }
     const items = (Array.isArray(body.items) ? body.items : []) as BulkItem[]
 
@@ -167,6 +184,8 @@ export async function POST(request: NextRequest) {
         note: note || null,
         store: store || null,
         user_name: userName || null,
+        user_employee_id: userEmployeeId,
+        user_employee_code: userEmployeeCode,
         category: validCategory,
       }
       if ((persistDepositSubject || persistWithdrawSubject) && accountSubjectId != null) {
@@ -190,7 +209,13 @@ export async function POST(request: NextRequest) {
       if (transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
       if (transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
 
-      const btInserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+      let btInserted: { id?: number }[] = []
+      try {
+        btInserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+      } catch (e) {
+        if (!isMissingIdentityColumnError(e)) throw e
+        btInserted = (await supabaseInsert('bank_transactions', stripIdentityColumns(row))) as { id?: number }[]
+      }
       const bankId = Array.isArray(btInserted) && btInserted[0] ? btInserted[0].id : undefined
 
       if (bankId && transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {

@@ -341,8 +341,8 @@ export function WorklogApproval() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
-                <SelectItem value="대기">Wait</SelectItem>
-                <SelectItem value="승인">OK / Commented</SelectItem>
+                <SelectItem value="대기">{t("workLogStatusWait")}</SelectItem>
+                <SelectItem value="승인">{t("workLogStatusOkCommented")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -354,9 +354,9 @@ export function WorklogApproval() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
-                <SelectItem value="Finish">Finish</SelectItem>
-                <SelectItem value="Continue">Continue</SelectItem>
-                <SelectItem value="Today">Today</SelectItem>
+                <SelectItem value="Finish">{t("workLogTypeFinish")}</SelectItem>
+                <SelectItem value="Continue">{t("workLogTypeContinue")}</SelectItem>
+                <SelectItem value="Today">{t("workLogTypeToday")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

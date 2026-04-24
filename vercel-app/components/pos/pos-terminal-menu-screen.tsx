@@ -1067,7 +1067,9 @@ export function PosTerminalMenuScreen({
                             {menu.name}
                           </span>
                           {first?.id === menu.id ? (
-                            <span className="rounded bg-slate-200 px-2 py-1 text-[11px] shrink-0">선택됨</span>
+                            <span className="rounded bg-slate-200 px-2 py-1 text-[11px] shrink-0">
+                              {t('posSelected')}
+                            </span>
                           ) : (
                             <span className="rounded bg-emerald-100 px-2 py-1 text-[11px] text-emerald-700 shrink-0 whitespace-nowrap">
                               {first ? (t('posSelect') || '선택') : (t('posBanbanFirstHalf') || '1번째 맛')}
@@ -1136,16 +1138,16 @@ export function PosTerminalMenuScreen({
                 }
               }
               const groupLabels: Record<string, string> = {
-                size: '사이즈',
-                part: '부위',
-                topping: '토핑',
-                bone: '뼈/순살',
-                type: '타입',
-                set_main: '세트 메인',
-                side: '사이드',
-                drink: '음료',
-                soup: '스프',
-                rice: '밥',
+                size: t('posOptionGroupSize') || '사이즈',
+                part: t('posOptionGroupPart') || '부위',
+                topping: t('posOptionGroupTopping') || '토핑',
+                bone: t('posOptionGroupBone') || '뼈/순살',
+                type: t('posOptionGroupType') || '타입',
+                set_main: t('posOptionGroupSetMain') || '세트 메인',
+                side: t('posOptionGroupSide') || '사이드',
+                drink: t('posOptionGroupDrink') || '음료',
+                soup: t('posOptionGroupSoup') || '스프',
+                rice: t('posOptionGroupRice') || '밥',
               }
               return (
                 <div className="flex flex-col gap-3 py-2">

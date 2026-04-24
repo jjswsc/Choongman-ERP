@@ -6,6 +6,8 @@ import { runChatCompletion } from "@/lib/ai/llm"
 import { logAiUsage } from "@/lib/ai/audit"
 import { getExternalContextSummary } from "@/lib/ai/external-context"
 import { buildStaffingInsight, isStaffingQuestion } from "@/lib/ai/staffing-advisor"
+import { applyAiDateRangePolicy, buildAiDataPolicy } from "@/lib/ai/policy"
+import { isAiRouteError } from "@/lib/ai/errors"
 import type { AiIntent } from "@/lib/ai/types"
 
 function parseIntent(raw: unknown): AiIntent {
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
   const rl = aiRateLimit(`ai:ask:${access.scoped.name}:${access.scoped.store}`, 50, 60 * 60 * 1000)
   if (!rl.ok) {
     return NextResponse.json(
-      { error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs },
+      { error: "Rate limit exceeded", code: "AI_RATE_LIMITED", retryAfterMs: rl.retryAfterMs },
       { status: 429, headers }
     )
   }
@@ -81,16 +83,31 @@ export async function POST(req: NextRequest) {
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers })
+    return NextResponse.json({ error: "Invalid JSON", code: "AI_INVALID_JSON" }, { status: 400, headers })
   }
 
   const query = String(body.query || "").trim()
   const intent = parseIntent(body.intent)
-  const store = String(body.store || access.scoped.store || "All").trim()
+  const requestedStore = String(body.store || access.scoped.store || "All").trim()
   const dateRange = body.dateRange as { start?: string; end?: string } | undefined
-  const start = String(dateRange?.start || "").trim().slice(0, 10)
-  const end = String(dateRange?.end || "").trim().slice(0, 10)
-  if (!query) return NextResponse.json({ error: "query is required" }, { status: 400, headers })
+  const requestedStart = String(dateRange?.start || "").trim().slice(0, 10)
+  const requestedEnd = String(dateRange?.end || "").trim().slice(0, 10)
+  const policy = buildAiDataPolicy({
+    scoped: access.scoped,
+    intent,
+    requestedStore,
+  })
+  const store = policy.resolvedStore
+  const ranged = applyAiDateRangePolicy({
+    start: requestedStart,
+    end: requestedEnd,
+    maxDays: policy.maxDateRangeDays,
+  })
+  const start = ranged.start || ""
+  const end = ranged.end || ""
+  if (!query) {
+    return NextResponse.json({ error: "query is required", code: "AI_QUERY_REQUIRED" }, { status: 400, headers })
+  }
 
   const { chunks, citations } = await retrieveKnowledgeContext(query, access.scoped, 6)
   const staffing = isStaffingQuestion(query)
@@ -136,8 +153,10 @@ export async function POST(req: NextRequest) {
           content:
             `의도: ${intent}\n지침: ${intentGuide}\n` +
             `사용자 스코프: role=${access.scoped.role}, store=${access.scoped.store}\n` +
-            `요청 매장: ${store}\n` +
+            `요청 매장: ${requestedStore}\n` +
+            `정책 적용 매장: ${store}${policy.isStoreCoerced ? " (권한 정책으로 보정됨)" : ""}\n` +
             `기간: ${start || "-"} ~ ${end || "-"} (Asia/Bangkok 기준)\n` +
+            `기간 정책: 최대 ${policy.maxDateRangeDays}일${ranged.isClamped ? " (요청 기간 보정됨)" : ""}\n` +
             `외부환경 요약: ${external.summaryText}\n` +
             `${staffingBlock ? `${staffingBlock}\n` : ""}` +
             `질문: ${query}\n\n` +
@@ -175,13 +194,25 @@ export async function POST(req: NextRequest) {
       totalTokens: llm.usage?.totalTokens,
       success: true,
       latencyMs: Date.now() - startedAt,
-      note: `intent=${intent}`,
+      note: `intent=${intent},tier=${policy.roleTier},storeScope=${policy.storeScope},store=${store}`,
     })
 
     return NextResponse.json(
       {
         answer,
         plan,
+        meta: {
+          requestedStore: policy.requestedStore,
+          resolvedStore: policy.resolvedStore,
+          isStoreCoerced: policy.isStoreCoerced,
+          storeScope: policy.storeScope,
+          requestedStart,
+          requestedEnd,
+          resolvedStart: start,
+          resolvedEnd: end,
+          maxDateRangeDays: policy.maxDateRangeDays,
+          isDateRangeClamped: ranged.isClamped,
+        },
         citations: staffing?.hasData
           ? [
               ...citations,
@@ -210,6 +241,8 @@ export async function POST(req: NextRequest) {
     )
   } catch (e) {
     console.error("ai/ask:", e)
+    const code = isAiRouteError(e) ? e.code : "AI_INTERNAL_ERROR"
+    const status = isAiRouteError(e) ? e.status : 500
     await logAiUsage({
       scoped: access.scoped,
       route: "/api/ai/ask",
@@ -218,8 +251,8 @@ export async function POST(req: NextRequest) {
       note: e instanceof Error ? e.message : String(e),
     })
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status: 500, headers }
+      { error: e instanceof Error ? e.message : String(e), code },
+      { status, headers }
     )
   }
 }

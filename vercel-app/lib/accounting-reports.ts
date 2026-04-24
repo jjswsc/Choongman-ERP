@@ -268,8 +268,10 @@ async function sumHqOutboundPurchaseFromOffice(
   storeFilter: string | null,
   startStr: string,
   endStr: string,
-  itemCostMap: Record<string, number>
-): Promise<number> {
+  itemCostMap: Record<string, number>,
+  itemAccountSubjectMap: Map<string, number>,
+  accountSubjectMeta: Map<number, AccountSubjectMetaRow>
+): Promise<{ purchaseTotal: number; expenseBySubject: Map<number | null, number> }> {
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   let filter =
     `log_type=in.(Outbound,ForceOutbound)` +
@@ -283,6 +285,7 @@ async function sumHqOutboundPurchaseFromOffice(
     limit: BASE_LIMIT,
   })) as { item_code?: string; qty?: number; invoice_unit_price?: number | null }[] | null
   let total = 0
+  const expenseBySubject = new Map<number | null, number>()
   for (const r of rows || []) {
     const qty = Math.abs(Number(r.qty) || 0)
     if (!qty) continue
@@ -291,9 +294,15 @@ async function sumHqOutboundPurchaseFromOffice(
       r.invoice_unit_price != null && !isNaN(Number(r.invoice_unit_price))
         ? Number(r.invoice_unit_price)
         : (itemCostMap[code] ?? 0)
-    total += qty * unit
+    const lineAmount = qty * unit
+    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
+    if (routed.isExpense) {
+      addToSubjectMap(expenseBySubject, routed.subjectId, lineAmount)
+      continue
+    }
+    total += lineAmount
   }
-  return total
+  return { purchaseTotal: total, expenseBySubject }
 }
 
 function buildHqOutboundFromOfficeFilter(
@@ -397,8 +406,10 @@ async function getDirectInboundPurchasesByVendor(
   startStr: string,
   endStr: string,
   itemCostMap: Record<string, number>,
-  excludeHqLocations = false
-): Promise<Record<string, number>> {
+  excludeHqLocations = false,
+  itemAccountSubjectMap: Map<string, number> = new Map(),
+  accountSubjectMeta: Map<number, AccountSubjectMetaRow> = new Map()
+): Promise<{ byVendor: Record<string, number>; expenseBySubject: Map<number | null, number> }> {
   const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startStr, endStr)
   let filter = `log_type=eq.Inbound&log_date=gte.${dayStartUtcIso}&log_date=lt.${nextDayStartUtcIso}`
   if (locationFilter) filter += `&${buildStoreFieldOrIlikeFragment('location', locationFilter)}`
@@ -409,6 +420,7 @@ async function getDirectInboundPurchasesByVendor(
   })) as { item_code?: string; qty?: number; unit_cost?: number | null; vendor_target?: string; location?: string }[] | null
 
   const byVendor: Record<string, number> = {}
+  const expenseBySubject = new Map<number | null, number>()
   for (const r of rows || []) {
     if (String(r.vendor_target || '').trim() === 'From HQ') continue
     if (excludeHqLocations && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
@@ -418,11 +430,16 @@ async function getDirectInboundPurchasesByVendor(
     const unitCost = r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : (itemCostMap[code] ?? 0)
     const line = qty * unitCost
     if (!line) continue
+    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
+    if (routed.isExpense) {
+      addToSubjectMap(expenseBySubject, routed.subjectId, line)
+      continue
+    }
     const vRaw = String(r.vendor_target || '').trim()
     const vKey = vRaw || '__pl_vendor_unknown__'
     byVendor[vKey] = (byVendor[vKey] || 0) + line
   }
-  return byVendor
+  return { byVendor, expenseBySubject }
 }
 
 async function getFixedExpensesAggregate(
@@ -479,16 +496,30 @@ type AccountSubjectMetaRow = {
   name: string
   nameEn: string | null
   nameTh: string | null
+  type: string
+  pAndLSection: string | null
+  statementType: string | null
 }
 
 async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaRow>> {
   const out = new Map<number, AccountSubjectMetaRow>()
   try {
     const rows = (await supabaseSelect('account_subjects', {
-      select: 'id,code,name,name_en,name_th',
+      select: 'id,code,name,name_en,name_th,type,p_and_l_section,statement_type',
       limit: 2000,
       order: 'sort_order.asc,code.asc',
     })) as { id?: number; code?: string; name?: string; name_en?: string | null; name_th?: string | null }[] | null
+      | {
+          id?: number
+          code?: string
+          name?: string
+          name_en?: string | null
+          name_th?: string | null
+          type?: string
+          p_and_l_section?: string | null
+          statement_type?: string | null
+        }[]
+      | null
     for (const r of rows || []) {
       const id = r.id != null ? Number(r.id) : NaN
       if (isNaN(id)) continue
@@ -496,17 +527,57 @@ async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaR
       const name = String(r.name || '').trim()
       const ne = r.name_en != null ? String(r.name_en).trim() : ''
       const nt = r.name_th != null ? String(r.name_th).trim() : ''
+      const type = String((r as { type?: string }).type || '').trim().toLowerCase()
+      const pAndLSectionRaw = String((r as { p_and_l_section?: string }).p_and_l_section || '').trim()
+      const statementTypeRaw = String((r as { statement_type?: string }).statement_type || '').trim()
       out.set(id, {
         code,
         name,
         nameEn: ne || null,
         nameTh: nt || null,
+        type,
+        pAndLSection: pAndLSectionRaw ? pAndLSectionRaw.toLowerCase() : null,
+        statementType: statementTypeRaw ? statementTypeRaw.toLowerCase() : null,
       })
     }
   } catch {
     // ignore
   }
   return out
+}
+
+async function loadItemAccountSubjectMap(): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  try {
+    const rows = (await supabaseSelect('items', {
+      select: 'code,account_subject_id',
+      limit: 50000,
+    })) as { code?: string; account_subject_id?: number | null }[] | null
+    for (const r of rows || []) {
+      const code = String(r.code || '').trim()
+      const sid = r.account_subject_id != null ? Number(r.account_subject_id) : NaN
+      if (!code || !Number.isFinite(sid) || sid <= 0) continue
+      out.set(code, sid)
+    }
+  } catch {
+    // account_subject_id 컬럼 미배포 환경 호환
+  }
+  return out
+}
+
+function isExpenseRoutedItem(
+  itemCode: string,
+  itemAccountSubjectMap: Map<string, number>,
+  accountSubjectMeta: Map<number, AccountSubjectMetaRow>
+): { isExpense: boolean; subjectId: number | null } {
+  const sid = itemAccountSubjectMap.get(String(itemCode || '').trim())
+  if (!sid || !Number.isFinite(sid) || sid <= 0) return { isExpense: false, subjectId: null }
+  const meta = accountSubjectMeta.get(sid)
+  if (!meta) return { isExpense: false, subjectId: sid }
+  const isExpenseType = meta.type === 'expense'
+  const isCostSection = meta.pAndLSection === 'cost'
+  // cost(매출원가) 분류는 기존 매입 흐름 유지, 그 외 expense 계정은 비용으로 분리
+  return { isExpense: isExpenseType && !isCostSection, subjectId: sid }
 }
 
 function mergeExpenseSubjectMaps(
@@ -555,7 +626,9 @@ async function getInventoryValue(
   cutoffDate: string,
   isBefore: boolean,
   itemCostMap: Record<string, number>,
-  excludeHq = false
+  excludeHq = false,
+  itemAccountSubjectMap: Map<string, number> = new Map(),
+  accountSubjectMeta: Map<number, AccountSubjectMetaRow> = new Map()
 ): Promise<number> {
   const op = isBefore ? 'lt' : 'lt'
   const boundary = isBefore ? cutoffDate : cutoffDate
@@ -575,6 +648,8 @@ async function getInventoryValue(
     if (excludeHq && isOfficeStore(String(r.location || ''))) continue
     const code = String(r.item_code || '').trim()
     if (!code) continue
+    const routed = isExpenseRoutedItem(code, itemAccountSubjectMap, accountSubjectMeta)
+    if (routed.isExpense) continue
     byItem[code] = (byItem[code] || 0) + Number(r.qty || 0)
   }
 
@@ -600,6 +675,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const code = String(r.code || '').trim()
     if (code) itemCostMap[code] = Number(r.cost) || 0
   }
+  const [subjectMeta, itemAccountSubjectMap] = await Promise.all([
+    loadAccountSubjectMeta(),
+    loadItemAccountSubjectMap(),
+  ])
 
   let sales = 0
   let purchases = 0
@@ -640,7 +719,16 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       .map(([key, amount]) => ({ key, amount }))
       .sort((a, b) => b.amount - a.amount)
 
-    const inboundByVendorHq = await getDirectInboundPurchasesByVendor('입고등록', startStr, endStr, itemCostMap, false)
+    const inboundHq = await getDirectInboundPurchasesByVendor(
+      '입고등록',
+      startStr,
+      endStr,
+      itemCostMap,
+      false,
+      itemAccountSubjectMap,
+      subjectMeta
+    )
+    const inboundByVendorHq = inboundHq.byVendor
     const bankPayByVendorHq = await fetchBankPurchasePaymentsByVendor({
       isHQ: true,
       storeFilter,
@@ -655,6 +743,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     )
     /** 거래처별 내역과 동일: 직접입고 + 통장 매입지급(purchase_payment) */
     purchases += Object.values(purchaseVendorMapHq).reduce((a, b) => a + b, 0)
+    mergeExpenseSubjectMaps(expenseBySubjectMap, inboundHq.expenseBySubject)
 
     const pettyAll = (await supabaseSelectFilter(
       'petty_cash_transactions',
@@ -714,8 +803,24 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       fixedExpenses += fx.total
       mergeExpenseSubjectMaps(expenseBySubjectMap, fx.byAccountSubjectId)
     }
-    beginningInventory = await getInventoryValue('본사', startStr, true, itemCostMap)
-    endingInventory = await getInventoryValue('본사', endStr, false, itemCostMap)
+    beginningInventory = await getInventoryValue(
+      '본사',
+      startStr,
+      true,
+      itemCostMap,
+      false,
+      itemAccountSubjectMap,
+      subjectMeta
+    )
+    endingInventory = await getInventoryValue(
+      '본사',
+      endStr,
+      false,
+      itemCostMap,
+      false,
+      itemAccountSubjectMap,
+      subjectMeta
+    )
     purchaseByVendor = Object.entries(purchaseVendorMapHq)
       .filter(([, v]) => v > 0)
       .map(([key, amount]) => ({ key, amount }))
@@ -738,7 +843,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const orderFilter =
       `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
       (storeFilter !== 'All' ? `&${buildStoreFieldOrIlikeFragment('store_name', storeFilter)}` : '')
-    const [orders, hqVendorCodes, hqOutboundPurchaseSubtotal] = await Promise.all([
+    const [orders, hqVendorCodes, hqOutboundAgg] = await Promise.all([
       supabaseSelectFilter('orders', orderFilter, {
         select: 'total',
         limit: BASE_LIMIT,
@@ -748,7 +853,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         storeFilter === 'All' ? null : storeFilter,
         startStr,
         endStr,
-        itemCostMap
+        itemCostMap,
+        itemAccountSubjectMap,
+        subjectMeta
       ),
     ])
     let ordersApprovedSubtotal = 0
@@ -767,17 +874,35 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       limits.hq_outbound = { fetched: 0, limit: BASE_LIMIT }
     }
 
-    ordersPurchaseSubtotal = hqOutboundPurchaseSubtotal
+    ordersPurchaseSubtotal = hqOutboundAgg.purchaseTotal
+    mergeExpenseSubjectMaps(expenseBySubjectMap, hqOutboundAgg.expenseBySubject)
     purchaseHqOutboundBasis = {
-      outboundTotal: hqOutboundPurchaseSubtotal,
+      outboundTotal: hqOutboundAgg.purchaseTotal,
       approvedOrdersTotal: ordersApprovedSubtotal,
-      diff: round2(hqOutboundPurchaseSubtotal - ordersApprovedSubtotal),
+      diff: round2(hqOutboundAgg.purchaseTotal - ordersApprovedSubtotal),
     }
 
-    const inboundByVendorStore =
+    const inboundStore =
       storeFilter !== 'All'
-        ? await getDirectInboundPurchasesByVendor(storeFilter, startStr, endStr, itemCostMap, false)
-        : await getDirectInboundPurchasesByVendor(null, startStr, endStr, itemCostMap, true)
+        ? await getDirectInboundPurchasesByVendor(
+            storeFilter,
+            startStr,
+            endStr,
+            itemCostMap,
+            false,
+            itemAccountSubjectMap,
+            subjectMeta
+          )
+        : await getDirectInboundPurchasesByVendor(
+            null,
+            startStr,
+            endStr,
+            itemCostMap,
+            true,
+            itemAccountSubjectMap,
+            subjectMeta
+          )
+    const inboundByVendorStore = inboundStore.byVendor
     const bankPayByVendorRaw = await fetchBankPurchasePaymentsByVendor({
       isHQ: false,
       storeFilter,
@@ -804,6 +929,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     /** 본사 창고 출고 + 거래처별(직접입고 + 통장 매입지급, 본사 법인 제외) — 펼침 합계와 매입 총액 일치 */
     const purchaseVendorDetailTotal = Object.values(purchaseVendorMapStore).reduce((a, b) => a + b, 0)
     purchases += ordersPurchaseSubtotal + purchaseVendorDetailTotal
+    mergeExpenseSubjectMaps(expenseBySubjectMap, inboundStore.expenseBySubject)
 
     let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
     if (storeFilter !== 'All') {
@@ -868,11 +994,43 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     }
 
     if (storeFilter !== 'All') {
-      beginningInventory = await getInventoryValue(storeFilter, startStr, true, itemCostMap)
-      endingInventory = await getInventoryValue(storeFilter, endStr, false, itemCostMap)
+      beginningInventory = await getInventoryValue(
+        storeFilter,
+        startStr,
+        true,
+        itemCostMap,
+        false,
+        itemAccountSubjectMap,
+        subjectMeta
+      )
+      endingInventory = await getInventoryValue(
+        storeFilter,
+        endStr,
+        false,
+        itemCostMap,
+        false,
+        itemAccountSubjectMap,
+        subjectMeta
+      )
     } else {
-      beginningInventory = await getInventoryValue(null, startStr, true, itemCostMap, true)
-      endingInventory = await getInventoryValue(null, endStr, false, itemCostMap, true)
+      beginningInventory = await getInventoryValue(
+        null,
+        startStr,
+        true,
+        itemCostMap,
+        true,
+        itemAccountSubjectMap,
+        subjectMeta
+      )
+      endingInventory = await getInventoryValue(
+        null,
+        endStr,
+        false,
+        itemCostMap,
+        true,
+        itemAccountSubjectMap,
+        subjectMeta
+      )
     }
 
     purchaseByVendor = []
@@ -906,7 +1064,6 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const grossProfit = sales - cogs
   const netProfit = grossProfit - expenses
 
-  const subjectMeta = await loadAccountSubjectMeta()
   const expenseByAccountSubject = buildExpenseByAccountList(expenseBySubjectMap, subjectMeta)
 
   const vendorNormToName = await loadVendorCodeNormToNameMap()

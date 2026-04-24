@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAiAccess } from "@/lib/ai/auth"
-import { isOfficeRole } from "@/lib/permissions"
 import { getBangkokDateTimeString, getBangkokTodayDateString, addBangkokCalendarDays } from "@/lib/bangkok-time"
 import { supabaseSelectFilter, supabaseUpsert } from "@/lib/supabase-server"
+import { buildAiDataPolicy } from "@/lib/ai/policy"
 
 type StoreProfile = {
   store_name?: string
@@ -45,15 +45,23 @@ export async function POST(req: NextRequest) {
 
   const access = await requireAiAccess(req)
   if (!access.ok) return access.response
-  if (!isOfficeRole(access.scoped.role)) {
-    return NextResponse.json({ error: "Office role required" }, { status: 403, headers })
+  const policy = buildAiDataPolicy({
+    scoped: access.scoped,
+    intent: "ops_recommend",
+    requestedStore: access.scoped.store || "All",
+  })
+  if (!policy.canSyncExternalContext) {
+    return NextResponse.json(
+      { error: "Office role required", code: "AI_OFFICE_REQUIRED" },
+      { status: 403, headers }
+    )
   }
 
   let body: Record<string, unknown> = {}
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
-    // empty is allowed
+    body = {}
   }
   const days = Math.max(1, Math.min(Number(body.days || 7), 14))
   const storeFilter = String(body.store || "").trim()

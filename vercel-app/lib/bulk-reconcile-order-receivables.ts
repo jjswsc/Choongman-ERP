@@ -28,6 +28,46 @@ function todayBangkok(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
+function normalizeStoreKey(v: string): string {
+  const raw = String(v || '').trim().toLowerCase()
+  if (!raw) return ''
+  const noSpace = raw.replace(/\s+/g, ' ')
+  return noSpace.startsWith('cm ') ? noSpace.slice(3).trim() : noSpace
+}
+
+function normalizeVendorCode(v: string): string {
+  return String(v || '').trim().toLowerCase()
+}
+
+async function getReceivableStoreAliasSetByVendorCode(vendorCodeFilter: string): Promise<Set<string>> {
+  const code = normalizeVendorCode(vendorCodeFilter)
+  if (!code) return new Set<string>()
+  const vendors = (await supabaseSelectFilter(
+    'vendors',
+    `code=eq.${encodeURIComponent(code)}`,
+    { select: 'code,name,gps_name', limit: 1 }
+  )) as { code?: string; name?: string; gps_name?: string }[] | null
+  const v = vendors?.[0]
+  if (!v) return new Set<string>()
+  const aliases = new Set<string>()
+  const name = normalizeStoreKey(String(v.name || ''))
+  const gps = normalizeStoreKey(String(v.gps_name || ''))
+  if (name) aliases.add(name)
+  if (gps) aliases.add(gps)
+  return aliases
+}
+
+function matchesStoreAliasOrExactName(
+  storeName: string | null | undefined,
+  rawFilter: string,
+  aliasesByVendorCode: Set<string>
+): boolean {
+  const storeNorm = normalizeStoreKey(String(storeName || ''))
+  if (!storeNorm) return false
+  if (aliasesByVendorCode.size > 0) return aliasesByVendorCode.has(storeNorm)
+  return storeNorm === normalizeStoreKey(rawFilter)
+}
+
 export async function reconcileOrderReceivablesBatch(params: {
   /** 이전 배치의 마지막 receivable_transactions.id (첫 호출 0) */
   lastReceivableId: number
@@ -36,6 +76,10 @@ export async function reconcileOrderReceivablesBatch(params: {
 }): Promise<BulkReconcileBatchResult> {
   const { lastReceivableId, storeFilter } = params
   const batchSize = Math.min(Math.max(params.batchSize, 1), 250)
+  const normalizedStoreFilter = String(storeFilter || '').trim()
+  const aliasSetByVendorCode = normalizedStoreFilter
+    ? await getReceivableStoreAliasSetByVendorCode(normalizedStoreFilter)
+    : new Set<string>()
 
   const stats: BulkReconcileStats = {
     processed: 0,
@@ -47,10 +91,7 @@ export async function reconcileOrderReceivablesBatch(params: {
   }
   const errorSamples: { orderId: number; message: string }[] = []
 
-  let filter = `ref_type=eq.Order&ref_id=not.is.null&id=gt.${Number(lastReceivableId) || 0}`
-  if (storeFilter?.trim()) {
-    filter += `&store_name=ilike.${encodeURIComponent(storeFilter.trim())}`
-  }
+  const filter = `ref_type=eq.Order&ref_id=not.is.null&id=gt.${Number(lastReceivableId) || 0}`
 
   const recRows = (await supabaseSelectFilter('receivable_transactions', filter, {
     select: 'id,ref_id,trans_date,store_name',
@@ -62,6 +103,12 @@ export async function reconcileOrderReceivablesBatch(params: {
     return { nextReceivableId: lastReceivableId, hasMore: false, stats, errorSamples }
   }
 
+  const scopedRecRows = normalizedStoreFilter
+    ? (recRows || []).filter((r) =>
+        matchesStoreAliasOrExactName(r.store_name, normalizedStoreFilter, aliasSetByVendorCode)
+      )
+    : recRows
+
   const nextReceivableId = Number(recRows[recRows.length - 1]?.id ?? lastReceivableId)
   const hasMore = recRows.length >= batchSize
 
@@ -70,7 +117,7 @@ export async function reconcileOrderReceivablesBatch(params: {
   const uniqueIds: number[] = []
   const seenRef = new Set<number>()
 
-  for (const r of recRows) {
+  for (const r of scopedRecRows) {
     const rid = Number(r.ref_id)
     if (!rid || Number.isNaN(rid)) continue
     if (!transByOrder.has(rid)) {

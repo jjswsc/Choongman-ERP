@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { fetchSalesTypesVendorsForInvoice } from '@/lib/invoice-vendor-clients'
 
 /** 인보이스 인쇄용: 본사 정보 + 매출처(회사명별) 정보 반환 (Supabase vendors) */
 export async function GET() {
@@ -52,21 +53,8 @@ export async function GET() {
         clients[k.toLowerCase()] = officeEntry
       }
     }
-    let clientRows = (await supabaseSelectFilter('vendors', 'type=eq.매출처', { limit: 500 })) as {
-      name?: string
-      addr?: string
-      tax_id?: string
-      phone?: string
-      gps_name?: string
-      sales_outlet?: string
-    }[] | null
-    if (!clientRows || clientRows.length === 0) {
-      clientRows = (await supabaseSelectFilter('vendors', 'type=eq.sales', { limit: 500 })) as typeof clientRows
-    }
-    if (!clientRows || clientRows.length === 0) {
-      clientRows = (await supabaseSelectFilter('vendors', 'type=eq.both', { limit: 500 })) as typeof clientRows
-    }
-    for (const r of clientRows || []) {
+    const clientRows = await fetchSalesTypesVendorsForInvoice()
+    for (const r of clientRows) {
       const companyName = String(r.name || '').trim()
       const gpsName = String((r as { gps_name?: string }).gps_name || '').trim()
       const salesOutlet = String((r as { sales_outlet?: string }).sales_outlet || '').trim()

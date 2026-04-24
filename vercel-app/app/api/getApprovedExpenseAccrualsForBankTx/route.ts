@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { evaluatePayeeBankMemoMatch, type PayeeMemoMatchQuality } from '@/lib/expense-accrual-bank-memo-match'
 import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
@@ -8,6 +9,8 @@ type BankTxRow = {
   trans_type?: string
   amount?: number
   trans_date?: string
+  memo?: string
+  note?: string
 }
 
 type ExpenseAccrualRow = {
@@ -42,6 +45,13 @@ function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdraw
   return { payeeCode, withdrawalCategory }
 }
 
+const MEMO_MATCH_ORDER: Record<PayeeMemoMatchQuality, number> = {
+  ok: 0,
+  uncertain: 1,
+  trivial: 2,
+  mismatch: 3,
+}
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -59,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
 
     const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
-      select: 'id,trans_type,amount,trans_date',
+      select: 'id,trans_type,amount,trans_date,memo,note',
       limit: 1,
     })) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
@@ -81,6 +91,8 @@ export async function GET(request: NextRequest) {
 
     const bankAmount = Math.abs(Number(bankRow.amount || 0))
     const bankDate = String(bankRow.trans_date || '').slice(0, 10)
+    const bankMemo = String(bankRow.memo || '')
+    const bankNote = String(bankRow.note || '')
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'status=eq.approved', {
         select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by',
@@ -101,7 +113,7 @@ export async function GET(request: NextRequest) {
       if (amt < 0) paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
     }
 
-    const list = (accrualRows || [])
+    const rawList = (accrualRows || [])
       .map((r) => {
         const id = Number(r.id || 0)
         const wht = Math.max(0, Math.abs(Number(r.withholding_tax_amount ?? 0) || 0))
@@ -137,6 +149,59 @@ export async function GET(request: NextRequest) {
         return rowStore.toLowerCase() === storeFilter.toLowerCase()
       })
       .filter((r) => (r.remainingAmount || 0) > 0)
+      // 통장 출금액 = 지급예정 잔액인 건만(오연결·부분집행 혼동 방지)
+      .filter((r) => Math.abs(Number(r.remainingAmount) - bankAmount) <= 0.01)
+
+    const codesForVendor = new Set(
+      rawList
+        .map((r) => String(r.payeeCode || '').trim().toLowerCase())
+        .filter((c) => c && !c.startsWith('auto_'))
+    )
+    const vendorNameByCode: Record<string, { name: string; gps: string }> = {}
+    if (codesForVendor.size > 0) {
+      const vrows = (await supabaseSelect('vendors', {
+        select: 'code,name,gps_name',
+        limit: 5000,
+      })) as { code?: string; name?: string; gps_name?: string }[] | null
+      for (const v of vrows || []) {
+        const c = String(v.code || '')
+          .trim()
+          .toLowerCase()
+        if (!c || !codesForVendor.has(c)) continue
+        vendorNameByCode[c] = {
+          name: String(v.name || '').trim(),
+          gps: String((v as { gps_name?: string }).gps_name || '').trim(),
+        }
+      }
+    }
+
+    const list = rawList
+      .map((r) => {
+        const c = String(r.payeeCode || '')
+          .trim()
+          .toLowerCase()
+        const vn = c ? vendorNameByCode[c] : undefined
+        const ev = evaluatePayeeBankMemoMatch({
+          bankMemo,
+          bankNote,
+          payeeName: r.payeeName,
+          payeeCode: r.payeeCode,
+          vendorName: vn?.name,
+          vendorGpsName: vn?.gps,
+        })
+        return {
+          ...r,
+          payeeMemoMatchQuality: ev.quality,
+          payeeMemoMatchDetail: ev.detail,
+        }
+      })
+      .sort((a, b) => {
+        const qd =
+          (MEMO_MATCH_ORDER[a.payeeMemoMatchQuality] ?? 9) -
+          (MEMO_MATCH_ORDER[b.payeeMemoMatchQuality] ?? 9)
+        if (qd !== 0) return qd
+        return a.id - b.id
+      })
 
     return NextResponse.json({
       success: true,
@@ -144,6 +209,8 @@ export async function GET(request: NextRequest) {
         id: Number(bankRow.id || 0),
         amount: bankAmount,
         transDate: bankDate,
+        memo: bankMemo,
+        note: bankNote,
       },
       list,
     }, { headers })

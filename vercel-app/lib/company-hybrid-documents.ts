@@ -22,6 +22,36 @@ export type CompanyHybridRelatedType = (typeof COMPANY_HYBRID_RELATED_TYPES)[num
 export const COMPANY_HYBRID_SOURCES = ['drive', 'supabase'] as const
 export type CompanyHybridSource = (typeof COMPANY_HYBRID_SOURCES)[number]
 
+/**
+ * 문서 열람 권한(메타) — 스키마 변경 없이 doc_type에 토큰으로 저장한다.
+ * - all: 기존 동작(해당 매장 접근 가능하면 열람 가능)
+ * - office: 본사 권한(Director/Officer)만 열람 가능
+ * - store_admin: 본사 + 매장 관리자(매니저/가맹점주)만 열람 가능
+ */
+export const COMPANY_HYBRID_DOC_VISIBILITIES = ['all', 'office', 'store_admin'] as const
+export type CompanyHybridDocVisibility = (typeof COMPANY_HYBRID_DOC_VISIBILITIES)[number]
+
+const DOC_VIS_META_PREFIX = '__perm__:'
+
+export function isCompanyHybridDocVisibility(v: string): v is CompanyHybridDocVisibility {
+  return (COMPANY_HYBRID_DOC_VISIBILITIES as readonly string[]).includes(v)
+}
+
+export function companyHybridDocVisibilityToDocType(v: CompanyHybridDocVisibility): string {
+  return `${DOC_VIS_META_PREFIX}${v}`
+}
+
+export function companyHybridDocVisibilityFromDocType(docType: string | null | undefined): CompanyHybridDocVisibility {
+  const raw = String(docType || '').trim()
+  if (!raw.startsWith(DOC_VIS_META_PREFIX)) return 'all'
+  const parsed = raw.slice(DOC_VIS_META_PREFIX.length).trim()
+  return isCompanyHybridDocVisibility(parsed) ? parsed : 'all'
+}
+
+export function isCompanyHybridDocTypePermissionMeta(docType: string | null | undefined): boolean {
+  return String(docType || '').trim().startsWith(DOC_VIS_META_PREFIX)
+}
+
 export function isCompanyHybridRelatedType(v: string): v is CompanyHybridRelatedType {
   return (COMPANY_HYBRID_RELATED_TYPES as readonly string[]).includes(v)
 }

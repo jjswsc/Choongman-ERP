@@ -1,8 +1,11 @@
-import { isFranchiseeRole, isOfficeRole } from '@/lib/permissions'
+import { isFranchiseeRole, isManagerOrFranchiseeRole, isOfficeRole } from '@/lib/permissions'
 import { franchiseeQueryStoreAllowed, normalizedAllowedStoresFromJwt } from '@/lib/franchisee-multi-store'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { storeMatches } from '@/lib/admin-employee-store-access'
-import { isCompanyHybridDocsListAllStoresParam } from '@/lib/company-hybrid-documents'
+import {
+  isCompanyHybridDocsListAllStoresParam,
+  type CompanyHybridDocVisibility,
+} from '@/lib/company-hybrid-documents'
 
 /**
  * 전 매장 문서 목록·열람(조회 로그) 허용 여부.
@@ -39,6 +42,22 @@ export function canAccessStoreForCompanyHybridDocs(jwt: JwtPayload, targetStore:
     return franchiseeQueryStoreAllowed(jwt, s)
   }
   return storeMatches(String(jwt.store || ''), s)
+}
+
+/** 문서 visibility 기반 열람 가능 여부 */
+export function canViewCompanyHybridDocument(
+  jwt: JwtPayload,
+  targetStore: string,
+  visibility: CompanyHybridDocVisibility
+): boolean {
+  if (visibility === 'office') {
+    return isOfficeRole(jwt.role || '')
+  }
+  if (visibility === 'store_admin') {
+    if (isOfficeRole(jwt.role || '')) return true
+    return isManagerOrFranchiseeRole(jwt.role || '') && canAccessStoreForCompanyHybridDocs(jwt, targetStore)
+  }
+  return canAccessStoreForCompanyHybridDocs(jwt, targetStore)
 }
 
 /**

@@ -28,6 +28,35 @@ type ForceOutboundLog = {
   is_deleted?: boolean | null
 }
 
+function normalizeStoreKey(v: string): string {
+  const raw = String(v || '').trim().toLowerCase()
+  if (!raw) return ''
+  const noSpace = raw.replace(/\s+/g, ' ')
+  return noSpace.startsWith('cm ') ? noSpace.slice(3).trim() : noSpace
+}
+
+function normalizeVendorCode(v: string): string {
+  return String(v || '').trim().toLowerCase()
+}
+
+async function getReceivableStoreAliasSetByVendorCode(vendorCodeFilter: string): Promise<Set<string>> {
+  const code = normalizeVendorCode(vendorCodeFilter)
+  if (!code) return new Set<string>()
+  const vendors = (await supabaseSelectFilter(
+    'vendors',
+    `code=eq.${encodeURIComponent(code)}`,
+    { select: 'code,name,gps_name', limit: 1 }
+  )) as { code?: string; name?: string; gps_name?: string }[] | null
+  const v = vendors?.[0]
+  if (!v) return new Set<string>()
+  const aliases = new Set<string>()
+  const name = normalizeStoreKey(String(v.name || ''))
+  const gps = normalizeStoreKey(String(v.gps_name || ''))
+  if (name) aliases.add(name)
+  if (gps) aliases.add(gps)
+  return aliases
+}
+
 async function loadItemMasterPrices(): Promise<Record<string, number>> {
   const items = (await supabaseSelect('items', {
     select: 'code,price',
@@ -169,19 +198,27 @@ export async function repairForceOutboundReceivablesRecentDays(days: number): Pr
 export async function reconcileAllForceOutboundReceivables(params: {
   storeFilter?: string
 }): Promise<{ processed: number; errors: number }> {
-  let filter = 'log_type=eq.ForceOutbound&is_deleted=is.false'
-  if (params.storeFilter?.trim()) {
-    filter += `&vendor_target=ilike.${encodeURIComponent(params.storeFilter.trim())}`
-  }
+  const filter = 'log_type=eq.ForceOutbound&is_deleted=is.false'
   const rows = (await supabaseSelectFilter('stock_logs', filter, {
     order: 'id.asc',
     limit: 8000,
     select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
   })) as ForceOutboundLog[]
+  let scopedRows = rows || []
+  const normalizedStoreFilter = String(params.storeFilter || '').trim()
+  if (normalizedStoreFilter) {
+    const aliasSetByVendorCode = await getReceivableStoreAliasSetByVendorCode(normalizedStoreFilter)
+    if (aliasSetByVendorCode.size > 0) {
+      scopedRows = scopedRows.filter((r) => aliasSetByVendorCode.has(normalizeStoreKey(String(r.vendor_target || ''))))
+    } else {
+      const fallbackNorm = normalizeStoreKey(normalizedStoreFilter)
+      scopedRows = scopedRows.filter((r) => normalizeStoreKey(String(r.vendor_target || '')) === fallbackNorm)
+    }
+  }
   const priceByCode = await loadItemMasterPrices()
   let processed = 0
   let errors = 0
-  for (const r of rows || []) {
+  for (const r of scopedRows) {
     try {
       await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode })
       processed++

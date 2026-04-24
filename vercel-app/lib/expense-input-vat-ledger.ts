@@ -10,6 +10,12 @@ function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdraw
   return { payeeCode, withdrawalCategory }
 }
 
+function shouldSkipExpenseVatAutoSync(withdrawalCategory: string): boolean {
+  const cat = String(withdrawalCategory || '').trim().toLowerCase()
+  // 매입대금/매입선급은 입고(재고) 기반 매입 VAT와 중복될 가능성이 높아 자동 반영에서 제외한다.
+  return cat === 'purchase_payment' || cat === 'purchase_advance'
+}
+
 function isMissingSubmissionColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
   return msg.includes('filing_status') || msg.includes('submitted_at') || msg.includes('submitted_by')
@@ -67,7 +73,10 @@ export async function deleteExpenseAccrualInputVatLedger(expenseAccrualId: numbe
  * 지출 발생(expense_accruals)의 부가세를 매입 세금계산서(PP30 input) 보조장부에 자동 반영한다.
  * 승인·지급 여부와 관계없이 vat_amount>0 이고 반려가 아니면 초안으로 적재한다.
  */
-export async function syncExpenseAccrualInputVatLedger(expenseAccrualId: number): Promise<void> {
+export async function syncExpenseAccrualInputVatLedger(
+  expenseAccrualId: number,
+  options?: { fallbackStoreName?: string }
+): Promise<void> {
   const id = Math.floor(Number(expenseAccrualId) || 0)
   if (id <= 0) return
 
@@ -83,6 +92,7 @@ export async function syncExpenseAccrualInputVatLedger(expenseAccrualId: number)
   const status = String(row.status || '').toLowerCase()
   const vatAmount = Math.max(0, Math.abs(Number(row.vat_amount ?? 0) || 0))
   const gross = Math.max(0, Math.abs(Number(row.amount ?? 0) || 0))
+  const fallbackStoreName = String(options?.fallbackStoreName || '').trim()
 
   if (status === 'rejected' || vatAmount <= 0 || gross <= 0) {
     const existing = (await supabaseSelectFilter(
@@ -100,7 +110,19 @@ export async function syncExpenseAccrualInputVatLedger(expenseAccrualId: number)
   const expenseDate = String(row.expense_date || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) return
   const taxMonth = expenseDate.slice(0, 7)
-  const { payeeCode } = decodePayeeCode(row.payee_code || undefined)
+  const { payeeCode, withdrawalCategory } = decodePayeeCode(row.payee_code || undefined)
+  if (shouldSkipExpenseVatAutoSync(withdrawalCategory)) {
+    const existing = (await supabaseSelectFilter(
+      'vat_ledger_entries',
+      `memo=ilike.${encodeURIComponent(`%${memoTag}%`)}`,
+      { limit: 20, select: 'id' }
+    )) as { id?: number }[] | null
+    for (const e of existing || []) {
+      const eid = Math.floor(Number(e?.id) || 0)
+      if (eid > 0) await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${eid}`)
+    }
+    return
+  }
   const payeeName = String(row.payee_name || payeeCode || '지출').trim() || '지출'
   const netAmount = Math.max(0, gross - vatAmount)
   const tin = await lookupVendorTaxId(payeeCode)
@@ -121,16 +143,38 @@ export async function syncExpenseAccrualInputVatLedger(expenseAccrualId: number)
     filing_status: 'draft',
     submitted_at: null,
     submitted_by: null,
-    store_name: String(row.store_name || '').trim() || null,
+    store_name: String(row.store_name || '').trim() || fallbackStoreName || null,
     updated_at: new Date().toISOString(),
   }
 
   const existing = (await supabaseSelectFilter(
     'vat_ledger_entries',
     `memo=ilike.${encodeURIComponent(`%${memoTag}%`)}`,
-    { limit: 1, select: 'id' }
-  )) as { id?: number }[] | null
-  const existingId = Math.floor(Number(existing?.[0]?.id) || 0)
+    { limit: 20, select: 'id,filing_status' }
+  )) as { id?: number; filing_status?: string | null }[] | null
+  let existingId = 0
+  let keepSubmitted = false
+  for (const e of existing || []) {
+    const eid = Math.floor(Number(e?.id) || 0)
+    if (eid <= 0) continue
+    const submitted = String(e?.filing_status || '').trim().toLowerCase() === 'submitted'
+    if (existingId <= 0) {
+      existingId = eid
+      keepSubmitted = submitted
+      continue
+    }
+    if (keepSubmitted) {
+      if (!submitted) await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${eid}`)
+      continue
+    }
+    if (submitted) {
+      await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${existingId}`)
+      existingId = eid
+      keepSubmitted = true
+      continue
+    }
+    await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${eid}`)
+  }
   if (existingId > 0) {
     try {
       await supabaseUpdate('vat_ledger_entries', existingId, ledgerRow)

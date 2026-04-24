@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
 
-const ITEMS_SELECT_FULL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order,stock_base_unit,stock_unit_options,standard_units'
+const ITEMS_SELECT_FULL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order,stock_base_unit,stock_unit_options,standard_units,account_subject_id'
 const ITEMS_SELECT_MINIMAL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order'
 
 function parseStockUnitOptions(val: unknown): { unit: string; factor: number }[] {
@@ -51,6 +51,7 @@ type ItemRow = {
   stock_base_unit?: string
   stock_unit_options?: { unit: string; factor: number }[] | null
   standard_units?: unknown
+  account_subject_id?: number | null
 }
 
 /** 관리자 품목 관리 - Supabase items 테이블 조회. scope=outbound|order 시 본사 전용만 */
@@ -118,6 +119,10 @@ export async function GET(request: NextRequest) {
           purchaseSource: ((row.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq') as 'hq' | 'store',
           orderDisabled: row.order_disabled === true,
           sortOrder: row.sort_order != null ? Number(row.sort_order) : undefined,
+          accountSubjectId:
+            row.account_subject_id != null && !Number.isNaN(Number(row.account_subject_id))
+              ? Number(row.account_subject_id)
+              : null,
           ...(hasStockCols
             ? {
                 stockBaseUnit: String(row.stock_base_unit ?? '').trim(),

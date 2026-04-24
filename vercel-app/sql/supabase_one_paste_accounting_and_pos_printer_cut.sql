@@ -1077,226 +1077,479 @@ $$;
 
 commit;
 
--- [Q1] 삭제된 ForceOutbound인데 미수금(ref ForceOutbound)이 남아있는 건
-select
-  s.id as stock_log_id,
-  s.vendor_target as store_name,
-  s.log_date,
-  rt.id as receivable_id,
-  rt.amount
-from public.stock_logs s
-join public.receivable_transactions rt
-  on rt.ref_type = 'ForceOutbound'
- and rt.ref_id = s.id
-where s.log_type = 'ForceOutbound'
-  and coalesce(s.is_deleted, false) = true
-order by s.id desc
-limit 200;
+-- ------------------------------------------------------------
+-- 진단/리포트 SELECT는 배포 환경 스키마 편차(예: stock_logs 없음)에서
+-- one-paste 실행을 중단시킬 수 있어 기본 파일에서는 비활성화.
+-- 필요 시 아래 개별 파일에서 별도 실행:
+--   - vercel-app/sql/stock_logs_soft_delete_outbound.sql
+--   - vercel-app/sql/logistics_kpi_dashboard_queries.sql
+-- ------------------------------------------------------------
+DO $$
+BEGIN
+  RAISE NOTICE 'Skip inline diagnostics/KPI SELECTs in one-paste script.';
+END
+$$;
 
--- [Q2] ForceOutbound 미수금이 삭제/미존재 stock_logs를 참조하는 고아 레코드
-select
-  rt.id as receivable_id,
-  rt.store_name,
-  rt.ref_id as stock_log_id,
-  rt.amount,
-  case
-    when s.id is null then 'missing_stock_log'
-    when coalesce(s.is_deleted, false) = true then 'deleted_stock_log'
-    when s.log_type <> 'ForceOutbound' then 'wrong_log_type'
-    else 'ok'
-  end as issue
-from public.receivable_transactions rt
-left join public.stock_logs s
-  on s.id = rt.ref_id
-where rt.ref_type = 'ForceOutbound'
-  and (
-    s.id is null
-    or coalesce(s.is_deleted, false) = true
-    or s.log_type <> 'ForceOutbound'
+-- ============================================================
+-- POS: 결제 모달 직전 최종 주문서 자동 인쇄
+-- ============================================================
+ALTER TABLE IF EXISTS public.pos_printer_settings
+  ADD COLUMN IF NOT EXISTS auto_print_final_order_before_payment boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN public.pos_printer_settings.auto_print_final_order_before_payment IS
+  '결제 버튼으로 결제 모달이 열리기 직전, 손님 확인용 최종 주문서 1장 자동 인쇄';
+
+-- ============================================================
+-- HR: 경고장 레지스트리
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.employee_warning_letter_registry (
+  id BIGSERIAL PRIMARY KEY,
+  store_name TEXT NOT NULL,
+  employee_name TEXT NOT NULL,
+  incident_date DATE,
+  incident_type TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT '',
+  warning_letter_url TEXT,
+  evaluator_name TEXT NOT NULL DEFAULT '',
+  approval_status TEXT NOT NULL DEFAULT 'draft'
+    CHECK (approval_status IN ('draft', 'pending', 'approved', 'rejected')),
+  approved_by TEXT,
+  approved_at TIMESTAMPTZ,
+  rejected_reason TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ewlr_store ON public.employee_warning_letter_registry (store_name);
+CREATE INDEX IF NOT EXISTS idx_ewlr_status ON public.employee_warning_letter_registry (approval_status);
+CREATE INDEX IF NOT EXISTS idx_ewlr_incident_date ON public.employee_warning_letter_registry (incident_date);
+
+COMMENT ON TABLE public.employee_warning_letter_registry IS
+  '경고·사건 독립 등록(평가 JSON 외). 결재: draft→pending→approved/rejected';
+
+-- ============================================================
+-- Logistics: stock_logs.reference_no
+-- ============================================================
+DO $$
+BEGIN
+  IF to_regclass('public.stock_logs') IS NULL THEN
+    RAISE NOTICE 'public.stock_logs table does not exist. Skip reference_no patch.';
+    RETURN;
+  END IF;
+
+  ALTER TABLE public.stock_logs
+    ADD COLUMN IF NOT EXISTS reference_no TEXT NULL;
+
+  COMMENT ON COLUMN public.stock_logs.reference_no IS
+    'Tax invoice / internal reference (e.g. 강제출고 시 일괄 입력)';
+END
+$$;
+
+-- ============================================================
+-- Company Hybrid Documents: one-paste
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.company_hybrid_documents (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  store TEXT NOT NULL,
+  related_type TEXT NOT NULL
+    CHECK (related_type IN ('none', 'employee', 'store', 'interior_project')),
+  related_id TEXT NULL,
+  doc_type TEXT NULL,
+  title TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('drive', 'supabase')),
+  external_url TEXT NULL,
+  public_url TEXT NULL,
+  storage_path TEXT NULL,
+  file_name TEXT NULL,
+  file_size BIGINT NULL,
+  mime TEXT NULL,
+  valid_from DATE NULL,
+  valid_to DATE NULL,
+  note TEXT NULL,
+  created_by_name TEXT NULL,
+  created_by_store TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS company_hybrid_documents_store_created_idx
+  ON public.company_hybrid_documents (store, created_at DESC)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS company_hybrid_documents_related_idx
+  ON public.company_hybrid_documents (store, related_type, related_id)
+  WHERE deleted_at IS NULL;
+
+COMMENT ON TABLE public.company_hybrid_documents IS
+  'Drive 링크·Storage 파일 메타; related_type+related_id로 직원/매장/인테리어 프로젝트 연결.';
+
+CREATE TABLE IF NOT EXISTS public.company_hybrid_document_events (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  document_id BIGINT NOT NULL REFERENCES public.company_hybrid_documents (id) ON DELETE CASCADE,
+  action TEXT NOT NULL CHECK (action IN ('create', 'update', 'delete', 'view')),
+  store TEXT NOT NULL,
+  actor_name TEXT NULL,
+  actor_store TEXT NULL,
+  detail JSONB NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS company_hybrid_document_events_doc_idx
+  ON public.company_hybrid_document_events (document_id, created_at DESC);
+
+ALTER TABLE public.company_hybrid_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_hybrid_document_events ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS public.company_hybrid_document_categories (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  store TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ NULL
+);
+
+CREATE INDEX IF NOT EXISTS company_hybrid_document_categories_store_idx
+  ON public.company_hybrid_document_categories (store, sort_order, id)
+  WHERE deleted_at IS NULL;
+
+COMMENT ON TABLE public.company_hybrid_document_categories IS
+  '회사 하이브리드 문서용 매장별 카테고리(계약, 면허, 세무 등).';
+
+ALTER TABLE public.company_hybrid_documents
+  ADD COLUMN IF NOT EXISTS category_id BIGINT NULL
+  REFERENCES public.company_hybrid_document_categories (id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS company_hybrid_documents_category_idx
+  ON public.company_hybrid_documents (store, category_id)
+  WHERE deleted_at IS NULL;
+
+ALTER TABLE public.company_hybrid_document_categories ENABLE ROW LEVEL SECURITY;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ============================================================
+-- Items: account_subject_id + category rules
+-- ============================================================
+ALTER TABLE IF EXISTS public.items
+  ADD COLUMN IF NOT EXISTS account_subject_id BIGINT NULL;
+
+DO $$
+BEGIN
+  IF to_regclass('public.items') IS NULL THEN
+    RAISE NOTICE 'public.items not found. Skip items account_subject mapping.';
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.account_subjects') IS NULL THEN
+    RAISE NOTICE 'public.account_subjects not found. Skip items account_subject mapping.';
+    RETURN;
+  END IF;
+
+  ALTER TABLE public.items
+    DROP CONSTRAINT IF EXISTS items_account_subject_id_fkey;
+
+  ALTER TABLE public.items
+    ADD CONSTRAINT items_account_subject_id_fkey
+    FOREIGN KEY (account_subject_id)
+    REFERENCES public.account_subjects(id)
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+END
+$$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.items') IS NOT NULL THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_items_account_subject_id ON public.items (account_subject_id)';
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.account_subjects') IS NULL THEN
+    RAISE NOTICE 'public.account_subjects not found. Skip item_account_subject_rules setup.';
+    RETURN;
+  END IF;
+
+  INSERT INTO public.account_subjects
+    (code, name, name_en, type, p_and_l_section, sort_order, statement_type, normal_side, is_system)
+  VALUES
+    ('5111', '식품원재료', 'Food Raw Materials', 'expense', 'cost', 91, 'pl', 'debit', FALSE),
+    ('5112', '포장재', 'Packaging Materials', 'expense', 'cost', 92, 'pl', 'debit', FALSE)
+  ON CONFLICT (code) DO UPDATE
+  SET
+    name = EXCLUDED.name,
+    name_en = EXCLUDED.name_en,
+    type = EXCLUDED.type,
+    p_and_l_section = EXCLUDED.p_and_l_section,
+    statement_type = EXCLUDED.statement_type,
+    normal_side = EXCLUDED.normal_side;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS public.item_account_subject_rules (
+  id BIGSERIAL PRIMARY KEY,
+  rule_type TEXT NOT NULL DEFAULT 'keyword',
+  keyword TEXT NOT NULL DEFAULT '',
+  match_mode TEXT NOT NULL DEFAULT 'contains',
+  account_subject_id BIGINT NOT NULL REFERENCES public.account_subjects(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  priority INT NOT NULL DEFAULT 100,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_item_account_subject_rules_priority
+  ON public.item_account_subject_rules (is_active, priority, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_item_account_subject_rules_rule_keyword_mode
+  ON public.item_account_subject_rules (rule_type, keyword, match_mode);
+
+ALTER TABLE IF EXISTS public.item_account_subject_rules
+  ALTER COLUMN keyword SET DEFAULT '';
+
+UPDATE public.item_account_subject_rules
+SET keyword = ''
+WHERE keyword IS NULL;
+
+ALTER TABLE IF EXISTS public.item_account_subject_rules
+  ALTER COLUMN keyword SET NOT NULL;
+
+WITH packaging_subject AS (
+  SELECT id FROM public.account_subjects WHERE code = '5112' LIMIT 1
+)
+INSERT INTO public.item_account_subject_rules (rule_type, keyword, match_mode, account_subject_id, priority, is_active)
+SELECT 'keyword', k.keyword, 'contains', ps.id, 10, TRUE
+FROM packaging_subject ps
+CROSS JOIN (
+  VALUES
+    ('packing'),
+    ('package'),
+    ('pkg'),
+    ('포장'),
+    ('패킹'),
+    ('포장재'),
+    ('포장자재'),
+    ('포장부자재'),
+    ('부자재')
+) AS k(keyword)
+ON CONFLICT (rule_type, keyword, match_mode) DO UPDATE
+SET
+  account_subject_id = EXCLUDED.account_subject_id,
+  priority = EXCLUDED.priority,
+  is_active = EXCLUDED.is_active,
+  updated_at = NOW();
+
+WITH food_raw_subject AS (
+  SELECT id FROM public.account_subjects WHERE code = '5111' LIMIT 1
+)
+INSERT INTO public.item_account_subject_rules (rule_type, keyword, match_mode, account_subject_id, priority, is_active)
+SELECT 'default', '', 'contains', fr.id, 999, TRUE
+FROM food_raw_subject fr
+ON CONFLICT (rule_type, keyword, match_mode) DO UPDATE
+SET
+  account_subject_id = EXCLUDED.account_subject_id,
+  priority = EXCLUDED.priority,
+  is_active = EXCLUDED.is_active,
+  updated_at = NOW();
+
+DO $$
+BEGIN
+  IF to_regclass('public.items') IS NULL THEN
+    RAISE NOTICE 'public.items not found. Skip item account_subject backfill.';
+    RETURN;
+  END IF;
+
+  WITH packaging_subject AS (
+    SELECT id FROM public.account_subjects WHERE code = '5112' LIMIT 1
   )
-order by rt.id desc
-limit 200;
+  UPDATE public.items i
+  SET account_subject_id = ps.id
+  FROM packaging_subject ps
+  WHERE i.account_subject_id IS NULL
+    AND (
+      COALESCE(i.category, '') ILIKE '%packing%'
+      OR COALESCE(i.category, '') ILIKE '%package%'
+      OR COALESCE(i.category, '') ILIKE '%pkg%'
+      OR COALESCE(i.category, '') ILIKE '%포장%'
+      OR COALESCE(i.category, '') ILIKE '%패킹%'
+      OR COALESCE(i.category, '') ILIKE '%포장재%'
+      OR COALESCE(i.category, '') ILIKE '%포장자재%'
+      OR COALESCE(i.category, '') ILIKE '%포장부자재%'
+      OR COALESCE(i.category, '') ILIKE '%부자재%'
+    );
 
--- [Q3] 주문 출고가 모두 삭제됐는데 Order 미수가 남아있는 건
-select
-  o.id as order_id,
-  o.store_name,
-  sum(rt.amount) as receivable_amount,
-  count(s.id) as active_outbound_log_count
-from public.orders o
-join public.receivable_transactions rt
-  on rt.ref_type = 'Order'
- and rt.ref_id = o.id
-left join public.stock_logs s
-  on s.order_id = o.id
- and s.log_type = 'Outbound'
- and coalesce(s.is_deleted, false) = false
-group by o.id, o.store_name
-having count(s.id) = 0
-order by o.id desc
-limit 200;
+  WITH food_raw_subject AS (
+    SELECT id FROM public.account_subjects WHERE code = '5111' LIMIT 1
+  )
+  UPDATE public.items i
+  SET account_subject_id = fr.id
+  FROM food_raw_subject fr
+  WHERE i.account_subject_id IS NULL;
+END
+$$;
 
--- [Q4] 매장별 미수 잔액 음수 (수금 초과 의심)
-select
-  rt.store_name,
-  sum(rt.amount) as outstanding
-from public.receivable_transactions rt
-group by rt.store_name
-having sum(rt.amount) < 0
-order by outstanding asc;
+-- ============================================================
+-- Accounting identity keys (employee snapshots + safe backfill)
+-- ============================================================
+DO $$
+BEGIN
+  IF to_regclass('public.bank_transactions') IS NOT NULL AND to_regclass('public.employees') IS NOT NULL THEN
+    ALTER TABLE public.bank_transactions
+      ADD COLUMN IF NOT EXISTS user_employee_id BIGINT NULL REFERENCES public.employees(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS user_employee_code TEXT NULL;
 
--- [Q5] 삭제 이벤트 request_key 중복(재시도 충돌/중복처리 위험)
-select
-  lower(btrim(e.request_key)) as normalized_request_key,
-  count(*) as cnt,
-  min(e.created_at) as first_seen_at,
-  max(e.created_at) as last_seen_at
-from public.outbound_delete_events e
-where e.request_key is not null
-  and btrim(e.request_key) <> ''
-group by lower(btrim(e.request_key))
-having count(*) > 1
-order by cnt desc, last_seen_at desc
-limit 200;
+    CREATE INDEX IF NOT EXISTS idx_bank_transactions_user_employee_id
+      ON public.bank_transactions(user_employee_id);
+    CREATE INDEX IF NOT EXISTS idx_bank_transactions_user_employee_code
+      ON public.bank_transactions(lower(trim(user_employee_code)));
+  ELSE
+    RAISE NOTICE 'Skip bank_transactions identity patch (bank_transactions or employees missing).';
+  END IF;
+END
+$$;
 
--- [Q6] 오늘(방콕) 삭제 처리 요약
-with bkk_now as (
-  select timezone('Asia/Bangkok', now()) as now_bkk
-),
-bkk_window as (
-  select
-    date_trunc('day', now_bkk) as start_bkk,
-    date_trunc('day', now_bkk) + interval '1 day' as end_bkk
-  from bkk_now
-)
-select
-  e.mode,
-  count(*) as event_count,
-  coalesce(sum(e.deleted_count), 0) as deleted_row_count
-from public.outbound_delete_events e
-cross join bkk_window w
-where timezone('Asia/Bangkok', e.created_at) >= w.start_bkk
-  and timezone('Asia/Bangkok', e.created_at) < w.end_bkk
-group by e.mode
-order by event_count desc;
+DO $$
+BEGIN
+  IF to_regclass('public.petty_cash_transactions') IS NOT NULL AND to_regclass('public.employees') IS NOT NULL THEN
+    ALTER TABLE public.petty_cash_transactions
+      ADD COLUMN IF NOT EXISTS user_employee_id BIGINT NULL REFERENCES public.employees(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS user_employee_code TEXT NULL;
 
--- [KPI-1] 일자별 출고 처리량(건수/수량) + 강제출고 비율
-with params as (
-  select
-    (timezone('Asia/Bangkok', now())::date - 29)::date as start_date_bkk,
-    timezone('Asia/Bangkok', now())::date as end_date_bkk
-),
-days as (
-  select generate_series(
-    (select start_date_bkk from params),
-    (select end_date_bkk from params),
-    interval '1 day'
-  )::date as biz_date
-),
-base as (
-  select
-    s.log_date::date as biz_date,
-    s.log_type,
-    count(*) as row_count,
-    sum(abs(coalesce(s.qty, 0)))::numeric as qty_sum
-  from public.stock_logs s
-  cross join params p
-  where s.log_date::date between p.start_date_bkk and p.end_date_bkk
-    and s.log_type in ('Outbound', 'ForceOutbound', 'ForcePush')
-    and coalesce(s.is_deleted, false) = false
-  group by s.log_date::date, s.log_type
-),
-pivoted as (
-  select
-    b.biz_date,
-    sum(b.row_count) as outbound_count,
-    sum(b.qty_sum) as outbound_qty,
-    sum(case when b.log_type in ('ForceOutbound', 'ForcePush') then b.row_count else 0 end) as force_outbound_count
-  from base b
-  group by b.biz_date
-)
-select
-  d.biz_date,
-  coalesce(p.outbound_count, 0) as outbound_count,
-  coalesce(p.outbound_qty, 0)::numeric as outbound_qty,
-  coalesce(p.force_outbound_count, 0) as force_outbound_count,
-  case
-    when coalesce(p.outbound_count, 0) = 0 then 0::numeric
-    else round((p.force_outbound_count::numeric / p.outbound_count::numeric) * 100, 2)
-  end as force_outbound_ratio_pct
-from days d
-left join pivoted p on p.biz_date = d.biz_date
-order by d.biz_date asc;
+    CREATE INDEX IF NOT EXISTS idx_petty_cash_transactions_user_employee_id
+      ON public.petty_cash_transactions(user_employee_id);
+    CREATE INDEX IF NOT EXISTS idx_petty_cash_transactions_user_employee_code
+      ON public.petty_cash_transactions(lower(trim(user_employee_code)));
+  ELSE
+    RAISE NOTICE 'Skip petty_cash_transactions identity patch (petty_cash_transactions or employees missing).';
+  END IF;
+END
+$$;
 
--- [KPI-2] 매장별 미수 잔액 TOP (현재 스냅샷)
-select
-  rt.store_name,
-  sum(rt.amount)::numeric as outstanding_amount
-from public.receivable_transactions rt
-group by rt.store_name
-order by outstanding_amount desc
-limit 30;
+DO $$
+BEGIN
+  IF to_regclass('public.pos_till_transactions') IS NOT NULL AND to_regclass('public.employees') IS NOT NULL THEN
+    ALTER TABLE public.pos_till_transactions
+      ADD COLUMN IF NOT EXISTS user_employee_id BIGINT NULL REFERENCES public.employees(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS user_employee_code TEXT NULL;
 
--- [KPI-3] 매장별 출고 삭제율 (최근 30일)
-with params as (
-  select
-    (timezone('Asia/Bangkok', now())::date - 29)::date as start_date_bkk,
-    timezone('Asia/Bangkok', now())::date as end_date_bkk
-),
-agg as (
-  select
-    coalesce(nullif(btrim(s.vendor_target), ''), '미지정') as store_name,
-    count(*) filter (
-      where s.log_type in ('Outbound', 'ForceOutbound', 'ForcePush')
-    ) as total_outbound_rows,
-    count(*) filter (
-      where s.log_type in ('Outbound', 'ForceOutbound', 'ForcePush')
-        and coalesce(s.is_deleted, false) = true
-    ) as deleted_outbound_rows
-  from public.stock_logs s
-  cross join params p
-  where s.log_date::date between p.start_date_bkk and p.end_date_bkk
-  group by coalesce(nullif(btrim(s.vendor_target), ''), '미지정')
-)
-select
-  a.store_name,
-  a.total_outbound_rows,
-  a.deleted_outbound_rows,
-  case
-    when a.total_outbound_rows = 0 then 0::numeric
-    else round((a.deleted_outbound_rows::numeric / a.total_outbound_rows::numeric) * 100, 2)
-  end as delete_ratio_pct
-from agg a
-where a.total_outbound_rows > 0
-order by delete_ratio_pct desc, a.total_outbound_rows desc;
+    CREATE INDEX IF NOT EXISTS idx_pos_till_transactions_user_employee_id
+      ON public.pos_till_transactions(user_employee_id);
+    CREATE INDEX IF NOT EXISTS idx_pos_till_transactions_user_employee_code
+      ON public.pos_till_transactions(lower(trim(user_employee_code)));
+  ELSE
+    RAISE NOTICE 'Skip pos_till_transactions identity patch (pos_till_transactions or employees missing).';
+  END IF;
+END
+$$;
 
--- [KPI-4] 삭제 이벤트 일자별 건수/삭제행수 (최근 30일, 방콕 기준)
-with params as (
-  select
-    (timezone('Asia/Bangkok', now())::date - 29)::date as start_date_bkk,
-    timezone('Asia/Bangkok', now())::date as end_date_bkk
-),
-days as (
-  select generate_series(
-    (select start_date_bkk from params),
-    (select end_date_bkk from params),
-    interval '1 day'
-  )::date as biz_date
-),
-events as (
-  select
-    timezone('Asia/Bangkok', e.created_at)::date as biz_date,
-    count(*) as event_count,
-    coalesce(sum(e.deleted_count), 0) as deleted_row_count
-  from public.outbound_delete_events e
-  cross join params p
-  where timezone('Asia/Bangkok', e.created_at)::date between p.start_date_bkk and p.end_date_bkk
-  group by timezone('Asia/Bangkok', e.created_at)::date
-)
-select
-  d.biz_date,
-  coalesce(e.event_count, 0) as event_count,
-  coalesce(e.deleted_row_count, 0) as deleted_row_count
-from days d
-left join events e on e.biz_date = d.biz_date
-order by d.biz_date asc;
+DO $$
+BEGIN
+  IF to_regclass('public.vat_ledger_entries') IS NOT NULL AND to_regclass('public.employees') IS NOT NULL THEN
+    ALTER TABLE public.vat_ledger_entries
+      ADD COLUMN IF NOT EXISTS created_by_employee_id BIGINT NULL REFERENCES public.employees(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS created_by_employee_code TEXT NULL,
+      ADD COLUMN IF NOT EXISTS submitted_by_employee_id BIGINT NULL REFERENCES public.employees(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS submitted_by_employee_code TEXT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_vat_ledger_entries_created_by_employee_id
+      ON public.vat_ledger_entries(created_by_employee_id);
+    CREATE INDEX IF NOT EXISTS idx_vat_ledger_entries_submitted_by_employee_id
+      ON public.vat_ledger_entries(submitted_by_employee_id);
+  ELSE
+    RAISE NOTICE 'Skip vat_ledger_entries identity patch (vat_ledger_entries or employees missing).';
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.employees') IS NULL THEN
+    RAISE NOTICE 'public.employees not found. Skip identity backfill.';
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.bank_transactions') IS NOT NULL THEN
+    WITH emp_unique AS (
+      SELECT
+        lower(trim(e.store::text)) AS s_key,
+        lower(trim(e.name::text)) AS n_key,
+        MIN(e.id) AS emp_id,
+        MIN(COALESCE(e.employee_code, '')) AS emp_code,
+        COUNT(*) AS cnt
+      FROM public.employees e
+      WHERE COALESCE(trim(e.store::text), '') <> ''
+        AND COALESCE(trim(e.name::text), '') <> ''
+      GROUP BY 1, 2
+    )
+    UPDATE public.bank_transactions bt
+    SET
+      user_employee_id = eu.emp_id,
+      user_employee_code = NULLIF(eu.emp_code, '')
+    FROM emp_unique eu
+    WHERE bt.user_employee_id IS NULL
+      AND COALESCE(trim(bt.user_name::text), '') <> ''
+      AND COALESCE(trim(bt.store::text), '') <> ''
+      AND lower(trim(bt.store::text)) = eu.s_key
+      AND lower(trim(bt.user_name::text)) = eu.n_key
+      AND eu.cnt = 1;
+  END IF;
+
+  IF to_regclass('public.petty_cash_transactions') IS NOT NULL THEN
+    WITH emp_unique AS (
+      SELECT
+        lower(trim(e.store::text)) AS s_key,
+        lower(trim(e.name::text)) AS n_key,
+        MIN(e.id) AS emp_id,
+        MIN(COALESCE(e.employee_code, '')) AS emp_code,
+        COUNT(*) AS cnt
+      FROM public.employees e
+      WHERE COALESCE(trim(e.store::text), '') <> ''
+        AND COALESCE(trim(e.name::text), '') <> ''
+      GROUP BY 1, 2
+    )
+    UPDATE public.petty_cash_transactions pt
+    SET
+      user_employee_id = eu.emp_id,
+      user_employee_code = NULLIF(eu.emp_code, '')
+    FROM emp_unique eu
+    WHERE pt.user_employee_id IS NULL
+      AND COALESCE(trim(pt.user_name::text), '') <> ''
+      AND COALESCE(trim(pt.store::text), '') <> ''
+      AND lower(trim(pt.store::text)) = eu.s_key
+      AND lower(trim(pt.user_name::text)) = eu.n_key
+      AND eu.cnt = 1;
+  END IF;
+
+  IF to_regclass('public.pos_till_transactions') IS NOT NULL THEN
+    WITH emp_unique AS (
+      SELECT
+        lower(trim(e.store::text)) AS s_key,
+        lower(trim(e.name::text)) AS n_key,
+        MIN(e.id) AS emp_id,
+        MIN(COALESCE(e.employee_code, '')) AS emp_code,
+        COUNT(*) AS cnt
+      FROM public.employees e
+      WHERE COALESCE(trim(e.store::text), '') <> ''
+        AND COALESCE(trim(e.name::text), '') <> ''
+      GROUP BY 1, 2
+    )
+    UPDATE public.pos_till_transactions tt
+    SET
+      user_employee_id = eu.emp_id,
+      user_employee_code = NULLIF(eu.emp_code, '')
+    FROM emp_unique eu
+    WHERE tt.user_employee_id IS NULL
+      AND COALESCE(trim(tt.user_name::text), '') <> ''
+      AND COALESCE(trim(tt.store_code::text), '') <> ''
+      AND lower(trim(tt.store_code::text)) = eu.s_key
+      AND lower(trim(tt.user_name::text)) = eu.n_key
+      AND eu.cnt = 1;
+  END IF;
+END
+$$;

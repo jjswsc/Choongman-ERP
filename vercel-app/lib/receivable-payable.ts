@@ -359,3 +359,60 @@ export async function upsertReceivableFromBankReceive(params: {
     await supabaseInsert('receivable_transactions', row)
   }
 }
+
+/**
+ * 통장 입금 연동 미수금(ref Receive) 정리.
+ * - 1차: bank_transaction_id 일치 행 삭제
+ * - 2차: 과거 레거시 데이터(bank_transaction_id null) 중 자동 생성 패턴 행 삭제
+ */
+export async function deleteReceivableFromBankReceive(params: {
+  bankTransactionId: number
+  storeName?: string | null
+  amountAbs?: number
+  transDate?: string
+  memo?: string
+}): Promise<void> {
+  const bankTransactionId = Number(params.bankTransactionId || 0)
+  if (!bankTransactionId) return
+
+  await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`)
+
+  const transDate = String(params.transDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) return
+
+  const amountAbs = Math.abs(Number(params.amountAbs) || 0)
+  const legacyFilterParts = [
+    'bank_transaction_id=is.null',
+    'ref_type=eq.Receive',
+    'ref_id=is.null',
+    `trans_date=eq.${transDate}`,
+  ]
+  if (amountAbs > 0) {
+    legacyFilterParts.push(`amount=eq.${-amountAbs}`)
+  }
+  const storeName = String(params.storeName || '').trim()
+  if (storeName) {
+    legacyFilterParts.push(`store_name=eq.${encodeURIComponent(storeName)}`)
+  }
+
+  const legacyRows = (await supabaseSelectFilter('receivable_transactions', legacyFilterParts.join('&'), {
+    select: 'id,memo',
+    order: 'id.asc',
+    limit: 100,
+  })) as { id?: number; memo?: string | null }[] | null
+
+  const expectedMemo = String(params.memo || '').trim()
+  const legacyIds = (legacyRows || [])
+    .filter((row) => {
+      const memo = String(row.memo || '').trim()
+      if (memo === '통장 수령') return true
+      if (expectedMemo && memo === expectedMemo) return true
+      return memo.startsWith('통장 수령:')
+    })
+    .map((row) => Number(row.id || 0))
+    .filter((id) => id > 0)
+
+  for (const id of legacyIds) {
+    await supabaseDeleteByFilter('receivable_transactions', `id=eq.${id}`)
+  }
+}

@@ -6,6 +6,18 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
+function isMissingIdentityColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('user_employee_id') || msg.includes('user_employee_code')
+}
+
+function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.user_employee_id
+  delete next.user_employee_code
+  return next
+}
+
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -31,6 +43,11 @@ export async function POST(request: NextRequest) {
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0) || null
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userEmployeeId =
+      auth.employeeId != null && Number.isFinite(Number(auth.employeeId))
+        ? Math.floor(Number(auth.employeeId))
+        : null
+    const userEmployeeCode = String(auth.employeeCode || '').trim() || null
     const userStore = String(auth.store || '').trim()
     const userRole = String(auth.role || '').toLowerCase()
     const allowedStores =
@@ -69,6 +86,8 @@ export async function POST(request: NextRequest) {
       amount: amt,
       memo,
       user_name: userName,
+      user_employee_id: userEmployeeId,
+      user_employee_code: userEmployeeCode,
     }
     if (receiptUrl) row.receipt_url = receiptUrl
     if (accountSubjectId != null) {
@@ -81,7 +100,13 @@ export async function POST(request: NextRequest) {
         row.account_subject_id = asid
       }
     }
-    const inserted = (await supabaseInsert('petty_cash_transactions', row)) as { id?: number }[]
+    let inserted: { id?: number }[] = []
+    try {
+      inserted = (await supabaseInsert('petty_cash_transactions', row)) as { id?: number }[]
+    } catch (e) {
+      if (!isMissingIdentityColumnError(e)) throw e
+      inserted = (await supabaseInsert('petty_cash_transactions', stripIdentityColumns(row))) as { id?: number }[]
+    }
     const pettyCashId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
 
     if (transType === 'expense' && category === 'purchase_payment' && vendorCode) {

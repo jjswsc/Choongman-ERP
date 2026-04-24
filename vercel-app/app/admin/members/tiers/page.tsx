@@ -6,10 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getMemberTiers, recalculateMemberTier, saveMemberTier } from "@/lib/api-client"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 type TierRow = { code: string; name: string; min_amount: number; point_rate: number }
 
 export default function MemberTiersPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [rows, setRows] = React.useState<TierRow[]>([])
   const [code, setCode] = React.useState("BRONZE")
   const [name, setName] = React.useState("Bronze")
@@ -29,12 +33,12 @@ export default function MemberTiersPage() {
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <Card className="mb-4">
-          <CardHeader><CardTitle>등급 규칙 관리</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberTierRuleTitle")}</CardTitle></CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-5">
             <Input placeholder="CODE" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
-            <Input placeholder="이름" value={name} onChange={(e) => setName(e.target.value)} />
-            <Input placeholder="최소 누적금액" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-            <Input placeholder="적립율(0.01=1%)" value={pointRate} onChange={(e) => setPointRate(e.target.value)} />
+            <Input placeholder={t("name")} value={name} onChange={(e) => setName(e.target.value)} />
+            <Input placeholder={t("memberTierMinAmount")} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+            <Input placeholder={t("memberTierPointRatePh")} value={pointRate} onChange={(e) => setPointRate(e.target.value)} />
             <Button
               onClick={async () => {
                 const res = await saveMemberTier({
@@ -43,35 +47,35 @@ export default function MemberTiersPage() {
                   minAmount: Number(minAmount || 0),
                   pointRate: Number(pointRate || 0),
                 })
-                if (!res.success) await appAlert(res.message || "저장 실패")
+                if (!res.success) await appAlert(res.message || t("msg_save_fail"))
                 await load()
               }}
             >
-              저장
+              {t("commonSave")}
             </Button>
           </CardContent>
         </Card>
         <Card className="mb-4">
-          <CardHeader><CardTitle>등급 재계산</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberTierRecalculateTitle")}</CardTitle></CardHeader>
           <CardContent>
             <Button
               variant="outline"
               onClick={async () => {
                 const res = await recalculateMemberTier()
-                if (!res.success) await appAlert(res.message || "재계산 실패")
-                else await appAlert(`재계산 완료: ${res.updated ?? 0}명`)
+                if (!res.success) await appAlert(res.message || t("memberTierRecalculateFail"))
+                else await appAlert(`${t("memberTierRecalculateDone")}: ${res.updated ?? 0}${t("memberCountUnit")}`)
               }}
             >
-              전체 회원 등급 재계산
+              {t("memberTierRecalculateAll")}
             </Button>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>등급 목록</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberTierListTitle")}</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-auto rounded-md border">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40"><tr><th className="p-2 text-left">코드</th><th className="p-2 text-left">이름</th><th className="p-2 text-left">최소 누적금액</th><th className="p-2 text-left">적립율</th></tr></thead>
+                <thead className="bg-muted/40"><tr><th className="p-2 text-left">{t("code")}</th><th className="p-2 text-left">{t("name")}</th><th className="p-2 text-left">{t("memberTierMinAmount")}</th><th className="p-2 text-left">{t("memberTierPointRate")}</th></tr></thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.code} className="border-t cursor-pointer hover:bg-muted/20" onClick={() => {

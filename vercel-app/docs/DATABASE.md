@@ -2,6 +2,8 @@
 
 Supabase (PostgreSQL) 사용. 다른 개발자가 수정·확장 시 참고용 문서입니다.
 
+SQL 파일 빠른 탐색: [SQL-INDEX.md](./SQL-INDEX.md)
+
 ## 1. 스키마 적용 순서
 
 1. **supabase_schema.sql** - 기본 테이블 생성

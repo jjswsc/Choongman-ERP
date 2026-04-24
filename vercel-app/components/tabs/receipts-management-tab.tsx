@@ -28,21 +28,6 @@ import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 
-const orderTypeLabels: Record<string, string> = {
-  dine_in: '매장',
-  takeout: '포장',
-  delivery: '배달',
-}
-
-const statusLabels: Record<string, string> = {
-  pending: '대기',
-  paid: '결제완료',
-  cooking: '조리중',
-  ready: '준비완료',
-  completed: '완료',
-  cancelled: '취소',
-}
-
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return '-'
   const dt = new Date(value)
@@ -73,6 +58,25 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const { stores } = useStoreList()
   const online = useOnlineStatus()
   const storeCode = auth?.store || stores[0] || ''
+  const orderTypeLabels = React.useMemo<Record<string, string>>(
+    () => ({
+      dine_in: t('posOrderTypeDineIn') || '매장',
+      takeout: t('posOrderTypeTakeout') || '포장',
+      delivery: t('posOrderTypeDelivery') || '배달',
+    }),
+    [t]
+  )
+  const statusLabels = React.useMemo<Record<string, string>>(
+    () => ({
+      pending: t('posPending') || '대기',
+      paid: t('posStatusPaid') || '결제완료',
+      cooking: t('posStatusCooking') || '조리중',
+      ready: t('posStatusReady') || '준비완료',
+      completed: t('done') || '완료',
+      cancelled: t('cancel') || '취소',
+    }),
+    [t]
+  )
 
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
   const [startStr, setStartStr] = React.useState(today)
@@ -369,7 +373,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   <th className="px-4 py-3 text-left font-semibold">{t('posTable') || '테이블'}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('posInputTotal') || '합계'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStatus') || '상태'}</th>
-                  <th className="px-4 py-3 text-left font-semibold">주문일시</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t('posOrderDateTime')}</th>
                   <th className="px-4 py-3 w-10" />
                 </tr>
               </thead>

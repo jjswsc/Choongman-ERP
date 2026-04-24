@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
+  deleteReceivableFromBankReceive,
   upsertPayableFromBankPurchasePayment,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
@@ -141,7 +142,13 @@ export async function POST(request: NextRequest) {
 
       if (prevCategory === 'receivable_receive' && (finalCategory !== 'receivable_receive' || !finalStoreName)) {
         // 매출 수령 → 다른 용도로 변경, 또는 매장 미선택: 기존 미수금 수령 건 삭제
-        await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTxId}`)
+        await deleteReceivableFromBankReceive({
+          bankTransactionId: bankTxId,
+          storeName: String(existing[0].store_name || '').trim() || finalStoreName || null,
+          amountAbs: amount,
+          transDate,
+          memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
+        })
       }
       if (finalCategory === 'receivable_receive' && finalStoreName) {
         await upsertReceivableFromBankReceive({

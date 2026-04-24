@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateEtaxXml, type EtaxInvoiceInput } from '@/lib/etax-xml'
 import { signEtaxXml } from '@/lib/etax-sign'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { fetchSalesTypesVendorsForInvoice } from '@/lib/invoice-vendor-clients'
 
 interface OutboundGroup {
   date: string
@@ -54,16 +55,8 @@ async function getInvoiceData(): Promise<{
       }
 
   const clients: Record<string, InvoiceDataClient> = {}
-  let clientRows = (await supabaseSelectFilter('vendors', 'type=eq.매출처', { limit: 500 })) as {
-    name?: string
-    addr?: string
-    tax_id?: string
-    phone?: string
-    gps_name?: string
-  }[] | null
-  if (!clientRows?.length) clientRows = (await supabaseSelectFilter('vendors', 'type=eq.sales', { limit: 500 })) as typeof clientRows
-  if (!clientRows?.length) clientRows = (await supabaseSelectFilter('vendors', 'type=eq.both', { limit: 500 })) as typeof clientRows
-  for (const r of clientRows || []) {
+  const clientRows = await fetchSalesTypesVendorsForInvoice()
+  for (const r of clientRows) {
     const companyName = String(r.name || '').trim()
     const gpsName = String((r as { gps_name?: string }).gps_name || '').trim()
     const salesOutlet = String((r as { sales_outlet?: string }).sales_outlet || '').trim()

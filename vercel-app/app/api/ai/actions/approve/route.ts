@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAiApprover } from "@/lib/ai/auth"
 import { aiRateLimit } from "@/lib/ai/rate-limit"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from "@/lib/supabase-server"
-import { executeAiAction } from "@/lib/ai/action-catalog"
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter, supabaseUpdateByFilterReturning } from "@/lib/supabase-server"
+import { executeAiAction, sanitizeAiActionPayloadScope } from "@/lib/ai/action-catalog"
 import type { AiActionType } from "@/lib/ai/types"
 import { logAiUsage } from "@/lib/ai/audit"
+import { isAiRouteError } from "@/lib/ai/errors"
 
 function toResponseRow(row: Record<string, unknown>) {
   return {
@@ -33,20 +34,28 @@ export async function POST(req: NextRequest) {
 
   const rl = aiRateLimit(`ai:approve:${access.scoped.name}:${access.scoped.store}`, 120, 60 * 60 * 1000)
   if (!rl.ok) {
-    return NextResponse.json({ error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs }, { status: 429, headers })
+    return NextResponse.json(
+      { error: "Rate limit exceeded", code: "AI_RATE_LIMITED", retryAfterMs: rl.retryAfterMs },
+      { status: 429, headers }
+    )
   }
 
   let body: Record<string, unknown> = {}
   try {
     body = (await req.json()) as Record<string, unknown>
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers })
+    return NextResponse.json({ error: "Invalid JSON", code: "AI_INVALID_JSON" }, { status: 400, headers })
   }
 
   const requestId = Number(body.requestId || 0)
   const approve = Boolean(body.approve)
   const comment = body.comment == null ? "" : String(body.comment).trim().slice(0, 2000)
-  if (!requestId) return NextResponse.json({ error: "requestId is required" }, { status: 400, headers })
+  if (!requestId) {
+    return NextResponse.json(
+      { error: "requestId is required", code: "AI_VALIDATION_ERROR" },
+      { status: 400, headers }
+    )
+  }
 
   const now = getBangkokDateTimeString()
   const found = (await supabaseSelectFilter(
@@ -54,28 +63,42 @@ export async function POST(req: NextRequest) {
     `id=eq.${requestId}`,
     {
       limit: 1,
-      select: "id,status,action_type,reason,payload_json,preview,created_at,requested_by,requested_store,approved_by,approved_at,executed_at,error_message",
+      select: "id,status,action_type,reason,payload_json,preview,created_at,requested_by,requested_role,requested_store,approved_by,approved_at,executed_at,error_message",
     }
   )) as Record<string, unknown>[] | null
   const row = found?.[0]
-  if (!row) return NextResponse.json({ error: "request not found" }, { status: 404, headers })
+  if (!row) {
+    return NextResponse.json(
+      { error: "request not found", code: "AI_REQUEST_NOT_FOUND" },
+      { status: 404, headers }
+    )
+  }
 
   const currentStatus = String(row.status || "")
   if (currentStatus !== "pending_approval") {
-    return NextResponse.json({ error: "request is not pending approval" }, { status: 409, headers })
+    return NextResponse.json(
+      { error: "request is not pending approval", code: "AI_APPROVAL_CONFLICT" },
+      { status: 409, headers }
+    )
   }
 
   if (!approve) {
-    await supabaseUpdateByFilter(
+    const rejected = (await supabaseUpdateByFilterReturning(
       "ai_action_requests",
-      `id=eq.${requestId}`,
+      `id=eq.${requestId}&status=eq.pending_approval`,
       {
         status: "rejected",
         approved_by: access.scoped.name,
         approved_at: now,
         updated_at: now,
       }
-    )
+    )) as Record<string, unknown>[] | null
+    if (!rejected?.length) {
+      return NextResponse.json(
+        { error: "request is not pending approval", code: "AI_APPROVAL_CONFLICT" },
+        { status: 409, headers }
+      )
+    }
     await supabaseInsert("ai_action_events", {
       request_id: requestId,
       event_type: "rejected",
@@ -95,12 +118,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await supabaseUpdateByFilter("ai_action_requests", `id=eq.${requestId}`, {
+    const approved = (await supabaseUpdateByFilterReturning("ai_action_requests", `id=eq.${requestId}&status=eq.pending_approval`, {
       status: "approved",
       approved_by: access.scoped.name,
       approved_at: now,
       updated_at: now,
-    })
+    })) as Record<string, unknown>[] | null
+    if (!approved?.length) {
+      return NextResponse.json(
+        { error: "request is not pending approval", code: "AI_APPROVAL_CONFLICT" },
+        { status: 409, headers }
+      )
+    }
     await supabaseInsert("ai_action_events", {
       request_id: requestId,
       event_type: "approved",
@@ -111,7 +140,14 @@ export async function POST(req: NextRequest) {
     })
 
     const actionType = String(row.action_type || "").trim() as AiActionType
-    const payload = (row.payload_json as Record<string, unknown>) || {}
+    const payload = sanitizeAiActionPayloadScope({
+      actionType,
+      payload: (row.payload_json as Record<string, unknown>) || {},
+      scoped: {
+        role: String(row.requested_role || ""),
+        store: String(row.requested_store || ""),
+      },
+    })
     const exec = await executeAiAction({
       requestId,
       actionType,
@@ -153,6 +189,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, request: toResponseRow(updated) }, { headers })
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
+    const code = isAiRouteError(e) ? e.code : "AI_VALIDATION_ERROR"
+    const status = isAiRouteError(e) ? e.status : 500
     await supabaseUpdateByFilter("ai_action_requests", `id=eq.${requestId}`, {
       status: "failed",
       approved_by: access.scoped.name,
@@ -174,7 +212,7 @@ export async function POST(req: NextRequest) {
       success: false,
       note: errMsg,
     })
-    return NextResponse.json({ error: errMsg }, { status: 500, headers })
+    return NextResponse.json({ error: errMsg, code }, { status, headers })
   }
 }
 

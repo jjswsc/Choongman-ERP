@@ -11,6 +11,39 @@ import { requireAuth } from '@/lib/verify-auth'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 
+function isMissingIdentityColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return (
+    msg.includes('user_employee_id') ||
+    msg.includes('user_employee_code')
+  )
+}
+
+function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.user_employee_id
+  delete next.user_employee_code
+  return next
+}
+
+async function insertBankTransactionWithIdentityFallback(row: Record<string, unknown>) {
+  try {
+    return (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+  } catch (e) {
+    if (!isMissingIdentityColumnError(e)) throw e
+    return (await supabaseInsert('bank_transactions', stripIdentityColumns(row))) as { id?: number }[]
+  }
+}
+
+async function insertPettyTransactionWithIdentityFallback(row: Record<string, unknown>) {
+  try {
+    return (await supabaseInsert('petty_cash_transactions', row)) as { id?: number }[]
+  } catch (e) {
+    if (!isMissingIdentityColumnError(e)) throw e
+    return (await supabaseInsert('petty_cash_transactions', stripIdentityColumns(row))) as { id?: number }[]
+  }
+}
+
 /** 출금 관리 5가지 유형 실행: 매입대금, 경비, 자산취득, 자금이동, 자본거래 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -27,6 +60,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userEmployeeId =
+      auth.employeeId != null && Number.isFinite(Number(auth.employeeId))
+        ? Math.floor(Number(auth.employeeId))
+        : null
+    const userEmployeeCode = String(auth.employeeCode || '').trim() || null
     const _userStore = String(auth.store || '').trim()
 
     const paymentMethod = String(body.paymentMethod || body.payment_method || 'bank').toLowerCase()
@@ -127,6 +165,8 @@ export async function POST(request: NextRequest) {
         note: `withdrawal_category:${category};${INTERNAL_BANK_SOURCE_MARKER}`,
         store: store || null,
         user_name: userName || null,
+        user_employee_id: userEmployeeId,
+        user_employee_code: userEmployeeCode,
         category: bankCategory,
         expense_date: transDate,
       }
@@ -142,11 +182,11 @@ export async function POST(request: NextRequest) {
         row.transfer_to_account_id = Number(transferToAccountId)
       }
 
-      const inserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+      const inserted = await insertBankTransactionWithIdentityFallback(row)
       bankTransactionId = Number(inserted?.[0]?.id || 0) || null
 
       if (category === 'transfer' && transferToAccountId) {
-        await supabaseInsert('bank_transactions', {
+        await insertBankTransactionWithIdentityFallback({
           account_id: Number(transferToAccountId),
           trans_date: transDate,
           trans_type: 'deposit',
@@ -155,17 +195,21 @@ export async function POST(request: NextRequest) {
           note: `withdrawal_transfer_from:${accountId};${INTERNAL_BANK_SOURCE_MARKER}`,
           store: store || null,
           user_name: userName || null,
+          user_employee_id: userEmployeeId,
+          user_employee_code: userEmployeeCode,
           category: 'correction',
         })
       }
       if (category === 'transfer_to_petty' && transferToPettyStore) {
-        await supabaseInsert('petty_cash_transactions', {
+        await insertPettyTransactionWithIdentityFallback({
           store: transferToPettyStore,
           trans_date: transDate,
           trans_type: 'replenish',
           amount: amount,
           memo: memo ? `통장이체: ${memo.slice(0, 200)}` : '통장이체',
           user_name: userName || null,
+          user_employee_id: userEmployeeId,
+          user_employee_code: userEmployeeCode,
         })
       }
       if (category === 'transfer_to_card' && transferToCardAccountId && bankTransactionId) {
@@ -198,14 +242,16 @@ export async function POST(request: NextRequest) {
         amount: -amount,
         memo: memo || null,
         user_name: userName || null,
+        user_employee_id: userEmployeeId,
+        user_employee_code: userEmployeeCode,
       }
       if (accountSubjectId != null) row.account_subject_id = Number(accountSubjectId)
 
-      const inserted = (await supabaseInsert('petty_cash_transactions', row)) as { id?: number }[]
+      const inserted = await insertPettyTransactionWithIdentityFallback(row)
       pettyCashTransactionId = Number(inserted?.[0]?.id || 0) || null
 
       if (category === 'transfer_from_petty' && transferToAccountId) {
-        await supabaseInsert('bank_transactions', {
+        await insertBankTransactionWithIdentityFallback({
           account_id: Number(transferToAccountId),
           trans_date: transDate,
           trans_type: 'deposit',
@@ -214,6 +260,8 @@ export async function POST(request: NextRequest) {
           note: `withdrawal_transfer_from_petty:${pettyStore};${INTERNAL_BANK_SOURCE_MARKER}`,
           store: store || null,
           user_name: userName || null,
+          user_employee_id: userEmployeeId,
+          user_employee_code: userEmployeeCode,
           category: 'correction',
         })
       }

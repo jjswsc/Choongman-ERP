@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
-  canAccessStoreForCompanyHybridDocs,
-  canListAllStoresCompanyHybridDocs,
+  canViewCompanyHybridDocument,
 } from '@/lib/company-hybrid-documents-access'
+import { companyHybridDocVisibilityFromDocType } from '@/lib/company-hybrid-documents'
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
 
 export const dynamic = 'force-dynamic'
@@ -27,16 +27,16 @@ export async function POST(request: NextRequest) {
     }
     const existing = (await supabaseSelectFilter('company_hybrid_documents', `id=eq.${id}`, {
       limit: 1,
-    })) as { id?: number; store?: string; deleted_at?: string | null; title?: string }[] | null
+    })) as
+      | { id?: number; store?: string; deleted_at?: string | null; title?: string; doc_type?: string | null }[]
+      | null
     const row = existing?.[0]
     if (!row || row.deleted_at) {
       return NextResponse.json({ success: false, message: '문서를 찾을 수 없습니다.' }, { status: 404, headers })
     }
     const st = String(row.store || '')
-    if (
-      !canAccessStoreForCompanyHybridDocs(auth, st) &&
-      !canListAllStoresCompanyHybridDocs(auth)
-    ) {
+    const visibility = companyHybridDocVisibilityFromDocType(row.doc_type)
+    if (!canViewCompanyHybridDocument(auth, st, visibility)) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
     }
     await logCompanyHybridDocumentEvent(id, 'view', st, { name: auth.name, store: auth.store }, {

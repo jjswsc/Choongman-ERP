@@ -16,6 +16,8 @@ import {
   updateMember,
   type Member,
 } from "@/lib/api-client"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 type MemberForm = {
   id?: number
@@ -80,34 +82,9 @@ function lineSyncErrorHint(errors?: string[]): string {
   return ` (${preview}${more})`
 }
 
-function reasonLabel(reason?: string): string {
-  const key = String(reason || "").trim()
-  if (!key) return "미확인"
-  if (key.startsWith("line_webhook:")) {
-    const event = key.replace("line_webhook:", "")
-    if (event === "follow") return "LINE 웹훅(follow)"
-    if (event === "message") return "LINE 웹훅(message)"
-    if (event === "postback") return "LINE 웹훅(postback)"
-    if (event === "unfollow") return "LINE 웹훅(unfollow)"
-    return `LINE 웹훅(${event})`
-  }
-  if (key === "crm_import") return "CRM 파일 반영"
-  if (key === "line_sync_or_register") return "LINE 동기화/등록"
-  if (key === "erp_manual") return "ERP 수동수정"
-  if (key === "app_master") return "앱·웹 마스터 등록"
-  return key
-}
-
-function sourceLabel(source?: string): string {
-  const s = String(source || "").trim()
-  if (s === "app") return "앱·웹"
-  if (s === "line") return "LINE"
-  if (s === "line_import") return "CRM파일"
-  if (s === "manual") return "수동"
-  return s || "—"
-}
-
 export default function MembersPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [members, setMembers] = React.useState<Member[]>([])
   const [loading, setLoading] = React.useState(true)
   const [searching, setSearching] = React.useState(false)
@@ -126,6 +103,31 @@ export default function MembersPage() {
   }>({ loaded: false, channelAccessTokenConfigured: null, channelSecretConfigured: null })
   const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
   const importFileRef = React.useRef<HTMLInputElement | null>(null)
+  const reasonLabelLocalized = React.useCallback((reason?: string) => {
+    const key = String(reason || "").trim()
+    if (!key) return t("memberUpdateReasonUnknown")
+    if (key.startsWith("line_webhook:")) {
+      const event = key.replace("line_webhook:", "")
+      if (event === "follow") return t("memberUpdateReasonWebhookFollow")
+      if (event === "message") return t("memberUpdateReasonWebhookMessage")
+      if (event === "postback") return t("memberUpdateReasonWebhookPostback")
+      if (event === "unfollow") return t("memberUpdateReasonWebhookUnfollow")
+      return `${t("memberUpdateReasonWebhook")}(${event})`
+    }
+    if (key === "crm_import") return t("memberUpdateReasonCrmImport")
+    if (key === "line_sync_or_register") return t("memberUpdateReasonLineSync")
+    if (key === "erp_manual") return t("memberUpdateReasonErpManual")
+    if (key === "app_master") return t("memberUpdateReasonAppMaster")
+    return key
+  }, [t])
+  const sourceLabelLocalized = React.useCallback((source?: string) => {
+    const s = String(source || "").trim()
+    if (s === "app") return t("memberSourceApp")
+    if (s === "line") return "LINE"
+    if (s === "line_import") return t("memberSourceCrm")
+    if (s === "manual") return t("memberSourceManual")
+    return s || "—"
+  }, [t])
 
   const load = React.useCallback(async (q?: string, isSearch = false) => {
     if (isSearch) setSearching(true)
@@ -138,7 +140,7 @@ export default function MembersPage() {
     } catch (e) {
       console.error("getMembers:", e)
       setMembers([])
-      setErrorMessage("회원 목록을 불러오지 못했습니다. 다시 시도해 주세요.")
+      setErrorMessage(t("memberLoadFailed"))
     } finally {
       setLoading(false)
       if (isSearch) setSearching(false)
@@ -184,7 +186,7 @@ export default function MembersPage() {
       if (!lineMessagingStatus.loaded) return
       if (lineMessagingStatus.channelAccessTokenConfigured === false) {
         setSyncMessage(
-          "LINE 동기화를 건너뜀: 서버에 LINE_CHANNEL_ACCESS_TOKEN이 설정되어 있지 않습니다. Vercel 환경 변수에 Messaging API 채널의 토큰을 넣은 뒤 재배포하세요."
+          t("memberLineSyncSkippedNoToken")
         )
         return
       }
@@ -207,7 +209,7 @@ export default function MembersPage() {
             // ignore storage failure
           }
           setSyncMessage(
-            `자동 동기화 완료: 조회 ${Number(res.scanned || 0).toLocaleString()}명, 반영 ${Number(res.synced || 0).toLocaleString()}명, 실패 ${Number(res.failed || 0).toLocaleString()}명${lineSyncErrorHint(res.errors)}`
+            `${t("memberAutoSyncDone")}: ${t("memberSyncScanned")} ${Number(res.scanned || 0).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncApplied")} ${Number(res.synced || 0).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncFailed")} ${Number(res.failed || 0).toLocaleString()}${t("memberCountUnit")}${lineSyncErrorHint(res.errors)}`
           )
           await load(query)
         }
@@ -221,7 +223,7 @@ export default function MembersPage() {
   const onSave = async () => {
     const name = form.name.trim()
     if (!name) {
-      await appAlert("회원 이름은 필수입니다.")
+      await appAlert(t("memberNameRequired"))
       return
     }
     setSaving(true)
@@ -234,7 +236,7 @@ export default function MembersPage() {
           source: "app",
         })
         if (!created.success || !created.member) {
-          await appAlert(created.message || "회원 등록에 실패했습니다.")
+          await appAlert(created.message || t("memberCreateFail"))
           return
         }
         const newId = created.member.id
@@ -253,7 +255,7 @@ export default function MembersPage() {
           status: form.status,
         })
         if (!res.success || !res.member) {
-          await appAlert(res.message || "등록 후 상세 정보 저장에 실패했습니다.")
+          await appAlert(res.message || t("memberDetailSaveFail"))
           return
         }
         setForm({ ...emptyForm })
@@ -275,7 +277,7 @@ export default function MembersPage() {
         status: form.status,
       })
       if (!res.success || !res.member) {
-        await appAlert(res.message || "회원 수정에 실패했습니다.")
+        await appAlert(res.message || t("memberUpdateFail"))
         return
       }
       setForm({ ...emptyForm })
@@ -293,9 +295,9 @@ export default function MembersPage() {
             <Users className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">회원 관리</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("memberManagementTitle")}</h1>
             <p className="text-xs text-muted-foreground">
-              회원 마스터는 ERP·자사 앱 기준으로 관리합니다. LINE OA는 선택 연동·동기화 채널입니다.
+              {t("memberManagementSub")}
             </p>
           </div>
         </div>
@@ -305,18 +307,13 @@ export default function MembersPage() {
             className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
             role="status"
           >
-            <p className="font-medium text-amber-900 dark:text-amber-100">LINE Messaging API 미설정</p>
+            <p className="font-medium text-amber-900 dark:text-amber-100">{t("memberLineApiMissingTitle")}</p>
             <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-              Vercel(또는 서버) 환경 변수에 <code className="rounded bg-muted px-1">LINE_CHANNEL_ACCESS_TOKEN</code>{" "}
-              (오피셜의 Messaging API 채널에서 발급)과 웹훅용{" "}
-              <code className="rounded bg-muted px-1">LINE_CHANNEL_SECRET</code>를 설정한 뒤 재배포해야 친구 목록·표시명
-              동기화가 동작합니다. LINE Login 채널 토큰과는 다릅니다. 회원 마스터는 앱·ERP에 두고, LINE은 보조 동기화로
-              사용합니다. 포인트·등급은 ERP에서 관리합니다.
+              {t("memberLineApiMissingBody")}
             </p>
             {lineMessagingStatus.channelSecretConfigured === false && (
               <p className="mt-2 text-xs text-muted-foreground">
-                현재 <code className="rounded bg-muted px-1">LINE_CHANNEL_SECRET</code>도 비어 있어 웹훅 검증이 실패할 수
-                있습니다.
+                {t("memberLineSecretMissing")}
               </p>
             )}
           </div>
@@ -326,41 +323,38 @@ export default function MembersPage() {
           <div className="lg:sticky lg:top-0 lg:self-start">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">회원 등록·수정</CardTitle>
+              <CardTitle className="text-base">{t("memberFormTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                신규는 아래에서 저장 시 <span className="font-medium">앱·웹 마스터(source=app)</span>로 등록됩니다. LINE
-                친구·웹훅으로 생긴 회원은 목록에서 선택해 수정하거나, LINE 동기화/CRM으로 보완할 수 있습니다.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("memberFormDesc")}</p>
               <div className="space-y-1.5">
-                <Label>이름 *</Label>
+                <Label>{t("name")} *</Label>
                 <Input value={form.name ?? ""} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>전체 이름(Full name)</Label>
+                <Label>{t("memberFullName")}</Label>
                 <Input value={form.fullName ?? ""} onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>LINE 표시명</Label>
+                <Label>{t("memberLineDisplayName")}</Label>
                 <Input value={form.lineDisplayName ?? ""} onChange={(e) => setForm((p) => ({ ...p, lineDisplayName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>전화번호</Label>
+                <Label>{t("memberPhone")}</Label>
                 <Input value={form.phone ?? ""} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>이메일</Label>
+                <Label>{t("email")}</Label>
                 <Input value={form.email ?? ""} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
-                  <Label>생년월일</Label>
+                  <Label>{t("birthDate")}</Label>
                   <Input type="date" value={form.birthDate ?? ""} onChange={(e) => setForm((p) => ({ ...p, birthDate: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>성별</Label>
-                  <Input placeholder="M/F/남/여" value={form.gender ?? ""} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} />
+                  <Label>{t("gender")}</Label>
+                  <Input placeholder={t("memberGenderPh")} value={form.gender ?? ""} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -370,7 +364,7 @@ export default function MembersPage() {
                     checked={form.consentMarketing}
                     onChange={(e) => setForm((p) => ({ ...p, consentMarketing: e.target.checked }))}
                   />
-                  마케팅 동의
+                  {t("memberConsentMarketing")}
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -378,11 +372,11 @@ export default function MembersPage() {
                     checked={form.consentPrivacy}
                     onChange={(e) => setForm((p) => ({ ...p, consentPrivacy: e.target.checked }))}
                   />
-                  개인정보 동의
+                  {t("memberConsentPrivacy")}
                 </label>
               </div>
               <div className="space-y-1.5">
-                <Label>동의 일시</Label>
+                <Label>{t("memberConsentAt")}</Label>
                 <Input
                   type="datetime-local"
                   value={form.consentAt ?? ""}
@@ -390,7 +384,7 @@ export default function MembersPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>상태(active/inactive)</Label>
+                <Label>{t("memberStatus")}</Label>
                 <Input
                   value={form.status ?? "active"}
                   onChange={(e) => setForm((p) => ({ ...p, status: e.target.value === "inactive" ? "inactive" : "active" }))}
@@ -398,10 +392,10 @@ export default function MembersPage() {
               </div>
               <div className="flex gap-2 pt-1">
                 <Button onClick={onSave} disabled={saving}>
-                  {saving ? "저장 중..." : form.id ? "저장" : "신규 등록 (마스터)"}
+                  {saving ? t("saving") : form.id ? t("commonSave") : t("memberRegisterMaster")}
                 </Button>
                 <Button variant="outline" onClick={() => setForm({ ...emptyForm })}>
-                  선택 해제
+                  {t("memberClearSelection")}
                 </Button>
               </div>
             </CardContent>
@@ -410,10 +404,10 @@ export default function MembersPage() {
 
           <Card id="line-tools">
             <CardHeader className="space-y-3">
-              <CardTitle className="text-base">회원 목록 (마스터 기준)</CardTitle>
+              <CardTitle className="text-base">{t("memberListMasterTitle")}</CardTitle>
               <div className="flex gap-2">
                 <Input
-                  placeholder="이름·LINE표시명·전화·이메일·성명·등급·생일·회원번호·LINE ID 검색"
+                  placeholder={t("memberSearchPh")}
                   value={query ?? ""}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -421,11 +415,11 @@ export default function MembersPage() {
                   }}
                 />
                 <Button variant="outline" onClick={() => load(query, true)} disabled={searching}>
-                  {searching ? "검색 중..." : "검색"}
+                  {searching ? t("loading") : t("search")}
                 </Button>
                 <Button
                   variant="outline"
-                  title="LINE Messaging API 기반 보조 동기화"
+                  title={t("memberLineSyncTitle")}
                   disabled={syncing}
                   onClick={async () => {
                     setSyncing(true)
@@ -433,12 +427,12 @@ export default function MembersPage() {
                     try {
                       const res = await syncLineMembers({ limit: 10000 })
                       if (!res.success) {
-                        await appAlert(res.message || "LINE 회원 동기화에 실패했습니다.")
+                        await appAlert(res.message || t("memberLineSyncFail"))
                       } else {
                         setSyncMessage(
-                          `동기화 완료: 조회 ${Number(res.scanned || 0).toLocaleString()}명, 반영 ${Number(
+                          `${t("memberSyncDone")}: ${t("memberSyncScanned")} ${Number(res.scanned || 0).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncApplied")} ${Number(
                             res.synced || 0
-                          ).toLocaleString()}명, 실패 ${Number(res.failed || 0).toLocaleString()}명${lineSyncErrorHint(res.errors)}`
+                          ).toLocaleString()}${t("memberCountUnit")}, ${t("memberSyncFailed")} ${Number(res.failed || 0).toLocaleString()}${t("memberCountUnit")}${lineSyncErrorHint(res.errors)}`
                         )
                         await load(query)
                       }
@@ -447,7 +441,7 @@ export default function MembersPage() {
                     }
                   }}
                 >
-                  {syncing ? "동기화 중..." : "LINE 동기화"}
+                  {syncing ? t("memberSyncing") : t("memberLineSyncBtn")}
                 </Button>
                 <input
                   ref={importFileRef}
@@ -464,7 +458,7 @@ export default function MembersPage() {
                   disabled={importing}
                   onClick={() => importFileRef.current?.click()}
                 >
-                  파일 선택
+                  {t("memberFileSelect")}
                 </Button>
                 <Button
                   variant="outline"
@@ -472,20 +466,20 @@ export default function MembersPage() {
                   onClick={async () => {
                     const file = importFileRef.current?.files?.[0]
                     if (!file) {
-                      await appAlert("먼저 LINE CRM 파일(xlsx/xls/csv)을 선택해 주세요.")
+                      await appAlert(t("memberCrmFileSelectFirst"))
                       return
                     }
                     setImporting(true)
                     try {
                       const res = await importLineCrmFile({ file })
                       if (!res.success) {
-                        await appAlert(res.message || "LINE CRM 파일 반영에 실패했습니다.")
+                        await appAlert(res.message || t("memberCrmImportFail"))
                         return
                       }
                       setSyncMessage(
-                        `CRM 반영 완료: 총 ${Number(res.rowCount || 0).toLocaleString()}건 / 성공 ${Number(
+                        `${t("memberCrmImportDone")}: ${t("memberTotal")} ${Number(res.rowCount || 0).toLocaleString()}${t("posCount")} / ${t("memberSuccess")} ${Number(
                           res.successCount || 0
-                        ).toLocaleString()}건 / 실패 ${Number(res.failedCount || 0).toLocaleString()}건`
+                        ).toLocaleString()}${t("posCount")} / ${t("memberFail")} ${Number(res.failedCount || 0).toLocaleString()}${t("posCount")}`
                       )
                       if (importFileRef.current) importFileRef.current.value = ""
                       setSelectedImportFileName("")
@@ -495,17 +489,17 @@ export default function MembersPage() {
                     }
                   }}
                 >
-                  {importing ? "반영 중..." : "CRM 파일 반영"}
+                  {importing ? t("memberImporting") : t("memberCrmImportBtn")}
                 </Button>
               </div>
               {errorMessage ? (
                 <p className="text-xs text-destructive">{errorMessage}</p>
               ) : (
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">검색 결과: {members.length.toLocaleString()}건</p>
-                  {!!selectedImportFileName && <p className="text-xs text-muted-foreground">선택 파일: {selectedImportFileName}</p>}
+                  <p className="text-xs text-muted-foreground">{t("memberSearchResult")}: {members.length.toLocaleString()}{t("posCount")}</p>
+                  {!!selectedImportFileName && <p className="text-xs text-muted-foreground">{t("memberSelectedFile")}: {selectedImportFileName}</p>}
                   <p className="text-[11px] text-muted-foreground">
-                    CRM 파일 컬럼 예시: LINE display name, phone number, full name, date of birth
+                    {t("memberCrmColumnHint")}
                   </p>
                   {!!syncMessage && <p className="text-xs text-emerald-700">{syncMessage}</p>}
                 </div>
@@ -513,25 +507,25 @@ export default function MembersPage() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className="text-sm text-muted-foreground">불러오는 중...</p>
+                <p className="text-sm text-muted-foreground">{t("loading")}</p>
               ) : (
                 <div className="overflow-auto rounded-md border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40">
                       <tr>
-                        <th className="p-2 text-left">회원명</th>
-                        <th className="p-2 text-left">등록 소스</th>
-                        <th className="p-2 text-left">LINE 연결</th>
-                        <th className="p-2 text-left">LINE 표시명</th>
-                        <th className="p-2 text-left">전화번호</th>
-                        <th className="p-2 text-left">성명(Full name)</th>
-                        <th className="p-2 text-left">생년월일</th>
-                        <th className="p-2 text-left">나이</th>
+                        <th className="p-2 text-left">{t("name")}</th>
+                        <th className="p-2 text-left">{t("memberSource")}</th>
+                        <th className="p-2 text-left">{t("memberLineLinked")}</th>
+                        <th className="p-2 text-left">{t("memberLineDisplayName")}</th>
+                        <th className="p-2 text-left">{t("memberPhone")}</th>
+                        <th className="p-2 text-left">{t("memberFullName")}</th>
+                        <th className="p-2 text-left">{t("birthDate")}</th>
+                        <th className="p-2 text-left">{t("age")}</th>
                         <th className="p-2 text-left">LINE User ID</th>
-                        <th className="p-2 text-left">회원번호</th>
-                        <th className="p-2 text-left">등급</th>
-                        <th className="p-2 text-left">업데이트 원인</th>
-                        <th className="p-2 text-left">상태</th>
+                        <th className="p-2 text-left">{t("memberNo")}</th>
+                        <th className="p-2 text-left">{t("memberTier")}</th>
+                        <th className="p-2 text-left">{t("memberUpdateReason")}</th>
+                        <th className="p-2 text-left">{t("status")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -557,8 +551,8 @@ export default function MembersPage() {
                           }
                         >
                           <td className="p-2">{m.name || "—"}</td>
-                          <td className="p-2">{sourceLabel(m.source)}</td>
-                          <td className="p-2">{m.lineLinked ? "예" : "아니오"}</td>
+                          <td className="p-2">{sourceLabelLocalized(m.source)}</td>
+                          <td className="p-2">{m.lineLinked ? t("yes") : t("no")}</td>
                           <td className="p-2">{m.lineDisplayName || "—"}</td>
                           <td className="p-2">{m.phone || "—"}</td>
                           <td className="p-2">{m.fullName || "-"}</td>
@@ -567,7 +561,7 @@ export default function MembersPage() {
                           <td className="p-2">{m.lineUserId || "-"}</td>
                           <td className="p-2">{m.memberNo || "-"}</td>
                           <td className="p-2">{m.tierCode || "-"}</td>
-                          <td className="p-2">{reasonLabel(m.lastUpdateReason)}</td>
+                          <td className="p-2">{reasonLabelLocalized(m.lastUpdateReason)}</td>
                           <td className="p-2">{m.status}</td>
                         </tr>
                       ))}

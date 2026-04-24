@@ -6,8 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getMemberCoupons, getMembers, getPosCoupons, issueMemberCoupon } from "@/lib/api-client"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 export default function MemberCouponsPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [memberId, setMemberId] = React.useState("")
   const [couponCode, setCouponCode] = React.useState("")
   const [masterCoupons, setMasterCoupons] = React.useState<Array<{ code: string; name: string }>>([])
@@ -33,27 +37,27 @@ export default function MemberCouponsPage() {
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <Card className="mb-4">
-          <CardHeader><CardTitle>회원 쿠폰 발급</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberCouponsIssueTitle")}</CardTitle></CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <Input placeholder="memberId" value={memberId} onChange={(e) => setMemberId(e.target.value)} />
-            <Input placeholder="coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} />
+            <Input placeholder={t("memberId")} value={memberId} onChange={(e) => setMemberId(e.target.value)} />
+            <Input placeholder={t("memberCouponsCodePh")} value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} />
             <Button
               onClick={async () => {
                 const id = Number(memberId || 0)
                 if (!id || !couponCode.trim()) return
                 const res = await issueMemberCoupon({ memberId: id, couponCode: couponCode.trim().toUpperCase() })
-                if (!res.success) await appAlert(res.message || "발급 실패")
+                if (!res.success) await appAlert(res.message || t("memberCouponsIssueFail"))
                 setCouponCode("")
                 await load()
               }}
             >
-              발급
+              {t("memberCouponsIssue")}
             </Button>
           </CardContent>
         </Card>
 
         <Card className="mb-4">
-          <CardHeader><CardTitle>쿠폰 마스터 (POS)</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberCouponsMasterTitle")}</CardTitle></CardHeader>
           <CardContent>
             <div className="grid gap-1 text-sm">
               {masterCoupons.map((c) => (
@@ -64,11 +68,11 @@ export default function MemberCouponsPage() {
         </Card>
 
         <Card className="mb-4">
-          <CardHeader><CardTitle>회원 목록</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberList")}</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-auto rounded-md border">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40"><tr><th className="p-2 text-left">ID</th><th className="p-2 text-left">회원번호</th><th className="p-2 text-left">이름</th></tr></thead>
+                <thead className="bg-muted/40"><tr><th className="p-2 text-left">ID</th><th className="p-2 text-left">{t("memberNo")}</th><th className="p-2 text-left">{t("name")}</th></tr></thead>
                 <tbody>
                   {members.map((m) => <tr className="border-t" key={m.id}><td className="p-2">{m.id}</td><td className="p-2">{m.memberNo}</td><td className="p-2">{m.name}</td></tr>)}
                 </tbody>
@@ -78,7 +82,7 @@ export default function MemberCouponsPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>회원 쿠폰 이력</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberCouponsHistoryTitle")}</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-auto rounded-md border">
               <table className="w-full text-sm">

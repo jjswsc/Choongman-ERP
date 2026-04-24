@@ -517,10 +517,10 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                         <table className="w-full min-w-[320px]">
                           <thead>
                             <tr className="border-b border-amber-200">
-                              <th className="text-left py-1 pr-2">날짜</th>
-                              <th className="text-right py-1 pr-2">금액</th>
-                              <th className="text-left py-1 pr-2">용도</th>
-                              <th className="text-left py-1 min-w-0">적요</th>
+                              <th className="text-left py-1 pr-2">{t("date")}</th>
+                              <th className="text-right py-1 pr-2">{t("amount")}</th>
+                              <th className="text-left py-1 pr-2">{t("visit_col_purpose")}</th>
+                              <th className="text-left py-1 min-w-0">{t("memo")}</th>
                             </tr>
                           </thead>
                           <tbody>

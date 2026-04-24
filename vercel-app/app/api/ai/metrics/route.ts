@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAiAccess } from "@/lib/ai/auth"
 import { getBangkokTodayDateString, addBangkokCalendarDays } from "@/lib/bangkok-time"
 import { supabaseCountFilter, supabaseSelectFilter } from "@/lib/supabase-server"
-import { isOfficeRole } from "@/lib/permissions"
+import { buildAiDataPolicy } from "@/lib/ai/policy"
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -10,11 +10,24 @@ export async function GET(req: NextRequest) {
   const access = await requireAiAccess(req)
   if (!access.ok) return access.response
 
+  const { searchParams } = new URL(req.url)
+  const requestedStore = String(searchParams.get("store") || access.scoped.store || "All").trim()
   const today = getBangkokTodayDateString()
   const start7d = addBangkokCalendarDays(today, -6)
-  const storeFilter = !isOfficeRole(access.scoped.role)
-    ? `&requested_store=eq.${encodeURIComponent(access.scoped.store || "All")}`
-    : ""
+  const policy = buildAiDataPolicy({
+    scoped: access.scoped,
+    intent: "reporting",
+    requestedStore,
+  })
+  const storeFilter = (() => {
+    if (policy.storeScope !== "all") {
+      return `&requested_store=eq.${encodeURIComponent(policy.resolvedStore)}`
+    }
+    if (requestedStore && requestedStore !== "All") {
+      return `&requested_store=eq.${encodeURIComponent(policy.resolvedStore)}`
+    }
+    return ""
+  })()
 
   const pendingApprovals = await supabaseCountFilter(
     "ai_action_requests",
@@ -46,9 +59,15 @@ export async function GET(req: NextRequest) {
   const total = successes + failures
   const successRate7d = total > 0 ? Number(((successes / total) * 100).toFixed(1)) : 100
 
-  const usageStoreFilter = !isOfficeRole(access.scoped.role)
-    ? `&user_store=eq.${encodeURIComponent(access.scoped.store || "All")}`
-    : ""
+  const usageStoreFilter = (() => {
+    if (policy.storeScope !== "all") {
+      return `&user_store=eq.${encodeURIComponent(policy.resolvedStore)}`
+    }
+    if (requestedStore && requestedStore !== "All") {
+      return `&user_store=eq.${encodeURIComponent(policy.resolvedStore)}`
+    }
+    return ""
+  })()
   const usageRows = (await supabaseSelectFilter(
     "ai_usage_logs",
     `created_at=gte.${encodeURIComponent(`${today} 00:00:00`)}&created_at=lte.${encodeURIComponent(`${today} 23:59:59`)}${usageStoreFilter}`,
@@ -67,6 +86,12 @@ export async function GET(req: NextRequest) {
       promptTokensToday,
       completionTokensToday,
       totalTokensToday,
+      meta: {
+        requestedStore: policy.requestedStore,
+        resolvedStore: policy.resolvedStore,
+        isStoreCoerced: policy.isStoreCoerced,
+        storeScope: policy.storeScope,
+      },
     },
     { headers }
   )

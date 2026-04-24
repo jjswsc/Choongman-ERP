@@ -8,9 +8,9 @@ import { POSMainGrid } from '@/components/pos/pos-main-grid'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { DEFAULT_TILES, POS_SUBMENUS, type POSTile, type POSSubMenuItem } from '@/lib/pos-display'
 import { cn } from '@/lib/utils'
-import { Circle, RefreshCw } from 'lucide-react'
+import { Circle, PlayCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { useLang } from '@/lib/lang-context'
+import { ADMIN_UI_LANG_OPTIONS, useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useStoreList, getPosTodaySales, getLoginData, loginCheck } from '@/lib/api-client'
 import { translateApiMessage } from '@/lib/translate-api-message'
@@ -58,7 +58,7 @@ function POSMainPageInner() {
   const requestedScenarioId = String(searchParams.get('scenario') || '').trim()
   const router = useRouter()
   const { auth, logout, setAuth } = useAuth()
-  const { lang } = useLang()
+  const { lang, setLang } = useLang()
   const t = useT(lang)
   const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
   const [switchUserOpen, setSwitchUserOpen] = useState(false)
@@ -75,6 +75,9 @@ function POSMainPageInner() {
   } | null>(null)
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [hybridPosShell, setHybridPosShell] = useState(false)
+  const [demoIntroAccepted, setDemoIntroAccepted] = useState(false)
+  const showDemoIntro = isPosDemo && !requestedScenarioId && !demoIntroAccepted
+  const isDemoTourEnabled = isPosDemo && !showDemoIntro
   useEffect(() => {
     setHybridPosShell(
       typeof window !== 'undefined' &&
@@ -309,8 +312,62 @@ function POSMainPageInner() {
   const formatTime = (date: Date) => formatPosClockTime(date, lang)
 
   return (
-    <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
+    <PosTourProvider isDemo={isDemoTourEnabled} scenarioId={tourScenarioId}>
       <PosTourOverlay />
+      {showDemoIntro ? (
+        <div className="relative flex h-full min-h-[200px] flex-1 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(16,185,129,0.18),transparent_38%),radial-gradient(circle_at_85%_80%,rgba(59,130,246,0.2),transparent_42%),linear-gradient(140deg,#020617,#0f172a_45%,#111827)] p-6 text-slate-100">
+          <div className="pointer-events-none absolute -left-14 top-10 h-48 w-48 rounded-full bg-emerald-400/10 blur-3xl" />
+          <div className="pointer-events-none absolute -right-12 bottom-6 h-52 w-52 rounded-full bg-blue-400/10 blur-3xl" />
+          <div className="relative w-full max-w-2xl rounded-3xl border border-white/15 bg-black/30 p-7 shadow-2xl backdrop-blur-xl sm:p-9">
+            <p className="inline-flex rounded-full border border-emerald-300/35 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">
+              {t('posDemoIntroBadge')}
+            </p>
+            <h1 className="mt-4 text-3xl font-bold leading-tight text-white sm:text-5xl">
+              {t('posDemoIntroTitle')}
+            </h1>
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-200/90 sm:text-base">
+              {t('posDemoLanguageGateTitle')}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2 text-xs font-medium">
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-slate-100">{t('posDemoIntroTagOrderFlow')}</span>
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-slate-100">{t('posDemoIntroTagSettlement')}</span>
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-slate-100">{t('posDemoIntroTagCashControl')}</span>
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-slate-100">{t('posDemoIntroTagTerminalTour')}</span>
+            </div>
+            <div className="mt-6 max-w-xs">
+              <Label className="mb-1.5 block text-xs font-medium text-slate-200/90">{t('posLanguage')}</Label>
+              <Select
+                value={lang}
+                onValueChange={(v) => {
+                  if (v) setLang(v as typeof lang)
+                }}
+              >
+                <SelectTrigger className="h-11 border-white/25 bg-white/10 text-white placeholder:text-slate-300">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ADMIN_UI_LANG_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-7">
+              <Button
+                type="button"
+                size="lg"
+                className="h-12 min-w-44 gap-2 bg-emerald-500 px-7 text-base font-semibold text-black hover:bg-emerald-400"
+                onClick={() => setDemoIntroAccepted(true)}
+              >
+                <PlayCircle className="h-5 w-5" aria-hidden />
+                {t('posDemoLanguageGateStart')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div
         className={cn(
           'flex flex-col h-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 overflow-hidden select-none'
@@ -477,19 +534,24 @@ function POSMainPageInner() {
         )}
       </footer>
     </div>
+      )}
     </PosTourProvider>
+  )
+}
+
+function PosPageLoadingFallback() {
+  const { lang } = useLang()
+  const t = useT(lang)
+  return (
+    <div className="flex h-full min-h-[200px] flex-1 items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 text-slate-600">
+      {t("loading")}
+    </div>
   )
 }
 
 export default function POSMainPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full min-h-[200px] flex-1 items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 text-slate-600">
-          Loading...
-        </div>
-      }
-    >
+    <Suspense fallback={<PosPageLoadingFallback />}>
       <POSMainPageInner />
     </Suspense>
   )

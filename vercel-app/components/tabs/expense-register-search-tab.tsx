@@ -222,7 +222,7 @@ export function ExpenseRegisterSearchTab() {
   )
 
   const filteredList = React.useMemo(() => {
-    const needle = vendorFilter.trim().toLowerCase()
+    const vendorCodeNeedle = vendorFilter.trim().toLowerCase()
     return (list || []).filter((r) => {
       if (categoryFilter !== "__all__") {
         const rowCat = String(r.category || "").toLowerCase()
@@ -230,14 +230,10 @@ export function ExpenseRegisterSearchTab() {
           if (rowCat !== "expense" && rowCat !== "fixed") return false
         } else if (rowCat !== categoryFilter) return false
       }
-      if (!needle) return true
-      const vendorName = r.vendorCode ? (vendors.find((v) => v.code === r.vendorCode)?.name || "") : ""
-      const subject = r.accountSubjectId ? accountSubjects.find((a) => a.id === r.accountSubjectId) : null
-      const subjectName = subject ? `${subject.code} ${asDisplayName(subject)}` : ""
-      const hay = `${r.vendorCode || ""} ${vendorName} ${subjectName} ${r.memo || ""}`.toLowerCase()
-      return hay.includes(needle)
+      if (!vendorCodeNeedle) return true
+      return String(r.vendorCode || "").trim().toLowerCase().includes(vendorCodeNeedle)
     })
-  }, [list, categoryFilter, vendorFilter, vendors, accountSubjects, asDisplayName])
+  }, [list, categoryFilter, vendorFilter])
 
   return (
     <div className="space-y-4">
@@ -276,7 +272,7 @@ export function ExpenseRegisterSearchTab() {
             <Input
               value={vendorFilter}
               onChange={(e) => setVendorFilter(e.target.value)}
-              placeholder={tt("vendor", "Vendor")}
+              placeholder={tt("vendor", "Vendor") + " " + tt("code", "Code")}
               className="w-[180px] h-9"
             />
             <Button size="sm" onClick={loadData} disabled={loading} className="h-9">

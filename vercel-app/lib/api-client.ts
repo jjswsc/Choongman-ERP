@@ -3543,6 +3543,8 @@ export async function updateReceivableReceiveCheck(params: {
 }
 
 // ─── 지출 관리 (MVP) ───
+export type PayeeMemoMatchQuality = 'ok' | 'uncertain' | 'mismatch' | 'trivial'
+
 export interface ExpenseAccrualPlanItem {
   id: number
   payeeCode: string
@@ -3570,6 +3572,9 @@ export interface ExpenseAccrualPlanItem {
   rejectedAt?: string | null
   rejectionNote?: string | null
   storeName?: string
+  /** getApprovedExpenseAccrualsForBankTx: 통장 적요 vs 지급처(느슨) */
+  payeeMemoMatchQuality?: PayeeMemoMatchQuality
+  payeeMemoMatchDetail?: string
 }
 
 export interface LogisticsPaymentPlanItem {
@@ -3781,7 +3786,7 @@ export async function getApprovedExpenseAccrualsForBankTx(params: {
   return res.json() as Promise<{
     success: boolean
     message?: string
-    bankTransaction?: { id: number; amount: number; transDate: string }
+    bankTransaction?: { id: number; amount: number; transDate: string; memo?: string; note?: string }
     list: ExpenseAccrualPlanItem[]
   }>
 }
@@ -3819,6 +3824,8 @@ export async function executeExpensePayment(params: {
   bankTransactionId?: number | null
   userName?: string
   userRole?: string
+  /** 통장 적요 vs 지급처 불일치(409) 시, 회계/본사 권한으로만 사용 */
+  acknowledgePayeeMemoMismatch?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/executeExpensePayment', {
     method: 'POST',
@@ -3827,7 +3834,10 @@ export async function executeExpensePayment(params: {
   })
   return res.json() as Promise<{
     success: boolean
+    code?: string
     message?: string
+    payeeMemoMatchQuality?: PayeeMemoMatchQuality
+    payeeMemoMatchDetail?: string
     bankTransactionId?: number | null
     pettyCashTransactionId?: number | null
     remainingAmount?: number
@@ -4479,6 +4489,7 @@ export async function getAccountSubjects(params?: {
   forTransfer?: boolean
   forRevenue?: boolean
   forCard?: boolean
+  forItem?: boolean
   excludeHeaders?: boolean
 }) {
   const q = new URLSearchParams()
@@ -4489,6 +4500,7 @@ export async function getAccountSubjects(params?: {
   if (params?.forTransfer) q.set('forTransfer', 'true')
   if (params?.forRevenue) q.set('forRevenue', 'true')
   if (params?.forCard) q.set('forCard', 'true')
+  if (params?.forItem) q.set('forItem', 'true')
   if (params?.excludeHeaders) q.set('excludeHeaders', 'true')
   const res = await apiFetchWithOffline(`/api/getAccountSubjects?${q}`)
   return jsonAsArray<AccountSubjectItem>(await res.json())
@@ -5151,6 +5163,8 @@ export interface AdminItem {
   stockUnitOptions?: { unit: string; factor: number }[]
   /** 표준 단위 목록. (totalQuantity) [unit] = 1 규격 */
   standardUnits?: { unit: string; totalQuantity: number }[]
+  /** 품목별 기본 계정과목 (선택). 미지정이면 기존 재고/매입 흐름 유지 */
+  accountSubjectId?: number | null
 }
 
 export interface AdminVendor {
@@ -5270,6 +5284,7 @@ export async function saveItem(params: {
   stockBaseUnit?: string
   stockUnitOptions?: { unit: string; factor: number }[]
   standardUnits?: { unit: string; totalQuantity: number }[]
+  accountSubjectId?: number | null
 }) {
   const res = await apiFetchWithOffline('/api/saveItem', {
     method: 'POST',
@@ -9441,7 +9456,10 @@ export async function getInvoiceOrderBillToCandidates(orderIds: number[]) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ orderIds }),
   })
-  return res.json() as Promise<{ map: Record<string, string[]> }>
+  return res.json() as Promise<{
+    map: Record<string, string[]>
+    taxInvoiceClientMap: Record<string, InvoiceDataClient>
+  }>
 }
 
 export type InvoiceSettings = Record<string, string>

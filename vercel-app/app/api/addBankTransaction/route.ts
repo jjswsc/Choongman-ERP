@@ -11,6 +11,18 @@ import {
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
 
+function isMissingIdentityColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('user_employee_id') || msg.includes('user_employee_code')
+}
+
+function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.user_employee_id
+  delete next.user_employee_code
+  return next
+}
+
 /** 통장 거래 등록 (매입 대금/매출 수령 시 미지급금/미수금 자동 연동) */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -80,6 +92,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '허용되지 않은 매장입니다.' }, { status: 403, headers })
     }
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userEmployeeId =
+      auth.employeeId != null && Number.isFinite(Number(auth.employeeId))
+        ? Math.floor(Number(auth.employeeId))
+        : null
+    const userEmployeeCode = String(auth.employeeCode || '').trim() || null
     const category = String(body.category || 'expense').toLowerCase()
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const salesDate = body.salesDate ?? body.sales_date
@@ -127,6 +144,8 @@ export async function POST(request: NextRequest) {
       note: note || null,
       store: store || null,
       user_name: userName || null,
+      user_employee_id: userEmployeeId,
+      user_employee_code: userEmployeeCode,
       category: validCategory,
     }
     if (accountSubjectId != null) {
@@ -152,7 +171,13 @@ export async function POST(request: NextRequest) {
     if (refType) row.ref_type = refType
     if (refId != null && !isNaN(Number(refId))) row.ref_id = Number(refId)
 
-    const inserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+    let inserted: { id?: number }[] = []
+    try {
+      inserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+    } catch (e) {
+      if (!isMissingIdentityColumnError(e)) throw e
+      inserted = (await supabaseInsert('bank_transactions', stripIdentityColumns(row))) as { id?: number }[]
+    }
     const bankId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
 
     if (bankId && validCategory === 'purchase_payment' && vendorCode) {

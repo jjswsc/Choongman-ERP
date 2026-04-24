@@ -13,6 +13,8 @@ import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
+export const dynamic = 'force-dynamic'
+
 type VatRow = {
   direction?: string
   net_amount?: number
@@ -56,6 +58,7 @@ function isMissingTaxSummaryRpcError(e: unknown): boolean {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) {
@@ -79,6 +82,9 @@ export async function GET(request: NextRequest) {
     isOfficeStore(userStore) ||
     isHeadOfficeLikeStoreName(userStore)
   let storeFilter = requestedStoreFilter
+  if (storeFilter && (isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter))) {
+    storeFilter = 'All'
+  }
   if (!isOfficeLevel) {
     if (!requestedStoreFilter || requestedStoreFilter === 'All') {
       storeFilter = String(allowedStores[0] || '').trim()

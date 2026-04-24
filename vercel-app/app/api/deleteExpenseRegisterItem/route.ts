@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
+import { deleteReceivableFromBankReceive } from '@/lib/receivable-payable'
 import { requireAuth } from '@/lib/verify-auth'
 
 type LinkedPayableRow = {
@@ -12,6 +13,9 @@ type BankTransactionRow = {
   id?: number
   trans_date?: string
   trans_type?: string
+  amount?: number
+  memo?: string | null
+  store_name?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
       supabaseSelectFilter('card_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
     ])
     const txRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
-      select: 'id,trans_date,trans_type',
+      select: 'id,trans_date,trans_type,amount,memo,store_name',
       limit: 1,
     })) as BankTransactionRow[] | null
     if (!txRows?.[0]?.id) {
@@ -95,7 +99,15 @@ export async function POST(request: NextRequest) {
 
     await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
     if (transTypeLower === 'deposit') {
-      await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`)
+      const tx = txRows[0]
+      const memo = String(tx.memo || '').trim()
+      await deleteReceivableFromBankReceive({
+        bankTransactionId,
+        storeName: String(tx.store_name || '').trim() || null,
+        amountAbs: Math.abs(Number(tx.amount) || 0),
+        transDate: String(tx.trans_date || '').slice(0, 10),
+        memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
+      })
     }
     await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
       memoIncludes: ['통장 거래 자동분개'],

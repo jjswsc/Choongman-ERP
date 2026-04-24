@@ -12,6 +12,7 @@ import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 
 type ItemTaxMeta = {
   price: number
@@ -292,25 +293,42 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     maxRows: 30000,
   })) as ExistingAutoRow[]
   const existingByStockId = new Map<number, { id: number; filingStatus: string; storeName: string }>()
+  const duplicateDraftIds: number[] = []
   for (const row of existingAutoRows || []) {
     const id = Math.floor(Number(row.id) || 0)
     const stockLogId = parseStockLogIdFromMemo(String(row.memo || ''))
     if (id <= 0 || stockLogId <= 0) continue
-    existingByStockId.set(stockLogId, {
-      id,
-      filingStatus: String(row.filing_status || '').trim().toLowerCase(),
-      storeName: String(row.store_name || '').trim(),
-    })
+    const filingStatus = String(row.filing_status || '').trim().toLowerCase()
+    const prev = existingByStockId.get(stockLogId)
+    if (!prev) {
+      existingByStockId.set(stockLogId, {
+        id,
+        filingStatus,
+        storeName: String(row.store_name || '').trim(),
+      })
+      continue
+    }
+    const prevSubmitted = prev.filingStatus === 'submitted'
+    const nextSubmitted = filingStatus === 'submitted'
+    if (!prevSubmitted && nextSubmitted) {
+      duplicateDraftIds.push(prev.id)
+      existingByStockId.set(stockLogId, {
+        id,
+        filingStatus,
+        storeName: String(row.store_name || '').trim(),
+      })
+      continue
+    }
+    if (!prevSubmitted && !nextSubmitted) duplicateDraftIds.push(id)
+  }
+  for (const dupId of duplicateDraftIds) {
+    await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${dupId}`)
   }
 
   const seenStockIds = new Set<number>()
   let stockUpserted = 0
-  let scannedLogs = 0
-  let inScopeLogs = 0
-  let netPositiveLogs = 0
 
   for (const log of stockLogs || []) {
-    scannedLogs += 1
     const stockLogId = Math.floor(Number(log.id) || 0)
     if (stockLogId <= 0) continue
     const logType = String(log.log_type || '').trim()
@@ -323,8 +341,6 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
       (loc ? storeScope.matches(loc) : false) ||
       (target ? storeScope.matches(target) : false)
     if (!inScope) continue
-    inScopeLogs += 1
-
     const vendor = target || '-'
     if (logType === 'Inbound' && (vendor === 'From HQ' || vendor === 'HQ')) {
       // 내부 재고 이동은 매입세금계산서 대상에서 제외
@@ -357,7 +373,6 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
           : Number(item.cost) || 0
     const net = round2(qty * unit)
     if (net <= 0) continue
-    netPositiveLogs += 1
     const vat = round2(net * vatRateFromTaxType(item.taxType))
     const total = round2(net + vat)
 
@@ -434,12 +449,17 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     pageSize: 4000,
     maxRows: 30000,
   })) as { id?: number; store_name?: string | null }[]
+  const officeScope = !!storeFilter && isHeadOfficeLikeStoreName(storeFilter)
   let expenseSynced = 0
   for (const row of expenseRows || []) {
     const id = Math.floor(Number(row.id) || 0)
     if (id <= 0) continue
-    if (storeFilter && !storeScope.matches(String(row.store_name || '').trim())) continue
-    await syncExpenseAccrualInputVatLedger(id)
+    const rowStore = String(row.store_name || '').trim()
+    if (storeFilter && !storeScope.matches(rowStore) && !(officeScope && !rowStore)) continue
+    await syncExpenseAccrualInputVatLedger(
+      id,
+      officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined
+    )
     expenseSynced += 1
   }
 

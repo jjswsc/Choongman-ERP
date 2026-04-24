@@ -5,8 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getMemberVisits } from "@/lib/api-client"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 export default function MemberVisitsPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [memberId, setMemberId] = React.useState("")
   const [rows, setRows] = React.useState<Array<{
     orderId: number
@@ -32,26 +36,26 @@ export default function MemberVisitsPage() {
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <Card className="mb-4">
-          <CardHeader><CardTitle>회원 방문 기록 조회</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberVisitsSearchTitle")}</CardTitle></CardHeader>
           <CardContent className="flex gap-2">
-            <Input placeholder="memberId (비우면 전체)" value={memberId} onChange={(e) => setMemberId(e.target.value)} />
-            <Button variant="outline" onClick={() => load()}>조회</Button>
+            <Input placeholder={t("memberVisitsMemberIdPh")} value={memberId} onChange={(e) => setMemberId(e.target.value)} />
+            <Button variant="outline" onClick={() => load()}>{t("btn_query")}</Button>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>방문/주문 이력</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("memberVisitsHistoryTitle")}</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40">
                   <tr>
-                    <th className="p-2 text-left">주문일시</th>
-                    <th className="p-2 text-left">memberId</th>
-                    <th className="p-2 text-left">회원번호</th>
-                    <th className="p-2 text-left">매장</th>
-                    <th className="p-2 text-left">주문번호</th>
-                    <th className="p-2 text-left">결제금액</th>
+                    <th className="p-2 text-left">{t("posOrderDateTime")}</th>
+                    <th className="p-2 text-left">{t("memberId")}</th>
+                    <th className="p-2 text-left">{t("memberNo")}</th>
+                    <th className="p-2 text-left">{t("store")}</th>
+                    <th className="p-2 text-left">{t("posOrderNo")}</th>
+                    <th className="p-2 text-left">{t("memberVisitsPaymentAmount")}</th>
                   </tr>
                 </thead>
                 <tbody>

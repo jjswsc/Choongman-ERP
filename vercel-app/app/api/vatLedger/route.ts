@@ -15,10 +15,13 @@ import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
+import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+export const dynamic = 'force-dynamic'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -37,7 +40,15 @@ function matchesFilingStatus(v: unknown, filter: '' | 'draft' | 'submitted'): bo
 
 function isMissingSubmissionColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
-  return msg.includes('filing_status') || msg.includes('submitted_at') || msg.includes('submitted_by')
+  return (
+    msg.includes('filing_status') ||
+    msg.includes('submitted_at') ||
+    msg.includes('submitted_by') ||
+    msg.includes('created_by_employee_id') ||
+    msg.includes('created_by_employee_code') ||
+    msg.includes('submitted_by_employee_id') ||
+    msg.includes('submitted_by_employee_code')
+  )
 }
 
 function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): T {
@@ -45,12 +56,60 @@ function stripSubmissionAuditFields<T extends Record<string, unknown>>(row: T): 
   delete next.filing_status
   delete next.submitted_at
   delete next.submitted_by
+  delete next.created_by_employee_id
+  delete next.created_by_employee_code
+  delete next.submitted_by_employee_id
+  delete next.submitted_by_employee_code
   return next
+}
+
+function monthStartYmd(ym: string): string {
+  return `${ym}-01`
+}
+
+function monthEndYmd(ym: string): string {
+  const y = Number(ym.slice(0, 4))
+  const m = Number(ym.slice(5, 7))
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return `${ym}-28`
+  const d = new Date(Date.UTC(y, m, 0))
+  return d.toISOString().slice(0, 10)
+}
+
+async function syncInputVatFromExpensesForPeriod(params: {
+  startMonth: string
+  endMonth: string
+  storeFilter: string
+}): Promise<void> {
+  const storeFilter = String(params.storeFilter || '').trim()
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+  const officeScope = !!storeFilter && isHeadOfficeLikeStoreName(storeFilter)
+  const startYmd = monthStartYmd(params.startMonth)
+  const endYmd = monthEndYmd(params.endMonth)
+  const expParts = [
+    `expense_date=gte.${encodeURIComponent(startYmd)}`,
+    `expense_date=lte.${encodeURIComponent(endYmd)}`,
+    'vat_amount=gt.0',
+    'status=neq.rejected',
+  ]
+  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
+    select: 'id,store_name',
+    order: 'id.asc',
+    pageSize: 2000,
+    maxRows: 30000,
+  })) as { id?: number; store_name?: string | null }[]
+  for (const row of expenseRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    if (id <= 0) continue
+    const rowStore = String(row.store_name || '').trim()
+    if (storeFilter && !storeScope.matches(rowStore) && !(officeScope && !rowStore)) continue
+    await syncExpenseAccrualInputVatLedger(id, officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined)
+  }
 }
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
@@ -85,6 +144,9 @@ export async function GET(request: NextRequest) {
     isOfficeStore(userStore) ||
     isHeadOfficeLikeStoreName(userStore)
   let storeFilter = requestedStoreFilter
+  if (storeFilter && (isOfficeStore(storeFilter) || isHeadOfficeLikeStoreName(storeFilter))) {
+    storeFilter = 'All'
+  }
   if (!isOfficeLevel) {
     if (!requestedStoreFilter || requestedStoreFilter === 'All') {
       storeFilter = String(allowedStores[0] || '').trim()
@@ -117,6 +179,31 @@ export async function GET(request: NextRequest) {
       return matchesFilingStatus(row.filing_status, filingStatus)
     })
     if (initialEntries.length > 0) {
+      const hasInputEntries = initialEntries.some(
+        (row) => String(row.direction || '').trim().toLowerCase() === 'input'
+      )
+      if (!hasInputEntries) {
+        try {
+          await syncInputVatFromExpensesForPeriod({
+            startMonth: period.startMonth,
+            endMonth: period.endMonth,
+            storeFilter,
+          })
+          const refreshedRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+            select: '*',
+            order: 'doc_date.asc,id.asc',
+            pageSize: 4000,
+            maxRows: 100000,
+          })) as Record<string, unknown>[] | null
+          const refreshedEntries = (refreshedRows || []).filter((row) => {
+            if (!initialStoreScope.matches(String(row.store_name || ''))) return false
+            return matchesFilingStatus(row.filing_status, filingStatus)
+          })
+          return NextResponse.json({ entries: refreshedEntries, period }, { headers })
+        } catch (e) {
+          console.warn('vatLedger GET expense-input quick sync skipped:', e)
+        }
+      }
       return NextResponse.json({ entries: initialEntries, period }, { headers })
     }
     try {
@@ -161,6 +248,12 @@ export async function POST(request: NextRequest) {
       .concat(String(authResult.auth.store || '').trim())
   try {
     const body = await request.json().catch(() => ({}))
+    const actorName = String(authResult.auth.name || body.createdBy || '').trim() || null
+    const actorEmployeeId =
+      authResult.auth.employeeId != null && Number.isFinite(Number(authResult.auth.employeeId))
+        ? Math.floor(Number(authResult.auth.employeeId))
+        : null
+    const actorEmployeeCode = String(authResult.auth.employeeCode || '').trim() || null
     const userRole = jwtUserRole
     const userStore = String(authResult.auth.store || '').trim()
     const isOfficeLevel =
@@ -188,12 +281,12 @@ export async function POST(request: NextRequest) {
     if (filingStatus === 'submitted') assertCanApproveAccountingCompliance(userRole)
     else assertCanWriteAccountingCompliance(userRole)
     const submittedAtRaw = String((body.submittedAt ?? body.submitted_at ?? '') || '').trim()
-    const submittedByRaw = String((body.submittedBy ?? body.submitted_by ?? body.createdBy ?? '') || '').trim()
+    const submittedByRaw = String((body.submittedBy ?? body.submitted_by ?? body.createdBy ?? actorName ?? '') || '').trim()
     if (!docDate || !/^\d{4}-\d{2}$/.test(taxMonth) || (direction !== 'output' && direction !== 'input')) {
       await writeAccountingComplianceAudit({
         actionType: 'vat_ledger_post',
         userRole,
-        actor: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+        actor: actorName,
         decision: 'deny',
         reasonCode: 'INVALID_BODY',
         yearMonth: taxMonth,
@@ -223,6 +316,8 @@ export async function POST(request: NextRequest) {
       filing_status: filingStatus,
       submitted_at: filingStatus === 'submitted' ? submittedAtRaw || new Date().toISOString() : null,
       submitted_by: filingStatus === 'submitted' ? submittedByRaw || null : null,
+      submitted_by_employee_id: filingStatus === 'submitted' ? actorEmployeeId : null,
+      submitted_by_employee_code: filingStatus === 'submitted' ? actorEmployeeCode : null,
       store_name: effectiveStoreName ? String(effectiveStoreName).slice(0, 200) : null,
       updated_at: new Date().toISOString(),
     }
@@ -252,7 +347,7 @@ export async function POST(request: NextRequest) {
       await writeAccountingComplianceAudit({
         actionType: 'vat_ledger_post',
         userRole,
-        actor: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+        actor: actorName,
         decision: 'allow',
         reasonCode: filingStatus === 'submitted' ? 'UPDATED_SUBMITTED' : 'UPDATED_DRAFT',
         yearMonth: taxMonth,
@@ -267,7 +362,9 @@ export async function POST(request: NextRequest) {
 
     const insertRow = {
       ...row,
-      created_by: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+      created_by: actorName,
+      created_by_employee_id: actorEmployeeId,
+      created_by_employee_code: actorEmployeeCode,
       created_at: new Date().toISOString(),
     }
     let inserted: { id?: number }[] = []
@@ -283,7 +380,7 @@ export async function POST(request: NextRequest) {
     await writeAccountingComplianceAudit({
       actionType: 'vat_ledger_post',
       userRole,
-      actor: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+      actor: actorName,
       decision: 'allow',
       reasonCode: filingStatus === 'submitted' ? 'CREATED_SUBMITTED' : 'CREATED_DRAFT',
       yearMonth: taxMonth,
@@ -304,7 +401,7 @@ export async function POST(request: NextRequest) {
         await writeAccountingComplianceAudit({
           actionType: 'vat_ledger_post',
           userRole: jwtUserRole,
-          actor: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+          actor: String(authResult.auth.name || body.createdBy || '').trim() || null,
           decision: 'deny',
           reasonCode: e.message === 'ACCOUNTING_APPROVAL_FORBIDDEN' ? 'FORBIDDEN_APPROVE' : 'FORBIDDEN_WRITE',
           yearMonth: String(body.taxMonth || body.tax_month || '').trim().slice(0, 7),

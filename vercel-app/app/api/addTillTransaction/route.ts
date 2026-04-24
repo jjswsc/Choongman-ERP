@@ -4,6 +4,18 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
+function isMissingIdentityColumnError(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('user_employee_id') || msg.includes('user_employee_code')
+}
+
+function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.user_employee_id
+  delete next.user_employee_code
+  return next
+}
+
 /** 시재(카운터 현금) 입출금 등록 - pos_till_transactions */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -25,6 +37,11 @@ export async function POST(request: NextRequest) {
     const amount = Math.abs(Number(body.amount) || 0)
     const memo = String(body.memo || '').trim()
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
+    const userEmployeeId =
+      auth.employeeId != null && Number.isFinite(Number(auth.employeeId))
+        ? Math.floor(Number(auth.employeeId))
+        : null
+    const userEmployeeCode = String(auth.employeeCode || '').trim() || null
     const userStore = String(auth.store || '').trim()
     const userRole = String(auth.role || '').toLowerCase()
     const allowedStores =
@@ -60,15 +77,23 @@ export async function POST(request: NextRequest) {
 
     const amt = transType === 'withdrawal' || transType === 'sales_withdrawal' ? -amount : amount
 
-    await supabaseInsert('pos_till_transactions', {
+    const row = {
       store_code: storeCode,
       trans_date: transDate,
       trans_type: transType,
       amount: amt,
       memo: memo || null,
       user_name: userName || null,
+      user_employee_id: userEmployeeId,
+      user_employee_code: userEmployeeCode,
       ...(salesDate && transType === 'sales_withdrawal' ? { sales_date: salesDate } : {}),
-    })
+    }
+    try {
+      await supabaseInsert('pos_till_transactions', row)
+    } catch (e) {
+      if (!isMissingIdentityColumnError(e)) throw e
+      await supabaseInsert('pos_till_transactions', stripIdentityColumns(row))
+    }
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {

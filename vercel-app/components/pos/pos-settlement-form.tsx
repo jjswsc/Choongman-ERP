@@ -756,10 +756,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             <AdminTabsBarWithHelp className="mb-4 overflow-hidden rounded-lg">
               <TabsList className={adminTabsListRowCn} data-tour="pos-tour-close-tabs">
                 <TabsTrigger value="entry" className={adminTabsTriggerCn}>
-                  결산 입력
+                  {t('posSettlementEntryTab')}
                 </TabsTrigger>
                 <TabsTrigger value="history" className={adminTabsTriggerCn}>
-                  결산 조회
+                  {t('posSettlementHistoryTab')}
                 </TabsTrigger>
               </TabsList>
             </AdminTabsBarWithHelp>
@@ -782,25 +782,28 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
               {linkposSummary && (
                 <div className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-primary">LINKPOS 리컨실</span>
+                    <span className="text-sm font-medium text-primary">{t('posLinkposReconcileTitle')}</span>
                     <span className="text-[11px] text-muted-foreground">
-                      승인 {linkposSummary.approvedCount}건 / 실패 {linkposSummary.failedCount}건
+                      {i18nTr(t, 'posLinkposReconcileCountSummary', {
+                        approved: linkposSummary.approvedCount,
+                        failed: linkposSummary.failedCount,
+                      })}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">카드입력 합계</span>
+                    <span className="text-muted-foreground">{t('posLinkposCardInputTotal')}</span>
                     <span className="tabular-nums">{linkposSummary.cardReportedTotal.toLocaleString()} ฿</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">LINKPOS 승인합계</span>
+                    <span className="text-muted-foreground">{t('posLinkposApprovedTotal')}</span>
                     <span className="tabular-nums">{linkposSummary.approvedTotal.toLocaleString()} ฿</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">LINKPOS 요청합계</span>
+                    <span className="text-muted-foreground">{t('posLinkposRequestedTotal')}</span>
                     <span className="tabular-nums">{linkposSummary.requestedTotal.toLocaleString()} ฿</span>
                   </div>
                   <div className="flex justify-between items-center pt-1 border-t border-primary/20">
-                    <span className="font-medium">카드입력 - 승인합계 차이</span>
+                    <span className="font-medium">{t('posLinkposCardVsApprovedDiff')}</span>
                     <span
                       className={cn(
                         'font-semibold tabular-nums',
@@ -1156,7 +1159,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   variant={historyRange === '7' ? 'default' : 'outline'}
                   onClick={() => setHistoryRange('7')}
                 >
-                  최근 7일
+                  {t('posHistoryRecent7Days')}
                 </Button>
                 <Button
                   type="button"
@@ -1164,34 +1167,34 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   variant={historyRange === '30' ? 'default' : 'outline'}
                   onClick={() => setHistoryRange('30')}
                 >
-                  최근 30일
+                  {t('posHistoryRecent30Days')}
                 </Button>
                 <Button type="button" size="sm" variant="outline" onClick={loadHistory} disabled={historyLoading}>
-                  {historyLoading ? '조회 중...' : '범위 조회'}
+                  {historyLoading ? t('posHistoryLoading') : t('posHistorySearchRange')}
                 </Button>
               </div>
 
               {!settlement ? (
                 <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-                  선택한 일자/매장의 저장된 결산 데이터가 없습니다.
+                  {t('posSettlementNoSavedData')}
                 </div>
               ) : (
                 <>
                   <div className="grid gap-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm sm:grid-cols-2">
                     <div className="flex justify-between sm:block">
-                      <span className="text-muted-foreground">결산일</span>
+                      <span className="text-muted-foreground">{t('posSettleDate')}</span>
                       <p className="font-medium">{settleDate}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-muted-foreground">매장</span>
+                      <span className="text-muted-foreground">{t('store')}</span>
                       <p className="font-medium">{effectiveStore}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-muted-foreground">마감 상태</span>
-                      <p className="font-medium">{settlement.closed ? '마감 완료' : '미마감'}</p>
+                      <span className="text-muted-foreground">{t('posSettlementClosedStatus')}</span>
+                      <p className="font-medium">{settlement.closed ? t('posSettlementClosedDone') : t('posSettlementNotClosed')}</p>
                     </div>
                     <div className="flex justify-between sm:block">
-                      <span className="text-muted-foreground">저장 시각</span>
+                      <span className="text-muted-foreground">{t('posSettlementSavedAt')}</span>
                       <p className="font-medium">{settleDate}</p>
                     </div>
                   </div>
@@ -1369,17 +1372,17 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
               <div className="rounded-lg border">
                 <div className="border-b px-4 py-3 text-sm font-medium">
-                  일자별 결산 히스토리
+                  {t('posSettlementDailyHistoryTitle')}
                 </div>
                 <div className="overflow-auto max-h-[calc(100vh-420px)] min-h-[160px]">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                       <tr className="border-b text-muted-foreground bg-muted/30">
-                        <th className="px-4 py-2 text-left">일자</th>
-                        <th className="px-4 py-2 text-right">시스템 매출</th>
-                        <th className="px-4 py-2 text-right">입력 합계</th>
-                        <th className="px-4 py-2 text-right">차액</th>
-                        <th className="px-4 py-2 text-center">마감</th>
+                        <th className="px-4 py-2 text-left">{t('date')}</th>
+                        <th className="px-4 py-2 text-right">{t('posSystemTotal')}</th>
+                        <th className="px-4 py-2 text-right">{t('posInputTotal')}</th>
+                        <th className="px-4 py-2 text-right">{t('posDifference')}</th>
+                        <th className="px-4 py-2 text-center">{t('posClosed')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1391,12 +1394,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                             r.date === settleDate && 'bg-muted/30'
                           )}
                           onClick={() => setSettleDate(r.date)}
-                          title="클릭하면 해당 일자 상세를 불러옵니다."
+                          title={t('posSettlementHistoryRowTitle')}
                         >
                           <td className="px-4 py-2">
                             {r.date}
                             {r.date === settleDate && (
-                              <span className="ml-2 text-xs text-primary">(선택됨)</span>
+                              <span className="ml-2 text-xs text-primary">({t('posSelected')})</span>
                             )}
                           </td>
                           <td className="px-4 py-2 text-right tabular-nums">{r.systemTotal.toLocaleString()} ฿</td>
@@ -1406,13 +1409,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                           <td className="px-4 py-2 text-right tabular-nums">
                             {r.hasSettlement ? `${r.diff.toLocaleString()} ฿` : '-'}
                           </td>
-                          <td className="px-4 py-2 text-center">{r.hasSettlement ? (r.closed ? '완료' : '미마감') : '-'}</td>
+                          <td className="px-4 py-2 text-center">
+                            {r.hasSettlement ? (r.closed ? t('posSettlementClosedDone') : t('posSettlementNotClosed')) : '-'}
+                          </td>
                         </tr>
                       ))}
                       {!historyLoading && historyRows.length === 0 && (
                         <tr>
                           <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
-                            조회할 결산 데이터가 없습니다.
+                            {t('posSettlementNoHistoryData')}
                           </td>
                         </tr>
                       )}

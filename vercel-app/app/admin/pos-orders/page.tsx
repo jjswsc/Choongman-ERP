@@ -1677,7 +1677,7 @@ export default function PosOrdersPage() {
             </div>
             <div className="mb-4 rounded-xl border bg-card p-4">
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-sm font-semibold">LINKPOS 자동분류 규칙</div>
+                <div className="text-sm font-semibold">{t("posLinkposAutoRuleTitle")}</div>
                 <div className="text-xs text-muted-foreground">
                   {rulesLoading
                     ? t("posLinkposRulesLoading")
@@ -1690,14 +1690,14 @@ export default function PosOrdersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="shared">공통(__shared__)</SelectItem>
-                    <SelectItem value="store">현재 매장</SelectItem>
+                    <SelectItem value="shared">{t("posLinkposScopeSharedWithCode")}</SelectItem>
+                    <SelectItem value="store">{t("posLinkposScopeCurrentStore")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
                   value={ruleKeyword}
                   onChange={(e) => setRuleKeyword(e.target.value)}
-                  placeholder="keyword (예: promptpay)"
+                  placeholder={t("posLinkposKeywordPlaceholder")}
                   className="h-8 text-xs md:col-span-2"
                 />
                 <Select value={ruleGroup} onValueChange={(v) => setRuleGroup(v as "card" | "qr")}>
@@ -1705,8 +1705,8 @@ export default function PosOrdersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="card">card</SelectItem>
-                    <SelectItem value="qr">qr</SelectItem>
+                    <SelectItem value="card">{t("posLinkposGroupCard")}</SelectItem>
+                    <SelectItem value="qr">{t("posLinkposGroupQr")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
@@ -1718,7 +1718,7 @@ export default function PosOrdersPage() {
                 <Input
                   value={rulePriority}
                   onChange={(e) => setRulePriority(e.target.value)}
-                  placeholder="priority"
+                  placeholder={t("posLinkposPriorityPlaceholder")}
                   className="h-8 text-xs"
                 />
               </div>
@@ -1733,21 +1733,21 @@ export default function PosOrdersPage() {
                   <span className="text-xs text-muted-foreground">{t("posLinkposPrioritySaving")}</span>
                 )}
                 {ruleScope === "store" && !currentStoreCode && (
-                  <span className="text-xs text-amber-600">현재 매장을 선택하면 매장 규칙 저장이 가능합니다.</span>
+                  <span className="text-xs text-amber-600">{t("posLinkposStoreScopeHint")}</span>
                 )}
               </div>
-              <div className="mb-2 text-[11px] text-muted-foreground">행을 드래그해서 우선순위를 변경할 수 있습니다.</div>
+              <div className="mb-2 text-[11px] text-muted-foreground">{t("posLinkposDragPriorityHint")}</div>
               <div className="max-h-44 overflow-y-auto rounded border">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="px-2 py-1.5 text-left">범위</th>
-                      <th className="px-2 py-1.5 text-left">키워드</th>
-                      <th className="px-2 py-1.5 text-center">그룹</th>
-                      <th className="px-2 py-1.5 text-left">키</th>
-                      <th className="px-2 py-1.5 text-center">우선순위</th>
-                      <th className="px-2 py-1.5 text-center">상태</th>
-                      <th className="px-2 py-1.5 text-center">액션</th>
+                      <th className="px-2 py-1.5 text-left">{t("posLinkposColScope")}</th>
+                      <th className="px-2 py-1.5 text-left">{t("posLinkposColKeyword")}</th>
+                      <th className="px-2 py-1.5 text-center">{t("posLinkposColGroup")}</th>
+                      <th className="px-2 py-1.5 text-left">{t("posLinkposColKey")}</th>
+                      <th className="px-2 py-1.5 text-center">{t("posLinkposColPriority")}</th>
+                      <th className="px-2 py-1.5 text-center">{t("status")}</th>
+                      <th className="px-2 py-1.5 text-center">{t("action")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1788,7 +1788,7 @@ export default function PosOrdersPage() {
                           <td className="px-2 py-1.5 text-center tabular-nums">{r.priority}</td>
                           <td className="px-2 py-1.5 text-center">
                             <span className={cn("rounded px-1.5 py-0.5", r.isActive ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground")}>
-                              {r.isActive ? "active" : "off"}
+                              {r.isActive ? t("active") : t("off")}
                             </span>
                           </td>
                           <td className="px-2 py-1.5 text-center">
@@ -1800,7 +1800,7 @@ export default function PosOrdersPage() {
                                 onClick={() => void handleToggleTenderRule(r)}
                                 disabled={reorderingRules}
                               >
-                                {r.isActive ? "off" : "on"}
+                                {r.isActive ? t("off") : t("on")}
                               </Button>
                               <Button
                                 size="sm"
@@ -1825,26 +1825,26 @@ export default function PosOrdersPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-40">요청시각</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">매장</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">주문번호</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-40">{t("posLinkposRequestedAt")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("store")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posOrderNo")}</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">R1 (local_tx_id)</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">상태</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-14">응답</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">요청/승인</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">원시도 R1</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">재시도 횟수</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">승인번호</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">추적번호</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">오류사유</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">액션</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("status")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-14">{t("posLinkposResponse")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posLinkposRequestedApproved")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">{t("posLinkposOriginR1")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posLinkposRetryCount")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posLinkposApprovalCode")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posLinkposTraceNo")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">{t("posLinkposErrorReason")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("action")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredAttempts.length === 0 ? (
                       <tr>
                         <td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">
-                          조회된 LINKPOS 결제 시도가 없습니다.
+                          {t("posLinkposNoAttempts")}
                         </td>
                       </tr>
                     ) : (
@@ -1931,7 +1931,7 @@ export default function PosOrdersPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">상태</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("status")}</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">grabMerchantID</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">partnerMerchantID</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">lastRequestID</th>
@@ -1943,7 +1943,7 @@ export default function PosOrdersPage() {
                     {grabIntegrations.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
-                          Grab 연동 상태 데이터가 없습니다.
+                          {t("adminGrabNoRows")}
                         </td>
                       </tr>
                     ) : (
@@ -1984,12 +1984,12 @@ export default function PosOrdersPage() {
       <Dialog open={!!chainDialogAttemptId} onOpenChange={(open) => !open && setChainDialogAttemptId(null)}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>LINKPOS 재시도 체인</DialogTitle>
+            <DialogTitle>{t("posLinkposRetryChainTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
             {chainRows.length === 0 ? (
               <div className="rounded border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-                표시할 체인 데이터가 없습니다.
+                {t("posLinkposNoChainData")}
               </div>
             ) : (
               <div className="rounded-xl border bg-card overflow-hidden">
@@ -1997,13 +1997,13 @@ export default function PosOrdersPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
-                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-20">단계</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-20">{t("posLinkposStep")}</th>
                         <th className="px-4 py-2.5 text-[11px] font-bold text-left min-w-[180px]">R1</th>
-                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-16">상태</th>
-                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-14">응답</th>
-                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-24">요청/승인</th>
-                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-24">승인번호</th>
-                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-20">요청시각</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-16">{t("status")}</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-14">{t("posLinkposResponse")}</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-24">{t("posLinkposRequestedApproved")}</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-24">{t("posLinkposApprovalCode")}</th>
+                        <th className="px-4 py-2.5 text-[11px] font-bold text-center w-20">{t("posLinkposRequestedAt")}</th>
                       </tr>
                     </thead>
                     <tbody>

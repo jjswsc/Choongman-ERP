@@ -52,6 +52,7 @@ const emptyForm: ItemFormData = {
   stockBaseUnit: "",
   stockUnitOptions: [],
   standardUnits: [],
+  accountSubjectId: "",
 }
 
 export default function ItemsPage() {
@@ -173,6 +174,10 @@ export default function ItemsPage() {
           stockBaseUnit: p.stockBaseUnit ?? "",
           stockUnitOptions: Array.isArray(p.stockUnitOptions) ? p.stockUnitOptions : [],
           standardUnits: derivedStandardUnits,
+          accountSubjectId:
+            p.accountSubjectId != null && Number.isFinite(Number(p.accountSubjectId))
+              ? String(Number(p.accountSubjectId))
+              : "",
         })
       }
     } else {
@@ -222,6 +227,10 @@ export default function ItemsPage() {
       stockBaseUnit: formData.stockBaseUnit.trim(),
       stockUnitOptions: formData.stockUnitOptions.filter((o) => (o.unit || "").trim()),
       standardUnits: validStandardUnits,
+      accountSubjectId:
+        formData.accountSubjectId && formData.accountSubjectId !== "__none__"
+          ? Number(formData.accountSubjectId)
+          : null,
     })
     if (!res.success) {
       await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
@@ -247,6 +256,10 @@ export default function ItemsPage() {
       stockBaseUnit: formData.stockBaseUnit.trim(),
       stockUnitOptions: formData.stockUnitOptions.filter((o) => (o.unit || "").trim()),
       standardUnits: validStandardUnits,
+      accountSubjectId:
+        formData.accountSubjectId && formData.accountSubjectId !== "__none__"
+          ? Number(formData.accountSubjectId)
+          : null,
     }
     if (editingCode) {
       setProducts((prev) => prev.map((p) => (p.code === editingCode ? newItem : p)))
@@ -291,6 +304,10 @@ export default function ItemsPage() {
       stockBaseUnit: product.stockBaseUnit ?? "",
       stockUnitOptions: Array.isArray(product.stockUnitOptions) ? product.stockUnitOptions : [],
       standardUnits: derivedStandardUnits,
+      accountSubjectId:
+        product.accountSubjectId != null && Number.isFinite(Number(product.accountSubjectId))
+          ? String(Number(product.accountSubjectId))
+          : "",
     })
     setEditingCode(product.code)
   }

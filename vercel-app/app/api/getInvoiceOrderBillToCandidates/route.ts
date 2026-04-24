@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelectFilter } from "@/lib/supabase-server"
 import { requireAuth } from "@/lib/verify-auth"
+import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 
 function pushUnique(out: string[], seen: Set<string>, s: string) {
   const t = String(s || "").trim()
@@ -29,6 +30,30 @@ function billToCandidatesFromOrderRow(storeName: string, cartJson: string | null
     if (v) pushUnique(out, seen, v)
   }
   return out
+}
+
+type TaxInvoiceClient = {
+  companyName: string
+  address: string
+  taxId: string
+  phone: string
+}
+
+function taxInvoiceClientFromOrderMemo(memo: string | null | undefined): TaxInvoiceClient | null {
+  const parsed = parsePosOrderMemo(memo)
+  const tax = parsed.taxInvoice
+  if (!tax) return null
+  const companyName = String(tax.name || "").trim()
+  const address = String(tax.address || "").trim()
+  const taxId = String(tax.taxId || "").replace(/\D/g, "")
+  const phone = String(tax.phone || "").trim()
+  if (!companyName && !address && !taxId && !phone) return null
+  return {
+    companyName: companyName || "-",
+    address: address || "-",
+    taxId: taxId || "-",
+    phone: phone || "-",
+  }
 }
 
 export async function OPTIONS() {
@@ -67,25 +92,34 @@ export async function POST(request: NextRequest) {
       80
     )
     if (orderIds.length === 0) {
-      return NextResponse.json({ map: {} as Record<string, string[]> }, { headers })
+      return NextResponse.json(
+        { map: {} as Record<string, string[]>, taxInvoiceClientMap: {} as Record<string, TaxInvoiceClient> },
+        { headers }
+      )
     }
 
     const idFilter = `id=in.(${orderIds.join(",")})`
     const rows = (await supabaseSelectFilter("orders", idFilter, {
       limit: orderIds.length + 10,
-      select: "id,store_name,cart_json",
-    })) as { id?: number; store_name?: string; cart_json?: string | null }[] | null
+      select: "id,store_name,cart_json,memo",
+    })) as { id?: number; store_name?: string; cart_json?: string | null; memo?: string | null }[] | null
 
     const map: Record<string, string[]> = {}
+    const taxInvoiceClientMap: Record<string, TaxInvoiceClient> = {}
     for (const r of rows || []) {
       const id = Number(r.id)
       if (!Number.isFinite(id) || id <= 0) continue
       map[String(id)] = billToCandidatesFromOrderRow(String(r.store_name || ""), r.cart_json)
+      const taxClient = taxInvoiceClientFromOrderMemo(r.memo)
+      if (taxClient) taxInvoiceClientMap[String(id)] = taxClient
     }
 
-    return NextResponse.json({ map }, { headers })
+    return NextResponse.json({ map, taxInvoiceClientMap }, { headers })
   } catch (e) {
     console.error("getInvoiceOrderBillToCandidates:", e)
-    return NextResponse.json({ map: {} as Record<string, string[]> }, { status: 500, headers })
+    return NextResponse.json(
+      { map: {} as Record<string, string[]>, taxInvoiceClientMap: {} as Record<string, TaxInvoiceClient> },
+      { status: 500, headers }
+    )
   }
 }

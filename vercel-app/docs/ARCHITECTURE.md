@@ -2,6 +2,8 @@
 
 다른 개발자가 기능 수정·버그 수정 시 참고할 수 있도록 기능별 구조를 정리합니다.
 
+관련 정리 가이드: [FILE-ORGANIZATION-GUIDE-KO.md](./FILE-ORGANIZATION-GUIDE-KO.md)
+
 ## 1. 전체 흐름
 
 ```

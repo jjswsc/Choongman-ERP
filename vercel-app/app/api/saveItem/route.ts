@@ -8,6 +8,90 @@ function taxTypeToDb(taxType: string): string {
   return '과세'
 }
 
+function normalizeKey(v: string): string {
+  return String(v || '').trim().toLowerCase().replace(/\s+/g, '')
+}
+
+function isPackingCategory(category: string): boolean {
+  const c = normalizeKey(category)
+  if (!c) return false
+  return /packing|package|packaging|pkg|포장|패킹|포장재|포장자재|포장부자재|부자재/.test(c)
+}
+
+async function resolveDefaultItemAccountSubjectIdFromRules(category: string): Promise<number | null> {
+  try {
+    const rows = (await supabaseSelectFilter(
+      'item_account_subject_rules',
+      'is_active=eq.true',
+      {
+        select: 'rule_type,keyword,match_mode,account_subject_id,priority',
+        order: 'priority.asc,id.asc',
+        limit: 500,
+      }
+    )) as
+      | {
+          rule_type?: string
+          keyword?: string | null
+          match_mode?: string | null
+          account_subject_id?: number | null
+          priority?: number
+        }[]
+      | null
+    const list = rows || []
+    if (!list.length) return null
+    const categoryNorm = normalizeKey(category)
+    for (const r of list) {
+      const ruleType = String(r.rule_type || '').trim().toLowerCase()
+      if (ruleType !== 'keyword') continue
+      const sid = Number(r.account_subject_id)
+      if (!Number.isFinite(sid) || sid <= 0) continue
+      const keywordNorm = normalizeKey(String(r.keyword || ''))
+      if (!keywordNorm) continue
+      const mode = String(r.match_mode || 'contains').trim().toLowerCase()
+      const matched = mode === 'exact' ? categoryNorm === keywordNorm : categoryNorm.includes(keywordNorm)
+      if (matched) return sid
+    }
+    const defaultRule = list.find((r) => String(r.rule_type || '').trim().toLowerCase() === 'default')
+    const defaultSid = Number(defaultRule?.account_subject_id)
+    if (Number.isFinite(defaultSid) && defaultSid > 0) return defaultSid
+    return null
+  } catch {
+    // 테이블 미배포/조회 실패 시 fallback
+    return null
+  }
+}
+
+async function resolveDefaultItemAccountSubjectId(category: string): Promise<number | null> {
+  const fromRules = await resolveDefaultItemAccountSubjectIdFromRules(category)
+  if (fromRules != null && Number.isFinite(fromRules) && fromRules > 0) return fromRules
+  try {
+    const rows = (await supabaseSelectFilter(
+      'account_subjects',
+      'type=eq.expense&p_and_l_section=eq.cost',
+      { select: 'id,code,name,name_en', limit: 2000 }
+    )) as { id?: number; code?: string; name?: string; name_en?: string }[] | null
+    const list = rows || []
+    const findByKeywords = (keywords: string[]) => {
+      const ks = keywords.map(normalizeKey).filter(Boolean)
+      for (const r of list) {
+        const merged = [r.name || '', r.name_en || '', r.code || ''].map(normalizeKey).join(' ')
+        if (!merged) continue
+        if (ks.some((k) => merged.includes(k))) {
+          const id = Number(r.id)
+          if (Number.isFinite(id) && id > 0) return id
+        }
+      }
+      return null
+    }
+    const packagingId = findByKeywords(['포장재', 'packaging', 'packingmaterial'])
+    const foodRawId = findByKeywords(['식품원재료', '식품원재료비', 'foodrawmaterial', 'ingredientrawmaterial'])
+    if (isPackingCategory(category)) return packagingId ?? foodRawId
+    return foodRawId ?? packagingId
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -33,6 +117,7 @@ export async function POST(request: NextRequest) {
       stockBaseUnit?: string
       stockUnitOptions?: { unit: string; factor: number }[]
       standardUnits?: { unit: string; totalQuantity: number }[]
+      accountSubjectId?: number | null
     }
 
     code = String(body.code || '').trim()
@@ -56,6 +141,14 @@ export async function POST(request: NextRequest) {
           .filter((x) => x && String(x.unit || '').trim() && Number(x.totalQuantity) > 0)
           .map((x) => ({ unit: String(x.unit).trim(), total_quantity: Number(x.totalQuantity) || 1 }))
       : []
+    const accountSubjectIdRaw =
+      body.accountSubjectId != null && !Number.isNaN(Number(body.accountSubjectId))
+        ? Number(body.accountSubjectId)
+        : null
+    const accountSubjectIdEff =
+      accountSubjectIdRaw != null && Number.isFinite(accountSubjectIdRaw) && accountSubjectIdRaw > 0
+        ? accountSubjectIdRaw
+        : await resolveDefaultItemAccountSubjectId(category)
     const row = {
       code,
       name,
@@ -74,6 +167,10 @@ export async function POST(request: NextRequest) {
       stock_base_unit: String(body.stockBaseUnit || '').trim(),
       stock_unit_options: stockUnitOpts,
       standard_units: standardUnitsDb,
+      account_subject_id:
+        accountSubjectIdEff != null && Number.isFinite(accountSubjectIdEff) && accountSubjectIdEff > 0
+          ? accountSubjectIdEff
+          : null,
     }
 
     const filterCode = editingCode || code
@@ -140,8 +237,16 @@ export async function POST(request: NextRequest) {
       await tryWrite(row)
     } catch (colErr) {
       const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
-      if (/stock_base_unit|stock_unit_options|column.*does not exist/i.test(errMsg)) {
-        const { stock_base_unit: _sbu, stock_unit_options: _suo, ...rowWithoutStock } = row
+      if (
+        /stock_base_unit|stock_unit_options|account_subject_id|column.*does not exist/i.test(errMsg)
+      ) {
+        const {
+          stock_base_unit: _sbu,
+          stock_unit_options: _suo,
+          account_subject_id: _asid,
+          ...rowWithoutCompatCols
+        } = row
+        const rowWithoutStock = rowWithoutCompatCols
         await tryWrite(rowWithoutStock)
       } else {
         throw colErr

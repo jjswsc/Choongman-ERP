@@ -30,7 +30,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole, OFFICE_STORES } from "@/lib/permissions"
+import { isOfficeRole, OFFICE_STORES, isAccountingRole, isDirectorRole } from "@/lib/permissions"
 import {
   executeExpensePayment,
   getApprovedExpenseAccrualsForBankTx,
@@ -2821,13 +2821,55 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">—</SelectItem>
-                  {approvedPickList.map((p) => (
+                  {approvedPickList.map((p) => {
+                    const tag =
+                      p.payeeMemoMatchQuality === "mismatch"
+                        ? "⚠"
+                        : p.payeeMemoMatchQuality === "uncertain"
+                          ? "?"
+                          : p.payeeMemoMatchQuality === "ok"
+                            ? "✓"
+                            : "·"
+                    return (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {(p.dueDate || p.expenseDate || "-")} · {p.payeeName} ({p.payeeCode || "-"}) / ฿{(p.remainingAmount || 0).toLocaleString()}
+                      {tag} {(p.dueDate || p.expenseDate || "-")} · {p.payeeName} ({p.payeeCode || "-"}) / ฿{(p.remainingAmount || 0).toLocaleString()}
                     </SelectItem>
-                  ))}
+                    )
+                  })}
                 </SelectContent>
               </Select>
+              {(() => {
+                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
+                const canOverridePayeeMemo = isAccountingRole(auth?.role || "") || isDirectorRole(auth?.role || "")
+                if (selected && selected.payeeMemoMatchQuality) {
+                  const q = selected.payeeMemoMatchQuality
+                  if (q === "mismatch" && !canOverridePayeeMemo) {
+                    return (
+                      <p className="text-xs text-destructive">
+                        {tt("bankPayeeMemoMismatchBlock", "통장 적요와 이 지급 예정이 맞지 않는 것으로 보입니다. (회계/본사 승인권자만 강제 연결 가능)")}
+                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
+                      </p>
+                    )
+                  }
+                  if (q === "mismatch" && canOverridePayeeMemo) {
+                    return (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        {tt("bankPayeeMemoMismatchOverride", "적요와 지급처가 불일치로 추정됩니다. 저장 시 확인이 필요합니다.")}
+                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
+                      </p>
+                    )
+                  }
+                  if (q === "uncertain") {
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        {tt("bankPayeeMemoUncertain", "적요와 지급처 일치를 확정할 수 없습니다. 내용을 확인하세요.")}
+                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
+                      </p>
+                    )
+                  }
+                }
+                return null
+              })()}
               {(() => {
                 const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
                 if (!selected || !approvedPickRow) return null
@@ -2848,6 +2890,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   onClick={async () => {
                     if (!approvedPickRow?.id || !approvedPickId) return
                     const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
+                    const canOverridePayeeMemo = isAccountingRole(auth?.role || "") || isDirectorRole(auth?.role || "")
                     const bankAmt = Math.abs(Number(approvedPickRow.amount || 0))
                     const remain = Math.abs(Number(selected?.remainingAmount || 0))
                     if (!selected || Math.abs(bankAmt - remain) > 0.01) {
@@ -2856,10 +2899,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     }
                     setApprovedPickSaving(true)
                     try {
-                      const res = await executeExpensePayment({
+                      const basePayload = {
                         expenseAccrualId: Number(approvedPickId),
-                        paymentMethod: "bank",
-                        amount: Math.abs(Number(approvedPickRow.amount || 0)),
+                        paymentMethod: "bank" as const,
+                        amount: bankAmt,
                         transDate: String(approvedPickRow.transDate || "").slice(0, 10),
                         memo: stripWithdrawalCategoryMetaFromNote(
                           (approvedPickRow.note || approvedPickRow.memo || "").trim()
@@ -2867,7 +2910,24 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         bankTransactionId: Number(approvedPickRow.id),
                         userName: auth?.user,
                         userRole: auth?.role,
-                      })
+                      }
+                      let res = await executeExpensePayment(basePayload)
+                      if (!res.success && (res as { code?: string }).code === "PAYEE_MEMO_MISMATCH" && canOverridePayeeMemo) {
+                        const sure = await appConfirm(
+                          tt(
+                            "bankPayeeMemoMismatchConfirm",
+                            "통장 적요와 지급처가 일치하지 않는 것으로 판단되었습니다. 이 지급 예정으로 연결하시겠습니까?"
+                          )
+                        )
+                        if (sure) {
+                          res = await executeExpensePayment({
+                            ...basePayload,
+                            acknowledgePayeeMemoMismatch: true,
+                          })
+                        } else {
+                          return
+                        }
+                      }
                       if (!res.success) {
                         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
                         return
@@ -2884,7 +2944,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
                     const bankAmt = Math.abs(Number(approvedPickRow?.amount || 0))
                     const remain = Math.abs(Number(selected?.remainingAmount || 0))
-                    return !selected || Math.abs(bankAmt - remain) > 0.01
+                    const canOverridePayeeMemo = isAccountingRole(auth?.role || "") || isDirectorRole(auth?.role || "")
+                    if (!selected || Math.abs(bankAmt - remain) > 0.01) return true
+                    if (selected.payeeMemoMatchQuality === "mismatch" && !canOverridePayeeMemo) return true
+                    return false
                   })()}
                 >
                   {approvedPickSaving ? "..." : (t("btnSave") || "저장")}

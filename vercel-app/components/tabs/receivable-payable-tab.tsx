@@ -15,12 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -51,6 +49,7 @@ import {
   getReceivablePayableList,
   getPayableTransactionItems,
   getInvoiceData,
+  getInvoiceOrderBillToCandidates,
   getInvoiceSettings,
   addBalanceTransaction,
   updateReceivableReceiveCheck,
@@ -64,8 +63,10 @@ import {
   type OrderInvoiceTotals,
 } from "@/lib/api-client"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
-import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
+import { resolveInvoiceClientForTarget, resolveInvoiceClientFromBillToCandidates } from "@/lib/invoice-client-resolve"
+import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import type { InvoiceData } from "@/components/invoice"
+import type { InvoiceDataClient } from "@/lib/api-client"
 
 type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoiceTotals?: OrderInvoiceTotals }
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
@@ -82,6 +83,20 @@ function buildTaxInvoiceDocNo(issueDate: string, refText: string): string {
   const refDigits = String(refText || "").replace(/\D/g, "")
   const suffix = (refDigits.slice(-3) || "1").padStart(3, "0")
   return `IV.${yyyymm}XX-${suffix}`
+}
+
+function buildClientFromPosTaxMemo(
+  memo: string | undefined,
+  fallbackName: string
+): InvoiceDataClient | null {
+  const parsed = parsePosOrderMemo(memo)
+  const tax = parsed.taxInvoice
+  if (!tax) return null
+  const name = String(tax.name || "").trim() || String(fallbackName || "").trim() || "-"
+  const address = String(tax.address || "").trim() || "-"
+  const taxId = String(tax.taxId || "").trim() || "-"
+  const phone = String(tax.phone || "").trim() || "-"
+  return { companyName: name, address, taxId, phone }
 }
 
 export function ReceivablePayableTab() {
@@ -107,7 +122,7 @@ export function ReceivablePayableTab() {
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
   // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
-  const [salesOutletOptions, setSalesOutletOptions] = React.useState<string[]>([])
+  const [salesOutletOptions, setSalesOutletOptions] = React.useState<{ code: string; name: string }[]>([])
   // 미지급금: 매장 선택 + 매입처. 본사/회계직원은 매장 선택, 매니저는 자기 매장 고정
   const [payableStoreFilter, setPayableStoreFilter] = React.useState(() =>
     !canSelectStores && isManager && managerStore ? managerStore : "All"
@@ -144,7 +159,7 @@ export function ReceivablePayableTab() {
   const handleTaxInvoicePrint = React.useCallback(
     async (
       row: NonNullable<ReceivablePayableItem["items"]>[number],
-      outletStoreName: string
+      recItem: ReceivablePayableItem
     ) => {
       let refType: "Order" | "ForceOutbound" | null = null
       let refId: number | null = null
@@ -173,10 +188,14 @@ export function ReceivablePayableTab() {
         refType === "Order" ? `tax-${row.id ?? refId}` : `tax-fo-${row.id ?? refId}`
       setTaxInvoiceLoadingKey(loadKey)
       try {
-        const [{ items, orderInvoiceTotals }, invoiceDataRes, invSettings] = await Promise.all([
+        const targetLabel = String(recItem.vendorName || recItem.storeName || "").trim()
+        const [{ items, orderInvoiceTotals }, invoiceDataRes, invSettings, billToCandRes] = await Promise.all([
           getPayableTransactionItems({ refType, refId }),
           getInvoiceData(),
           getInvoiceSettings(),
+          refType === "Order" && refId != null
+            ? getInvoiceOrderBillToCandidates([refId])
+            : Promise.resolve({ map: {} as Record<string, string[]>, taxInvoiceClientMap: {} as Record<string, InvoiceDataClient> }),
         ])
         if (!items.length) {
           await appAlert(tt("recTaxInvoiceNoLines", "No line items to display, cannot create tax invoice."))
@@ -184,7 +203,33 @@ export function ReceivablePayableTab() {
         }
         const { company, clients } = invoiceDataRes
         const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
-        const client = resolveInvoiceClientForTarget(outletStoreName, company, clients)
+        const billToMap = billToCandRes?.map && typeof billToCandRes.map === "object" ? billToCandRes.map : {}
+        const taxInvoiceClientMap =
+          billToCandRes?.taxInvoiceClientMap && typeof billToCandRes.taxInvoiceClientMap === "object"
+            ? billToCandRes.taxInvoiceClientMap
+            : {}
+        let client: InvoiceDataClient | { companyName: string }
+        if (refType === "Order" && refId != null) {
+          const fromOrder = billToMap[String(refId)]
+          const memoFromOrder = taxInvoiceClientMap[String(refId)]
+          const memoFromRow = buildClientFromPosTaxMemo(row.memo, targetLabel)
+          const memoClient = memoFromOrder ?? memoFromRow
+          const extra = [String(recItem.vendorName || "").trim(), String(recItem.storeName || "").trim()].filter(
+            (s) => s.length > 0
+          )
+          const candidates =
+            Array.isArray(fromOrder) && fromOrder.length > 0
+              ? [...fromOrder, ...extra]
+              : extra
+          client =
+            memoClient ??
+            (candidates.length > 0
+              ? resolveInvoiceClientFromBillToCandidates(candidates, company, clients)
+              : resolveInvoiceClientForTarget(targetLabel, company, clients))
+        } else {
+          const memoClient = buildClientFromPosTaxMemo(row.memo, targetLabel)
+          client = memoClient ?? resolveInvoiceClientForTarget(targetLabel, company, clients)
+        }
         const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
         const refForDoc = (row.invoice_no || "").trim() || String(refId)
         const docNo = buildTaxInvoiceDocNo(dateStr, refForDoc)
@@ -257,21 +302,20 @@ export function ReceivablePayableTab() {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))
   }, [])
 
-  // 매출처 목록: 매장 + 판매처(매출 type 거래처)
+  // 매출처 목록: vendor code + 표시명
   React.useEffect(() => {
     const load = async () => {
-      const stores = (storeList || []).filter((s) => s && s !== "All")
       const sales = (await getVendorsForSales()) || []
-      const salesNames = sales.map((v) => v.name).filter(Boolean)
       const seen = new Set<string>()
-      setSalesOutletOptions([...stores, ...salesNames].filter((n) => {
-        if (!n || seen.has(n)) return false
-        seen.add(n)
+      setSalesOutletOptions((sales || []).filter((v) => {
+        const c = String(v.code || "").trim()
+        if (!c || seen.has(c)) return false
+        seen.add(c)
         return true
       }))
     }
     load().catch(() => setSalesOutletOptions([]))
-  }, [storeList])
+  }, [])
 
   // 매니저(회계권한 없을 때): 미지급금 매장 선택을 자기 매장으로 고정
   React.useEffect(() => {
@@ -322,16 +366,18 @@ export function ReceivablePayableTab() {
   /** 매출처 선택값과 동일·유사 이름의 매입 거래처(발주·미지급) — 미수금이 비어 있을 때 미지급 탭 유도용 */
   const purchaseVendorMatchForOutlet = React.useMemo(() => {
     if (salesOutletFilter === "All") return null
-    const needle = salesOutletFilter.trim().toLowerCase()
-    if (!needle) return null
-    return (
-      vendors.find((v) => {
-        const n = (v.name || "").trim().toLowerCase()
-        const c = (v.code || "").trim().toLowerCase()
-        return n === needle || c === needle || n.includes(needle) || needle.includes(n)
-      }) ?? null
-    )
+    const code = salesOutletFilter.trim().toLowerCase()
+    if (!code) return null
+    return vendors.find((v) => (v.code || "").trim().toLowerCase() === code) ?? null
   }, [salesOutletFilter, vendors])
+
+  const selectedSalesOutletLabel = React.useMemo(() => {
+    if (salesOutletFilter === "All") return tt("recFilterSalesOutletAll", "All Customers")
+    const row = salesOutletOptions.find((v) => (v.code || "") === salesOutletFilter)
+    if (!row) return salesOutletFilter
+    const nm = String(row.name || "").trim()
+    return nm && nm !== row.code ? `${nm} (${row.code})` : row.code
+  }, [salesOutletFilter, salesOutletOptions, tt])
 
   const jumpToPayableForMatchedVendor = React.useCallback(() => {
     const v = purchaseVendorMatchForOutlet
@@ -458,7 +504,7 @@ export function ReceivablePayableTab() {
         ? tt(
             "recBulkSyncConfirmOutlet",
             "선택한 매출처({outlet})의 Order 미수금만 현재 품목·직접정산(지두방) 규칙으로 다시 맞춥니다. 계속할까요?"
-          ).replace(/\{outlet\}/g, salesOutletFilter)
+          ).replace(/\{outlet\}/g, selectedSalesOutletLabel)
         : tt(
             "recBulkSyncConfirmAll",
             "전체 매출처의 Order 미수금을 현재 품목·직접정산(지두방) 규칙으로 다시 맞춥니다. 시간이 걸릴 수 있습니다. 계속할까요?"
@@ -527,7 +573,7 @@ export function ReceivablePayableTab() {
       setBulkRecSyncing(false)
       setBulkRecProgress("")
     }
-  }, [auth?.role, loadList, salesOutletFilter, t, tt])
+  }, [auth?.role, loadList, salesOutletFilter, selectedSalesOutletLabel, t, tt])
 
   const handleBulkOutboundSyncOrderReceivables = React.useCallback(async () => {
     const msg =
@@ -535,7 +581,7 @@ export function ReceivablePayableTab() {
         ? tt(
             "recBulkOutboundSyncConfirmOutlet",
             '선택한 매출처({outlet})의 주문(출고) 미수금과 강제출고 미수금을 출고 관리와 같은 규칙으로 맞춥니다. 계속할까요?'
-          ).replace(/\{outlet\}/g, salesOutletFilter)
+          ).replace(/\{outlet\}/g, selectedSalesOutletLabel)
         : tt(
             "recBulkOutboundSyncConfirmAll",
             "전체 매출처의 주문(출고) 미수금과 강제출고 미수금을 출고(본사 출고 로그) 기준으로 맞춥니다. 계속할까요?"
@@ -619,7 +665,7 @@ export function ReceivablePayableTab() {
       setBulkOutboundRecSyncing(false)
       setBulkOutboundRecProgress("")
     }
-  }, [auth?.role, loadList, salesOutletFilter, t, tt])
+  }, [auth?.role, loadList, salesOutletFilter, selectedSalesOutletLabel, t, tt])
 
   React.useEffect(() => {
     setHasSearchedList(false)
@@ -1009,7 +1055,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <SelectContent>
                           <SelectItem value="All">{(t("recFilterSalesOutletAll") || "All Customers")}</SelectItem>
                           {salesOutletOptions.map((s) => (
-                            <SelectItem key={s} value={s}>{formatStoreLabel(s)}</SelectItem>
+                            <SelectItem key={s.code} value={s.code}>
+                              {s.name && s.name !== s.code ? `${s.name} (${s.code})` : s.code}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1328,7 +1376,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             aria-label={tt("recTaxInvoicePrintTitle", "Tax Invoice/Receipt 인쇄")}
                                             onClick={(e) => {
                                               e.stopPropagation()
-                                              void handleTaxInvoicePrint(row, item.storeName || "")
+                                              void handleTaxInvoicePrint(row, item)
                                             }}
                                           >
                                             {taxInvoiceLoadingKey ===

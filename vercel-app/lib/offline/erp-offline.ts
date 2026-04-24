@@ -100,20 +100,20 @@ export async function getVendorsForPurchaseWithCache(): Promise<VendorForPurchas
   return cached ?? fallback
 }
 
-export async function getVendorsForSalesWithCache(): Promise<{ name: string }[]> {
-  const fallback: { name: string }[] = []
+export async function getVendorsForSalesWithCache(): Promise<{ code: string; name: string }[]> {
+  const fallback: { code: string; name: string }[] = []
   if (isOnline()) {
     try {
       const res = await apiFetch('/api/getVendorsForSales')
-      const data = (await res.json()) as { name: string }[]
+      const data = (await res.json()) as { code: string; name: string }[]
       await setErpCache(CACHE_KEYS.VENDORS_SALES, data)
       return data ?? fallback
     } catch {
-      const cached = await getFromErpCache<{ name: string }[]>(CACHE_KEYS.VENDORS_SALES)
+      const cached = await getFromErpCache<{ code: string; name: string }[]>(CACHE_KEYS.VENDORS_SALES)
       return cached ?? fallback
     }
   }
-  const cached = await getFromErpCache<{ name: string }[]>(CACHE_KEYS.VENDORS_SALES)
+  const cached = await getFromErpCache<{ code: string; name: string }[]>(CACHE_KEYS.VENDORS_SALES)
   return cached ?? fallback
 }
 

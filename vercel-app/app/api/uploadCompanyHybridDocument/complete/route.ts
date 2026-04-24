@@ -3,12 +3,12 @@ import { requireAuth } from '@/lib/verify-auth'
 import { supabaseInsert, supabaseStoragePublicUrl } from '@/lib/supabase-server'
 import {
   isAllowedCompanyDocContentType,
-  isCompanyHybridRelatedType,
+  isCompanyHybridDocVisibility,
+  companyHybridDocVisibilityToDocType,
   COMPANY_DOCUMENTS_BUCKET,
   slugifyStoreForCompanyDocPath,
 } from '@/lib/company-hybrid-documents'
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
-import { validateCompanyHybridRelated } from '@/lib/company-hybrid-documents-validate'
 import { logCompanyHybridDocumentEvent } from '@/lib/company-hybrid-documents-audit'
 import { resolveCategoryIdForDocument } from '@/lib/company-hybrid-category-server'
 
@@ -32,9 +32,8 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as Record<string, unknown>
     const store = norm(body.store)
     const title = norm(body.title)
-    const relatedType = norm(body.relatedType || body.related_type)
-    const relatedId = norm(body.relatedId || body.related_id)
-    const docType = norm(body.docType || body.doc_type)
+    const visibilityRaw = norm(body.visibility || body.permission || body.docPermission || body.doc_permission)
+    const visibility = isCompanyHybridDocVisibility(visibilityRaw) ? visibilityRaw : 'all'
     const categoryIdIn = body.categoryId ?? body.category_id
     const note = norm(body.note)
     const validFrom = body.validFrom != null && String(body.validFrom).trim() ? String(body.validFrom).slice(0, 10) : null
@@ -59,29 +58,6 @@ export async function POST(request: NextRequest) {
     if (!title) {
       return NextResponse.json({ success: false, message: '제목이 필요합니다.' }, { status: 400, headers })
     }
-    if (!isCompanyHybridRelatedType(relatedType)) {
-      return NextResponse.json({ success: false, message: '유효하지 않은 relatedType입니다.' }, { status: 400, headers })
-    }
-    const rId = relatedType === 'none' ? null : relatedId
-    if (rId) {
-      const relErr = await validateCompanyHybridRelated(
-        relatedType,
-        rId,
-        store,
-        String(auth.role || ''),
-        String(auth.store || ''),
-        auth
-      )
-      if (relErr) {
-        return NextResponse.json({ success: false, message: relErr }, { status: 400, headers })
-      }
-    } else if (relatedType !== 'none') {
-      return NextResponse.json(
-        { success: false, message: '관련 ID가 필요합니다.' },
-        { status: 400, headers }
-      )
-    }
-
     const catRes = await resolveCategoryIdForDocument(store, categoryIdIn)
     if (!catRes.ok) {
       return NextResponse.json({ success: false, message: catRes.message }, { status: 400, headers })
@@ -108,9 +84,9 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
     const inserted = await supabaseInsert('company_hybrid_documents', {
       store,
-      related_type: relatedType,
-      related_id: rId,
-      doc_type: docType || null,
+      related_type: 'none',
+      related_id: null,
+      doc_type: companyHybridDocVisibilityToDocType(visibility),
       category_id: categoryId,
       title,
       source: 'supabase',
@@ -138,7 +114,7 @@ export async function POST(request: NextRequest) {
       'create',
       store,
       { name: auth.name, store: auth.store },
-      { title, relatedType, source: 'supabase', storagePath }
+      { title, visibility, source: 'supabase', storagePath }
     )
     return NextResponse.json({ success: true, id: newId, url: publicUrl, message: '등록되었습니다.' }, { headers })
   } catch (e) {

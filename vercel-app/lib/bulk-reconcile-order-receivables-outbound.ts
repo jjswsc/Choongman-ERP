@@ -7,6 +7,46 @@ import { syncReceivableToOutboundView } from '@/lib/receivable-match-outbound'
 import { orderIdFromReceivableOrderRow } from '@/lib/receivable-order-id-parse'
 import { reconcileAllForceOutboundReceivables } from '@/lib/force-outbound-receivable'
 
+function normalizeStoreKey(v: string): string {
+  const raw = String(v || '').trim().toLowerCase()
+  if (!raw) return ''
+  const noSpace = raw.replace(/\s+/g, ' ')
+  return noSpace.startsWith('cm ') ? noSpace.slice(3).trim() : noSpace
+}
+
+function normalizeVendorCode(v: string): string {
+  return String(v || '').trim().toLowerCase()
+}
+
+async function getReceivableStoreAliasSetByVendorCode(vendorCodeFilter: string): Promise<Set<string>> {
+  const code = normalizeVendorCode(vendorCodeFilter)
+  if (!code) return new Set<string>()
+  const vendors = (await supabaseSelectFilter(
+    'vendors',
+    `code=eq.${encodeURIComponent(code)}`,
+    { select: 'code,name,gps_name', limit: 1 }
+  )) as { code?: string; name?: string; gps_name?: string }[] | null
+  const v = vendors?.[0]
+  if (!v) return new Set<string>()
+  const aliases = new Set<string>()
+  const name = normalizeStoreKey(String(v.name || ''))
+  const gps = normalizeStoreKey(String(v.gps_name || ''))
+  if (name) aliases.add(name)
+  if (gps) aliases.add(gps)
+  return aliases
+}
+
+function matchesStoreAliasOrExactName(
+  storeName: string | null | undefined,
+  rawFilter: string,
+  aliasesByVendorCode: Set<string>
+): boolean {
+  const storeNorm = normalizeStoreKey(String(storeName || ''))
+  if (!storeNorm) return false
+  if (aliasesByVendorCode.size > 0) return aliasesByVendorCode.has(storeNorm)
+  return storeNorm === normalizeStoreKey(rawFilter)
+}
+
 export type BulkOutboundStats = {
   processed: number
   updated: number
@@ -33,6 +73,10 @@ export async function reconcileOrderReceivablesOutboundBatch(params: {
 }): Promise<BulkOutboundBatchResult> {
   const { lastReceivableId, storeFilter } = params
   const batchSize = Math.min(Math.max(params.batchSize, 1), 250)
+  const normalizedStoreFilter = String(storeFilter || '').trim()
+  const aliasSetByVendorCode = normalizedStoreFilter
+    ? await getReceivableStoreAliasSetByVendorCode(normalizedStoreFilter)
+    : new Set<string>()
 
   const stats: BulkOutboundStats = {
     processed: 0,
@@ -44,16 +88,13 @@ export async function reconcileOrderReceivablesOutboundBatch(params: {
   }
   const errorSamples: { orderId: number; message: string }[] = []
 
-  let filter = `ref_type=eq.Order&id=gt.${Number(lastReceivableId) || 0}`
-  if (storeFilter?.trim()) {
-    filter += `&store_name=ilike.${encodeURIComponent(storeFilter.trim())}`
-  }
+  const filter = `ref_type=eq.Order&id=gt.${Number(lastReceivableId) || 0}`
 
   const recRows = (await supabaseSelectFilter('receivable_transactions', filter, {
-    select: 'id,ref_id,invoice_no,memo',
+    select: 'id,ref_id,invoice_no,memo,store_name',
     order: 'id.asc',
     limit: batchSize,
-  })) as { id?: number; ref_id?: number; invoice_no?: string | null; memo?: string | null }[]
+  })) as { id?: number; ref_id?: number; invoice_no?: string | null; memo?: string | null; store_name?: string | null }[]
 
   if (!recRows?.length) {
     const fo = await reconcileAllForceOutboundReceivables({ storeFilter })
@@ -62,12 +103,18 @@ export async function reconcileOrderReceivablesOutboundBatch(params: {
     return { nextReceivableId: lastReceivableId, hasMore: false, stats, errorSamples }
   }
 
+  const scopedRecRows = normalizedStoreFilter
+    ? (recRows || []).filter((r) =>
+        matchesStoreAliasOrExactName(r.store_name, normalizedStoreFilter, aliasSetByVendorCode)
+      )
+    : recRows
+
   const nextReceivableId = Number(recRows[recRows.length - 1]?.id ?? lastReceivableId)
   const hasMore = recRows.length >= batchSize
 
   const seenOrder = new Set<number>()
   const uniqueIds: number[] = []
-  for (const r of recRows) {
+  for (const r of scopedRecRows) {
     const oid = orderIdFromReceivableOrderRow(r)
     if (oid == null) continue
     if (seenOrder.has(oid)) continue
