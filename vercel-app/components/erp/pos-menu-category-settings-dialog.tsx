@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getPosMenuCategoriesConfig, savePosMenuCategoriesConfig, type PosMenuCategoriesConfig } from "@/lib/api-client"
-import { Pencil, Trash2, FolderTree } from "lucide-react"
+import { Pencil, Trash2, FolderTree, ArrowUp, ArrowDown } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
@@ -97,7 +97,7 @@ export function PosMenuCategorySettingsDialog({
     try {
       const newMains = editingMain
         ? config.mainCategories.map((c) => (c === editingMain ? name : c))
-        : [...config.mainCategories, name].sort()
+        : [...config.mainCategories, name]
       const newCategoriesByMain = { ...config.categoriesByMain }
       if (editingMain && editingMain !== name) {
         newCategoriesByMain[name] = newCategoriesByMain[editingMain] || []
@@ -186,7 +186,7 @@ export function PosMenuCategorySettingsDialog({
         ? subs.map((c) => (c === editingSub!.sub ? name : c))
         : subs.includes(name)
           ? subs
-          : [...subs, name].sort()
+          : [...subs, name]
       const newCategoriesByMain = {
         ...config.categoriesByMain,
         [main]: newSubs,
@@ -267,6 +267,69 @@ export function PosMenuCategorySettingsDialog({
     setFormSub({ main, name: sub })
   }
 
+  const saveConfig = React.useCallback(async (nextConfig: PosMenuCategoriesConfig) => {
+    const res = await savePosMenuCategoriesConfig({
+      mainCategories: nextConfig.mainCategories,
+      categoriesByMain: nextConfig.categoriesByMain,
+      applyToMenus: false,
+    })
+    if (!res?.success) {
+      throw new Error((res as { message?: string })?.message || (t("msg_save_fail_detail") || "저장에 실패했습니다."))
+    }
+    if ((res as { queued?: boolean }).queued) {
+      await appAlert(t("posPrinterSavedQueued"))
+      setConfig(nextConfig)
+    } else {
+      await refreshConfigFromServer()
+    }
+    onSaved?.()
+  }, [onSaved, refreshConfigFromServer, t])
+
+  const moveMainCategory = async (main: string, direction: "up" | "down") => {
+    if (!config) return
+    const idx = config.mainCategories.indexOf(main)
+    if (idx < 0) return
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= config.mainCategories.length) return
+    const newMains = [...config.mainCategories]
+    const [picked] = newMains.splice(idx, 1)
+    newMains.splice(targetIdx, 0, picked)
+    setSaving(true)
+    try {
+      await saveConfig({ ...config, mainCategories: newMains })
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : (t("msg_save_fail_detail") || "저장에 실패했습니다."))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const moveSubCategory = async (main: string, sub: string, direction: "up" | "down") => {
+    if (!config) return
+    const subs = config.categoriesByMain[main] || []
+    const idx = subs.indexOf(sub)
+    if (idx < 0) return
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= subs.length) return
+    const newSubs = [...subs]
+    const [picked] = newSubs.splice(idx, 1)
+    newSubs.splice(targetIdx, 0, picked)
+    setSaving(true)
+    try {
+      await saveConfig({
+        ...config,
+        categoriesByMain: {
+          ...config.categoriesByMain,
+          [main]: newSubs,
+        },
+      })
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : (t("msg_save_fail_detail") || "저장에 실패했습니다."))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl sm:max-h-[85vh] flex flex-col">
@@ -321,10 +384,32 @@ export function PosMenuCategorySettingsDialog({
                 </div>
               ) : (
                 <ul className="divide-y">
-                  {config.mainCategories.map((m) => (
+                  {config.mainCategories.map((m, idx) => (
                     <li key={m} className="flex items-center justify-between gap-2 px-4 py-2">
                       <span className="font-medium">{m}</span>
                       <div className="flex gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => moveMainCategory(m, "up")}
+                          disabled={saving || idx === 0}
+                          title="위로 이동"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => moveMainCategory(m, "down")}
+                          disabled={saving || idx === config.mainCategories.length - 1}
+                          title="아래로 이동"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </Button>
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditMain(m)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -413,11 +498,33 @@ export function PosMenuCategorySettingsDialog({
               ) : (
                 <ul className="divide-y">
                   {config.mainCategories.flatMap((main) =>
-                    (config.categoriesByMain[main] || []).map((sub) => (
+                    (config.categoriesByMain[main] || []).map((sub, idx, arr) => (
                       <li key={`${main}-${sub}`} className="flex items-center justify-between gap-2 px-4 py-2">
                         <span className="text-muted-foreground text-xs">{main}</span>
                         <span className="font-medium flex-1">{translatePosMenuCategoryLabel(sub, t)}</span>
                         <div className="flex gap-1 shrink-0">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => moveSubCategory(main, sub, "up")}
+                            disabled={saving || idx === 0}
+                            title="위로 이동"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => moveSubCategory(main, sub, "down")}
+                            disabled={saving || idx === arr.length - 1}
+                            title="아래로 이동"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
