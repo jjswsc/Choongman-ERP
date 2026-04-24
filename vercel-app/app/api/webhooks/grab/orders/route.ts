@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { persistGrabOrderToPos } from '@/lib/grab-order-to-pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,25 +27,41 @@ export async function POST(req: NextRequest) {
     logGrabWebhook('submit_order', req, { error: 'missing_orderID' })
     return new NextResponse(null, { status: 400 })
   }
-  const duplicate = await reserveGrabWebhookEvent({
-    eventKind: 'submit_order',
-    uniqueKey: orderID,
-    requestId: String(body.requestID ?? ''),
-    orderId: orderID,
-    merchantId: merchantID,
-    partnerMerchantId: String(body.partnerMerchantID ?? ''),
-    payload: body,
-  })
-  if (duplicate) {
-    logGrabWebhook('submit_order', req, { orderID, duplicate: true })
-    return new NextResponse(null, { status: 204 })
+  const persisted = await persistGrabOrderToPos(body)
+  if (!persisted.ok) {
+    logGrabWebhook('submit_order', req, {
+      orderID,
+      merchantID,
+      partnerMerchantID: String(body.partnerMerchantID ?? ''),
+      persistError: persisted.message,
+    })
+    return NextResponse.json({ reason: 'persist_failed' }, { status: 500 })
   }
+
   logGrabWebhook('submit_order', req, {
     orderID,
     shortOrderNumber,
     merchantID,
     partnerMerchantID: String(body.partnerMerchantID ?? ''),
+    posOrderId: persisted.orderId,
+    posOrderNo: persisted.orderNo,
+    duplicate: persisted.duplicate,
   })
-  // TODO: idempotent 저장 후 POS 반영 (동일 orderID 재전송 대비)
+
+  // Audit trail only (idempotency는 POS 저장 로직에서도 memo 기반으로 보강)
+  try {
+    await reserveGrabWebhookEvent({
+      eventKind: 'submit_order',
+      uniqueKey: orderID,
+      requestId: String(body.requestID ?? ''),
+      orderId: orderID,
+      merchantId: merchantID,
+      partnerMerchantId: String(body.partnerMerchantID ?? ''),
+      payload: body,
+    })
+  } catch (e) {
+    console.warn('[grab-webhook] submit_order audit_write_failed', String(e ?? 'unknown'))
+  }
+
   return new NextResponse(null, { status: 204 })
 }

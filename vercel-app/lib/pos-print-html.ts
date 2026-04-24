@@ -10,7 +10,9 @@ import { getClientUiLang, getUiString } from '@/lib/i18n'
  * 두 작업을 한 롤에 이어 붙임(Zywell Zy808 등). 영수증 파이프라인 정리 후 이 시간만큼
  * 지연한 뒤 주방전을 시작한다.
  */
-export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS = 4000
+export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS = 3000
+/** 하이브리드(Electron)에서는 스풀 연결 여유를 유지하되 지연을 소폭 단축 */
+export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID = 2000
 
 /**
  * 주방전이 여러 장일 때 장·장 사이 간격(동일 드라이버 스풀 합침 완화).
@@ -21,6 +23,18 @@ export const POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS = 1200
  * 주방 자동 인쇄 직후 고객용 영수증 자동 인쇄 전(모달 경로). 주방 컷·스풀 안정화.
  */
 export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS = 1000
+
+/**
+ * 영수증(홀 주문) 직후 주방전 시작 지연.
+ * - 웹: 기존 보수값 유지
+ * - 하이브리드 셸: 소폭 단축
+ */
+export function resolveAfterReceiptToKitchenDelayMs(): number {
+  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
+    return POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID
+  }
+  return POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+}
 
 /** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
 export type PosPrintTargetRole = 'receipt' | 'kitchen'

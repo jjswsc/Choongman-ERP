@@ -4,7 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
-import { ArrowUpFromLine } from "lucide-react"
+import { ArrowUpFromLine, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -71,6 +71,7 @@ import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
 import {
   ShipmentFilterBar,
   ShipmentTable,
+  type ShipmentHistorySortKey,
   type ShipmentTableRow,
 } from "@/components/shipment"
 import type { InvoiceData } from "@/components/invoice"
@@ -221,6 +222,10 @@ export default function OutboundPage() {
   const [summaryVendorSortDir, setSummaryVendorSortDir] = React.useState<"asc" | "desc">("desc")
   const [summaryMenuSortBy, setSummaryMenuSortBy] = React.useState<"qty" | "amount">("amount")
   const [summaryMenuSortDir, setSummaryMenuSortDir] = React.useState<"asc" | "desc">("desc")
+  const [historySortKey, setHistorySortKey] = React.useState<ShipmentHistorySortKey>("orderDate")
+  const [historySortDir, setHistorySortDir] = React.useState<"asc" | "desc">("desc")
+  const [summaryMonthDialogOpen, setSummaryMonthDialogOpen] = React.useState(false)
+  const [summaryMonthDraft, setSummaryMonthDraft] = React.useState("")
   const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
   const [photoModalOpen, setPhotoModalOpen] = React.useState(false)
   const [photoModalUrls, setPhotoModalUrls] = React.useState<string[]>([])
@@ -288,6 +293,35 @@ export default function OutboundPage() {
     setHistStart(startStr)
     setHistEnd(endStr)
   }, [])
+
+  const handleHistorySortChange = React.useCallback((key: ShipmentHistorySortKey) => {
+    if (historySortKey === key) {
+      setHistorySortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+      return
+    }
+    setHistorySortKey(key)
+    setHistorySortDir("desc")
+  }, [historySortKey])
+
+  const openSummaryMonthDialog = React.useCallback(() => {
+    setSummaryMonthDraft(histMonth || "")
+    setSummaryMonthDialogOpen(true)
+  }, [histMonth])
+
+  const pickCurrentSummaryMonth = React.useCallback(() => {
+    const { yearMonth } = getBangkokMonthRange()
+    setSummaryMonthDraft(yearMonth)
+  }, [])
+
+  const applySummaryMonth = React.useCallback(() => {
+    handleHistMonthChange(summaryMonthDraft)
+    setSummaryMonthDialogOpen(false)
+  }, [handleHistMonthChange, summaryMonthDraft])
+
+  const clearSummaryMonth = React.useCallback(() => {
+    handleHistMonthChange("")
+    setSummaryMonthDialogOpen(false)
+  }, [handleHistMonthChange])
 
   React.useEffect(() => {
     Promise.all([getAdminItems({ scope: 'outbound' }), getAdminVendors(), getStockStores(), getWarehouseLocations()])
@@ -900,8 +934,86 @@ export default function OutboundPage() {
     return result
   }, [groupedHistory, histTargetType, histStore, storeTargets, salesTargets, histDeliveryStatus, invoiceSearch, itemSearch, isOffice])
 
+  const displayGroupedHistory = React.useMemo(() => {
+    const normalizeOutboundSort = (s: string) => {
+      const v = normalizedDeliveryStatus(s || "")
+      if (v === "배송완료") return "3"
+      if (v === "일부배송완료") return "2"
+      if (v === "배송중") return "1"
+      return "0"
+    }
+    const direction = historySortDir === "asc" ? 1 : -1
+    const rows = [...filteredGroupedHistory]
+    rows.sort((a, b) => {
+      const aFirst = a.items[0]
+      const bFirst = b.items[0]
+      const aOrderDate = String(aFirst?.orderDate || a.date || "").slice(0, 10)
+      const bOrderDate = String(bFirst?.orderDate || b.date || "").slice(0, 10)
+      const aDeliveryDate = String(aFirst?.deliveryDate || "").slice(0, 10)
+      const bDeliveryDate = String(bFirst?.deliveryDate || "").slice(0, 10)
+      const aInv = String(a.invoiceNo || "")
+      const bInv = String(b.invoiceNo || "")
+      const aOrderType = String(a.type || "")
+      const bOrderType = String(b.type || "")
+      const aOutboundType = normalizeOutboundSort(String(aFirst?.deliveryStatus || ""))
+      const bOutboundType = normalizeOutboundSort(String(bFirst?.deliveryStatus || ""))
+      const aPhoto = aFirst?.orderRowId ? 1 : 0
+      const bPhoto = bFirst?.orderRowId ? 1 : 0
+      const aTarget = String(a.target || "")
+      const bTarget = String(b.target || "")
+      const aItem = a.items.length > 0 ? String(a.items[0]?.name || "") : ""
+      const bItem = b.items.length > 0 ? String(b.items[0]?.name || "") : ""
+      const aQty = Number(a.totalQty || 0)
+      const bQty = Number(b.totalQty || 0)
+      const aAmount = Number(a.totalAmt || 0)
+      const bAmount = Number(b.totalAmt || 0)
+
+      const compareString = (x: string, y: string) => x.localeCompare(y, "ko", { sensitivity: "base" })
+      const compareNumber = (x: number, y: number) => x - y
+
+      let primary = 0
+      switch (historySortKey) {
+        case "orderDate":
+          primary = compareString(aOrderDate, bOrderDate)
+          break
+        case "deliveryDate":
+          primary = compareString(aDeliveryDate, bDeliveryDate)
+          break
+        case "invoiceNo":
+          primary = compareString(aInv, bInv)
+          break
+        case "orderType":
+          primary = compareString(aOrderType, bOrderType)
+          break
+        case "outboundType":
+          primary = compareString(aOutboundType, bOutboundType)
+          break
+        case "photo":
+          primary = compareNumber(aPhoto, bPhoto)
+          break
+        case "target":
+          primary = compareString(aTarget, bTarget)
+          break
+        case "item":
+          primary = compareString(aItem, bItem)
+          break
+        case "qty":
+          primary = compareNumber(aQty, bQty)
+          break
+        case "amount":
+          primary = compareNumber(aAmount, bAmount)
+          break
+      }
+      if (primary !== 0) return primary * direction
+
+      const fallback = compareString(aOrderDate + aTarget + aInv, bOrderDate + bTarget + bInv)
+      return fallback * -1
+    })
+    return rows
+  }, [filteredGroupedHistory, historySortDir, historySortKey])
+
   const shipmentTableRows = React.useMemo((): ShipmentTableRow[] => {
-    return filteredGroupedHistory.map((g, i) => {
+    return displayGroupedHistory.map((g, i) => {
       const first = g.items[0]
       const orderDate = first?.orderDate || g.date?.slice(0, 10) || ""
       const deliveryDate = first?.deliveryDate || ""
@@ -939,7 +1051,7 @@ export default function OutboundPage() {
         receiveImageUrls: g.receiveImageUrls ?? (g.receiveImageUrl ? [g.receiveImageUrl] : undefined),
       }
     })
-  }, [filteredGroupedHistory, isOffice, t])
+  }, [displayGroupedHistory, isOffice, t])
 
   const handleDeleteSelectedOutbounds = React.useCallback(async () => {
     if (!isOffice) return
@@ -1202,23 +1314,35 @@ export default function OutboundPage() {
   }, [summarySourceRows, summaryMenuSortBy, summaryMenuSortDir])
 
   const summaryTargetTotals = React.useMemo(() => {
-    return summaryByTarget.reduce(
+    const base = summaryByTarget.reduce(
       (acc, row) => ({
         qty: acc.qty + row.qty,
         amount: acc.amount + row.amount,
       }),
       { qty: 0, amount: 0 }
     )
+    const tax = thaiInvoiceTotalsFromRawSubtotal(base.amount)
+    return {
+      ...base,
+      vat: tax.vatRounded,
+      total: tax.grandTotal,
+    }
   }, [summaryByTarget])
 
   const summaryMenuTotals = React.useMemo(() => {
-    return summaryByMenu.reduce(
+    const base = summaryByMenu.reduce(
       (acc, row) => ({
         qty: acc.qty + row.qty,
         amount: acc.amount + row.amount,
       }),
       { qty: 0, amount: 0 }
     )
+    const tax = thaiInvoiceTotalsFromRawSubtotal(base.amount)
+    return {
+      ...base,
+      vat: tax.vatRounded,
+      total: tax.grandTotal,
+    }
   }, [summaryByMenu])
 
   const toggleVendorSort = (field: "qty" | "amount") => {
@@ -1248,6 +1372,10 @@ export default function OutboundPage() {
     setSelectedForPrint(new Set())
   }, [invoiceSearch, itemSearch, histDeliveryStatus])
 
+  React.useEffect(() => {
+    setSelectedForPrint(new Set())
+  }, [historySortKey, historySortDir])
+
   const togglePrintSelect = (idx: number) => {
     setSelectedForPrint((prev) => {
       const next = new Set(prev)
@@ -1258,16 +1386,16 @@ export default function OutboundPage() {
   }
 
   const togglePrintSelectAll = () => {
-    if (filteredGroupedHistory.length === 0) return
-    if (selectedForPrint.size >= filteredGroupedHistory.length) {
+    if (displayGroupedHistory.length === 0) return
+    if (selectedForPrint.size >= displayGroupedHistory.length) {
       setSelectedForPrint(new Set())
     } else {
-      setSelectedForPrint(new Set(filteredGroupedHistory.map((_, i) => i)))
+      setSelectedForPrint(new Set(displayGroupedHistory.map((_, i) => i)))
     }
   }
 
   const handleEtaxXmlDownload = async () => {
-    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
+    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => displayGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
       await appAlert(t("outSelectForPrint"))
       return
@@ -1321,13 +1449,90 @@ export default function OutboundPage() {
     }
   }
 
+  const downloadSummaryExcel = React.useCallback(
+    (headers: string[], dataRows: string[][], summaryRow: string[], filenamePrefix: string) => {
+      const escapeXml = (s: string) =>
+        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      const minW = 55
+      const pxPerChar = 8
+      const colWidths = headers.map((h, c) => {
+        let maxLen = String(h).length
+        for (const row of dataRows) {
+          const len = String(row[c] ?? "").length
+          if (len > maxLen) maxLen = len
+        }
+        const sumLen = String(summaryRow[c] ?? "").length
+        if (sumLen > maxLen) maxLen = sumLen
+        return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
+      })
+      const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
+<body>
+<table>
+<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
+<tr class="head">${headers.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
+${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>`).join("")}
+<tr class="head">${summaryRow.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>
+</table>
+</body>
+</html>`
+      const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.xls`
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    []
+  )
+
+  const handleSummaryVendorExcelDownload = React.useCallback(async () => {
+    if (summaryByTarget.length === 0) {
+      await appAlert(t("outNoData"))
+      return
+    }
+    const headers = [t("vendor"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total") || "Total"]
+    const rows = summaryByTarget.map((row) => {
+      const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
+      return [
+        row.vendor,
+        String(row.qty),
+        String(row.amount),
+        String(vat.vatRounded),
+        String(vat.grandTotal),
+      ]
+    })
+    const summaryRow = [t("inv_total") || "Total", String(summaryTargetTotals.qty), String(summaryTargetTotals.amount), String(summaryTargetTotals.vat), String(summaryTargetTotals.total)]
+    downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_vendor")
+  }, [summaryByTarget, summaryTargetTotals, downloadSummaryExcel, t])
+
+  const handleSummaryMenuExcelDownload = React.useCallback(async () => {
+    if (summaryByMenu.length === 0) {
+      await appAlert(t("outNoData"))
+      return
+    }
+    const headers = [t("outSummaryMenuCol"), t("outColQty"), t("inColAmount"), t("inv_vat7"), t("inv_total") || "Total"]
+    const rows = summaryByMenu.map((row) => {
+      const vat = thaiInvoiceTotalsFromRawSubtotal(row.amount)
+      return [
+        `${row.code ? `[${row.code}] ` : ""}${row.name || "-"}${row.spec ? ` (${row.spec})` : ""}`,
+        String(row.qty),
+        String(row.amount),
+        String(vat.vatRounded),
+        String(vat.grandTotal),
+      ]
+    })
+    const summaryRow = [t("inv_total") || "Total", String(summaryMenuTotals.qty), String(summaryMenuTotals.amount), String(summaryMenuTotals.vat), String(summaryMenuTotals.total)]
+    downloadSummaryExcel(headers, rows, summaryRow, "outbound_summary_menu")
+  }, [summaryByMenu, summaryMenuTotals, downloadSummaryExcel, t])
+
   const handleExcelDownload = async () => {
-    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
+    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => displayGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
       await appAlert(t("outSelectForExcel"))
       return
     }
-    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
     const headers = [
       t("orderColDate"),
       t("orderColDeliveryDate"),
@@ -1339,8 +1544,13 @@ export default function OutboundPage() {
       t("spec"),
       t("outColQty"),
       t("inColAmount"),
+      t("inv_vat7"),
+      t("inv_total") || "Total",
     ]
     const dataRows: string[][] = []
+    let sumAmount = 0
+    let sumVat = 0
+    let sumGrand = 0
     for (const g of checked) {
       const orderDate = g.date?.slice(0, 10) || ""
       const deliveryDate = (g.items[0]?.deliveryDate || "").slice(0, 10) || "-"
@@ -1359,40 +1569,38 @@ export default function OutboundPage() {
       for (const it of g.items) {
         const name = it.name || "-"
         const spec = it.spec || "-"
-        dataRows.push([orderDate, deliveryDate, g.invoiceNo || "-", orderTypeLabel, outboundTypeLabel, target, name, spec, String(it.qty ?? ""), String(it.amount ?? "")])
+        const amount = Number(it.amount ?? 0)
+        const vatTotals = thaiInvoiceTotalsFromRawSubtotal(amount)
+        sumAmount += amount
+        sumVat += vatTotals.vatRounded
+        sumGrand += vatTotals.grandTotal
+        dataRows.push([
+          orderDate,
+          deliveryDate,
+          g.invoiceNo || "-",
+          orderTypeLabel,
+          outboundTypeLabel,
+          target,
+          name,
+          spec,
+          String(it.qty ?? ""),
+          String(amount),
+          String(vatTotals.vatRounded),
+          String(vatTotals.grandTotal),
+        ])
       }
     }
-    const minW = 55
-    const pxPerChar = 8
-    const colWidths = headers.map((h, c) => {
-      let maxLen = String(h).length
-      for (const row of dataRows) {
-        const len = String(row[c] ?? "").length
-        if (len > maxLen) maxLen = len
-      }
-      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
-    })
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
-<body>
-<table>
-<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
-<tr class="head">${headers.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
-${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>`).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `outbound_${new Date().toISOString().slice(0, 10)}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
+    const summaryLabel = t("inv_total") || "Total"
+    const summaryRow = headers.map(() => "")
+    summaryRow[0] = summaryLabel
+    summaryRow[9] = String(sumAmount)
+    summaryRow[10] = String(sumVat)
+    summaryRow[11] = String(sumGrand)
+    downloadSummaryExcel(headers, dataRows, summaryRow, "outbound")
   }
 
   const buildInvoiceData = (
-    group: (typeof filteredGroupedHistory)[0],
+    group: (typeof displayGroupedHistory)[0],
     company: InvoiceDataCompany | null,
     client: InvoiceDataClient | { companyName: string },
     invSettings: Record<string, string>
@@ -1424,7 +1632,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   }
 
   const handlePrintInvoice = async () => {
-    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
+    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => displayGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
       await appAlert(t("outSelectForPrint"))
       return
@@ -1473,6 +1681,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     if (isOffice) return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
     return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
   }, [historyList, usageList, isOffice])
+  const periodTotalsWithVat = React.useMemo(() => thaiInvoiceTotalsFromRawSubtotal(periodTotal), [periodTotal])
 
   React.useEffect(() => {
     setTabValue(isOffice ? "new" : "hist")
@@ -1488,6 +1697,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   }
 
   const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
+  const periodVatFormatted = `${periodTotalsWithVat.vatRounded.toLocaleString()}${lang === "th" ? " THB" : ""}`
+  const periodGrandTotalFormatted = `${periodTotalsWithVat.grandTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
 
   return (
     <div className="flex-1 overflow-auto">
@@ -1998,13 +2209,15 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     onChange={(e) => handleHistEndChange(e.target.value)}
                     className="w-[140px] h-9"
                   />
-                  <Input
-                    type="month"
-                    value={histMonth}
-                    onChange={(e) => handleHistMonthChange(e.target.value)}
-                    className="w-[140px] h-9"
-                    title={t("inMonthHint")}
-                  />
+                  <Button
+                    type="button"
+                    variant={histMonth ? "default" : "outline"}
+                    className="h-9"
+                    onClick={openSummaryMonthDialog}
+                  >
+                    {t("outFilterMonth")}
+                    {histMonth ? ` (${histMonth})` : ""}
+                  </Button>
                   <Button size="sm" onClick={fetchSummaryHistory} disabled={historyLoading}>
                     {historyLoading ? t("loading") : t("btn_query")}
                   </Button>
@@ -2059,9 +2272,55 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 <p className="text-xs text-muted-foreground">{t("outSummaryHint")}</p>
               </div>
 
+              <Dialog open={summaryMonthDialogOpen} onOpenChange={setSummaryMonthDialogOpen}>
+                <DialogContent className="sm:max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>{t("outFilterMonth")}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">{t("inMonthHint")}</label>
+                    <Input
+                      type="month"
+                      value={summaryMonthDraft}
+                      onChange={(e) => setSummaryMonthDraft(e.target.value)}
+                      className="h-9"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {histMonth
+                        ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
+                        : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={pickCurrentSummaryMonth}>
+                        {t("thisMonth") || "이번 달"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={clearSummaryMonth}>
+                        {t("all")}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={() => setSummaryMonthDialogOpen(false)}>
+                        {t("cancel") || "Cancel"}
+                      </Button>
+                      <Button type="button" onClick={applySummaryMonth}>
+                        {t("btn_query")}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div className="rounded-xl border bg-card p-5">
-                  <h3 className="text-sm font-bold mb-3">{t("vendor")}</h3>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold">{t("vendor")}</h3>
+                    <Button type="button" size="sm" variant="outline" onClick={handleSummaryVendorExcelDownload}>
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      {t("outExcelDownload")}
+                    </Button>
+                  </div>
                   <div className="overflow-x-auto max-h-[480px]">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-muted/80 backdrop-blur">
@@ -2087,12 +2346,14 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                               {sortMark(summaryVendorSortBy === "amount", summaryVendorSortDir)}
                             </button>
                           </th>
+                          <th className="py-2 px-2 text-right">{t("inv_vat7")}</th>
+                          <th className="py-2 px-2 text-right">{t("inv_total") || "Total"}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {summaryByTarget.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="py-8 text-center text-muted-foreground">
+                            <td colSpan={5} className="py-8 text-center text-muted-foreground">
                               {t("outNoData")}
                             </td>
                           </tr>
@@ -2102,6 +2363,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                               <td className="py-2 px-2">{row.vendor}</td>
                               <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
                               <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">
+                                {thaiInvoiceTotalsFromRawSubtotal(row.amount).vatRounded.toLocaleString()}
+                              </td>
+                              <td className="py-2 px-2 text-right tabular-nums">
+                                {thaiInvoiceTotalsFromRawSubtotal(row.amount).grandTotal.toLocaleString()}
+                              </td>
                             </tr>
                           ))
                         )}
@@ -2110,6 +2377,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                             <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.qty.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.amount.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.vat.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryTargetTotals.total.toLocaleString()}</td>
                           </tr>
                         )}
                       </tbody>
@@ -2118,7 +2387,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 </div>
 
                 <div className="rounded-xl border bg-card p-5">
-                  <h3 className="text-sm font-bold mb-3">{t("outSummaryByMenu")}</h3>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold">{t("outSummaryByMenu")}</h3>
+                    <Button type="button" size="sm" variant="outline" onClick={handleSummaryMenuExcelDownload}>
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      {t("outExcelDownload")}
+                    </Button>
+                  </div>
                   <div className="overflow-x-auto max-h-[480px]">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-muted/80 backdrop-blur">
@@ -2144,12 +2419,14 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                               {sortMark(summaryMenuSortBy === "amount", summaryMenuSortDir)}
                             </button>
                           </th>
+                          <th className="py-2 px-2 text-right">{t("inv_vat7")}</th>
+                          <th className="py-2 px-2 text-right">{t("inv_total") || "Total"}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {summaryByMenu.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="py-8 text-center text-muted-foreground">
+                            <td colSpan={5} className="py-8 text-center text-muted-foreground">
                               {t("outNoData")}
                             </td>
                           </tr>
@@ -2163,6 +2440,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                               </td>
                               <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>
                               <td className="py-2 px-2 text-right tabular-nums">{row.amount.toLocaleString()}</td>
+                              <td className="py-2 px-2 text-right tabular-nums">
+                                {thaiInvoiceTotalsFromRawSubtotal(row.amount).vatRounded.toLocaleString()}
+                              </td>
+                              <td className="py-2 px-2 text-right tabular-nums">
+                                {thaiInvoiceTotalsFromRawSubtotal(row.amount).grandTotal.toLocaleString()}
+                              </td>
                             </tr>
                           ))
                         )}
@@ -2171,6 +2454,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                             <td className="py-2 px-2 font-semibold">{t("inv_total") || "Total"}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.qty.toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.amount.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.vat.toLocaleString()}</td>
+                            <td className="py-2 px-2 text-right tabular-nums font-semibold">{summaryMenuTotals.total.toLocaleString()}</td>
                           </tr>
                         )}
                       </tbody>
@@ -2183,6 +2468,8 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           <TabsContent value="hist" className={adminTabsContentCn}>
             <ShipmentFilterBar
               totalAmount={periodTotalFormatted}
+              totalVatAmount={periodVatFormatted}
+              totalWithVatAmount={periodGrandTotalFormatted}
               isOffice={isOffice}
               histStart={histStart}
               histEnd={histEnd}
@@ -2190,10 +2477,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               onHistStartChange={handleHistStartChange}
               onHistEndChange={handleHistEndChange}
               onHistMonthChange={handleHistMonthChange}
-              onMonthClick={() => {
-                const { yearMonth } = getBangkokMonthRange()
-                handleHistMonthChange(yearMonth)
-              }}
               histType={histType}
               histDeliveryStatus={histDeliveryStatus}
               histTargetType={histTargetType}
@@ -2226,6 +2509,9 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 selectedIndices={selectedForPrint}
                 onToggleSelect={togglePrintSelect}
                 onToggleSelectAll={togglePrintSelectAll}
+                sortKey={historySortKey}
+                sortDir={historySortDir}
+                onSortChange={handleHistorySortChange}
                 storeTargets={storeTargets}
                 onPhotoClick={async (orderId) => {
                   setPhotoModalOpen(true)

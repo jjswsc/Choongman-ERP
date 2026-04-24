@@ -13,6 +13,7 @@ import {
   frozenInvoiceUnitPriceFromLog,
   unitPriceFromOutboundLogSnapshot,
 } from '@/lib/outbound-order-line-match'
+import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
 
 export const dynamic = 'force-dynamic'
 
@@ -297,6 +298,7 @@ export async function GET(request: NextRequest) {
         String(row.item_name || '').trim(),
         info.price
       )
+      const isInternalUseForce = typeCode === 'Force' && isInternalForceOutboundTarget(target)
       const frozen = frozenInvoiceUnitPriceFromLog(row)
       const sid = row.id != null ? Number(row.id) : NaN
       const fromCartLr = findLineRemarksInOrderCart(
@@ -312,7 +314,7 @@ export async function GET(request: NextRequest) {
         code,
         spec: info.spec,
         qty: qtyAbs,
-        amount: unitPrice * qtyAbs,
+        amount: isInternalUseForce ? 0 : unitPrice * qtyAbs,
         orderRowId: orderRowId || undefined,
         deliveryStatus: deliveryStatus || undefined,
         deliveryDate: deliveryDateForItem || undefined,

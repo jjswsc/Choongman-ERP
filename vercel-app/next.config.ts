@@ -58,6 +58,18 @@ const nextConfig: NextConfig = {
       { source: "/firebase-messaging-sw.js", destination: "/sw.js", permanent: false },
     ];
   },
+  /**
+   * Grab Developer Portal의 Partner configuration UI가 종종
+   * `/<grab-path>/menus`, `/<grab-path>/status` 형태를 기대하는데,
+   * 우리 구현 라우트는 `pushGrabMenu`, `pushIntegrationStatus`로 열려 있다.
+   * (외부 스펙/포털 입력을 맞추기 위한 얇은 alias)
+   */
+  async rewrites() {
+    return [
+      { source: "/api/webhooks/grab/menus", destination: "/api/webhooks/grab/pushGrabMenu" },
+      { source: "/api/webhooks/grab/status", destination: "/api/webhooks/grab/pushIntegrationStatus" },
+    ];
+  },
   // webpack(PostCSS 등) 모듈 해석을 vercel-app 기준으로 (상위 lockfile로 인한 충돌 방지)
   webpack: (config, { isServer, webpack }) => {
     config.context = vercelAppDir;

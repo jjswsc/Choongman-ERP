@@ -310,7 +310,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
       />
 
       {(currentBalance != null || completedCash != null) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-tour="pos-tour-cash-balance-cards">
           {currentBalance != null && (
             <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-6 py-4 text-center">
               <div className="text-sm font-medium text-muted-foreground mb-1">
@@ -341,7 +341,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               <Wallet className="h-6 w-6 text-primary" />
               <h2 className="text-lg font-semibold">{t('posCashInputOutput') || '시재 입출금'}</h2>
             </div>
-            <div className="flex rounded-lg border border-input bg-muted/30 p-0.5">
+            <div className="flex rounded-lg border border-input bg-muted/30 p-0.5" data-tour="pos-tour-cash-subtabs">
               <button
                 type="button"
                 onClick={() => setSubTab('till')}
@@ -367,7 +367,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
 
           {subTab === 'sales_withdrawal_list' ? (
             <>
-              <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="mb-4 flex flex-wrap items-center gap-3" data-tour="pos-tour-cash-filters">
                 <Button size="sm" onClick={loadSalesWithdrawalList} disabled={salesWithdrawalListLoading}>
                   <Search className="mr-1 h-4 w-4" />
                   {salesWithdrawalListLoading ? t('loading') : t('search') || '조회'}
@@ -378,7 +378,10 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
               )}
-              <div className="overflow-auto max-h-[calc(100vh-320px)] min-h-[200px] rounded-xl border">
+              <div
+                className="overflow-auto max-h-[calc(100vh-320px)] min-h-[200px] rounded-xl border"
+                data-tour="pos-tour-cash-ledger-table"
+              >
                 <table className="w-full min-w-[400px] text-sm">
                   <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                     <tr className="border-b bg-muted/30">
@@ -419,7 +422,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </>
           ) : (
             <>
-          <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="mb-4 flex flex-wrap items-center gap-3" data-tour="pos-tour-cash-filters">
             <Input
               type="date"
               value={startStr}
@@ -473,7 +476,10 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </div>
           )}
 
-          <div className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border">
+          <div
+            className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border"
+            data-tour="pos-tour-cash-ledger-table"
+          >
             <table className="w-full min-w-[400px] text-sm">
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                 <tr className="border-b bg-muted/30">
@@ -610,7 +616,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </form>
           </div>
 
-          <div className="mt-6 border-t pt-6">
+          <div className="mt-6 border-t pt-6" data-tour="pos-tour-cash-sales-withdrawal">
             <p className="mb-2 text-sm font-medium">{t('posSalesWithdrawal') || '매출액 출금'}</p>
             <p className="mb-3 text-xs text-muted-foreground">{t('posSalesWithdrawalHint') || '날짜를 선택하면 해당일 현금 매출액이 표시됩니다. 출금할 금액과 내용을 입력 후 등록하세요.'}</p>
             <form onSubmit={handleSalesWithdrawalAdd} className="flex flex-col gap-3 w-full">

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { patchStockLogInvoiceUnitPrice } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 
 type StatusBadgeKey = "outTypeOrder" | "statusPartialDelivered" | "statusInTransit" | "statusDelivered" | "outTypeForce"
 
@@ -65,6 +66,18 @@ export interface ShipmentTableRow {
   receiveImageUrls?: string[]
 }
 
+export type ShipmentHistorySortKey =
+  | "orderDate"
+  | "deliveryDate"
+  | "invoiceNo"
+  | "orderType"
+  | "outboundType"
+  | "photo"
+  | "target"
+  | "item"
+  | "qty"
+  | "amount"
+
 interface ShipmentTableProps {
   /** 본사: 출고 그룹 테이블 / 비본사: 사용 내역 테이블 */
   isOffice: boolean
@@ -88,6 +101,9 @@ interface ShipmentTableProps {
   onForceReceived?: (date: string, target: string) => void | Promise<void>
   /** 본사: 출고 로그 단가 저장 후 목록 새로고침 */
   onReloadHistory?: () => void
+  sortKey?: ShipmentHistorySortKey
+  sortDir?: "asc" | "desc"
+  onSortChange?: (key: ShipmentHistorySortKey) => void
 }
 
 export function ShipmentTable({
@@ -103,6 +119,9 @@ export function ShipmentTable({
   storeTargets = [],
   onForceReceived,
   onReloadHistory,
+  sortKey,
+  sortDir = "desc",
+  onSortChange,
 }: ShipmentTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -132,6 +151,21 @@ export function ShipmentTable({
       ? canEditLogUnitPriceProp
       : Boolean(isOffice && onReloadHistory)
 
+  const summaryTotals = useMemo(() => {
+    return rows.reduce(
+      (acc, row) => {
+        acc.qty += Number(row.totalQty || 0)
+        acc.amount += Number(row.totalAmt || 0)
+        return acc
+      },
+      { qty: 0, amount: 0 }
+    )
+  }, [rows])
+  const summaryVat = useMemo(
+    () => thaiInvoiceTotalsFromRawSubtotal(summaryTotals.amount),
+    [summaryTotals.amount]
+  )
+
   const toggleExpand = (idx: number) => {
     setExpandedRows((prev) => {
       const next = new Set(prev)
@@ -152,6 +186,11 @@ export function ShipmentTable({
     if (s.includes("배송중") || s.includes("Transit")) return "statusInTransit"
     if (s.includes("배송완료") || s.includes("Delivered") || s.includes("수령완료") || s.includes("수령")) return "statusDelivered"
     return null
+  }
+
+  const sortMark = (key: ShipmentHistorySortKey) => {
+    if (sortKey !== key) return ""
+    return sortDir === "asc" ? " ▲" : " ▼"
   }
 
   /* 매장: 출고 행이 있으면 출고 테이블(인보이스 인쇄) 표시, 없으면 사용 내역 테이블 표시 */
@@ -291,32 +330,104 @@ export function ShipmentTable({
               />
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("orderColDate")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("orderDate")}
+              >
+                {t("orderColDate")}
+                {sortMark("orderDate")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("orderColDeliveryDate")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("deliveryDate")}
+              >
+                {t("orderColDeliveryDate")}
+                {sortMark("deliveryDate")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("outColInvNo")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("invoiceNo")}
+              >
+                {t("outColInvNo")}
+                {sortMark("invoiceNo")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("outColOrderType")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("orderType")}
+              >
+                {t("outColOrderType")}
+                {sortMark("orderType")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("outColOutboundType")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("outboundType")}
+              >
+                {t("outColOutboundType")}
+                {sortMark("outboundType")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("outColPhoto")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("photo")}
+              >
+                {t("outColPhoto")}
+                {sortMark("photo")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("outColStore")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("target")}
+              >
+                {t("outColStore")}
+                {sortMark("target")}
+              </button>
             </th>
-            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide sm:px-2.5 sm:py-3 sm:text-xs">{t("outColItem")}</th>
-            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("outColQty")}
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide sm:px-2.5 sm:py-3 sm:text-xs">
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("item")}
+              >
+                {t("outColItem")}
+                {sortMark("item")}
+              </button>
             </th>
             <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
-              {t("inColAmount")}
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("qty")}
+              >
+                {t("outColQty")}
+                {sortMark("qty")}
+              </button>
+            </th>
+            <th className="px-2 py-2.5 text-center text-[11px] font-semibold leading-snug tracking-wide whitespace-nowrap sm:px-2.5 sm:py-3 sm:text-xs">
+              <button
+                type="button"
+                className="font-semibold hover:text-sky-200"
+                onClick={() => onSortChange?.("amount")}
+              >
+                {t("inColAmount")}
+                {sortMark("amount")}
+              </button>
             </th>
           </tr>
         </thead>
@@ -350,6 +461,27 @@ export function ShipmentTable({
             ))
           )}
         </tbody>
+        {!loading && rows.length > 0 && (
+          <tfoot>
+            <tr className="sticky bottom-0 z-[1] border-t-2 border-border bg-muted/95 backdrop-blur">
+              <td colSpan={9} className="px-2 py-2.5 text-right text-[11px] font-semibold sm:px-2.5 sm:py-3 sm:text-xs">
+                {t("inv_total") || "Total"}
+              </td>
+              <td className="px-2 py-2.5 text-center text-[11px] font-semibold tabular-nums sm:px-2.5 sm:py-3 sm:text-xs">
+                {summaryTotals.qty.toLocaleString()}
+              </td>
+              <td className="px-2 py-2 text-right text-[11px] font-semibold tabular-nums sm:px-2.5 sm:py-2.5 sm:text-xs">
+                <div className="flex flex-col items-end leading-tight">
+                  <span>{`${t("salesSupplyAmount") || t("subtotal") || "공급가액"}: ${summaryTotals.amount.toLocaleString()}`}</span>
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {`${t("inv_vat7")}: ${summaryVat.vatRounded.toLocaleString()}`}
+                  </span>
+                  <span>{`${t("inv_total") || "Total"}: ${summaryVat.grandTotal.toLocaleString()}`}</span>
+                </div>
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
 
       <Dialog open={lineEdit != null} onOpenChange={(o) => !o && setLineEdit(null)}>
@@ -578,7 +710,12 @@ function TableRow({
           {row.totalQty.toLocaleString()}
         </td>
         <td className="px-2 py-2.5 text-right text-[11px] font-semibold tabular-nums text-primary sm:px-2.5 sm:py-3 sm:text-sm">
-          {row.totalAmt.toLocaleString()}
+          <div className="flex flex-col items-end leading-tight">
+            <span>{row.totalAmt.toLocaleString()}</span>
+            <span className="text-[10px] font-medium text-muted-foreground">
+              {t("inv_vat7")}: {thaiInvoiceTotalsFromRawSubtotal(row.totalAmt || 0).vatRounded.toLocaleString()}
+            </span>
+          </div>
         </td>
       </tr>
       {isExpanded && hasDetails && (

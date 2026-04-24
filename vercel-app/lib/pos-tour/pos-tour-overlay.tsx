@@ -4,21 +4,30 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
+import { POS_DEMO_ROUTES } from './demo-routes'
 import { PosDemoLanguageGate } from './pos-demo-language-gate'
 import { usePosTour } from './pos-tour-context'
 import { useT } from '@/lib/i18n'
 import { useLang } from '@/lib/lang-context'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
 const OVERLAY_Z = 100
 /** `overlayDim: false`일 때 결제 다이얼로그(보통 z-50) 위에 툴팁 */
 const TOOLTIP_ABOVE_DIALOG_Z = 130
 
-function useTargetRect(dataTour: string | null, stepIndex: number) {
+function useTargetRect(
+  dataTour: string | null,
+  stepIndex: number,
+  opts?: { fallbackDataTour?: string | null; resyncKey?: number }
+) {
   const [rect, setRect] = React.useState<DOMRect | null>(null)
+  const fallback = opts?.fallbackDataTour ?? null
+  const resyncKey = opts?.resyncKey ?? 0
 
   React.useLayoutEffect(() => {
+    let alive = true
     if (typeof document === 'undefined' || !dataTour) {
       setRect(null)
       return
@@ -28,7 +37,11 @@ function useTargetRect(dataTour: string | null, stepIndex: number) {
       return
     }
     const safe = dataTour.replace(/["\\]/g, '')
-    const el = document.querySelector<HTMLElement>(`[data-tour="${safe}"]`)
+    let el = document.querySelector<HTMLElement>(`[data-tour="${safe}"]`)
+    if (!el && fallback && fallback !== 'pos-tour-nospot') {
+      const fb = fallback.replace(/["\\]/g, '')
+      el = document.querySelector<HTMLElement>(`[data-tour="${fb}"]`)
+    }
     if (!el) {
       setRect(null)
       return
@@ -36,6 +49,7 @@ function useTargetRect(dataTour: string | null, stepIndex: number) {
     /** 스텝 전환 직후 메뉴·카트 등이 뷰포트 밖에 있으면 스팟라이트가 어긋나므로 먼저 스크롤 */
     el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
     const update = () => {
+      if (!alive) return
       setRect(el.getBoundingClientRect())
     }
     update()
@@ -45,11 +59,12 @@ function useTargetRect(dataTour: string | null, stepIndex: number) {
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', update)
     return () => {
+      alive = false
       ro.disconnect()
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', update)
     }
-  }, [dataTour, stepIndex])
+  }, [dataTour, stepIndex, fallback, resyncKey])
 
   return rect
 }
@@ -58,8 +73,19 @@ export function PosTourOverlay() {
   const router = useRouter()
   const { lang } = useLang()
   const t = useT(lang)
-  const { showOverlay, preTourLanguageDone, currentStep, goNext, goPrev, endTour, scenario, stepIndex } =
-    usePosTour()
+  const {
+    isDemo,
+    showOverlay,
+    preTourLanguageDone,
+    currentStep,
+    goNext,
+    goPrev,
+    endTour,
+    scenario,
+    stepIndex,
+    setStepIndex,
+    manualNextAllowed,
+  } = usePosTour()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
@@ -68,7 +94,61 @@ export function PosTourOverlay() {
     mounted && showOverlay && preTourLanguageDone && currentStep?.target
       ? currentStep.target
       : null
-  const rect = useTargetRect(spotlightTarget, stepIndex)
+  const seq = currentStep?.spotlightSequence
+  const seqLen = seq?.length ?? 0
+  const [spotlightSeqIndex, setSpotlightSeqIndex] = React.useState(0)
+  React.useEffect(() => {
+    setSpotlightSeqIndex(0)
+  }, [stepIndex, seqLen])
+  const seqManual = Boolean(currentStep?.spotlightSequenceManualAdvance)
+  React.useEffect(() => {
+    if (!seqLen || !seq || seqManual) return
+    let alive = true
+    const ms = Math.max(800, currentStep?.spotlightSequenceIntervalMs ?? 2600)
+    const id = window.setInterval(() => {
+      if (!alive) return
+      setSpotlightSeqIndex((i) => (i + 1) % seq.length)
+    }, ms)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+    }
+  }, [stepIndex, seq, seqLen, seqManual, currentStep?.spotlightSequenceIntervalMs])
+
+  const activeSpotlight =
+    seqLen && seq && spotlightTarget && spotlightTarget !== 'pos-tour-nospot'
+      ? seq[spotlightSeqIndex] ?? spotlightTarget
+      : spotlightTarget
+  const rect = useTargetRect(activeSpotlight, stepIndex, {
+    fallbackDataTour: seqLen ? spotlightTarget : null,
+    resyncKey: seqLen ? spotlightSeqIndex : 0,
+  })
+  type QuickCategory = 'start' | 'order' | 'payment' | 'business' | 'cash'
+  type QuickSection = { value: QuickCategory; label: string; navigateTo: string }
+  const quickSections = React.useMemo<QuickSection[]>(() => {
+    if (!isDemo) return []
+    return [
+      { value: 'start', label: t('posTourQuickStartScreen'), navigateTo: POS_DEMO_ROUTES.homeMain },
+      { value: 'order', label: t('posTourQuickOrderScreen'), navigateTo: POS_DEMO_ROUTES.terminalFullDineIn },
+      { value: 'payment', label: t('posTourQuickPaymentScreen'), navigateTo: POS_DEMO_ROUTES.terminalFullDineIn },
+      { value: 'business', label: t('posTourQuickBusinessMgmt'), navigateTo: POS_DEMO_ROUTES.businessOpen },
+      { value: 'cash', label: t('posTourQuickCashMgmt'), navigateTo: POS_DEMO_ROUTES.cashManagement },
+    ]
+  }, [isDemo, t])
+  const quickSectionValue = React.useMemo(() => {
+    if (quickSections.length === 0) return ''
+    if (scenario.id === 'terminal-full-walkthrough') {
+      const paymentIdx = scenario.steps.findIndex((s) => s.id === 'w18_pay')
+      return stepIndex >= Math.max(0, paymentIdx) ? 'payment' : 'order'
+    }
+    if (scenario.id === 'pos-business-open-tour' || scenario.id === 'pos-business-close-tour' || scenario.id === 'pos-business-cash-home') {
+      return 'business'
+    }
+    if (scenario.id === 'pos-cash-management-tour') {
+      return 'cash'
+    }
+    return 'start'
+  }, [quickSections, scenario, stepIndex])
 
   if (!mounted || !showOverlay) {
     return null
@@ -94,8 +174,13 @@ export function PosTourOverlay() {
       }
     : null
 
-  const title = t(currentStep.titleKey)
-  const body = t(currentStep.bodyKey)
+  const seqCopy = currentStep.spotlightSequenceCopy
+  const copyPair =
+    seqLen && seqCopy?.length
+      ? seqCopy[Math.min(spotlightSeqIndex, seqCopy.length - 1)] ?? null
+      : null
+  const title = t(copyPair?.titleKey ?? currentStep.titleKey)
+  const body = t(copyPair?.bodyKey ?? currentStep.bodyKey)
   const isFirst = stepIndex <= 0
   const isLast = stepIndex >= scenario.steps.length - 1
   const advance = currentStep.advance
@@ -103,7 +188,7 @@ export function PosTourOverlay() {
    * 「다음」은 수동 스텝만. 조건형(`cart_has_line_*` 등)은 건너뛰기 방지로 버튼 숨김 —
    * 조건이 맞으면 PosTerminalTourController가 자동으로 스텝을 넘김(화면과 동기).
    */
-  const showNext = advance === 'manual'
+  const showNext = advance === 'manual' && manualNextAllowed
   const floatingZ = dimBackground ? OVERLAY_Z + 1 : TOOLTIP_ABOVE_DIALOG_Z
   const navOnNext = currentStep?.navigateOnNext
   const nextNavLabel = t('posTourNextNavigate')
@@ -168,12 +253,55 @@ export function PosTourOverlay() {
 
       <div
         className={cn(
-          'pointer-events-auto absolute max-w-sm rounded-lg border border-border bg-card p-4 shadow-xl',
-          'left-1/2 top-[72px] w-[min(100vw-1.5rem,22rem)] -translate-x-1/2',
-          'sm:bottom-8 sm:left-auto sm:right-8 sm:top-auto sm:translate-x-0'
+          'pointer-events-auto absolute left-1/2 top-[72px] w-[min(100vw-1.5rem,22rem)] -translate-x-1/2',
+          'sm:bottom-8 sm:left-auto sm:right-8 sm:top-auto sm:translate-x-0',
+          'flex flex-col gap-2'
         )}
         style={{ zIndex: floatingZ }}
       >
+        {quickSections.length > 0 && (
+          <div className="rounded-lg border border-border bg-card/95 p-2 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-card/85">
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 px-2" onClick={() => setStepIndex(0)}>
+                {t('posTourQuickRestart')}
+              </Button>
+              <Select
+                value={quickSectionValue}
+                onValueChange={(v) => {
+                  const target = quickSections.find((s) => s.value === (v as QuickCategory))
+                  if (!target) return
+                  if (target.value === 'payment' && scenario.id === 'terminal-full-walkthrough') {
+                    const paymentIdx = scenario.steps.findIndex((s) => s.id === 'w18_pay')
+                    if (paymentIdx >= 0) {
+                      setStepIndex(paymentIdx)
+                      return
+                    }
+                  }
+                  if (target.value === 'order' && scenario.id === 'terminal-full-walkthrough') {
+                    const orderIdx = scenario.steps.findIndex((s) => s.id === 'w11_menu')
+                    if (orderIdx >= 0) {
+                      setStepIndex(orderIdx)
+                      return
+                    }
+                  }
+                  navigatePosOfflineAware(target.navigateTo, (p) => router.push(p))
+                }}
+              >
+                <SelectTrigger className="h-8 flex-1 text-xs">
+                  <SelectValue placeholder={t('posTourQuickJumpPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {quickSections.map((s) => (
+                    <SelectItem key={`tour-quick-${s.value}`} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+        <div className="rounded-lg border border-border bg-card p-4 shadow-xl">
         <p className="text-xs text-muted-foreground">
           {t('posTourStepCounter')
             .replace('{{n}}', String(stepIndex + 1))
@@ -201,12 +329,33 @@ export function PosTourOverlay() {
             {t('posTourEnd')}
           </Button>
           {!isFirst && (
-            <Button type="button" variant="outline" size="sm" onClick={goPrev}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (seqLen && seqManual && spotlightSeqIndex > 0) {
+                  setSpotlightSeqIndex((i) => Math.max(0, i - 1))
+                  return
+                }
+                goPrev()
+              }}
+            >
               {t('posTourPrev')}
             </Button>
           )}
           {showNext && !isLast && (
-            <Button type="button" size="sm" onClick={goNext}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                if (seqLen && seqManual && spotlightSeqIndex < seqLen - 1) {
+                  setSpotlightSeqIndex((i) => i + 1)
+                  return
+                }
+                goNext()
+              }}
+            >
               {t('posTourNext')}
             </Button>
           )}
@@ -226,6 +375,7 @@ export function PosTourOverlay() {
               {t('posTourDone')}
             </Button>
           )}
+        </div>
         </div>
       </div>
     </div>

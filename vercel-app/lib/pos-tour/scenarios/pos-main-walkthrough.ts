@@ -1,6 +1,5 @@
 import type { PosTourScenario, PosTourStep } from '../pos-tour-types'
-
-const TERMINAL_DEMO = '/pos/terminal?type=dine_in&demo=1&scenario=terminal-full-walkthrough'
+import { POS_DEMO_ROUTES } from '../demo-routes'
 
 const steps: PosTourStep[] = [
   { id: 'h1_welcome', target: 'pos-tour-nospot', titleKey: 'posMainTourH1Title', bodyKey: 'posMainTourH1Body', advance: 'manual' },
@@ -20,7 +19,7 @@ const steps: PosTourStep[] = [
     titleKey: 'posMainTourH12Title',
     bodyKey: 'posMainTourH12Body',
     advance: 'manual',
-    navigateOnNext: TERMINAL_DEMO,
+    navigateOnNext: POS_DEMO_ROUTES.terminalFullDineIn,
   },
 ]
 

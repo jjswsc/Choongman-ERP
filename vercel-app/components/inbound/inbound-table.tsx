@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { ChevronDown, ChevronRight, PenLine, Trash2, Printer, FileSpreadsheet, FileCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
@@ -15,10 +15,11 @@ export interface InboundTableRow {
   poNo?: string
   invoiceNo?: string
   invoiceReceived?: boolean
-  items: { name: string; spec: string; qty: number; amount: number }[]
+  items: { name: string; spec: string; qty: number; amount: number; vatAmount: number }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
+  totalVat: number
 }
 
 interface InboundTableProps {
@@ -26,7 +27,7 @@ interface InboundTableProps {
   rows: InboundTableRow[]
   loading?: boolean
   /** 비본사용: 단순 { date, vendor, item, qty, amount } */
-  storeRows?: { date: string; vendor: string; item: string; qty: number; amount: number }[]
+  storeRows?: { date: string; vendor: string; item: string; qty: number; amount: number; vatAmount: number }[]
   onEdit?: (row: InboundTableRow) => void
   onDelete?: (row: InboundTableRow) => void
   onInvoiceReceivedToggle?: (row: InboundTableRow) => void
@@ -34,6 +35,8 @@ interface InboundTableProps {
   onExcel?: (row: InboundTableRow) => void
   updatingInvoiceId?: number | null
 }
+
+type OfficeSortKey = "poDate" | "inboundDate" | "vendor" | "item" | "qty" | "amount" | "vat" | "total" | "poInvoice"
 
 export function InboundTable({
   isOffice,
@@ -49,16 +52,91 @@ export function InboundTable({
 }: InboundTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [sortKey, setSortKey] = useState<OfficeSortKey>("inboundDate")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
-  const toggleExpand = (idx: number) => {
+  const toggleExpand = (rowId: string) => {
     setExpandedRows((prev) => {
       const next = new Set(prev)
-      if (next.has(idx)) next.delete(idx)
-      else next.add(idx)
+      if (next.has(rowId)) next.delete(rowId)
+      else next.add(rowId)
       return next
     })
   }
+
+  const sortedOfficeRows = useMemo(() => {
+    const compareString = (a: string, b: string) =>
+      a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })
+    const compareDate = (a?: string | null, b?: string | null) => {
+      const aTime = a ? new Date(a).getTime() : NaN
+      const bTime = b ? new Date(b).getTime() : NaN
+      const aValid = Number.isFinite(aTime)
+      const bValid = Number.isFinite(bTime)
+      if (!aValid && !bValid) return 0
+      if (!aValid) return 1
+      if (!bValid) return -1
+      return aTime - bTime
+    }
+
+    const rowsToSort = [...rows]
+    rowsToSort.sort((a, b) => {
+      let diff = 0
+      switch (sortKey) {
+        case "poDate":
+          diff = compareDate(a.poDate, b.poDate)
+          break
+        case "inboundDate":
+          diff = compareDate(a.date, b.date)
+          break
+        case "vendor":
+          diff = compareString(a.vendor || "", b.vendor || "")
+          break
+        case "item":
+          diff = compareString(a.itemsSummary || "", b.itemsSummary || "")
+          break
+        case "qty":
+          diff = a.totalQty - b.totalQty
+          break
+        case "amount":
+          diff = a.totalAmt - b.totalAmt
+          break
+        case "vat":
+          diff = a.totalVat - b.totalVat
+          break
+        case "total":
+          diff = a.totalAmt + a.totalVat - (b.totalAmt + b.totalVat)
+          break
+        case "poInvoice":
+          diff = compareString(`${a.poNo || ""} / ${a.invoiceNo || ""}`, `${b.poNo || ""} / ${b.invoiceNo || ""}`)
+          break
+        default:
+          diff = 0
+      }
+      if (diff === 0) {
+        diff = compareDate(a.date, b.date) || compareString(a.vendor || "", b.vendor || "")
+      }
+      return sortDir === "asc" ? diff : -diff
+    })
+    return rowsToSort
+  }, [rows, sortKey, sortDir])
+
+  const handleSort = (nextKey: OfficeSortKey) => {
+    if (sortKey === nextKey) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+      return
+    }
+    setSortKey(nextKey)
+    setSortDir("asc")
+  }
+
+  const sortMark = (key: OfficeSortKey) => {
+    if (sortKey !== key) return ""
+    return sortDir === "asc" ? " ▲" : " ▼"
+  }
+  const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
+  const vatLabel = t("posVatLabel") || "VAT"
+  const totalLabel = t("inv_total") || t("total") || "Total"
 
   if (!isOffice) {
     return (
@@ -70,17 +148,19 @@ export function InboundTable({
               <th className="px-3 py-2.5 text-center font-semibold">{t("inVendor")}</th>
               <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
               <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{supplyLabel}</th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{vatLabel}</th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{totalLabel}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={5} className="py-12 text-center">{t("loading")}</td>
+                <td colSpan={7} className="py-12 text-center">{t("loading")}</td>
               </tr>
             ) : storeRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-12 text-center text-muted-foreground">{t("inNoData")}</td>
+                <td colSpan={7} className="py-12 text-center text-muted-foreground">{t("inNoData")}</td>
               </tr>
             ) : (
               storeRows.map((r, idx) => (
@@ -90,6 +170,8 @@ export function InboundTable({
                   <td className="px-3 py-2.5 text-center text-card-foreground">{r.item}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{r.qty.toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{(r.amount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{(r.vatAmount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{((r.amount || 0) + (r.vatAmount || 0)).toLocaleString()}</td>
                 </tr>
               ))
             )}
@@ -99,20 +181,58 @@ export function InboundTable({
     )
   }
 
-  const colCount = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 8 : 6
+  const colCount = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 10 : 9
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-xs">
         <thead>
           <tr className="bg-[#1E293B] text-white">
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">{t("inPoDate")}</th>
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">{t("inInboundDate")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inVendor")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">{t("poInvoiceNo")}</th>
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("poDate")}>
+                {t("inPoDate")}{sortMark("poDate")}
+              </button>
+            </th>
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("inboundDate")}>
+                {t("inInboundDate")}{sortMark("inboundDate")}
+              </button>
+            </th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("vendor")}>
+                {t("inVendor")}{sortMark("vendor")}
+              </button>
+            </th>
+            <th className="px-3 py-2.5 text-center font-semibold">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("item")}>
+                {t("outColItem")}{sortMark("item")}
+              </button>
+            </th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("qty")}>
+                {t("outColQty")}{sortMark("qty")}
+              </button>
+            </th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("amount")}>
+                {supplyLabel}{sortMark("amount")}
+              </button>
+            </th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("vat")}>
+                {vatLabel}{sortMark("vat")}
+              </button>
+            </th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("total")}>
+                {totalLabel}{sortMark("total")}
+              </button>
+            </th>
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">
+              <button type="button" className="hover:text-primary" onClick={() => handleSort("poInvoice")}>
+                {t("poInvoiceNo")}{sortMark("poInvoice")}
+              </button>
+            </th>
             {(onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel) && <th className="px-2 py-2.5 text-center font-semibold min-w-[10rem] whitespace-nowrap">{t("actions")}</th>}
           </tr>
         </thead>
@@ -126,14 +246,13 @@ export function InboundTable({
               <td colSpan={colCount} className="py-12 text-center text-muted-foreground">{t("inNoData")}</td>
             </tr>
           ) : (
-            rows.map((row, idx) => (
+            sortedOfficeRows.map((row) => (
               <TableRow
                 key={row.id}
                 row={row}
-                idx={idx}
                 colCount={colCount}
-                isExpanded={expandedRows.has(idx)}
-                onToggleExpand={() => toggleExpand(idx)}
+                isExpanded={expandedRows.has(row.id)}
+                onToggleExpand={() => toggleExpand(row.id)}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onInvoiceReceivedToggle={onInvoiceReceivedToggle}
@@ -152,7 +271,6 @@ export function InboundTable({
 
 function TableRow({
   row,
-  idx: _idx,
   colCount,
   isExpanded,
   onToggleExpand,
@@ -165,7 +283,6 @@ function TableRow({
   t,
 }: {
   row: InboundTableRow
-  idx: number
   colCount: number
   isExpanded: boolean
   onToggleExpand: () => void
@@ -183,6 +300,9 @@ function TableRow({
   const canInvoiceToggle = row.inboundBatchId != null && onInvoiceReceivedToggle
   const canPrint = row.inboundBatchId != null && onPrint
   const canExcel = row.inboundBatchId != null && onExcel
+  const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
+  const vatLabel = t("posVatLabel") || "VAT"
+  const totalLabel = t("inv_total") || t("total") || "Total"
 
   return (
     <>
@@ -214,6 +334,12 @@ function TableRow({
         <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{row.totalQty.toLocaleString()}</td>
         <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">
           {row.totalAmt.toLocaleString()}
+        </td>
+        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">
+          {row.totalVat.toLocaleString()}
+        </td>
+        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">
+          {(row.totalAmt + row.totalVat).toLocaleString()}
         </td>
         <td className="px-2 py-2.5 text-center text-muted-foreground text-xs">
           {row.invoiceNo ? (
@@ -290,7 +416,9 @@ function TableRow({
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("spec")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
-                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("inColAmount")}</th>
+                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{supplyLabel}</th>
+                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{vatLabel}</th>
+                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{totalLabel}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -300,6 +428,8 @@ function TableRow({
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
                       <td className="px-4 py-2 text-center text-card-foreground font-medium tabular-nums">{d.qty.toLocaleString()}</td>
                       <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{d.amount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{d.vatAmount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{(d.amount + d.vatAmount).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

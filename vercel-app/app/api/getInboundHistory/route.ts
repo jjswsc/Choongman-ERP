@@ -60,21 +60,49 @@ export async function GET(request: NextRequest) {
       endStr = last.toISOString().slice(0, 10)
     }
 
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,cost,purchase_source' })) as {
+    let itemRows: {
       code?: string
       spec?: string
       cost?: number
       purchase_source?: string
-    }[] | null
-    const itemMap: Record<string, { spec: string; cost: number; purchaseSource: 'hq' | 'store' }> = {}
+      tax_type?: string
+    }[] | null = null
+    try {
+      itemRows = (await supabaseSelect('items', {
+        order: 'id.asc',
+        limit: 5000,
+        select: 'code,spec,cost,purchase_source,tax_type',
+      })) as {
+        code?: string
+        spec?: string
+        cost?: number
+        purchase_source?: string
+        tax_type?: string
+      }[] | null
+    } catch {
+      itemRows = (await supabaseSelect('items', {
+        order: 'id.asc',
+        limit: 5000,
+        select: 'code,spec,cost,purchase_source',
+      })) as {
+        code?: string
+        spec?: string
+        cost?: number
+        purchase_source?: string
+      }[] | null
+    }
+    const itemMap: Record<string, { spec: string; cost: number; purchaseSource: 'hq' | 'store'; taxRate: number }> = {}
     for (const row of itemRows || []) {
       const code = String(row.code || '').trim()
       if (code) {
         const ps = String(row.purchase_source || '').trim()
+        const taxRaw = String(row.tax_type || '').trim().toLowerCase()
+        const taxRate = taxRaw === 'exempt' || taxRaw === 'zero' ? 0 : 0.07
         itemMap[code] = {
           spec: row.spec || '-',
           cost: Number(row.cost) || 0,
           purchaseSource: ps === 'store' ? 'store' : 'hq',
+          taxRate,
         }
       }
     }
@@ -121,6 +149,7 @@ export async function GET(request: NextRequest) {
       spec: string
       qty: number
       amount: number
+      vatAmount?: number
       code?: string
       purchaseSource?: 'hq' | 'store'
       inbound_batch_id?: number | null
@@ -144,7 +173,7 @@ export async function GET(request: NextRequest) {
       if (exactVendor && rowVendor !== exactVendor) continue
 
       const code = String(row.item_code || '').trim()
-      const info = itemMap[code] || { spec: '-', cost: 0, purchaseSource: 'hq' as const }
+      const info = itemMap[code] || { spec: '-', cost: 0, purchaseSource: 'hq' as const, taxRate: 0.07 }
       if (itemSearch) {
         const q = itemSearch.trim().toLowerCase()
         const nm = String(row.item_name || '-').toLowerCase()
@@ -154,13 +183,16 @@ export async function GET(request: NextRequest) {
       }
       const qty = Number(row.qty) || 0
       const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
+      const amount = unitCost * qty
+      const vatAmount = Math.round(amount * info.taxRate * 100) / 100
       list.push({
         date: rowDate.toISOString().slice(0, 10),
         vendor: rowVendor,
         name: row.item_name || '-',
         spec: info.spec,
         qty,
-        amount: unitCost * qty,
+        amount,
+        vatAmount,
         code: code || undefined,
         purchaseSource: info.purchaseSource,
         inbound_batch_id: row.inbound_batch_id ?? undefined,
@@ -198,6 +230,7 @@ export async function GET(request: NextRequest) {
           spec: b.spec,
           qty: b.qty,
           amount: b.amount,
+          vatAmount: b.vatAmount,
           purchaseSource: b.purchaseSource,
           inbound_batch_id: null,
           bank_transaction_id: b.bank_transaction_id,

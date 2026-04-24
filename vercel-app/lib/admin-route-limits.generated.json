@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-23T12:55:32.531Z",
-  "entryCount": 879,
+  "generatedAt": "2026-04-23T14:13:14.899Z",
+  "entryCount": 882,
   "entries": [
     {
       "path": "app/admin/members/coupons/page.tsx",
@@ -1516,56 +1516,70 @@
     },
     {
       "path": "app/api/getInboundForStore/route.ts",
-      "line": 60,
+      "line": 70,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getInboundForStore"
     },
     {
       "path": "app/api/getInboundForStore/route.ts",
-      "line": 93,
+      "line": 82,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getInboundForStore"
+    },
+    {
+      "path": "app/api/getInboundForStore/route.ts",
+      "line": 121,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getInboundForStore"
     },
     {
       "path": "app/api/getInboundForStore/route.ts",
-      "line": 94,
+      "line": 122,
       "kind": "maxRows",
       "value": 80000,
       "apiLabel": "getInboundForStore"
     },
     {
       "path": "app/api/getInboundForStore/route.ts",
-      "line": 172,
+      "line": 204,
       "kind": "maxRows",
       "value": 120,
       "apiLabel": "getInboundForStore"
     },
     {
       "path": "app/api/getInboundHistory/route.ts",
-      "line": 63,
+      "line": 73,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getInboundHistory"
     },
     {
       "path": "app/api/getInboundHistory/route.ts",
-      "line": 104,
+      "line": 85,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "getInboundHistory"
+    },
+    {
+      "path": "app/api/getInboundHistory/route.ts",
+      "line": 132,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getInboundHistory"
     },
     {
       "path": "app/api/getInboundHistory/route.ts",
-      "line": 105,
+      "line": 133,
       "kind": "maxRows",
       "value": 80000,
       "apiLabel": "getInboundHistory"
     },
     {
       "path": "app/api/getInboundHistory/route.ts",
-      "line": 177,
+      "line": 209,
       "kind": "maxRows",
       "value": 120,
       "apiLabel": "getInboundHistory"
@@ -5016,14 +5030,14 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 423,
+      "line": 425,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1370,
+      "line": 1378,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
@@ -5513,14 +5527,21 @@
     },
     {
       "path": "lib/inbound-bank-purchase-synthetic.ts",
-      "line": 65,
+      "line": 66,
       "kind": "limit",
       "value": 900,
       "apiLabel": "lib:inbound-bank-purchase-synthetic"
     },
     {
       "path": "lib/inbound-bank-purchase-synthetic.ts",
-      "line": 124,
+      "line": 102,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "lib:inbound-bank-purchase-synthetic"
+    },
+    {
+      "path": "lib/inbound-bank-purchase-synthetic.ts",
+      "line": 142,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:inbound-bank-purchase-synthetic"

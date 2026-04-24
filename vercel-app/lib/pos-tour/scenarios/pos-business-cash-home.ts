@@ -1,6 +1,5 @@
 import type { PosTourScenario, PosTourStep } from '../pos-tour-types'
-
-const BUSINESS_OPEN_DEMO = '/pos/settlement?mode=open&demo=1&scenario=pos-business-open-tour'
+import { POS_DEMO_ROUTES } from '../demo-routes'
 
 const steps: PosTourStep[] = [
   {
@@ -30,7 +29,7 @@ const steps: PosTourStep[] = [
     titleKey: 'posBusinessCashHomeTourS4Title',
     bodyKey: 'posBusinessCashHomeTourS4Body',
     advance: 'manual',
-    navigateOnNext: BUSINESS_OPEN_DEMO,
+    navigateOnNext: POS_DEMO_ROUTES.businessOpen,
   },
 ]
 

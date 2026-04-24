@@ -87,6 +87,7 @@ import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
+import { usePosTour } from '@/lib/pos-tour'
 import { Separator } from '@/components/ui/separator'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
@@ -393,6 +394,8 @@ interface CartPanelProps {
   onPaymentComplete?: () => void
   /** 터미널 데모: 홀에서 손님 수가 0이면 지정 값으로(투어 주문 버튼) */
   posDineInDemoDefaultGuestCount?: number
+  /** 터미널 투어 등: 홀 손님 수 변경 시 부모 동기 */
+  onGuestCountChange?: (guestCount: number) => void
 }
 
 type CartItem = OrderItem
@@ -559,7 +562,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onTaxInvoiceToggleChange,
   onPaymentComplete,
   posDineInDemoDefaultGuestCount,
+  onGuestCountChange,
 }, ref) {
+  const { currentStep, showTourStepOverlay } = usePosTour()
   const { auth } = useAuth()
   const { lang } = useLang()
   const tDefault = useT(lang)
@@ -1982,6 +1987,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setGuestCount(posDineInDemoDefaultGuestCount)
   }, [posDineInDemoDefaultGuestCount, orderType, selectedTable?.id, selectedTable?.order?.id, guestCount])
 
+  useEffect(() => {
+    onGuestCountChange?.(guestCount)
+  }, [guestCount, onGuestCountChange])
+
+  const lockPaymentModalForTour = useMemo(() => {
+    if (!showTourStepOverlay) return false
+    const id = currentStep?.id
+    if (!id) return false
+    return (
+      id === 'w19_payment' ||
+      id === 'w19a_dutch_toggle' ||
+      id === 'w19b_partial_pay' ||
+      id === 'w19c_dutch_menu_mode' ||
+      id === 'w19d_dutch_menu_panel' ||
+      id === 'w20_payment_tabs' ||
+      id === 'w21_payment_card' ||
+      id === 'w22_payment_qr' ||
+      id === 'w23_payment_delivery_app' ||
+      id === 'w24_payment_other' ||
+      id === 'w25_tax_invoice_toggle' ||
+      id === 'w26_tax_invoice_fields' ||
+      id === 'w26a_tax_id' ||
+      id === 'w26b_tax_branch' ||
+      id === 'w26c_tax_phone' ||
+      id === 'w26d_tax_address'
+    )
+  }, [currentStep?.id, showTourStepOverlay])
+
   return (
     <>
     <Card className="h-full flex flex-col min-w-0 overflow-hidden" data-tour="pos-tour-cart">
@@ -2611,10 +2644,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       </CardContent>
     </Card>
 
-    <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
+    <Dialog
+      open={showPaymentModal}
+      onOpenChange={(open) => {
+        if (!open && lockPaymentModalForTour) return
+        setShowPaymentModal(open)
+      }}
+    >
       <DialogContent
         data-tour="pos-tour-payment-dialog"
         hideCloseButton
+        onEscapeKeyDown={(e) => {
+          if (lockPaymentModalForTour) e.preventDefault()
+        }}
+        onPointerDownOutside={(e) => {
+          if (lockPaymentModalForTour) e.preventDefault()
+        }}
+        onInteractOutside={(e) => {
+          if (lockPaymentModalForTour) e.preventDefault()
+        }}
         className="flex h-[min(95vh,720px)] w-[95vw] max-w-lg flex-col overflow-hidden rounded-2xl border border-border/60 p-0 shadow-2xl sm:max-w-xl"
       >
         <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 bg-gradient-to-b from-card to-card/95 px-5 py-4 text-left backdrop-blur-sm">
@@ -2624,15 +2672,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 {t('posSplitPayment') || '결제 수단 입력'}
               </DialogTitle>
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon"
-              className="h-10 w-10 shrink-0 rounded-xl"
-              onClick={() => setShowPaymentModal(false)}
-            >
-              <X className="h-5 w-5" />
-            </Button>
+            {!lockPaymentModalForTour && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="h-10 w-10 shrink-0 rounded-xl"
+                onClick={() => setShowPaymentModal(false)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            )}
           </div>
         </DialogHeader>
         {orderType === 'delivery' ? (
@@ -2654,14 +2704,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
             </div>
             <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-12 w-full rounded-xl sm:w-auto"
-                onClick={() => setShowPaymentModal(false)}
-              >
-                {t('posCancel') || '취소'}
-              </Button>
+              {!lockPaymentModalForTour && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-xl sm:w-auto"
+                  onClick={() => setShowPaymentModal(false)}
+                >
+                  {t('posCancel') || '취소'}
+                </Button>
+              )}
               <Button
                 className="h-12 w-full rounded-xl font-semibold sm:min-w-[8rem]"
                 onClick={() => {
@@ -3307,12 +3359,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="flex flex-wrap items-center gap-2 pt-3">
-                  <div className="flex w-full items-center gap-2">
+                  <div className="flex w-full items-center gap-2" data-tour="pos-tour-dutch-mode-row">
                     <Button
                       type="button"
                       size="sm"
                       variant={splitMode === 'amount' ? 'default' : 'outline'}
                       className="h-9"
+                      data-tour="pos-tour-dutch-mode-amount"
                       onClick={() => setSplitMode('amount')}
                     >
                       {tr('posDutchSplitModeAmount', '금액 기준')}
@@ -3328,27 +3381,43 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       {tr('posDutchSplitModeMenu', '메뉴 기준')}
                     </Button>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm text-muted-foreground">{tr('posSplitPeople', '인원')}</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={splitCount}
-                      onChange={(e) => setSplitCount(Math.max(1, Number(e.target.value || 1)))}
-                      className="h-11 w-14 rounded-lg text-center text-base shrink-0"
-                    />
+                  <div className="flex flex-wrap items-center gap-2" data-tour="pos-tour-dutch-split-count-row">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm text-muted-foreground">{tr('posSplitPeople', '인원')}</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={splitCount}
+                        onChange={(e) => setSplitCount(Math.max(1, Number(e.target.value || 1)))}
+                        className="h-11 w-14 rounded-lg text-center text-base shrink-0"
+                        data-tour="pos-tour-dutch-split-count"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5">
-                    <span className="text-sm">
-                      {splitMode === 'menu'
-                        ? tr('posCurrentPersonAmount', '현재 인원 금액')
-                        : tr('posPerPersonAmount', '1인 금액')}
-                    </span>
-                    <span className="font-semibold tabular-nums">{formatBahtNum(currentSplitTargetAmount)}฿</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5 text-sm">
-                    <span>{tr('posProgress', '진행')} <span className="font-semibold tabular-nums">{splitPaidSteps}/{Math.max(1, splitCount)}{tr('posPeopleUnit', '명')}</span></span>
-                    <span className="font-semibold tabular-nums text-muted-foreground">{formatBahtNum(paymentSum)}/{formatBahtNum(total)}฿</span>
+                  <div
+                    className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-50/30 px-2 py-2 dark:bg-violet-950/15"
+                    data-tour="pos-tour-dutch-progress-row"
+                  >
+                    <div className="flex items-center gap-1.5 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5">
+                      <span className="text-sm">
+                        {splitMode === 'menu'
+                          ? tr('posCurrentPersonAmount', '현재 인원 금액')
+                          : tr('posPerPersonAmount', '1인 금액')}
+                      </span>
+                      <span className="font-semibold tabular-nums">{formatBahtNum(currentSplitTargetAmount)}฿</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5 text-sm">
+                      <span>
+                        {tr('posProgress', '진행')}{' '}
+                        <span className="font-semibold tabular-nums">
+                          {splitPaidSteps}/{Math.max(1, splitCount)}
+                          {tr('posPeopleUnit', '명')}
+                        </span>
+                      </span>
+                      <span className="font-semibold tabular-nums text-muted-foreground">
+                        {formatBahtNum(paymentSum)}/{formatBahtNum(total)}฿
+                      </span>
+                    </div>
                   </div>
                   {splitMode === 'menu' && (
                     <div
@@ -3449,7 +3518,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       </div>
                     </div>
                   )}
-                  <p className="w-full text-[11px] text-muted-foreground sm:w-auto sm:flex-1 sm:min-w-[12rem]">
+                  <p
+                    className="w-full text-[11px] text-muted-foreground sm:w-auto sm:flex-1 sm:min-w-[12rem]"
+                    data-tour="pos-tour-dutch-hint"
+                  >
                     {splitMode === 'menu'
                       ? tr(
                           'posDutchPayMenuHint',
@@ -3479,6 +3551,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   ? 'border-emerald-500/30 bg-emerald-500/[0.07] text-emerald-900 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-100'
                   : 'border-amber-500/35 bg-amber-500/[0.08] text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50'
               )}
+              data-tour="pos-tour-dutch-payment-sum-box"
             >
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-semibold">{t('posPaymentSum') || '입력 합계'}</span>

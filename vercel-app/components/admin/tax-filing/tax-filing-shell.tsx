@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/select"
 import { useStoreList } from "@/lib/api-client"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
-import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
+import { isManagerOrFranchiseeRole, isOfficeRole, isOfficeStore } from "@/lib/permissions"
+import { isHeadOfficeLikeStoreName } from "@/lib/internal-outbound"
 import { TaxFilingVatTab } from "@/components/admin/tax-filing/tab-vat"
 import { TaxFilingWhtTab } from "@/components/admin/tax-filing/tab-wht"
 import { TaxFilingCitTab } from "@/components/admin/tax-filing/tab-cit"
@@ -181,9 +182,10 @@ export function TaxFilingShell() {
   const t = useT(lang)
   const { stores: storeList } = useStoreList()
   const role = auth?.role || ""
-  const isOffice = isOfficeRole(role)
-  const isManager = isManagerOrFranchiseeRole(role)
   const managerStore = (auth?.store || "").trim()
+  const officeByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
+  const isOffice = isOfficeRole(role) || officeByStore
+  const isManager = !isOffice && isManagerOrFranchiseeRole(role)
 
   const [tab, setTab] = React.useState("vat")
 

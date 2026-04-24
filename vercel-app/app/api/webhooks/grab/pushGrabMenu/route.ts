@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { importGrabMenuToPos } from '@/lib/grab-menu-import-to-pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,10 +41,24 @@ export async function POST(req: NextRequest) {
       logGrabWebhook('push_grab_menu', req, { bodyBytes: raw.length, duplicate: true })
       return new NextResponse(null, { status: 204 })
     }
-    logGrabWebhook('push_grab_menu', req, { bodyBytes: raw.length, merchantID, partnerMerchantID })
-  } catch {
-    logGrabWebhook('push_grab_menu', req, { error: 'read_body_failed' })
+    let imported: { menusUpserted: number; optionsUpserted: number; skipped: number } | null = null
+    if (body) {
+      imported = await importGrabMenuToPos(body)
+    }
+    logGrabWebhook('push_grab_menu', req, {
+      bodyBytes: raw.length,
+      merchantID,
+      partnerMerchantID,
+      menusUpserted: imported?.menusUpserted ?? 0,
+      optionsUpserted: imported?.optionsUpserted ?? 0,
+      skipped: imported?.skipped ?? 0,
+    })
+    if (!body) {
+      return NextResponse.json({ reason: 'invalid_json' }, { status: 400 })
+    }
+  } catch (e) {
+    logGrabWebhook('push_grab_menu', req, { error: 'import_failed', message: String(e ?? 'unknown') })
+    return NextResponse.json({ reason: 'import_failed' }, { status: 500 })
   }
-  // TODO: 페이로드 파싱 후 로컬 메뉴 임포트
   return new NextResponse(null, { status: 204 })
 }

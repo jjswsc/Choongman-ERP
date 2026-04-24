@@ -1,7 +1,7 @@
 'use client'
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, type ComponentProps } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
@@ -69,6 +69,7 @@ import {
   printPosHtmlDocument,
   POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  resolveAfterReceiptToKitchenDelayMs,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
@@ -93,8 +94,10 @@ import {
   getPosTourScenarioIdFromQuery,
   isPosDemoFromQuery,
   PosTerminalTourController,
+  PosTourTerminalManualNextGates,
   PosTourOverlay,
   PosTourProvider,
+  usePosTour,
 } from '@/lib/pos-tour'
 
 function buildCustomerDisplayPaymentLines(
@@ -148,6 +151,26 @@ const DEMO_FLOOR_3X3_SLOTS = [
   { x: 44, y: 344 }, { x: 276, y: 344 }, { x: 508, y: 344 },
 ] as const
 
+function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView> & { isPosDemo: boolean }) {
+  const { isPosDemo, layout, ...rest } = props
+  const { currentStep } = usePosTour()
+  const timeTourSpotlights = useMemo(() => {
+    if (currentStep?.id !== 'w13d_table_time_guide' || !isPosDemo) return null
+    const a = layout[0]?.id
+    const b = layout[1]?.id
+    const c = layout[2]?.id
+    if (!a || !b || !c) return null
+    return {
+      elapsedTableId: a,
+      freshSurfaceTableId: a,
+      warningSurfaceTableId: b,
+      urgentSurfaceTableId: c,
+      orderClockTableId: a,
+    }
+  }, [currentStep?.id, isPosDemo, layout])
+  return <TableFloorView {...rest} layout={layout} timeTourSpotlights={timeTourSpotlights} />
+}
+
 export default function PosTerminalPage() {
   const searchParams = useSearchParams()
   const typeParam = searchParams.get('type') ?? 'dine_in'
@@ -163,6 +186,7 @@ export default function PosTerminalPage() {
   const isPosDemo = isPosDemoFromQuery(searchParams)
   const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams)
   const [tourMainDeviceTouched, setTourMainDeviceTouched] = useState(false)
+  const [tourCartGuestCount, setTourCartGuestCount] = useState(0)
   const posDemoRef = useRef(false)
   const cartRef = useRef<CartPanelHandle>(null)
   useEffect(() => {
@@ -782,6 +806,13 @@ export default function PosTerminalPage() {
     if (demoDineInOrder?.tableId === servingTableId) return demoDineInOrder.order
     return currentStore?.tables.find((t) => t.id === servingTableId)?.order ?? null
   }, [servingTableId, demoDineInOrder, currentStore?.tables])
+  const tourServingItemChecked = useMemo(() => {
+    const order = tourServingOrder
+    if (!order) return false
+    const st = String(order.status)
+    if (st === 'partial_served' || st === 'ready') return true
+    return (order.items || []).some((it) => Boolean(it?.servedAt))
+  }, [tourServingOrder])
 
   const selectedDeliveryOrderId = selectedDeliveryTargetId?.startsWith('delivery-order-')
     ? selectedDeliveryTargetId.replace('delivery-order-', '')
@@ -1135,7 +1166,11 @@ export default function PosTerminalPage() {
       ...(directPrint && typeof onAfterDirectPrint === 'function'
         ? {
             onAfterCleanup: () => {
-              window.setTimeout(onAfterDirectPrint, POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS)
+              const postReceiptDelayMs =
+                typeof window !== 'undefined' && window.cmPosShell
+                  ? resolveAfterReceiptToKitchenDelayMs()
+                  : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+              window.setTimeout(onAfterDirectPrint, postReceiptDelayMs)
             },
           }
         : {}),
@@ -1975,6 +2010,7 @@ export default function PosTerminalPage() {
             onPaymentTabChange={setTourPaymentTab}
             onTaxInvoiceToggleChange={setTourTaxInvoiceEnabled}
             onPaymentComplete={() => setTourPaymentCompletedCount((v) => v + 1)}
+            onGuestCountChange={setTourCartGuestCount}
             posDineInDemoDefaultGuestCount={undefined}
             lockOrderType
             orderType={cartOrderType}
@@ -2787,6 +2823,12 @@ export default function PosTerminalPage() {
   )
   return (
     <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
+      <PosTourTerminalManualNextGates
+        dineInGuestCount={tourCartGuestCount}
+        activeTab={activeTab}
+        mainDeviceTouched={tourMainDeviceTouched}
+        onMainDeviceTourStepEnter={() => setTourMainDeviceTouched(false)}
+      />
       <PosTerminalTourController
         activeTab={activeTab}
         selectedTableId={selectedTableId}
@@ -2803,6 +2845,7 @@ export default function PosTerminalPage() {
         needTaxInvoice={tourTaxInvoiceEnabled}
         paymentCompletedCount={tourPaymentCompletedCount}
         mainDeviceModeChanged={tourMainDeviceTouched}
+        servingItemChecked={tourServingItemChecked}
         servingOrderReady={tourServingOrder?.status === 'ready'}
         liveMenuSearchOpen={liveSearchOpen}
       />
@@ -2977,7 +3020,10 @@ export default function PosTerminalPage() {
             </div>
             {activeTab === 'delivery' && (
               <div className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0">
-                <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
+                <div
+                  className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap"
+                  data-tour={isPosDemo ? 'pos-tour-delivery-order-draft' : undefined}
+                >
                 {effectiveDeliveryApps.map((app) => (
                   <Button
                     key={app.id}
@@ -2991,7 +3037,6 @@ export default function PosTerminalPage() {
                 ))}
                 <div
                   className="flex min-w-0 flex-wrap items-center gap-2 min-[640px]:gap-2"
-                  data-tour={isPosDemo ? 'pos-tour-delivery-order-draft' : undefined}
                 >
                   <span className="text-sm font-medium text-muted-foreground shrink-0">
                     {t('posDeliveryOrderNo') || '주문 번호'}
@@ -3044,7 +3089,10 @@ export default function PosTerminalPage() {
                 className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0"
                 data-tour="pos-tour-takeout-toolbar"
               >
-                <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
+                <div
+                  className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap"
+                  data-tour={isPosDemo ? 'pos-tour-takeout-slots' : undefined}
+                >
                   {Array.from({ length: 7 }, (_, i) => i + 1).map((slotNo) => (
                     <Button
                       key={slotNo}
@@ -3134,7 +3182,8 @@ export default function PosTerminalPage() {
                       className="h-full min-h-[min(420px,50vh)] min-w-0"
                       data-tour="pos-tour-floor"
                     >
-                      <TableFloorView
+                      <TableFloorWithW13dTimeTour
+                        isPosDemo={isPosDemo}
                         layout={floorLayoutForView}
                         tableListMode={tableListMode}
                         gridCols={30}

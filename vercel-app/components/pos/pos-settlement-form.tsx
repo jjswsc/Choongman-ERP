@@ -2,8 +2,8 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
-import { Wallet, Save, RotateCw, Printer, ChevronDown, ChevronRight } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Wallet, Save, RotateCw, Printer, ChevronDown, ChevronRight, House } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { adminTabsListRowCn, adminTabsTriggerCn } from '@/lib/admin-tab-styles'
@@ -41,6 +41,8 @@ import { tr as i18nTr } from '@/lib/i18n'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
+import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
+import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
 import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
@@ -152,6 +154,18 @@ export type PosSettlementFormProps = {
 
 export function PosSettlementForm({ t, compact, offlineAware = false, openMode = false }: PosSettlementFormProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const settlementFullCloseHref = React.useMemo(
+    () =>
+      isPosDemoFromQuery(searchParams)
+        ? POS_DEMO_ROUTES.businessClose
+        : '/pos/settlement',
+    [searchParams]
+  )
+  const posHomeHref = React.useMemo(
+    () => (isPosDemoFromQuery(searchParams) ? '/pos?demo=1' : '/pos'),
+    [searchParams]
+  )
   const { lang } = useLang()
   const { auth } = useAuth()
   const { stores } = useStoreList()
@@ -635,7 +649,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           </div>
         </div>
 
-        <div className={cn('flex flex-wrap items-center gap-3', compact ? 'mb-4' : 'mb-6')}>
+        <div
+          className={cn('flex flex-wrap items-center gap-3', compact ? 'mb-4' : 'mb-6')}
+          data-tour="pos-tour-settlement-toolbar"
+        >
           <Input
             type="date"
             value={settleDate}
@@ -666,6 +683,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
               {t('printBtn') || '인쇄'}
             </Button>
           )}
+          <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={() => router.push(posHomeHref)}>
+            <House className="h-4 w-4" />
+            {t('mobileStoreSalesBackHome') || '홈으로 돌아가기'}
+          </Button>
         </div>
 
         <div className="max-h-[calc(100vh-260px)] min-h-0 overflow-y-auto overflow-x-hidden -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -676,7 +697,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         {effectiveStore && !loading && openMode && (
           <div className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')} data-tour="pos-tour-open-cash-counts">
             <div className="space-y-4">
-              <div className="rounded-lg bg-muted/50 px-4 py-3">
+              <div className="rounded-lg bg-muted/50 px-4 py-3" data-tour="pos-tour-open-prev-summary">
                 <p className="text-sm text-muted-foreground mb-1">{t('posPrevDayCash') || '전날 시재'}</p>
                 <p className="text-xl font-bold tabular-nums">
                   {prevDayCashActual != null ? `${prevDayCashActual.toLocaleString()} ฿` : '—'}
@@ -687,7 +708,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   {t('posSavedCashActual') || '저장된 시제'}: {Number(settlement.cashActual).toLocaleString()} ฿
                 </p>
               )}
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-5 gap-3" data-tour="pos-tour-open-denom-grid">
                 {CASH_DENOMINATIONS.map((d) => (
                   <div key={d.value} className="flex items-center gap-2">
                     <span className="w-12 text-sm font-medium tabular-nums">{d.label}฿</span>
@@ -710,7 +731,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   </div>
                 ))}
               </div>
-              <div className="rounded-lg bg-primary/10 px-4 py-4 text-center">
+              <div className="rounded-lg bg-primary/10 px-4 py-4 text-center" data-tour="pos-tour-open-denom-total">
                 <div className="text-sm text-muted-foreground mb-1">{t('posCashActual') || '현금 시제 합계'}</div>
                 <div className="text-2xl font-bold tabular-nums">{denomTotal.toLocaleString()} ฿</div>
               </div>
@@ -721,7 +742,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => router.push('/pos/settlement')}
+                onClick={() => router.push(settlementFullCloseHref)}
+                data-tour="pos-tour-open-link-full-settlement"
               >
                 {t('posSettlement') || '전체 결산'}
               </Button>
@@ -732,7 +754,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         {effectiveStore && !loading && !openMode && (
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')} data-tour="pos-tour-close-entry">
             <AdminTabsBarWithHelp className="mb-4 overflow-hidden rounded-lg">
-              <TabsList className={adminTabsListRowCn}>
+              <TabsList className={adminTabsListRowCn} data-tour="pos-tour-close-tabs">
                 <TabsTrigger value="entry" className={adminTabsTriggerCn}>
                   결산 입력
                 </TabsTrigger>
@@ -743,7 +765,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             </AdminTabsBarWithHelp>
 
             <TabsContent value="entry" className="space-y-4">
-              <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3">
+              <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3" data-tour="pos-tour-close-system-summary">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{t('posSystemSubtotal') || '공급가액'}</span>
                   <span className="tabular-nums">{systemSubtotal.toLocaleString()} ฿</span>
@@ -828,7 +850,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   </p>
                 </div>
 
-                <label className="flex items-center justify-between text-sm">
+                <label
+                  className="flex items-center justify-between text-sm"
+                  data-tour="pos-tour-close-cash-line"
+                >
                   <span>{t('posCash') || '현금'}</span>
                   <div className="flex items-center gap-1">
                     <Input
@@ -1057,7 +1082,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 </Collapsible>
               </div>
 
-              <div className="space-y-1 rounded-lg border px-4 py-2 text-sm">
+              <div className="space-y-1 rounded-lg border px-4 py-2 text-sm" data-tour="pos-tour-close-input-totals">
                 <div className="flex justify-between text-muted-foreground">
                   <span>{t('posCashActual') || '돈통 시제'}</span>
                   <span className="tabular-nums">{cashActualNum.toLocaleString()}{currencySuffix}</span>
@@ -1080,6 +1105,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   'flex justify-between items-center rounded-lg px-4 py-3',
                   diff === 0 ? 'bg-green-500/10 text-green-700' : 'bg-amber-500/10 text-amber-700'
                 )}
+                data-tour="pos-tour-close-diff"
               >
                 <span className="font-medium">{t('posDifference') || '차액'} ({t('posDifferenceHint') || '입력−시스템'})</span>
                 <span className="font-bold tabular-nums">
@@ -1088,7 +1114,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 </span>
               </div>
 
-              <div>
+              <div data-tour="pos-tour-close-memo">
                 <label className="text-sm">{t('posMemo') || '비고'}</label>
                 <Input
                   value={memo}

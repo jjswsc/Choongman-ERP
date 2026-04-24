@@ -3,6 +3,7 @@ import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { syncReceivableToOutboundView } from '@/lib/receivable-match-outbound'
 import { syncReceivableFromForceOutboundStockLogById } from '@/lib/force-outbound-receivable'
+import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
 
 /**
  * 출고 이력(stock_logs) 확정 단가·수량 수정. orders.cart_json 은 변경하지 않음.
@@ -43,15 +44,30 @@ export async function POST(request: NextRequest) {
 
     const filter = `id=eq.${encodeURIComponent(String(stockLogId))}&is_deleted=is.false`
     const rows = (await supabaseSelectFilter('stock_logs', filter, {
-      select: 'id,log_type,qty,order_id,is_deleted',
+      select: 'id,log_type,qty,order_id,vendor_target,is_deleted',
       limit: 1,
-    })) as { id?: number; log_type?: string; qty?: number | string; order_id?: number | null; is_deleted?: boolean }[]
+    })) as {
+      id?: number
+      log_type?: string
+      qty?: number | string
+      order_id?: number | null
+      vendor_target?: string
+      is_deleted?: boolean
+    }[]
 
     const row = rows?.[0]
     const lt = String(row?.log_type || '')
     if (!row || Boolean(row.is_deleted) || (lt !== 'Outbound' && lt !== 'ForceOutbound')) {
       return NextResponse.json(
         { success: false, message: '주문/강제 출고 로그만 수정할 수 있습니다.' },
+        { headers }
+      )
+    }
+
+    const forceTarget = String(row.vendor_target || '').trim()
+    if (lt === 'ForceOutbound' && isInternalForceOutboundTarget(forceTarget) && invoiceUnitPrice > 0) {
+      return NextResponse.json(
+        { success: false, message: '본사→본사(내부사용) 출고는 청구 금액을 입력할 수 없습니다. 단가는 0만 허용됩니다.' },
         { headers }
       )
     }

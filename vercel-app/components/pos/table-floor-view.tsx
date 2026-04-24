@@ -41,6 +41,15 @@ function getSeatPositions(w: number, h: number, n: number): { x: number; y: numb
   return positions
 }
 
+/** `pos-tour-floor-guide-*`와 1:1 대응하는 테이블 id */
+export type TableFloorTimeTourSpotlights = {
+  elapsedTableId: string
+  freshSurfaceTableId: string
+  warningSurfaceTableId: string
+  urgentSurfaceTableId: string
+  orderClockTableId: string
+}
+
 export interface TableFloorViewProps {
   /** 관리자 테이블 배치와 동일한 픽셀 좌표 레이아웃 */
   layout: PosTableItem[]
@@ -68,6 +77,11 @@ export interface TableFloorViewProps {
   gridRows?: number
   /** 테이블 현황 필터: 준비중 / 결제완료 / 전체 (null이면 전체) */
   tableListMode?: 'in_progress' | 'completed' | 'all' | null
+  /**
+   * 터미널 투어(w13d) 등: 테이블별로 `data-tour` 가이드 마커를 붙여 순차 스포트라이트.
+   * `null`이면 마커 없음.
+   */
+  timeTourSpotlights?: TableFloorTimeTourSpotlights | null
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -152,6 +166,7 @@ export function TableFloorView({
   gridCols = 30,
   gridRows = 20,
   tableListMode = 'all',
+  timeTourSpotlights = null,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const availableFloors = useMemo<(1 | 2 | 3)[]>(() => {
@@ -501,6 +516,11 @@ export function TableFloorView({
                     )}
                     {createdAt && (
                       <span
+                        data-tour={
+                          timeTourSpotlights && tab.id === timeTourSpotlights.elapsedTableId
+                            ? 'pos-tour-floor-guide-elapsed'
+                            : undefined
+                        }
                         className={cn(
                           'inline-flex max-w-full shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums shadow-sm ring-1 ring-black/10 sm:text-xs',
                           elapsedClass
@@ -533,7 +553,15 @@ export function TableFloorView({
                   {statusLabel ? (
                     <span className="max-w-[min(100%,6.5rem)] shrink truncate font-bold">{statusLabel}</span>
                   ) : null}
-                  <span className="shrink-0 tabular-nums font-semibold opacity-90" title={t('posTableOrderClockHint') || ''}>
+                  <span
+                    className="shrink-0 tabular-nums font-semibold opacity-90"
+                    title={t('posTableOrderClockHint') || ''}
+                    data-tour={
+                      timeTourSpotlights && tab.id === timeTourSpotlights.orderClockTableId
+                        ? 'pos-tour-floor-guide-order-clock'
+                        : undefined
+                    }
+                  >
                     {formatTableTime(createdAt)}
                   </span>
                 </div>
@@ -544,6 +572,27 @@ export function TableFloorView({
                 </div>
               ) : null}
             </div>
+            {timeTourSpotlights && tab.id === timeTourSpotlights.freshSurfaceTableId && (
+              <div
+                data-tour="pos-tour-floor-guide-fresh"
+                className="absolute inset-0 z-[14] pointer-events-none rounded-sm"
+                aria-hidden
+              />
+            )}
+            {timeTourSpotlights && tab.id === timeTourSpotlights.warningSurfaceTableId && (
+              <div
+                data-tour="pos-tour-floor-guide-warning"
+                className="absolute inset-0 z-[14] pointer-events-none rounded-sm"
+                aria-hidden
+              />
+            )}
+            {timeTourSpotlights && tab.id === timeTourSpotlights.urgentSurfaceTableId && (
+              <div
+                data-tour="pos-tour-floor-guide-urgent"
+                className="absolute inset-0 z-[14] pointer-events-none rounded-sm"
+                aria-hidden
+              />
+            )}
           </div>
         )
       })}

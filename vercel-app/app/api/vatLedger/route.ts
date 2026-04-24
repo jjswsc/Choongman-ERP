@@ -3,6 +3,7 @@ import {
   supabaseDeleteByFilter,
   supabaseInsert,
   supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
   supabaseUpdate,
 } from '@/lib/supabase-server'
 import {
@@ -10,12 +11,13 @@ import {
   assertCanManageAccountingCompliance,
   assertCanWriteAccountingCompliance,
 } from '@/lib/accounting-auth'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
       .filter(Boolean)
       .concat(String(authResult.auth.store || '').trim())
   try {
-    assertCanManageAccountingCompliance(userRole)
+    assertCanManageAccountingCompliance(userRole, String(authResult.auth.store || ''))
   } catch (e) {
     if (e instanceof Error && e.message === 'ACCOUNTING_FORBIDDEN') {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403, headers })
@@ -76,7 +78,12 @@ export async function GET(request: NextRequest) {
   const periodType = periodTypeRaw === 'annual' || periodTypeRaw === 'half_year' ? periodTypeRaw : 'monthly'
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
   const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
-  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const userStore = String(authResult.auth.store || '').trim()
+  const isOfficeLevel =
+    isOfficeRole(userRole) ||
+    isAccountingRole(userRole) ||
+    isOfficeStore(userStore) ||
+    isHeadOfficeLikeStoreName(userStore)
   let storeFilter = requestedStoreFilter
   if (!isOfficeLevel) {
     if (!requestedStoreFilter || requestedStoreFilter === 'All') {
@@ -97,6 +104,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const monthFilter = buildTaxMonthPostgrestFilter(period.months)
+    const initialRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
+      select: '*',
+      order: 'doc_date.asc,id.asc',
+      pageSize: 4000,
+      maxRows: 100000,
+    })) as Record<string, unknown>[] | null
+    const initialStoreScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const initialEntries = (initialRows || []).filter((row) => {
+      if (!initialStoreScope.matches(String(row.store_name || ''))) return false
+      return matchesFilingStatus(row.filing_status, filingStatus)
+    })
+    if (initialEntries.length > 0) {
+      return NextResponse.json({ entries: initialEntries, period }, { headers })
+    }
     try {
       await syncTaxVatLedgersFromStockAndExpenses({
         months: period.months,
@@ -105,14 +127,17 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.warn('vatLedger GET auto-sync skipped:', e)
     }
-    const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const filter = appendStoreNameFilter(monthFilter, storeFilter)
-    const rows = (await supabaseSelectFilter('vat_ledger_entries', filter, {
+    const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
       select: '*',
-      limit: 20000,
       order: 'doc_date.asc,id.asc',
+      pageSize: 4000,
+      maxRows: 100000,
     })) as Record<string, unknown>[] | null
-    const entries = (rows || []).filter((row) => matchesFilingStatus(row.filing_status, filingStatus))
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const entries = (rows || []).filter((row) => {
+      if (!storeScope.matches(String(row.store_name || ''))) return false
+      return matchesFilingStatus(row.filing_status, filingStatus)
+    })
     return NextResponse.json({ entries, period }, { headers })
   } catch (e) {
     console.error('vatLedger GET:', e)
@@ -137,7 +162,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}))
     const userRole = jwtUserRole
-    const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+    const userStore = String(authResult.auth.store || '').trim()
+    const isOfficeLevel =
+      isOfficeRole(userRole) ||
+      isAccountingRole(userRole) ||
+      isOfficeStore(userStore) ||
+      isHeadOfficeLikeStoreName(userStore)
     const requestedStoreName = body.storeName != null ? String(body.storeName).trim() : ''
     if (!isOfficeLevel && requestedStoreName) {
       const allowed = jwtAllowedStores.some((s) => storesMatchForGradeLookup(s, requestedStoreName))
@@ -148,7 +178,7 @@ export async function POST(request: NextRequest) {
     const effectiveStoreName = isOfficeLevel
       ? (requestedStoreName || null)
       : (requestedStoreName || String(jwtAllowedStores[0] || '').trim() || null)
-    assertCanManageAccountingCompliance(userRole)
+    assertCanManageAccountingCompliance(userRole, String(authResult.auth.store || ''))
 
     const id = body.id != null ? Number(body.id) : 0
     const docDate = String(body.docDate || body.doc_date || '').slice(0, 10)

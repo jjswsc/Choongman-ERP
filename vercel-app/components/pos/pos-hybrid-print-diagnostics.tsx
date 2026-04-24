@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { tr, useT } from '@/lib/i18n'
 
 type PrinterRow = { name: string; displayName: string; isDefault: boolean }
 
@@ -45,6 +45,14 @@ function normalizeConfigForEdit(cfg: PrintConfig | null): EditablePrintConfig {
     kitchen2DeviceName: String(cfg?.kitchen2DeviceName || '').trim(),
     kitchen3DeviceName: String(cfg?.kitchen3DeviceName || '').trim(),
   }
+}
+
+function formatPrintConfigSaveFailure(t: (k: string) => string, reasonRaw: unknown): string {
+  const reason = String(reasonRaw || 'save_failed').trim() || 'save_failed'
+  if (reason === 'forbidden') return t('posShellPrintDiagnosticsSaveReasonForbidden')
+  if (reason === 'invalid_payload') return t('posShellPrintDiagnosticsSaveReasonInvalidPayload')
+  if (reason === 'save_failed') return t('posShellPrintDiagnosticsSaveFailed')
+  return tr(t, 'posShellPrintDiagnosticsSaveFailedWithReason', { reason })
 }
 
 export function PosHybridPrintDiagnosticsButton() {
@@ -98,10 +106,7 @@ export function PosHybridPrintDiagnosticsButton() {
 
   const onSave = React.useCallback(async () => {
     if (!shell?.savePrintConfig) {
-      setError(
-        t('posShellPrintDiagnosticsNoInlineSave') ||
-          '현재 설치된 POS 셸은 점검창 저장 기능이 없는 버전입니다. 앱 업데이트 후 다시 시도하세요.'
-      )
+      setError(t('posShellPrintDiagnosticsNoInlineSave'))
       return
     }
     setSaving(true)
@@ -118,13 +123,13 @@ export function PosHybridPrintDiagnosticsButton() {
         kitchen3DeviceName: draft.kitchen3DeviceName,
       })
       if (!res?.ok) {
-        setError(res?.reason || 'save_failed')
+        setError(formatPrintConfigSaveFailure(t, res?.reason))
         return
       }
       const nextConfig = res.config && typeof res.config === 'object' ? (res.config as PrintConfig) : null
       setConfig(nextConfig)
       setDraft(normalizeConfigForEdit(nextConfig))
-      setSaveMessage(t('commonSaved') || '저장 완료')
+      setSaveMessage(t('commonSaved'))
       const plist = await shell.listPrinters?.()
       if (Array.isArray(plist)) setPrinters(plist)
     } catch (e) {
@@ -134,56 +139,54 @@ export function PosHybridPrintDiagnosticsButton() {
     }
   }, [draft, shell, t])
 
-  const fieldDefs: Array<{
-    key: keyof EditablePrintConfig
-    label: string
-    code: string
-    placeholder: string
-    hint: string
-  }> = [
-    {
-      key: 'deviceName',
-      label: '공통 기본 프린터',
-      code: 'deviceName',
-      placeholder: '예: Counter',
-      hint: '영수증/주방 개별 지정이 없을 때 공통으로 사용됩니다.',
-    },
-    {
-      key: 'receiptDeviceName',
-      label: '영수증 프린터',
-      code: 'receiptDeviceName',
-      placeholder: '예: Counter',
-      hint: '결제 영수증에 우선 적용됩니다.',
-    },
-    {
-      key: 'kitchenDeviceName',
-      label: '주방 공통 프린터',
-      code: 'kitchenDeviceName',
-      placeholder: '예: Kitchen',
-      hint: '주방1/2/3 개별 지정이 없을 때 사용됩니다.',
-    },
-    {
-      key: 'kitchen1DeviceName',
-      label: '주방1 프린터',
-      code: 'kitchen1DeviceName',
-      placeholder: '예: kitchen1',
-      hint: '주방 라우팅에서 1번으로 분기된 주문서에 적용됩니다.',
-    },
-    {
-      key: 'kitchen2DeviceName',
-      label: '주방2 프린터',
-      code: 'kitchen2DeviceName',
-      placeholder: '예: kitchen2',
-      hint: '주방 라우팅에서 2번으로 분기된 주문서에 적용됩니다.',
-    },
-    {
-      key: 'kitchen3DeviceName',
-      label: '주방3 프린터',
-      code: 'kitchen3DeviceName',
-      placeholder: '예: kitchen3',
-      hint: '주방 라우팅에서 3번으로 분기된 주문서에 적용됩니다.',
-    },
-  ]
+  const fieldDefs = React.useMemo(
+    () =>
+      [
+        {
+          key: 'deviceName' as const,
+          label: t('posShellPrintDiagnosticsFieldDeviceName'),
+          code: 'deviceName',
+          placeholder: t('posShellPrintDiagnosticsPhCounter'),
+          hint: t('posShellPrintDiagnosticsHintDeviceName'),
+        },
+        {
+          key: 'receiptDeviceName' as const,
+          label: t('posShellPrintDiagnosticsFieldReceipt'),
+          code: 'receiptDeviceName',
+          placeholder: t('posShellPrintDiagnosticsPhCounter'),
+          hint: t('posShellPrintDiagnosticsHintReceipt'),
+        },
+        {
+          key: 'kitchenDeviceName' as const,
+          label: t('posShellPrintDiagnosticsFieldKitchenAny'),
+          code: 'kitchenDeviceName',
+          placeholder: t('posShellPrintDiagnosticsPhKitchen'),
+          hint: t('posShellPrintDiagnosticsHintKitchenAny'),
+        },
+        {
+          key: 'kitchen1DeviceName' as const,
+          label: t('posShellPrintDiagnosticsFieldKitchen1'),
+          code: 'kitchen1DeviceName',
+          placeholder: t('posShellPrintDiagnosticsPhKitchen1'),
+          hint: t('posShellPrintDiagnosticsHintKitchen1'),
+        },
+        {
+          key: 'kitchen2DeviceName' as const,
+          label: t('posShellPrintDiagnosticsFieldKitchen2'),
+          code: 'kitchen2DeviceName',
+          placeholder: t('posShellPrintDiagnosticsPhKitchen2'),
+          hint: t('posShellPrintDiagnosticsHintKitchen2'),
+        },
+        {
+          key: 'kitchen3DeviceName' as const,
+          label: t('posShellPrintDiagnosticsFieldKitchen3'),
+          code: 'kitchen3DeviceName',
+          placeholder: t('posShellPrintDiagnosticsPhKitchen3'),
+          hint: t('posShellPrintDiagnosticsHintKitchen3'),
+        },
+      ] as const,
+    [t]
+  )
 
   const registeredPrinterNames = React.useMemo(
     () => new Set(printers.map((p) => String(p.name || '').trim()).filter(Boolean)),
@@ -204,10 +207,8 @@ export function PosHybridPrintDiagnosticsButton() {
     [draft, namedDraftFields, registeredPrinterNames]
   )
 
-  const title = t('posShellPrintDiagnostics') || '프린터 점검'
-  const desc =
-    t('posShellPrintDiagnosticsHint') ||
-    'Windows에 등록된 프린터 목록과 현재 인쇄 설정을 비교해 점검합니다. 프린터 이름은 PowerShell Get-Printer의 Name과 정확히 같아야 합니다.'
+  const title = t('posShellPrintDiagnostics')
+  const desc = t('posShellPrintDiagnosticsHint')
 
   const defaultPrinter = printers.find((p) => p.isDefault)
   const defaultPrinterLabel = defaultPrinter
@@ -225,58 +226,60 @@ export function PosHybridPrintDiagnosticsButton() {
         (config.kitchen3DeviceName && String(config.kitchen3DeviceName).trim())
     )
 
-  const nullHint =
-    t('posShellPrintDiagnosticsRuntimeNullExplain') ||
-    'deviceName·receiptDeviceName·kitchen* 가 모두 비어 있으면(null) 무인쇄용 프린터를 아직 지정하지 않은 상태입니다. 이 경우 영수증·주방 모두 Windows 기본 프린터로 나가는 경우가 많습니다. 서로 다른 기기로 나누려면 아래 목록의 이름을 그대로 복사해 runtime-config.json의 print 섹션에 넣으세요.'
+  const nullHint = t('posShellPrintDiagnosticsRuntimeNullExplain')
 
-  const configRows = [
-    {
-      label: '무인쇄 우선 모드',
-      code: 'silent',
-      value: config ? (config.silent !== false ? '사용' : '미사용') : '-',
-    },
-    { label: '공통 기본 프린터', code: 'deviceName', value: config?.deviceName || '-' },
-    { label: '영수증 프린터', code: 'receiptDeviceName', value: config?.receiptDeviceName || '-' },
-    { label: '주방 공통 프린터', code: 'kitchenDeviceName', value: config?.kitchenDeviceName || '-' },
-    { label: '주방1 프린터', code: 'kitchen1DeviceName', value: config?.kitchen1DeviceName || '-' },
-    { label: '주방2 프린터', code: 'kitchen2DeviceName', value: config?.kitchen2DeviceName || '-' },
-    { label: '주방3 프린터', code: 'kitchen3DeviceName', value: config?.kitchen3DeviceName || '-' },
-  ]
+  const configRows = React.useMemo(
+    () => [
+      {
+        label: t('posShellPrintDiagnosticsSilentLabel'),
+        code: 'silent',
+        value: loading
+          ? '…'
+          : config
+            ? config.silent !== false
+              ? t('posShellPrintDiagnosticsSilentOn')
+              : t('posShellPrintDiagnosticsSilentOff')
+            : '-',
+      },
+      { label: t('posShellPrintDiagnosticsFieldDeviceName'), code: 'deviceName', value: config?.deviceName || '-' },
+      { label: t('posShellPrintDiagnosticsFieldReceipt'), code: 'receiptDeviceName', value: config?.receiptDeviceName || '-' },
+      { label: t('posShellPrintDiagnosticsFieldKitchenAny'), code: 'kitchenDeviceName', value: config?.kitchenDeviceName || '-' },
+      { label: t('posShellPrintDiagnosticsFieldKitchen1'), code: 'kitchen1DeviceName', value: config?.kitchen1DeviceName || '-' },
+      { label: t('posShellPrintDiagnosticsFieldKitchen2'), code: 'kitchen2DeviceName', value: config?.kitchen2DeviceName || '-' },
+      { label: t('posShellPrintDiagnosticsFieldKitchen3'), code: 'kitchen3DeviceName', value: config?.kitchen3DeviceName || '-' },
+    ],
+    [t, config, loading]
+  )
 
   const usesOnlyWindowsDefault =
     !loading && Boolean(config) && !hasExplicitPrintDevices && Boolean(defaultPrinterLabel)
 
   const checklistItems: Array<{ title: string; done: boolean; hint: string }> = [
     {
-      title: t('posShellPrintDiagnosticsChecklistName') || '프린터 이름 일치 확인',
+      title: t('posShellPrintDiagnosticsChecklistName'),
       done: namedDraftFields.length === 0 || mismatchFields.length === 0,
       hint:
         mismatchFields.length > 0
           ? `${mismatchFields
               .slice(0, 2)
               .map((f) => `${f.label}(${String(draft[f.key] || '').trim()})`)
-              .join(', ')} ${t('posShellPrintDiagnosticsChecklistNameMismatch') || '값이 목록과 다릅니다.'}`
-          : t('posShellPrintDiagnosticsChecklistNameOk') ||
-            '입력된 프린터명이 현재 Windows 등록 목록과 일치합니다.',
+              .join(', ')} ${t('posShellPrintDiagnosticsChecklistNameMismatch')}`
+          : t('posShellPrintDiagnosticsChecklistNameOk'),
     },
     {
-      title: t('posShellPrintDiagnosticsChecklistDefaultRisk') || '기본 프린터 의존 위험 점검',
+      title: t('posShellPrintDiagnosticsChecklistDefaultRisk'),
       done: !usesOnlyWindowsDefault,
       hint: usesOnlyWindowsDefault
-        ? t('posShellPrintDiagnosticsChecklistDefaultRiskWarn') ||
-          '현재는 Windows 기본 프린터만 사용될 가능성이 큽니다. 영수증/주방 분리를 위해 각 항목에 프린터를 지정하세요.'
-        : t('posShellPrintDiagnosticsChecklistDefaultRiskOk') ||
-          '개별 프린터가 지정되어 기본 프린터 의존 위험이 낮습니다.',
+        ? t('posShellPrintDiagnosticsChecklistDefaultRiskWarn')
+        : t('posShellPrintDiagnosticsChecklistDefaultRiskOk'),
     },
     {
-      title: t('posShellPrintDiagnosticsChecklistRescan') || '저장 후 재확인',
+      title: t('posShellPrintDiagnosticsChecklistRescan'),
       done: Boolean(saveMessage) && !saving,
       hint:
         saveMessage && !saving
-          ? t('posShellPrintDiagnosticsChecklistRescanOk') ||
-            '저장이 완료되었습니다. 다시 읽기로 최종 반영 상태를 확인하세요.'
-          : t('posShellPrintDiagnosticsChecklistRescanTodo') ||
-            '값을 저장한 뒤 `다시 읽기`를 눌러 실제 반영값을 꼭 확인하세요.',
+          ? t('posShellPrintDiagnosticsChecklistRescanOk')
+          : t('posShellPrintDiagnosticsChecklistRescanTodo'),
     },
   ]
 
@@ -305,22 +308,22 @@ export function PosHybridPrintDiagnosticsButton() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">
-              {t('posShellPrintDiagnosticsGuide') || '점검 순서: 목록 새로고침 → 프린터명 확인 → 필요 시 저장'}
+              {t('posShellPrintDiagnosticsGuide')}
             </p>
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void load()}>
                 <RotateCw className={`mr-1 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-                {t('posShellPrintDiagnosticsRefresh') || '다시 읽기'}
+                {t('posShellPrintDiagnosticsRefresh')}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 disabled={saving || loading}
                 onClick={() => void onSave()}
-                title={!canSave ? (t('posShellPrintDiagnosticsNoInlineSave') || '현재 POS 셸 버전은 점검창 저장을 지원하지 않습니다.') : undefined}
+                title={!canSave ? t('posShellPrintDiagnosticsNoInlineSave') : undefined}
               >
                 <Save className="mr-1 h-3.5 w-3.5" />
-                {saving ? '…' : t('commonSave') || '저장'}
+                {saving ? '…' : t('commonSave')}
               </Button>
             </div>
           </div>
@@ -341,7 +344,7 @@ export function PosHybridPrintDiagnosticsButton() {
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="space-y-3 rounded-xl border border-border/80 bg-background p-3">
               <p className="text-sm font-semibold text-foreground">
-                {t('posShellPrintDiagnosticsRuntime') || '현재 적용 중인 인쇄 설정'}
+                {t('posShellPrintDiagnosticsRuntimeApplied')}
               </p>
               <div className="space-y-2">
                 {configRows.map((row) => (
@@ -361,8 +364,8 @@ export function PosHybridPrintDiagnosticsButton() {
                 <div className="space-y-1 rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
                   <p>{nullHint}</p>
                   {defaultPrinterLabel ? (
-                    <p className="font-medium">
-                      {t('posShellPrintDiagnosticsWindowsDefaultNow') || '현재 Windows 기본 프린터:'}{' '}
+                      <p className="font-medium">
+                      {t('posShellPrintDiagnosticsWindowsDefaultNow')}{' '}
                       <span className="font-mono">{defaultPrinterLabel}</span>
                     </p>
                   ) : null}
@@ -371,7 +374,7 @@ export function PosHybridPrintDiagnosticsButton() {
             </div>
             <div className="space-y-3 rounded-xl border border-border/80 bg-background p-3">
               <p className="text-sm font-semibold text-foreground">
-                {t('posShellPrintDiagnosticsSystem') || '이 PC에 등록된 프린터'}
+                {t('posShellPrintDiagnosticsSystem')}
               </p>
               <div className="max-h-64 space-y-1 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-2 text-xs">
                 {printers.length ? (
@@ -382,25 +385,25 @@ export function PosHybridPrintDiagnosticsButton() {
                         key={`${p.name}-${p.displayName}`}
                         className="rounded-md border border-border/50 bg-background px-2 py-1.5 font-mono text-[11px] text-foreground"
                       >
-                        {p.isDefault ? `[기본] ${label}` : label}
+                        {p.isDefault ? `${t('posShellPrintDiagnosticsPrinterDefaultBadge')} ${label}` : label}
                       </div>
                     )
                   })
                 ) : (
                   <p className="px-1 py-2 text-muted-foreground">
-                    {loading ? '…' : t('posShellPrintDiagnosticsEmpty') || '(없음)'}
+                    {loading ? '…' : t('posShellPrintDiagnosticsEmpty')}
                   </p>
                 )}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {t('posShellPrintDiagnosticsMatchHint') || '입력값은 위 프린터 이름과 한 글자까지 동일해야 정상 동작합니다.'}
+                {t('posShellPrintDiagnosticsMatchHint')}
               </p>
             </div>
           </div>
 
           <div className="space-y-2 rounded-xl border border-border/80 bg-background p-3">
             <p className="text-sm font-semibold text-foreground">
-              {t('posShellPrintDiagnosticsChecklistTitle') || '문제 진단 체크리스트'}
+              {t('posShellPrintDiagnosticsChecklistTitle')}
             </p>
             <div className="space-y-2">
               {checklistItems.map((item, idx) => (
@@ -428,11 +431,10 @@ export function PosHybridPrintDiagnosticsButton() {
           {canSave ? (
             <div className="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3">
               <p className="text-sm font-semibold text-foreground">
-                {t('posShellPrintDiagnosticsEditInline') || '점검창에서 바로 수정/저장'}
+                {t('posShellPrintDiagnosticsEditInline')}
               </p>
               <p className="text-xs text-muted-foreground">
-                {t('posShellPrintDiagnosticsEditInlineHint') ||
-                  '아래 값을 저장하면 이 POS 앱에서 읽는 runtime-config.json(userData)의 print 설정이 즉시 갱신됩니다.'}
+                {t('posShellPrintDiagnosticsEditInlineHint')}
               </p>
               <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs">
                 <input
@@ -440,7 +442,7 @@ export function PosHybridPrintDiagnosticsButton() {
                   checked={draft.silent}
                   onChange={(e) => onChangeField('silent', e.currentTarget.checked)}
                 />
-                <span>무인쇄 우선 사용 (`silent`)</span>
+                <span>{t('posShellPrintDiagnosticsSilentLabel')}</span>
               </label>
               <datalist id="cm-pos-printer-name-options">
                 {printers.map((p) => (
@@ -466,8 +468,7 @@ export function PosHybridPrintDiagnosticsButton() {
             </div>
           ) : (
             <div className="rounded-lg border border-amber-200/80 bg-amber-50/90 p-2 text-xs leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
-              {t('posShellPrintDiagnosticsNoInlineSave') ||
-                '현재 설치된 POS 셸은 점검창 저장 기능이 없는 버전입니다. 앱 업데이트 후 점검창에서 바로 저장할 수 있습니다.'}
+              {t('posShellPrintDiagnosticsNoInlineSave')}
             </div>
           )}
         </DialogContent>

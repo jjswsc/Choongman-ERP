@@ -4,9 +4,20 @@ import * as React from "react"
 import { Search, Printer, Download, FileX, CalendarIcon, Store, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getBangkokMonthRange } from "@/lib/bangkok-time"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 
 interface ShipmentFilterBarProps {
   totalAmount: string
+  totalVatAmount?: string
+  totalWithVatAmount?: string
   /** 본사 권한 시 확장 필터 표시 */
   isOffice?: boolean
   // Period
@@ -50,6 +61,8 @@ interface ShipmentFilterBarProps {
 
 export function ShipmentFilterBar({
   totalAmount,
+  totalVatAmount = "",
+  totalWithVatAmount = "",
   isOffice = true,
   histStart,
   histEnd,
@@ -85,6 +98,8 @@ export function ShipmentFilterBar({
   const t = useT(lang)
   const [storeSearchQuery, setStoreSearchQuery] = React.useState("")
   const [isStoreDropdownOpen, setIsStoreDropdownOpen] = React.useState(false)
+  const [isMonthDialogOpen, setIsMonthDialogOpen] = React.useState(false)
+  const [draftMonth, setDraftMonth] = React.useState(histMonth || "")
   const storeInputRef = React.useRef<HTMLInputElement>(null)
   const storeDropdownRef = React.useRef<HTMLDivElement>(null)
 
@@ -105,6 +120,12 @@ export function ShipmentFilterBar({
   React.useEffect(() => {
     if (!isStoreDropdownOpen) setStoreSearchQuery("")
   }, [isStoreDropdownOpen])
+
+  React.useEffect(() => {
+    if (!isMonthDialogOpen) {
+      setDraftMonth(histMonth || "")
+    }
+  }, [histMonth, isMonthDialogOpen])
 
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -133,6 +154,27 @@ export function ShipmentFilterBar({
     storeInputRef.current?.focus()
   }
 
+  const handleOpenMonthDialog = () => {
+    onMonthClick?.()
+    setDraftMonth(histMonth || "")
+    setIsMonthDialogOpen(true)
+  }
+
+  const handleApplyMonth = () => {
+    onHistMonthChange(draftMonth)
+    setIsMonthDialogOpen(false)
+  }
+
+  const handlePickCurrentMonth = () => {
+    const { yearMonth } = getBangkokMonthRange()
+    setDraftMonth(yearMonth)
+  }
+
+  const handleClearMonth = () => {
+    onHistMonthChange("")
+    setIsMonthDialogOpen(false)
+  }
+
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -158,23 +200,16 @@ export function ShipmentFilterBar({
         {/* Monthly */}
         <button
           type="button"
-          onClick={onMonthClick}
-          className="h-8 rounded border border-input bg-card px-3 text-xs font-medium text-card-foreground hover:bg-accent transition-colors"
+          onClick={handleOpenMonthDialog}
+          className={`h-8 rounded border px-3 text-xs font-medium transition-colors ${
+            histMonth
+              ? "border-primary bg-primary/10 text-primary hover:bg-primary/20"
+              : "border-input bg-card text-card-foreground hover:bg-accent"
+          }`}
         >
           {t("outFilterMonth")}
+          {histMonth ? ` (${histMonth})` : ""}
         </button>
-
-        {/* Year-Month */}
-        <div className="relative">
-          <input
-            type="month"
-            value={histMonth}
-            onChange={(e) => onHistMonthChange(e.target.value)}
-            title={t("inMonthHint")}
-            className="h-8 w-[100px] rounded border border-input bg-card px-2 pr-7 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <CalendarIcon className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-        </div>
 
         {isOffice && (
           <>
@@ -355,10 +390,20 @@ export function ShipmentFilterBar({
         )}
 
         {/* Total */}
-        <div className="ml-auto">
+        <div className="ml-auto text-right">
           <span className="text-sm font-bold text-[#16A34A]">
             {t("outPeriodTotal")}: {totalAmount}
           </span>
+          {totalVatAmount ? (
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("inv_vat7")}: {totalVatAmount}
+            </p>
+          ) : null}
+          {totalWithVatAmount ? (
+            <p className="text-xs font-semibold text-foreground">
+              {t("inv_total") || "Total"}: {totalWithVatAmount}
+            </p>
+          ) : null}
         </div>
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
@@ -366,6 +411,44 @@ export function ShipmentFilterBar({
           ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
           : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
       </p>
+
+      <Dialog open={isMonthDialogOpen} onOpenChange={setIsMonthDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("outFilterMonth")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">{t("inMonthHint")}</label>
+            <div className="relative">
+              <input
+                type="month"
+                value={draftMonth}
+                onChange={(e) => setDraftMonth(e.target.value)}
+                className="h-9 w-full rounded border border-input bg-card px-2 pr-8 text-sm text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <CalendarIcon className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={handlePickCurrentMonth}>
+                {t("thisMonth") || "이번 달"}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleClearMonth}>
+                {t("all")}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsMonthDialogOpen(false)}>
+                {t("cancel") || "Cancel"}
+              </Button>
+              <Button type="button" onClick={handleApplyMonth}>
+                {t("btn_query")}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -2,11 +2,14 @@ import {
   supabaseDeleteByFilter,
   supabaseInsert,
   supabaseSelect,
+  supabaseSelectFilter,
   supabaseSelectFilterAllPages,
   supabaseUpdate,
 } from '@/lib/supabase-server'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
+import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 
@@ -25,6 +28,7 @@ type StockLogRow = {
   item_code?: string
   item_name?: string
   qty?: number
+  order_id?: number | string | null
   invoice_unit_price?: number | string | null
   unit_cost?: number | string | null
 }
@@ -33,6 +37,7 @@ type ExistingAutoRow = {
   id?: number
   memo?: string | null
   filing_status?: string | null
+  store_name?: string | null
 }
 
 type ExpenseAccrualWhtRow = {
@@ -85,6 +90,16 @@ function monthEndYmd(ym: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** stock_logs.log_date(TIMESTAMPTZ) → 방콕 달력 YYYY-MM-DD (세무 월과 입출고 UI 정합) */
+function bangkokYmdFromLogDate(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+  if (!s) return ''
+  const ms = Date.parse(s)
+  if (Number.isFinite(ms)) return formatDateBangkok(new Date(ms))
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1]! : ''
+}
+
 function vatRateFromTaxType(taxType: ItemTaxMeta['taxType']): number {
   if (taxType === 'exempt' || taxType === 'zero') return 0
   return 0.07
@@ -122,6 +137,50 @@ function decodePayeeCode(raw: string | undefined): { payeeCode: string } {
   return { payeeCode: src.slice(0, idx).trim() }
 }
 
+/** 세무 원장의 기본 매장키(행 저장용): location 우선, 없으면 vendor_target */
+function taxScopeStoreFromStockLog(log: Pick<StockLogRow, 'log_type' | 'location' | 'vendor_target'>): string {
+  const logType = String(log.log_type || '').trim()
+  const loc = String(log.location || '').trim()
+  const target = String(log.vendor_target || '').trim()
+  if (logType === 'Outbound' || logType === 'ForceOutbound') return loc || target
+  return loc || target
+}
+
+async function loadOrderCartByIds(orderIds: number[]): Promise<Record<string, OrderCartLine[]>> {
+  const ids = [...new Set(orderIds.map((v) => Math.floor(Number(v) || 0)).filter((v) => v > 0))]
+  const out: Record<string, OrderCartLine[]> = {}
+  if (!ids.length) return out
+
+  const chunkSize = 200
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const filter = `id=in.(${chunk.join(',')})`
+    let rows: { id?: number | null; cart_json?: string | null }[] | null = null
+    try {
+      rows = (await supabaseSelectFilter('orders', filter, {
+        select: 'id,cart_json',
+        limit: chunk.length,
+      })) as { id?: number | null; cart_json?: string | null }[] | null
+    } catch {
+      // orders/cart_json 스키마 차이 환경에서는 장바구니 단가 보강을 건너뛰고 진행
+      rows = []
+    }
+    for (const row of rows || []) {
+      const id = Math.floor(Number(row.id) || 0)
+      if (id <= 0) continue
+      let cart: OrderCartLine[] = []
+      try {
+        const parsed = JSON.parse(String(row.cart_json || '[]'))
+        if (Array.isArray(parsed)) cart = parsed as OrderCartLine[]
+      } catch {
+        cart = []
+      }
+      out[String(id)] = cart
+    }
+  }
+  return out
+}
+
 function digitsOnly(v: unknown): string {
   return String(v || '')
     .replace(/\D/g, '')
@@ -156,14 +215,25 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
 
   const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
   const startYmd = monthStartYmd(validMonths[0])
   const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
 
-  const itemRows = (await supabaseSelect('items', {
-    order: 'id.asc',
-    limit: 12000,
-    select: 'code,price,cost,tax_type',
-  })) as { code?: string; price?: number; cost?: number; tax_type?: string }[] | null
+  let itemRows: { code?: string; price?: number; cost?: number; tax_type?: string }[] | null = null
+  try {
+    itemRows = (await supabaseSelect('items', {
+      order: 'id.asc',
+      limit: 12000,
+      select: 'code,price,cost,tax_type',
+    })) as { code?: string; price?: number; cost?: number; tax_type?: string }[] | null
+  } catch {
+    // 일부 로컬/레거시 스키마에는 tax_type 컬럼이 없다.
+    itemRows = (await supabaseSelect('items', {
+      order: 'id.asc',
+      limit: 12000,
+      select: 'code,price,cost',
+    })) as { code?: string; price?: number; cost?: number; tax_type?: string }[] | null
+  }
   const itemMap: Record<string, ItemTaxMeta> = {}
   for (const it of itemRows || []) {
     const code = String(it.code || '').trim()
@@ -180,26 +250,48 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
 
   const stockFilter = [
     'log_type=in.(Outbound,ForceOutbound,Inbound)',
-    `log_date=gte.${encodeURIComponent(`${startYmd}T00:00:00.000`)}`,
-    `log_date=lte.${encodeURIComponent(`${endYmd}T23:59:59.999`)}`,
+    `log_date=gte.${startYmd}`,
+    `log_date=lte.${endYmd}T23:59:59.999`,
   ].join('&')
-  const stockLogs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
-    select:
-      'id,log_type,log_date,location,vendor_target,item_code,item_name,qty,invoice_unit_price,unit_cost',
-    order: 'id.asc',
-    pageSize: 8000,
-    maxRows: 200000,
-  })) as StockLogRow[]
+  let stockLogs: StockLogRow[] = []
+  try {
+    stockLogs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
+      select:
+        'id,log_type,log_date,location,vendor_target,item_code,item_name,qty,order_id,invoice_unit_price,unit_cost',
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: 200000,
+    })) as StockLogRow[]
+  } catch {
+    try {
+      stockLogs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
+        select: 'id,log_type,log_date,location,vendor_target,item_code,item_name,qty,order_id,invoice_unit_price',
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: 200000,
+      })) as StockLogRow[]
+    } catch {
+      stockLogs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
+        select: 'id,log_type,log_date,location,vendor_target,item_code,item_name,qty',
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: 200000,
+      })) as StockLogRow[]
+    }
+  }
+  const orderIds = (stockLogs || [])
+    .map((r) => Math.floor(Number(r.order_id) || 0))
+    .filter((n) => n > 0)
+  const orderCartById = await loadOrderCartByIds(orderIds)
 
-  const autoFilterBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:STOCK_LOG:%')}`
-  const autoFilter = appendStoreNameFilter(autoFilterBase, storeFilter)
+  const autoFilter = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:STOCK_LOG:%')}`
   const existingAutoRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', autoFilter, {
-    select: 'id,memo,filing_status',
+    select: 'id,memo,filing_status,store_name',
     order: 'id.asc',
     pageSize: 4000,
     maxRows: 30000,
   })) as ExistingAutoRow[]
-  const existingByStockId = new Map<number, { id: number; filingStatus: string }>()
+  const existingByStockId = new Map<number, { id: number; filingStatus: string; storeName: string }>()
   for (const row of existingAutoRows || []) {
     const id = Math.floor(Number(row.id) || 0)
     const stockLogId = parseStockLogIdFromMemo(String(row.memo || ''))
@@ -207,26 +299,39 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     existingByStockId.set(stockLogId, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+      storeName: String(row.store_name || '').trim(),
     })
   }
 
   const seenStockIds = new Set<number>()
   let stockUpserted = 0
+  let scannedLogs = 0
+  let inScopeLogs = 0
+  let netPositiveLogs = 0
 
   for (const log of stockLogs || []) {
+    scannedLogs += 1
     const stockLogId = Math.floor(Number(log.id) || 0)
     if (stockLogId <= 0) continue
     const logType = String(log.log_type || '').trim()
+    const scopedStore = taxScopeStoreFromStockLog(log)
     const loc = String(log.location || '').trim()
-    if (storeFilter && !storesMatchForGradeLookup(loc, storeFilter)) continue
+    const target = String(log.vendor_target || '').trim()
+    const inScope =
+      !storeFilter ||
+      storeScope.matches(scopedStore) ||
+      (loc ? storeScope.matches(loc) : false) ||
+      (target ? storeScope.matches(target) : false)
+    if (!inScope) continue
+    inScopeLogs += 1
 
-    const vendor = String(log.vendor_target || '').trim() || '-'
+    const vendor = target || '-'
     if (logType === 'Inbound' && (vendor === 'From HQ' || vendor === 'HQ')) {
       // 내부 재고 이동은 매입세금계산서 대상에서 제외
       continue
     }
 
-    const docDate = String(log.log_date || '').slice(0, 10)
+    const docDate = bangkokYmdFromLogDate(log.log_date)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) continue
     const taxMonth = docDate.slice(0, 7)
     if (!validMonths.includes(taxMonth)) continue
@@ -235,17 +340,24 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     if (qty <= 0) continue
 
     const code = String(log.item_code || '').trim()
+    const itemName = String(log.item_name || '').trim()
     const item = itemMap[code] || { price: 0, cost: 0, taxType: 'taxable' as const }
+    const orderId = Math.floor(Number(log.order_id) || 0)
+    const cartForPrice = orderId > 0 ? orderCartById[String(orderId)] : undefined
     const unit =
       logType === 'Outbound' || logType === 'ForceOutbound'
-        ? Number(log.invoice_unit_price) > 0
-          ? Number(log.invoice_unit_price)
-          : Number(item.price) || 0
+        ? (() => {
+            const derived = unitPriceFromOutboundLogSnapshot(log, cartForPrice, code, itemName, Number(item.price) || 0)
+            if (Number(derived) > 0) return Number(derived)
+            const unitCost = Number(log.unit_cost) || 0
+            return unitCost > 0 ? unitCost : 0
+          })()
         : Number(log.unit_cost) > 0
           ? Number(log.unit_cost)
           : Number(item.cost) || 0
     const net = round2(qty * unit)
     if (net <= 0) continue
+    netPositiveLogs += 1
     const vat = round2(net * vatRateFromTaxType(item.taxType))
     const total = round2(net + vat)
 
@@ -265,7 +377,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
       filing_status: 'draft',
       submitted_at: null,
       submitted_by: null,
-      store_name: loc || null,
+      store_name: scopedStore || null,
       updated_at: new Date().toISOString(),
     }
 
@@ -303,6 +415,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
 
   let stockDeleted = 0
   for (const [stockLogId, ex] of existingByStockId.entries()) {
+    if (storeFilter && !storeScope.matches(ex.storeName)) continue
     if (seenStockIds.has(stockLogId)) continue
     if (ex.filingStatus === 'submitted') continue
     await supabaseDeleteByFilter('vat_ledger_entries', `id=eq.${ex.id}`)
@@ -315,17 +428,17 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     'vat_amount=gt.0',
     'status=neq.rejected',
   ]
-  if (storeFilter) expParts.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
   const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
-    select: 'id',
+    select: 'id,store_name',
     order: 'id.asc',
     pageSize: 4000,
     maxRows: 30000,
-  })) as { id?: number }[]
+  })) as { id?: number; store_name?: string | null }[]
   let expenseSynced = 0
   for (const row of expenseRows || []) {
     const id = Math.floor(Number(row.id) || 0)
     if (id <= 0) continue
+    if (storeFilter && !storeScope.matches(String(row.store_name || '').trim())) continue
     await syncExpenseAccrualInputVatLedger(id)
     expenseSynced += 1
   }

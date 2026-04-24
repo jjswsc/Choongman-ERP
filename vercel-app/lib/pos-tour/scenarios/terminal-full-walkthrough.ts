@@ -1,4 +1,5 @@
 import type { PosTourScenario, PosTourStep } from '../pos-tour-types'
+import { POS_DEMO_ROUTES } from '../demo-routes'
 
 /**
  * 홀/배달/포장 탭 → 홀에서 테이블·메뉴·장바구니·주문 →
@@ -41,14 +42,48 @@ const steps: PosTourStep[] = [
     // 메뉴 터치/선택으로 자동 진행되는 단계라 딤을 끄고 상호작용 가능하게 유지
     overlayDim: false,
   },
-  { id: 'w12_cart', target: 'pos-tour-cart-guest-count', titleKey: 'posTourFullW12Title', bodyKey: 'posTourFullW12Body', advance: 'manual' },
+  { id: 'w12_cart', target: 'pos-tour-cart', titleKey: 'posTourFullW12Title', bodyKey: 'posTourFullW12Body', advance: 'manual' },
+  {
+    id: 'w12b_cart_guest_count',
+    target: 'pos-tour-cart-guest-count',
+    titleKey: 'posTourFullW12bTitle',
+    bodyKey: 'posTourFullW12bBody',
+    advance: 'manual',
+  },
   { id: 'w13_order', target: 'pos-tour-cart-order', titleKey: 'posTourFullW13Title', bodyKey: 'posTourFullW13Body', advance: 'serving_panel_open' },
-  { id: 'w13a_serving_panel', target: 'pos-tour-serving-panel', titleKey: 'posTourFullW13aTitle', bodyKey: 'posTourFullW13aBody', advance: 'manual' },
-  { id: 'w13b_serving_items', target: 'pos-tour-serving-items', titleKey: 'posTourFullW13bTitle', bodyKey: 'posTourFullW13bBody', advance: 'manual' },
+  { id: 'w13b_serving_items', target: 'pos-tour-serving-items', titleKey: 'posTourFullW13bTitle', bodyKey: 'posTourFullW13bBody', advance: 'serving_item_checked' },
   { id: 'w13c_serving_complete', target: 'pos-tour-serving-complete', titleKey: 'posTourFullW13cTitle', bodyKey: 'posTourFullW13cBody', advance: 'serving_order_ready' },
-  { id: 'w13d_table_time_guide', target: 'pos-tour-floor', titleKey: 'posTourFullW13dTitle', bodyKey: 'posTourFullW13dBody', advance: 'manual' },
+  {
+    id: 'w13d_table_time_guide',
+    target: 'pos-tour-floor',
+    titleKey: 'posTourFullW13dTitle',
+    bodyKey: 'posTourFullW13dBody',
+    advance: 'manual',
+    spotlightSequence: [
+      'pos-tour-floor-guide-elapsed',
+      'pos-tour-floor-guide-fresh',
+      'pos-tour-floor-guide-warning',
+      'pos-tour-floor-guide-urgent',
+      'pos-tour-floor-guide-order-clock',
+    ],
+    spotlightSequenceCopy: [
+      { titleKey: 'posTourFullW13d1Title', bodyKey: 'posTourFullW13d1Body' },
+      { titleKey: 'posTourFullW13d2Title', bodyKey: 'posTourFullW13d2Body' },
+      { titleKey: 'posTourFullW13d3Title', bodyKey: 'posTourFullW13d3Body' },
+      { titleKey: 'posTourFullW13d4Title', bodyKey: 'posTourFullW13d4Body' },
+      { titleKey: 'posTourFullW13d5Title', bodyKey: 'posTourFullW13d5Body' },
+    ],
+    spotlightSequenceManualAdvance: true,
+  },
   { id: 'w14_to_takeout', target: 'pos-tour-nospot', titleKey: 'posTourFullW14Title', bodyKey: 'posTourFullW14Body', advance: 'manual' },
   { id: 'w15_tab_takeout2', target: 'pos-tour-tab-takeout', titleKey: 'posTourFullW15Title', bodyKey: 'posTourFullW15Body', advance: 'manual' },
+  {
+    id: 'w16a_takeout_slots',
+    target: 'pos-tour-takeout-slots',
+    titleKey: 'posTourFullW16aTitle',
+    bodyKey: 'posTourFullW16aBody',
+    advance: 'manual',
+  },
   { id: 'w16_new_takeout', target: 'pos-tour-takeout-new', titleKey: 'posTourFullW16Title', bodyKey: 'posTourFullW16Body', advance: 'takeout_draft' },
   {
     id: 'w17_menu2',
@@ -63,13 +98,6 @@ const steps: PosTourStep[] = [
     target: 'pos-tour-live-menu-search',
     titleKey: 'posTourFullW9live1Title',
     bodyKey: 'posTourFullW9live1Body',
-    advance: 'manual',
-  },
-  {
-    id: 'w9live_menu_open',
-    target: 'pos-tour-live-menu-search',
-    titleKey: 'posTourFullW9live2Title',
-    bodyKey: 'posTourFullW9live2Body',
     advance: 'live_menu_search_open',
   },
   {
@@ -83,9 +111,50 @@ const steps: PosTourStep[] = [
   { id: 'w18_pay', target: 'pos-tour-cart-pay', titleKey: 'posTourFullW18Title', bodyKey: 'posTourFullW18Body', advance: 'payment_modal_open' },
   { id: 'w19_payment', target: 'pos-tour-payment-tabs', titleKey: 'posTourFullW19Title', bodyKey: 'posTourFullW19Body', advance: 'manual', overlayDim: false },
   { id: 'w19a_dutch_toggle', target: 'pos-tour-dutch-pay-toggle', titleKey: 'posTourFullW19aTitle', bodyKey: 'posTourFullW19aBody', advance: 'manual', overlayDim: false },
+  {
+    id: 'w19a0_dutch_mode_row',
+    target: 'pos-tour-dutch-mode-row',
+    titleKey: 'posTourFullW19a0Title',
+    bodyKey: 'posTourFullW19a0Body',
+    advance: 'manual',
+    overlayDim: false,
+  },
+  {
+    id: 'w19a1_dutch_amount_mode',
+    target: 'pos-tour-dutch-mode-amount',
+    titleKey: 'posTourFullW19a1Title',
+    bodyKey: 'posTourFullW19a1Body',
+    advance: 'manual',
+    overlayDim: false,
+  },
+  {
+    id: 'w19a2_dutch_split_count',
+    target: 'pos-tour-dutch-split-count',
+    titleKey: 'posTourFullW19a2Title',
+    bodyKey: 'posTourFullW19a2Body',
+    advance: 'manual',
+    overlayDim: false,
+  },
+  {
+    id: 'w19a3_dutch_progress',
+    target: 'pos-tour-dutch-progress-row',
+    titleKey: 'posTourFullW19a3Title',
+    bodyKey: 'posTourFullW19a3Body',
+    advance: 'manual',
+    overlayDim: false,
+  },
+  {
+    id: 'w19a4_dutch_payment_sum',
+    target: 'pos-tour-dutch-payment-sum-box',
+    titleKey: 'posTourFullW19a4Title',
+    bodyKey: 'posTourFullW19a4Body',
+    advance: 'manual',
+    overlayDim: false,
+  },
   { id: 'w19b_partial_pay', target: 'pos-tour-payment-partial', titleKey: 'posTourFullW19bTitle', bodyKey: 'posTourFullW19bBody', advance: 'manual', overlayDim: false },
   { id: 'w19c_dutch_menu_mode', target: 'pos-tour-dutch-mode-menu', titleKey: 'posTourFullW19cTitle', bodyKey: 'posTourFullW19cBody', advance: 'manual', overlayDim: false },
-  { id: 'w19d_dutch_menu_panel', target: 'pos-tour-dutch-mode-menu', titleKey: 'posTourFullW19dTitle', bodyKey: 'posTourFullW19dBody', advance: 'manual', overlayDim: false },
+  { id: 'w19d_dutch_menu_panel', target: 'pos-tour-dutch-menu-panel', titleKey: 'posTourFullW19dTitle', bodyKey: 'posTourFullW19dBody', advance: 'manual', overlayDim: false },
+  { id: 'w19e_dutch_hint', target: 'pos-tour-dutch-hint', titleKey: 'posTourFullW19eTitle', bodyKey: 'posTourFullW19eBody', advance: 'manual', overlayDim: false },
   { id: 'w20_payment_tabs', target: 'pos-tour-payment-tabs', titleKey: 'posTourFullW20Title', bodyKey: 'posTourFullW20Body', advance: 'manual', overlayDim: false },
   { id: 'w21_payment_card', target: 'pos-tour-payment-tab-card', titleKey: 'posTourFullW21Title', bodyKey: 'posTourFullW21Body', advance: 'manual', overlayDim: false },
   { id: 'w22_payment_qr', target: 'pos-tour-payment-tab-qr', titleKey: 'posTourFullW22Title', bodyKey: 'posTourFullW22Body', advance: 'manual', overlayDim: false },
@@ -99,6 +168,14 @@ const steps: PosTourStep[] = [
   { id: 'w26d_tax_address', target: 'pos-tour-tax-address-input', titleKey: 'posTourFullW26dTitle', bodyKey: 'posTourFullW26dBody', advance: 'manual', overlayDim: false },
   { id: 'w27_payment_confirm', target: 'pos-tour-payment-confirm', titleKey: 'posTourFullW27Title', bodyKey: 'posTourFullW27Body', advance: 'payment_completed', overlayDim: false },
   { id: 'w28_payment_finish', target: 'pos-tour-nospot', titleKey: 'posTourFullW28Title', bodyKey: 'posTourFullW28Body', advance: 'manual' },
+  {
+    id: 'w29_goto_business_cash_tour',
+    target: 'pos-tour-nospot',
+    titleKey: 'posTourFullW29Title',
+    bodyKey: 'posTourFullW29Body',
+    advance: 'manual',
+    navigateOnNext: POS_DEMO_ROUTES.homeBusinessCash,
+  },
 ]
 
 export const terminalFullWalkthroughScenario: PosTourScenario = {

@@ -1,11 +1,13 @@
 "use client"
 
+import * as React from "react"
 import { CalendarIcon } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
 interface InboundFilterBarProps {
   totalAmount: string
+  totalVat?: string
   isOffice?: boolean
   /** 본사일 때 매장 필터 (전체/입고등록/매장명) */
   histStore?: string
@@ -35,6 +37,7 @@ interface InboundFilterBarProps {
 
 export function InboundFilterBar({
   totalAmount,
+  totalVat = "",
   isOffice = true,
   histStore = "",
   stores = [],
@@ -59,6 +62,18 @@ export function InboundFilterBar({
 }: InboundFilterBarProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const monthInputRef = React.useRef<HTMLInputElement | null>(null)
+
+  const handleMonthButtonClick = React.useCallback(() => {
+    onMonthClick?.()
+    const monthInput = monthInputRef.current
+    if (!monthInput) return
+    if (typeof monthInput.showPicker === "function") {
+      monthInput.showPicker()
+      return
+    }
+    monthInput.click()
+  }, [onMonthClick])
 
   return (
     <div className="rounded-lg border border-border bg-card p-3">
@@ -85,23 +100,31 @@ export function InboundFilterBar({
         {/* Monthly */}
         <button
           type="button"
-          onClick={onMonthClick}
+          onClick={handleMonthButtonClick}
           className="h-8 rounded border border-input bg-card px-3 text-xs font-medium text-card-foreground hover:bg-accent transition-colors"
         >
           {t("outFilterMonth")}
         </button>
 
-        {/* Year-Month */}
-        <div className="relative">
+        {/* Hidden month picker (opened by button click) */}
+        <div className="relative w-0 overflow-hidden">
           <input
+            ref={monthInputRef}
             type="month"
             value={histMonth}
             onChange={(e) => onHistMonthChange(e.target.value)}
             title={t("inMonthHint")}
-            className="h-8 w-[100px] rounded border border-input bg-card px-2 pr-7 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="absolute -left-[9999px] h-0 w-0 opacity-0 pointer-events-none"
+            tabIndex={-1}
+            aria-hidden
           />
-          <CalendarIcon className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         </div>
+        {!!histMonth && (
+          <div className="inline-flex h-8 items-center gap-1 rounded border border-input bg-card px-2 text-xs text-card-foreground">
+            <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{histMonth}</span>
+          </div>
+        )}
 
         {isOffice && stores.length > 0 && onHistStoreChange && (
           <select
@@ -174,9 +197,16 @@ export function InboundFilterBar({
 
         {/* Total */}
         <div className="ml-auto">
-          <span className="text-sm font-bold text-[#16A34A]">
-            {t("inPeriodTotal")}: {totalAmount}
-          </span>
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-bold text-[#16A34A]">
+              {t("inPeriodTotal")}: {totalAmount}
+            </span>
+            {totalVat ? (
+              <span className="text-xs font-semibold text-primary">
+                {t("posVatLabel") || "VAT"}: {totalVat}
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

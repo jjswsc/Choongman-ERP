@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 import { syncReceivableFromForceOutboundStockLogRow } from '@/lib/force-outbound-receivable'
+import { isInternalForceOutboundTarget } from '@/lib/internal-outbound'
 
 /** DB에 `stock_logs.reference_no` 마이그레이션 전인 환경: 해당 키만 제거 후 재시도 */
 function stripReferenceNoFromStockLogRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -72,10 +73,15 @@ export async function POST(request: NextRequest) {
       const dateObj = d.date ? new Date(d.date) : new Date()
       const dateIso = dateObj.toISOString()
       const deliveryDate = (d.deliveryDate && String(d.deliveryDate).trim()) || null
+      const isInternalUse = isInternalForceOutboundTarget(store)
 
       const snapPrice = priceByCode[code]
       const invoiceUnit =
-        snapPrice != null && Number.isFinite(snapPrice) && snapPrice >= 0 ? snapPrice : null
+        isInternalUse
+          ? 0
+          : snapPrice != null && Number.isFinite(snapPrice) && snapPrice >= 0
+            ? snapPrice
+            : null
 
       const refPatch = referenceNoBatch ? { reference_no: referenceNoBatch } : {}
       rows.push({

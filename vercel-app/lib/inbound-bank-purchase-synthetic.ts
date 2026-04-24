@@ -10,6 +10,7 @@ export type InboundBankPurchaseSyntheticRow = {
   spec: string
   qty: number
   amount: number
+  vatAmount: number
   purchaseSource: 'store'
   inbound_batch_id: null
   bank_transaction_id: number
@@ -94,6 +95,23 @@ export async function fetchInboundBankPurchaseSyntheticRows(params: {
     if (id) bankById.set(id, b)
   }
 
+  const linkedRows = (await supabaseSelectFilter(
+    'bank_transaction_inbound_links',
+    `bank_transaction_id=in.(${bankIds.join(',')})`,
+    {
+      limit: 5000,
+      select: 'bank_transaction_id,amount',
+    }
+  )) as { bank_transaction_id?: number; amount?: number }[] | null
+  const linkedAmountByBankId = new Map<number, number>()
+  for (const row of linkedRows || []) {
+    const bankId = Number(row.bank_transaction_id || 0)
+    if (!bankId) continue
+    const amount = Math.abs(Number(row.amount || 0))
+    if (amount <= 0) continue
+    linkedAmountByBankId.set(bankId, (linkedAmountByBankId.get(bankId) || 0) + amount)
+  }
+
   const accountIds = [...new Set((bankRows || []).map((b) => Number(b.account_id)).filter((id) => id > 0))]
   const accountById: Record<number, { store?: string | null }> = {}
   if (accountIds.length > 0) {
@@ -157,7 +175,10 @@ export async function fetchInboundBankPurchaseSyntheticRows(params: {
     }
 
     const transDate = String(bt.trans_date || pt.trans_date || '').slice(0, 10)
-    const amt = Math.abs(Number(bt.amount || 0))
+    const paidAmount = Math.abs(Number(bt.amount || 0))
+    const linkedAmount = Math.abs(Number(linkedAmountByBankId.get(bid) || 0))
+    // 중복 방지: 입고 연동 이력이 1건이라도 있으면 통장 보조행은 노출하지 않는다.
+    if (linkedAmount > 0) continue
 
     seenBank.add(bid)
     out.push({
@@ -166,7 +187,8 @@ export async function fetchInboundBankPurchaseSyntheticRows(params: {
       name: '__BANK_PURCHASE_PAYMENT__',
       spec: '—',
       qty: 1,
-      amount: amt,
+      amount: paidAmount,
+      vatAmount: 0,
       purchaseSource: 'store',
       inbound_batch_id: null,
       bank_transaction_id: bid,

@@ -24,8 +24,11 @@ import {
 } from '@/lib/permissions'
 import {
   DEFAULT_POS_HOME_TOUR_SCENARIO_ID,
+  getPosDemoShortcutTargetByScenario,
+  getPosDemoTerminalRoute,
   getPosTourScenarioIdFromQuery,
   isPosDemoFromQuery,
+  POS_DEMO_ROUTES,
   PosTourOverlay,
   PosTourProvider,
 } from '@/lib/pos-tour'
@@ -52,6 +55,7 @@ function POSMainPageInner() {
   const searchParams = useSearchParams()
   const isPosDemo = isPosDemoFromQuery(searchParams)
   const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams, DEFAULT_POS_HOME_TOUR_SCENARIO_ID)
+  const requestedScenarioId = String(searchParams.get('scenario') || '').trim()
   const router = useRouter()
   const { auth, logout, setAuth } = useAuth()
   const { lang } = useLang()
@@ -100,6 +104,17 @@ function POSMainPageInner() {
     getPosTodaySales({ storeCode }).then(setTodaySales).catch(() => setTodaySales(null))
   }, [storeCode])
 
+  /**
+   * POS 홈(`/pos`)으로 들어와도 `scenario` 바로가기를 타면
+   * 해당 실습 화면(영업 시작/결산/시재/터미널)으로 즉시 이동시킵니다.
+   */
+  useEffect(() => {
+    if (!isPosDemo || !requestedScenarioId) return
+    const target = getPosDemoShortcutTargetByScenario(requestedScenarioId)
+    if (!target) return
+    navigatePosOfflineAware(target, (p) => router.replace(p))
+  }, [isPosDemo, requestedScenarioId, router])
+
   const todayOrders = todaySales?.completedCount ?? 0
   const totalAmount = todaySales?.completedTotal ?? 0
 
@@ -135,10 +150,16 @@ function POSMainPageInner() {
     (subType: string) => {
       switch (subType) {
         case 'open':
-          navigatePosOfflineAware('/pos/settlement?mode=open', (p) => router.push(p))
+          navigatePosOfflineAware(
+            isPosDemo ? POS_DEMO_ROUTES.businessOpen : '/pos/settlement?mode=open',
+            (p) => router.push(p)
+          )
           break
         case 'close':
-          navigatePosOfflineAware('/pos/settlement', (p) => router.push(p))
+          navigatePosOfflineAware(
+            isPosDemo ? POS_DEMO_ROUTES.businessClose : '/pos/settlement',
+            (p) => router.push(p)
+          )
           break
         case 'refresh':
           window.location.reload()
@@ -153,7 +174,7 @@ function POSMainPageInner() {
           break
       }
     },
-    [router, logout]
+    [router, logout, isPosDemo]
   )
 
   const [submenuParent, setSubmenuParent] = useState<'business' | 'operations' | null>(null)
@@ -172,19 +193,21 @@ function POSMainPageInner() {
         setSubmenuParent(tile.type)
         return
       }
-      const demoQ = isPosDemo ? '&demo=1&scenario=terminal-full-walkthrough' : ''
       switch (tile.type) {
         case 'dine-in':
-          navigatePosOfflineAware(`/pos/terminal?type=dine_in${demoQ}`, (p) => router.push(p))
+          navigatePosOfflineAware(isPosDemo ? getPosDemoTerminalRoute('dine_in') : '/pos/terminal?type=dine_in', (p) => router.push(p))
           break
         case 'takeout':
-          navigatePosOfflineAware(`/pos/terminal?type=takeout${demoQ}`, (p) => router.push(p))
+          navigatePosOfflineAware(isPosDemo ? getPosDemoTerminalRoute('takeout') : '/pos/terminal?type=takeout', (p) => router.push(p))
           break
         case 'delivery':
-          navigatePosOfflineAware(`/pos/terminal?type=delivery${demoQ}`, (p) => router.push(p))
+          navigatePosOfflineAware(isPosDemo ? getPosDemoTerminalRoute('delivery') : '/pos/terminal?type=delivery', (p) => router.push(p))
           break
         case 'cash':
-          navigatePosOfflineAware('/pos/local/cash', (p) => router.push(p))
+          navigatePosOfflineAware(
+            isPosDemo ? POS_DEMO_ROUTES.cashManagement : '/pos/local/cash',
+            (p) => router.push(p)
+          )
           break
         case 'petty-cash':
           navigatePosOfflineAware('/pos/local/petty-cash', (p) => router.push(p))

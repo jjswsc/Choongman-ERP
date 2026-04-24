@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import {
   syncTaxVatLedgersFromStockAndExpenses,
   syncTaxWithholdingLedgersFromPayroll,
   syncTaxWithholdingLedgersFromExpenses,
 } from '@/lib/tax-ledger-auto-sync'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 type VatRow = {
@@ -18,6 +19,7 @@ type VatRow = {
   vat_amount?: number
   counterparty_tax_id?: string | null
   invoice_number?: string | null
+  store_name?: string | null
 }
 
 type WhtRow = {
@@ -26,6 +28,7 @@ type WhtRow = {
   wht_amount?: number
   payee_tax_id?: string | null
   certificate_no?: string | null
+  store_name?: string | null
 }
 
 type RpcSummaryRow = {
@@ -69,7 +72,12 @@ export async function GET(request: NextRequest) {
       .map((s) => String(s || '').trim())
       .filter(Boolean)
       .concat(String(authResult.auth.store || '').trim())
-  const isOfficeLevel = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const userStore = String(authResult.auth.store || '').trim()
+  const isOfficeLevel =
+    isOfficeRole(userRole) ||
+    isAccountingRole(userRole) ||
+    isOfficeStore(userStore) ||
+    isHeadOfficeLikeStoreName(userStore)
   let storeFilter = requestedStoreFilter
   if (!isOfficeLevel) {
     if (!requestedStoreFilter || requestedStoreFilter === 'All') {
@@ -86,7 +94,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    assertCanManageAccountingCompliance(userRole)
+    assertCanManageAccountingCompliance(userRole, String(authResult.auth.store || ''))
   } catch (e) {
     if (e instanceof Error && e.message === 'ACCOUNTING_FORBIDDEN') {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403, headers })
@@ -96,6 +104,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
     try {
       await syncTaxVatLedgersFromStockAndExpenses({
         months: period.months,
@@ -112,7 +121,9 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.warn('getThaiTaxFilingSummary auto-sync skipped:', e)
     }
-    try {
+    const useRpcSummary = !storeFilter || storeFilter === 'All' || storeFilter === '*'
+    if (useRpcSummary) {
+      try {
       const rpcRows = await supabaseRpc<RpcSummaryRow[]>('get_thai_tax_filing_summary_agg', {
         p_tax_months: period.months,
         p_store_name: storeFilter || 'All',
@@ -152,22 +163,20 @@ export async function GET(request: NextRequest) {
         },
         { headers }
       )
-    } catch (rpcError) {
-      if (!isMissingTaxSummaryRpcError(rpcError)) throw rpcError
-      console.warn('getThaiTaxFilingSummary rpc fallback: missing function')
+      } catch (rpcError) {
+        if (!isMissingTaxSummaryRpcError(rpcError)) throw rpcError
+        console.warn('getThaiTaxFilingSummary rpc fallback: missing function')
+      }
     }
 
     const monthBase = buildTaxMonthPostgrestFilter(period.months)
-    const vatFilter = appendStoreNameFilter(monthBase, storeFilter)
-    const whtFilter = appendStoreNameFilter(monthBase, storeFilter)
-
     const [vatRows, whtRows] = await Promise.all([
-      supabaseSelectFilter('vat_ledger_entries', vatFilter, {
-        select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number',
+      supabaseSelectFilter('vat_ledger_entries', monthBase, {
+        select: 'direction,net_amount,vat_amount,counterparty_tax_id,invoice_number,store_name',
         limit: 20000,
       }) as Promise<VatRow[] | null>,
-      supabaseSelectFilter('withholding_tax_ledger_entries', whtFilter, {
-        select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no',
+      supabaseSelectFilter('withholding_tax_ledger_entries', monthBase, {
+        select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name',
         limit: 20000,
       }) as Promise<WhtRow[] | null>,
     ])
@@ -183,6 +192,7 @@ export async function GET(request: NextRequest) {
       rowCount: 0,
     }
     for (const row of vatRows || []) {
+      if (!storeScope.matches(String(row.store_name || ''))) continue
       const dir = String(row.direction || '').toLowerCase()
       const net = Number(row.net_amount) || 0
       const amt = Number(row.vat_amount) || 0
@@ -209,6 +219,7 @@ export async function GET(request: NextRequest) {
       byForm: whtByForm,
     }
     for (const row of whtRows || []) {
+      if (!storeScope.matches(String(row.store_name || ''))) continue
       const form = String(row.form_hint || 'PND53').trim().toUpperCase()
       const gross = Number(row.gross_amount) || 0
       const withheld = Number(row.wht_amount) || 0

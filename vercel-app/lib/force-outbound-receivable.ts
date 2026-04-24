@@ -12,6 +12,7 @@ import {
 import { getDirectSettlementMap } from './direct-settlement-server'
 import { thaiInvoiceTotalsFromRawSubtotal } from './invoice-vat-total'
 import { unitPriceFromOutboundLogSnapshot } from './outbound-order-line-match'
+import { isInternalForceOutboundTarget } from './internal-outbound'
 
 const TZ = 'Asia/Bangkok'
 
@@ -66,6 +67,7 @@ export async function syncReceivableFromForceOutboundStockLogRow(
     master
   )
   let rawSubtotal = qtyAbs * unitPrice
+  if (isInternalForceOutboundTarget(storeName)) rawSubtotal = 0
   const directMap = code ? await getDirectSettlementMap([code]) : {}
   if (code && directMap[code]) rawSubtotal = 0
 

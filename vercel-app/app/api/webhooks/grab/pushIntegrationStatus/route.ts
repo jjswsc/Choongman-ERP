@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { upsertGrabStoreIntegration } from '@/lib/grab-store-integration'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,14 +39,36 @@ export async function POST(req: NextRequest) {
       })
       return new NextResponse(null, { status: 204 })
     }
+
+    const persisted = await upsertGrabStoreIntegration({
+      grabMerchantID,
+      partnerMerchantID,
+      integrationStatus,
+      requestID: String(body.requestID ?? ''),
+      message: String(body.message ?? ''),
+      payload: body,
+    })
+
     logGrabWebhook('push_integration_status', req, {
       partnerMerchantID,
       grabMerchantID,
       integrationStatus,
+      created: persisted.created,
     })
-  } catch {
-    logGrabWebhook('push_integration_status', req, { error: 'invalid_json' })
-    return new NextResponse(null, { status: 400 })
+  } catch (e) {
+    const msg = String(e ?? '')
+    if (/unexpected token|invalid json|json/i.test(msg)) {
+      logGrabWebhook('push_integration_status', req, { error: 'invalid_json' })
+      return new NextResponse(null, { status: 400 })
+    }
+    if (/pos_grab_store_integrations|does not exist|42p01/i.test(msg)) {
+      logGrabWebhook('push_integration_status', req, {
+        warning: 'missing_pos_grab_store_integrations_table',
+      })
+      return new NextResponse(null, { status: 204 })
+    }
+    logGrabWebhook('push_integration_status', req, { error: 'persist_failed', message: msg })
+    return NextResponse.json({ reason: 'persist_failed' }, { status: 500 })
   }
   return new NextResponse(null, { status: 204 })
 }

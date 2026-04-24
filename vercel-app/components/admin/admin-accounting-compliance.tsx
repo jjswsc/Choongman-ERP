@@ -93,7 +93,8 @@ import {
   uploadEtaxEvidenceFile,
   getExportEtaxTimestampAuditCsvUrl,
 } from "@/lib/api-client"
-import { isOfficeRole, isManagerOrFranchiseeRole } from "@/lib/permissions"
+import { isOfficeRole, isManagerOrFranchiseeRole, isOfficeStore } from "@/lib/permissions"
+import { isHeadOfficeLikeStoreName } from "@/lib/internal-outbound"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import {
@@ -232,6 +233,7 @@ const KT20K_TOL_QUERY_KEY = "kt20k_tol"
 const KT20K_YEAR_QUERY_KEY = "kt20k_year"
 const KT20K_STORE_QUERY_KEY = "kt20k_store"
 const KT20K_TAB_QUERY_KEY = "kt20k_tab"
+const PP30_FETCH_TIMEOUT_MS = 120000
 
 function ymNow(): string {
   const n = new Date()
@@ -306,6 +308,20 @@ function daysFromNow(v: string | null | undefined): number | null {
   if (Number.isNaN(d.getTime())) return null
   const ms = Date.now() - d.getTime()
   return Math.floor(ms / (24 * 60 * 60 * 1000))
+}
+
+async function withClientTimeout<T>(promise: Promise<T>, timeoutMs = 15000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("CLIENT_TIMEOUT")), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 type SsoPayrollPreview = {
@@ -530,7 +546,7 @@ function csvCell(v: unknown): string {
 type AdminAccountingComplianceProps = {
   initialTab?: string
   hideTabBar?: boolean
-  initialPp30SubView?: "output" | "input" | "wht"
+  initialPp30SubView?: "output" | "input" | "settlement" | "wht"
   /** PP30 영역 표시 모드: all(통합) / vat_only(매출·매입만) / wht_only(원천만) */
   pp30Mode?: "all" | "vat_only" | "wht_only"
   /** 세무 신고 셸과 동기화 시 본문의 중복 년·매장 입력 숨김 */
@@ -554,14 +570,15 @@ export function AdminAccountingCompliance({
   const { lang } = useLang()
   const t = useT(lang)
   const role = auth?.role || ""
-  const canUse = canManageAccountingCompliance(role)
+  const canUse = canManageAccountingCompliance(role, auth?.store)
   const canWriteCompliance = canWriteAccountingCompliance(role)
   const canApproveCompliance = canApproveAccountingCompliance(role)
   const canApproveUnlock = canApproveAccountingPeriodUnlock(role)
   const { stores: storeList, resolveStoreKey } = useStoreList()
-  const isOffice = isOfficeRole(role)
-  const isManager = isManagerOrFranchiseeRole(role)
   const managerStore = (auth?.store || "").trim()
+  const officeByStore = isOfficeStore(managerStore) || isHeadOfficeLikeStoreName(managerStore)
+  const isOffice = isOfficeRole(role) || officeByStore
+  const isManager = !isOffice && isManagerOrFranchiseeRole(role)
 
   const externalFiling =
     filingYearMonth !== undefined &&
@@ -588,6 +605,10 @@ export function AdminAccountingCompliance({
     const r = String(resolveStoreKey(s) ?? "").trim()
     return r || s
   }, [storeTb, resolveStoreKey])
+  const isHeadOfficeLedgerStore = React.useMemo(() => {
+    if (storeFilterForLedger === "All") return false
+    return isOfficeStore(storeFilterForLedger) || isHeadOfficeLikeStoreName(storeFilterForLedger)
+  }, [storeFilterForLedger])
 
   const [resp, setResp] = React.useState<Record<string, ThaiFilingResponsibility>>({})
   const [notes, setNotes] = React.useState("")
@@ -679,17 +700,27 @@ export function AdminAccountingCompliance({
   const [ledgerStatusFilter, setLedgerStatusFilter] = React.useState<"all" | "draft" | "submitted">("all")
   /** 법인세 연간: API는 yearMonth의 연도만 사용 — UI는 연도만 고름 */
   const [citFiscalYear, setCitFiscalYear] = React.useState(() => Number(ymNow().slice(0, 4)))
-  /** 부가세(ภ.พ.30) 탭: FlowAccount Tax 메뉴와 유사 — 매출/매입/원천 3가지 조회 */
-  const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "wht">(initialPp30SubView)
-  const allowedPp30Views = React.useMemo<("output" | "input" | "wht")[]>(() => {
-    if (pp30Mode === "vat_only") return ["output", "input"]
+  /** 부가세(ภ.พ.30) 탭: 매출/매입/정산/원천 조회 */
+  const [pp30SubView, setPp30SubView] = React.useState<"output" | "input" | "settlement" | "wht">(initialPp30SubView)
+  const [vatOutputViewMode, setVatOutputViewMode] = React.useState<"vendor" | "detail">("vendor")
+  const [vatInputViewMode, setVatInputViewMode] = React.useState<"vendor" | "detail">("vendor")
+  const allowedPp30Views = React.useMemo<("output" | "input" | "settlement" | "wht")[]>(() => {
+    if (pp30Mode === "vat_only") return ["output", "input", "settlement"]
     if (pp30Mode === "wht_only") return ["wht"]
-    return ["output", "input", "wht"]
+    return ["output", "input", "settlement", "wht"]
   }, [pp30Mode])
+  const canShowVatSettlement = React.useMemo(
+    () => allowedPp30Views.includes("output") && allowedPp30Views.includes("input"),
+    [allowedPp30Views]
+  )
   const [taxSummary, setTaxSummary] = React.useState<ThaiTaxFilingSummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = React.useState(false)
   /** 부가세(PP30) 요약 탭: 조건 변경 시 초기화, 검색 후에만 API 조회 */
   const [pp30Queried, setPp30Queried] = React.useState(false)
+  const [pp30SearchSeq, setPp30SearchSeq] = React.useState(0)
   const pp30FilterBootRef = React.useRef(true)
+  const vatLoadSeqRef = React.useRef(0)
+  const vatInFlightKeyRef = React.useRef<string | null>(null)
   const [citData, setCitData] = React.useState<CorporateTaxComputationData | null>(null)
   const [workflowRows, setWorkflowRows] = React.useState<AccountingWorkflowStatusRow[]>([])
   const [workflowFallbackUsed, setWorkflowFallbackUsed] = React.useState(false)
@@ -925,25 +956,45 @@ export function AdminAccountingCompliance({
 
   const loadVat = React.useCallback(async () => {
     if (!canUse) return
+    const requestKey = `${taxMonth}|${periodType}|${ledgerStatusFilter}|${storeFilterForLedger}`
+    if (vatInFlightKeyRef.current === requestKey) {
+      return
+    }
+    vatInFlightKeyRef.current = requestKey
+    const seq = ++vatLoadSeqRef.current
     setLoading(true)
     try {
-      const data = await getVatLedger({
+      const data = await withClientTimeout(
+        getVatLedger({
         userRole: role,
         taxMonth,
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
         storeFilter: storeFilterForLedger,
-      })
+        }),
+        PP30_FETCH_TIMEOUT_MS
+      )
+      if (seq !== vatLoadSeqRef.current) {
+        return
+      }
       if (data.error) appAlert(t("accCompLoadFail"))
       setVatRows(mapVat(data.entries || []))
     } catch {
+      if (seq !== vatLoadSeqRef.current) {
+        return
+      }
       setVatRows([])
       appAlert(t("accCompLoadFail"))
     } finally {
-      setLoading(false)
+      if (seq === vatLoadSeqRef.current) setLoading(false)
+      if (vatInFlightKeyRef.current === requestKey) vatInFlightKeyRef.current = null
     }
   }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, mapVat])
+
+  React.useEffect(() => {
+    if (!pp30Queried || tab !== "summary") return
+  }, [pp30Queried, tab, taxMonth, storeFilterForLedger, pp30SubView, vatRows.length, whtRows.length, loading])
 
   const mapWht = React.useCallback(
     (entries: Record<string, unknown>[]): WhtDraft[] =>
@@ -972,14 +1023,17 @@ export function AdminAccountingCompliance({
     if (!canUse) return
     setLoading(true)
     try {
-      const data = await getWithholdingTaxLedger({
+      const data = await withClientTimeout(
+        getWithholdingTaxLedger({
         userRole: role,
         taxMonth,
         yearMonth: taxMonth,
         periodType,
         filingStatus: ledgerStatusFilter,
         storeFilter: storeFilterForLedger,
-      })
+        }),
+        PP30_FETCH_TIMEOUT_MS
+      )
       setWhtRows(mapWht(data.entries || []))
     } catch {
       setWhtRows([])
@@ -990,19 +1044,22 @@ export function AdminAccountingCompliance({
 
   const loadTaxSummary = React.useCallback(async () => {
     if (!canUse) return
-    setLoading(true)
+    setSummaryLoading(true)
     try {
-      const data = await getThaiTaxFilingSummary({
+      const data = await withClientTimeout(
+        getThaiTaxFilingSummary({
         userRole: role,
         yearMonth: taxMonth,
         periodType,
         storeFilter: storeFilterForLedger,
-      })
+        }),
+        PP30_FETCH_TIMEOUT_MS
+      )
       setTaxSummary(data)
     } catch {
       setTaxSummary(null)
     } finally {
-      setLoading(false)
+      setSummaryLoading(false)
     }
   }, [canUse, role, taxMonth, periodType, storeFilterForLedger])
 
@@ -1610,20 +1667,39 @@ export function AdminAccountingCompliance({
       pp30FilterBootRef.current = false
       return
     }
+    if (!pp30Queried) return
+    // summary 탭 재조회는 summaryEffect가 담당한다(중복 호출 방지).
+    if (tab === "summary") return
     setPp30Queried(false)
     setVatRows([])
     setWhtRows([])
     setTaxSummary(null)
-  }, [taxMonth, storeFilterForLedger, periodType, ledgerStatusFilter])
+  }, [
+    taxMonth,
+    storeFilterForLedger,
+    periodType,
+    ledgerStatusFilter,
+    pp30Queried,
+    tab,
+    canUse,
+    pp30SubView,
+    loadVat,
+    loadWht,
+    loadTaxSummary,
+  ])
 
   React.useEffect(() => {
     if (!canUse || tab !== "summary" || !pp30Queried) return
     let cancelled = false
     void (async () => {
-      await loadTaxSummary()
-      if (cancelled) return
+      if (pp30SubView === "wht") setWhtRows([])
+      else setVatRows([])
       if (pp30SubView === "wht") await loadWht()
       else await loadVat()
+      if (cancelled) {
+        return
+      }
+      void loadTaxSummary()
     })()
     return () => {
       cancelled = true
@@ -1637,6 +1713,7 @@ export function AdminAccountingCompliance({
     storeFilterForLedger,
     periodType,
     ledgerStatusFilter,
+    pp30SearchSeq,
     loadTaxSummary,
     loadVat,
     loadWht,
@@ -2143,8 +2220,13 @@ export function AdminAccountingCompliance({
     [t]
   )
   const vatOutputRowsFiltered = React.useMemo(
-    () => vatOutputRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
-    [vatOutputRows, ledgerStatusFilter]
+    () =>
+      vatOutputRows.filter((r) => {
+        if (ledgerStatusFilter !== "all" && r.filing_status !== ledgerStatusFilter) return false
+        if (isHeadOfficeLedgerStore && isPosAutoVatOutputRow(r)) return false
+        return true
+      }),
+    [vatOutputRows, ledgerStatusFilter, isHeadOfficeLedgerStore]
   )
   const vatInputRowsFiltered = React.useMemo(
     () => vatInputRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
@@ -2155,6 +2237,7 @@ export function AdminAccountingCompliance({
     [vatOutputRowsFiltered]
   )
   const posFilingOutputSummaries = React.useMemo(() => {
+    if (isHeadOfficeLedgerStore) return []
     const ledgers: VatLedgerRow[] = vatOutputRowsFiltered.map((r) => ({
       id: r.id,
       doc_date: r.doc_date,
@@ -2176,7 +2259,110 @@ export function AdminAccountingCompliance({
     const posOnly = ledgers.filter(isPosAutoVatOutputRow)
     if (!posOnly.length) return []
     return consolidatePosOutputRowsForTaxExport(posOnly)
+  }, [vatOutputRowsFiltered, isHeadOfficeLedgerStore])
+  const vatOutputVendorSummaries = React.useMemo(() => {
+    const grouped = new Map<string, { name: string; count: number; net: number; vat: number; total: number }>()
+    for (const row of vatOutputRowsFiltered) {
+      if (isPosAutoVatOutputRow(row)) continue
+      const name = String(row.counterparty_name || "").trim() || "(미지정 거래처)"
+      const hit = grouped.get(name) || { name, count: 0, net: 0, vat: 0, total: 0 }
+      hit.count += 1
+      hit.net += Number(row.net_amount || 0)
+      hit.vat += Number(row.vat_amount || 0)
+      hit.total += Number(row.total_amount || 0)
+      grouped.set(name, hit)
+    }
+    return Array.from(grouped.values()).sort((a, b) => b.total - a.total)
   }, [vatOutputRowsFiltered])
+  const vatOutputVendorTotals = React.useMemo(
+    () =>
+      vatOutputVendorSummaries.reduce(
+        (acc, row) => ({
+          count: acc.count + row.count,
+          net: acc.net + row.net,
+          vat: acc.vat + row.vat,
+          total: acc.total + row.total,
+        }),
+        { count: 0, net: 0, vat: 0, total: 0 }
+      ),
+    [vatOutputVendorSummaries]
+  )
+  const vatInputVendorSummaries = React.useMemo(() => {
+    const grouped = new Map<string, { name: string; count: number; net: number; vat: number; total: number }>()
+    for (const row of vatInputRowsFiltered) {
+      const name = String(row.counterparty_name || "").trim() || "(미지정 거래처)"
+      const hit = grouped.get(name) || { name, count: 0, net: 0, vat: 0, total: 0 }
+      hit.count += 1
+      hit.net += Number(row.net_amount || 0)
+      hit.vat += Number(row.vat_amount || 0)
+      hit.total += Number(row.total_amount || 0)
+      grouped.set(name, hit)
+    }
+    return Array.from(grouped.values()).sort((a, b) => b.total - a.total)
+  }, [vatInputRowsFiltered])
+  const vatInputVendorTotals = React.useMemo(
+    () =>
+      vatInputVendorSummaries.reduce(
+        (acc, row) => ({
+          count: acc.count + row.count,
+          net: acc.net + row.net,
+          vat: acc.vat + row.vat,
+          total: acc.total + row.total,
+        }),
+        { count: 0, net: 0, vat: 0, total: 0 }
+      ),
+    [vatInputVendorSummaries]
+  )
+  const vatSettlement = React.useMemo(() => {
+    const outputNet = vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0)
+    const outputVat = vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0)
+    const outputTotal = vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0)
+    const inputNet = vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0)
+    const inputVat = vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0)
+    const inputTotal = vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0)
+    const payableVat = outputVat - inputVat
+    return {
+      outputNet,
+      outputVat,
+      outputTotal,
+      inputNet,
+      inputVat,
+      inputTotal,
+      payableVat,
+      dueVat: payableVat > 0 ? payableVat : 0,
+      creditVat: payableVat < 0 ? Math.abs(payableVat) : 0,
+      outputCount: vatOutputRowsFiltered.length,
+      inputCount: vatInputRowsFiltered.length,
+      summaryPayableVat: Number(taxSummary?.vat?.payableVat || 0),
+    }
+  }, [vatOutputRowsFiltered, vatInputRowsFiltered, taxSummary?.vat?.payableVat])
+  const vatSettlementHeadline = React.useMemo(() => {
+    if (vatSettlement.payableVat > 0) {
+      return {
+        tone: "납부 예정",
+        className: "border-rose-300/50 bg-rose-50/85 dark:bg-rose-950/25",
+      }
+    }
+    if (vatSettlement.payableVat < 0) {
+      return {
+        tone: "환급(이월공제) 예정",
+        className: "border-violet-300/50 bg-violet-50/85 dark:bg-violet-950/25",
+      }
+    }
+    return {
+      tone: "정산 0원",
+      className: "border-emerald-300/50 bg-emerald-50/85 dark:bg-emerald-950/25",
+    }
+  }, [vatSettlement.payableVat])
+  const outputSummaryNet = isHeadOfficeLedgerStore
+    ? vatSettlement.outputNet
+    : Number(taxSummary?.vat.outputNet || 0)
+  const outputSummaryVat = isHeadOfficeLedgerStore
+    ? vatSettlement.outputVat
+    : Number(taxSummary?.vat.outputVat || 0)
+  const outputSummaryPayable = isHeadOfficeLedgerStore
+    ? vatSettlement.payableVat
+    : Number(taxSummary?.vat.payableVat || 0)
   const whtRowsFiltered = React.useMemo(
     () => whtRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [whtRows, ledgerStatusFilter]
@@ -2317,8 +2503,9 @@ export function AdminAccountingCompliance({
         periodType,
         filingStatus: ledgerStatusFilter,
         storeFilter: storeFilterForLedger,
+        excludePosAuto: isHeadOfficeLedgerStore,
       }),
-    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
+    [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger, isHeadOfficeLedgerStore]
   )
   const whtExportUrl = React.useMemo(
     () =>
@@ -4076,16 +4263,30 @@ export function AdminAccountingCompliance({
                 <div className="shrink-0">
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="h-9"
-                    onClick={() => setPp30Queried(true)}
-                    disabled={loading}
+                    variant="default"
+                    className={cn(
+                      "h-9 min-w-[88px] font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                      "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                      "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                      "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                    )}
+                    onClick={() => {
+                      setPp30Queried(true)
+                      setPp30SearchSeq((prev) => prev + 1)
+                    }}
                   >
                     {t("search")}
                   </Button>
                 </div>
               </div>
 
+              {!pp30Queried ? (
+                <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
+                  년·월·매장·신고 상태 등 조건을 맞춘 뒤 <span className="font-medium text-foreground">검색</span>을 누르면
+                  집계와 원장이 표시됩니다.
+                </div>
+              ) : (
+                <>
               <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
                 {allowedPp30Views.includes("output") && (
                   <Button
@@ -4107,6 +4308,16 @@ export function AdminAccountingCompliance({
                     {t("accCompTaxInputDocs")}
                   </Button>
                 )}
+                {canShowVatSettlement && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pp30SubView === "settlement" ? "default" : "outline"}
+                    onClick={() => setPp30SubView("settlement")}
+                  >
+                    납부 계산
+                  </Button>
+                )}
                 {allowedPp30Views.includes("wht") && (
                   <Button
                     type="button"
@@ -4122,32 +4333,43 @@ export function AdminAccountingCompliance({
                 {t("accCompPeriodType")}: {summaryPeriodLabel}
               </div>
 
-              {!pp30Queried ? (
-                <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
-                  년·월·매장·신고 상태 등 조건을 맞춘 뒤 <span className="font-medium text-foreground">검색</span>을 누르면
-                  집계와 원장이 표시됩니다.
+              {loading ? (
+                <div className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground" aria-live="polite">
+                  {t("loading")}
                 </div>
-              ) : (
-                <>
+              ) : null}
+              {summaryLoading ? (
+                <div className="rounded-md border border-border/40 bg-background px-3 py-2 text-[11px] text-muted-foreground" aria-live="polite">
+                  요약 집계 계산 중...
+                </div>
+              ) : null}
+
+              <>
               {pp30SubView === "output" && (
                 <div className="space-y-3 text-sm">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>
-                      {t("accCompVatOutputNet")}: {(taxSummary?.vat.outputNet || 0).toLocaleString()}
+                      {t("accCompVatOutputNet")}: {Math.round(outputSummaryNet).toLocaleString()}
                     </div>
                     <div>
-                      {t("accCompVatOutputVat")}: {(taxSummary?.vat.outputVat || 0).toLocaleString()}
+                      {t("accCompVatOutputVat")}: {Math.round(outputSummaryVat).toLocaleString()}
                     </div>
                     <div>
-                      {t("accCompVatPayable")}: {(taxSummary?.vat.payableVat || 0).toLocaleString()}
+                      {t("accCompVatPayable")}: {Math.round(outputSummaryPayable).toLocaleString()}
                     </div>
                     <div>
                       {t("accCompVatRowsSales")}: {nonPosOutputCount.toLocaleString()}
                       {posFilingOutputSummaries.length > 0
                         ? ` · POS 자동(과세월 합계 ${posFilingOutputSummaries.length.toLocaleString()}줄)`
                         : ""}{" "}
-                      / {t("accCompVatTotalRows")}: {(taxSummary?.vat.rowCount || 0).toLocaleString()}
+                      / {t("accCompVatTotalRows")}:{" "}
+                      {(isHeadOfficeLedgerStore ? vatOutputRowsFiltered.length : Number(taxSummary?.vat.rowCount || 0)).toLocaleString()}
                     </div>
+                    {isHeadOfficeLedgerStore ? (
+                      <div className="md:col-span-2 text-[11px] text-muted-foreground">
+                        본사 조회에서는 POS 자동 매출을 제외한 값만 표시합니다.
+                      </div>
+                    ) : null}
                     <div>
                       {t("accCompMissingTin")}: {(taxSummary?.vat.missingTaxIdCount || 0).toLocaleString()}
                     </div>
@@ -4201,6 +4423,22 @@ export function AdminAccountingCompliance({
                         {t("accCompVatExport")}
                       </a>
                     </Button>
+                    <Button
+                      type="button"
+                      variant={vatOutputViewMode === "vendor" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setVatOutputViewMode("vendor")}
+                    >
+                      거래처별 보기
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={vatOutputViewMode === "detail" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setVatOutputViewMode("detail")}
+                    >
+                      건별 편집
+                    </Button>
                   </div>
                   <Card>
                     <CardContent className="p-2 overflow-x-auto space-y-3">
@@ -4238,7 +4476,59 @@ export function AdminAccountingCompliance({
                       {nonPosOutputCount > 0 ? (
                         <div className="text-[11px] font-medium text-muted-foreground px-0.5">POS 외 매출 (편집)</div>
                       ) : null}
-                      {vatRows.map((row, idx) => {
+                      {vatOutputViewMode === "vendor" ? (
+                        <div className="rounded-md border border-border/70 overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead className="bg-muted/30">
+                              <tr className="border-b border-border/70">
+                                <th className="p-2 text-left">거래처</th>
+                                <th className="p-2 text-right">건수</th>
+                                <th className="p-2 text-right">공급가</th>
+                                <th className="p-2 text-right">VAT</th>
+                                <th className="p-2 text-right">합계</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {vatOutputVendorSummaries.map((row) => (
+                                <tr key={`vendor-sum-${row.name}`} className="border-b border-border/50">
+                                  <td className="p-2">{row.name}</td>
+                                  <td className="p-2 text-right tabular-nums">{row.count.toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums">{Math.round(row.net).toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums">{Math.round(row.vat).toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums font-medium">{Math.round(row.total).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                              {!vatOutputVendorSummaries.length ? (
+                                <tr>
+                                  <td className="p-6 text-center text-muted-foreground" colSpan={5}>
+                                    {t("emp_result_empty")}
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </tbody>
+                            {vatOutputVendorSummaries.length ? (
+                              <tfoot className="bg-muted/20">
+                                <tr className="border-t border-border/70 font-medium">
+                                  <td className="p-2">합계</td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {vatOutputVendorTotals.count.toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {Math.round(vatOutputVendorTotals.net).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {Math.round(vatOutputVendorTotals.vat).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {Math.round(vatOutputVendorTotals.total).toLocaleString()}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            ) : null}
+                          </table>
+                        </div>
+                      ) : null}
+                      {vatOutputViewMode === "detail" ? vatRows.map((row, idx) => {
                         if (row.direction !== "output") return null
                         if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
                         if (isPosAutoVatOutputRow(row)) return null
@@ -4381,8 +4671,10 @@ export function AdminAccountingCompliance({
                             </div>
                           </div>
                         )
-                      })}
-                      {!posFilingOutputSummaries.length && !nonPosOutputCount ? (
+                      }) : null}
+                      {!posFilingOutputSummaries.length &&
+                      ((vatOutputViewMode === "vendor" && !vatOutputVendorSummaries.length) ||
+                        (vatOutputViewMode === "detail" && !nonPosOutputCount)) ? (
                         <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
                       ) : null}
                     </CardContent>
@@ -4496,10 +4788,71 @@ export function AdminAccountingCompliance({
                         {t("accCompVatExport")}
                       </a>
                     </Button>
+                    <Button
+                      type="button"
+                      variant={vatInputViewMode === "vendor" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setVatInputViewMode("vendor")}
+                    >
+                      거래처별 보기
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={vatInputViewMode === "detail" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setVatInputViewMode("detail")}
+                    >
+                      건별 편집
+                    </Button>
                   </div>
                   <Card>
                     <CardContent className="p-2 overflow-x-auto space-y-3">
-                      {vatRows.map((row, idx) => {
+                      {vatInputViewMode === "vendor" ? (
+                        <div className="rounded-md border border-border/70 overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead className="bg-muted/30">
+                              <tr className="border-b border-border/70">
+                                <th className="p-2 text-left">거래처</th>
+                                <th className="p-2 text-right">건수</th>
+                                <th className="p-2 text-right">공급가</th>
+                                <th className="p-2 text-right">VAT</th>
+                                <th className="p-2 text-right">합계</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {vatInputVendorSummaries.map((row) => (
+                                <tr key={`vendor-input-sum-${row.name}`} className="border-b border-border/50">
+                                  <td className="p-2">{row.name}</td>
+                                  <td className="p-2 text-right tabular-nums">{row.count.toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums">{Math.round(row.net).toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums">{Math.round(row.vat).toLocaleString()}</td>
+                                  <td className="p-2 text-right tabular-nums font-medium">{Math.round(row.total).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            {vatInputVendorSummaries.length ? (
+                              <tfoot className="bg-muted/20">
+                                <tr className="border-t border-border/70 font-medium">
+                                  <td className="p-2">합계</td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {vatInputVendorTotals.count.toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {Math.round(vatInputVendorTotals.net).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {Math.round(vatInputVendorTotals.vat).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 text-right tabular-nums">
+                                    {Math.round(vatInputVendorTotals.total).toLocaleString()}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            ) : null}
+                          </table>
+                        </div>
+                      ) : null}
+                      {vatInputViewMode === "detail" ? vatRows.map((row, idx) => {
                         if (row.direction !== "input") return null
                         if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
                         return (
@@ -4641,12 +4994,81 @@ export function AdminAccountingCompliance({
                             </div>
                           </div>
                         )
-                      })}
-                      {!vatInputRowsFiltered.length ? (
+                      }) : null}
+                      {(vatInputViewMode === "vendor" && !vatInputVendorSummaries.length) ||
+                      (vatInputViewMode === "detail" && !vatInputRowsFiltered.length) ? (
                         <div className="p-6 text-center text-muted-foreground text-xs">{t("emp_result_empty")}</div>
                       ) : null}
                     </CardContent>
                   </Card>
+                </div>
+              )}
+
+              {pp30SubView === "settlement" && (
+                <div className="space-y-3 text-sm">
+                  <div className={cn("sticky top-0 z-10 rounded-md border p-4 backdrop-blur-sm", vatSettlementHeadline.className)}>
+                    <div className="text-xs text-muted-foreground">이번 신고월 예상 부가세</div>
+                    <div className="mt-1 flex flex-wrap items-end gap-2">
+                      <span className="text-3xl md:text-4xl font-bold tabular-nums">
+                        {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
+                      </span>
+                      <span className="text-sm font-medium text-muted-foreground pb-1">THB</span>
+                    </div>
+                    <div className="text-xs mt-1">
+                      {vatSettlementHeadline.tone} · 계산식: 매출 VAT - 매입 VAT
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="rounded-md border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3">
+                      <div className="text-xs text-muted-foreground">매출 VAT 합계</div>
+                      <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.outputVat).toLocaleString()}</div>
+                      <div className="text-[11px] text-muted-foreground mt-1">
+                        공급가 {Math.round(vatSettlement.outputNet).toLocaleString()} / 건수 {vatSettlement.outputCount.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-sky-300/40 bg-sky-50/40 dark:bg-sky-950/20 p-3">
+                      <div className="text-xs text-muted-foreground">매입 VAT 합계</div>
+                      <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.inputVat).toLocaleString()}</div>
+                      <div className="text-[11px] text-muted-foreground mt-1">
+                        공급가 {Math.round(vatSettlement.inputNet).toLocaleString()} / 건수 {vatSettlement.inputCount.toLocaleString()}
+                      </div>
+                    </div>
+                    <div
+                      className={cn(
+                        "rounded-md border p-3",
+                        vatSettlement.payableVat >= 0
+                          ? "border-rose-300/40 bg-rose-50/40 dark:bg-rose-950/20"
+                          : "border-violet-300/40 bg-violet-50/40 dark:bg-violet-950/20"
+                      )}
+                    >
+                      <div className="text-xs text-muted-foreground">예상 납부/환급 VAT</div>
+                      <div className="text-lg font-semibold tabular-nums">
+                        {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-1">
+                        {vatSettlement.payableVat >= 0 ? "납부 예정" : "이월 공제(환급) 예정"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-2">
+                    <div className="font-medium text-foreground">계산식</div>
+                    <div className="tabular-nums">
+                      매출 VAT {Math.round(vatSettlement.outputVat).toLocaleString()} - 매입 VAT {Math.round(vatSettlement.inputVat).toLocaleString()} ={" "}
+                      {Math.round(vatSettlement.payableVat).toLocaleString()}
+                    </div>
+                    <div className="text-muted-foreground">
+                      합계 기준이며, 최종 신고 금액은 공제/가산 조정에 따라 달라질 수 있습니다.
+                    </div>
+                  </div>
+
+                  {taxSummary ? (
+                    <div className="rounded-md border border-dashed border-border/70 bg-background p-3 text-xs">
+                      <span className="text-muted-foreground">요약 API 계산값:</span>{" "}
+                      <span className="font-medium tabular-nums">{Math.round(vatSettlement.summaryPayableVat).toLocaleString()}</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -5141,6 +5563,7 @@ export function AdminAccountingCompliance({
                   </Card>
                 </div>
               )}
+                </>
                 </>
               )}
             </CardContent>

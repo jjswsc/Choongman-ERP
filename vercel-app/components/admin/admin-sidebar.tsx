@@ -25,6 +25,7 @@ const menuItems = [
   { href: "/admin/pos-menus", label: "메뉴 관리" },
   { href: "/admin/pos-cost-analysis", label: "원가 분석" },
   { href: "/admin/pos-promos", label: "프로모션 관리" },
+  { href: "/admin/grab-integration", label: "Grab 연동 상태" },
   // 4. 인사 관리
   { header: "인사 관리" },
   { href: "/admin/employees", label: "직원 관리" },

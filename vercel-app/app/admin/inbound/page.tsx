@@ -26,6 +26,12 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -108,6 +114,8 @@ export default function InboundPage() {
   const [summaryStart, setSummaryStart] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [summaryEnd, setSummaryEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [summaryMonth, setSummaryMonth] = React.useState("")
+  const [summaryMonthDialogOpen, setSummaryMonthDialogOpen] = React.useState(false)
+  const [summaryMonthDraft, setSummaryMonthDraft] = React.useState("")
   const [summaryLoading, setSummaryLoading] = React.useState(false)
   const [summaryList, setSummaryList] = React.useState<InboundHistoryItem[]>([])
   const [summaryVendorFilter, setSummaryVendorFilter] = React.useState("")
@@ -409,16 +417,22 @@ export default function InboundPage() {
   }
 
   const fetchHistory = React.useCallback(async () => {
-    let s = histStart
-    let e = histEnd
-    if (histMonth) {
-      const [y, m] = histMonth.split("-").map(Number)
-      const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
-      const last = new Date(y, m, 0).toISOString().slice(0, 10)
-      s = first
-      e = last
+    let s = String(histStart || "").trim()
+    let e = String(histEnd || "").trim()
+    if (!s || !e) {
+      if (histMonth) {
+        const [y, m] = histMonth.split("-").map(Number)
+        if (y && m) {
+          s = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+          e = new Date(y, m, 0).toISOString().slice(0, 10)
+        }
+      }
     }
-    if (!s || !e) return
+    if (!s || !e) {
+      const today = new Date().toISOString().slice(0, 10)
+      s = s || today
+      e = e || today
+    }
     setHistoryLoading(true)
     try {
       if (isOffice) {
@@ -448,6 +462,58 @@ export default function InboundPage() {
       setHistoryLoading(false)
     }
   }, [histStart, histEnd, histMonth, histVendor, histVendorSearch, histItemSearch, histStore, isOffice, auth?.store])
+
+  const applyHistMonthRange = React.useCallback((month: string) => {
+    setHistMonth(month)
+    if (!month) return
+    const [y, m] = month.split("-").map(Number)
+    if (!y || !m) return
+    const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+    const last = new Date(y, m, 0).toISOString().slice(0, 10)
+    setHistStart(first)
+    setHistEnd(last)
+  }, [])
+
+  const handleSummaryStartChange = React.useCallback((next: string) => {
+    setSummaryStart(next)
+    if (next && summaryMonth) setSummaryMonth("")
+  }, [summaryMonth])
+
+  const handleSummaryEndChange = React.useCallback((next: string) => {
+    setSummaryEnd(next)
+    if (next && summaryMonth) setSummaryMonth("")
+  }, [summaryMonth])
+
+  const applySummaryMonthRange = React.useCallback((month: string) => {
+    setSummaryMonth(month)
+    if (!month) return
+    const [y, m] = month.split("-").map(Number)
+    if (!y || !m) return
+    const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+    const last = new Date(y, m, 0).toISOString().slice(0, 10)
+    setSummaryStart(first)
+    setSummaryEnd(last)
+  }, [])
+
+  const openSummaryMonthDialog = React.useCallback(() => {
+    setSummaryMonthDraft(summaryMonth || "")
+    setSummaryMonthDialogOpen(true)
+  }, [summaryMonth])
+
+  const pickCurrentSummaryMonth = React.useCallback(() => {
+    const now = new Date()
+    setSummaryMonthDraft(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
+  }, [])
+
+  const handleApplySummaryMonthDialog = React.useCallback(() => {
+    applySummaryMonthRange(summaryMonthDraft)
+    setSummaryMonthDialogOpen(false)
+  }, [applySummaryMonthRange, summaryMonthDraft])
+
+  const handleClearSummaryMonthDialog = React.useCallback(() => {
+    applySummaryMonthRange("")
+    setSummaryMonthDialogOpen(false)
+  }, [applySummaryMonthRange])
 
   const fetchSummaryHistory = React.useCallback(async () => {
     let s = summaryStart
@@ -613,23 +679,28 @@ export default function InboundPage() {
   }, [historyList, histPurchaseSource])
 
   const groupedHistory = React.useMemo(() => {
-    const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
+    const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; totalVat: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
     for (const i of filteredHistoryList) {
       const batchId = i.inbound_batch_id
       const bankId = i.bank_transaction_id
       const k = bankId ? `banktx-${bankId}` : batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
-        g[k] = { date: i.date, po_created_at: i.po_created_at, vendor: i.vendor, totalQty: 0, totalAmt: 0, items: [], inbound_batch_id: batchId, po_no: i.po_no, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
+        g[k] = { date: i.date, po_created_at: i.po_created_at, vendor: i.vendor, totalQty: 0, totalAmt: 0, totalVat: 0, items: [], inbound_batch_id: batchId, po_no: i.po_no, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
       g[k].totalAmt += i.amount || 0
+      g[k].totalVat += i.vatAmount || 0
     }
     return Object.values(g)
   }, [filteredHistoryList])
 
   const periodTotal = React.useMemo(() => {
     return filteredHistoryList.reduce((sum, i) => sum + (i.amount || 0), 0)
+  }, [filteredHistoryList])
+
+  const periodVatTotal = React.useMemo(() => {
+    return filteredHistoryList.reduce((sum, i) => sum + (i.vatAmount || 0), 0)
   }, [filteredHistoryList])
 
   const inboundTableRows = React.useMemo((): InboundTableRow[] => {
@@ -655,10 +726,12 @@ export default function InboundPage() {
           spec: it.spec || "",
           qty: it.qty || 0,
           amount: it.amount || 0,
+          vatAmount: it.vatAmount || 0,
         })),
         itemsSummary,
         totalQty: g.totalQty,
         totalAmt: g.totalAmt,
+        totalVat: g.totalVat,
       }
     })
   }, [groupedHistory, isOffice, t, formatInboundLineName])
@@ -671,6 +744,7 @@ export default function InboundPage() {
         item: `${formatInboundLineName(i)}${i.spec ? ` (${i.spec})` : ""}`.trim() || "-",
         qty: i.qty,
         amount: i.amount || 0,
+        vatAmount: i.vatAmount || 0,
       })),
     [filteredHistoryList, formatInboundLineName]
   )
@@ -875,18 +949,21 @@ export default function InboundPage() {
       }[lang] || "en-US"
       const inboundDateStr = row.date ? new Date(row.date).toLocaleDateString(locale) : ""
       const poDateStr = row.poDate ? new Date(row.poDate).toLocaleDateString(locale) : ""
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
+      const vatLabel = t("posVatLabel") || "VAT"
+      const totalLabel = t("inv_total") || t("total") || "Total"
       const tbodyHtml = row.items
         .map(
           (it, i) =>
-            `<tr><td>${i + 1}</td><td>${(it.name || "-").replace(/</g, "&lt;")}</td><td>${(it.spec || "-").replace(/</g, "&lt;")}</td><td class="num">${it.qty}</td><td class="num">${it.amount.toLocaleString()}</td></tr>`
+            `<tr><td>${i + 1}</td><td>${(it.name || "-").replace(/</g, "&lt;")}</td><td>${(it.spec || "-").replace(/</g, "&lt;")}</td><td class="num">${it.qty}</td><td class="num">${it.amount.toLocaleString()}</td><td class="num">${it.vatAmount.toLocaleString()}</td><td class="num">${(it.amount + it.vatAmount).toLocaleString()}</td></tr>`
         )
         .join("")
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("adminInbound")} - ${row.date}</title>
 <style>body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style></head><body>
 <h1>${t("adminInbound")}</h1>${row.poDate ? `<p><strong>${t("inPoDate")}:</strong> ${poDateStr}</p>` : ""}<p><strong>${t("inInboundDate")}:</strong> ${inboundDateStr}</p><p><strong>${t("inVendor")}:</strong> ${(row.vendor || "-").replace(/</g, "&lt;")}</p>
 ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || "").replace(/</g, "&lt;")}</p>` : ""}${row.invoiceNo ? `<p><strong>${t("inInvoiceNo") || "인보이스"}:</strong> ${(row.invoiceNo || "").replace(/</g, "&lt;")}</p>` : ""}
-<hr/><table><thead><tr><th>No</th><th>${t("outColItem")}</th><th>${t("spec")}</th><th class="num">${t("outColQty")}</th><th class="num">${t("inColAmount")}</th></tr></thead>
-<tbody>${tbodyHtml}</tbody><tfoot><tr class="tot"><td colspan="3" class="num">${t("total")}</td><td class="num">${row.totalQty.toLocaleString()}</td><td class="num">${row.totalAmt.toLocaleString()}</td></tr></tfoot></table></body></html>`
+<hr/><table><thead><tr><th>No</th><th>${t("outColItem")}</th><th>${t("spec")}</th><th class="num">${t("outColQty")}</th><th class="num">${supplyLabel}</th><th class="num">${vatLabel}</th><th class="num">${totalLabel}</th></tr></thead>
+<tbody>${tbodyHtml}</tbody><tfoot><tr class="tot"><td colspan="3" class="num">${totalLabel}</td><td class="num">${row.totalQty.toLocaleString()}</td><td class="num">${row.totalAmt.toLocaleString()}</td><td class="num">${row.totalVat.toLocaleString()}</td><td class="num">${(row.totalAmt + row.totalVat).toLocaleString()}</td></tr></tfoot></table></body></html>`
       const w = window.open("", "_blank")
       if (w) {
         w.document.write(html)
@@ -901,8 +978,11 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
   const exportInboundExcel = React.useCallback(
     (row: InboundTableRow) => {
       const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-      const headers = ["No", t("outColItem"), t("spec"), t("outColQty"), t("inColAmount")]
-      const dataRows = row.items.map((it, i) => [i + 1, it.name || "-", it.spec || "-", it.qty, it.amount])
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
+      const vatLabel = t("posVatLabel") || "VAT"
+      const totalLabel = t("inv_total") || t("total") || "Total"
+      const headers = ["No", t("outColItem"), t("spec"), t("outColQty"), supplyLabel, vatLabel, totalLabel]
+      const dataRows = row.items.map((it, i) => [i + 1, it.name || "-", it.spec || "-", it.qty, it.amount, it.vatAmount, it.amount + it.vatAmount])
       const allRows = [
         [t("adminInbound"), `${row.date} ${row.vendor}`],
         ...(row.poDate ? [[t("inPoDate"), row.poDate]] : []),
@@ -913,23 +993,31 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
         headers,
         ...dataRows.map((r) => r.map((v) => String(v))),
         [],
-        [t("total"), "", "", row.totalQty, row.totalAmt],
+        [totalLabel, "", "", row.totalQty, row.totalAmt, row.totalVat, row.totalAmt + row.totalVat],
       ].filter((r) => r.length > 0)
-      const colCount = 5
+      const colCount = 7
       const pad = (r: (string | number)[], n: number) => [...r].concat(Array(Math.max(0, n - r.length)).fill("")).slice(0, n).map((v) => escapeXml(String(v)))
       const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head><body><table>${allRows.map((r, ri) => `<tr${ri === 0 || (Array.isArray(r) && r[0] === "No") || ri === allRows.length - 1 ? ' class="head"' : ""}>${pad(r as (string|number)[], colCount).map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></body></html>`
       const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `Inbound_${row.date}_${(row.vendor || "").replace(/[/\\?*:"|]/g, "_").slice(0, 20)}.xls`
+      const startLabel = (histStart || row.date || "").replace(/-/g, "")
+      const endLabel = (histEnd || row.date || "").replace(/-/g, "")
+      const periodLabel = startLabel && endLabel ? `${startLabel}-${endLabel}` : (row.date || "").replace(/-/g, "")
+      const storeLabelRaw = isOffice
+        ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
+        : (auth?.store?.trim() || t("store") || "Store")
+      const storeLabel = storeLabelRaw.replace(/[/\\?*:"|]/g, "_").slice(0, 20)
+      a.download = `Inbound_${storeLabel}_${periodLabel}_${(row.vendor || "").replace(/[/\\?*:"|]/g, "_").slice(0, 20)}.xls`
       a.click()
       URL.revokeObjectURL(url)
     },
-    [t]
+    [t, histStart, histEnd, isOffice, histStore, auth?.store]
   )
 
   const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
+  const periodVatFormatted = `${periodVatTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
 
   return (
     <div className="flex-1 overflow-auto">
@@ -1179,6 +1267,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             )}
             <InboundFilterBar
               totalAmount={periodTotalFormatted}
+              totalVat={periodVatFormatted}
               isOffice={isOffice}
               histStore={histStore}
               stores={histStoreOptions}
@@ -1188,10 +1277,10 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
               histMonth={histMonth}
               onHistStartChange={setHistStart}
               onHistEndChange={setHistEnd}
-              onHistMonthChange={setHistMonth}
+              onHistMonthChange={applyHistMonthRange}
               onMonthClick={() => {
                 const now = new Date()
-                setHistMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
+                applyHistMonthRange(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
               }}
               histVendor={histVendor}
               vendors={histVendorSelectOptions}
@@ -1245,22 +1334,24 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                   <Input
                     type="date"
                     value={summaryStart}
-                    onChange={(e) => setSummaryStart(e.target.value)}
+                    onChange={(e) => handleSummaryStartChange(e.target.value)}
                     className="w-[140px] h-9"
                   />
                   <Input
                     type="date"
                     value={summaryEnd}
-                    onChange={(e) => setSummaryEnd(e.target.value)}
+                    onChange={(e) => handleSummaryEndChange(e.target.value)}
                     className="w-[140px] h-9"
                   />
-                  <Input
-                    type="month"
-                    value={summaryMonth}
-                    onChange={(e) => setSummaryMonth(e.target.value)}
-                    className="w-[140px] h-9"
-                    title={t("inMonthHint")}
-                  />
+                  <Button
+                    type="button"
+                    variant={summaryMonth ? "default" : "outline"}
+                    className="h-9"
+                    onClick={openSummaryMonthDialog}
+                  >
+                    {t("outFilterMonth")}
+                    {summaryMonth ? ` (${summaryMonth})` : ""}
+                  </Button>
                   {isOffice && (
                     <Select value={summaryStoreFilter || "__all__"} onValueChange={(v) => setSummaryStoreFilter(v === "__all__" ? "" : v)}>
                       <SelectTrigger className="w-[180px] h-9">
@@ -1316,6 +1407,46 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                 </div>
                 <p className="text-xs text-muted-foreground">{t("inSummaryHint")}</p>
               </div>
+
+              <Dialog open={summaryMonthDialogOpen} onOpenChange={setSummaryMonthDialogOpen}>
+                <DialogContent className="sm:max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>{t("outFilterMonth")}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">{t("inMonthHint")}</label>
+                    <Input
+                      type="month"
+                      value={summaryMonthDraft}
+                      onChange={(e) => setSummaryMonthDraft(e.target.value)}
+                      className="h-9"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {summaryMonth
+                        ? "월 필터 적용 중: 선택한 월 전체 기간으로 조회됩니다."
+                        : "기간을 직접 입력하면 월 필터는 해제되고 입력한 기간으로 조회됩니다."}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={pickCurrentSummaryMonth}>
+                        {t("thisMonth") || "이번 달"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={handleClearSummaryMonthDialog}>
+                        {t("all")}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" onClick={() => setSummaryMonthDialogOpen(false)}>
+                        {t("cancel") || "Cancel"}
+                      </Button>
+                      <Button type="button" onClick={handleApplySummaryMonthDialog}>
+                        {t("btn_query")}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div className="rounded-xl border bg-card p-5">

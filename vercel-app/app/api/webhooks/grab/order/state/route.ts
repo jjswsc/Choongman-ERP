@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
+import { syncGrabOrderStateToPos } from '@/lib/grab-order-to-pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,11 +39,28 @@ export async function PUT(req: NextRequest) {
     logGrabWebhook('push_order_state', req, { orderID, state, duplicate: true })
     return new NextResponse(null, { status: 204 })
   }
+  const synced = await syncGrabOrderStateToPos({
+    orderID,
+    state,
+    orderPayload: body.order,
+  })
+  if (!synced.ok) {
+    logGrabWebhook('push_order_state', req, {
+      orderID,
+      merchantID: String(body.merchantID ?? ''),
+      state,
+      syncError: synced.message,
+    })
+    return NextResponse.json({ reason: 'sync_failed' }, { status: 500 })
+  }
+
   logGrabWebhook('push_order_state', req, {
     orderID,
     merchantID: String(body.merchantID ?? ''),
     state,
+    posOrderId: synced.orderId ?? null,
+    posStatus: synced.status ?? null,
+    updated: synced.updated,
   })
-  // TODO: 주문 상태 동기화
   return new NextResponse(null, { status: 204 })
 }

@@ -186,6 +186,20 @@
   - `vercel-app/app/api/grab/markOrderReady/route.ts`
   - `vercel-app/app/api/grab/getStoreStatus/route.ts`
   - `vercel-app/app/api/grab/pauseStore/route.ts`
+- Get menu 웹훅(Grab -> POS 메뉴 반환):
+  - `vercel-app/app/api/webhooks/grab/merchant/menu/route.ts`
+  - `vercel-app/lib/grab-menu-from-pos.ts`
+  - 동작: `pos_menus` + `pos_menu_options`를 Grab 메뉴 포맷으로 조립, 실패 시 스텁으로 폴백
+- Push Grab menu 웹훅(Grab -> POS 메뉴 역반영):
+  - `vercel-app/app/api/webhooks/grab/pushGrabMenu/route.ts`
+  - `vercel-app/lib/grab-menu-import-to-pos.ts`
+  - 동작: Grab menu payload의 category/item/modifier를 `pos_menus`/`pos_menu_options`로 upsert
+- Integration status 웹훅(Grab -> 매장 연동 상태 저장):
+  - `vercel-app/app/api/webhooks/grab/pushIntegrationStatus/route.ts`
+  - `vercel-app/lib/grab-store-integration.ts`
+  - DB: `vercel-app/sql/pos_grab_store_integrations.sql`
+  - 동작: `(grabMerchantID, partnerMerchantID)` 키로 상태 upsert(`ACTIVE`, `INACTIVE`, `SYNCING`, `FAILED`)
+  - 조회 API: `vercel-app/app/api/getGrabStoreIntegrations/route.ts` (`grabMerchantID`, `partnerMerchantID`, `status`, `limit` 필터 지원)
 - 웹훅 멱등 처리:
   - `vercel-app/lib/grab-webhook-idempotency.ts`
   - 적용 라우트:
@@ -196,6 +210,15 @@
     - `vercel-app/app/api/webhooks/grab/pushGrabMenu/route.ts`
   - DB 스키마:
     - `vercel-app/sql/pos_grab_webhook_events.sql`
+- 상태 동기화(Grab -> POS):
+  - 구현: `vercel-app/lib/grab-order-to-pos.ts`, `vercel-app/app/api/webhooks/grab/order/state/route.ts`
+  - 매핑:
+    - `ACCEPTED`, `DRIVER_ALLOCATED`, `DRIVER_ARRIVED` -> `cooking`
+    - `COLLECTED` -> `ready`
+    - `BILL_PAID` -> `paid`
+    - `DELIVERED`, `COMPLETED` -> `completed`
+    - `CANCELLED`, `FAILED` -> `cancelled`
+    - `REFUNDED` -> `refunded`
 
 ### 환경변수(서버)
 - `GRAB_CLIENT_ID`
@@ -208,6 +231,10 @@
 - Grab 웹훅 `Authorization: Bearer ...` 검증용(우리 `/oauth/token`에서 발급한 access_token과 동일해야 함):
   - 권장: `GRAB_PARTNER_WEBHOOK_JWT_SECRET` (HS256 서명용 비밀값; 길고 랜덤한 문자열)
   - 레거시: `GRAB_PARTNER_ISSUED_ACCESS_TOKEN` (구명칭; HS256 secret로도 사용 가능. opaque 고정 bearer 모드도 호환)
+- 매장 매핑(Submit order -> POS 저장 시 store_code 결정):
+  - 선택: `GRAB_STORE_MAP_JSON` (JSON object)
+  - 예: `{"Partner-ABECU":"TH01","1-CYNGRUNGSBCCC":"TH01"}`
+  - 미설정 시 `partnerMerchantID`를 `store_code`로 직접 사용
 - 선택:
   - `GRAB_PARTNER_API_BASE_URL` (기본 `partner-api.grab.com` override)
   - `GRAB_AUTH_BASE_URL` (기본 `https://api.grab.com` override)

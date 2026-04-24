@@ -1,6 +1,5 @@
 import type { PosTourScenario, PosTourStep } from '../pos-tour-types'
-
-const BUSINESS_CLOSE_DEMO = '/pos/settlement?demo=1&scenario=pos-business-close-tour'
+import { POS_DEMO_ROUTES } from '../demo-routes'
 
 const steps: PosTourStep[] = [
   {
@@ -11,26 +10,54 @@ const steps: PosTourStep[] = [
     advance: 'manual',
   },
   {
-    id: 'cm2_add_form',
+    id: 'cm2_subtabs',
+    target: 'pos-tour-cash-subtabs',
+    titleKey: 'posCashTourS1bTitle',
+    bodyKey: 'posCashTourS1bBody',
+    advance: 'manual',
+  },
+  {
+    id: 'cm3_filters',
+    target: 'pos-tour-cash-filters',
+    titleKey: 'posCashTourS1cTitle',
+    bodyKey: 'posCashTourS1cBody',
+    advance: 'manual',
+  },
+  {
+    id: 'cm4_ledger',
+    target: 'pos-tour-cash-ledger-table',
+    titleKey: 'posCashTourS1dTitle',
+    bodyKey: 'posCashTourS1dBody',
+    advance: 'manual',
+  },
+  {
+    id: 'cm5_sales_withdrawal',
+    target: 'pos-tour-cash-sales-withdrawal',
+    titleKey: 'posCashTourS1eTitle',
+    bodyKey: 'posCashTourS1eBody',
+    advance: 'manual',
+  },
+  {
+    id: 'cm6_add_form',
     target: 'pos-tour-cash-add-form',
     titleKey: 'posCashTourS2Title',
     bodyKey: 'posCashTourS2Body',
     advance: 'manual',
   },
   {
-    id: 'cm3_add_save',
+    id: 'cm7_add_save',
     target: 'pos-tour-cash-add-save',
     titleKey: 'posCashTourS3Title',
     bodyKey: 'posCashTourS3Body',
     advance: 'manual',
   },
   {
-    id: 'cm4_go_close',
+    id: 'cm8_go_close',
     target: 'pos-tour-nospot',
     titleKey: 'posCashTourS4Title',
     bodyKey: 'posCashTourS4Body',
     advance: 'manual',
-    navigateOnNext: BUSINESS_CLOSE_DEMO,
+    navigateOnNext: POS_DEMO_ROUTES.businessClose,
   },
 ]
 

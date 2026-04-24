@@ -26,6 +26,12 @@ type PosTourContextValue = {
   /** 데모 언어 게이트(「가이드 시작」) 완료 여부 — 시나리오/데모 켤 때마다 false로 리셋 */
   preTourLanguageDone: boolean
   completePreTourLanguage: () => void
+  /**
+   * `advance: 'manual'` 단계에서「다음」표시 여부.
+   * 스텝 변경 시 Provider가 true로 리셋하고, 터미널 등에서 조건에 맞게 false로 둘 수 있음(예: 손님 수 0명).
+   */
+  manualNextAllowed: boolean
+  setManualNextAllowed: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const Ctx = React.createContext<PosTourContextValue | null>(null)
@@ -47,6 +53,8 @@ export function usePosTour(): PosTourContextValue {
       showTourStepOverlay: false,
       preTourLanguageDone: true,
       completePreTourLanguage: () => {},
+      manualNextAllowed: true,
+      setManualNextAllowed: () => {},
     }
   }
   return v
@@ -61,12 +69,19 @@ type ProviderProps = {
 
 export function PosTourProvider({ children, isDemo, scenarioId }: ProviderProps) {
   const [ended, setEnded] = React.useState(false)
-  const [stepIndex, setStepIndex] = React.useState(0)
+  const [stepIndex, setStepIndexInner] = React.useState(0)
+  const [manualNextAllowed, setManualNextAllowed] = React.useState(true)
   const [preTourLanguageDone, setPreTourLanguageDone] = React.useState(!isDemo)
   const scenario = React.useMemo(() => getPosTourScenario(scenarioId), [scenarioId])
   const tourEnabled = isDemo
   const currentStep = scenario.steps[stepIndex] ?? null
   const maxIdx = Math.max(0, scenario.steps.length - 1)
+
+  /** 스텝을 바꿀 때만「다음」허용을 true로 — `stepIndex` effect는 자식 게이트보다 늦게 돌아 조건부 막기를 덮어쓰므로 사용하지 않음 */
+  const setStepIndex = React.useCallback<React.Dispatch<React.SetStateAction<number>>>((action) => {
+    setManualNextAllowed(true)
+    setStepIndexInner(action)
+  }, [])
 
   const completePreTourLanguage = React.useCallback(() => {
     setPreTourLanguageDone(true)
@@ -74,11 +89,11 @@ export function PosTourProvider({ children, isDemo, scenarioId }: ProviderProps)
 
   const goNext = React.useCallback(() => {
     setStepIndex((i) => Math.min(maxIdx, i + 1))
-  }, [maxIdx])
+  }, [maxIdx, setStepIndex])
 
   const goPrev = React.useCallback(() => {
     setStepIndex((i) => Math.max(0, i - 1))
-  }, [])
+  }, [setStepIndex])
 
   const endTour = React.useCallback(() => {
     setEnded(true)
@@ -100,6 +115,8 @@ export function PosTourProvider({ children, isDemo, scenarioId }: ProviderProps)
     showTourStepOverlay: baseShow && preTourLanguageDone,
     preTourLanguageDone,
     completePreTourLanguage,
+    manualNextAllowed,
+    setManualNextAllowed,
   }
 
   // 데모·시나리오가 바뀌면: 스텝·언어 게이트(매 페이지·매 시나리오마다 언어 먼저) 리셋
@@ -107,12 +124,14 @@ export function PosTourProvider({ children, isDemo, scenarioId }: ProviderProps)
   React.useEffect(() => {
     if (!isDemo) {
       setPreTourLanguageDone(true)
+      setManualNextAllowed(true)
       return
     }
+    setManualNextAllowed(true)
     setStepIndex(0)
     setEnded(false)
     setPreTourLanguageDone(false)
-  }, [isDemo, scenarioKey])
+  }, [isDemo, scenarioKey, setStepIndex])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -135,6 +154,7 @@ function shouldAdvanceToNextStep(
     needTaxInvoice: boolean
     paymentCompletedCount: number
     mainDeviceModeChanged: boolean
+    servingItemChecked: boolean
     servingOrderReady: boolean
     liveMenuSearchOpen: boolean
   }
@@ -199,6 +219,8 @@ function shouldAdvanceToNextStep(
       return p.mainDeviceModeChanged
     case 'live_menu_search_open':
       return p.liveMenuSearchOpen
+    case 'serving_item_checked':
+      return p.servingItemChecked
     case 'serving_order_ready':
       return p.servingOrderReady
     default:
@@ -233,6 +255,8 @@ export function PosTerminalTourController(p: {
   paymentCompletedCount: number
   /** 상단 메인/주문 기기 토글을 사용했는지 */
   mainDeviceModeChanged: boolean
+  /** 홀 서빙 패널에서 줄별 서빙을 1개 이상 체크했는지 */
+  servingItemChecked: boolean
   /** 홀 서빙 중 주문이 전체 서빙 완료(ready) 상태 */
   servingOrderReady: boolean
   /** 실시간 메뉴 검색 Dialog 열림 */
@@ -262,7 +286,7 @@ export function PosTerminalTourController(p: {
       floorFallbackSatisfiedRef.current = false
     } else if (!floorFallbackSatisfiedRef.current) {
       floorFallbackSatisfiedRef.current = true
-      const servingPanelIdx = scenario.steps.findIndex((step) => step.id === 'w13a_serving_panel')
+      const servingPanelIdx = scenario.steps.findIndex((step) => step.id === 'w13b_serving_items')
       if (servingPanelIdx >= 0) {
         setStepIndex(servingPanelIdx)
       }
@@ -304,11 +328,52 @@ export function PosTerminalTourController(p: {
     p.needTaxInvoice,
     p.paymentCompletedCount,
     p.mainDeviceModeChanged,
+    p.servingItemChecked,
     p.servingOrderReady,
     p.liveMenuSearchOpen,
     maxIdx,
     setStepIndex,
   ])
 
+  return null
+}
+
+/** 터미널 풀 투어: 조건부 수동「다음」(손님 수·포장 탭·메인/주문 토글 등) */
+export function PosTourTerminalManualNextGates(props: {
+  dineInGuestCount: number
+  activeTab: 'tables' | 'delivery' | 'takeout'
+  /** `w2a_main_device_toggle`: 메인/주문 토글을 한 번이라도 눌렀는지 */
+  mainDeviceTouched?: boolean
+  /** `w2a_main_device_toggle`에 들어올 때마다(뒤로 가기 등) 토글 플래그를 초기화 */
+  onMainDeviceTourStepEnter?: () => void
+}) {
+  const { currentStep, setManualNextAllowed } = usePosTour()
+  const n = props.dineInGuestCount
+  const tab = props.activeTab
+  const mainTouched = Boolean(props.mainDeviceTouched)
+  const onMainEnter = props.onMainDeviceTourStepEnter
+  const prevStepIdRef = React.useRef<string | undefined>(undefined)
+  React.useEffect(() => {
+    const id = currentStep?.id
+    if (id === 'w2a_main_device_toggle' && prevStepIdRef.current !== 'w2a_main_device_toggle') {
+      onMainEnter?.()
+    }
+    prevStepIdRef.current = id
+  }, [currentStep?.id, onMainEnter])
+  React.useEffect(() => {
+    const id = currentStep?.id
+    if (id === 'w12b_cart_guest_count') {
+      setManualNextAllowed(n > 0)
+      return
+    }
+    if (id === 'w15_tab_takeout2' || id === 'w16a_takeout_slots') {
+      setManualNextAllowed(tab === 'takeout')
+      return
+    }
+    if (id === 'w2a_main_device_toggle') {
+      setManualNextAllowed(mainTouched)
+      return
+    }
+  }, [currentStep?.id, n, tab, mainTouched, setManualNextAllowed])
   return null
 }

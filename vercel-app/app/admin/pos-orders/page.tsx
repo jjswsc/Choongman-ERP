@@ -33,6 +33,7 @@ import {
   getPosMenus,
   getPosPrinterSettings,
   getPosDeliveryApps,
+  getGrabStoreIntegrations,
   updatePosOrder,
   updatePosOrderStatus,
   useStoreList,
@@ -41,6 +42,7 @@ import {
   type PosLinkposTenderRule,
   type PosMenu,
   type PosDeliveryApp,
+  type GrabStoreIntegrationSnapshot,
 } from "@/lib/api-client"
 import {
   getPosDeliveryPlatformName,
@@ -192,7 +194,7 @@ export default function PosOrdersPage() {
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
-  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed">("orders")
+  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed" | "grabIntegration">("orders")
   const [attempts, setAttempts] = React.useState<PosPaymentAttempt[]>([])
   const [attemptsLoading, setAttemptsLoading] = React.useState(false)
   const [attemptStatusFilter, setAttemptStatusFilter] = React.useState<"failed" | "all" | "approved" | "declined">("failed")
@@ -223,6 +225,10 @@ export default function PosOrdersPage() {
   const [deliveryAppsByStore, setDeliveryAppsByStore] = React.useState<
     Record<string, PosDeliveryApp[]>
   >({})
+  const [grabIntegrations, setGrabIntegrations] = React.useState<GrabStoreIntegrationSnapshot[]>([])
+  const [grabLoading, setGrabLoading] = React.useState(false)
+  const [grabStatusFilter, setGrabStatusFilter] = React.useState("all")
+  const [grabPartnerMerchantFilter, setGrabPartnerMerchantFilter] = React.useState("")
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   /** 목록 API에 넘길 매장: 본사(오피스)는 선택값·「전체」는 미지정, 매니저/가맹점주 등은 로그인 매장 고정 */
@@ -643,6 +649,18 @@ export default function PosOrdersPage() {
       .finally(() => setRulesLoading(false))
   }, [currentStoreCode])
 
+  const loadGrabIntegrations = React.useCallback(() => {
+    setGrabLoading(true)
+    getGrabStoreIntegrations({
+      status: grabStatusFilter !== "all" ? grabStatusFilter : undefined,
+      partnerMerchantID: grabPartnerMerchantFilter.trim() || undefined,
+      limit: 500,
+    })
+      .then((rows) => setGrabIntegrations(Array.isArray(rows) ? rows : []))
+      .catch(() => setGrabIntegrations([]))
+      .finally(() => setGrabLoading(false))
+  }, [grabStatusFilter, grabPartnerMerchantFilter])
+
   const handleSaveTenderRule = React.useCallback(async () => {
     const keyword = ruleKeyword.trim().toLowerCase().replace(/\s+/g, "")
     const tenderKey = ruleKey.trim()
@@ -861,6 +879,11 @@ export default function PosOrdersPage() {
   }, [activeTab, loadAttempts, loadTenderRules])
 
   React.useEffect(() => {
+    if (activeTab !== "grabIntegration") return
+    loadGrabIntegrations()
+  }, [activeTab, loadGrabIntegrations])
+
+  React.useEffect(() => {
     getPosMenus().then(setMenus).catch(() => setMenus([]))
   }, [])
 
@@ -1062,7 +1085,7 @@ export default function PosOrdersPage() {
               <span className="min-w-0 truncate font-medium text-foreground">{auth?.store}</span>
             </span>
           ) : null}
-          {activeTab !== "linkposFailed" && (
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9 w-32 text-sm">
                 <SelectValue placeholder={t("posStatus") || "상태"} />
@@ -1095,10 +1118,30 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
+          {activeTab === "grabIntegration" && (
+            <Select value={grabStatusFilter} onValueChange={setGrabStatusFilter}>
+              <SelectTrigger className="h-9 w-36 text-sm">
+                <SelectValue placeholder="Integration status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                <SelectItem value="SYNCING">SYNCING</SelectItem>
+                <SelectItem value="FAILED">FAILED</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Button
             size="sm"
             className="h-9 gap-1.5 px-4"
-            onClick={activeTab === "linkposFailed" ? loadAttempts : loadOrders}
+            onClick={
+              activeTab === "linkposFailed"
+                ? loadAttempts
+                : activeTab === "grabIntegration"
+                  ? loadGrabIntegrations
+                  : loadOrders
+            }
           >
             <Search className="h-4 w-4" />
             {t("itemsBtnSearch") || "조회"}
@@ -1108,6 +1151,13 @@ export default function PosOrdersPage() {
               placeholder={"R1, 주문번호, 승인번호, 추적번호, 응답코드 검색"}
               value={attemptSearchTerm}
               onChange={(e) => setAttemptSearchTerm(e.target.value)}
+              className="h-9 flex-1 min-w-[200px] text-sm"
+            />
+          ) : activeTab === "grabIntegration" ? (
+            <Input
+              placeholder="partnerMerchantID 검색"
+              value={grabPartnerMerchantFilter}
+              onChange={(e) => setGrabPartnerMerchantFilter(e.target.value)}
               className="h-9 flex-1 min-w-[200px] text-sm"
             />
           ) : (
@@ -1120,13 +1170,13 @@ export default function PosOrdersPage() {
           )}
         </div>
 
-        {(loading || attemptsLoading) && (
+        {(loading || attemptsLoading || grabLoading) && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
           </div>
         )}
 
-        {activeTab !== "linkposFailed" && todaySummary && (
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && todaySummary && (
           <div className="mb-4 flex gap-4 rounded-lg border bg-card p-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
@@ -1167,7 +1217,7 @@ export default function PosOrdersPage() {
 
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed")}
+          onValueChange={(v) => setActiveTab(v as "orders" | "cookTime" | "linkposFailed" | "grabIntegration")}
           className={adminTabsRootCn}
         >
           <AdminTabsBarWithHelp>
@@ -1180,6 +1230,9 @@ export default function PosOrdersPage() {
                 </TabsTrigger>
                 <TabsTrigger value="linkposFailed" className={adminTabsTriggerCn}>
                   LINKPOS 실패 관리
+                </TabsTrigger>
+                <TabsTrigger value="grabIntegration" className={adminTabsTriggerCn}>
+                  Grab 연동 상태
                 </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
@@ -1863,6 +1916,58 @@ export default function PosOrdersPage() {
                             ) : (
                               <span className="text-muted-foreground text-xs">-</span>
                             )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+          <TabsContent value="grabIntegration" className={adminTabsContentFlushCn}>
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">상태</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">grabMerchantID</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">partnerMerchantID</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[180px]">lastRequestID</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[240px]">lastMessage</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-44">updatedAt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grabIntegrations.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                          Grab 연동 상태 데이터가 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      grabIntegrations.map((row) => (
+                        <tr key={row.id} className="border-b">
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={cn(
+                                "rounded px-2 py-0.5 text-xs",
+                                row.integrationStatus === "ACTIVE" && "bg-emerald-50 text-emerald-700",
+                                row.integrationStatus === "SYNCING" && "bg-amber-50 text-amber-700",
+                                row.integrationStatus === "FAILED" && "bg-rose-50 text-rose-700",
+                                row.integrationStatus === "INACTIVE" && "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {row.integrationStatus}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-[11px]">{row.grabMerchantID || "-"}</td>
+                          <td className="px-4 py-3 font-mono text-[11px]">{row.partnerMerchantID || "-"}</td>
+                          <td className="px-4 py-3 font-mono text-[11px]">{row.lastRequestID || "-"}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">{row.lastMessage || "-"}</td>
+                          <td className="px-4 py-3 text-center text-muted-foreground">
+                            {formatBangkokDateTime(row.updatedAt, bangkokDisplayLocale(lang))}
                           </td>
                         </tr>
                       ))

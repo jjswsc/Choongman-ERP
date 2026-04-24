@@ -2691,12 +2691,14 @@ export function getExportVatLedgerCsvUrl(params: {
   periodType?: 'monthly' | 'half_year' | 'annual'
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
+  excludePosAuto?: boolean
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.excludePosAuto) q.set('excludePosAuto', '1')
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportVatLedgerCsv?${q}`
   }
@@ -7765,6 +7767,36 @@ export async function savePosDeliveryApps(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface GrabStoreIntegrationSnapshot {
+  id: number
+  grabMerchantID: string
+  partnerMerchantID: string
+  integrationStatus: string
+  lastRequestID: string | null
+  lastMessage: string | null
+  payload: unknown
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export async function getGrabStoreIntegrations(params?: {
+  grabMerchantID?: string
+  partnerMerchantID?: string
+  status?: string
+  limit?: number
+}) {
+  const q = new URLSearchParams()
+  if (params?.grabMerchantID) q.set('grabMerchantID', params.grabMerchantID)
+  if (params?.partnerMerchantID) q.set('partnerMerchantID', params.partnerMerchantID)
+  if (params?.status) q.set('status', params.status)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  const url = '/api/getGrabStoreIntegrations' + (qs ? `?${qs}` : '')
+  const res = await apiFetch(url)
+  const json = await res.json()
+  return Array.isArray(json) ? (json as GrabStoreIntegrationSnapshot[]) : []
+}
+
 export interface PosMenuScreenConfig {
   storeCode: string | null
   mainCategoryFontSize: number
@@ -9004,6 +9036,7 @@ export interface InboundHistoryItem {
   invoice_no?: string | null
   invoice_received?: boolean
   amount: number
+  vatAmount?: number
   inbound_batch_id?: number | null
   po_created_at?: string | null
   code?: string

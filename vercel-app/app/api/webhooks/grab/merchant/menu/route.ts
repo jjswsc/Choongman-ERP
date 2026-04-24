@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabStubMenuJson, grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
+import { buildGrabMenuFromPos } from '@/lib/grab-menu-from-pos'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,5 +23,16 @@ export async function GET(req: NextRequest) {
     )
   }
   logGrabWebhook('get_menu', req, { merchantID, partnerMerchantID })
-  return NextResponse.json(grabStubMenuJson(merchantID, partnerMerchantID))
+  try {
+    const menu = await buildGrabMenuFromPos({ merchantID, partnerMerchantID })
+    return NextResponse.json(menu)
+  } catch (e) {
+    logGrabWebhook('get_menu', req, {
+      merchantID,
+      partnerMerchantID,
+      fallback: 'stub',
+      error: String(e ?? 'unknown'),
+    })
+    return NextResponse.json(grabStubMenuJson(merchantID, partnerMerchantID))
+  }
 }
