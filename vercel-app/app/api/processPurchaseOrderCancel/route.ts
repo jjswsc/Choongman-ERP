@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { deletePayableFromPO, deleteReceivableFromAccountingPo } from '@/lib/receivable-payable'
+import { syncTaxWithholdingLedgerForPurchaseOrder } from '@/lib/tax-ledger-auto-sync'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
     await supabaseUpdate('purchase_orders', poId, { status: 'Cancelled' })
     await deletePayableFromPO(poId)
     await deleteReceivableFromAccountingPo(poId)
+    await syncTaxWithholdingLedgerForPurchaseOrder(poId)
     return NextResponse.json({ success: true, message: '취소되었습니다.' }, { headers })
   } catch (e) {
     console.error('processPurchaseOrderCancel:', e)

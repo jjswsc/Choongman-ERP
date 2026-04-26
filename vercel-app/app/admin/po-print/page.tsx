@@ -127,6 +127,8 @@ export default function PoPrintPage() {
             ? t("poAccountingPrintBadgeApproved") || "Approved"
             : t("poAccountingPrintBadgeDraft") || "Draft"
         : undefined,
+      poWht3LineLabel: t("poWht3LineLabel") || "Withholding tax (3%)",
+      poNetAfterWht: t("poNetAfterWht") || "Net after withholding",
     }
   }, [t, data])
 

@@ -13,6 +13,7 @@ import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { parsePurchaseOrderCart, purchaseOrderMetaOrderDate } from '@/lib/purchase-order-cart'
 
 type ItemTaxMeta = {
   price: number
@@ -52,6 +53,21 @@ type ExpenseAccrualWhtRow = {
   expense_date?: string | null
   memo?: string | null
   store_name?: string | null
+}
+
+type PurchaseOrderWhtRow = {
+  id?: number
+  po_no?: string | null
+  status?: string | null
+  vendor_code?: string | null
+  vendor_name?: string | null
+  total?: number | null
+  vat?: number | null
+  withholding_tax_amount?: number | null
+  withholding_tax_rate?: number | null
+  created_at?: string | null
+  location_name?: string | null
+  cart_json?: unknown
 }
 
 type EmployeeTaxRow = {
@@ -120,6 +136,12 @@ function parseExpenseAccrualWhtIdFromMemo(memo: string): number {
 
 function parsePayrollRecordIdFromMemo(memo: string): number {
   const m = memo.match(/\[AUTO:PAYROLL_RECORD_WHT:(\d+)\]/)
+  if (!m) return 0
+  return Math.floor(Number(m[1]) || 0)
+}
+
+function parsePurchaseOrderIdFromMemo(memo: string): number {
+  const m = memo.match(/\[AUTO:PURCHASE_ORDER_WHT:(\d+)\]/)
   if (!m) return 0
   return Math.floor(Number(m[1]) || 0)
 }
@@ -612,6 +634,186 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
   }
 
   return { upserted, deleted }
+}
+
+export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
+  months: string[]
+  storeFilter?: string
+}): Promise<{ upserted: number; deleted: number }> {
+  const validMonths = (params.months || [])
+    .map((m) => String(m || '').slice(0, 7))
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+  if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
+
+  const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const startYmd = monthStartYmd(validMonths[0])
+  const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
+  const poFilter = [
+    `created_at=gte.${encodeURIComponent(`${startYmd}T00:00:00`)}`,
+    `created_at=lte.${encodeURIComponent(`${endYmd}T23:59:59.999`)}`,
+    'withholding_tax_amount=gt.0',
+  ]
+  const poRows = (await supabaseSelectFilterAllPages('purchase_orders', poFilter.join('&'), {
+    select:
+      'id,po_no,status,vendor_code,vendor_name,total,vat,withholding_tax_amount,withholding_tax_rate,created_at,location_name,cart_json',
+    order: 'id.asc',
+    pageSize: 3000,
+    maxRows: 50000,
+  })) as PurchaseOrderWhtRow[]
+
+  const vendorRows = (await supabaseSelect('vendors', {
+    select: 'code,tax_id',
+    order: 'id.asc',
+    limit: 20000,
+  })) as { code?: string | null; tax_id?: string | null }[] | null
+  const vendorTinByCode = new Map<string, string>()
+  for (const v of vendorRows || []) {
+    const code = String(v.code || '').trim()
+    if (!code) continue
+    const tin = String(v.tax_id || '')
+      .trim()
+      .replace(/\D/g, '')
+    if (tin) vendorTinByCode.set(code, tin)
+  }
+
+  const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
+  const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:PURCHASE_ORDER_WHT:%')}`
+  const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
+  const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
+    select: 'id,memo,filing_status',
+    order: 'id.asc',
+    pageSize: 3000,
+    maxRows: 30000,
+  })) as ExistingAutoRow[]
+  const existingByPoId = new Map<number, { id: number; filingStatus: string }>()
+  for (const row of existingAutoRows || []) {
+    const id = Math.floor(Number(row.id) || 0)
+    const poId = parsePurchaseOrderIdFromMemo(String(row.memo || ''))
+    if (id <= 0 || poId <= 0) continue
+    existingByPoId.set(poId, {
+      id,
+      filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+    })
+  }
+
+  let upserted = 0
+  const seenPoIds = new Set<number>()
+  for (const po of poRows || []) {
+    const poId = Math.floor(Number(po.id) || 0)
+    if (poId <= 0) continue
+    const status = String(po.status || '').trim().toLowerCase()
+    if (status === 'cancelled' || status === 'rejected' || status === 'cancel') continue
+    const whtAmount = round2(Math.max(0, Math.abs(Number(po.withholding_tax_amount) || 0)))
+    if (whtAmount <= 0) continue
+
+    const { items, meta } = parsePurchaseOrderCart(po.cart_json)
+    const relatedStore = String(meta?.relatedStore || '').trim()
+    const itemStore = items.map((it) => String(it.store || '').trim()).find(Boolean) || ''
+    const taxStoreName = relatedStore || itemStore || String(po.location_name || '').trim() || null
+    if (storeFilter && !storesMatchForGradeLookup(String(taxStoreName || ''), storeFilter)) continue
+
+    const docDate = purchaseOrderMetaOrderDate(po.cart_json)
+      ? String(purchaseOrderMetaOrderDate(po.cart_json))
+      : formatDateBangkok(new Date(String(po.created_at || new Date().toISOString())))
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) continue
+    const taxMonth = docDate.slice(0, 7)
+    if (!validMonths.includes(taxMonth)) continue
+
+    const total = Math.max(0, Number(po.total) || 0)
+    const vat = Math.max(0, Number(po.vat) || 0)
+    const grossBase = round2(Math.max(0, total - vat))
+    const rawRate = Number(po.withholding_tax_rate)
+    const whtRate =
+      Number.isFinite(rawRate) && rawRate > 0
+        ? round2(rawRate)
+        : grossBase > 0
+          ? round2((whtAmount / grossBase) * 100)
+          : null
+
+    const vendorCode = String(po.vendor_code || '').trim()
+    const payeeTaxId = vendorCode ? vendorTinByCode.get(vendorCode) || null : null
+    const payeeName = String(po.vendor_name || vendorCode || `PO-${poId}`).trim()
+    const poNo = String(po.po_no || '').trim()
+    const memoTag = `[AUTO:PURCHASE_ORDER_WHT:${poId}]`
+    const saveRow = {
+      payment_date: docDate,
+      tax_month: taxMonth,
+      payee_name: payeeName.slice(0, 500),
+      payee_tax_id: payeeTaxId,
+      income_type: '서비스',
+      gross_amount: grossBase > 0 ? grossBase : total,
+      wht_rate: whtRate,
+      wht_amount: whtAmount,
+      form_hint: 'PND53',
+      certificate_no: (poNo ? `PO-${poNo}` : `PO-${poId}`).slice(0, 128),
+      memo: `${memoTag} 발주 원천세 자동`.slice(0, 2000),
+      filing_status: 'draft',
+      submitted_at: null,
+      submitted_by: null,
+      store_name: taxStoreName,
+      updated_at: new Date().toISOString(),
+    }
+
+    const existing = existingByPoId.get(poId)
+    if (existing?.id && existing.filingStatus === 'submitted') {
+      seenPoIds.add(poId)
+      continue
+    }
+    if (existing?.id) {
+      try {
+        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, saveRow)
+      } catch (e) {
+        if (!isMissingSubmissionColumnError(e)) throw e
+        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, stripSubmissionAuditFields(saveRow))
+      }
+      upserted += 1
+      seenPoIds.add(poId)
+      continue
+    }
+
+    const insertRow = {
+      ...saveRow,
+      created_by: 'system',
+      created_at: new Date().toISOString(),
+    }
+    try {
+      await supabaseInsert('withholding_tax_ledger_entries', insertRow)
+    } catch (e) {
+      if (!isMissingSubmissionColumnError(e)) throw e
+      await supabaseInsert('withholding_tax_ledger_entries', stripSubmissionAuditFields(insertRow))
+    }
+    upserted += 1
+    seenPoIds.add(poId)
+  }
+
+  let deleted = 0
+  for (const [poId, ex] of existingByPoId.entries()) {
+    if (seenPoIds.has(poId)) continue
+    if (ex.filingStatus === 'submitted') continue
+    await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
+    deleted += 1
+  }
+
+  return { upserted, deleted }
+}
+
+export async function syncTaxWithholdingLedgerForPurchaseOrder(poId: number): Promise<void> {
+  const id = Math.floor(Number(poId) || 0)
+  if (id <= 0) return
+  const rows = (await supabaseSelectFilter('purchase_orders', `id=eq.${id}`, {
+    select: 'id,created_at,cart_json',
+    limit: 1,
+  })) as { id?: number; created_at?: string | null; cart_json?: unknown }[] | null
+  const po = rows?.[0]
+  if (!po?.id) return
+
+  const docDate = purchaseOrderMetaOrderDate(po.cart_json)
+    ? String(purchaseOrderMetaOrderDate(po.cart_json))
+    : formatDateBangkok(new Date(String(po.created_at || new Date().toISOString())))
+  const month = /^\d{4}-\d{2}-\d{2}$/.test(docDate) ? docDate.slice(0, 7) : ''
+  if (!/^\d{4}-\d{2}$/.test(month)) return
+
+  await syncTaxWithholdingLedgersFromPurchaseOrders({ months: [month] })
 }
 
 export async function syncTaxWithholdingLedgersFromPayroll(params: {

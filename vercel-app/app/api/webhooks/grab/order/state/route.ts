@@ -61,6 +61,7 @@ export async function PUT(req: NextRequest) {
     posOrderId: synced.orderId ?? null,
     posStatus: synced.status ?? null,
     updated: synced.updated,
+    memoUpdated: synced.memoUpdated ?? false,
   })
   return new NextResponse(null, { status: 204 })
 }

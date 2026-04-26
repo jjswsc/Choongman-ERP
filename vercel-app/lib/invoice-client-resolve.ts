@@ -56,20 +56,26 @@ export function resolveInvoiceClientFromBillToCandidates(
     return resolveInvoiceClientForTarget("", company, clients)
   }
   const hits: InvoiceDataClient[] = []
+  let hasOfficeLikeCandidate = false
+  let hasNonOfficeLikeCandidate = false
   for (const key of list) {
-    if (isOfficeLikeTarget(key) && company) {
-      return {
-        companyName: company.companyName,
-        address: company.address || "-",
-        taxId: company.taxId || "-",
-        phone: company.phone || "-",
-      }
-    }
+    if (isOfficeLikeTarget(key)) hasOfficeLikeCandidate = true
+    else hasNonOfficeLikeCandidate = true
     const found = lookupClientInMap(key, clients)
     if (found) hits.push(found)
   }
   const withAddr = hits.find((h) => clientHasBillToAddress(h))
   if (withAddr) return withAddr
   if (hits[0]) return hits[0]
+  // 본사 fallback은 "전부 본사 후보"인 경우에만 허용한다.
+  // 매장 후보가 하나라도 있으면 절대 본사로 강등하지 않는다.
+  if (hasOfficeLikeCandidate && !hasNonOfficeLikeCandidate && company) {
+    return {
+      companyName: company.companyName,
+      address: company.address || "-",
+      taxId: company.taxId || "-",
+      phone: company.phone || "-",
+    }
+  }
   return resolveInvoiceClientForTarget(list[0], company, clients)
 }

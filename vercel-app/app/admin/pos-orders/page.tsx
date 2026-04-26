@@ -193,6 +193,7 @@ export default function PosOrdersPage() {
   )
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("all")
+  const [channelFilter, setChannelFilter] = React.useState("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed" | "grabIntegration">("orders")
   const [attempts, setAttempts] = React.useState<PosPaymentAttempt[]>([])
@@ -297,9 +298,17 @@ export default function PosOrdersPage() {
   )
 
   const filteredOrders = React.useMemo(() => {
-    if (!searchTerm.trim()) return orders
+    const source =
+      channelFilter === "all"
+        ? orders
+        : orders.filter((o) => {
+            const channel = String(o.deliveryPaymentChannel || o.orderType || "").trim().toLowerCase()
+            if (channelFilter === "delivery") return channel === "delivery" || o.orderType === "delivery"
+            return channel === channelFilter
+          })
+    if (!searchTerm.trim()) return source
     const term = searchTerm.trim().toLowerCase()
-    return orders.filter(
+    return source.filter(
       (o) =>
         o.orderNo.toLowerCase().includes(term) ||
         (o.tableName && o.tableName.toLowerCase().includes(term)) ||
@@ -309,7 +318,7 @@ export default function PosOrdersPage() {
             it.name && String(it.name).toLowerCase().includes(term)
         )
     )
-  }, [orders, searchTerm])
+  }, [orders, searchTerm, channelFilter])
 
   const filteredAttempts = React.useMemo(() => {
     if (!attemptSearchTerm.trim()) return attempts
@@ -1097,6 +1106,21 @@ export default function PosOrdersPage() {
                     {v}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          )}
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+            <Select value={channelFilter} onValueChange={setChannelFilter}>
+              <SelectTrigger className="h-9 w-36 text-sm">
+                <SelectValue placeholder={t("채널") || "채널"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                <SelectItem value="delivery">{t("posOrderTypeDelivery") || "배달"}</SelectItem>
+                <SelectItem value="grab">Grab</SelectItem>
+                <SelectItem value="lineman">LineMan</SelectItem>
+                <SelectItem value="shopee">Shopee</SelectItem>
+                <SelectItem value="dine_in">{t("posOrderTypeDineIn") || "매장"}</SelectItem>
               </SelectContent>
             </Select>
           )}

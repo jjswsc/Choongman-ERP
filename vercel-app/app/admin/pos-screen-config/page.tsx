@@ -221,7 +221,7 @@ export default function PosScreenConfigPage() {
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabDelivery") || "배달앱 관리"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {t("posScreenConfigTabDeliveryDesc") || "배달앱 추가·수정·순서 변경, dine out 지원 여부를 설정합니다."}
+                {t("posScreenConfigTabDeliveryDesc") || "배달앱 추가·수정·순서 변경, 매장결제 노출 여부를 설정합니다."}
               </p>
               <PosDeliveryAppsContent />
             </div>

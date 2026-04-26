@@ -1207,6 +1207,8 @@ CREATE TABLE IF NOT EXISTS public.company_hybrid_document_categories (
   store TEXT NOT NULL,
   name TEXT NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
+  parent_category_id BIGINT NULL
+    REFERENCES public.company_hybrid_document_categories (id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ NULL
@@ -1216,8 +1218,16 @@ CREATE INDEX IF NOT EXISTS company_hybrid_document_categories_store_idx
   ON public.company_hybrid_document_categories (store, sort_order, id)
   WHERE deleted_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS company_hybrid_document_categories_parent_idx
+  ON public.company_hybrid_document_categories (store, parent_category_id, sort_order, id)
+  WHERE deleted_at IS NULL;
+
 COMMENT ON TABLE public.company_hybrid_document_categories IS
   '회사 하이브리드 문서용 매장별 카테고리(계약, 면허, 세무 등).';
+
+ALTER TABLE public.company_hybrid_document_categories
+  ADD COLUMN IF NOT EXISTS parent_category_id BIGINT NULL
+  REFERENCES public.company_hybrid_document_categories (id) ON DELETE SET NULL;
 
 ALTER TABLE public.company_hybrid_documents
   ADD COLUMN IF NOT EXISTS category_id BIGINT NULL
@@ -1228,6 +1238,69 @@ CREATE INDEX IF NOT EXISTS company_hybrid_documents_category_idx
   WHERE deleted_at IS NULL;
 
 ALTER TABLE public.company_hybrid_document_categories ENABLE ROW LEVEL SECURITY;
+
+-- 기본 하위 카테고리 시드(공지, 매뉴얼):
+-- 1) 기존 자동 생성명 '하위 카테고리'를 '공지'로 정리
+-- 2) 매장별 최상위 카테고리(부모) 중 가장 앞선 1개를 찾아, '공지/매뉴얼' 없을 때만 생성
+UPDATE public.company_hybrid_document_categories
+SET name = '공지', updated_at = NOW()
+WHERE deleted_at IS NULL
+  AND parent_category_id IS NOT NULL
+  AND name = '하위 카테고리';
+
+UPDATE public.company_hybrid_document_categories
+SET sort_order = 10, updated_at = NOW()
+WHERE deleted_at IS NULL
+  AND parent_category_id IS NOT NULL
+  AND name = '공지'
+  AND COALESCE(sort_order, 0) <> 10;
+
+UPDATE public.company_hybrid_document_categories
+SET sort_order = 20, updated_at = NOW()
+WHERE deleted_at IS NULL
+  AND parent_category_id IS NOT NULL
+  AND name = '매뉴얼'
+  AND COALESCE(sort_order, 0) <> 20;
+
+WITH root_per_store AS (
+  SELECT DISTINCT ON (store)
+    id AS parent_id,
+    store
+  FROM public.company_hybrid_document_categories
+  WHERE deleted_at IS NULL
+    AND parent_category_id IS NULL
+  ORDER BY store, sort_order ASC, id ASC
+),
+seed_names AS (
+  SELECT '공지'::TEXT AS name, 10::INT AS sort_order
+  UNION ALL
+  SELECT '매뉴얼'::TEXT AS name, 20::INT AS sort_order
+)
+INSERT INTO public.company_hybrid_document_categories (
+  store,
+  name,
+  sort_order,
+  parent_category_id,
+  created_at,
+  updated_at
+)
+SELECT
+  r.store,
+  s.name,
+  s.sort_order,
+  r.parent_id,
+  NOW(),
+  NOW()
+FROM root_per_store r
+CROSS JOIN seed_names s
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.company_hybrid_document_categories c
+  WHERE c.deleted_at IS NULL
+    AND c.store = r.store
+    AND c.parent_category_id = r.parent_id
+    AND c.name = s.name
+);
 
 NOTIFY pgrst, 'reload schema';
 

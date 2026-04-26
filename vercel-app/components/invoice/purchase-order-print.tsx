@@ -32,6 +32,9 @@ export interface PoPrintData {
   subtotal: number
   vat: number
   total: number
+  /** 원천징수(예: 3%) — 공급가 기준 저장값과 동일 */
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number | null
   userName: string
   status?: string
   /** 회계 PO: 연결 매장 */
@@ -125,6 +128,8 @@ export function PurchaseOrderPrint({
     poPrintLegalEntity?: string
     /** 회계 청구: Draft / Approved / Tax Invoice 뱃지 (외부 양식 없을 때) */
     poHeaderBadge?: string
+    poWht3LineLabel?: string
+    poNetAfterWht?: string
   }
 }) {
   const t = (key: keyof NonNullable<typeof labels>) => labels?.[key] ?? key
@@ -430,6 +435,30 @@ export function PurchaseOrderPrint({
                 {formatCurrency(data.total ?? 0)} THB
               </span>
             </div>
+            {Number(data.withholdingTaxAmount ?? 0) > 0 ? (
+              <>
+                <div className="flex justify-between text-sm py-2 text-rose-800 dark:text-rose-300">
+                  <span>
+                    {(data.withholdingTaxRate != null && Number(data.withholdingTaxRate) > 0
+                      ? `${t("poWht3LineLabel") || "Withholding tax"} (${Number(data.withholdingTaxRate)}%)`
+                      : t("poWht3LineLabel") || "Withholding tax")}
+                    :
+                  </span>
+                  <span className="font-medium">
+                    −{formatCurrency(Number(data.withholdingTaxAmount))} THB
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm py-2 border-t border-slate-200">
+                  <span className="text-muted-foreground">{t("poNetAfterWht") || "Net after withholding"}:</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatCurrency(
+                      Math.max(0, Math.round(((data.total ?? 0) - Number(data.withholdingTaxAmount)) * 100) / 100)
+                    )}{" "}
+                    THB
+                  </span>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

@@ -284,10 +284,34 @@
   .table tbody td { color: #0f172a; }
   .table-hover tbody tr:hover { background-color: #e2e8f0; }
   .table-header-dark th { color: #f8fafc !important; }
+  /* 주문 승인 목록 요약(비고) 칸은 한 줄로 표시 */
+  #order-list .ord-summary-one-line {
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   /* 조회 결과 영역 최소 높이 → 데이터 로딩 시 레이아웃 흔들림 방지 (노트북/작은 화면) */
   .card-box .table-responsive,
   .card .table-responsive {
     min-height: 200px;
+  }
+  /* 휴가 통계: 2줄 헤더를 항상 상단에 고정 */
+  #leave-panel-stats .leave-stats-scroll {
+    max-height: min(65vh, 640px);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #leave-panel-stats .leave-stats-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #212529 !important;
+    color: #fff !important;
+  }
+  #leave-panel-stats .leave-stats-table thead tr:nth-child(2) th {
+    top: 42px;
+    z-index: 4;
   }
   .card-box > div[id$="-list"],
   .card-box > div[id$="-Box"],

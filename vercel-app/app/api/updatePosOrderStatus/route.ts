@@ -14,6 +14,10 @@ import {
   resolveBangkokAccountingDate,
 } from '@/lib/pos-order-policy'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
+import {
+  extractGrabOrderIdFromMemo,
+  mergeGrabStateIntoFullMemo,
+} from '@/lib/grab-order-memo'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -56,6 +60,7 @@ export async function POST(req: NextRequest) {
     const retrySideEffects = body.retrySideEffects === true || String(body.retrySideEffects ?? '') === '1'
     const id = body.id != null ? Number(body.id) : NaN
     const status = String(body.status ?? '').trim()
+    const grabStateRaw = String(body.grabState ?? '').trim()
 
     if (!id || isNaN(id)) {
       return NextResponse.json({ success: false, message: '주문 ID가 필요합니다.' }, { headers })
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by',
+          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo',
       },
       'updatePosOrderStatus'
     )) as {
@@ -88,6 +93,7 @@ export async function POST(req: NextRequest) {
       payment_other?: number
       payment_delivery_app?: number
       created_by?: string
+      memo?: string
     }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
@@ -215,7 +221,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    await supabaseUpdate('pos_orders', id, { status })
+    const patch: Record<string, unknown> = { status }
+    if (grabStateRaw) {
+      const prevMemo = String(prev?.memo ?? '')
+      const grabOrderId = extractGrabOrderIdFromMemo(prevMemo)
+      if (grabOrderId) {
+        const mergedMemo = mergeGrabStateIntoFullMemo(prevMemo, grabOrderId, grabStateRaw)
+        if (mergedMemo && mergedMemo !== prevMemo) patch.memo = mergedMemo
+      }
+    }
+
+    await supabaseUpdate('pos_orders', id, patch)
 
     const storeCode = String(prev?.store_code ?? '').trim()
     const salesDate = resolveBangkokAccountingDate(String(prev?.created_at ?? ''))

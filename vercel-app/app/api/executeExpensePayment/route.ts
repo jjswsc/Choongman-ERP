@@ -3,8 +3,7 @@ import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supa
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
-import { evaluatePayeeBankMemoMatch, isStrictPayeeMemoMismatch } from '@/lib/expense-accrual-bank-memo-match'
-import { isAccountingRole, isDirectorRole } from '@/lib/permissions'
+import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
 import { requireAuth } from '@/lib/verify-auth'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
@@ -128,9 +127,7 @@ export async function POST(request: NextRequest) {
     const transDate = String(body.transDate || body.trans_date || getBangkokTodayDateString()).slice(0, 10)
     const memo = String(body.memo || '').trim()
     const store = String(body.store || '').trim()
-    const acknowledgePayeeMemoMismatch = body.acknowledgePayeeMemoMismatch === true
     const userRole = String(auth.role || '')
-    const canOverridePayeeMemoMismatch = isAccountingRole(userRole) || isDirectorRole(userRole)
 
     if (!expenseAccrualId) {
       return NextResponse.json({ success: false, message: '지출 발생 ID가 필요합니다.' }, { status: 400, headers })
@@ -239,21 +236,7 @@ export async function POST(request: NextRequest) {
           vendorName: vName,
           vendorGpsName: vGps,
         })
-        if (isStrictPayeeMemoMismatch(memEv.quality)) {
-          if (!canOverridePayeeMemoMismatch || !acknowledgePayeeMemoMismatch) {
-            return NextResponse.json(
-              {
-                success: false,
-                code: 'PAYEE_MEMO_MISMATCH',
-                message:
-                  '통장 적요와 지급 대상(거래처)이 뚜렷히 맞지 않습니다. (회계/본사 승인권이 있는 경우에만, 확인 후 재시도할 수 있습니다.)',
-                payeeMemoMatchQuality: memEv.quality,
-                payeeMemoMatchDetail: memEv.detail,
-              },
-              { status: 409, headers }
-            )
-          }
-        }
+        // 계좌명/적요 불일치여도 지급 예정-통장 매칭은 금액·일자 기준으로 허용한다.
         const linkedPayable = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=eq.${existingBankId}`, { limit: 1 })) as { id?: number }[] | null
         if (linkedPayable?.length) {
           return NextResponse.json({ success: false, message: '이미 다른 지출/매입과 연결된 통장 거래입니다.' }, { status: 400, headers })

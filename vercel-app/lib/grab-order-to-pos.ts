@@ -1,6 +1,8 @@
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { computePosPricing } from '@/lib/pos-pricing'
+import { consumeDeliveryMenuStockByName } from '@/lib/pos-delivery-policy'
+import { buildGrabOrderMemo, mergeGrabStateIntoFullMemo } from '@/lib/grab-order-memo'
 
 type GrabOrderPersistResult =
   | {
@@ -19,8 +21,10 @@ type GrabOrderStateSyncResult =
   | {
       ok: true
       updated: boolean
+      memoUpdated?: boolean
       orderId?: number
       status?: string
+      grabState?: string
     }
   | {
       ok: false
@@ -78,20 +82,55 @@ function parseGrabStoreMap(): Record<string, string> {
   }
 }
 
-function resolveStoreCode(order: Record<string, unknown>): string {
+export function resolveGrabStoreCode(order: Record<string, unknown>): string {
   const partnerMerchantID = String(order.partnerMerchantID ?? '').trim()
   const merchantID = String(order.merchantID ?? '').trim()
   const map = parseGrabStoreMap()
   return map[partnerMerchantID] || map[merchantID] || partnerMerchantID
 }
 
-function buildMemo(orderID: string): string {
-  return `grab_order:${orderID}`
+function resolveEcoCutlerySummary(order: Record<string, unknown>): string | null {
+  const visited = new Set<unknown>()
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: order, depth: 0 }]
+  let found: boolean | null = null
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (!node) break
+    const { value, depth } = node
+    if (depth > 4 || value == null) continue
+    if (typeof value !== 'object') continue
+    if (visited.has(value)) continue
+    visited.add(value)
+    const rec = asRecord(value)
+    for (const [kRaw, v] of Object.entries(rec)) {
+      const k = String(kRaw || '').trim().toLowerCase()
+      if (!k) continue
+      const isCutleryKey =
+        (k.includes('plastic') && (k.includes('cutlery') || k.includes('utensil'))) ||
+        k.includes('cutleryrequested') ||
+        k.includes('utensilrequested')
+      if (isCutleryKey) {
+        if (typeof v === 'boolean') found = v
+        else if (typeof v === 'string') {
+          const s = v.trim().toLowerCase()
+          if (s === 'true' || s === 'yes' || s === '1') found = true
+          else if (s === 'false' || s === 'no' || s === '0') found = false
+        } else {
+          const n = Number(v)
+          if (Number.isFinite(n)) found = n > 0
+        }
+      }
+      if (v && typeof v === 'object') queue.push({ value: v, depth: depth + 1 })
+    }
+  }
+  if (found == null) return null
+  return found ? 'eco:plastic cutlery requested' : 'eco:no plastic cutlery requested'
 }
 
 function buildPosItems(order: Record<string, unknown>): PosItem[] {
   const exponent = currencyExponent(order)
   const rawItems = Array.isArray(order.items) ? order.items : []
+  const ecoSummary = resolveEcoCutlerySummary(order)
   const out: PosItem[] = []
   let idx = 0
 
@@ -113,6 +152,7 @@ function buildPosItems(order: Record<string, unknown>): PosItem[] {
     const noteParts = [
       String(item.specifications ?? '').trim(),
       modifierNames.length ? `mods:${modifierNames.join(',')}` : '',
+      ecoSummary || '',
     ].filter(Boolean)
 
     out.push({
@@ -130,8 +170,15 @@ function buildPosItems(order: Record<string, unknown>): PosItem[] {
 }
 
 function resolveOrderType(order: Record<string, unknown>): 'delivery' | 'dine_in' {
-  const dineIn = order.dineIn
-  if (dineIn && typeof dineIn === 'object') return 'dine_in'
+  // Grab webhook payload에는 dineIn 관련 객체가 부가적으로 포함될 수 있어
+  // 배달 주문이 잘못 dine_in으로 들어가 목록에서 사라지는 케이스가 발생할 수 있다.
+  // 명시적 dine-in 타입일 때만 dine_in으로 처리하고, 기본은 delivery로 둔다.
+  const explicitType = String(order.orderType ?? order.fulfillmentType ?? order.diningOption ?? '')
+    .trim()
+    .toLowerCase()
+  if (explicitType === 'dine_in' || explicitType === 'dine-in' || explicitType === 'dinein') {
+    return 'dine_in'
+  }
   return 'delivery'
 }
 
@@ -145,13 +192,24 @@ function resolveDisplayName(order: Record<string, unknown>): string {
   return 'Grab'
 }
 
+function resolveInitialGrabMemoState(
+  order: Record<string, unknown>,
+  initialStatus: string
+): string {
+  const fromPayload = String(order.state ?? order.orderState ?? '').trim()
+  if (fromPayload) return fromPayload
+  const st = String(initialStatus || '').trim().toLowerCase()
+  return st === 'cooking' ? 'ACCEPTED' : 'SUBMITTED'
+}
+
 export async function persistGrabOrderToPos(
-  order: Record<string, unknown>
+  order: Record<string, unknown>,
+  opts?: { initialStatus?: string }
 ): Promise<GrabOrderPersistResult> {
   const orderID = String(order.orderID ?? '').trim()
   if (!orderID) return { ok: false, message: 'missing orderID' }
 
-  const storeCode = resolveStoreCode(order)
+  const storeCode = resolveGrabStoreCode(order)
   if (!storeCode) {
     return {
       ok: false,
@@ -159,10 +217,12 @@ export async function persistGrabOrderToPos(
     }
   }
 
-  const memo = buildMemo(orderID)
+  const initialStatus = String(opts?.initialStatus || 'pending').trim() || 'pending'
+  const grabMemoState = resolveInitialGrabMemoState(order, initialStatus)
+  const memo = buildGrabOrderMemo(orderID, grabMemoState)
   const existing = (await supabaseSelectFilter(
     'pos_orders',
-    `store_code=eq.${encodeURIComponent(storeCode)}&memo=eq.${encodeURIComponent(memo)}`,
+    `store_code=eq.${encodeURIComponent(storeCode)}&memo=ilike.${encodeURIComponent(`*grab_order:${orderID}*`)}`,
     { limit: 1, select: 'id,order_no' }
   )) as { id?: number; order_no?: string }[]
   if (existing?.[0]?.id) {
@@ -218,7 +278,7 @@ export async function persistGrabOrderToPos(
     subtotal,
     vat,
     total,
-    status: 'pending',
+    status: initialStatus,
     payment_cash: paymentCash,
     payment_card: 0,
     payment_qr: 0,
@@ -238,6 +298,12 @@ export async function persistGrabOrderToPos(
   const created = Array.isArray(inserted) ? inserted[0] : inserted
   if (!created?.id) return { ok: false, message: 'insert failed' }
 
+  await consumeDeliveryMenuStockByName({
+    storeCode,
+    appCode: 'grab',
+    items: items.map((item) => ({ name: item.name, qty: item.qty })),
+  }).catch(() => {})
+
   return {
     ok: true,
     orderId: Number(created.id),
@@ -250,13 +316,25 @@ export async function persistGrabOrderToPos(
 function mapGrabStateToPosStatus(state: string): string | null {
   const s = String(state || '').trim().toUpperCase()
   if (!s) return null
+  // 매장 운영 기준: Grab의 배송 완료 신호로 POS 주문을 자동 완료/결제 처리하지 않는다.
+  // POS 화면에서 직접 "포장 완료/결제"를 눌러 마감하도록 유지한다.
   if (s === 'REFUNDED') return 'refunded'
   if (s === 'CANCELLED' || s === 'FAILED') return 'cancelled'
-  if (s === 'COLLECTED') return 'ready'
-  if (s === 'BILL_PAID') return 'paid'
-  if (s === 'DELIVERED' || s === 'COMPLETED') return 'completed'
-  if (s === 'ACCEPTED' || s === 'DRIVER_ALLOCATED' || s === 'DRIVER_ARRIVED') return 'cooking'
   return null
+}
+
+function canApplyGrabStatusTransition(prevStatus: string, nextStatus: string): boolean {
+  const prev = String(prevStatus || '').trim().toLowerCase()
+  const next = String(nextStatus || '').trim().toLowerCase()
+  if (!next) return false
+  if (!prev) return true
+  // POS에서 이미 확정된 상태는 Grab 상태 푸시로 덮어쓰지 않는다.
+  if (prev === 'completed' || prev === 'paid' || prev === 'cancelled' || prev === 'refunded') return false
+  // 중복 업데이트 방지
+  if (prev === next) return false
+  // 이 경로에서 허용하는 것은 취소/환불 동기화만
+  if (next === 'cancelled' || next === 'refunded') return true
+  return false
 }
 
 export async function syncGrabOrderStateToPos(params: {
@@ -267,16 +345,16 @@ export async function syncGrabOrderStateToPos(params: {
   const orderID = String(params.orderID || '').trim()
   if (!orderID) return { ok: false, message: 'missing orderID' }
 
-  const nextStatus = mapGrabStateToPosStatus(params.state)
-  if (!nextStatus) {
-    return { ok: true, updated: false }
-  }
+  const incomingState = String(params.state || '').trim()
+  if (!incomingState) return { ok: false, message: 'missing state' }
 
-  const memo = buildMemo(orderID)
-  let rows = (await supabaseSelectFilter('pos_orders', `memo=eq.${encodeURIComponent(memo)}`, {
+  const nextStatus = mapGrabStateToPosStatus(incomingState)
+
+  const memoIlike = `memo=ilike.${encodeURIComponent(`*grab_order:${orderID}*`)}`
+  let rows = (await supabaseSelectFilter('pos_orders', memoIlike, {
     limit: 1,
-    select: 'id,status',
-  })) as { id?: number; status?: string }[]
+    select: 'id,status,memo',
+  })) as { id?: number; status?: string; memo?: string }[]
 
   if (!rows?.[0]?.id && params.orderPayload && typeof params.orderPayload === 'object') {
     const persisted = await persistGrabOrderToPos(params.orderPayload as Record<string, unknown>)
@@ -285,18 +363,36 @@ export async function syncGrabOrderStateToPos(params: {
     }
     rows = (await supabaseSelectFilter('pos_orders', `id=eq.${persisted.orderId}`, {
       limit: 1,
-      select: 'id,status',
-    })) as { id?: number; status?: string }[]
+      select: 'id,status,memo',
+    })) as { id?: number; status?: string; memo?: string }[]
   }
 
   const row = rows?.[0]
   if (!row?.id) return { ok: false, message: 'pos_order_not_found' }
 
+  const prevMemo = String(row.memo ?? '')
+  const mergedMemo = mergeGrabStateIntoFullMemo(prevMemo, orderID, incomingState)
+  const memoChanged = mergedMemo !== prevMemo
+
+  let statusUpdated = false
   const prevStatus = String(row.status ?? '').trim().toLowerCase()
-  if (prevStatus === nextStatus) {
-    return { ok: true, updated: false, orderId: Number(row.id), status: nextStatus }
+  if (nextStatus && canApplyGrabStatusTransition(prevStatus, nextStatus)) {
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(row.id)}`, {
+      status: nextStatus,
+      ...(memoChanged ? { memo: mergedMemo } : {}),
+    })
+    statusUpdated = true
+  } else if (memoChanged) {
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(row.id)}`, { memo: mergedMemo })
   }
 
-  await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(row.id)}`, { status: nextStatus })
-  return { ok: true, updated: true, orderId: Number(row.id), status: nextStatus }
+  const updated = statusUpdated || memoChanged
+  return {
+    ok: true,
+    updated,
+    memoUpdated: memoChanged,
+    orderId: Number(row.id),
+    status: nextStatus || undefined,
+    grabState: incomingState,
+  }
 }

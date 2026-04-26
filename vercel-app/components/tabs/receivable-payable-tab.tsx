@@ -99,6 +99,18 @@ function buildClientFromPosTaxMemo(
   return { companyName: name, address, taxId, phone }
 }
 
+function isOfficeLikeLabel(label: string): boolean {
+  const v = String(label || "").trim().toLowerCase()
+  if (!v) return false
+  return (
+    v.includes("본사") ||
+    v.includes("office") ||
+    v.includes("hq") ||
+    v.includes("head office") ||
+    v.includes("headoffice")
+  )
+}
+
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -188,7 +200,7 @@ export function ReceivablePayableTab() {
         refType === "Order" ? `tax-${row.id ?? refId}` : `tax-fo-${row.id ?? refId}`
       setTaxInvoiceLoadingKey(loadKey)
       try {
-        const targetLabel = String(recItem.vendorName || recItem.storeName || "").trim()
+        const targetLabel = String(recItem.storeName || recItem.vendorName || "").trim()
         const [{ items, orderInvoiceTotals }, invoiceDataRes, invSettings, billToCandRes] = await Promise.all([
           getPayableTransactionItems({ refType, refId }),
           getInvoiceData(),
@@ -214,21 +226,36 @@ export function ReceivablePayableTab() {
           const memoFromOrder = taxInvoiceClientMap[String(refId)]
           const memoFromRow = buildClientFromPosTaxMemo(row.memo, targetLabel)
           const memoClient = memoFromOrder ?? memoFromRow
-          const extra = [String(recItem.vendorName || "").trim(), String(recItem.storeName || "").trim()].filter(
+          const extra = [String(recItem.storeName || "").trim(), String(recItem.vendorName || "").trim()].filter(
             (s) => s.length > 0
           )
           const candidates =
             Array.isArray(fromOrder) && fromOrder.length > 0
               ? [...fromOrder, ...extra]
               : extra
-          client =
-            memoClient ??
-            (candidates.length > 0
+          const resolvedClient =
+            candidates.length > 0
               ? resolveInvoiceClientFromBillToCandidates(candidates, company, clients)
-              : resolveInvoiceClientForTarget(targetLabel, company, clients))
+              : resolveInvoiceClientForTarget(targetLabel, company, clients)
+          const hasResolvedMasterInfo =
+            typeof (resolvedClient as { address?: string }).address === "string" &&
+            String((resolvedClient as { address?: string }).address || "").trim() !== "-" &&
+            String((resolvedClient as { address?: string }).address || "").trim().length > 0
+          const strictStoreTarget = !isOfficeLikeLabel(targetLabel)
+          client = strictStoreTarget
+            ? resolvedClient
+            : (hasResolvedMasterInfo ? resolvedClient : (memoClient ?? resolvedClient))
         } else {
           const memoClient = buildClientFromPosTaxMemo(row.memo, targetLabel)
-          client = memoClient ?? resolveInvoiceClientForTarget(targetLabel, company, clients)
+          const resolvedClient = resolveInvoiceClientForTarget(targetLabel, company, clients)
+          const hasResolvedMasterInfo =
+            typeof (resolvedClient as { address?: string }).address === "string" &&
+            String((resolvedClient as { address?: string }).address || "").trim() !== "-" &&
+            String((resolvedClient as { address?: string }).address || "").trim().length > 0
+          const strictStoreTarget = !isOfficeLikeLabel(targetLabel)
+          client = strictStoreTarget
+            ? resolvedClient
+            : (hasResolvedMasterInfo ? resolvedClient : (memoClient ?? resolvedClient))
         }
         const dateStr = (row.trans_date || "").slice(0, 10) || bangkokTodayStr()
         const refForDoc = (row.invoice_no || "").trim() || String(refId)

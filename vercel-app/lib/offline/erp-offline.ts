@@ -81,6 +81,7 @@ export type VendorForPurchase = {
   bankAccountNo?: string | null
   /** 거래처 마스터 매출처(매장) — 회계 PO 매장별 거래처 필터용 */
   salesOutlet?: string | null
+  gpsName?: string | null
 }
 
 export async function getVendorsForPurchaseWithCache(): Promise<VendorForPurchase[]> {

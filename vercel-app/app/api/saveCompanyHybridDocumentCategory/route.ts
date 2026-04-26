@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
     const store = norm(body.store)
     const name = norm(body.name)
     const sortOrder = body.sortOrder != null ? Math.floor(Number(body.sortOrder)) : 0
+    const parentCategoryIdRaw = body.parentCategoryId
+    const parentCategoryId =
+      parentCategoryIdRaw == null || parentCategoryIdRaw === ''
+        ? null
+        : Math.floor(Number(parentCategoryIdRaw))
     if (!store) {
       return NextResponse.json({ success: false, message: 'store가 필요합니다.' }, { status: 400, headers })
     }
@@ -43,6 +48,38 @@ export async function POST(request: NextRequest) {
         { status: 400, headers }
       )
     }
+    if (parentCategoryId != null && (!Number.isFinite(parentCategoryId) || parentCategoryId <= 0)) {
+      return NextResponse.json(
+        { success: false, message: '상위 카테고리 값이 올바르지 않습니다.' },
+        { status: 400, headers }
+      )
+    }
+    if (parentCategoryId != null) {
+      const parentRows = (await supabaseSelectFilter(
+        'company_hybrid_document_categories',
+        `id=eq.${parentCategoryId}`,
+        { limit: 1 }
+      )) as { id?: number; store?: string; deleted_at?: string | null }[] | null
+      const parent = parentRows?.[0]
+      if (!parent || parent.deleted_at) {
+        return NextResponse.json(
+          { success: false, message: '상위 카테고리를 찾을 수 없습니다.' },
+          { status: 404, headers }
+        )
+      }
+      if (String(parent.store) !== store) {
+        return NextResponse.json(
+          { success: false, message: '상위 카테고리 매장이 일치하지 않습니다.' },
+          { status: 400, headers }
+        )
+      }
+      if (id && Number.isFinite(id) && id > 0 && Number(id) === Number(parentCategoryId)) {
+        return NextResponse.json(
+          { success: false, message: '카테고리를 자기 자신의 하위로 지정할 수 없습니다.' },
+          { status: 400, headers }
+        )
+      }
+    }
     const now = new Date().toISOString()
     if (id && Number.isFinite(id) && id > 0) {
       const ex = (await supabaseSelectFilter('company_hybrid_document_categories', `id=eq.${id}`, { limit: 1 })) as
@@ -58,6 +95,7 @@ export async function POST(request: NextRequest) {
       await supabaseUpdate('company_hybrid_document_categories', id, {
         name,
         sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+        parent_category_id: parentCategoryId,
         updated_at: now,
       })
       return NextResponse.json({ success: true, id, message: '저장되었습니다.' }, { headers })
@@ -66,6 +104,7 @@ export async function POST(request: NextRequest) {
       store,
       name,
       sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+      parent_category_id: parentCategoryId,
       created_at: now,
       updated_at: now,
     })

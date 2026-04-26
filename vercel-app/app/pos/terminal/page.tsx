@@ -81,6 +81,7 @@ import {
   receiptModalDataFromPosOrderForPayment,
 } from '@/lib/pos-payment-receipt-from-order'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
+import { extractGrabStateFromMemo } from '@/lib/grab-order-memo'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import {
   publishPosCustomerDisplayState,
@@ -144,7 +145,7 @@ type PendingPayRequest = {
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
 const FLOOR_PREF_KEY = 'pos-terminal-floor:'
-/** 720×480 바닥 기준 3×3. `TableFloorView`의 표시 배율(1.55)까지 고려해 간격·여백을 둠 */
+/** 720×480 바닥 기준 3×3. 관리자 테이블 구성과 동일한 1:1 배율 기준 */
 const DEMO_FLOOR_3X3_SLOTS = [
   { x: 44, y: 48 }, { x: 276, y: 48 }, { x: 508, y: 48 },
   { x: 44, y: 196 }, { x: 276, y: 196 }, { x: 508, y: 196 },
@@ -897,12 +898,100 @@ export default function PosTerminalPage() {
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
   const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  /** 신규 배달 주문 자동 포커스/알림 중복 방지 */
+  const lastAutoFocusedDeliveryOrderIdRef = useRef<number>(0)
+  /** 신규 "수동 수락 필요" 팝업 중복 방지 */
+  const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
+  /** Grab 플랫폼 승인(ACCEPTED) 팝업 중복 방지 */
+  const promptedAcceptedDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
+    lastAutoFocusedDeliveryOrderIdRef.current = 0
+    promptedPendingDeliveryOrderIdsRef.current = new Set()
+    promptedAcceptedDeliveryOrderIdsRef.current = new Set()
     paymentReceiptScanSeededRef.current = false
   }, [currentStoreId])
+
+  /**
+   * 신규 주문 알림음 (브라우저 autoplay 정책에 따라 무음 처리될 수 있음)
+   * - 외부 오디오 파일 의존 없이 짧은 2톤 비프
+   */
+  const playIncomingOrderBeep = useCallback(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const AC = (window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) as
+        | typeof AudioContext
+        | undefined
+      if (!AC) return
+      const ctx = new AC()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'square'
+      osc.frequency.setValueAtTime(880, ctx.currentTime)
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.11)
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.23)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.24)
+      window.setTimeout(() => {
+        void ctx.close().catch(() => {})
+      }, 350)
+    } catch {
+      // ignore (no audio device / blocked by browser policy)
+    }
+  }, [])
+
+  /**
+   * 신규 "배달" 주문 자동 처리:
+   * - 배달 탭으로 전환
+   * - 해당 주문 자동 선택
+   * - 배달앱 코드가 있으면 Grab/LineMan/Shopee 자동 선택
+   * - 알림음 재생
+   */
+  const autoFocusIncomingDeliveryOrder = useCallback(
+    (params: { orderId: number; orderType?: string; deliveryAppCode?: string; status?: string }) => {
+      const orderId = Number(params.orderId)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      const orderType = String(params.orderType ?? '').trim().toLowerCase()
+      if (orderType !== 'delivery') return
+      if (lastAutoFocusedDeliveryOrderIdRef.current === orderId) return
+      lastAutoFocusedDeliveryOrderIdRef.current = orderId
+
+      const deliveryCode = String(params.deliveryAppCode ?? '').trim().toLowerCase()
+      if (deliveryCode) setDeliveryApp(deliveryCode)
+      setActiveTab('delivery')
+      setDeliveryListMode('all')
+      setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+      setSelectedDeliveryTargetLabel('')
+      playIncomingOrderBeep()
+      const status = String(params.status ?? '').trim().toLowerCase()
+      if (status !== 'cancelled' && status !== 'refunded' && !promptedPendingDeliveryOrderIdsRef.current.has(orderId)) {
+        promptedPendingDeliveryOrderIdsRef.current.add(orderId)
+        window.setTimeout(() => {
+          void (async () => {
+            const accepted = await appConfirm(
+              status === 'pending'
+                ? (t('posIncomingDeliveryApprovePrompt') ||
+                    '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?')
+                : (t('posIncomingDeliveryArrivedPrompt') ||
+                    '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?')
+            )
+            if (!accepted) return
+            setActiveTab('delivery')
+            setDeliveryListMode('all')
+            setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+          })()
+        }, 120)
+      }
+    },
+    [playIncomingOrderBeep, t]
+  )
 
   const schedulePostPaymentCustomerQr = useCallback(() => {
     if (!dualMonitorEnabled) return
@@ -1216,6 +1305,14 @@ export default function PosTerminalPage() {
       if (items.length === 0) return
       seenOrderIdsRef.current.add(orderId)
       if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
+      autoFocusIncomingDeliveryOrder({
+        orderId,
+        orderType: String(row.order_type ?? ''),
+        deliveryAppCode: String(row.delivery_app_code ?? ''),
+        status: String(row.status ?? ''),
+      })
+      // 주문 바/배달 목록은 usePosStore 스냅샷을 사용하므로, 신규 주문 수신 시 즉시 갱신합니다.
+      refetchCurrentStore()
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNo = String(row.order_no ?? '')
       const orderType = String(row.order_type ?? 'dine_in')
@@ -1339,7 +1436,77 @@ export default function PosTerminalPage() {
     menus,
     t,
     lang,
+    refetchCurrentStore,
   ])
+
+  useEffect(() => {
+    if (isMainPosDevice || !currentStoreId) return
+    const channel = subscribePosOrdersInsert((payload: { new?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      const rowStore = String(row.store_code ?? '').trim()
+      const variants = [
+        currentStoreId,
+        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
+        currentStoreId.replace(/^CM\s+/i, ''),
+      ].filter(Boolean)
+      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (seenOrderIdsRef.current.has(orderId)) return
+      seenOrderIdsRef.current.add(orderId)
+      if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
+      autoFocusIncomingDeliveryOrder({
+        orderId,
+        orderType: String(row.order_type ?? ''),
+        deliveryAppCode: String(row.delivery_app_code ?? ''),
+        status: String(row.status ?? ''),
+      })
+      refetchCurrentStore()
+    })
+    return () => {
+      if (channel) channel.unsubscribe()
+    }
+  }, [isMainPosDevice, currentStoreId, autoFocusIncomingDeliveryOrder, refetchCurrentStore])
+
+  useEffect(() => {
+    if (!currentStoreId) return
+    const channel = subscribePosOrdersUpdate((payload: { new?: Record<string, unknown> }) => {
+      const row = payload?.new as Record<string, unknown> | undefined
+      if (!row) return
+      const orderId = coercePosOrderIdFromRealtime(row.id)
+      if (orderId == null) return
+      if (promptedAcceptedDeliveryOrderIdsRef.current.has(orderId)) return
+      const rowStore = String(row.store_code ?? '').trim()
+      const variants = [
+        currentStoreId,
+        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
+        currentStoreId.replace(/^CM\s+/i, ''),
+      ].filter(Boolean)
+      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      const orderType = String(row.order_type ?? '').trim().toLowerCase()
+      if (orderType !== 'delivery') return
+      const memo = String(row.memo ?? '')
+      const grabState = String(extractGrabStateFromMemo(memo) ?? '').trim().toUpperCase()
+      if (grabState !== 'ACCEPTED' && grabState !== 'MERCHANT_ACCEPTED') return
+      promptedAcceptedDeliveryOrderIdsRef.current.add(orderId)
+      playIncomingOrderBeep()
+      window.setTimeout(() => {
+        void (async () => {
+          const accepted = await appConfirm(
+            'Grab 주문이 플랫폼에서 승인되었습니다. 주문 화면으로 이동할까요?'
+          )
+          if (!accepted) return
+          setActiveTab('delivery')
+          setDeliveryListMode('all')
+          setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+        })()
+      }, 120)
+    })
+    return () => {
+      if (channel) channel.unsubscribe()
+    }
+  }, [currentStoreId, playIncomingOrderBeep])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId || !autoPrintReceiptOnPayment) return
@@ -1459,6 +1626,7 @@ export default function PosTerminalPage() {
           return
         }
         const newOrders = orders
+        let shouldRefreshCurrentStore = false
         for (const order of newOrders) {
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
@@ -1487,6 +1655,18 @@ export default function PosTerminalPage() {
           if (items.length === 0) continue
           seenOrderIdsRef.current.add(oid)
           lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+          const inferredDeliveryCode =
+            String((order as unknown as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim() ||
+            String(
+              (order.items || []).find((it) => String(it.deliveryAppCode ?? '').trim())?.deliveryAppCode ?? ''
+            ).trim()
+          autoFocusIncomingDeliveryOrder({
+            orderId: oid,
+            orderType: String(order.orderType ?? ''),
+            deliveryAppCode: inferredDeliveryCode,
+            status: String(order.status ?? ''),
+          })
+          shouldRefreshCurrentStore = true
           const receiptPayloadPoll = {
             orderNo: order.orderNo ?? '',
             storeCode: order.storeCode ?? currentStoreId,
@@ -1574,6 +1754,9 @@ export default function PosTerminalPage() {
             setTimeout(runKitchenForPolledOrder, 180)
           }
         }
+        if (shouldRefreshCurrentStore) {
+          refetchCurrentStore()
+        }
         await runPaymentReceiptScan()
       } catch {
         // ignore poll errors
@@ -1593,8 +1776,10 @@ export default function PosTerminalPage() {
     autoPrintReceiptOnPayment,
     pricingAdjustments,
     menus,
+    autoFocusIncomingDeliveryOrder,
     t,
     lang,
+    refetchCurrentStore,
   ])
 
   useEffect(() => {
@@ -3179,12 +3364,14 @@ export default function PosTerminalPage() {
                   )}
                   {(!loadingTables && floorLayoutForView.length > 0) && (
                     <div
-                      className="h-full min-h-[min(420px,50vh)] min-w-0"
+                      className="flex h-full min-h-[min(420px,50vh)] min-w-0 justify-center"
                       data-tour="pos-tour-floor"
                     >
                       <TableFloorWithW13dTimeTour
                         isPosDemo={isPosDemo}
                         layout={floorLayoutForView}
+                        className="w-full max-w-[720px] h-full min-h-[min(420px,50vh)]"
+                        displayScale={1}
                         tableListMode={tableListMode}
                         gridCols={30}
                         gridRows={20}
@@ -3241,7 +3428,6 @@ export default function PosTerminalPage() {
                         activeFloor={activeFloor}
                         onFloorChange={setActiveFloor}
                         t={t}
-                        className="h-full min-h-[min(420px,50vh)]"
                         freshMaxMin={cookingRules.freshMaxMin}
                         warningMaxMin={cookingRules.warningMaxMin}
                         ruleMode={cookingRules.mode}
@@ -3367,6 +3553,7 @@ export default function PosTerminalPage() {
               order={selectedDeliveryOrder}
               onPackaged={refetchCurrentStore}
               onCancel={refetchCurrentStore}
+              storeCode={currentStoreId}
               onPay={() => {
                 if (!selectedDeliveryOrder) return
                 setPendingDeliveryOrderId(Number(selectedDeliveryOrder.id))

@@ -11,6 +11,7 @@ import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audi
 import {
   syncTaxWithholdingLedgersFromExpenses,
   syncTaxWithholdingLedgersFromPayroll,
+  syncTaxWithholdingLedgersFromPurchaseOrders,
 } from '@/lib/tax-ledger-auto-sync'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
@@ -101,6 +102,10 @@ export async function GET(request: NextRequest) {
         storeFilter,
       })
       await syncTaxWithholdingLedgersFromPayroll({
+        months: period.months,
+        storeFilter,
+      })
+      await syncTaxWithholdingLedgersFromPurchaseOrders({
         months: period.months,
         storeFilter,
       })

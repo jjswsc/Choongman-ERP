@@ -73,7 +73,7 @@ export interface ParsedPosOrderMemo {
   taxInvoice: PosTaxInvoiceData | null
 }
 
-const TAX_INVOICE_MARKER = '[TAX_INVOICE]'
+export const TAX_INVOICE_MARKER = '[TAX_INVOICE]'
 
 export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrderMemo {
   const raw = String(memo || '')

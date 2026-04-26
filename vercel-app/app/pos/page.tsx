@@ -14,11 +14,13 @@ import { ADMIN_UI_LANG_OPTIONS, useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useStoreList, getPosTodaySales, getLoginData, loginCheck } from '@/lib/api-client'
 import { translateApiMessage } from '@/lib/translate-api-message'
+import type { Store } from '@/lib/pos-types'
 import {
   canAccessPosSettlement,
   canAccessAdmin,
   canAccessPosOrder,
   canNavigateFromPosToAdmin,
+  isFranchiseeRole,
   isManagerOrFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
@@ -61,6 +63,37 @@ function POSMainPageInner() {
   const { lang, setLang } = useLang()
   const t = useT(lang)
   const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
+
+  const selectableStoreCodes = useMemo(() => {
+    const list = stores
+    const role = String(auth?.role || '')
+    if (isOfficeRole(role)) {
+      if (list.length > 0) return list
+      return auth?.store ? [auth.store] : []
+    }
+    if (isFranchiseeRole(role) && auth?.allowedStores && auth.allowedStores.length > 0) {
+      const allowed = auth.allowedStores.map((x) => String(x || '').trim()).filter(Boolean)
+      if (list.length > 0) {
+        const filtered = list.filter((code) =>
+          allowed.some((a) => resolveStoreKey(a) === resolveStoreKey(code))
+        )
+        if (filtered.length > 0) return filtered
+      }
+      return [...allowed].sort((a, b) => a.localeCompare(b))
+    }
+    if (auth?.store) return [auth.store]
+    return list
+  }, [stores, auth?.role, auth?.store, auth?.allowedStores, resolveStoreKey])
+
+  const posHomeHeaderStores = useMemo((): Store[] => {
+    return selectableStoreCodes.map((id) => ({
+      id,
+      name: formatStoreLabel(id),
+      tables: [],
+      gridCols: 0,
+      gridRows: 0,
+    }))
+  }, [selectableStoreCodes, formatStoreLabel])
   const [switchUserOpen, setSwitchUserOpen] = useState(false)
   const [switchLoginData, setSwitchLoginData] = useState<Record<string, string[]>>({})
   const [switchStore, setSwitchStore] = useState('')
@@ -93,8 +126,29 @@ function POSMainPageInner() {
     await shell.resetCacheAndReload()
   }, [])
 
-  const storeCode = auth?.store || stores[0] || ''
+  const storeCode = useMemo(() => {
+    const list = selectableStoreCodes
+    const a = (auth?.store || '').trim()
+    if (!list.length) return a || stores[0] || ''
+    const found = list.find((s) => s === a || resolveStoreKey(s) === resolveStoreKey(a))
+    return found || list[0] || a || ''
+  }, [selectableStoreCodes, auth?.store, stores, resolveStoreKey])
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
+
+  const handlePosHomeStoreChange = useCallback(
+    (nextId: string) => {
+      if (!auth) return
+      setAuth({ ...auth, store: nextId })
+    },
+    [auth, setAuth]
+  )
+  const handlePosHomeHeaderRefresh = useCallback(() => {
+    if (storeCode) {
+      getPosTodaySales({ storeCode }).then(setTodaySales).catch(() => setTodaySales(null))
+    } else {
+      window.location.reload()
+    }
+  }, [storeCode])
 
   useEffect(() => {
     setCurrentTime(new Date())
@@ -388,6 +442,11 @@ function POSMainPageInner() {
           showAdminNavButton={canNavigateFromPosToAdmin(auth?.role || '')}
           onAdminNav={() => navigatePosOfflineAware('/admin', (p) => router.push(p))}
           canAccessAdmin={canAccessAdmin(auth?.role || '')}
+          stores={posHomeHeaderStores}
+          currentStoreId={storeCode}
+          onStoreChange={handlePosHomeStoreChange}
+          onRefresh={handlePosHomeHeaderRefresh}
+          canChangeStore={selectableStoreCodes.length > 0}
           todayOrders={todayOrders}
           totalAmount={totalAmount}
           isMainPosDevice={isMainPosDevice}

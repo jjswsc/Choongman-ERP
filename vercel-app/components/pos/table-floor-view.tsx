@@ -10,8 +10,6 @@ const FLOOR_W = 720
 const FLOOR_H = 480
 const SEAT_R = 6
 const SEAT_INSET = 6
-/** 포스 테이블 현황에서만 표시 크기 확대 (저장 좌표는 그대로, 중심 기준). 터치·가독성 우선. */
-const TABLE_FLOOR_DISPLAY_SCALE = 1.55
 
 /** 조리중 구간: 0~10분 연두, 10~15분 주황, 15분~ 빨강 */
 export type TableStatus = 'preparing' | 'partial_served' | 'completed' | null
@@ -78,6 +76,8 @@ export interface TableFloorViewProps {
   gridRows?: number
   /** 테이블 현황 필터: 준비중 / 결제완료 / 전체 (null이면 전체) */
   tableListMode?: 'in_progress' | 'completed' | 'all' | null
+  /** 관리자 테이블 구성과 동일 크기(1.0)가 기본. 필요 시 POS에서만 확대/축소 가능 */
+  displayScale?: number
   /**
    * 터미널 투어(w13d) 등: 테이블별로 `data-tour` 가이드 마커를 붙여 순차 스포트라이트.
    * `null`이면 마커 없음.
@@ -168,6 +168,7 @@ export function TableFloorView({
   gridRows = 20,
   tableListMode = 'all',
   timeTourSpotlights = null,
+  displayScale = 1,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const availableFloors = useMemo<(1 | 2 | 3)[]>(() => {
@@ -220,8 +221,9 @@ export function TableFloorView({
         const baseH = (aabb.h / FLOOR_H) * 100
         const cx = baseLeft + baseW / 2
         const cy = baseTop + baseH / 2
-        const widthPct = Math.min(100, baseW * TABLE_FLOOR_DISPLAY_SCALE)
-        const heightPct = Math.min(100, baseH * TABLE_FLOOR_DISPLAY_SCALE)
+        const safeScale = Number.isFinite(displayScale) ? Math.max(0.5, Math.min(2, displayScale)) : 1
+        const widthPct = Math.min(100, baseW * safeScale)
+        const heightPct = Math.min(100, baseH * safeScale)
         const leftPct = Math.max(0, Math.min(100 - widthPct, cx - widthPct / 2))
         const topPct = Math.max(0, Math.min(100 - heightPct, cy - heightPct / 2))
         return {

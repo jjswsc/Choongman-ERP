@@ -24,7 +24,10 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload } from "@/lib/utils"
-import { formatEmployeeDisplayName, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
+import {
+  formatEmployeeDisplayNameWithNick,
+  normalizeEmployeeNameForGradeMatch,
+} from "@/lib/employee-display-name"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { getEvaluationDistinctStores } from "@/lib/api-client"
 import { matchesEvalKitchenJob, matchesEvalServiceJob } from "@/lib/employee-job-rules"
@@ -846,7 +849,7 @@ export function EmployeeEvalTab({
                 </SelectItem>
                 {employeeList.map((e, idx) => (
                   <SelectItem key={e.name ? e.name : `emp-${idx}`} value={e.name || "__unnamed__"}>
-                    {formatEmployeeDisplayName(e.name, e.nameTitle)}
+                    {formatEmployeeDisplayNameWithNick(e.name, e.nameTitle, e.nick)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -863,16 +866,6 @@ export function EmployeeEvalTab({
               className="h-8 w-[130px] text-xs"
             />
           </div>
-          {selectedEmp?.photo && (
-            <div className="h-10 w-10 overflow-hidden rounded-lg border bg-muted">
-              <img
-                src={selectedEmp.photo}
-                alt=""
-                className="h-full w-full object-cover"
-                onError={(e) => (e.currentTarget.style.display = "none")}
-              />
-            </div>
-          )}
           <div>
             <label className="mb-1 block text-xs font-semibold">
               {t("label_evaluator")}

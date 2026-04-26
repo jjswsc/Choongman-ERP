@@ -239,3 +239,41 @@
   - `GRAB_PARTNER_API_BASE_URL` (기본 `partner-api.grab.com` override)
   - `GRAB_AUTH_BASE_URL` (기본 `https://api.grab.com` override)
 
+---
+
+## 9) 운영 검증 루틴 (시나리오 8~13)
+
+아래 체크리스트는 배달앱 운영 탭/주문 상태 화면에서 매일 점검하는 기준이다.
+
+### 8. Campaign 주문 가격 반영
+- [ ] Grab 주문 payload의 `campaignInfo`/할인값이 POS `discount_amt`, `total`에 반영되는지 확인
+- [ ] POS 저장 총액과 Grab List Orders 응답 총액이 동일한지 비교
+- [ ] 배달앱 결제 채널(`deliveryPaymentChannel`)이 `grab`으로 저장되는지 확인
+
+### 9. POS 주문 상태 추적
+- [ ] `submit_order` 수신 후 POS 주문 생성(`pending` 또는 자동승인 시 `cooking`)
+- [ ] `push order state` 수신 시 `cooking -> ready -> completed` 또는 `cancelled`로 전이
+- [ ] 관리자 주문 이력에서 상태 변경 타임라인(메모/상태)이 조회 가능한지 확인
+
+### 10. Self-collection 주문
+- [ ] Grab 주문 타입이 self-collection일 때 POS `orderType`이 `delivery`로 들어오되 채널 라벨이 self-collection으로 표시되는지 확인
+- [ ] 포장 완료 후 결제/완료 처리까지 정상 흐름 확인
+
+### 11. Restaurant-delivered 주문
+- [ ] 주문 타입이 restaurant-delivery일 때 POS 채널이 배달앱 주문으로 식별되는지 확인
+- [ ] 상태 푸시(`DRIVER_ALLOCATED`, `DRIVER_ARRIVED`, `DELIVERED`)가 POS 상태에 반영되는지 확인
+
+### 12. Dine-in 주문
+- [ ] Grab payload에 dine-in 정보 포함 시 POS `order_type='dine_in'`으로 저장되는지 확인
+- [ ] 매장 결제 플로우(영수증/주방 출력/완료처리)가 일반 홀 주문과 동일하게 동작하는지 확인
+
+### 13. Mark ready API
+- [ ] POS에서 포장 완료 시 Grab `markOrderReady` API 호출 성공 여부 확인
+- [ ] 실패 시 관리자 화면에서 재시도 가능(로그 기반)한지 확인
+- [ ] `markStatus` 호출 후 Grab 상태 푸시가 POS에 역반영되는지 확인
+
+### 운영 로그/모니터링 포인트
+- `pos_orders.memo`에 `grab_order:<orderID>` 저장 여부 확인 (멱등키)
+- `pos_orders.delivery_app_code` / `delivery_payment_channel` 필터로 앱별 장애 탐지
+- `pos_grab_webhook_events`에서 `submit_order`, `push_order_state` 처리 실패 건 일일 점검
+

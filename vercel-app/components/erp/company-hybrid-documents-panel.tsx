@@ -220,30 +220,46 @@ export function CompanyHybridDocumentsPanel() {
 
   const [newCategoryName, setNewCategoryName] = React.useState("")
   const [newCategorySort, setNewCategorySort] = React.useState("0")
+  const [newCategoryParentId, setNewCategoryParentId] = React.useState(FORM_CAT_NONE)
   const [editingCategory, setEditingCategory] = React.useState<{
     id: number
     name: string
     sort_order: number
     store: string
+    parent_category_id: number | null
   } | null>(null)
 
-  const categoryNameById = React.useMemo(() => {
-    const m = new Map<number, string>()
-    for (const c of categories) {
-      m.set(c.id, c.name)
+  const categoryLabelById = React.useMemo(() => {
+    const byId = new Map<number, CompanyHybridDocumentCategory>()
+    for (const c of categories) byId.set(c.id, c)
+    const visiting = new Set<number>()
+    const cache = new Map<number, string>()
+    const build = (id: number): string => {
+      if (cache.has(id)) return String(cache.get(id))
+      const row = byId.get(id)
+      if (!row) return "—"
+      if (visiting.has(id)) return row.name
+      visiting.add(id)
+      const parentId =
+        row.parent_category_id != null && Number(row.parent_category_id) > 0 ? Number(row.parent_category_id) : null
+      const label = parentId && byId.has(parentId) ? `${build(parentId)} > ${row.name}` : row.name
+      visiting.delete(id)
+      cache.set(id, label)
+      return label
     }
-    return m
+    for (const c of categories) cache.set(c.id, build(c.id))
+    return cache
   }, [categories])
 
   const labelForDocumentCategory = React.useCallback(
     (row: CompanyHybridDocumentListItem) => {
-      if (row.category_id != null && categoryNameById.has(row.category_id)) {
-        return categoryNameById.get(row.category_id) || "—"
+      if (row.category_id != null && categoryLabelById.has(row.category_id)) {
+        return categoryLabelById.get(row.category_id) || "—"
       }
       if (row.doc_type && !isCompanyHybridDocTypePermissionMeta(row.doc_type)) return row.doc_type
       return t("companyHybridDocCategoryFilterUncat")
     },
-    [categoryNameById, t]
+    [categoryLabelById, t]
   )
 
   const labelForVisibility = React.useCallback(
@@ -533,10 +549,13 @@ export function CompanyHybridDocumentsPanel() {
       return
     }
     const sortOrder = Math.floor(Number(newCategorySort) || 0)
+    const parentCategoryId =
+      newCategoryParentId !== FORM_CAT_NONE ? Math.floor(Number(newCategoryParentId) || 0) : null
     const res = await saveCompanyHybridDocumentCategory({
       store: ws,
       name,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+      parentCategoryId: parentCategoryId && parentCategoryId > 0 ? parentCategoryId : null,
     })
     if (!res.success) {
       if (redirectToAdminLoginIfUnauthorized(res.httpStatus, setAuth)) return
@@ -545,6 +564,7 @@ export function CompanyHybridDocumentsPanel() {
     }
     setNewCategoryName("")
     setNewCategorySort("0")
+    setNewCategoryParentId(FORM_CAT_NONE)
     void loadCategories()
   }
 
@@ -561,6 +581,7 @@ export function CompanyHybridDocumentsPanel() {
       store: editingCategory.store,
       name,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+      parentCategoryId: editingCategory.parent_category_id,
     })
     if (!res.success) {
       if (redirectToAdminLoginIfUnauthorized(res.httpStatus, setAuth)) return
@@ -854,8 +875,8 @@ export function CompanyHybridDocumentsPanel() {
                     {categories.map((c) => (
                       <SelectItem key={`${c.store}-${c.id}`} value={String(c.id)}>
                         {isCompanyHybridDocsListAllStoresParam(selectedStore)
-                          ? `${formatStoreLabel(c.store)} · ${c.name}`
-                          : c.name}
+                          ? `${formatStoreLabel(c.store)} · ${categoryLabelById.get(c.id) || c.name}`
+                          : categoryLabelById.get(c.id) || c.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1015,6 +1036,24 @@ export function CompanyHybridDocumentsPanel() {
                     disabled={!writeStoreForMutations}
                   />
                 </div>
+                <div className="min-w-[13rem] space-y-1.5">
+                  <Label>상위 카테고리</Label>
+                  <Select value={newCategoryParentId} onValueChange={setNewCategoryParentId} disabled={!writeStoreForMutations}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={FORM_CAT_NONE}>없음(최상위)</SelectItem>
+                      {categories
+                        .filter((c) => c.store === writeStoreForMutations)
+                        .map((c) => (
+                          <SelectItem key={`new-parent-${c.id}`} value={String(c.id)}>
+                            {categoryLabelById.get(c.id) || c.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button
                   type="button"
                   onClick={() => void onAddCategory()}
@@ -1049,6 +1088,40 @@ export function CompanyHybridDocumentsPanel() {
                       }}
                     />
                   </div>
+                  <div className="min-w-[13rem] space-y-1.5">
+                    <Label>상위 카테고리</Label>
+                    <Select
+                      value={
+                        editingCategory.parent_category_id != null
+                          ? String(editingCategory.parent_category_id)
+                          : FORM_CAT_NONE
+                      }
+                      onValueChange={(v) =>
+                        setEditingCategory((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                parent_category_id: v !== FORM_CAT_NONE ? Math.floor(Number(v) || 0) : null,
+                              }
+                            : null
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={FORM_CAT_NONE}>없음(최상위)</SelectItem>
+                        {categories
+                          .filter((c) => c.store === editingCategory.store && c.id !== editingCategory.id)
+                          .map((c) => (
+                            <SelectItem key={`edit-parent-${c.id}`} value={String(c.id)}>
+                              {categoryLabelById.get(c.id) || c.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex gap-2">
                     <Button type="button" onClick={() => void onSaveEditingCategory()}>
                       {t("companyHybridCategorySave")}
@@ -1082,7 +1155,7 @@ export function CompanyHybridDocumentsPanel() {
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                             {formatStoreLabel(c.store)}
                           </TableCell>
-                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="font-medium">{categoryLabelById.get(c.id) || c.name}</TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex flex-wrap justify-end gap-1">
                               {canCat && (
@@ -1096,6 +1169,7 @@ export function CompanyHybridDocumentsPanel() {
                                       name: c.name,
                                       sort_order: c.sort_order,
                                       store: c.store,
+                                      parent_category_id: c.parent_category_id ?? null,
                                     })
                                   }
                                 >

@@ -18,15 +18,46 @@ const DEFAULT_GRID_COLS = Math.round(FLOOR_W / GRID_SIZE)
 const DEFAULT_GRID_ROWS = Math.round(FLOOR_H / GRID_SIZE)
 
 function mapOrderType(orderType: string): Order['type'] {
-  const v = String(orderType || '').toLowerCase()
+  const v = String(orderType || '').trim().toLowerCase()
   if (v === 'delivery') return 'delivery'
   if (v === 'takeout') return 'takeout'
   return 'dine-in'
 }
 
+function inferOrderType(po: PosOrder & { orderNo?: string }): Order['type'] {
+  const explicit = mapOrderType(po.orderType)
+  if (explicit !== 'dine-in') return explicit
+
+  const memo = String(po.memo ?? '').toLowerCase()
+  const tableName = String(po.tableName ?? '').toLowerCase()
+  const paymentChannel = String(po.deliveryPaymentChannel ?? '').trim().toLowerCase()
+  const hasDeliveryItem = Array.isArray(po.items)
+    ? po.items.some((it) => String(it.deliveryAppCode ?? '').trim() !== '')
+    : false
+
+  // 실데이터에서 order_type이 비표준값으로 저장되는 경우를 위한 보강 분류.
+  if (
+    paymentChannel === 'grab' ||
+    paymentChannel === 'lineman' ||
+    paymentChannel === 'shopee' ||
+    memo.includes('grab_order:') ||
+    memo.includes('lineman_order:') ||
+    memo.includes('shopee_order:') ||
+    memo.includes('delivery') ||
+    tableName.includes('grab') ||
+    tableName.includes('line man') ||
+    tableName.includes('lineman') ||
+    tableName.includes('shopee') ||
+    hasDeliveryItem
+  ) {
+    return 'delivery'
+  }
+  return 'dine-in'
+}
+
 function mapOrderStatus(status: string): Order['status'] {
   const v = String(status || '').toLowerCase()
-  if (v === 'completed') return 'completed'
+  if (v === 'completed' || v === 'done') return 'completed'
   if (v === 'paid') return 'paid'
   if (v === 'ready') return 'ready'
   if (v === 'pending') return 'pending'
@@ -34,10 +65,11 @@ function mapOrderStatus(status: string): Order['status'] {
 }
 
 function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
+  const inferredType = inferOrderType(po)
   return {
     id: String(po.id),
     tableId: undefined,
-    type: mapOrderType(po.orderType),
+    type: inferredType,
     items: (po.items || []).map((it) => ({
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
@@ -56,7 +88,7 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     memo: String(po.memo || '').trim() || undefined,
     orderNo: String(po.orderNo ?? '').trim() || undefined,
     guestCount:
-      mapOrderType(po.orderType) === 'dine-in'
+      inferredType === 'dine-in'
         ? Math.max(0, Math.min(99, Math.trunc(Number(po.guestCount ?? 0) || 0)))
         : undefined,
   }

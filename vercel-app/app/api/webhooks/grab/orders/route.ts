@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
-import { persistGrabOrderToPos } from '@/lib/grab-order-to-pos'
+import { persistGrabOrderToPos, resolveGrabStoreCode } from '@/lib/grab-order-to-pos'
+import { getPosDeliveryPolicyBundle, resolveOrderAcceptanceMode } from '@/lib/pos-delivery-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,15 +24,23 @@ export async function POST(req: NextRequest) {
   const orderID = String(body.orderID ?? '')
   const shortOrderNumber = String(body.shortOrderNumber ?? '')
   const merchantID = String(body.merchantID ?? '')
+  const resolvedStoreCode = resolveGrabStoreCode(body)
   if (!orderID) {
     logGrabWebhook('submit_order', req, { error: 'missing_orderID' })
     return new NextResponse(null, { status: 400 })
   }
-  const persisted = await persistGrabOrderToPos(body)
+  /** 매장별 `pos_delivery_app_policies`: manual → pending(수락 필요), auto → cooking(자동 수락) */
+  const policyBundle = resolvedStoreCode
+    ? await getPosDeliveryPolicyBundle({ storeCode: resolvedStoreCode, appCode: 'grab' }).catch(() => null)
+    : null
+  const acceptanceMode = resolveOrderAcceptanceMode(policyBundle)
+  const initialStatus = acceptanceMode === 'auto' ? 'cooking' : 'pending'
+  const persisted = await persistGrabOrderToPos(body, { initialStatus })
   if (!persisted.ok) {
     logGrabWebhook('submit_order', req, {
       orderID,
       merchantID,
+      resolvedStoreCode,
       partnerMerchantID: String(body.partnerMerchantID ?? ''),
       persistError: persisted.message,
     })
@@ -42,10 +51,13 @@ export async function POST(req: NextRequest) {
     orderID,
     shortOrderNumber,
     merchantID,
+    resolvedStoreCode,
     partnerMerchantID: String(body.partnerMerchantID ?? ''),
     posOrderId: persisted.orderId,
     posOrderNo: persisted.orderNo,
     duplicate: persisted.duplicate,
+    acceptanceMode,
+    initialStatus,
   })
 
   // Audit trail only (idempotency는 POS 저장 로직에서도 memo 기반으로 보강)

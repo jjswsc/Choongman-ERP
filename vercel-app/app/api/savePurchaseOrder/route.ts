@@ -11,6 +11,7 @@ import {
   parsePoBillingKindFromBody,
 } from '@/lib/po-billing-upsert'
 import { bangkokDateToUtcRange } from '@/lib/attendance-utils'
+import { syncTaxWithholdingLedgerForPurchaseOrder } from '@/lib/tax-ledger-auto-sync'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -194,6 +195,7 @@ export async function POST(request: NextRequest) {
           patch.created_at = bangkokDateToUtcRange(orderDateNorm).startISO
         }
         await supabaseUpdate('purchase_orders', existing.id, patch)
+        await syncTaxWithholdingLedgerForPurchaseOrder(existing.id)
         return NextResponse.json(
           {
             success: true,
@@ -234,6 +236,7 @@ export async function POST(request: NextRequest) {
 
     const inserted = (await supabaseInsert('purchase_orders', row)) as { id?: number }[]
     const id = Array.isArray(inserted) && inserted[0]?.id != null ? inserted[0].id : null
+    if (id) await syncTaxWithholdingLedgerForPurchaseOrder(id)
 
     return NextResponse.json(
       { success: true, id, poNo, updated: false, message: '발주가 저장되었습니다.' },

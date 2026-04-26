@@ -4,7 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator, ClipboardList, Download, Upload } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -28,8 +28,13 @@ import {
   getPosMenus,
   getPosMenuCategories,
   getPosMenuCategoriesConfig,
+  getPosDeliveryAppPolicies,
   getNextPosMenuCode,
+  savePosDeliveryAppPolicies,
   type PosMenuCategoriesConfig,
+  type DeliveryAppCode,
+  type PosDeliveryAppPolicy,
+  type PosDeliveryMenuPolicy,
   getPosMenuOptions,
   getPosMenuIngredients,
   getMenuCost,
@@ -188,7 +193,7 @@ export default function PosMenusPage() {
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
   const [mainTab, setMainTab] = React.useState<
-    "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "priceApply" | "finalPrice"
+    "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "finalPrice" | "deliveryOps"
   >("screen")
   const [pricingStoreCode, setPricingStoreCode] = React.useState("")
   const canSearchAllStores = isOfficeRole(auth?.role || "")
@@ -221,6 +226,26 @@ export default function PosMenusPage() {
   } | null>(null)
   const [setTabSchemaDismissed, setSetTabSchemaDismissed] = React.useState(false)
   const [setTabFocusPromoId, setSetTabFocusPromoId] = React.useState<string | null>(null)
+  const [deliveryOpsStoreCode, setDeliveryOpsStoreCode] = React.useState("")
+  const [deliveryOpsAppCode, setDeliveryOpsAppCode] = React.useState<DeliveryAppCode>("grab")
+  const [deliveryOpsLoading, setDeliveryOpsLoading] = React.useState(false)
+  const [deliveryOpsSaving, setDeliveryOpsSaving] = React.useState(false)
+  const [deliveryOpsSearch, setDeliveryOpsSearch] = React.useState("")
+  const [deliveryOpsAppPolicy, setDeliveryOpsAppPolicy] = React.useState<PosDeliveryAppPolicy>({
+    storeCode: "",
+    appCode: "grab",
+    enabled: true,
+    orderAcceptanceMode: "manual",
+    autoAcceptEnabled: false,
+  })
+  const [deliveryOpsMenuPolicyMap, setDeliveryOpsMenuPolicyMap] = React.useState<Record<string, PosDeliveryMenuPolicy>>({})
+  const [deliveryOpsCategoryOrderMap, setDeliveryOpsCategoryOrderMap] = React.useState<Record<string, number>>({})
+  const deliveryOpsVisibleMenus = React.useMemo(() => {
+    const q = deliveryOpsSearch.trim().toLowerCase()
+    const src = [...menus]
+    if (!q) return src
+    return src.filter((m) => `${m.code} ${m.name} ${m.categoryMain || ""} ${m.category || ""}`.toLowerCase().includes(q))
+  }, [menus, deliveryOpsSearch])
 
   React.useEffect(() => {
     try {
@@ -239,6 +264,14 @@ export default function PosMenusPage() {
       setPricingStoreCode(auth.store)
     }
   }, [canSearchAllStores, stores, auth?.store, pricingStoreCode])
+
+  React.useEffect(() => {
+    if (canSearchAllStores && stores.length && !deliveryOpsStoreCode) {
+      setDeliveryOpsStoreCode(stores[0])
+    } else if (!canSearchAllStores && auth?.store) {
+      setDeliveryOpsStoreCode(auth.store)
+    }
+  }, [canSearchAllStores, stores, auth?.store, deliveryOpsStoreCode])
 
   React.useEffect(() => {
     if (mainTab !== "set" && mainTab !== "setInquiry") return
@@ -1400,6 +1433,160 @@ export default function PosMenusPage() {
     return raw.sort()
   }, [mainCategoryFilter, menus, categories, categoriesConfig])
 
+  const deliveryCategoryRows = React.useMemo(() => {
+    const keySet = new Set<string>()
+    const rows: Array<{ main: string; category: string; key: string }> = []
+    for (const m of menus) {
+      const main = String(m.categoryMain ?? "").trim()
+      const category = String(m.category ?? "").trim()
+      if (!category) continue
+      const key = `${main}::${category}`
+      if (keySet.has(key)) continue
+      keySet.add(key)
+      rows.push({ main, category, key })
+    }
+    rows.sort((a, b) => {
+      const ao = Number(deliveryOpsCategoryOrderMap[a.key] ?? 0)
+      const bo = Number(deliveryOpsCategoryOrderMap[b.key] ?? 0)
+      if (ao !== bo) return ao - bo
+      if (a.main !== b.main) return a.main.localeCompare(b.main)
+      return a.category.localeCompare(b.category)
+    })
+    return rows
+  }, [menus, deliveryOpsCategoryOrderMap])
+
+  const loadDeliveryOpsPolicy = React.useCallback(async () => {
+    const storeCode = String(deliveryOpsStoreCode || "").trim()
+    if (!storeCode) return
+    setDeliveryOpsLoading(true)
+    try {
+      const res = await getPosDeliveryAppPolicies({ storeCode, appCode: deliveryOpsAppCode })
+      if (!res?.success) throw new Error((res as { message?: string })?.message || "load_failed")
+      setDeliveryOpsAppPolicy({
+        storeCode,
+        appCode: deliveryOpsAppCode,
+        enabled: Boolean(res.appPolicy?.enabled ?? true),
+        orderAcceptanceMode: (res.appPolicy?.orderAcceptanceMode ?? "manual") as "manual" | "auto",
+        autoAcceptEnabled: Boolean(res.appPolicy?.autoAcceptEnabled ?? false),
+        updatedAt: res.appPolicy?.updatedAt,
+      })
+      const menuMap: Record<string, PosDeliveryMenuPolicy> = {}
+      for (const row of res.menuPolicies || []) {
+        menuMap[String(row.menuId)] = row
+      }
+      setDeliveryOpsMenuPolicyMap(menuMap)
+      const catMap: Record<string, number> = {}
+      for (const row of res.categoryOrders || []) {
+        const key = `${String(row.categoryMain ?? "").trim()}::${String(row.category ?? "").trim()}`
+        if (key.endsWith("::")) continue
+        catMap[key] = Number(row.sortOrder ?? 0) || 0
+      }
+      setDeliveryOpsCategoryOrderMap(catMap)
+    } catch (e) {
+      await appAlert(translateApiMessage(String(e ?? "load_failed"), t))
+    } finally {
+      setDeliveryOpsLoading(false)
+    }
+  }, [deliveryOpsStoreCode, deliveryOpsAppCode, t])
+
+  React.useEffect(() => {
+    if (mainTab !== "deliveryOps") return
+    void loadDeliveryOpsPolicy()
+  }, [mainTab, loadDeliveryOpsPolicy])
+
+  const upsertDeliveryMenuPolicy = React.useCallback((menuId: string, patch: Partial<PosDeliveryMenuPolicy>) => {
+    setDeliveryOpsMenuPolicyMap((prev) => {
+      const base = prev[menuId] || {
+        storeCode: deliveryOpsStoreCode,
+        appCode: deliveryOpsAppCode,
+        menuId: Number(menuId) || 0,
+        enabled: true,
+        sortOrder: 0,
+        sellStartTime: null,
+        sellEndTime: null,
+        stockQty: null,
+        soldOut: false,
+        autoStopOnZero: true,
+      }
+      return {
+        ...prev,
+        [menuId]: {
+          ...base,
+          ...patch,
+          menuId: Number(menuId) || base.menuId,
+          storeCode: deliveryOpsStoreCode,
+          appCode: deliveryOpsAppCode,
+        },
+      }
+    })
+  }, [deliveryOpsStoreCode, deliveryOpsAppCode])
+
+  const handleSaveDeliveryOpsPolicy = React.useCallback(async () => {
+    const storeCode = String(deliveryOpsStoreCode || "").trim()
+    if (!storeCode) {
+      await appAlert(t("store") || "매장을 먼저 선택해 주세요.")
+      return
+    }
+    setDeliveryOpsSaving(true)
+    try {
+      const menuPolicies: PosDeliveryMenuPolicy[] = menus.map((m) => {
+        const k = String(m.id)
+        const row = deliveryOpsMenuPolicyMap[k]
+        return {
+          storeCode,
+          appCode: deliveryOpsAppCode,
+          menuId: Number(m.id),
+          enabled: Boolean(row?.enabled ?? true),
+          sortOrder: Number(row?.sortOrder ?? m.sortOrder ?? 0) || 0,
+          sellStartTime: row?.sellStartTime ?? null,
+          sellEndTime: row?.sellEndTime ?? null,
+          stockQty: row?.stockQty == null ? null : Number(row.stockQty),
+          soldOut: Boolean(row?.soldOut ?? false),
+          autoStopOnZero: Boolean(row?.autoStopOnZero ?? true),
+        }
+      })
+      const categoryOrders = deliveryCategoryRows.map((r, idx) => ({
+        storeCode,
+        appCode: deliveryOpsAppCode,
+        categoryMain: r.main,
+        category: r.category,
+        sortOrder: Number(deliveryOpsCategoryOrderMap[r.key] ?? idx + 1),
+      }))
+      const res = await savePosDeliveryAppPolicies({
+        storeCode,
+        appCode: deliveryOpsAppCode,
+        appPolicy: {
+          storeCode,
+          appCode: deliveryOpsAppCode,
+          enabled: Boolean(deliveryOpsAppPolicy.enabled),
+          orderAcceptanceMode: deliveryOpsAppPolicy.orderAcceptanceMode,
+          autoAcceptEnabled: Boolean(deliveryOpsAppPolicy.autoAcceptEnabled),
+        },
+        menuPolicies,
+        categoryOrders,
+      })
+      if (!res?.success) {
+        throw new Error(res?.message || "save_failed")
+      }
+      await appAlert(t("msg_save_done") || "저장되었습니다.")
+      await loadDeliveryOpsPolicy()
+    } catch (e) {
+      await appAlert(translateApiMessage(String(e ?? "save_failed"), t))
+    } finally {
+      setDeliveryOpsSaving(false)
+    }
+  }, [
+    deliveryOpsStoreCode,
+    deliveryOpsAppCode,
+    deliveryOpsAppPolicy,
+    deliveryOpsMenuPolicyMap,
+    deliveryOpsCategoryOrderMap,
+    deliveryCategoryRows,
+    menus,
+    loadDeliveryOpsPolicy,
+    t,
+  ])
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -1461,13 +1648,13 @@ export default function PosMenusPage() {
                   <History className={adminTabsIconCn} aria-hidden />
                   {t("posMenuTabPriceHistory") || "메뉴 가격이력"}
                 </TabsTrigger>
-                <TabsTrigger value="priceApply" className={adminTabsTriggerCn}>
-                  <DollarSign className={adminTabsIconCn} aria-hidden />
-                  {t("posMenuTabPriceApply") || "가격 적용"}
-                </TabsTrigger>
                 <TabsTrigger value="finalPrice" className={adminTabsTriggerCn}>
                   <Calculator className={adminTabsIconCn} aria-hidden />
                   {t("posPricingTab") || "최종가격"}
+                </TabsTrigger>
+                <TabsTrigger value="deliveryOps" className={adminTabsTriggerCn}>
+                  <Monitor className={adminTabsIconCn} aria-hidden />
+                  {t("배달앱 운영") || "배달앱 운영"}
                 </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
@@ -2743,34 +2930,6 @@ export default function PosMenusPage() {
               <PriceHistoryTab entityTypes={["pos_menu", "pos_menu_option"]} mode="menu" />
             </div>
           </TabsContent>
-          <TabsContent value="priceApply" className={adminTabsContentCn}>
-            <div className="rounded-xl border bg-card p-6 space-y-4">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-primary" />
-                {t("posMenuTabPriceApply") || "가격 적용"}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {t("posMenuTabPriceApplyDesc") || "POS에서는 주문 유형에 따라 아래와 같이 메뉴 관리의 가격이 자동 적용됩니다."}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("posOrderTypeDineIn") || "매장"}</p>
-                  <p className="text-sm font-medium">{t("posMenuPriceApplyHall") || "홀 가격 적용"}</p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("posOrderTypeTakeout") || "포장"}</p>
-                  <p className="text-sm font-medium">{t("posMenuPriceApplyHall") || "홀 가격 적용"}</p>
-                </div>
-                <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("posOrderTypeDelivery") || "배달"}</p>
-                  <p className="text-sm font-medium">{t("posMenuPriceApplyDelivery") || "배달앱 가격 적용"}</p>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("posMenuPriceApplyHint") || "메뉴 정보 탭에서 홀·배달앱 가격을 각각 설정할 수 있습니다. 배달앱 가격이 없으면 홀 가격이 적용됩니다."}
-              </p>
-            </div>
-          </TabsContent>
           <TabsContent value="finalPrice" className={adminTabsContentCn}>
             <div className="rounded-xl border bg-card p-6 space-y-4 max-w-2xl">
               <h3 className="text-sm font-bold flex items-center gap-2">
@@ -2798,6 +2957,209 @@ export default function PosMenusPage() {
                 </div>
               )}
               <PosStoreFinalPriceSettings storeCode={effectivePricingStore} />
+            </div>
+          </TabsContent>
+          <TabsContent value="deliveryOps" className={adminTabsContentCn}>
+            <div className="rounded-xl border bg-card p-5 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold">{t("배달앱 운영") || "배달앱 운영"}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {t("앱별 메뉴 노출/시간대/품절/재고/주문수락 정책을 설정합니다.") || "앱별 메뉴 노출/시간대/품절/재고/주문수락 정책을 설정합니다."}
+                  </p>
+                </div>
+                <Button type="button" onClick={handleSaveDeliveryOpsPolicy} disabled={deliveryOpsSaving}>
+                  <Save className="h-4 w-4 mr-1.5" />
+                  {deliveryOpsSaving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-4">
+                <div>
+                  <label className="text-xs font-semibold">{t("store") || "매장"}</label>
+                  <Select value={deliveryOpsStoreCode} onValueChange={setDeliveryOpsStoreCode}>
+                    <SelectTrigger className="mt-1 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(canSearchAllStores ? stores : [auth?.store || ""]).filter(Boolean).map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold">App</label>
+                  <Select value={deliveryOpsAppCode} onValueChange={(v) => setDeliveryOpsAppCode(v as DeliveryAppCode)}>
+                    <SelectTrigger className="mt-1 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="grab">Grab</SelectItem>
+                      <SelectItem value="lineman">LineMan</SelectItem>
+                      <SelectItem value="shopee">Shopee</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold">{t("주문 수락 모드") || "주문 수락 모드"}</label>
+                  <Select
+                    value={deliveryOpsAppPolicy.orderAcceptanceMode}
+                    onValueChange={(v) =>
+                      setDeliveryOpsAppPolicy((p) => ({ ...p, orderAcceptanceMode: v as "manual" | "auto" }))
+                    }
+                  >
+                    <SelectTrigger className="mt-1 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="auto">Auto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end gap-4 pb-1">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={deliveryOpsAppPolicy.enabled}
+                      onChange={(e) => setDeliveryOpsAppPolicy((p) => ({ ...p, enabled: e.target.checked }))}
+                    />
+                    {t("앱 연동 사용") || "앱 연동 사용"}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={deliveryOpsAppPolicy.autoAcceptEnabled}
+                      onChange={(e) => setDeliveryOpsAppPolicy((p) => ({ ...p, autoAcceptEnabled: e.target.checked }))}
+                    />
+                    {t("자동승인 강제") || "자동승인 강제"}
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-3 space-y-2">
+                <h4 className="text-xs font-semibold">{t("카테고리 순서") || "카테고리 순서"}</h4>
+                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                  {deliveryCategoryRows.map((row) => (
+                    <div key={row.key} className="flex items-center gap-2 rounded border px-2 py-1.5">
+                      <span className="text-[11px] text-muted-foreground min-w-0 flex-1 truncate">
+                        {row.main ? `${row.main} / ${translatePosMenuCategoryLabel(row.category, t)}` : translatePosMenuCategoryLabel(row.category, t)}
+                      </span>
+                      <Input
+                        type="number"
+                        className="h-7 w-20 text-xs text-right"
+                        value={String(deliveryOpsCategoryOrderMap[row.key] ?? 0)}
+                        onChange={(e) =>
+                          setDeliveryOpsCategoryOrderMap((prev) => ({
+                            ...prev,
+                            [row.key]: Number(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-semibold">{t("배달앱 노출 메뉴") || "배달앱 노출 메뉴"}</h4>
+                  <Input
+                    className="h-8 w-60 text-xs"
+                    value={deliveryOpsSearch}
+                    onChange={(e) => setDeliveryOpsSearch(e.target.value)}
+                    placeholder={t("itemsSearchPh") || "검색"}
+                  />
+                </div>
+                <div className="max-h-[420px] overflow-auto border rounded">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted/80">
+                      <tr className="border-b">
+                        <th className="p-2 text-left">Menu</th>
+                        <th className="p-2 text-center w-16">{t("use") || "사용"}</th>
+                        <th className="p-2 text-center w-20">Sort</th>
+                        <th className="p-2 text-center w-24">Start</th>
+                        <th className="p-2 text-center w-24">End</th>
+                        <th className="p-2 text-center w-24">Stock</th>
+                        <th className="p-2 text-center w-20">{t("posSoldOut") || "품절"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deliveryOpsVisibleMenus.map((m) => {
+                        const policy = deliveryOpsMenuPolicyMap[String(m.id)] || {
+                          storeCode: deliveryOpsStoreCode,
+                          appCode: deliveryOpsAppCode,
+                          menuId: Number(m.id),
+                          enabled: true,
+                          sortOrder: m.sortOrder ?? 0,
+                          sellStartTime: null,
+                          sellEndTime: null,
+                          stockQty: null,
+                          soldOut: false,
+                          autoStopOnZero: true,
+                        }
+                        return (
+                          <tr key={m.id} className="border-b last:border-b-0">
+                            <td className="p-2">
+                              <div className="font-medium">{m.code} - {m.name}</div>
+                              <div className="text-muted-foreground">{m.categoryMain || "-"} / {translatePosMenuCategoryLabel(m.category || "-", t)}</div>
+                            </td>
+                            <td className="p-2 text-center">
+                              <Checkbox
+                                checked={policy.enabled}
+                                onCheckedChange={(v) => upsertDeliveryMenuPolicy(String(m.id), { enabled: Boolean(v) })}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                className="h-7 text-right"
+                                value={String(policy.sortOrder ?? 0)}
+                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { sortOrder: Number(e.target.value) || 0 })}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="time"
+                                className="h-7"
+                                value={String(policy.sellStartTime ?? "")}
+                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { sellStartTime: e.target.value || null })}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="time"
+                                className="h-7"
+                                value={String(policy.sellEndTime ?? "")}
+                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { sellEndTime: e.target.value || null })}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                className="h-7 text-right"
+                                value={policy.stockQty == null ? "" : String(policy.stockQty)}
+                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { stockQty: e.target.value === "" ? null : Number(e.target.value) })}
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <Checkbox
+                                checked={policy.soldOut}
+                                onCheckedChange={(v) => upsertDeliveryMenuPolicy(String(m.id), { soldOut: Boolean(v) })}
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {deliveryOpsLoading && (
+                <p className="text-xs text-muted-foreground">{t("loading") || "불러오는 중..."}</p>
+              )}
             </div>
           </TabsContent>
         </Tabs>

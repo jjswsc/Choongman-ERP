@@ -5481,6 +5481,46 @@ export interface PosMenuCategoriesConfig {
   categoriesByMain: Record<string, string[]>
 }
 
+export type DeliveryAppCode = 'grab' | 'lineman' | 'shopee'
+export type DeliveryAcceptanceMode = 'manual' | 'auto'
+
+export interface PosDeliveryAppPolicy {
+  storeCode: string
+  appCode: DeliveryAppCode
+  enabled: boolean
+  orderAcceptanceMode: DeliveryAcceptanceMode
+  autoAcceptEnabled: boolean
+  updatedAt?: string
+}
+
+export interface PosDeliveryMenuPolicy {
+  storeCode: string
+  appCode: DeliveryAppCode
+  menuId: number
+  enabled: boolean
+  sortOrder: number
+  sellStartTime?: string | null
+  sellEndTime?: string | null
+  stockQty?: number | null
+  soldOut: boolean
+  autoStopOnZero: boolean
+}
+
+export interface PosDeliveryCategoryOrder {
+  storeCode: string
+  appCode: DeliveryAppCode
+  categoryMain?: string
+  category: string
+  sortOrder: number
+}
+
+export interface PosDeliveryPolicyBundle {
+  success?: boolean
+  appPolicy: PosDeliveryAppPolicy
+  menuPolicies: PosDeliveryMenuPolicy[]
+  categoryOrders: PosDeliveryCategoryOrder[]
+}
+
 export async function getPosMenuCategoriesConfig() {
   const res = await apiFetchWithOffline('/api/posMenuCategories')
   return res.json() as Promise<PosMenuCategoriesConfig>
@@ -5510,6 +5550,32 @@ export async function savePosMenuCategoriesConfig(params: {
     menusUpdated?: number
     message?: string
   }>
+}
+
+export async function getPosDeliveryAppPolicies(params: {
+  storeCode: string
+  appCode: DeliveryAppCode
+}) {
+  const q = new URLSearchParams()
+  q.set('storeCode', params.storeCode)
+  q.set('appCode', params.appCode)
+  const res = await apiFetchWithOffline(`/api/getPosDeliveryAppPolicies?${q.toString()}`)
+  return res.json() as Promise<PosDeliveryPolicyBundle & { success: boolean; message?: string }>
+}
+
+export async function savePosDeliveryAppPolicies(params: {
+  storeCode: string
+  appCode: DeliveryAppCode
+  appPolicy?: Partial<PosDeliveryAppPolicy>
+  menuPolicies?: PosDeliveryMenuPolicy[]
+  categoryOrders?: PosDeliveryCategoryOrder[]
+}) {
+  const res = await apiFetchWithOffline('/api/savePosDeliveryAppPolicies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function getPosMenuOptions(params?: { menuId?: string }) {
@@ -8394,6 +8460,7 @@ export type PosOrderStatusUpdateResult = {
 export async function updatePosOrderStatus(params: {
   id: number
   status: string
+  grabState?: string
   retrySideEffects?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {
@@ -8402,6 +8469,29 @@ export async function updatePosOrderStatus(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<PosOrderStatusUpdateResult>
+}
+
+export async function grabMarkOrderReadyApi(params: { orderID: string; markStatus: 1 | 2 }) {
+  const res = await apiFetchWithOffline('/api/grab/markOrderReady', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function grabCancelOrderByStoreApi(params: {
+  orderID: string
+  storeCode?: string
+  merchantID?: string
+  cancelCode?: 1001 | 1002 | 1003 | 1004
+}) {
+  const res = await apiFetchWithOffline('/api/grab/cancelOrderByStore', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function markPosOrderItemServed(params: {
@@ -10737,6 +10827,8 @@ export interface VendorForPurchase {
   phone?: string
   bankAccountNo?: string | null
   salesOutlet?: string | null
+  /** vendors.gps_name — 매장 표시명, 회계 PO 매장-법인 매칭용 */
+  gpsName?: string | null
 }
 
 export interface ItemByVendor {
@@ -10762,6 +10854,14 @@ export async function getVendorsForPurchase() {
 
 export async function getVendorsForSales() {
   return getVendorsForSalesWithCache()
+}
+
+/** 회계 PO·로열티 청구: 매출처(가맹 법인) 전체 필드 — getVendorsForPurchase에는 매출처가 없음 */
+export async function getVendorsForSalesFranchiseMaster(): Promise<VendorForPurchase[]> {
+  const res = await apiFetch('/api/getVendorsForSales?detail=1')
+  if (!res.ok) return []
+  const data = (await res.json()) as unknown
+  return Array.isArray(data) ? (data as VendorForPurchase[]) : []
 }
 
 export async function getItemsByVendor(
@@ -11075,6 +11175,7 @@ export type CompanyHybridDocumentCategory = {
   store: string
   name: string
   sort_order: number
+  parent_category_id: number | null
   created_at?: string
 }
 
@@ -11120,7 +11221,7 @@ export async function getCompanyHybridDocumentCategories(params: {
 }
 
 export async function saveCompanyHybridDocumentCategory(
-  body: { store: string; name: string; sortOrder?: number; id?: number }
+  body: { store: string; name: string; sortOrder?: number; id?: number; parentCategoryId?: number | null }
 ): Promise<{ success: boolean; id?: number; message?: string } & CompanyHybridHttpMeta> {
   const res = await apiFetchWithOffline('/api/saveCompanyHybridDocumentCategory', {
     method: 'POST',

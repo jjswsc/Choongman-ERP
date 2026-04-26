@@ -33,6 +33,7 @@ import {
   uploadPoQuotationFile,
   invalidatePurchaseOrdersListCache,
   getPoBillingDraft,
+  getVendorsForSalesFranchiseMaster,
   type PurchaseLocation,
   type VendorForPurchase,
   type ItemByVendor,
@@ -85,7 +86,7 @@ function parsePositiveIntQty(s: string): number {
   return Number.isFinite(n) && n >= 1 ? n : 1
 }
 
-/** 회계 PO: 매장명과 vendors.sales_outlet(매출처)가 같은 거래처 = 해당 매장 법인 */
+/** 회계 PO: 매장명과 vendors.sales_outlet / gps_name 이 같은 거래처 = 해당 매장 법인 */
 function vendorForSalesOutletStore(
   vendors: VendorForPurchase[],
   storeName: string
@@ -93,10 +94,15 @@ function vendorForSalesOutletStore(
   const s = String(storeName || "").trim()
   if (!s || s === "_none") return null
   const lower = s.toLowerCase()
+  const stripCm = (x: string) => x.replace(/^cm\s+/i, "").trim().toLowerCase()
+  const sStripped = stripCm(s)
   for (const v of vendors) {
     const out = String(v.salesOutlet ?? "").trim()
-    if (!out) continue
-    if (out === s || out.toLowerCase() === lower) return v
+    const gps = String(v.gpsName ?? "").trim()
+    if (out && (out === s || out.toLowerCase() === lower)) return v
+    if (gps && (gps === s || gps.toLowerCase() === lower)) return v
+    if (out && stripCm(out) === sStripped) return v
+    if (gps && stripCm(gps) === sStripped) return v
   }
   return null
 }
@@ -179,6 +185,12 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     const total = Math.round((sub + v) * 100) / 100
     return { subtotal: sub, vat: v, total }
   }, [cart])
+  /** 로열티·회계 PO: 공급가액(과세 전) 기준 3% 원천징수(태국 관행에 맞춤 조정 가능) */
+  const [applyWithholding3Pct, setApplyWithholding3Pct] = React.useState(false)
+  const withholdingTaxAmount = React.useMemo(() => {
+    if (!allowManualLines || !applyWithholding3Pct) return 0
+    return Math.round(subtotal * 0.03 * 100) / 100
+  }, [allowManualLines, applyWithholding3Pct, subtotal])
   /** 본사(회계) 발주일 — 방콕 달력 YYYY-MM-DD */
   const [poOrderDate, setPoOrderDate] = React.useState(todayStrBangkok)
   const [poReferenceNo, setPoReferenceNo] = React.useState("")
@@ -290,7 +302,15 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
           : Promise.resolve({ companyName: "", taxId: "", address: "", phone: "", bankInfo: "" }),
       ])
       if (cancelled) return
-      setVendors(ven || [])
+      let mergedVendors = ven || []
+      if (allowManualLines) {
+        const franchiseRows = await getVendorsForSalesFranchiseMaster().catch(() => [])
+        if (franchiseRows.length > 0) {
+          const frCodes = new Set(franchiseRows.map((v) => v.code))
+          mergedVendors = [...franchiseRows, ...(ven || []).filter((v) => !frCodes.has(v.code))]
+        }
+      }
+      setVendors(mergedVendors)
       if (allowManualLines) {
         const hqAddr = String(ho?.address || "").trim()
         const hq: PurchaseLocation = { name: "본사", address: hqAddr, location_code: "본사" }
@@ -566,9 +586,13 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         })
         if (res.truncated) truncatedAny = true
         if (!res.success || !res.lines?.length) continue
+        const draftSub = res.lines.reduce((s, ln) => s + Number(ln.price || 0) * Number(ln.qty || 0), 0)
+        const whtAmt =
+          applyWithholding3Pct && draftSub > 0 ? Math.round(draftSub * 0.03 * 100) / 100 : 0
+        const vendorForStore = vendorForSalesOutletStore(vendors, store) ?? vendorSelect
         const saveRes = await savePurchaseOrder({
-          vendorCode: vendorSelect.code,
-          vendorName: vendorSelect.name,
+          vendorCode: vendorForStore.code,
+          vendorName: vendorForStore.name,
           locationName: locationSelect.name,
           locationAddress: locationSelect.address,
           locationCode: locationSelect.location_code,
@@ -584,6 +608,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
           billingMonthYm: ym,
           billingKind: mode,
           orderDate: poOrderDate || undefined,
+          ...(whtAmt > 0 ? { withholdingTaxAmount: whtAmt, withholdingTaxRate: 3 } : {}),
         })
         if (saveRes.success) {
           if (saveRes.updated) updated += 1
@@ -682,6 +707,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         billingKind: passBillingUpsert ? billingIntentMode! : undefined,
         orderDate: allowManualLines && poOrderDate ? poOrderDate : undefined,
         referenceNo: poReferenceNo.trim() || undefined,
+        ...(allowManualLines && withholdingTaxAmount > 0
+          ? { withholdingTaxAmount, withholdingTaxRate: 3 }
+          : {}),
         ...(poQuotation
           ? { quotationFileUrl: poQuotation.url, quotationFileName: poQuotation.name }
           : {}),
@@ -858,6 +886,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                         {v.code && v.code !== v.name && (
                           <span className="ml-1.5 text-xs text-muted-foreground">({v.code})</span>
                         )}
+                        {allowManualLines && (v.salesOutlet || v.gpsName) ? (
+                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                            {[v.salesOutlet, v.gpsName].filter(Boolean).join(" · ")}
+                          </span>
+                        ) : null}
                       </button>
                     ))
                   )}
@@ -865,7 +898,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
               )}
             </div>
             {allowManualLines ? (
-              <p className="mt-2 text-xs text-muted-foreground">{t("poStoreVendorHint")}</p>
+              <>
+                <p className="mt-2 text-xs text-muted-foreground">{t("poStoreVendorHint")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("poFranchiseVendorListHint")}</p>
+              </>
             ) : null}
           </CardContent>
         </Card>
@@ -1408,6 +1444,33 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   <span>{t("total")}</span>
                   <span className="tabular-nums">{formatMoneyComma(total)}</span>
                 </div>
+                {allowManualLines ? (
+                  <div className="space-y-2 border-t border-border/50 pt-2">
+                    <Button
+                      type="button"
+                      variant={applyWithholding3Pct ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-8 w-full text-xs"
+                      onClick={() => setApplyWithholding3Pct((v) => !v)}
+                    >
+                      {applyWithholding3Pct ? t("poWht3Remove") : t("poWht3Apply")}
+                    </Button>
+                    {withholdingTaxAmount > 0 ? (
+                      <>
+                        <div className="flex justify-between text-rose-700 dark:text-rose-400">
+                          <span>{t("poWht3LineLabel")}</span>
+                          <span className="tabular-nums">−{formatMoneyComma(withholdingTaxAmount)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{t("poNetAfterWht")}</span>
+                          <span className="tabular-nums">
+                            {formatMoneyComma(Math.max(0, Math.round((total - withholdingTaxAmount) * 100) / 100))}
+                          </span>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

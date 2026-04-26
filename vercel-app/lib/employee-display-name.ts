@@ -73,6 +73,21 @@ export function formatEmployeeDisplayName(name: string, nameTitle?: string): str
   return `${t} ${n}`
 }
 
+/** 화면 표시: `formatEmployeeDisplayName` + 닉이 있으면 뒤에 (닉) */
+export function formatEmployeeDisplayNameWithNick(
+  name: string,
+  nameTitle: string | undefined,
+  nick: string | undefined
+): string {
+  const base = formatEmployeeDisplayName(name, nameTitle)
+  const n = String(nick || "")
+    .trim()
+    .replace(/\s+/g, " ")
+  if (!n) return base
+  if (!base) return n
+  return `${base} (${n})`
+}
+
 type EmployeeRowForAttendanceDisplay = {
   id?: number
   store?: string

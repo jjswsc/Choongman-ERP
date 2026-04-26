@@ -6,13 +6,18 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
 import type { PosDeliveryApp } from '@/lib/api-client'
-import { markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
+import { grabCancelOrderByStoreApi, markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
+import { extractGrabOrderIdFromMemo, extractGrabStateFromMemo } from '@/lib/grab-order-memo'
+import {
+  grabStateToStageIndex,
+  GRAB_DELIVERY_PROGRESS_STAGE_COUNT,
+} from '@/lib/grab-delivery-progress'
 
 export interface DeliveryOrderPanelProps {
   orderLabel: string
@@ -23,6 +28,7 @@ export interface DeliveryOrderPanelProps {
   /** 주문 취소 시 */
   onCancel?: () => void
   onClose?: () => void
+  storeCode?: string
   t?: (key: string) => string
 }
 
@@ -34,6 +40,7 @@ export function DeliveryOrderPanel({
   onPay,
   onCancel,
   onClose,
+  storeCode,
   t = (k) => k,
 }: DeliveryOrderPanelProps) {
   const { lang } = useLang()
@@ -42,6 +49,34 @@ export function DeliveryOrderPanel({
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
+  const [optimisticGrabState, setOptimisticGrabState] = useState<string | null>(null)
+
+  const parseItemMeta = (rawNote?: string) => {
+    const note = String(rawNote || '').trim()
+    if (!note) return { optionSummary: '', optionChips: [] as string[], requestSummary: '' }
+    const chunks = note
+      .split('·')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    let optionSummary = ''
+    const requests: string[] = []
+    for (const chunk of chunks) {
+      const m = /^mods:\s*(.+)$/i.exec(chunk)
+      if (m?.[1]) {
+        optionSummary = m[1].trim()
+        continue
+      }
+      requests.push(chunk)
+    }
+    return {
+      optionSummary,
+      optionChips: optionSummary
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      requestSummary: requests.join(' · '),
+    }
+  }
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -57,6 +92,10 @@ export function DeliveryOrderPanel({
       })
     }
   }, [order?.id, order?.items])
+
+  useEffect(() => {
+    setOptimisticGrabState(null)
+  }, [order?.id, order?.memo, order?.status])
 
   const toggleItemPackaged = async (itemId: string) => {
     if (!order) return
@@ -93,6 +132,36 @@ export function DeliveryOrderPanel({
 
   const canCancel = order && !['completed', 'cancelled'].includes(order.status ?? '')
   const [cancelling, setCancelling] = useState(false)
+  const [deciding, setDeciding] = useState(false)
+
+  const grabOrderId = order ? extractGrabOrderIdFromMemo(String(order.memo ?? '')) : ''
+
+  const grabProgress = (() => {
+    if (!order || !grabOrderId) return null as null | { cancelled: boolean; current: number }
+    const memo = String(order.memo ?? '')
+    const gs = optimisticGrabState || extractGrabStateFromMemo(memo)
+    if (gs) {
+      const si = grabStateToStageIndex(gs)
+      if (si < 0) return { cancelled: true, current: 0 }
+      return { cancelled: false, current: Math.min(GRAB_DELIVERY_PROGRESS_STAGE_COUNT - 1, Math.max(0, si)) }
+    }
+    const st = String(order.status ?? '').toLowerCase()
+    if (st === 'pending') return { cancelled: false, current: 0 }
+    if (st === 'preparing') return { cancelled: false, current: 1 }
+    if (st === 'ready') return { cancelled: false, current: 4 }
+    if (st === 'paid' || st === 'completed') return { cancelled: false, current: 5 }
+    return { cancelled: false, current: 0 }
+  })()
+
+  const grabStageKeys = [
+    'posGrabStageWaitConfirm',
+    'posGrabStageAccepted',
+    'posGrabStageDriverFound',
+    'posGrabStageDriverArrived',
+    'posGrabStageCollected',
+    'posGrabStageDelivered',
+  ] as const
+  const isManualPending = String(order?.status ?? '').trim().toLowerCase() === 'pending'
 
   const handleCancelOrder = async () => {
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
@@ -120,6 +189,50 @@ export function DeliveryOrderPanel({
     }
   }
 
+  const handleManualAccept = async () => {
+    if (!order) return
+    setDeciding(true)
+    try {
+      const id = Number(order.id)
+      if (grabOrderId) setOptimisticGrabState('ACCEPTED')
+      if (!Number.isNaN(id)) {
+        await updatePosOrderStatus({ id, status: 'cooking', ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}) })
+      }
+      onPackaged?.()
+    } catch (e) {
+      setOptimisticGrabState(null)
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setDeciding(false)
+    }
+  }
+
+  const handleManualReject = async () => {
+    if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 거절하시겠습니까?')) return
+    setDeciding(true)
+    try {
+      if (grabOrderId) setOptimisticGrabState('CANCELLED')
+      const id = Number(order.id)
+      if (!Number.isNaN(id)) {
+        await updatePosOrderStatus({ id, status: 'cancelled', ...(grabOrderId ? { grabState: 'CANCELLED' } : {}) })
+      }
+      if (grabOrderId) {
+        await grabCancelOrderByStoreApi({
+          orderID: grabOrderId,
+          storeCode: storeCode || undefined,
+          cancelCode: 1002,
+        })
+      }
+      onCancel?.()
+      onClose?.()
+    } catch (e) {
+      setOptimisticGrabState(null)
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setDeciding(false)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col border-l border-border bg-card">
       <div className="px-3 py-3 border-b flex items-center justify-between">
@@ -139,6 +252,43 @@ export function DeliveryOrderPanel({
             <Clock className="w-4 h-4 shrink-0" />
             <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
           </div>
+
+          {grabProgress && (
+            <div className="rounded-lg border border-border/60 bg-muted/30 px-2 py-2 space-y-1.5">
+              <p className="text-[11px] font-medium text-foreground/90">{ti('posGrabDeliveryProgressTitle')}</p>
+              <p className="text-[10px] text-muted-foreground leading-snug">{ti('posGrabDeliveryProgressHint')}</p>
+              {grabProgress.cancelled ? (
+                <p className="text-xs font-medium text-destructive">{ti('posGrabStageCancelled')}</p>
+              ) : (
+                <div className="grid grid-cols-6 gap-0.5 pt-1">
+                  {grabStageKeys.map((key, i) => {
+                    const done = i < grabProgress.current
+                    const active = i === grabProgress.current
+                    return (
+                      <div key={key} className="flex min-w-0 flex-col items-center gap-1">
+                        <div
+                          className={cn(
+                            'h-2 w-2 shrink-0 rounded-full',
+                            done && 'bg-emerald-500',
+                            active && !done && 'bg-emerald-400 ring-2 ring-emerald-500/40',
+                            !done && !active && 'bg-muted-foreground/25'
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            'text-[8px] leading-tight text-center line-clamp-3',
+                            active ? 'font-semibold text-emerald-800 dark:text-emerald-200' : 'text-muted-foreground'
+                          )}
+                        >
+                          {ti(key)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {isCompleted ? (
             <>
@@ -165,6 +315,7 @@ export function DeliveryOrderPanel({
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : item.name
                     const optionPart = optMatch ? optMatch[2].trim() : null
+                    const meta = parseItemMeta(item.note)
                     return (
                       <li
                         key={item.id}
@@ -186,6 +337,28 @@ export function DeliveryOrderPanel({
                             {optionPart && <span className="mr-1">{optionPart}</span>}
                             x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
                           </p>
+                          {meta.optionSummary && (
+                            <div className="mt-1">
+                              <p className="mb-1 text-[11px] leading-none text-emerald-700 dark:text-emerald-300">
+                                {t('posOptionSummaryLabel') || '옵션'}
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {meta.optionChips.map((chip, chipIdx) => (
+                                  <span
+                                    key={`${item.id}-opt-${chipIdx}`}
+                                    className="rounded-full border border-emerald-300/70 bg-emerald-50 px-2 py-0.5 text-[11px] leading-relaxed text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/30 dark:text-emerald-200"
+                                  >
+                                    {chip}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {meta.requestSummary && (
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                              {(t('posMenuDescriptionLabel') || '요청사항') + ': ' + meta.requestSummary}
+                            </p>
+                          )}
                           {expandedItemId === item.id && (
                             <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">
                               {item.name}
@@ -224,6 +397,17 @@ export function DeliveryOrderPanel({
                   ? (t('posDeliveryPackagingComplete') || '포장 완료')
                   : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${order.items.length})`}
               </Button>
+
+              {isManualPending && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" className="h-10" onClick={handleManualAccept} disabled={deciding}>
+                    {t('posDeliveryOrderAccept') || '주문 수락'}
+                  </Button>
+                  <Button type="button" variant="destructive" className="h-10" onClick={handleManualReject} disabled={deciding}>
+                    {t('posDeliveryOrderReject') || '주문 거절'}
+                  </Button>
+                </div>
+              )}
 
               <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
                 {t('posTablePayInStore') || '매장 결제'}

@@ -1666,11 +1666,19 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           Array.isArray(fromOrder) && fromOrder.length > 0
             ? fromOrder
             : [String(g.target || "").trim()].filter(Boolean)
-        const client = memoClient
-          ? memoClient
-          : candidates.length > 0
+        const resolvedClient =
+          candidates.length > 0
             ? resolveInvoiceClientFromBillToCandidates(candidates, company, clients)
             : resolveInvoiceClientForTarget(g.target || "", company, clients)
+        const hasResolvedMasterInfo =
+          typeof (resolvedClient as { address?: string }).address === "string" &&
+          String((resolvedClient as { address?: string }).address || "").trim() !== "-" &&
+          String((resolvedClient as { address?: string }).address || "").trim().length > 0
+        const targetLabel = String(g.target || "").trim()
+        const strictStoreTarget = !/본사|office|hq|head office/i.test(targetLabel)
+        const client = strictStoreTarget
+          ? resolvedClient
+          : (hasResolvedMasterInfo ? resolvedClient : (memoClient ?? resolvedClient))
         return buildInvoiceData(g, company, client, settings)
       })
       sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))

@@ -83,6 +83,42 @@ type PreviewKind = "receipt" | "kitchen"
 
 const POS_PAPER_SIDE_PADDING_MM = 0
 const RECEIPT_ASSET_MAX_BYTES = 1024 * 700
+const KITCHEN_ROUTE_DRAFT_CACHE_PREFIX = "erp:posPrinterKitchenRoutes:"
+
+type KitchenRouteDraftCachePayload = {
+  kitchenRouteByMenu: Record<string, KitchenRouteValue>
+  kitchenRouteByCategory: Record<string, KitchenRouteValue>
+  kitchenRouteByCategoryMain: Record<string, KitchenRouteValue>
+  savedAt: string
+}
+
+const hasKitchenRouteMapValues = (v: unknown): boolean => {
+  const map = normalizeKitchenRouteMapInput(v)
+  return Object.keys(map).length > 0
+}
+
+const readKitchenRouteDraftCache = (storeCode: string): KitchenRouteDraftCachePayload | null => {
+  if (typeof window === "undefined") return null
+  const key = `${KITCHEN_ROUTE_DRAFT_CACHE_PREFIX}${String(storeCode || "").trim()}`
+  if (!key || key === KITCHEN_ROUTE_DRAFT_CACHE_PREFIX) return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<KitchenRouteDraftCachePayload>
+    return {
+      kitchenRouteByMenu: normalizeKitchenRouteMapInput(parsed.kitchenRouteByMenu as unknown),
+      kitchenRouteByCategory: alignKitchenCategoryRouteKeyMap(
+        normalizeKitchenRouteMapInput(parsed.kitchenRouteByCategory as unknown)
+      ),
+      kitchenRouteByCategoryMain: alignKitchenCategoryRouteKeyMap(
+        normalizeKitchenRouteMapInput(parsed.kitchenRouteByCategoryMain as unknown)
+      ),
+      savedAt: String(parsed.savedAt || ""),
+    }
+  } catch {
+    return null
+  }
+}
 
 const buildCode128BarcodeUrl = (raw: string) => {
   const text = String(raw || "").trim()
@@ -518,7 +554,23 @@ export default function PosPrintersPage() {
       .then(([settings, catRes, menus]) => {
         if (requestSeq !== loadRequestSeqRef.current) return
         const cats = catRes.categories
-        applyFromPosSettings(settings)
+        let hydratedSettings = settings
+        const serverRouteEmpty =
+          !hasKitchenRouteMapValues(settings.kitchenRouteByMenu) &&
+          !hasKitchenRouteMapValues(settings.kitchenRouteByCategory) &&
+          !hasKitchenRouteMapValues(settings.kitchenRouteByCategoryMain)
+        if (serverRouteEmpty) {
+          const cachedRoutes = readKitchenRouteDraftCache(effectiveStore)
+          if (cachedRoutes) {
+            hydratedSettings = {
+              ...settings,
+              kitchenRouteByMenu: cachedRoutes.kitchenRouteByMenu,
+              kitchenRouteByCategory: cachedRoutes.kitchenRouteByCategory,
+              kitchenRouteByCategoryMain: cachedRoutes.kitchenRouteByCategoryMain,
+            }
+          }
+        }
+        applyFromPosSettings(hydratedSettings)
         setCategories(cats || [])
         setMainCategories(Array.isArray(catRes.mainCategories) ? catRes.mainCategories : [])
         setMenusList(Array.isArray(menus) ? menus : [])
@@ -689,6 +741,24 @@ export default function PosPrintersPage() {
       }
       const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
       if (res.success) {
+        try {
+          if (typeof window !== "undefined") {
+            const cacheKey = `${KITCHEN_ROUTE_DRAFT_CACHE_PREFIX}${effectiveStore}`
+            const payload: KitchenRouteDraftCachePayload = {
+              kitchenRouteByMenu: normalizeKitchenRouteMapInput(merged.kitchenRouteByMenu as unknown),
+              kitchenRouteByCategory: alignKitchenCategoryRouteKeyMap(
+                normalizeKitchenRouteMapInput(merged.kitchenRouteByCategory as unknown)
+              ),
+              kitchenRouteByCategoryMain: alignKitchenCategoryRouteKeyMap(
+                normalizeKitchenRouteMapInput(merged.kitchenRouteByCategoryMain as unknown)
+              ),
+              savedAt: new Date().toISOString(),
+            }
+            window.localStorage.setItem(cacheKey, JSON.stringify(payload))
+          }
+        } catch {
+          /* ignore local cache write errors */
+        }
         setLastSavedAt(new Date())
         if (res.queued) {
           setSaveStatus("queued")
@@ -1520,17 +1590,8 @@ export default function PosPrintersPage() {
 
               <div className="rounded-lg border border-amber-200/70 bg-amber-50/40 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
                 <p className="text-xs text-muted-foreground">
-                  {tr("posKitchenRoutingSaveHint", "아래 저장 버튼(또는 페이지 하단 저장 버튼)을 눌러 서버에 반영하세요.")}
+                  {tr("posKitchenRoutingSaveHint", "변경 후 페이지 맨 아래 저장 버튼을 눌러 서버에 반영하세요.")}
                 </p>
-                <Button
-                  type="button"
-                  className="mt-3 w-full sm:w-auto"
-                  onClick={() => void handleSave()}
-                  disabled={saving || loading}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  {saving ? t("posPrinterSaving") : t("itemsBtnSave")}
-                </Button>
               </div>
 
             <div className="grid gap-2 sm:grid-cols-2">

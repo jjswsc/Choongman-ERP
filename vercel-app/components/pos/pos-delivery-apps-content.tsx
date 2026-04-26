@@ -26,12 +26,7 @@ import { cn } from '@/lib/utils'
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from '@/components/pos/pos-screen-config-action-bar'
 import { PosScreenConfigCopyInline } from '@/components/pos/pos-screen-config-copy-blocks'
 
-const ACCENT_COLORS = [
-  { value: 'lime', label: 'Lime (Grab)' },
-  { value: 'sky', label: 'Sky (Line Man)' },
-  { value: 'amber', label: 'Amber (Shopee)' },
-  { value: 'slate', label: 'Slate (기타)' },
-] as const
+const ACCENT_COLORS = ['lime', 'sky', 'amber', 'slate'] as const
 
 export function PosDeliveryAppsContent() {
   const { auth } = useAuth()
@@ -131,7 +126,7 @@ export function PosDeliveryAppsContent() {
         }))
       const res = await savePosDeliveryApps({ storeCode: canSearchAll && storeCode ? storeCode : undefined, items: payload })
       if (res.success) {
-        await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
+        await appAlert(tr('itemsAlertSaved', '저장되었습니다.'))
         loadData()
       } else {
         await appAlert(res.message || t('msg_save_fail_detail'))
@@ -143,7 +138,29 @@ export function PosDeliveryAppsContent() {
     }
   }
 
-  const tr = (key: string, fallback: string) => t(key) || fallback
+  const tr = React.useCallback(
+    (key: string, fallback: string) => {
+      const v = t(key)
+      return v && v !== key ? v : fallback
+    },
+    [t]
+  )
+  const getAccentColorLabel = React.useCallback(
+    (color: (typeof ACCENT_COLORS)[number]) => {
+      switch (color) {
+        case 'lime':
+          return tr('posDeliveryAppsAccentLimeGrab', '라임 (Grab)')
+        case 'sky':
+          return tr('posDeliveryAppsAccentSkyLineMan', '스카이 (Line Man)')
+        case 'amber':
+          return tr('posDeliveryAppsAccentAmberShopee', '앰버 (Shopee)')
+        case 'slate':
+        default:
+          return tr('posDeliveryAppsAccentSlateEtc', '슬레이트 (기타)')
+      }
+    },
+    [tr]
+  )
   const deliveryCopyTarget = canSearchAll ? (storeCode?.trim() || '') : String(auth?.store || '').trim()
   const showStoreCopy =
     Boolean(deliveryCopyTarget) && stores.filter((s) => s && s !== deliveryCopyTarget).length > 0
@@ -157,10 +174,10 @@ export function PosDeliveryAppsContent() {
               {canSearchAll && (
                 <Select value={storeCode || '__global__'} onValueChange={(v) => setStoreCode(v === '__global__' ? '' : v)}>
                   <SelectTrigger className="h-10 w-40">
-                    <SelectValue placeholder={t('store') || '매장'} />
+                    <SelectValue placeholder={tr('store', '매장')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__global__">{t('posDeliveryAppsGlobal') || '전역'}</SelectItem>
+                    <SelectItem value="__global__">{tr('posDeliveryAppsGlobal', '전역')}</SelectItem>
                     {stores.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
@@ -171,7 +188,7 @@ export function PosDeliveryAppsContent() {
               )}
               <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
                 <RotateCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-                {t('posRefresh') || '새로고침'}
+                {tr('posRefresh', '새로고침')}
               </Button>
               <label className="flex items-center gap-2 text-sm shrink-0">
                 <input
@@ -179,7 +196,7 @@ export function PosDeliveryAppsContent() {
                   checked={includeDisabled}
                   onChange={(e) => setIncludeDisabled(e.target.checked)}
                 />
-                {t('posDeliveryAppsIncludeDisabled') || '비활성 포함'}
+                {tr('posDeliveryAppsIncludeDisabled', '비활성 포함')}
               </label>
               {showStoreCopy ? (
                 <PosScreenConfigCopyInline
@@ -195,7 +212,7 @@ export function PosDeliveryAppsContent() {
           right={
             <PosScreenConfigEmeraldSaveButton onClick={handleSave} disabled={saving}>
               <Save className="h-4 w-4" />
-              {saving ? '...' : t('itemsBtnSave') || '저장'}
+              {saving ? '...' : tr('itemsBtnSave', '저장')}
             </PosScreenConfigEmeraldSaveButton>
           }
         />
@@ -220,28 +237,28 @@ export function PosDeliveryAppsContent() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Truck className="h-4 w-4" />
-            {t('posScreenConfigTabDelivery') || '배달앱 관리'}
+            {tr('posScreenConfigTabDelivery', '배달앱 관리')}
           </div>
           <Button size="sm" variant="outline" onClick={addItem} className="gap-1">
             <Plus className="h-4 w-4" />
-            {t('posDeliveryAppsAdd') || '추가'}
+            {tr('posDeliveryAppsAdd', '추가')}
           </Button>
         </div>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground py-4">{t('loading') || '불러오는 중...'}</p>
+          <p className="text-sm text-muted-foreground py-4">{tr('loading', '불러오는 중...')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsOrder') || '순서'}</th>
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsCode') || '코드'}</th>
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsName') || '표시명'}</th>
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsKeywords') || '인식 키워드'}</th>
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsAccent') || '배지색'}</th>
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsEnabled') || '활성'}</th>
-                  <th className="text-left p-2 font-medium">{t('posDeliveryAppsDineOut') || 'Dine out'}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsOrder', '순서')}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsCode', '코드')}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsName', '표시명')}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsKeywords', '인식 키워드')}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsAccent', '배지색')}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsEnabled', '활성')}</th>
+                  <th className="text-left p-2 font-medium">{tr('posDeliveryAppsDineOut', '매장결제 노출')}</th>
                   <th className="text-left p-2 w-16"></th>
                 </tr>
               </thead>
@@ -263,7 +280,7 @@ export function PosDeliveryAppsContent() {
                         className="h-8 w-24 font-mono text-xs"
                         value={it.code}
                         onChange={(e) => updateItem(idx, { code: e.target.value })}
-                        placeholder="grab"
+                        placeholder={tr('posDeliveryAppsCodePlaceholder', '예: grab')}
                       />
                     </td>
                     <td className="p-2">
@@ -271,7 +288,7 @@ export function PosDeliveryAppsContent() {
                         className="h-8 w-28"
                         value={it.name}
                         onChange={(e) => updateItem(idx, { name: e.target.value })}
-                        placeholder="Grab"
+                        placeholder={tr('posDeliveryAppsNamePlaceholder', '예: Grab')}
                       />
                     </td>
                     <td className="p-2">
@@ -284,7 +301,7 @@ export function PosDeliveryAppsContent() {
                             { matchKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) }
                           )
                         }
-                        placeholder="grab, 그랩"
+                        placeholder={tr('posDeliveryAppsKeywordsPlaceholder', '예: grab, 그랩')}
                       />
                     </td>
                     <td className="p-2">
@@ -296,9 +313,9 @@ export function PosDeliveryAppsContent() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {ACCENT_COLORS.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
+                          {ACCENT_COLORS.map((color) => (
+                            <SelectItem key={color} value={color}>
+                              {getAccentColorLabel(color)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -322,7 +339,7 @@ export function PosDeliveryAppsContent() {
                     </td>
                     <td className="p-2">
                       <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => removeItem(idx)}>
-                        {t('delete') || '삭제'}
+                        {tr('delete', '삭제')}
                       </Button>
                     </td>
                   </tr>
@@ -333,7 +350,7 @@ export function PosDeliveryAppsContent() {
         )}
 
         <p className="text-xs text-muted-foreground">
-          {t('posDeliveryAppsGuide') || '인식 키워드: 주문 라벨(customerName, orderNo, memo)에 포함되면 해당 배달앱으로 인식됩니다. Dine out: 테이블 결제 시 "배달앱 결제" 옵션에 표시됩니다.'}
+          {tr('posDeliveryAppsGuide', '인식 키워드: 주문 라벨(customerName, orderNo, memo)에 포함되면 해당 배달앱으로 인식됩니다. 매장결제 노출: 테이블 결제 시 "배달앱 결제" 옵션에 표시됩니다.')}
         </p>
       </div>
     </div>

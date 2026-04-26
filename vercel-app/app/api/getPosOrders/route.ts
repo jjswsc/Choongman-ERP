@@ -162,19 +162,32 @@ export async function GET(request: NextRequest) {
           select: POS_ORDER_SELECT,
         })) as typeof rows
 
-        if (!rows?.length && effectiveStoreCode) {
+        if (effectiveStoreCode) {
           const variants = [
-            effectiveStoreCode.startsWith('CM ') ? effectiveStoreCode.slice(3).trim() : `CM ${effectiveStoreCode}`.trim(),
+            effectiveStoreCode.startsWith('CM ')
+              ? effectiveStoreCode.slice(3).trim()
+              : `CM ${effectiveStoreCode}`.trim(),
             effectiveStoreCode.replace(/^CM\s+/i, '').trim(),
           ].filter((v) => v && v !== effectiveStoreCode)
-          for (const alt of variants) {
-            const altFilter = buildListFilter(alt)
-            rows = (await supabaseSelectFilter('pos_orders', altFilter, {
-              order: listOrder,
-              limit: listLimit,
-              select: POS_ORDER_SELECT,
-            })) as typeof rows
-            if (rows?.length) break
+          if (variants.length > 0) {
+            const mergedById = new Map<number, (typeof rows)[number]>()
+            for (const row of rows || []) {
+              const id = Number(row.id || 0)
+              if (id > 0) mergedById.set(id, row)
+            }
+            for (const alt of variants) {
+              const altFilter = buildListFilter(alt)
+              const altRows = (await supabaseSelectFilter('pos_orders', altFilter, {
+                order: listOrder,
+                limit: listLimit,
+                select: POS_ORDER_SELECT,
+              })) as typeof rows
+              for (const row of altRows || []) {
+                const id = Number(row.id || 0)
+                if (id > 0 && !mergedById.has(id)) mergedById.set(id, row)
+              }
+            }
+            rows = Array.from(mergedById.values())
           }
         }
       } else {

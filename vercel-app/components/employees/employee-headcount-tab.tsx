@@ -49,6 +49,7 @@ type HcChartRow = HcOverviewStackRow & { segEmpty: number }
 type JobActualAgg = { full: number; part: number; fte: number }
 
 type HcOverviewChartMode = "both" | "target" | "actual"
+const ALL_STORES_VALUE = "__ALL__"
 
 type HcSingleMetricRow = { label: string; full: string; val: number; segEmpty: number }
 
@@ -497,8 +498,9 @@ export function EmployeeHeadcountTab({
   isManager: boolean
 }) {
   const t = useT(useLang().lang)
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [empList, setEmpList] = React.useState<AdminEmployeeItem[]>([])
   const [stores, setStores] = React.useState<string[]>([])
   const [jobOptions, setJobOptions] = React.useState<string[]>([])
@@ -537,8 +539,21 @@ export function EmployeeHeadcountTab({
   }, [userStore, userRole])
 
   React.useEffect(() => {
-    void loadAll()
-  }, [loadAll])
+    if (hasSearched) return
+    let alive = true
+    ;(async () => {
+      try {
+        const empRes = await getAdminEmployeeList({ userStore, userRole })
+        if (!alive) return
+        setStores(empRes.stores || [])
+      } catch {
+        // explicit search button will retry full load
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [hasSearched, userStore, userRole])
 
   React.useEffect(() => {
     if (isManager && userStore) {
@@ -551,7 +566,7 @@ export function EmployeeHeadcountTab({
   }, [stores, selectedStore, isManager, userStore])
 
   React.useEffect(() => {
-    if (!selectedStore) {
+    if (!selectedStore || selectedStore === ALL_STORES_VALUE) {
       setLocalRows([])
       return
     }
@@ -604,7 +619,7 @@ export function EmployeeHeadcountTab({
 
   const storeChoices = React.useMemo(() => {
     if (isManager && userStore) return [userStore]
-    return stores
+    return [ALL_STORES_VALUE, ...stores]
   }, [isManager, userStore, stores])
 
   const overviewJobOptions = React.useMemo(() => {
@@ -662,7 +677,7 @@ export function EmployeeHeadcountTab({
 
   const overviewFiltered = React.useMemo(() => {
     type Row = (typeof overviewByStore)[number] & { viewKey: string }
-    if (overviewStorePicks.length === 0) {
+    if (overviewStorePicks.length === 0 || overviewStorePicks.some((p) => p.store === ALL_STORES_VALUE)) {
       return overviewByStore.map((r) => ({ ...r, viewKey: r.store })) as Row[]
     }
     const byName = new Map(overviewByStore.map((r) => [r.store, r]))
@@ -690,7 +705,12 @@ export function EmployeeHeadcountTab({
     const s = overviewPickSelect.trim()
     if (!s) return
     overviewPickSeq.current += 1
-    setOverviewStorePicks((prev) => [...prev, { id: overviewPickSeq.current, store: s }])
+    setOverviewStorePicks((prev) => {
+      if (s === ALL_STORES_VALUE) return [{ id: overviewPickSeq.current, store: s }]
+      const withoutAll = prev.filter((x) => x.store !== ALL_STORES_VALUE)
+      if (withoutAll.some((x) => x.store === s)) return withoutAll
+      return [...withoutAll, { id: overviewPickSeq.current, store: s }]
+    })
     setOverviewPickSelect("")
   }, [overviewPickSelect])
 
@@ -717,7 +737,7 @@ export function EmployeeHeadcountTab({
   }
 
   const handleSave = async () => {
-    if (!selectedStore) return
+    if (!selectedStore || selectedStore === ALL_STORES_VALUE) return
     setSaving(true)
     try {
       const res = await saveStoreJobHeadcount({
@@ -747,7 +767,7 @@ export function EmployeeHeadcountTab({
     return <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-800 dark:text-emerald-200">{t("emp_hc_ok")}</span>
   }
 
-  if (loading && empList.length === 0) {
+  if (loading && hasSearched && empList.length === 0) {
     return (
       <div className="flex justify-center py-16 text-sm text-muted-foreground">{t("loading")}</div>
     )
@@ -782,12 +802,24 @@ export function EmployeeHeadcountTab({
                     aria-label={t("emp_hc_overview_pick_label")}
                   >
                     <option value="">{t("emp_hc_overview_pick_placeholder")}</option>
+                    <option value={ALL_STORES_VALUE}>{t("store_all_stores")}</option>
                     {overviewByStore.map((r) => (
                       <option key={r.store} value={r.store}>
                         {r.store}
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHasSearched(true)
+                      void loadAll()
+                    }}
+                    disabled={loading}
+                    className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted/50 disabled:opacity-50"
+                  >
+                    {t("search")}
+                  </button>
                   <button
                     type="button"
                     onClick={addOverviewStorePick}
@@ -816,7 +848,9 @@ export function EmployeeHeadcountTab({
                           className="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs"
                         >
                           <span className="shrink-0 tabular-nums text-muted-foreground">{idx + 1}.</span>
-                          <span className="min-w-0 truncate font-medium">{p.store}</span>
+                          <span className="min-w-0 truncate font-medium">
+                            {p.store === ALL_STORES_VALUE ? t("store_all_stores") : p.store}
+                          </span>
                           <button
                             type="button"
                             onClick={() => setOverviewStorePicks((prev) => prev.filter((x) => x.id !== p.id))}
@@ -873,7 +907,7 @@ export function EmployeeHeadcountTab({
                 </select>
               </div>
             </div>
-            {overviewFiltered.length > 0 ? (
+            {hasSearched && overviewFiltered.length > 0 ? (
               <HeadcountStoreOverviewChart
                 key={overviewChartMode}
                 data={overviewChartData}
@@ -881,11 +915,13 @@ export function EmployeeHeadcountTab({
                 mode={overviewChartMode}
               />
             ) : (
-              <p className="text-xs text-muted-foreground">{t("emp_hc_overview_no_results")}</p>
+              <p className="text-xs text-muted-foreground">
+                {hasSearched ? t("emp_hc_overview_no_results") : t("emp_hc_search_required")}
+              </p>
             )}
           </>
         )}
-        {overviewByStore.length > 0 && (
+        {hasSearched && overviewByStore.length > 0 && (
         <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full text-xs">
             <thead>
@@ -967,7 +1003,7 @@ export function EmployeeHeadcountTab({
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-4">
-        <div className="space-y-1">
+        <div className="flex items-center gap-[19px]">
           <label className="text-xs font-medium text-muted-foreground">{t("emp_hc_select_store")}</label>
           <select
             value={selectedStore}
@@ -977,29 +1013,34 @@ export function EmployeeHeadcountTab({
           >
             {storeChoices.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {s === ALL_STORES_VALUE ? t("store_all_stores") : s}
               </option>
             ))}
           </select>
         </div>
         <button
           type="button"
-          onClick={() => void loadAll()}
+          onClick={() => {
+            setHasSearched(true)
+            void loadAll()
+          }}
           disabled={loading}
           className="h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
         >
-          {t("emp_mov_load")}
+          {t("search")}
         </button>
         <button
           type="button"
           onClick={() => void handleSave()}
-          disabled={saving || !selectedStore || tableMissing}
+          disabled={saving || !selectedStore || selectedStore === ALL_STORES_VALUE || tableMissing || !hasSearched}
           className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
           {saving ? t("loading") : t("emp_hc_save")}
         </button>
       </div>
 
+      {hasSearched ? (
+      <>
       <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/20 p-3">
         <span className="text-xs text-muted-foreground">{t("emp_hc_add_job")}</span>
         <select
@@ -1016,6 +1057,17 @@ export function EmployeeHeadcountTab({
         </select>
         <button
           type="button"
+          onClick={() => {
+            setHasSearched(true)
+            void loadAll()
+          }}
+          disabled={loading}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs disabled:opacity-50"
+        >
+          {t("search")}
+        </button>
+        <button
+          type="button"
           onClick={handleAddJob}
           disabled={!addJobPick}
           className="h-8 rounded-md bg-secondary px-2 text-xs font-medium disabled:opacity-50"
@@ -1023,7 +1075,6 @@ export function EmployeeHeadcountTab({
           +
         </button>
       </div>
-
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-xs">
           <thead>
@@ -1092,6 +1143,12 @@ export function EmployeeHeadcountTab({
       <p className="text-xs text-muted-foreground">{t("emp_hc_asof_hint")}</p>
       <p className="text-xs text-muted-foreground">{t("emp_hc_resign_soon_hint")}</p>
       <p className="text-xs text-muted-foreground">{t("emp_hc_parttime_half_hint")}</p>
+      </>
+      ) : (
+        <div className="rounded-lg border border-border bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+          {t("emp_hc_search_required")}
+        </div>
+      )}
     </div>
   )
 }

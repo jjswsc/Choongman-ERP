@@ -17,6 +17,7 @@ import { useT } from "@/lib/i18n"
 import {
   getPurchaseOrders,
   getVendorsForPurchase,
+  getVendorsForSalesFranchiseMaster,
   processPurchaseOrderApproval,
   processPurchaseOrderCancel,
   updatePurchaseOrderInvoice,
@@ -78,13 +79,14 @@ export function AdminPurchaseOrderHistory() {
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
   const [cancellingId, setCancellingId] = React.useState<number | null>(null)
   const [taxInvoiceToggleId, setTaxInvoiceToggleId] = React.useState<number | null>(null)
-  const [vendors, setVendors] = React.useState<{ code: string; name: string; address?: string; taxId?: string; phone?: string }[]>([])
+  const [vendors, setVendors] = React.useState<
+    { code: string; name: string; address?: string; taxId?: string; phone?: string; salesOutlet?: string | null; gpsName?: string | null }[]
+  >([])
   const [startDate, setStartDate] = React.useState(() => addCalendarMonthsBangkokYmd(todayStrBangkok(), -1))
   const [endDate, setEndDate] = React.useState(() => todayStrBangkok())
   const [vendorFilter, setVendorFilter] = React.useState<string>("All")
   const [sourceFilter, setSourceFilter] = React.useState<"all" | "logistics" | "accounting">("all")
   const [searchText, setSearchText] = React.useState("")
-  const initialFetchDone = React.useRef(false)
 
   const poDateLocale = React.useMemo(
     () =>
@@ -102,26 +104,29 @@ export function AdminPurchaseOrderHistory() {
   )
 
   React.useEffect(() => {
-    getVendorsForPurchase()
-      .then((rows) => setVendors((rows || []).map((v) => ({ code: v.code, name: v.name, address: v.address, taxId: v.taxId, phone: v.phone }))))
-      .catch(() => setVendors([]))
-  }, [])
-
-  /** 탭 진입 시 한 번 자동 조회(검색 버튼을 누르지 않아도 최근 발주 표시) */
-  React.useEffect(() => {
-    if (initialFetchDone.current) return
-    initialFetchDone.current = true
-    setHasSearched(true)
-    setLoading(true)
-    getPurchaseOrders({
-      startDate,
-      endDate,
-      vendorCode: vendorFilter === "All" ? undefined : vendorFilter,
-    })
-      .then((rows) => setList(Array.isArray(rows) ? rows : []))
-      .catch(() => setList([]))
-      .finally(() => setLoading(false))
-     
+    ;(async () => {
+      try {
+        const [pur, fr] = await Promise.all([getVendorsForPurchase(), getVendorsForSalesFranchiseMaster()])
+        let merged = pur || []
+        if (fr.length > 0) {
+          const frCodes = new Set(fr.map((v) => v.code))
+          merged = [...fr, ...(pur || []).filter((v) => !frCodes.has(v.code))]
+        }
+        setVendors(
+          merged.map((v) => ({
+            code: v.code,
+            name: v.name,
+            address: v.address,
+            taxId: v.taxId,
+            phone: v.phone,
+            salesOutlet: v.salesOutlet,
+            gpsName: v.gpsName,
+          }))
+        )
+      } catch {
+        setVendors([])
+      }
+    })()
   }, [])
 
   const load = React.useCallback(() => {
@@ -330,6 +335,32 @@ export function AdminPurchaseOrderHistory() {
       pad([t("subtotal"), ...Array(colCount - 2).fill(""), String(po.subtotal ?? 0)], colCount),
       pad([t("vat"), ...Array(colCount - 2).fill(""), String(po.vat ?? 0)], colCount),
       pad([t("total"), ...Array(colCount - 2).fill(""), String(po.total ?? 0)], colCount),
+      ...(Number(po.withholding_tax_amount) > 0
+        ? [
+            pad(
+              [
+                t("poWht3LineLabel"),
+                ...Array(colCount - 2).fill(""),
+                String(-Math.abs(Number(po.withholding_tax_amount) || 0)),
+              ],
+              colCount
+            ),
+            pad(
+              [
+                t("poNetAfterWht"),
+                ...Array(colCount - 2).fill(""),
+                String(
+                  Math.max(
+                    0,
+                    Math.round(((Number(po.total) || 0) - Math.abs(Number(po.withholding_tax_amount) || 0)) * 100) /
+                      100
+                  )
+                ),
+              ],
+              colCount
+            ),
+          ]
+        : []),
     ]
     const pxPerChar = 8
     const minW = 50
@@ -346,7 +377,7 @@ export function AdminPurchaseOrderHistory() {
     const isHeaderDataRow = (ri: number) =>
       headerPadded.length > 0 &&
       headerPadded.every((cell, i) => String(allRows[ri][i] ?? "") === String(cell))
-    const footerCount = 3
+    const footerCount = 3 + (Number(po.withholding_tax_amount) > 0 ? 2 : 0)
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
 <body>
@@ -377,15 +408,30 @@ ${allRows.map((row, ri) => {
     const vendor = vendors.find(
       (v) => v.code === po.vendor_code || v.name === po.vendor_name
     )
+    const stripCm = (x: string) => x.replace(/^cm\s+/i, "").trim().toLowerCase()
+    const relStore = String(meta?.relatedStore || "").trim()
+    const vendorByOutlet =
+      relStore && relStore !== "_none"
+        ? vendors.find((v) => {
+            const out = String(v.salesOutlet || "").trim()
+            const gps = String(v.gpsName || "").trim()
+            if (out && (out === relStore || out.toLowerCase() === relStore.toLowerCase())) return true
+            if (gps && (gps === relStore || gps.toLowerCase() === relStore.toLowerCase())) return true
+            if (out && stripCm(out) === stripCm(relStore)) return true
+            if (gps && stripCm(gps) === stripCm(relStore)) return true
+            return false
+          })
+        : undefined
+    const vendorResolved = vendor || vendorByOutlet
 
     const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const poPrintData = {
       poNo,
       createdAt: dateStr,
-      vendorName: po.vendor_name || vendor?.name || "-",
-      vendorAddress: vendor?.address || undefined,
-      vendorTaxId: vendor?.taxId || undefined,
-      vendorPhone: vendor?.phone || undefined,
+      vendorName: po.vendor_name || vendorResolved?.name || "-",
+      vendorAddress: vendorResolved?.address || undefined,
+      vendorTaxId: vendorResolved?.taxId || undefined,
+      vendorPhone: vendorResolved?.phone || undefined,
       locationName: po.location_name || "-",
       locationAddress: po.location_address || "-",
       cart: cart.map((c) => ({
@@ -398,6 +444,14 @@ ${allRows.map((row, ri) => {
       subtotal: po.subtotal ?? 0,
       vat: po.vat ?? 0,
       total: po.total ?? 0,
+      withholdingTaxAmount:
+        po.withholding_tax_amount != null && Number(po.withholding_tax_amount) > 0
+          ? Number(po.withholding_tax_amount)
+          : undefined,
+      withholdingTaxRate:
+        po.withholding_tax_rate != null && Number(po.withholding_tax_rate) > 0
+          ? Number(po.withholding_tax_rate)
+          : undefined,
       userName: po.user_name || "-",
       status: po.status,
       relatedStore: meta?.relatedStore,

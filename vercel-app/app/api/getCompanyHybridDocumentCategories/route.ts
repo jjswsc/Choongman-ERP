@@ -31,7 +31,11 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'company_hybrid_document_categories',
       filter,
-      { order: 'store.asc,sort_order.asc,id.asc', limit: 5000, select: 'id, store, name, sort_order, created_at' }
+      {
+        order: 'store.asc,sort_order.asc,id.asc',
+        limit: 5000,
+        select: 'id, store, name, sort_order, parent_category_id, created_at',
+      }
     )) as Record<string, unknown>[]
     return NextResponse.json({ success: true, list: rows || [] }, { headers })
   } catch (e) {
