@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Trash2 } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -30,6 +30,8 @@ import { Button } from "@/components/ui/button"
 
 export interface EmployeeEvalListTabProps {
   stores: string[]
+  /** 있으면 행에서 「이 평가 수정」으로 직원 평가 탭에 기존 건 불러오기 */
+  onEditInEvalTab?: (row: EvalHistoryRow) => void
 }
 
 interface EvalHistoryRow {
@@ -52,7 +54,7 @@ function formatEvalHistoryScore(raw: string): string {
   return n.toFixed(2)
 }
 
-export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
+export function EmployeeEvalListTab({ stores, onEditInEvalTab }: EmployeeEvalListTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
@@ -429,7 +431,8 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                 <th className="px-3 py-2.5 text-center font-semibold">
                   {t("eval_list_th_memo")}
                 </th>
-                <th className="min-w-[120px] px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                <th className="min-w-[160px] px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                  {onEditInEvalTab ? `${t("eval_list_open_for_edit")} / ` : ""}
                   {t("eval_list_btn_view")} / {t("delete")}
                 </th>
               </tr>
@@ -484,6 +487,18 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <div className="flex flex-wrap items-center justify-center gap-1">
+                          {onEditInEvalTab ? (
+                            <button
+                              type="button"
+                              onClick={() => onEditInEvalTab(r)}
+                              disabled={deletingId === r.id || loading}
+                              className="inline-flex items-center justify-center gap-0.5 rounded border border-border bg-transparent px-2 py-1 text-xs font-medium text-foreground hover:bg-muted/60 disabled:opacity-50"
+                              title={t("eval_list_open_for_edit")}
+                            >
+                              <Pencil className="h-3 w-3" aria-hidden />
+                              {t("eval_list_open_for_edit")}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => openDetail(r)}

@@ -39,6 +39,11 @@ function canSaveEvaluationForStore(
   return userCanAccessEmployeeStore(jwtRole, jwtStore, targetStore, { allowedStores: auth.allowedStores })
 }
 
+function isSupabaseDuplicateError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /23505|duplicate key value violates unique constraint/i.test(msg)
+}
+
 /** 평가 결과 저장 (신규 또는 수정). JWT 기준 본사·회계 또는 해당 매장 매니저/가맹점주 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -123,17 +128,37 @@ export async function POST(req: NextRequest) {
       '_' +
       empTrim.replace(/\s/g, '')
 
-    await supabaseInsert('evaluation_results', {
-      id: newId,
-      eval_type: typeVal,
-      eval_date: dateStr,
-      store_name: storeTrim,
-      employee_name: empTrim,
-      evaluator: evalTrim,
-      final_grade: gradeTrim,
-      memo: memoTrim,
-      json_data: jsonStr,
-    })
+    try {
+      await supabaseInsert('evaluation_results', {
+        id: newId,
+        eval_type: typeVal,
+        eval_date: dateStr,
+        store_name: storeTrim,
+        employee_name: empTrim,
+        evaluator: evalTrim,
+        final_grade: gradeTrim,
+        memo: memoTrim,
+        json_data: jsonStr,
+      })
+    } catch (insertError) {
+      if (!isSupabaseDuplicateError(insertError)) throw insertError
+      const uniqFilter =
+        `eval_type=eq.${encodeURIComponent(typeVal)}` +
+        `&eval_date=eq.${encodeURIComponent(dateStr)}` +
+        `&store_name=eq.${encodeURIComponent(storeTrim)}` +
+        `&employee_name=eq.${encodeURIComponent(empTrim)}`
+      const existing = (await supabaseSelectFilter('evaluation_results', uniqFilter, {
+        limit: 1,
+        select: 'id',
+      })) as { id?: string }[] | null
+      if (!existing?.[0]?.id) throw insertError
+      await supabaseUpdateByFilter('evaluation_results', `id=eq.${encodeURIComponent(String(existing[0].id))}`, {
+        evaluator: evalTrim,
+        final_grade: gradeTrim,
+        memo: memoTrim,
+        json_data: jsonStr,
+      })
+    }
     await updateEmployeeGrade(storeTrim, empTrim)
     return NextResponse.json('SAVED', { headers })
   } catch (e) {

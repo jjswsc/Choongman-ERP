@@ -28,15 +28,32 @@ export async function GET(request: NextRequest) {
       listScope.kind === 'all'
         ? 'deleted_at=is.null'
         : `store=eq.${encodeURIComponent(listScope.store)}&deleted_at=is.null`
-    const rows = (await supabaseSelectFilter(
-      'company_hybrid_document_categories',
-      filter,
-      {
-        order: 'store.asc,sort_order.asc,id.asc',
-        limit: 5000,
-        select: 'id, store, name, sort_order, parent_category_id, created_at',
-      }
-    )) as Record<string, unknown>[]
+    let rows: Record<string, unknown>[] = []
+    try {
+      rows = (await supabaseSelectFilter(
+        'company_hybrid_document_categories',
+        filter,
+        {
+          order: 'store.asc,sort_order.asc,id.asc',
+          limit: 5000,
+          select: 'id, store, name, sort_order, parent_category_id, created_at',
+        }
+      )) as Record<string, unknown>[]
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      // 구버전 스키마(parent_category_id 미존재) 환경 폴백
+      if (!/42703|parent_category_id/i.test(msg)) throw e
+      const fallbackRows = (await supabaseSelectFilter(
+        'company_hybrid_document_categories',
+        filter,
+        {
+          order: 'store.asc,sort_order.asc,id.asc',
+          limit: 5000,
+          select: 'id, store, name, sort_order, created_at',
+        }
+      )) as Record<string, unknown>[]
+      rows = (fallbackRows || []).map((r) => ({ ...r, parent_category_id: null }))
+    }
     return NextResponse.json({ success: true, list: rows || [] }, { headers })
   } catch (e) {
     console.error('getCompanyHybridDocumentCategories:', e)

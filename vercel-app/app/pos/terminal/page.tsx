@@ -3102,15 +3102,19 @@ export default function PosTerminalPage() {
               "border-b border-border bg-card px-2 sm:px-4 shrink-0",
               isNarrowViewport && "sticky top-0 z-10"
             )}>
-              <div className="flex h-12 min-[640px]:h-10 min-h-[44px] items-center justify-between gap-1 min-[640px]:gap-2 flex-wrap">
-                <TabsList
-                  className="h-12 min-[640px]:h-10 min-h-[44px] bg-transparent shrink-0"
-                  data-tour="pos-tour-tabs-all"
-                >
+              <div className="flex h-12 min-[640px]:h-10 min-h-[44px] min-w-0 flex-nowrap items-center justify-between gap-1 min-[640px]:gap-2">
+                {/* 좁은 화면에서 오른쪽 필터와 한 줄에 두면 탭이 flex로 압축되어 사라진 것처럼 보일 수 있음 → 가로 스크롤 */}
+                <div className="min-h-[44px] min-w-0 flex-1 overflow-x-auto [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <TabsList
+                    className="inline-flex h-12 min-[640px]:h-10 min-h-[44px] w-max min-w-0 flex-nowrap bg-transparent p-0"
+                    data-tour="pos-tour-tabs-all"
+                  >
                   <TabsTrigger
                     value="tables"
                     data-tour="pos-tour-tab-tables"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                    title={t('posTableStatus')}
+                    aria-label={t('posTableStatus')}
+                    className="shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
                   >
                     <LayoutGrid className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posTableStatus')}</span>
@@ -3118,7 +3122,9 @@ export default function PosTerminalPage() {
                   <TabsTrigger
                     value="delivery"
                     data-tour="pos-tour-tab-delivery"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                    title={t('posOrderTypeDelivery') || '배달'}
+                    aria-label={t('posOrderTypeDelivery') || '배달'}
+                    className="shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
                   >
                     <Bike className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posOrderTypeDelivery') || '배달'}</span>
@@ -3126,15 +3132,18 @@ export default function PosTerminalPage() {
                   <TabsTrigger
                     value="takeout"
                     data-tour="pos-tour-tab-takeout"
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
+                    title={t('posOrderTypeTakeout') || '포장'}
+                    aria-label={t('posOrderTypeTakeout') || '포장'}
+                    className="shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation"
                   >
                     <Package className="w-4 h-4 shrink-0" />
                     <span className="hidden min-[640px]:inline">{t('posOrderTypeTakeout') || '포장'}</span>
                   </TabsTrigger>
-                </TabsList>
+                  </TabsList>
+                </div>
                 {/* 오른쪽 영역: 탭별 필터(준비중/결제완료/전체) + 실시간 메뉴 검색 — 배달/포장/테이블 동일 UI, 밑줄 정렬 */}
                 <div
-                  className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0 w-[min(100%,theme(spacing.52))] min-[640px]:w-44 justify-end self-stretch min-h-0"
+                  className="flex shrink-0 items-center gap-1 min-[640px]:gap-2 justify-end self-stretch min-h-0 min-[640px]:w-44"
                   data-tour="pos-tour-toolbar-filters"
                 >
                   {activeTab === 'tables' && (

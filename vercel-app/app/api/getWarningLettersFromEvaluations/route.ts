@@ -11,6 +11,7 @@ import {
   canViewEvaluationForStore,
   roleMayViewEvaluation,
 } from '@/lib/warning-letter-evaluation-access'
+import { evalStoredIncidentRecordHasContent } from '@/lib/warning-letter-incident'
 
 interface WarningLetterIncidentItem {
   source: 'evaluation'
@@ -30,11 +31,7 @@ interface WarningLetterIncidentItem {
 }
 
 function incidentHasContent(inc: Record<string, unknown>): boolean {
-  const type = String(inc?.type || '').trim()
-  const details = String(inc?.details || '').trim()
-  const url = String(inc?.warningLetterUrl || '').trim()
-  const checked = Boolean(inc?.warningLetterChecked)
-  return Boolean(type || details || url || checked)
+  return evalStoredIncidentRecordHasContent(inc)
 }
 
 function incidentMatchesFilter(

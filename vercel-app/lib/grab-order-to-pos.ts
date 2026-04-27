@@ -65,6 +65,14 @@ function minorToMajor(value: unknown, exponent: number): number {
   return Math.round(major * 100) / 100
 }
 
+function readFirstFinite(...values: unknown[]): number {
+  for (const value of values) {
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return 0
+}
+
 function parseGrabStoreMap(): Record<string, string> {
   const raw = process.env.GRAB_STORE_MAP_JSON?.trim()
   if (!raw) return {}
@@ -182,13 +190,28 @@ function resolveOrderType(order: Record<string, unknown>): 'delivery' | 'dine_in
   return 'delivery'
 }
 
+function resolveFulfillmentLabel(order: Record<string, unknown>): string {
+  const explicitType = String(order.orderType ?? order.fulfillmentType ?? order.diningOption ?? '')
+    .trim()
+    .toLowerCase()
+  if (explicitType.includes('self') || explicitType.includes('pickup') || explicitType.includes('collect')) {
+    return 'Self-collection'
+  }
+  if (explicitType.includes('restaurant') || explicitType.includes('merchant')) {
+    return 'Restaurant delivery'
+  }
+  if (explicitType.includes('dine')) return 'Dine-in'
+  return 'Delivery'
+}
+
 function resolveDisplayName(order: Record<string, unknown>): string {
   const short = String(order.shortOrderNumber ?? '').trim()
   const receiver = asRecord(order.receiver)
   const receiverName = String(receiver.name ?? '').trim()
-  if (short && receiverName) return `Grab #${short} · ${receiverName}`
-  if (short) return `Grab #${short}`
-  if (receiverName) return `Grab · ${receiverName}`
+  const fulfill = resolveFulfillmentLabel(order)
+  if (short && receiverName) return `Grab #${short} · ${fulfill} · ${receiverName}`
+  if (short) return `Grab #${short} · ${fulfill}`
+  if (receiverName) return `Grab · ${fulfill} · ${receiverName}`
   return 'Grab'
 }
 
@@ -245,7 +268,18 @@ export async function persistGrabOrderToPos(
   const price = asRecord(order.price)
   const deliveryFee = minorToMajor(price.deliveryFee, exponent)
   const packagingFee = minorToMajor(price.merchantChargeFee, exponent)
-  const discountAmt = Math.max(0, minorToMajor(price.merchantFundPromo, exponent))
+  const discountMinor = Math.max(
+    0,
+    readFirstFinite(
+      price.totalDiscount,
+      price.totalPromo,
+      price.discount,
+      price.merchantFundPromo,
+      price.promoDiscount,
+      0
+    )
+  )
+  const discountAmt = Math.max(0, minorToMajor(discountMinor, exponent))
   const tax = Math.max(0, minorToMajor(price.tax, exponent))
   const totalFromWebhook = Math.max(0, minorToMajor(price.total, exponent))
 

@@ -50,6 +50,11 @@ import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
+import {
+  posDescriptionChannelFromTerminalType,
+  resolvePosMenuDescriptionForChannel,
+  resolvePosMenuOptionDescriptionForChannel,
+} from '@/lib/pos-menu-display-description'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
@@ -132,6 +137,7 @@ export function PosTerminalMenuScreen({
   const [configSaving, setConfigSaving] = React.useState(false)
   const [configMessage, setConfigMessage] = React.useState<string>('')
   const isAdminMode = mode === 'admin-config'
+  const descriptionChannel = posDescriptionChannelFromTerminalType(orderType)
   const [menuEditOpen, setMenuEditOpen] = React.useState(false)
   const [menuEditSaving, setMenuEditSaving] = React.useState(false)
   const [menuEditTargetId, setMenuEditTargetId] = React.useState<string | null>(null)
@@ -819,13 +825,15 @@ export function PosTerminalMenuScreen({
                 <div className="mt-auto text-xs font-bold text-amber-600">{getPromoPrice(p).toLocaleString()} ฿</div>
               </button>
             ))}
-            {filteredMenus.map((m) => (
+            {filteredMenus.map((m) => {
+              const menuDesc = resolvePosMenuDescriptionForChannel(m, descriptionChannel)
+              return (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => interactive && fireMenuAction(() => openMenuPicker(m))}
                 className={cn(
-                  'touch-manipulation flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition',
+                  'touch-manipulation flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition',
                   !isAdminMode &&
                     'rounded-2xl border-border/90 bg-card shadow-md shadow-black/[0.06] ring-1 ring-border/50 dark:shadow-black/30',
                   interactive
@@ -834,7 +842,7 @@ export function PosTerminalMenuScreen({
                 )}
                 data-menu-card="menu"
               >
-                <div className="relative h-[92px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                <div className="relative h-[80px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100 min-[400px]:h-[92px]">
                   {isAdminMode && (
                     <span
                       role="button"
@@ -859,22 +867,34 @@ export function PosTerminalMenuScreen({
                   )}
                   <PosMenuFillImage src={m.imageUrl || ''} alt={m.name} />
                 </div>
-                <div
-                  className="mt-1 overflow-hidden break-words font-medium leading-tight text-slate-800"
-                  style={{
-                    fontSize: `${tileFontPx}px`,
-                    lineHeight: '1.2',
-                    height: '3.6em',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                  }}
-                >
-                  {m.name}
+                <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5">
+                  <div
+                    className="overflow-hidden break-words font-medium leading-tight text-slate-800"
+                    style={{
+                      fontSize: `${tileFontPx}px`,
+                      lineHeight: '1.2',
+                      maxHeight: '3.6em',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                    }}
+                  >
+                    {m.name}
+                  </div>
+                  {menuDesc ? (
+                    <p
+                      className="line-clamp-2 text-[10px] leading-snug text-slate-500"
+                      style={{ fontSize: `${Math.max(9, tileFontPx - 3)}px` }}
+                      title={menuDesc}
+                    >
+                      {menuDesc}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="mt-auto text-xs font-bold text-emerald-600">{getMenuPrice(m).toLocaleString()} ฿</div>
               </button>
-            ))}
+            )
+            })}
           </div>
         </section>
 
@@ -1014,6 +1034,16 @@ export function PosTerminalMenuScreen({
                 ? ` (${(optionPickerStep || 0) + 1}/${optionPickerMenu.optionSelectionGroups.length})`
                 : ''}
             </DialogTitle>
+            {optionPickerMenu
+              ? (() => {
+                  const md = resolvePosMenuDescriptionForChannel(optionPickerMenu, descriptionChannel)
+                  return md ? (
+                    <p className="text-left text-xs text-muted-foreground whitespace-pre-wrap max-h-28 overflow-y-auto pr-1">
+                      {md}
+                    </p>
+                  ) : null
+                })()
+              : null}
           </DialogHeader>
           {optionPickerMenu && (() => {
             if (isBanbanMenu(optionPickerMenu)) {
@@ -1042,7 +1072,9 @@ export function PosTerminalMenuScreen({
                     <p className="text-xs text-muted-foreground">{t('posBanbanNoChicken') || '치킨 메뉴가 없습니다.'}</p>
                   ) : (
                     <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                      {list.map((menu) => (
+                      {list.map((menu) => {
+                        const banDesc = resolvePosMenuDescriptionForChannel(menu, descriptionChannel)
+                        return (
                         <button
                           key={menu.id}
                           type="button"
@@ -1063,8 +1095,13 @@ export function PosTerminalMenuScreen({
                               : "border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50"
                           )}
                         >
-                          <span className="flex-1 min-w-0 text-left font-medium text-slate-800 break-words">
-                            {menu.name}
+                          <span className="min-w-0 flex-1 text-left break-words">
+                            <span className="block font-medium text-slate-800">{menu.name}</span>
+                            {banDesc ? (
+                              <span className="mt-0.5 block line-clamp-2 text-[11px] text-muted-foreground" title={banDesc}>
+                                {banDesc}
+                              </span>
+                            ) : null}
                           </span>
                           {first?.id === menu.id ? (
                             <span className="rounded bg-slate-200 px-2 py-1 text-[11px] shrink-0">
@@ -1076,7 +1113,8 @@ export function PosTerminalMenuScreen({
                             </span>
                           )}
                         </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                   {first && (
@@ -1181,19 +1219,29 @@ export function PosTerminalMenuScreen({
             return (
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
-                {optsToShow.map((opt) => (
+                {optsToShow.map((opt) => {
+                  const optDesc = resolvePosMenuOptionDescriptionForChannel(opt, descriptionChannel)
+                  return (
                   <button
                     key={opt.id}
                     type="button"
                     onClick={() => fireMenuAction(() => addWithOption(optionPickerMenu, opt))}
-                    className="flex justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                    className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                   >
-                    <span className="text-slate-800">{opt.name}</span>
-                    <span className="font-bold text-emerald-600">
+                    <span className="min-w-0 flex-1 text-slate-800">
+                      <span className="block font-medium">{opt.name}</span>
+                      {optDesc ? (
+                        <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
+                          {optDesc}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 font-bold text-emerald-600">
                       {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
                     </span>
                   </button>
-                ))}
+                  )
+                })}
               </div>
             )
           })()}

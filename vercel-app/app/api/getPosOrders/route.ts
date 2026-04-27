@@ -4,6 +4,8 @@ import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { isOfficeRole } from '@/lib/permissions'
+import { buildLegacyToCanonicalMap, fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 async function resolveBearerCaller(
   request: NextRequest
@@ -22,6 +24,34 @@ async function resolveBearerCaller(
 const POS_ORDER_SELECT =
   'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
 
+function addStoreVariants(set: Set<string>, raw: string) {
+  const v = String(raw || '').trim()
+  if (!v || v.toLowerCase() === 'all') return
+  set.add(v)
+  const prefixed = v.startsWith('CM ') ? v.slice(3).trim() : `CM ${v}`.trim()
+  if (prefixed && prefixed !== v) set.add(prefixed)
+  const noPrefix = v.replace(/^CM\s+/i, '').trim()
+  if (noPrefix && noPrefix !== v) set.add(noPrefix)
+}
+
+async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]> {
+  const base = String(rawStore || '').trim()
+  if (!base || base.toLowerCase() === 'all') return []
+  const variants = new Set<string>()
+  addStoreVariants(variants, base)
+  try {
+    const masters = await fetchErpStoresMaster()
+    if (masters.length > 0) {
+      const legacyToCanonical = buildLegacyToCanonicalMap(masters)
+      const canonical = String(legacyToCanonical[normStoreKey(base)] || '').trim()
+      if (canonical) addStoreVariants(variants, canonical)
+    }
+  } catch {
+    // ignore master resolve failure; fall back to raw variants
+  }
+  return Array.from(variants)
+}
+
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -39,6 +69,8 @@ export async function GET(request: NextRequest) {
     }
     effectiveStoreCode = own
   }
+  const storeFilterCandidates = await resolveStoreFilterCandidates(effectiveStoreCode)
+  const primaryStoreFilter = storeFilterCandidates[0] || ''
   const status = String(searchParams.get('status') || '').trim()
   const sinceIdRaw = searchParams.get('sinceId')?.trim()
   const sinceId = sinceIdRaw && /^\d+$/.test(sinceIdRaw) ? parseInt(sinceIdRaw, 10) : null
@@ -105,8 +137,8 @@ export async function GET(request: NextRequest) {
     /** 단건 id 조회: Realtime UPDATE 후 풀 행 보강용 */
     if (orderId != null && orderId > 0) {
       const idFilters = [`id=eq.${orderId}`]
-      if (effectiveStoreCode && effectiveStoreCode !== 'All') {
-        idFilters.push(`store_code=ilike.${encodeURIComponent(effectiveStoreCode)}`)
+      if (primaryStoreFilter) {
+        idFilters.push(`store_code=ilike.${encodeURIComponent(primaryStoreFilter)}`)
       }
       let idRows = (await supabaseSelectFilter('pos_orders', idFilters.join('&'), {
         order: 'created_at.desc',
@@ -114,12 +146,8 @@ export async function GET(request: NextRequest) {
         select: POS_ORDER_SELECT,
       })) as typeof rows
 
-      if (!idRows?.length && effectiveStoreCode) {
-        const variants = [
-          effectiveStoreCode.startsWith('CM ') ? effectiveStoreCode.slice(3).trim() : `CM ${effectiveStoreCode}`.trim(),
-          effectiveStoreCode.replace(/^CM\s+/i, '').trim(),
-        ].filter((v) => v && v !== effectiveStoreCode)
-        for (const alt of variants) {
+      if (!idRows?.length && storeFilterCandidates.length > 1) {
+        for (const alt of storeFilterCandidates.slice(1)) {
           const altFilter = `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`
           idRows = (await supabaseSelectFilter('pos_orders', altFilter, {
             order: 'created_at.desc',
@@ -153,7 +181,7 @@ export async function GET(request: NextRequest) {
         return parts.join('&')
       }
 
-      const filterStr = buildListFilter(effectiveStoreCode)
+      const filterStr = buildListFilter(primaryStoreFilter)
 
       if (filterStr) {
         rows = (await supabaseSelectFilter('pos_orders', filterStr, {
@@ -162,13 +190,8 @@ export async function GET(request: NextRequest) {
           select: POS_ORDER_SELECT,
         })) as typeof rows
 
-        if (effectiveStoreCode) {
-          const variants = [
-            effectiveStoreCode.startsWith('CM ')
-              ? effectiveStoreCode.slice(3).trim()
-              : `CM ${effectiveStoreCode}`.trim(),
-            effectiveStoreCode.replace(/^CM\s+/i, '').trim(),
-          ].filter((v) => v && v !== effectiveStoreCode)
+        if (storeFilterCandidates.length > 1) {
+          const variants = storeFilterCandidates.slice(1)
           if (variants.length > 0) {
             const mergedById = new Map<number, (typeof rows)[number]>()
             for (const row of rows || []) {
@@ -206,6 +229,8 @@ export async function GET(request: NextRequest) {
         endDate,
         requestedStore: requestedStore || '(none)',
         effectiveStore: effectiveStoreCode || '(all)',
+        primaryStoreFilter: primaryStoreFilter || '(all)',
+        storeFilterCandidates,
         status: statusPaidLike ? 'paidLike' : status || '(all)',
         sinceId: sinceId ?? '(none)',
         listLimit,

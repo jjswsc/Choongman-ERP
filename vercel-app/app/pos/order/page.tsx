@@ -86,6 +86,10 @@ import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/l
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
+import {
+  resolvePosMenuDescriptionForChannel,
+  resolvePosMenuOptionDescriptionForChannel,
+} from "@/lib/pos-menu-display-description"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -1198,31 +1202,44 @@ export default function PosOrderPage() {
                 </div>
               </button>
             ))}
-            {filteredMenus.map((m) => (
+            {filteredMenus.map((m) => {
+              const menuDesc = resolvePosMenuDescriptionForChannel(m, orderType)
+              return (
               <button
                 key={m.id}
                 onClick={() => addToCart(m)}
-                className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition hover:border-emerald-400 hover:shadow-md active:scale-[0.98] touch-manipulation"
+                className="flex min-h-[170px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition hover:border-emerald-400 hover:shadow-md active:scale-[0.98] touch-manipulation h-full"
               >
-                <div className="relative h-[92px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                <div className="relative h-[88px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100 min-[400px]:h-[92px]">
                   <PosMenuFillImage src={m.imageUrl || ''} alt={m.name} />
                 </div>
-                <div
-                  className="mt-1 overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
-                  style={{
-                    height: "2.6em",
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                  }}
-                >
-                  {m.name}
+                <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5">
+                  <div
+                    className="overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
+                    style={{
+                      maxHeight: "2.6em",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                  >
+                    {m.name}
+                  </div>
+                  {menuDesc ? (
+                    <p
+                      className="line-clamp-2 text-[10px] leading-snug text-slate-500"
+                      title={menuDesc}
+                    >
+                      {menuDesc}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="mt-auto text-xs font-bold text-emerald-600">
                   {(getMenuPrice(m)) > 0 ? `${formatBahtNum(getMenuPrice(m))} ฿` : "-"}
                 </div>
               </button>
-            ))}
+            )
+            })}
           </div>
           {!selectedMainCategory && (
             <div className="col-span-full py-12 text-center text-slate-500">
@@ -1755,6 +1772,16 @@ export default function PosOrderPage() {
                 ? ` (${(optionPickerStep || 0) + 1}/${optionPickerMenu.optionSelectionGroups.length})`
                 : ""}
             </DialogTitle>
+            {optionPickerMenu
+              ? (() => {
+                  const md = resolvePosMenuDescriptionForChannel(optionPickerMenu, orderType)
+                  return md ? (
+                    <p className="text-left text-xs text-muted-foreground whitespace-pre-wrap max-h-28 overflow-y-auto pr-1">
+                      {md}
+                    </p>
+                  ) : null
+                })()
+              : null}
           </DialogHeader>
           {optionPickerMenu && (() => {
             if (isBanbanMenu(optionPickerMenu)) {
@@ -1774,7 +1801,9 @@ export default function PosOrderPage() {
                     <p className="text-xs text-muted-foreground">{t("posBanbanNoChicken") || "치킨 메뉴가 없습니다."}</p>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      {list.map((menu) => (
+                      {list.map((menu) => {
+                        const banDesc = resolvePosMenuDescriptionForChannel(menu, orderType)
+                        return (
                         <button
                           key={menu.id}
                           type="button"
@@ -1788,9 +1817,15 @@ export default function PosOrderPage() {
                           className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                         >
                           <span className="block font-medium text-slate-800">{menu.name}</span>
+                          {banDesc ? (
+                            <span className="mt-0.5 block line-clamp-2 text-[11px] text-muted-foreground" title={banDesc}>
+                              {banDesc}
+                            </span>
+                          ) : null}
                           <span className="text-xs text-emerald-600">{formatBahtNum(getMenuPrice(menu))} ฿</span>
                         </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                   {first && (
@@ -1883,18 +1918,28 @@ export default function PosOrderPage() {
             return (
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
-                {optsToShow.map((opt) => (
+                {optsToShow.map((opt) => {
+                  const optDesc = resolvePosMenuOptionDescriptionForChannel(opt, orderType)
+                  return (
                   <button
                     key={opt.id}
                     onClick={() => addToCartWithOption(optionPickerMenu, opt)}
-                    className="flex justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                    className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                   >
-                    <span className="text-slate-800">{opt.name}</span>
-                    <span className="font-bold text-emerald-600">
+                    <span className="min-w-0 flex-1 text-slate-800">
+                      <span className="block font-medium">{opt.name}</span>
+                      {optDesc ? (
+                        <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
+                          {optDesc}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 font-bold text-emerald-600">
                       {formatBahtNum(getMenuPrice(optionPickerMenu) + getOptionModifier(opt))} ฿
                     </span>
                   </button>
-                ))}
+                  )
+                })}
               </div>
             )
           })()}

@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
   getEvaluationItems,
+  getEvaluationResultById,
   saveEvaluationResult,
   translateTexts,
   type AdminEmployeeItem,
@@ -31,6 +32,8 @@ import {
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { getEvaluationDistinctStores } from "@/lib/api-client"
 import { matchesEvalKitchenJob, matchesEvalServiceJob } from "@/lib/employee-job-rules"
+import { evalIncidentRowHasUserContent } from "@/lib/warning-letter-incident"
+import { normalizeHistoryEvalType } from "@/lib/evaluation-postgrest-filters"
 
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
@@ -78,6 +81,45 @@ export type EmployeeEvalJumpTarget = {
   job: string
   /** 평가 저장 시의 유형(경고서 탭 바로가기 등). 있으면 직무 추정보다 우선 */
   evalType?: "kitchen" | "service" | "manager"
+  /** 있으면 해당 평가 결과를 불러와 수정(저장 시 UPDATE). 경고서·평가 이력 연동 */
+  evaluationId?: string
+}
+
+const JSON_SECTION_KEYS = ["menu", "cost", "hygiene", "attitude", "service", "manager"] as const
+
+function mergeSectionScoresFromSavedJson(
+  sectionsJson: Record<string, unknown>,
+  initScores: Record<string, string>,
+  initRemarks: Record<string, string>,
+  initSolo: Record<string, boolean>,
+  initPeak: Record<string, boolean>,
+  initTrain: Record<string, boolean>
+) {
+  for (const sk of JSON_SECTION_KEYS) {
+    const arr = sectionsJson[sk]
+    if (!Array.isArray(arr)) continue
+    for (const raw of arr) {
+      const item = raw as Record<string, unknown>
+      const kid = String(item?.id ?? "")
+      if (!kid) continue
+      if (Object.prototype.hasOwnProperty.call(initScores, kid)) {
+        const sc = item.score
+        if (sc != null && String(sc).trim() !== "") initScores[kid] = String(sc)
+      }
+      if (Object.prototype.hasOwnProperty.call(initRemarks, kid) && item.notes != null) {
+        initRemarks[kid] = String(item.notes)
+      }
+      if (Object.prototype.hasOwnProperty.call(initSolo, kid) && item.soloOK !== undefined) {
+        initSolo[kid] = Boolean(item.soloOK)
+      }
+      if (Object.prototype.hasOwnProperty.call(initPeak, kid) && item.peakOK !== undefined) {
+        initPeak[kid] = Boolean(item.peakOK)
+      }
+      if (Object.prototype.hasOwnProperty.call(initTrain, kid) && item.canTrain !== undefined) {
+        initTrain[kid] = Boolean(item.canTrain)
+      }
+    }
+  }
 }
 
 function findEmployeeForEvalJump(
@@ -134,6 +176,34 @@ interface IncidentRow {
   warningLetterUrl: string
 }
 
+function parseIncidentsFromSavedJson(raw: unknown): IncidentRow[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return [
+      {
+        type: EVAL_INCIDENT_KEYS[0],
+        typeOther: "",
+        date: "",
+        details: "",
+        warningLetterChecked: false,
+        warningLetterUrl: "",
+      },
+    ]
+  }
+  return raw.map((x) => {
+    const item = x as Record<string, unknown>
+    const savedType = String(item.type || "").trim()
+    const isPreset = /^eval_incident_\d+$/i.test(savedType)
+    return {
+      type: isPreset ? savedType : "__기타__",
+      typeOther: isPreset ? "" : savedType,
+      date: String(item.date || "").trim(),
+      details: String(item.details || "").trim(),
+      warningLetterChecked: Boolean(item.warningLetterChecked),
+      warningLetterUrl: String(item.warningLetterUrl || "").trim(),
+    }
+  })
+}
+
 export interface EmployeeEvalTabProps {
   stores: string[]
   employees: (AdminEmployeeItem & { finalGrade?: string })[]
@@ -188,6 +258,8 @@ export function EmployeeEvalTab({
 
   /** 경고서 탭 등에서 평가 탭으로 점프한 뒤 `loadForm`을 자동 호출(수동 「양식 불러오기」 없이 양식 표시) */
   const pendingEvalFormAutoLoadRef = React.useRef(false)
+  /** `loadForm` 직전에 채움 — 양식 템플릿에 저장된 점수·비고 병합 */
+  const pendingSavedJsonForMergeRef = React.useRef<Record<string, unknown> | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -220,31 +292,130 @@ export function EmployeeEvalTab({
     /** 상위 `allEmployees`가 비동기로 채워지기 전에 점프하면 매칭 실패·payload 소비만 되고 끝남 → 목록이 올 때까지 대기 */
     if (employees.length === 0) return
 
-    const jump = {
-      store: jumpToEmployee.store,
-      name: jumpToEmployee.name,
-      nick: jumpToEmployee.nick,
-      job: jumpToEmployee.job,
+    let cancelled = false
+
+    const finishConsume = () => {
+      if (!cancelled) onJumpToEmployeeConsumed?.()
     }
-    const jStore = String(jump.store || "").trim()
-    const pickedStore =
-      storeOptionsForEval.find((s) => storesMatchForGradeLookup(s, jStore)) || jStore
-    const match = findEmployeeForEvalJump(employees, jump)
-    const nextType =
-      jumpToEmployee.evalType ??
-      (match ? deriveEvalTypeFromEmployee(match) : evalTypeFromJobLabel(String(jump.job || "")))
-    setEvalStore(pickedStore)
-    setEvalScope(nextType)
-    if (match) {
-      const nameForSelect = String(match.name || "").trim() ? String(match.name) : "__unnamed__"
-      setEvalEmployee(nameForSelect)
-      pendingEvalFormAutoLoadRef.current = true
-    } else {
-      setEvalEmployee("")
-      pendingEvalFormAutoLoadRef.current = false
-      void appAlert(t("eval_jump_not_found"))
+
+    void (async () => {
+      const evId = String(jumpToEmployee.evaluationId || "").trim()
+      if (evId) {
+        try {
+          const rec = await getEvaluationResultById(evId)
+          if (cancelled) {
+            finishConsume()
+            return
+          }
+          const jStore = String(rec.store || jumpToEmployee.store || "").trim()
+          const pickedStore =
+            storeOptionsForEval.find((s) => storesMatchForGradeLookup(s, jStore)) || jStore
+          const nextType = normalizeHistoryEvalType(
+            String(rec.evalType || jumpToEmployee.evalType || "kitchen")
+          )
+          const empName = String(rec.employeeName || jumpToEmployee.name || "").trim()
+          setEvalStore(pickedStore)
+          setEvalScope(nextType)
+          setEvalEmployee(empName ? empName : "__unnamed__")
+          setEvalDate(String(rec.date || "").slice(0, 10))
+          setEvalId(String(rec.id || ""))
+          setTotalMemo(String(rec.memo || ""))
+          setFinalGrade(String(rec.finalGrade || ""))
+
+          let parsed: Record<string, unknown> = {}
+          try {
+            const jd = rec.jsonData
+            parsed =
+              typeof jd === "string"
+                ? (JSON.parse(jd) as Record<string, unknown>)
+                : jd && typeof jd === "object"
+                  ? (jd as Record<string, unknown>)
+                  : {}
+          } catch {
+            parsed = {}
+          }
+          const ap = parsed.actionPlan
+          if (ap && typeof ap === "object") {
+            const o = ap as Record<string, unknown>
+            setTrainingNeeded(String(o.trainingNeeded ?? ""))
+            setCoach(String(o.coach ?? ""))
+            setTargetDate(String(o.targetDate ?? "").slice(0, 10))
+            setReevalDate(String(o.reevalDate ?? "").slice(0, 10))
+          } else {
+            setTrainingNeeded("")
+            setCoach("")
+            setTargetDate("")
+            setReevalDate("")
+          }
+          setIncidents(parseIncidentsFromSavedJson(parsed.incidents))
+          pendingSavedJsonForMergeRef.current = parsed
+          pendingEvalFormAutoLoadRef.current = true
+        } catch (e) {
+          console.error(e)
+          if (!cancelled) {
+            void appAlert(t("eval_load_record_fail"))
+            pendingSavedJsonForMergeRef.current = null
+            const jump = {
+              store: jumpToEmployee.store,
+              name: jumpToEmployee.name,
+              nick: jumpToEmployee.nick,
+              job: jumpToEmployee.job,
+            }
+            const jStore = String(jump.store || "").trim()
+            const pickedStore =
+              storeOptionsForEval.find((s) => storesMatchForGradeLookup(s, jStore)) || jStore
+            const match = findEmployeeForEvalJump(employees, jump)
+            const nextType =
+              jumpToEmployee.evalType ??
+              (match ? deriveEvalTypeFromEmployee(match) : evalTypeFromJobLabel(String(jump.job || "")))
+            setEvalStore(pickedStore)
+            setEvalScope(nextType)
+            if (match) {
+              const nameForSelect = String(match.name || "").trim() ? String(match.name) : "__unnamed__"
+              setEvalEmployee(nameForSelect)
+              pendingEvalFormAutoLoadRef.current = true
+            } else {
+              setEvalEmployee("")
+              pendingEvalFormAutoLoadRef.current = false
+              void appAlert(t("eval_jump_not_found"))
+            }
+          }
+        }
+        finishConsume()
+        return
+      }
+
+      const jump = {
+        store: jumpToEmployee.store,
+        name: jumpToEmployee.name,
+        nick: jumpToEmployee.nick,
+        job: jumpToEmployee.job,
+      }
+      const jStore = String(jump.store || "").trim()
+      const pickedStore =
+        storeOptionsForEval.find((s) => storesMatchForGradeLookup(s, jStore)) || jStore
+      const match = findEmployeeForEvalJump(employees, jump)
+      const nextType =
+        jumpToEmployee.evalType ??
+        (match ? deriveEvalTypeFromEmployee(match) : evalTypeFromJobLabel(String(jump.job || "")))
+      setEvalStore(pickedStore)
+      setEvalScope(nextType)
+      pendingSavedJsonForMergeRef.current = null
+      if (match) {
+        const nameForSelect = String(match.name || "").trim() ? String(match.name) : "__unnamed__"
+        setEvalEmployee(nameForSelect)
+        pendingEvalFormAutoLoadRef.current = true
+      } else {
+        setEvalEmployee("")
+        pendingEvalFormAutoLoadRef.current = false
+        void appAlert(t("eval_jump_not_found"))
+      }
+      finishConsume()
+    })()
+
+    return () => {
+      cancelled = true
     }
-    onJumpToEmployeeConsumed?.()
   }, [jumpToEmployee, employees, storeOptionsForEval, onJumpToEmployeeConsumed, t])
 
   /** 매장 매니저: 최초에만 본인 매장을 기본 선택. 경고서 탭에서 평가 탭으로 점프할 때는 매장을 덮어쓰지 않음 */
@@ -385,6 +556,18 @@ export function EmployeeEvalTab({
             initTrain[key] = false
           }
         }
+      }
+      const mergeSource = pendingSavedJsonForMergeRef.current
+      pendingSavedJsonForMergeRef.current = null
+      if (mergeSource?.sections && typeof mergeSource.sections === "object") {
+        mergeSectionScoresFromSavedJson(
+          mergeSource.sections as Record<string, unknown>,
+          initScores,
+          initRemarks,
+          initSolo,
+          initPeak,
+          initTrain
+        )
       }
       setScores(initScores)
       setRemarks(initRemarks)
@@ -605,7 +788,7 @@ export function EmployeeEvalTab({
       }
 
       const incidentPayload = incidents
-        .filter((r) => r.type || r.typeOther)
+        .filter((r) => evalIncidentRowHasUserContent(r))
         .map((r) => ({
           type: r.type === "__기타__" ? r.typeOther : r.type,
           date: r.date,
@@ -783,6 +966,11 @@ export function EmployeeEvalTab({
         </div>
       )}
       <div className="rounded-lg border border-border bg-card p-4">
+        {evalId ? (
+          <p className="mb-3 rounded-md border border-primary/25 bg-primary/5 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+            {t("eval_editing_existing_hint")}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold">
@@ -879,7 +1067,10 @@ export function EmployeeEvalTab({
           <Button
             type="button"
             size="sm"
-            onClick={loadForm}
+            onClick={() => {
+              setEvalId("")
+              void loadForm()
+            }}
             disabled={loading || (evalScope === "all" && !evalEmployee)}
             className="h-8"
           >

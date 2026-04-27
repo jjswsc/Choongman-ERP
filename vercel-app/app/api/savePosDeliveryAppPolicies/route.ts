@@ -5,6 +5,7 @@ import {
   type PosDeliveryCategoryOrder,
   type PosDeliveryMenuPolicy,
 } from '@/lib/pos-delivery-policy'
+import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,12 @@ export async function POST(req: NextRequest) {
       menuPolicies: Array.isArray(body.menuPolicies) ? body.menuPolicies : undefined,
       categoryOrders: Array.isArray(body.categoryOrders) ? body.categoryOrders : undefined,
     })
+    if (appCode === 'grab') {
+      void triggerGrabMenuNotification({
+        reason: 'delivery_policy_updated',
+        partnerMerchantID: storeCode,
+      })
+    }
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     return NextResponse.json(

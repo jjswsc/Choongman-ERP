@@ -7,6 +7,7 @@ import * as React from "react"
 import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -137,6 +138,9 @@ const emptyForm = {
   price: "",
   priceDelivery: "",
   imageUrl: "",
+  descriptionDefault: "",
+  descriptionDelivery: "",
+  descriptionTable: "",
   vatIncluded: true,
   isActive: true,
   isBanban: false,
@@ -173,11 +177,18 @@ export default function PosMenusPage() {
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
   const [soldOutTogglingOptionId, setSoldOutTogglingOptionId] = React.useState<string | null>(null)
   const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
+  const [selectedOptionDescId, setSelectedOptionDescId] = React.useState("")
+  const [optionDescDefaultDraft, setOptionDescDefaultDraft] = React.useState("")
+  const [optionDescDeliveryDraft, setOptionDescDeliveryDraft] = React.useState("")
+  const [optionDescTableDraft, setOptionDescTableDraft] = React.useState("")
   const [menuIngredients, setMenuIngredients] = React.useState<PosMenuIngredient[]>([])
   const [items, setItems] = React.useState<{ code: string; name: string; category: string }[]>([])
   const [newOptionName, setNewOptionName] = React.useState("")
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
   const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
+  const [newOptionDescriptionDefault, setNewOptionDescriptionDefault] = React.useState("")
+  const [newOptionDescriptionDelivery, setNewOptionDescriptionDelivery] = React.useState("")
+  const [newOptionDescriptionTable, setNewOptionDescriptionTable] = React.useState("")
   const [newOptionType, setNewOptionType] = React.useState<"substitution" | "additive">("substitution")
   /** 추가형: 연결할 소스 메뉴 id (pos_menus) */
   const [newOptionSourceMenuId, setNewOptionSourceMenuId] = React.useState("")
@@ -191,7 +202,7 @@ export default function PosMenusPage() {
   const [baseMenuCost, setBaseMenuCost] = React.useState<number | null>(null)
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
-  const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
+  const [formTab, setFormTab] = React.useState<"info" | "options" | "cost" | "description">("info")
   const [mainTab, setMainTab] = React.useState<
     "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "finalPrice" | "deliveryOps"
   >("screen")
@@ -392,6 +403,10 @@ export default function PosMenusPage() {
   React.useEffect(() => {
     if (!editingId) {
       setMenuOptions([])
+      setSelectedOptionDescId("")
+      setOptionDescDefaultDraft("")
+      setOptionDescDeliveryDraft("")
+      setOptionDescTableDraft("")
       setMenuIngredients([])
       setMenuCost(null)
       setBaseMenuCost(null)
@@ -400,6 +415,19 @@ export default function PosMenusPage() {
     }
     getPosMenuOptions({ menuId: editingId }).then((opts) => setMenuOptions(opts || []))
   }, [editingId])
+
+  React.useEffect(() => {
+    if (!selectedOptionDescId) {
+      setOptionDescDefaultDraft("")
+      setOptionDescDeliveryDraft("")
+      setOptionDescTableDraft("")
+      return
+    }
+    const opt = menuOptions.find((o) => o.id === selectedOptionDescId)
+    setOptionDescDefaultDraft(opt?.descriptionDefault ?? "")
+    setOptionDescDeliveryDraft(opt?.descriptionDelivery ?? "")
+    setOptionDescTableDraft(opt?.descriptionTable ?? "")
+  }, [selectedOptionDescId, menuOptions])
 
   React.useEffect(() => {
     if (!editingId) return
@@ -515,6 +543,9 @@ export default function PosMenusPage() {
           price: String(m.price),
           priceDelivery: m.priceDelivery != null ? String(m.priceDelivery) : "",
           imageUrl: m.imageUrl,
+          descriptionDefault: m.descriptionDefault ?? "",
+          descriptionDelivery: m.descriptionDelivery ?? "",
+          descriptionTable: m.descriptionTable ?? "",
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
           isBanban: m.isBanban ?? false,
@@ -587,6 +618,9 @@ export default function PosMenusPage() {
       price: Number(formData.price) || 0,
       priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       imageUrl: formData.imageUrl.trim(),
+      descriptionDefault: formData.descriptionDefault.trim(),
+      descriptionDelivery: formData.descriptionDelivery.trim() || null,
+      descriptionTable: formData.descriptionTable.trim() || null,
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       isBanban: formData.isBanban,
@@ -604,6 +638,9 @@ export default function PosMenusPage() {
       price: Number(formData.price) || 0,
       priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       imageUrl: formData.imageUrl.trim(),
+      descriptionDefault: formData.descriptionDefault.trim(),
+      descriptionDelivery: formData.descriptionDelivery.trim() || null,
+      descriptionTable: formData.descriptionTable.trim() || null,
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       sortOrder: 0,
@@ -644,6 +681,9 @@ export default function PosMenusPage() {
       price: String(menu.price),
       priceDelivery: menu.priceDelivery != null ? String(menu.priceDelivery) : "",
       imageUrl: menu.imageUrl,
+      descriptionDefault: menu.descriptionDefault ?? "",
+      descriptionDelivery: menu.descriptionDelivery ?? "",
+      descriptionTable: menu.descriptionTable ?? "",
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
       isBanban: menu.isBanban ?? false,
@@ -652,6 +692,9 @@ export default function PosMenusPage() {
     setNewOptionName("")
     setNewOptionModifier("0")
     setNewOptionModifierDelivery("")
+    setNewOptionDescriptionDefault("")
+    setNewOptionDescriptionDelivery("")
+    setNewOptionDescriptionTable("")
     setSelectedIngredientOptionId("")
   }
 
@@ -687,6 +730,9 @@ export default function PosMenusPage() {
         newOptionType === "additive" ? Number(newOptionSourceMenuId) || null : null,
       quantity: newOptionType === "additive" ? Number(newOptionQuantity) || 1 : 1,
       optionStepValues,
+      descriptionDefault: newOptionDescriptionDefault.trim(),
+      descriptionDelivery: newOptionDescriptionDelivery.trim() || null,
+      descriptionTable: newOptionDescriptionTable.trim() || null,
     })
     if (res.success) {
       getPosMenuOptions({ menuId: editingId }).then(setMenuOptions)
@@ -697,6 +743,9 @@ export default function PosMenusPage() {
       setNewOptionSourceMenuId("")
       setNewOptionQuantity("1")
       setNewOptionStepValues({})
+      setNewOptionDescriptionDefault("")
+      setNewOptionDescriptionDelivery("")
+      setNewOptionDescriptionTable("")
     } else {
       await appAlert(res.message)
     }
@@ -741,6 +790,39 @@ export default function PosMenusPage() {
     } else {
       await appAlert(res.message)
     }
+  }
+
+  const handleSaveOptionDescription = async () => {
+    if (!editingId || !selectedOptionDescId) return
+    const opt = menuOptions.find((o) => o.id === selectedOptionDescId)
+    if (!opt) return
+    const res = await savePosMenuOption({
+      id: opt.id,
+      menuId: Number(editingId),
+      name: opt.name,
+      priceModifier: opt.priceModifier ?? 0,
+      priceModifierDelivery: opt.priceModifierDelivery ?? null,
+      priceModifierPackaging: opt.priceModifierPackaging ?? null,
+      sortOrder: opt.sortOrder ?? 0,
+      optionType: opt.optionType ?? "substitution",
+      itemCode: opt.itemCode ?? null,
+      additiveSourceMenuId: opt.additiveSourceMenuId ?? null,
+      quantity: opt.quantity ?? 1,
+      optionStepValues: opt.optionStepValues ?? undefined,
+      sellHall: opt.sellHall ?? true,
+      sellDelivery: opt.sellDelivery ?? true,
+      sellPackaging: opt.sellPackaging ?? true,
+      descriptionDefault: optionDescDefaultDraft.trim(),
+      descriptionDelivery: optionDescDeliveryDraft.trim() || null,
+      descriptionTable: optionDescTableDraft.trim() || null,
+    })
+    if (!res.success) {
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      return
+    }
+    const opts = await getPosMenuOptions({ menuId: editingId })
+    setMenuOptions(opts || [])
+    await appAlert(t("itemsAlertUpdated") || "수정되었습니다.")
   }
 
   /** 메뉴 목록 펼침에서 옵션 삭제 시 DB 반영 및 화면 갱신 */
@@ -1697,6 +1779,9 @@ export default function PosMenusPage() {
                         <TabsTrigger value="cost" className={adminTabsTriggerCn}>
                           {t("posFormTabCost") || "원가"}
                         </TabsTrigger>
+                        <TabsTrigger value="description" className={adminTabsTriggerCn}>
+                          {t("posFormTabDescription") || "설명"}
+                        </TabsTrigger>
                       </TabsList>
                     </div>
                   </div>
@@ -2003,7 +2088,7 @@ export default function PosMenusPage() {
                           <thead>
                             <tr className="border-b bg-muted/50">
                               <th className="px-3 py-2 text-left font-semibold">{t("posMenuIngredients") || "재료"}</th>
-                              <th className="px-3 py-2 text-right font-semibold">수량</th>
+                              <th className="px-3 py-2 text-right font-semibold">{t("quantity") || "수량"}</th>
                               <th className="px-3 py-2 text-right font-semibold">{t("posIngredientLoss") || "로스"}</th>
                               <th className="px-3 py-2 text-right font-semibold">{t("posMenuCost") || "원가"}</th>
                             </tr>
@@ -2039,6 +2124,112 @@ export default function PosMenusPage() {
                         </span>
                       </div>
                     )}
+                  </TabsContent>
+                  <TabsContent value="description" className="mt-4 space-y-4">
+                    <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
+                      <h4 className="text-xs font-semibold">
+                        {t("posMenuDescriptionSection") || "메뉴 설명 (배달앱/테이블오더용)"}
+                      </h4>
+                      <div>
+                        <label className="text-xs font-semibold">
+                          {t("posMenuDescriptionDefault") || "기본 설명"}
+                        </label>
+                        <Textarea
+                          className="mt-1 min-h-[72px] text-xs"
+                          placeholder={t("posMenuDescriptionDefaultPh") || "메뉴 기본 설명을 입력하세요."}
+                          value={formData.descriptionDefault}
+                          onChange={(e) =>
+                            setFormData((p) => ({ ...p, descriptionDefault: e.target.value }))
+                          }
+                          disabled={!!editingMenuLinkedPromoId}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">
+                          {t("posMenuDescriptionDelivery") || "배달앱 설명 (비우면 기본 설명 사용)"}
+                        </label>
+                        <Textarea
+                          className="mt-1 min-h-[60px] text-xs"
+                          placeholder={t("posMenuDescriptionDeliveryPh") || "Grab/LineMan 등에 노출할 설명"}
+                          value={formData.descriptionDelivery}
+                          onChange={(e) =>
+                            setFormData((p) => ({ ...p, descriptionDelivery: e.target.value }))
+                          }
+                          disabled={!!editingMenuLinkedPromoId}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">
+                          {t("posMenuDescriptionTable") || "테이블오더 설명 (비우면 기본 설명 사용)"}
+                        </label>
+                        <Textarea
+                          className="mt-1 min-h-[60px] text-xs"
+                          placeholder={t("posMenuDescriptionTablePh") || "테이블오더(QR 메뉴)용 설명"}
+                          value={formData.descriptionTable}
+                          onChange={(e) =>
+                            setFormData((p) => ({ ...p, descriptionTable: e.target.value }))
+                          }
+                          disabled={!!editingMenuLinkedPromoId}
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded border border-border/70 bg-muted/20 p-3 space-y-2">
+                      <h4 className="text-xs font-semibold">
+                        {t("posOptionDescriptionEdit") || "옵션 설명 수정"}
+                      </h4>
+                      {menuOptions.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t("posOptionDescriptionEmpty") || "옵션이 없습니다. 먼저 옵션 탭에서 옵션을 추가해 주세요."}
+                        </p>
+                      ) : (
+                        <>
+                          <Select
+                            value={selectedOptionDescId}
+                            onValueChange={setSelectedOptionDescId}
+                          >
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue
+                                placeholder={t("posOptionDescriptionSelect") || "옵션 선택"}
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {menuOptions.map((o) => (
+                                <SelectItem key={o.id} value={o.id}>
+                                  {optionPartLabel(o.name)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedOptionDescId && (
+                            <div className="grid gap-2">
+                              <Textarea
+                                className="min-h-[56px] text-xs"
+                                placeholder={t("posOptionDescriptionDefaultPh") || "옵션 기본 설명"}
+                                value={optionDescDefaultDraft}
+                                onChange={(e) => setOptionDescDefaultDraft(e.target.value)}
+                              />
+                              <Textarea
+                                className="min-h-[48px] text-xs"
+                                placeholder={t("posOptionDescriptionDeliveryPh") || "배달앱 옵션 설명 (비우면 기본 설명)"}
+                                value={optionDescDeliveryDraft}
+                                onChange={(e) => setOptionDescDeliveryDraft(e.target.value)}
+                              />
+                              <Textarea
+                                className="min-h-[48px] text-xs"
+                                placeholder={t("posOptionDescriptionTablePh") || "테이블오더 옵션 설명 (비우면 기본 설명)"}
+                                value={optionDescTableDraft}
+                                onChange={(e) => setOptionDescTableDraft(e.target.value)}
+                              />
+                              <div className="flex justify-end">
+                                <Button size="sm" onClick={handleSaveOptionDescription}>
+                                  {t("itemsBtnSave") || "저장"}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </TabsContent>
                 </Tabs>
                     <div className="flex gap-3 pt-2">

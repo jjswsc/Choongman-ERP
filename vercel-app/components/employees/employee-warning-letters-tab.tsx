@@ -11,8 +11,7 @@ import {
   type WarningLetterIncidentItem,
 } from "@/lib/api-client"
 import { bangkokDateYmd, bangkokFirstOfMonthMonthsAgo } from "@/lib/bangkok-date"
-import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
-import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
+import { resolveEmployeeNickJobForEvalJump } from "@/lib/employee-eval-jump-resolve"
 import {
   Select,
   SelectContent,
@@ -27,6 +26,8 @@ import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 export interface EmployeeWarningLettersTabProps {
   stores: string[]
   employees: (AdminEmployeeItem & { finalGrade?: string })[]
+  /** 직원 평가 저장 시 증가 → 이전에 조회한 적 있으면 목록 자동 재조회 */
+  evalSaveSerial?: number
   /** 직원 평가 탭으로 이동할 때 전달 (상위에서 key 부여) */
   onOpenEval: (target: {
     store: string
@@ -34,31 +35,9 @@ export interface EmployeeWarningLettersTabProps {
     nick: string
     job: string
     evalType: WarningLetterIncidentItem["evalType"]
+    /** 있으면 해당 평가 건을 불러와 수정 */
+    evaluationId?: string
   }) => void
-}
-
-function resolveEmployeeForJump(
-  list: (AdminEmployeeItem & { finalGrade?: string })[],
-  store: string,
-  name: string
-): { nick: string; job: string } {
-  const jStore = String(store || "").trim()
-  const jName = String(name || "").trim()
-  const jNameNorm = jName ? normalizeEmployeeNameForGradeMatch(jName) : ""
-  for (const e of list) {
-    const atStore =
-      storesMatchForGradeLookup(e.store || "", jStore) ||
-      (Array.isArray(e.extraStores) &&
-        e.extraStores.some((x) => storesMatchForGradeLookup(String(x || ""), jStore)))
-    if (!atStore) continue
-    const n = String(e.name || "").trim()
-    const nick = String(e.nick || "").trim()
-    const job = String(e.job || "").trim()
-    if (jName && n === jName) return { nick, job }
-    const nNorm = n ? normalizeEmployeeNameForGradeMatch(n) : ""
-    if (jNameNorm && nNorm && jNameNorm === nNorm) return { nick, job }
-  }
-  return { nick: "", job: "" }
 }
 
 function formatIncidentTypeLabel(raw: string, t: (k: string) => string): string {
@@ -96,6 +75,7 @@ function warningAttachmentKind(url: string): "image" | "pdf" | "other" {
 export function EmployeeWarningLettersTab({
   stores,
   employees,
+  evalSaveSerial = 0,
   onOpenEval,
 }: EmployeeWarningLettersTabProps) {
   const { lang } = useLang()
@@ -199,14 +179,21 @@ export function EmployeeWarningLettersTab({
     }
   }, [type, start, end, storeFilter, employeeFilter, evaluatorFilter, listMode, t])
 
+  React.useEffect(() => {
+    if (evalSaveSerial < 1) return
+    if (!hasLoadedOnce) return
+    void loadList()
+  }, [evalSaveSerial, hasLoadedOnce, loadList])
+
   const handleOpenEval = (row: WarningLetterIncidentItem) => {
-    const { nick, job } = resolveEmployeeForJump(employees, row.store, row.employeeName)
+    const { nick, job } = resolveEmployeeNickJobForEvalJump(employees, row.store, row.employeeName)
     onOpenEval({
       store: row.store,
       name: row.employeeName,
       nick,
       job,
       evalType: row.evalType === "standalone" ? "kitchen" : row.evalType,
+      evaluationId: row.evaluationId ? String(row.evaluationId) : undefined,
     })
   }
 

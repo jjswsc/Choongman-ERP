@@ -10,13 +10,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const selectCols =
-      'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging'
+      'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging,description_default,description_delivery,description_table'
     const colsWithoutSellAndStep =
-      'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity'
+      'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,description_default,description_delivery,description_table'
     const colsBaseWithDelivery = 'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order'
     const colsBaseWithDeliveryOnly = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order'
     const minimalCols = 'id,menu_id,name,price_modifier,sort_order'
-    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean }[] | null = null
+    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean; description_default?: string; description_delivery?: string | null; description_table?: string | null }[] | null = null
 
     const doSelect = async (cols: string) => {
       if (menuId) {
@@ -82,6 +82,11 @@ export async function GET(request: NextRequest) {
         sellHall: row.sell_hall != null ? !!row.sell_hall : true,
         sellDelivery: row.sell_delivery != null ? !!row.sell_delivery : true,
         sellPackaging: row.sell_packaging != null ? !!row.sell_packaging : true,
+        descriptionDefault: String(row.description_default ?? ''),
+        descriptionDelivery:
+          row.description_delivery == null ? null : String(row.description_delivery),
+        descriptionTable:
+          row.description_table == null ? null : String(row.description_table),
       }
     })
 

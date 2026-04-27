@@ -16,13 +16,21 @@ function asArray(value: unknown): unknown[] {
 }
 
 /** 루트 `categories` 또는 `sections[].categories`(메뉴 시뮬/Partner 샘플 형) */
-function collectCategoriesFromPayload(payload: Record<string, unknown>): unknown[] {
+function collectCategoriesFromPayload(payload: Record<string, unknown>): Array<{
+  sectionName: string
+  category: Record<string, unknown>
+}> {
   const top = asArray(payload.categories)
-  if (top.length) return top
-  const out: unknown[] = []
+  if (top.length) {
+    return top.map((c) => ({ sectionName: 'Regular', category: asRecord(c) }))
+  }
+  const out: Array<{ sectionName: string; category: Record<string, unknown> }> = []
   for (const sec of asArray(payload.sections)) {
     const s = asRecord(sec)
-    out.push(...asArray(s.categories))
+    const sectionName = String(s.name ?? '').trim() || 'Regular'
+    for (const cat of asArray(s.categories)) {
+      out.push({ sectionName, category: asRecord(cat) })
+    }
   }
   return out
 }
@@ -109,8 +117,8 @@ export async function importGrabMenuToPos(payload: Record<string, unknown>): Pro
     skipped: 0,
   }
 
-  for (const rawCategory of categories) {
-    const category = asRecord(rawCategory)
+  for (const block of categories) {
+    const category = block.category
     const categoryName = String(category.name ?? 'Grab').trim() || 'Grab'
     const items = asArray(category.items)
 
@@ -129,16 +137,19 @@ export async function importGrabMenuToPos(payload: Record<string, unknown>): Pro
       const photos = asArray(item.photos)
       const imageUrl = photos.length > 0 ? String(photos[0] ?? '').trim() : ''
       const sequence = Math.max(0, Math.trunc(Number(item.sequence ?? 0) || 0))
+      const itemDescription = String(item.description ?? '').trim()
 
       const upsert = await upsertPosMenuFromBody(
         {
           code: menuCode,
           name: itemName,
           category: categoryName,
-          categoryMain: categoryName,
+          categoryMain: block.sectionName,
           price: itemPrice,
           priceDelivery: itemPrice,
           imageUrl,
+          descriptionDefault: itemDescription,
+          descriptionDelivery: itemDescription || null,
           vatIncluded: true,
           isActive: availableStatus !== 'UNAVAILABLE',
           sortOrder: sequence,

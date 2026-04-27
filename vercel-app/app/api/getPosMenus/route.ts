@@ -5,7 +5,9 @@ import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
 const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_groups'
-const POS_MENUS_SELECT_WITH_ALL = POS_MENUS_SELECT_WITH_GROUPS + ',kitchen_printer,cooking_time_min,is_banban'
+const POS_MENUS_SELECT_WITH_ALL =
+  POS_MENUS_SELECT_WITH_GROUPS +
+  ',kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table'
 const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
@@ -52,6 +54,9 @@ export async function GET() {
       cooking_time_min?: number | null
       is_banban?: boolean
       promo_id?: number | null
+      description_default?: string
+      description_delivery?: string | null
+      description_table?: string | null
     }[]
 
     const list = (typedRows || []).map((row) => {
@@ -81,6 +86,11 @@ export async function GET() {
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
         isBanban,
         promoId: pid != null && Number(pid) > 0 ? String(pid) : null,
+        descriptionDefault: String(row.description_default ?? ''),
+        descriptionDelivery:
+          row.description_delivery == null ? null : String(row.description_delivery),
+        descriptionTable:
+          row.description_table == null ? null : String(row.description_table),
       }
     })
 

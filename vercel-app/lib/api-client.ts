@@ -5433,6 +5433,10 @@ export interface PosMenu {
   isBanban?: boolean
   /** 프로모션 마스터와 연동된 미러 메뉴 */
   promoId?: string | null
+  /** 채널별 메뉴 설명 (미입력 시 default 사용) */
+  descriptionDefault?: string
+  descriptionDelivery?: string | null
+  descriptionTable?: string | null
 }
 
 export interface PosMenuOption {
@@ -5456,6 +5460,10 @@ export interface PosMenuOption {
   sellDelivery?: boolean
   /** 포장에서 판매 */
   sellPackaging?: boolean
+  /** 채널별 옵션 설명 (미입력 시 default 사용) */
+  descriptionDefault?: string
+  descriptionDelivery?: string | null
+  descriptionTable?: string | null
 }
 
 export async function getPosMenus() {
@@ -5622,6 +5630,9 @@ export async function savePosMenuOption(
     sellHall?: boolean
     sellDelivery?: boolean
     sellPackaging?: boolean
+    descriptionDefault?: string
+    descriptionDelivery?: string | null
+    descriptionTable?: string | null
   },
   opts?: { requireOnline?: boolean }
 ) {
@@ -6015,6 +6026,9 @@ export async function savePosMenu(
     kitchenPrinter?: number | null
     cookingTimeMin?: number | null
     isBanban?: boolean
+    descriptionDefault?: string
+    descriptionDelivery?: string | null
+    descriptionTable?: string | null
   },
   opts?: { requireOnline?: boolean }
 ) {
@@ -9682,18 +9696,37 @@ export async function saveEmployeeJobCatalog(jobs: string[]) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function getFranchiseeMultiStoreSettings() {
-  const res = await apiFetch('/api/franchiseeMultiStoreSettings')
-  return res.json() as Promise<{ success?: boolean; settings?: FranchiseeMultiStoreSettings; message?: string }>
+export type FranchiseeMultiStoreSettingsResponse = {
+  success?: boolean
+  settings?: FranchiseeMultiStoreSettings
+  message?: string
 }
 
-export async function saveFranchiseeMultiStoreSettings(settings: FranchiseeMultiStoreSettings) {
-  const res = await apiFetch('/api/franchiseeMultiStoreSettings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(settings),
-  })
-  return res.json() as Promise<{ success?: boolean; settings?: FranchiseeMultiStoreSettings; message?: string }>
+/** 네트워크 단절·DNS 등으로 fetch 자체가 실패할 때 TypeError를 삼키고 호출부 런타임 오류를 막음 */
+export async function getFranchiseeMultiStoreSettings(): Promise<FranchiseeMultiStoreSettingsResponse> {
+  try {
+    const res = await apiFetch('/api/franchiseeMultiStoreSettings')
+    const data = (await res.json().catch(() => ({}))) as FranchiseeMultiStoreSettingsResponse
+    return data && typeof data === 'object' ? data : {}
+  } catch {
+    return { success: false, message: 'network_unavailable' }
+  }
+}
+
+export async function saveFranchiseeMultiStoreSettings(
+  settings: FranchiseeMultiStoreSettings
+): Promise<FranchiseeMultiStoreSettingsResponse> {
+  try {
+    const res = await apiFetch('/api/franchiseeMultiStoreSettings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    })
+    const data = (await res.json().catch(() => ({}))) as FranchiseeMultiStoreSettingsResponse
+    return data && typeof data === 'object' ? data : {}
+  } catch {
+    return { success: false, message: 'network_unavailable' }
+  }
 }
 
 export async function getAdminEmployeeList(params: {
@@ -10042,6 +10075,29 @@ export async function deleteWarningLetterRegistry(body: { id: number }) {
     body: JSON.stringify(body),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export type EvaluationResultById = {
+  id: string
+  date: string
+  store: string
+  employeeName: string
+  evaluator: string
+  finalGrade: string
+  memo: string
+  totalScore: string
+  jsonData?: string | Record<string, unknown>
+  evalType: 'kitchen' | 'service' | 'manager'
+}
+
+/** 평가 1건 불러오기(이력·경고서에서 수정 폼으로 열기) */
+export async function getEvaluationResultById(id: string) {
+  const q = new URLSearchParams()
+  q.set('id', String(id || '').trim())
+  const res = await apiFetchWithOffline(`/api/getEvaluationResultById?${q}`)
+  const data = (await res.json().catch(() => ({}))) as { error?: string } & Partial<EvaluationResultById>
+  if (!res.ok) throw new Error(String(data?.error || '조회 실패'))
+  return data as EvaluationResultById
 }
 
 export async function getEvaluationHistory(params: {

@@ -20,7 +20,11 @@ export type PosMenuUpsertApiBody = {
   kitchenPrinter?: number | null
   cookingTimeMin?: number | null
   isBanban?: boolean
+  descriptionDefault?: string
+  descriptionDelivery?: string | null
+  descriptionTable?: string | null
   id?: string
+  storeCode?: string
 }
 
 type ExistingMenuRow = {
@@ -40,7 +44,16 @@ type ExistingMenuRow = {
 export async function upsertPosMenuFromBody(
   body: PosMenuUpsertApiBody,
   opts?: { upsertByCode?: boolean }
-): Promise<{ success: boolean; message: string; newId?: string }> {
+): Promise<{
+  success: boolean
+  message: string
+  newId?: string
+  syncHint?: {
+    imageChanged: boolean
+    changedFields: string[]
+    partnerMerchantID?: string | null
+  }
+}> {
   const code = String(body.code ?? '').trim()
   const name = String(body.name ?? '').trim()
   let editingId = body.id ? String(body.id).trim() : null
@@ -83,6 +96,9 @@ export async function upsertPosMenuFromBody(
       ? body.cookingTimeMin
       : null
   const isBanban = body.isBanban === true
+  const hasDescriptionDefault = 'descriptionDefault' in body
+  const hasDescriptionDelivery = 'descriptionDelivery' in body
+  const hasDescriptionTable = 'descriptionTable' in body
   const baseRow: Record<string, unknown> = {
     code,
     name,
@@ -106,8 +122,30 @@ export async function upsertPosMenuFromBody(
   if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
   if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
   baseRow.is_banban = isBanban
+  if (!editingId || hasDescriptionDefault) {
+    baseRow.description_default = String(body.descriptionDefault ?? '').trim()
+  }
+  if (!editingId || hasDescriptionDelivery) {
+    const v = body.descriptionDelivery
+    baseRow.description_delivery = v == null ? null : String(v).trim()
+  }
+  if (!editingId || hasDescriptionTable) {
+    const v = body.descriptionTable
+    baseRow.description_table = v == null ? null : String(v).trim()
+  }
 
-  const doSave = async (row: Record<string, unknown>): Promise<{ success: boolean; message: string; newId?: string }> => {
+  const doSave = async (
+    row: Record<string, unknown>
+  ): Promise<{
+    success: boolean
+    message: string
+    newId?: string
+    syncHint?: {
+      imageChanged: boolean
+      changedFields: string[]
+      partnerMerchantID?: string | null
+    }
+  }> => {
     if (editingId) {
       let existing: ExistingMenuRow[] | null = null
       try {
@@ -136,6 +174,25 @@ export async function upsertPosMenuFromBody(
         if (!incomingImage && prev.image != null && String(prev.image).trim()) {
           row.image = String(prev.image).trim()
         }
+        const changedFields: string[] = []
+        const nextName = String(row.name ?? prev.name ?? '').trim()
+        const nextCategoryMain = String(row.category_main ?? prev.category_main ?? '').trim()
+        const nextCategory = String(row.category ?? prev.category ?? '').trim()
+        const nextImage = String(row.image ?? prev.image ?? '').trim()
+        const nextPrice = Number(row.price ?? prev.price ?? 0)
+        const nextPriceDelivery = row.price_delivery != null ? Number(row.price_delivery) : null
+        const prevName = String(prev.name ?? '').trim()
+        const prevCategoryMain = String(prev.category_main ?? '').trim()
+        const prevCategory = String(prev.category ?? '').trim()
+        const prevImage = String(prev.image ?? '').trim()
+        const prevPrice = Number(prev.price ?? 0)
+        const prevPriceDelivery = prev.price_delivery != null ? Number(prev.price_delivery) : null
+        if (nextName !== prevName) changedFields.push('name')
+        if (nextCategoryMain !== prevCategoryMain) changedFields.push('category_main')
+        if (nextCategory !== prevCategory) changedFields.push('category')
+        if (nextImage !== prevImage) changedFields.push('image')
+        if (nextPrice !== prevPrice) changedFields.push('price')
+        if (nextPriceDelivery !== prevPriceDelivery) changedFields.push('price_delivery')
         const catMain = (prev.category_main || '').trim()
         const cat = (prev.category || '').trim()
         const changes: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
@@ -175,7 +232,15 @@ export async function upsertPosMenuFromBody(
             await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, rowWithout)
           } else throw colErr
         }
-        return { success: true, message: '수정되었습니다.' }
+        return {
+          success: true,
+          message: '수정되었습니다.',
+          syncHint: {
+            imageChanged: changedFields.includes('image'),
+            changedFields,
+            partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+          },
+        }
       }
     }
 
@@ -216,7 +281,16 @@ export async function upsertPosMenuFromBody(
           categoryMain: catMain || undefined,
         }).catch(() => {})
       }
-      return { success: true, message: '저장되었습니다.', newId }
+      return {
+        success: true,
+        message: '저장되었습니다.',
+        newId,
+        syncHint: {
+          imageChanged: !!String(row.image ?? '').trim(),
+          changedFields: ['insert'],
+          partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+        },
+      }
     } catch (insErr: unknown) {
       if (String(insErr).includes('category_main') || String(insErr).includes('42703')) {
         const rowWithout = { ...row }
@@ -237,7 +311,16 @@ export async function upsertPosMenuFromBody(
             category: cat || undefined,
           }).catch(() => {})
         }
-        return { success: true, message: '저장되었습니다.', newId }
+        return {
+          success: true,
+          message: '저장되었습니다.',
+          newId,
+          syncHint: {
+            imageChanged: !!String(rowWithout.image ?? '').trim(),
+            changedFields: ['insert'],
+            partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+          },
+        }
       }
       throw insErr
     }
@@ -271,11 +354,17 @@ export async function upsertPosMenuFromBody(
         optionSelectionGroupsLegacy ||
         kitchenPrinter != null ||
         cookingTimeMin != null ||
-        isBanban) &&
+        isBanban ||
+        hasDescriptionDefault ||
+        hasDescriptionDelivery ||
+        hasDescriptionTable) &&
       (err.includes('option_selection_groups') ||
         err.includes('kitchen_printer') ||
         err.includes('cooking_time_min') ||
         err.includes('is_banban') ||
+        err.includes('description_default') ||
+        err.includes('description_delivery') ||
+        err.includes('description_table') ||
         err.includes('42703'))
     ) {
       const rowWithout = { ...baseRow }
@@ -283,6 +372,9 @@ export async function upsertPosMenuFromBody(
       delete rowWithout.kitchen_printer
       delete rowWithout.cooking_time_min
       delete rowWithout.is_banban
+      delete rowWithout.description_default
+      delete rowWithout.description_delivery
+      delete rowWithout.description_table
       const result = await doSave(rowWithout)
       if (result.success && code && (baseRow.price != null || body.price != null)) {
         const newPrice = Number(baseRow.price ?? body.price ?? 0)

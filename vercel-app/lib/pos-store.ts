@@ -164,17 +164,26 @@ type RefetchStoresOptions = {
 }
 
 export function usePosStore() {
-  const { stores: storeCodes } = useStoreList()
+  const { stores: storeCodes, legacyToCanonical } = useStoreList()
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || '')
+  const canonicalAuthStore = useMemo(() => {
+    const raw = String(auth?.store || '').trim()
+    if (!raw) return ''
+    const key = raw.toLowerCase()
+    const canonical = String(legacyToCanonical[key] || '').trim()
+    if (canonical) return canonical
+    if (storeCodes.includes(raw)) return raw
+    return raw
+  }, [auth?.store, legacyToCanonical, storeCodes])
   const effectiveStoreCodes = useMemo(() => {
     if (canSearchAll) {
       if (storeCodes.length > 0) return storeCodes
-      if (auth?.store) return [auth.store]
+      if (canonicalAuthStore) return [canonicalAuthStore]
       return storeCodes
     }
-    return auth?.store ? [auth.store] : storeCodes
-  }, [canSearchAll, auth?.store, storeCodes])
+    return canonicalAuthStore ? [canonicalAuthStore] : storeCodes
+  }, [canSearchAll, canonicalAuthStore, storeCodes])
 
   const [stores, setStores] = useState<Store[]>([])
   const [layoutByStoreId, setLayoutByStoreId] = useState<Record<string, PosTableItem[]>>({})
@@ -245,7 +254,10 @@ export function usePosStore() {
         setLayoutByStoreId(layouts)
         setOrdersByStoreId(nextOrdersByStore)
         setCurrentStoreId((prev) => {
-          const next = auth?.store && effectiveStoreCodes.includes(auth.store) ? auth.store : effectiveStoreCodes[0]
+          const next =
+            canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)
+              ? canonicalAuthStore
+              : effectiveStoreCodes[0]
           return storeList.some((s) => s.id === prev) ? prev : next ?? effectiveStoreCodes[0] ?? ''
         })
       })
@@ -254,14 +266,18 @@ export function usePosStore() {
         setOrdersByStoreId({})
       })
       .finally(() => setLoading(false))
-  }, [effectiveStoreCodes.join(','), auth?.store, fetchStoreSnapshot])
+  }, [effectiveStoreCodes.join(','), canonicalAuthStore, fetchStoreSnapshot])
 
   // effectiveStoreCodes 변경 시 currentStoreId가 목록에 없으면 첫 매장으로
   useEffect(() => {
     if (!effectiveStoreCodes.length || !currentStoreId) return
     if (effectiveStoreCodes.includes(currentStoreId)) return
-    setCurrentStoreId(auth?.store && effectiveStoreCodes.includes(auth.store) ? auth.store : effectiveStoreCodes[0])
-  }, [effectiveStoreCodes, currentStoreId, auth?.store])
+    setCurrentStoreId(
+      canonicalAuthStore && effectiveStoreCodes.includes(canonicalAuthStore)
+        ? canonicalAuthStore
+        : effectiveStoreCodes[0]
+    )
+  }, [effectiveStoreCodes, currentStoreId, canonicalAuthStore])
 
   const currentStore = stores.find((s) => s.id === currentStoreId) || stores[0]
 

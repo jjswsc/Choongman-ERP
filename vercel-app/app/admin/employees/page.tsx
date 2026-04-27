@@ -68,6 +68,7 @@ import {
   type EmployeeEvalJumpTarget,
 } from "@/components/employees"
 import { normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
+import { resolveEmployeeNickJobForEvalJump } from "@/lib/employee-eval-jump-resolve"
 import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
@@ -196,6 +197,7 @@ export default function EmployeesPage() {
   const [franchiseeMulti, setFranchiseeMulti] = React.useState<FranchiseeMultiStoreSettings | null>(null)
   const [hrMainTab, setHrMainTab] = React.useState("list")
   const [evalJumpPayload, setEvalJumpPayload] = React.useState<EmployeeEvalJumpTarget | null>(null)
+  const [evalResultSaveSerial, setEvalResultSaveSerial] = React.useState(0)
   const clearEvalJump = React.useCallback(() => setEvalJumpPayload(null), [])
 
   const adminRowToForm = React.useCallback(
@@ -676,7 +678,10 @@ export default function EmployeesPage() {
               <EmployeeEvalTab
                 stores={storesForForm}
                 employees={allEmployees}
-                onSaved={loadEmployeeList}
+                onSaved={() => {
+                  void loadEmployeeList()
+                  setEvalResultSaveSerial((n) => n + 1)
+                }}
                 jumpToEmployee={evalJumpPayload}
                 onJumpToEmployeeConsumed={clearEvalJump}
               />
@@ -687,6 +692,7 @@ export default function EmployeesPage() {
               <EmployeeWarningLettersTab
                 stores={storesForFilter}
                 employees={allEmployees}
+                evalSaveSerial={evalResultSaveSerial}
                 onOpenEval={(target) => {
                   if (target.evalType === "standalone") return
                   setEvalJumpPayload({
@@ -696,6 +702,7 @@ export default function EmployeesPage() {
                     nick: target.nick,
                     job: target.job,
                     evalType: target.evalType,
+                    evaluationId: target.evaluationId,
                   })
                   setHrMainTab("eval")
                 }}
@@ -726,7 +733,29 @@ export default function EmployeesPage() {
             </TabsContent>
           )}
           <TabsContent value="eval-list" className="mt-0 p-4 sm:p-6">
-            <EmployeeEvalListTab stores={storesForFilter} />
+            <EmployeeEvalListTab
+              stores={storesForFilter}
+              onEditInEvalTab={
+                showEmployeeEvalTab
+                  ? (row) => {
+                      const { nick, job } = resolveEmployeeNickJobForEvalJump(
+                        allEmployees,
+                        row.store,
+                        row.employeeName
+                      )
+                      setEvalJumpPayload({
+                        key: Date.now(),
+                        store: row.store,
+                        name: row.employeeName,
+                        nick,
+                        job,
+                        evaluationId: row.id,
+                      })
+                      setHrMainTab("eval")
+                    }
+                  : undefined
+              }
+            />
           </TabsContent>
           {isOffice && (
             <TabsContent value="eval-items-setting" className={adminTabsContentCn}>

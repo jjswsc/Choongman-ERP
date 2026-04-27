@@ -41,11 +41,16 @@ const ALL_ALLOWED_MIME: string[] = (() => {
 })()
 
 function looksLikeMissingStorageBucket(msg: string): boolean {
+  const normalized = String(msg || '')
   return (
-    /Bucket not found/i.test(msg) ||
-    /bucket does not exist/i.test(msg) ||
-    /No such bucket/i.test(msg) ||
-    (/not found/i.test(msg) && /bucket/i.test(msg))
+    /Bucket not found/i.test(normalized) ||
+    /bucket does not exist/i.test(normalized) ||
+    /No such bucket/i.test(normalized) ||
+    (/not found/i.test(normalized) && /bucket/i.test(normalized)) ||
+    // Supabase Storage가 버킷 누락 시 404 InvalidRequest("The related resource doesn't exist")를 주는 경우 대응
+    (/InvalidRequest/i.test(normalized) &&
+      /related resource doesn't exist/i.test(normalized) &&
+      /404/.test(normalized))
   )
 }
 

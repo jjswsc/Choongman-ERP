@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { recordPriceChanges } from '@/lib/price-history'
+import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
 
 async function getMenuCategories(menuId: number): Promise<{ categoryMain: string; category: string }> {
   try {
@@ -44,6 +45,9 @@ export async function POST(req: NextRequest) {
     const sellHall = body?.sellHall != null ? !!body.sellHall : true
     const sellDelivery = body?.sellDelivery != null ? !!body.sellDelivery : true
     const sellPackaging = body?.sellPackaging != null ? !!body.sellPackaging : true
+    const hasDescriptionDefault = 'descriptionDefault' in (body || {})
+    const hasDescriptionDelivery = 'descriptionDelivery' in (body || {})
+    const hasDescriptionTable = 'descriptionTable' in (body || {})
 
     if (!menuId || !name) {
       return NextResponse.json({ success: false, message: 'menuId and name required' }, { headers })
@@ -64,6 +68,17 @@ export async function POST(req: NextRequest) {
       sell_hall: sellHall,
       sell_delivery: sellDelivery,
       sell_packaging: sellPackaging,
+    }
+    if (!id || hasDescriptionDefault) {
+      rowFull.description_default = String(body?.descriptionDefault ?? '').trim()
+    }
+    if (!id || hasDescriptionDelivery) {
+      rowFull.description_delivery =
+        body?.descriptionDelivery == null ? null : String(body.descriptionDelivery).trim()
+    }
+    if (!id || hasDescriptionTable) {
+      rowFull.description_table =
+        body?.descriptionTable == null ? null : String(body.descriptionTable).trim()
     }
     if (optionStepValues) rowFull.option_step_values = optionStepValues
 
@@ -144,6 +159,9 @@ export async function POST(req: NextRequest) {
       delete rowWithoutNew.item_code
       delete rowWithoutNew.additive_source_menu_id
       delete rowWithoutNew.quantity
+      delete rowWithoutNew.description_default
+      delete rowWithoutNew.description_delivery
+      delete rowWithoutNew.description_table
       if (priceModifierDelivery != null) (rowWithoutNew as Record<string, unknown>).price_modifier_delivery = priceModifierDelivery
       try {
         await doSave(rowWithoutNew)
@@ -152,6 +170,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    void triggerGrabMenuNotification({
+      reason: 'menu_modifier_updated',
+      partnerMerchantID: body?.storeCode ? String(body.storeCode).trim() : null,
+    })
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('savePosMenuOption:', e)
