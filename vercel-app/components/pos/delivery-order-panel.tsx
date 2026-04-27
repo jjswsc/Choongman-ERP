@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
-import type { PosDeliveryApp } from '@/lib/api-client'
+import type { PosDeliveryApp, PosMenu } from '@/lib/api-client'
+import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { grabCancelOrderByStoreApi, markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,8 @@ import {
 export interface DeliveryOrderPanelProps {
   orderLabel: string
   order: Order | null
+  /** 품목 `name`이 코드로만 온 경우(Grab 등) POS 메뉴명으로 복원 */
+  menus?: PosMenu[]
   deliveryApps?: PosDeliveryApp[]
   onPackaged?: () => void
   onPay?: () => void
@@ -35,6 +38,7 @@ export interface DeliveryOrderPanelProps {
 export function DeliveryOrderPanel({
   orderLabel,
   order,
+  menus: menusFromProps = [],
   deliveryApps: _deliveryApps = [],
   onPackaged,
   onPay,
@@ -196,7 +200,14 @@ export function DeliveryOrderPanel({
       const id = Number(order.id)
       if (grabOrderId) setOptimisticGrabState('ACCEPTED')
       if (!Number.isNaN(id)) {
-        await updatePosOrderStatus({ id, status: 'cooking', ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}) })
+        const res = await updatePosOrderStatus({
+          id,
+          status: 'cooking',
+          ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}),
+        })
+        if (!res.success) {
+          throw new Error(res.message || (t('processFail') || '처리 실패'))
+        }
       }
       onPackaged?.()
     } catch (e) {
@@ -311,9 +322,13 @@ export function DeliveryOrderPanel({
               <ScrollArea className="flex-1 max-h-[320px] rounded-md border">
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
+                    const displayName = resolvePosOrderItemMenuDisplayName(
+                      { id: item.id, name: item.name, menuId: item.menuId },
+                      menusFromProps
+                    )
                     const packaged = itemPackaged[item.id]
-                    const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
-                    const mainName = optMatch ? optMatch[1].trim() : item.name
+                    const optMatch = displayName.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+                    const mainName = optMatch ? optMatch[1].trim() : displayName
                     const optionPart = optMatch ? optMatch[2].trim() : null
                     const meta = parseItemMeta(item.note)
                     return (
@@ -329,7 +344,7 @@ export function DeliveryOrderPanel({
                             type="button"
                             className="text-sm font-medium truncate text-left w-full hover:underline"
                             onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
-                            title={item.name}
+                            title={displayName}
                           >
                             {mainName}
                           </button>
@@ -361,14 +376,14 @@ export function DeliveryOrderPanel({
                           )}
                           {expandedItemId === item.id && (
                             <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">
-                              {item.name}
+                              {displayName}
                             </p>
                           )}
                         </div>
                         <Button
                           size="sm"
                           variant={packaged ? 'default' : 'outline'}
-                          className="shrink-0 h-8 min-w-[80px] self-center"
+                          className="shrink-0 h-9 w-9 p-0 self-start mt-0.5"
                           onClick={() => { void toggleItemPackaged(item.id) }}
                           disabled={savingItemId === item.id}
                           aria-label={
@@ -377,8 +392,7 @@ export function DeliveryOrderPanel({
                               : (t('posDeliveryPackagingComplete') || '포장 완료')
                           }
                         >
-                          {packaged ? <Check className="w-4 h-4 mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
-                          {packaged ? (t('cancel') || '취소') : (t('posDeliveryPackagingComplete') || '포장 완료')}
+                          {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                         </Button>
                       </li>
                     )

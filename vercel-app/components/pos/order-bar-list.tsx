@@ -18,6 +18,10 @@ export interface OrderBarItem {
   targetMin?: number
   subLabel?: string
   rightLabel?: string
+  /** POS 내부 주문번호(영수증/주문관리와 동일 포맷) — 배달 카드 본문 표시용 */
+  posOrderNo?: string
+  /** 플랫폼 단축 주문번호(예: Grab #GF-1234) — 보조 표시용 */
+  platformOrderNo?: string
   /** 배달 주문 시 플랫폼별 구분 (코드 또는 accent 색상) */
   deliveryAppAccent?: DeliveryAppAccent
   /** 배달앱 표시명 (설정 기반) */
@@ -200,9 +204,20 @@ export function OrderBarList({
                         {platformLabel}
                       </span>
                     )}
-                    <p className="text-lg font-bold text-slate-800 truncate min-w-0">
-                      {item.rightLabel ?? (item.deliveryAppAccent ? '' : item.label)}
-                    </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-lg font-bold text-slate-800 truncate">
+                        {item.platformOrderNo || item.posOrderNo || item.rightLabel || (item.deliveryAppAccent ? '' : item.label)}
+                      </p>
+                      {item.platformOrderNo && item.posOrderNo ? (
+                        <p className="mt-0.5 text-xs font-semibold text-slate-600 truncate tabular-nums">
+                          {item.posOrderNo}
+                        </p>
+                      ) : item.rightLabel && !item.platformOrderNo ? (
+                        <p className="mt-0.5 text-xs font-semibold text-slate-600 truncate tabular-nums">
+                          {item.rightLabel}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-sm tabular-nums text-slate-600 shrink-0">

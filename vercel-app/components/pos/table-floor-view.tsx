@@ -178,6 +178,9 @@ export function TableFloorView({
     return floors.length > 0 ? floors : [1]
   }, [layout])
 
+  /** 2층 이상 구성이 있을 때만 층 전환(1·2·3층) 표시 — 1층만인 매장은 탭을 숨김 */
+  const showFloorTabs = availableFloors.length > 1
+
   useEffect(() => {
     if (!onFloorChange) return
     if (availableFloors.includes(activeFloor)) return
@@ -303,7 +306,7 @@ export function TableFloorView({
       )}
       style={{ aspectRatio: `${FLOOR_W} / ${FLOOR_H}` }}
     >
-      {!!onFloorChange && (
+      {!!onFloorChange && showFloorTabs && (
         <div className="absolute left-2 top-2 z-20 flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 p-1 shadow-sm">
           {availableFloors.map((floor) => (
             <button

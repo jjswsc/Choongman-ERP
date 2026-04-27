@@ -493,7 +493,7 @@ export function TableOrderPanel({
             </>
           ) : (
             <>
-              <ScrollArea className="flex-1 max-h-[min(360px,45vh)] rounded-md border" data-tour="pos-tour-serving-items">
+              <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
                 <ul className="p-1.5 space-y-1">
                   {order.items.map((item) => {
                     const served = itemServed[item.id]

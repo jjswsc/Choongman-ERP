@@ -234,7 +234,7 @@ export function NoticesPanel() {
                   {isExpanded && (
                     <div className="border-t border-border/60 bg-muted/20 px-5 py-3 pl-14">
                       <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
-                        {n.content ? getTrans(n.content) : "(내용 없음)"}
+                        {n.content ? getTrans(n.content) : t("noticeEmptyContent")}
                       </p>
                       {Array.isArray(n.attachments) && n.attachments.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -253,7 +253,7 @@ export function NoticesPanel() {
                               >
                                 <img
                                   src={url}
-                                  alt={att?.name || "첨부"}
+                                  alt={att?.name || t("noticeAttachment")}
                                   className="max-h-40 w-auto object-contain"
                                   onError={(e) => { e.currentTarget.style.display = "none" }}
                                 />
@@ -267,7 +267,7 @@ export function NoticesPanel() {
                                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted"
                               >
                                 <FileText className="h-3.5 w-3.5" />
-                                {att?.name || "첨부파일"}
+                                {att?.name || t("noticeAttachmentFile")}
                               </a>
                             )
                           })}

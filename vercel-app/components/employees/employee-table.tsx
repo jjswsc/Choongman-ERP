@@ -36,11 +36,22 @@ export interface EmployeeTableRow extends AdminEmployeeItem {
 }
 
 function resolveRowStatus(e: AdminEmployeeItem): "active" | "leave" | "resigned" | "suspended" {
+  const resignDate = String(e.resign || "").trim().slice(0, 10)
+  const todayBangkok = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date())
   const raw = String((e as { employmentStatus?: unknown }).employmentStatus || "")
     .trim()
     .toLowerCase()
-  if (raw === "active" || raw === "leave" || raw === "resigned" || raw === "suspended") return raw
-  return String(e.resign || "").trim() ? "resigned" : "active"
+  if (raw === "active" || raw === "leave" || raw === "resigned" || raw === "suspended") {
+    if (raw === "resigned" && resignDate && resignDate > todayBangkok) return "active"
+    return raw
+  }
+  if (!resignDate) return "active"
+  return resignDate <= todayBangkok ? "resigned" : "active"
 }
 
 interface EmployeeTableProps {
@@ -100,7 +111,12 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                 managerGrade && managerGrade !== "-" ? managerGrade : "-"
               const resignStr = String(e.resign || "").trim()
               const resignDate = resignStr ? resignStr.slice(0, 10) : ""
-              const todayStr = new Date().toISOString().slice(0, 10)
+              const todayStr = new Intl.DateTimeFormat("en-CA", {
+                timeZone: "Asia/Bangkok",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              }).format(new Date())
               const status = resolveRowStatus(e)
               const isAfterResignDate = resignDate && todayStr > resignDate
               const showResignedHighlight =

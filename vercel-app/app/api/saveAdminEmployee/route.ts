@@ -31,12 +31,27 @@ function toDateStr(val: unknown): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
 }
 
+function bangkokTodayDateStr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
 function normalizeEmploymentStatus(val: unknown, resignDate: unknown): 'active' | 'leave' | 'resigned' | 'suspended' {
+  const today = bangkokTodayDateStr()
+  const resignDateStr = toDateStr(resignDate)
   const raw = String(val || '')
     .trim()
     .toLowerCase()
-  if (EMPLOYMENT_STATUS_VALUES.has(raw)) return raw as 'active' | 'leave' | 'resigned' | 'suspended'
-  return String(resignDate || '').trim() ? 'resigned' : 'active'
+  if (EMPLOYMENT_STATUS_VALUES.has(raw)) {
+    if (raw === 'resigned' && resignDateStr && resignDateStr > today) return 'active'
+    return raw as 'active' | 'leave' | 'resigned' | 'suspended'
+  }
+  if (!resignDateStr) return 'active'
+  return resignDateStr <= today ? 'resigned' : 'active'
 }
 
 function normalizePhoneForMatch(raw: unknown): string {
@@ -316,9 +331,7 @@ export async function POST(req: NextRequest) {
     const employmentStatus = normalizeEmploymentStatus((d as { employmentStatus?: unknown }).employmentStatus, payload.resign_date)
     payload.employment_status = employmentStatus
     if (employmentStatus === 'resigned') {
-      if (!payload.resign_date) payload.resign_date = new Date().toISOString().slice(0, 10)
-    } else {
-      payload.resign_date = null
+      if (!payload.resign_date) payload.resign_date = bangkokTodayDateStr()
     }
     if (codeRaw) {
       if (!EMPLOYEE_CODE_RE.test(codeRaw)) {

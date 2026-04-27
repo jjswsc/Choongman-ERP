@@ -26,6 +26,8 @@ export interface Order {
   total: number
   status: "pending" | "preparing" | "ready" | "paid" | "completed"
   createdAt: Date
+  /** API `table_name` (배달: 플랫폼/테이블 표시 — 주문 번호·채널 추론에 사용) */
+  tableName?: string
   customerName?: string
   customerPhone?: string
   address?: string
@@ -39,6 +41,8 @@ export interface Order {
 export interface OrderItem {
   id: string
   name: string
+  /** `items_json`의 menu_id1 등 — 있으면 표시명을 POS 메뉴 id로 복원 */
+  menuId?: string
   quantity: number
   price: number
   /** 줄 단위 메모 (주방·items_json) */

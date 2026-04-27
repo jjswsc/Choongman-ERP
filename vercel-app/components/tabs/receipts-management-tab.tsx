@@ -55,7 +55,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { stores, resolveStoreKey } = useStoreList()
   const online = useOnlineStatus()
   const storeCode = auth?.store || stores[0] || ''
   const orderTypeLabels = React.useMemo<Record<string, string>>(
@@ -110,7 +110,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const loadOrders = React.useCallback(() => {
     if (!startStr || !endStr) return
     setLoading(true)
-    const store = canSearchAll ? (storeFilter || undefined) : storeCode
+    const normalizedStoreFilter = storeFilter ? resolveStoreKey(storeFilter) : ''
+    const normalizedUserStore = storeCode ? resolveStoreKey(storeCode) : ''
+    const store = canSearchAll ? (normalizedStoreFilter || undefined) : (normalizedUserStore || storeCode)
     const fetcher = offlineAware ? getPosOrdersWithCache : getPosOrders
     const params = {
       startStr,
@@ -122,7 +124,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       .then(setOrders)
       .catch(() => setOrders([]))
       .finally(() => setLoading(false))
-  }, [startStr, endStr, storeFilter, storeCode, statusFilter, canSearchAll, offlineAware])
+  }, [startStr, endStr, storeFilter, storeCode, statusFilter, canSearchAll, offlineAware, resolveStoreKey])
 
   React.useEffect(() => {
     loadOrders()

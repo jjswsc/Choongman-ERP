@@ -1,6 +1,12 @@
+export type AppConfirmOptions = {
+  title?: string
+  confirmLabel?: string
+  cancelLabel?: string
+}
+
 export type AppMessageEnqueue = {
   alert: (message: string) => Promise<void>
-  confirm: (message: string) => Promise<boolean>
+  confirm: (message: string, options?: AppConfirmOptions) => Promise<boolean>
   prompt: (message: string, defaultValue?: string) => Promise<string | null>
 }
 
@@ -27,9 +33,9 @@ export function appAlert(message: unknown): Promise<void> {
   return Promise.resolve()
 }
 
-export function appConfirm(message: unknown): Promise<boolean> {
+export function appConfirm(message: unknown, options?: AppConfirmOptions): Promise<boolean> {
   const text = asAlertText(message)
-  if (impl) return impl.confirm(text)
+  if (impl) return impl.confirm(text, options)
   if (typeof window !== "undefined") return Promise.resolve(window.confirm(text))
   return Promise.resolve(false)
 }

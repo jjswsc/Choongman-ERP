@@ -35,7 +35,9 @@ import {
   getPosTodaySales,
   getPosDeliveryApps,
   executeLinkposPayment,
+  grabCancelOrderByStoreApi,
   updatePosOrder,
+  updatePosOrderStatus,
   type PosMenu,
   type PosDeliveryApp,
   type LinkposPaymentSummary,
@@ -56,13 +58,18 @@ import { useT } from '@/lib/i18n'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
-import { formatPosReceiptOrderNoDisplay } from '@/lib/pos-delivery-platform'
+import {
+  formatPosReceiptOrderNoDisplay,
+  getPosDeliveryPlatformName,
+  pickPosChannelOrderNo,
+} from '@/lib/pos-delivery-platform'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 import {
@@ -81,7 +88,6 @@ import {
   receiptModalDataFromPosOrderForPayment,
 } from '@/lib/pos-payment-receipt-from-order'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
-import { extractGrabStateFromMemo } from '@/lib/grab-order-memo'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import {
   publishPosCustomerDisplayState,
@@ -131,6 +137,84 @@ function coercePosOrderIdFromRealtime(raw: unknown): number | null {
     return n > 0 ? n : null
   }
   return null
+}
+
+function isSessionNewOrder(createdAtRaw: unknown, sessionStartedAtMs: number, graceMs = 5000): boolean {
+  const s = String(createdAtRaw ?? '').trim()
+  if (!s) return false
+  const ms = new Date(s).getTime()
+  if (!Number.isFinite(ms)) return false
+  return ms >= sessionStartedAtMs - graceMs
+}
+
+function extractGrabOrderIdFromMemoText(memo: string): string {
+  return (/grab_order:([A-Za-z0-9._:-]+)/i.exec(String(memo || ''))?.[1] || '').trim()
+}
+
+let POS_INCOMING_WAV_DATA_URI_CACHE = ''
+
+function getPosIncomingWavDataUri(): string {
+  if (POS_INCOMING_WAV_DATA_URI_CACHE) return POS_INCOMING_WAV_DATA_URI_CACHE
+  const sampleRate = 22050
+  const durationSec = 0.62
+  const totalSamples = Math.max(1, Math.floor(sampleRate * durationSec))
+  const pcm = new Int16Array(totalSamples)
+
+  const mixNote = (startSec: number, lenSec: number, freqHz: number, gain: number) => {
+    const start = Math.max(0, Math.floor(startSec * sampleRate))
+    const end = Math.min(totalSamples, Math.floor((startSec + lenSec) * sampleRate))
+    const attack = Math.floor(sampleRate * 0.018)
+    const release = Math.floor(sampleRate * 0.08)
+    for (let i = start; i < end; i += 1) {
+      const t = (i - start) / sampleRate
+      const idx = i - start
+      const tail = end - i
+      const envA = attack > 0 ? Math.min(1, idx / attack) : 1
+      const envR = release > 0 ? Math.min(1, tail / release) : 1
+      const env = Math.min(envA, envR)
+      const v = Math.sin(2 * Math.PI * freqHz * t) * gain * env
+      const next = pcm[i] + Math.floor(v * 32767)
+      pcm[i] = Math.max(-32768, Math.min(32767, next))
+    }
+  }
+
+  // 매장 알림용 3노트 차임
+  mixNote(0.00, 0.16, 784, 0.24)
+  mixNote(0.17, 0.16, 988, 0.22)
+  mixNote(0.34, 0.20, 1174, 0.24)
+
+  const dataSize = pcm.length * 2
+  const buf = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buf)
+  const writeAscii = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i += 1) view.setUint8(offset + i, s.charCodeAt(i))
+  }
+  writeAscii(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeAscii(8, 'WAVE')
+  writeAscii(12, 'fmt ')
+  view.setUint32(16, 16, true) // fmt chunk size
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, 1, true) // mono
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true) // byteRate
+  view.setUint16(32, 2, true) // blockAlign
+  view.setUint16(34, 16, true) // bitsPerSample
+  writeAscii(36, 'data')
+  view.setUint32(40, dataSize, true)
+  for (let i = 0; i < pcm.length; i += 1) {
+    view.setInt16(44 + i * 2, pcm[i], true)
+  }
+
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    const part = bytes.subarray(i, i + chunk)
+    binary += String.fromCharCode(...part)
+  }
+  POS_INCOMING_WAV_DATA_URI_CACHE = `data:audio/wav;base64,${btoa(binary)}`
+  return POS_INCOMING_WAV_DATA_URI_CACHE
 }
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
@@ -184,7 +268,6 @@ export default function PosTerminalPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const posOrdersDebugEnabled = true
   const isPosDemo = isPosDemoFromQuery(searchParams)
   const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams)
   const [tourMainDeviceTouched, setTourMainDeviceTouched] = useState(false)
@@ -896,57 +979,275 @@ export default function PosTerminalPage() {
   const isNarrowViewport = useMediaQuery('(max-width: 920px)')
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
+  const posSessionStartedAtRef = useRef<number>(Date.now())
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
   const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
-  /** 신규 배달 주문 자동 포커스/알림 중복 방지 */
-  const lastAutoFocusedDeliveryOrderIdRef = useRef<number>(0)
-  /** 신규 "수동 수락 필요" 팝업 중복 방지 */
+  /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
   const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
-  /** Grab 플랫폼 승인(ACCEPTED) 팝업 중복 방지 */
-  const promptedAcceptedDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
-    lastAutoFocusedDeliveryOrderIdRef.current = 0
     promptedPendingDeliveryOrderIdsRef.current = new Set()
-    promptedAcceptedDeliveryOrderIdsRef.current = new Set()
     paymentReceiptScanSeededRef.current = false
   }, [currentStoreId])
 
   /**
    * 신규 주문 알림음 (브라우저 autoplay 정책에 따라 무음 처리될 수 있음)
-   * - 외부 오디오 파일 의존 없이 짧은 2톤 비프
+   * - WAV(data URI) 차임 우선, 실패 시 WebAudio 폴백
    */
   const playIncomingOrderBeep = useCallback(() => {
     if (typeof window === 'undefined') return
-    try {
-      const AC = (window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) as
-        | typeof AudioContext
-        | undefined
-      if (!AC) return
-      const ctx = new AC()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'square'
-      osc.frequency.setValueAtTime(880, ctx.currentTime)
-      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.11)
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.23)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start()
-      osc.stop(ctx.currentTime + 0.24)
-      window.setTimeout(() => {
-        void ctx.close().catch(() => {})
-      }, 350)
-    } catch {
-      // ignore (no audio device / blocked by browser policy)
+    const playFallbackWithWebAudio = () => {
+      try {
+        const AC = (window.AudioContext ||
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) as
+          | typeof AudioContext
+          | undefined
+        if (!AC) return
+        const ctx = new AC()
+        const now = ctx.currentTime
+        const makeTone = (at: number, freq: number, dur: number, gainMax: number) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = 'sine'
+          osc.frequency.setValueAtTime(freq, at)
+          gain.gain.setValueAtTime(0.0001, at)
+          gain.gain.exponentialRampToValueAtTime(gainMax, at + 0.02)
+          gain.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start(at)
+          osc.stop(at + dur + 0.02)
+        }
+        makeTone(now, 784, 0.12, 0.04)
+        makeTone(now + 0.14, 1046, 0.14, 0.045)
+        window.setTimeout(() => {
+          void ctx.close().catch(() => {})
+        }, 460)
+      } catch {
+        // ignore (no audio device / blocked by browser policy)
+      }
     }
+    try {
+      const wavDataUri = getPosIncomingWavDataUri()
+      const audio = new Audio(wavDataUri)
+      audio.preload = 'auto'
+      audio.volume = 0.9
+      const p = audio.play()
+      if (p && typeof p.catch === 'function') {
+        void p.catch(() => {
+          playFallbackWithWebAudio()
+        })
+      }
+      return
+    } catch {
+      // fall through
+    }
+    playFallbackWithWebAudio()
   }, [])
+
+  const decideIncomingPendingDeliveryOrder = useCallback(
+    async (params: {
+      orderId: number
+      storeCode?: string
+      memo?: string
+      deliveryAppCode?: string
+    }) => {
+      try {
+        const confirmed = await appConfirm(
+          t('posIncomingDeliveryDecisionPrompt') ||
+            '신규 배달 주문입니다.\n이 주문을 수락할까요?',
+          {
+            title: t('posOrderTypeDelivery') || '배달',
+            confirmLabel: t('posDeliveryOrderAccept') || '수락',
+            cancelLabel: t('posDeliveryOrderReject') || '반려',
+          }
+        )
+        const orderId = Number(params.orderId)
+        if (!Number.isFinite(orderId) || orderId <= 0) return
+        const memo = String(params.memo || '')
+        const grabOrderId = extractGrabOrderIdFromMemoText(memo)
+        if (confirmed) {
+          const res = await updatePosOrderStatus({
+            id: orderId,
+            status: 'cooking',
+            ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}),
+          })
+          if (!res.success) {
+            await appAlert(res.message || (t('processFail') || '처리 실패'))
+            return
+          }
+          refetchStores({ scope: 'all' })
+          setActiveTab('delivery')
+          setDeliveryListMode('all')
+          setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+          if (String(params.deliveryAppCode || '').trim()) {
+            setDeliveryApp(String(params.deliveryAppCode || '').trim().toLowerCase())
+          }
+          if (isMainPosDevice && (autoPrintReceiptOnOrder || autoPrintKitchenSlipOnOrder)) {
+            let list = await getPosOrders({
+              orderId,
+              storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
+            })
+            if (!list.length) {
+              list = await getPosOrders({ orderId })
+            }
+            const order = list[0]
+            if (order?.items?.length) {
+              const items = (order.items || []).map((it) => {
+                const note = String(it.note ?? '').trim()
+                const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+                const displayName = resolvePosOrderItemMenuDisplayName({
+                  id: String(it.id ?? ''),
+                  name: String(it.name ?? ''),
+                  menuId,
+                }, menus)
+                return {
+                  id: String(it.id ?? ''),
+                  name: displayName,
+                  price: Number(it.price ?? 0),
+                  qty: Number(it.qty ?? 1),
+                  ...(note ? { note } : {}),
+                }
+              })
+              const runKitchenForAcceptedOrder = () => {
+                if (!autoPrintKitchenSlipOnOrder) return
+                void (async () => {
+                  try {
+                    const effectiveStoreCode = order.storeCode ?? currentStoreId
+                    const settings = await getPrinterSettingsForStore(effectiveStoreCode)
+                    const kLabels = {
+                      unified: t('posKitchenOrder') || '주방 주문서',
+                      kitchen1: `${t('posKitchen1') || '주방 1'}`,
+                      kitchen2: `${t('posKitchen2') || '주방 2'}`,
+                      kitchen3: `${t('posKitchen3') || '주방 3'}`,
+                    }
+                    const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+                    if (!slips.length) return
+                    const slipDesign = resolveKitchenSlipDesign(settings)
+                    const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
+                    const memoLine = kitchenMemo.trim()
+                      ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                      : ''
+                    const orderTypeLabels: Record<string, string> = {
+                      dine_in: t('posOrderTypeDineIn') ?? '매장',
+                      takeout: t('posOrderTypeTakeout') ?? '포장',
+                      delivery: t('posOrderTypeDelivery') ?? '배달',
+                    }
+                    const printOne = (idx: number) => {
+                      if (idx >= slips.length) return
+                      const slip = slips[idx]
+                      const tablePart = order.tableName
+                        ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+                        : ''
+                      const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                      const html = buildKitchenSlipDocumentHtml({
+                        label: slip.label,
+                        orderNo: order.orderNo ?? '',
+                        storeCode: effectiveStoreCode,
+                        orderTypeLabel,
+                        tablePart,
+                        dateStr: formatPosDateTimeMedium(new Date(), lang),
+                        items: slip.items.map((it) => ({
+                          name: translatePosMenuLineForReceipt(it.name, t),
+                          qty: it.qty,
+                          note: it.note,
+                        })),
+                        memoLine: memoLine || null,
+                        escapeHtml,
+                        design: slipDesign,
+                        printColorAdjust: 'exact',
+                      })
+                      printPosHtmlDocument(html, {
+                        title: slip.label,
+                        printDelayMs: 0,
+                        focusIframeBeforePrint: false,
+                        printRole: 'kitchen',
+                        kitchenStation: slip.station,
+                        escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                        onPrintUnavailable: () => {
+                          void appAlert(t('posPrintUnavailable'))
+                        },
+                        onAfterCleanup: () => {
+                          if (idx + 1 < slips.length) {
+                            setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                          }
+                        },
+                      })
+                    }
+                    setTimeout(() => printOne(0), 0)
+                  } catch (e) {
+                    console.error('Kitchen slip print (accept flow):', e)
+                  }
+                })()
+              }
+              if (autoPrintReceiptOnOrder) {
+                await printReceiptNow(
+                  {
+                    orderNo: order.orderNo ?? '',
+                    storeCode: order.storeCode ?? currentStoreId,
+                    orderType: order.orderType ?? 'delivery',
+                    tableName: order.tableName,
+                    memo: order.memo,
+                    items,
+                    subtotal: order.subtotal ?? 0,
+                    discountAmt: order.discountAmt ?? 0,
+                    total: order.total ?? 0,
+                  },
+                  undefined,
+                  false,
+                  undefined,
+                  true,
+                  autoPrintKitchenSlipOnOrder ? runKitchenForAcceptedOrder : undefined
+                )
+              } else if (autoPrintKitchenSlipOnOrder) {
+                setTimeout(runKitchenForAcceptedOrder, 180)
+              }
+            }
+          }
+          refetchStores({ scope: 'all' })
+          if (typeof window !== 'undefined') {
+            window.setTimeout(() => refetchStores({ scope: 'all' }), 700)
+            window.setTimeout(() => refetchStores({ scope: 'all' }), 1800)
+          }
+          return
+        }
+
+        const rejectRes = await updatePosOrderStatus({
+          id: orderId,
+          status: 'cancelled',
+          ...(grabOrderId ? { grabState: 'CANCELLED' } : {}),
+        })
+        if (!rejectRes.success) {
+          await appAlert(rejectRes.message || (t('processFail') || '처리 실패'))
+          return
+        }
+        if (grabOrderId) {
+          await grabCancelOrderByStoreApi({
+            orderID: grabOrderId,
+            storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
+            cancelCode: 1002,
+          })
+        }
+        refetchStores({ scope: 'all' })
+        await appAlert(t('posOrderRejected') || '주문을 반려했습니다.')
+      } catch (e) {
+        await appAlert(t('posUnexpectedErrorDetail')?.replace('{{detail}}', String(e)) || String(e))
+      }
+    },
+    [
+      t,
+      refetchStores,
+      isMainPosDevice,
+      autoPrintReceiptOnOrder,
+      autoPrintKitchenSlipOnOrder,
+      currentStoreId,
+      menus,
+      lang,
+    ]
+  )
 
   /**
    * 신규 "배달" 주문 자동 처리:
@@ -956,42 +1257,62 @@ export default function PosTerminalPage() {
    * - 알림음 재생
    */
   const autoFocusIncomingDeliveryOrder = useCallback(
-    (params: { orderId: number; orderType?: string; deliveryAppCode?: string; status?: string }) => {
+    (params: {
+      orderId: number
+      orderType?: string
+      deliveryAppCode?: string
+      status?: string
+      createdAt?: string
+      storeCode?: string
+      memo?: string
+    }) => {
       const orderId = Number(params.orderId)
       if (!Number.isFinite(orderId) || orderId <= 0) return
+      if (!isSessionNewOrder(params.createdAt, posSessionStartedAtRef.current)) return
       const orderType = String(params.orderType ?? '').trim().toLowerCase()
       if (orderType !== 'delivery') return
-      if (lastAutoFocusedDeliveryOrderIdRef.current === orderId) return
-      lastAutoFocusedDeliveryOrderIdRef.current = orderId
+      const status = String(params.status ?? '').trim().toLowerCase()
+      if (status === 'cancelled' || status === 'refunded') return
+      if (promptedPendingDeliveryOrderIdsRef.current.has(orderId)) return
+      promptedPendingDeliveryOrderIdsRef.current.add(orderId)
 
       const deliveryCode = String(params.deliveryAppCode ?? '').trim().toLowerCase()
       if (deliveryCode) setDeliveryApp(deliveryCode)
+      refetchStores({ scope: 'all' })
       setActiveTab('delivery')
       setDeliveryListMode('all')
       setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
       setSelectedDeliveryTargetLabel('')
       playIncomingOrderBeep()
-      const status = String(params.status ?? '').trim().toLowerCase()
-      if (status !== 'cancelled' && status !== 'refunded' && !promptedPendingDeliveryOrderIdsRef.current.has(orderId)) {
-        promptedPendingDeliveryOrderIdsRef.current.add(orderId)
+      if (status === 'pending') {
         window.setTimeout(() => {
-          void (async () => {
-            const accepted = await appConfirm(
-              status === 'pending'
-                ? (t('posIncomingDeliveryApprovePrompt') ||
-                    '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?')
-                : (t('posIncomingDeliveryArrivedPrompt') ||
-                    '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?')
-            )
-            if (!accepted) return
-            setActiveTab('delivery')
-            setDeliveryListMode('all')
-            setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
-          })()
+          void decideIncomingPendingDeliveryOrder({
+            orderId,
+            storeCode: params.storeCode,
+            memo: params.memo,
+            deliveryAppCode: deliveryCode,
+          })
         }, 120)
+        return
       }
+      window.setTimeout(() => {
+        void (async () => {
+          const accepted = await appConfirm(
+            status === 'pending'
+              ? (t('posIncomingDeliveryApprovePrompt') ||
+                  '신규 배달 주문이 도착했습니다. 지금 주문 수락 화면으로 이동할까요?')
+              : (t('posIncomingDeliveryArrivedPrompt') ||
+                  '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?')
+          )
+          if (!accepted) return
+          refetchStores({ scope: 'all' })
+          setActiveTab('delivery')
+          setDeliveryListMode('all')
+          setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
+        })()
+      }, 120)
     },
-    [playIncomingOrderBeep, t]
+    [playIncomingOrderBeep, t, refetchStores, decideIncomingPendingDeliveryOrder]
   )
 
   const schedulePostPaymentCustomerQr = useCallback(() => {
@@ -1111,6 +1432,19 @@ export default function PosTerminalPage() {
   const lastSeenOrderIdRef = useRef<number>(0)
   const prevStoreForPollRef = useRef<string | null>(null)
 
+  const resolveOrderItemDisplayName = useCallback(
+    (item: { id?: string; name?: string; menuId?: string }) =>
+      resolvePosOrderItemMenuDisplayName(
+        {
+          id: String(item.id ?? ''),
+          name: String(item.name ?? ''),
+          ...(String(item.menuId ?? '').trim() ? { menuId: String(item.menuId).trim() } : {}),
+        },
+        menus
+      ),
+    [menus]
+  )
+
 
   async function printReceiptNow(
     payload: {
@@ -1119,7 +1453,7 @@ export default function PosTerminalPage() {
       orderType: string
       tableName?: string
       memo?: string
-      items: { id: string; name: string; price: number; qty: number; note?: string; isAddon?: boolean }[]
+      items: { id: string; name: string; price: number; qty: number; note?: string; isAddon?: boolean; menuId?: string }[]
       subtotal: number
       discountAmt: number
       total: number
@@ -1185,7 +1519,12 @@ export default function PosTerminalPage() {
               esc(tr('posReceiptAddonSection', '추가 주문')) +
               ct('div')
             : ''
-        const line = translatePosMenuLineForReceipt(it.name, (k) => tPrint(k))
+        const lineName = resolveOrderItemDisplayName({
+          id: String(it.id ?? ''),
+          name: String(it.name ?? ''),
+          menuId: String((it as { menuId?: string }).menuId ?? ''),
+        })
+        const line = translatePosMenuLineForReceipt(lineName, (k) => tPrint(k))
         const lineNote = String((it as { note?: string }).note ?? '').trim()
         const noteHtml = lineNote
           ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
@@ -1274,6 +1613,7 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
+      if (!isSessionNewOrder(row.created_at, posSessionStartedAtRef.current)) return
       const rowStore = String(row.store_code ?? '').trim()
       const variants = [currentStoreId, currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(), currentStoreId.replace(/^CM\s+/i, '')].filter(Boolean)
       if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
@@ -1288,13 +1628,20 @@ export default function PosTerminalPage() {
         const raw = row.items_json
         const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : []
         items = (Array.isArray(arr) ? arr : []).map(
-          (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string }) => {
+          (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string; menuId1?: string; menu_id1?: string; menuId?: string }) => {
             const note = String(it.note ?? '').trim()
-            return {
+            const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+            const displayName = resolveOrderItemDisplayName({
               id: String(it.id ?? ''),
               name: String(it.name ?? ''),
+              menuId,
+            })
+            return {
+              id: String(it.id ?? ''),
+              name: displayName,
               price: Number(it.price ?? 0),
               qty: Number(it.qty ?? it.quantity ?? 1),
+              ...(menuId ? { menuId } : {}),
               ...(note ? { note } : {}),
             }
           }
@@ -1311,6 +1658,9 @@ export default function PosTerminalPage() {
         orderType: String(row.order_type ?? ''),
         deliveryAppCode: String(row.delivery_app_code ?? ''),
         status: String(row.status ?? ''),
+        createdAt: String(row.created_at ?? ''),
+        storeCode: String(row.store_code ?? ''),
+        memo: String(row.memo ?? ''),
       })
       // 주문 바/배달 목록은 usePosStore 스냅샷을 사용하므로, 신규 주문 수신 시 즉시 갱신합니다.
       refetchCurrentStore()
@@ -1397,19 +1747,24 @@ export default function PosTerminalPage() {
           })
           .catch((e) => console.error('Kitchen slip print:', e))
       }
-      if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
-        printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
-      } else if (autoPrintReceiptOnOrder) {
-        printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
-      } else if (autoPrintKitchenSlipOnOrder) {
-        setTimeout(runKitchenFromRealtimeOrderInsert, 180)
+      const isPendingDelivery =
+        String(orderType).trim().toLowerCase() === 'delivery' &&
+        String(row.status ?? '').trim().toLowerCase() === 'pending'
+      if (!isPendingDelivery) {
+        if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
+        } else if (autoPrintReceiptOnOrder) {
+          printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
+        } else if (autoPrintKitchenSlipOnOrder) {
+          setTimeout(runKitchenFromRealtimeOrderInsert, 180)
+        }
       }
       if (autoPrintReceiptOnPayment) {
         const st = String(row.status ?? '').toLowerCase()
         const paySum = posOrderRowPaymentSum(row)
         if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
           printedPaymentReceiptIdsRef.current.add(orderId)
-          void getPosOrders({ orderId, storeCode: currentStoreId, debugPosOrders: posOrdersDebugEnabled }).then((list) => {
+          void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
             const order = list[0] as PosOrder | undefined
             if (!order?.items?.length) {
               printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -1447,6 +1802,7 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
+      if (!isSessionNewOrder(row.created_at, posSessionStartedAtRef.current)) return
       const rowStore = String(row.store_code ?? '').trim()
       const variants = [
         currentStoreId,
@@ -1462,6 +1818,9 @@ export default function PosTerminalPage() {
         orderType: String(row.order_type ?? ''),
         deliveryAppCode: String(row.delivery_app_code ?? ''),
         status: String(row.status ?? ''),
+        createdAt: String(row.created_at ?? ''),
+        storeCode: String(row.store_code ?? ''),
+        memo: String(row.memo ?? ''),
       })
       refetchCurrentStore()
     })
@@ -1469,45 +1828,6 @@ export default function PosTerminalPage() {
       if (channel) channel.unsubscribe()
     }
   }, [isMainPosDevice, currentStoreId, autoFocusIncomingDeliveryOrder, refetchCurrentStore])
-
-  useEffect(() => {
-    if (!currentStoreId) return
-    const channel = subscribePosOrdersUpdate((payload: { new?: Record<string, unknown> }) => {
-      const row = payload?.new as Record<string, unknown> | undefined
-      if (!row) return
-      const orderId = coercePosOrderIdFromRealtime(row.id)
-      if (orderId == null) return
-      if (promptedAcceptedDeliveryOrderIdsRef.current.has(orderId)) return
-      const rowStore = String(row.store_code ?? '').trim()
-      const variants = [
-        currentStoreId,
-        currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
-        currentStoreId.replace(/^CM\s+/i, ''),
-      ].filter(Boolean)
-      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
-      const orderType = String(row.order_type ?? '').trim().toLowerCase()
-      if (orderType !== 'delivery') return
-      const memo = String(row.memo ?? '')
-      const grabState = String(extractGrabStateFromMemo(memo) ?? '').trim().toUpperCase()
-      if (grabState !== 'ACCEPTED' && grabState !== 'MERCHANT_ACCEPTED') return
-      promptedAcceptedDeliveryOrderIdsRef.current.add(orderId)
-      playIncomingOrderBeep()
-      window.setTimeout(() => {
-        void (async () => {
-          const accepted = await appConfirm(
-            'Grab 주문이 플랫폼에서 승인되었습니다. 주문 화면으로 이동할까요?'
-          )
-          if (!accepted) return
-          setActiveTab('delivery')
-          setDeliveryListMode('all')
-          setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
-        })()
-      }, 120)
-    })
-    return () => {
-      if (channel) channel.unsubscribe()
-    }
-  }, [currentStoreId, playIncomingOrderBeep])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId || !autoPrintReceiptOnPayment) return
@@ -1527,7 +1847,7 @@ export default function PosTerminalPage() {
       if (posOrderRowPaymentSum(row) <= 0) return
       if (printedPaymentReceiptIdsRef.current.has(orderId)) return
       printedPaymentReceiptIdsRef.current.add(orderId)
-      void getPosOrders({ orderId, storeCode: currentStoreId, debugPosOrders: posOrdersDebugEnabled }).then((list) => {
+      void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
         const order = list[0] as PosOrder | undefined
         if (!order?.items?.length) {
           printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -1569,7 +1889,6 @@ export default function PosTerminalPage() {
               startStr: today,
               endStr: today,
               storeCode: currentStoreId,
-              debugPosOrders: posOrdersDebugEnabled,
               statusPaidLike: true,
               limit: 800,
               orderBy: 'id.desc',
@@ -1617,13 +1936,15 @@ export default function PosTerminalPage() {
           startStr: today,
           endStr: today,
           storeCode: currentStoreId,
-          debugPosOrders: posOrdersDebugEnabled,
           ...(sinceId != null ? { sinceId } : {}),
         })
         if (!hasInitializedMainPosPollRef.current) {
           const maxId = orders.length ? Math.max(...orders.map((o) => o.id ?? 0)) : 0
+          for (const o of orders) {
+            const oid = Number(o.id)
+            if (Number.isFinite(oid) && oid > 0) seenOrderIdsRef.current.add(oid)
+          }
           lastSeenOrderIdRef.current = maxId
-          orders.forEach((o) => seenOrderIdsRef.current.add(o.id))
           hasInitializedMainPosPollRef.current = true
           await runPaymentReceiptScan()
           return
@@ -1633,6 +1954,10 @@ export default function PosTerminalPage() {
         for (const order of newOrders) {
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
+          if (!isSessionNewOrder(order.createdAt, posSessionStartedAtRef.current)) {
+            lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+            continue
+          }
           if (seenOrderIdsRef.current.has(oid)) {
             lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
             continue
@@ -1643,13 +1968,20 @@ export default function PosTerminalPage() {
             continue
           }
           const items = (order.items || []).map(
-            (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string }) => {
+            (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string; menuId1?: string; menu_id1?: string; menuId?: string }) => {
               const note = String(it.note ?? '').trim()
-              return {
+              const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+              const displayName = resolveOrderItemDisplayName({
                 id: String(it.id ?? ''),
                 name: String(it.name ?? ''),
+                menuId,
+              })
+              return {
+                id: String(it.id ?? ''),
+                name: displayName,
                 price: Number(it.price ?? 0),
                 qty: Number(it.qty ?? it.quantity ?? 1),
+                ...(menuId ? { menuId } : {}),
                 ...(note ? { note } : {}),
               }
             }
@@ -1668,6 +2000,9 @@ export default function PosTerminalPage() {
             orderType: String(order.orderType ?? ''),
             deliveryAppCode: inferredDeliveryCode,
             status: String(order.status ?? ''),
+            createdAt: String(order.createdAt ?? ''),
+            storeCode: String(order.storeCode ?? ''),
+            memo: String(order.memo ?? ''),
           })
           shouldRefreshCurrentStore = true
           const receiptPayloadPoll = {
@@ -1749,12 +2084,17 @@ export default function PosTerminalPage() {
               }
             })()
           }
-          if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
-            printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
-          } else if (autoPrintReceiptOnOrder) {
-            printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
-          } else if (autoPrintKitchenSlipOnOrder) {
-            setTimeout(runKitchenForPolledOrder, 180)
+          const isPendingDelivery =
+            String(order.orderType ?? '').trim().toLowerCase() === 'delivery' &&
+            String(order.status ?? '').trim().toLowerCase() === 'pending'
+          if (!isPendingDelivery) {
+            if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
+            } else if (autoPrintReceiptOnOrder) {
+              printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
+            } else if (autoPrintKitchenSlipOnOrder) {
+              setTimeout(runKitchenForPolledOrder, 180)
+            }
           }
         }
         if (shouldRefreshCurrentStore) {
@@ -1944,16 +2284,76 @@ export default function PosTerminalPage() {
     return ''
   }
 
+  const mapPosAccentToBar = (accent: string | null | undefined): NonNullable<OrderBarItem['deliveryAppAccent']> => {
+    const raw = String(accent || '').trim().toLowerCase()
+    if (raw === 'grab' || raw === 'lime') return 'lime'
+    if (raw === 'lineman' || raw === 'sky') return 'sky'
+    if (raw === 'shopee' || raw === 'amber') return 'amber'
+    if (raw === 'slate') return 'slate'
+    return 'slate'
+  }
+
+  const resolveMatchedDeliveryAppForOrder = (order: Order): PosDeliveryApp | null => {
+    const tableName = String(order.tableName || '').trim()
+    const memo = String(order.memo || '').trim()
+    const label = String(order.customerName || '').trim()
+    const orderNoRaw = String(order.orderNo || '').trim()
+    const probeText = [label, memo, orderNoRaw, tableName].filter(Boolean).join(' \n ')
+    const byKeyword = detectDeliveryApp(probeText)
+    if (byKeyword) return byKeyword
+
+    const platformName = getPosDeliveryPlatformName(
+      { tableName, orderNo: orderNoRaw, memo },
+      deliveryAppsFromApi
+    ).trim()
+    if (!platformName) return null
+    const want = platformName.toLowerCase()
+    for (const app of deliveryAppsFromApi) {
+      const n = String(app.name || '').trim().toLowerCase()
+      if (n && n === want) return app
+      const c = String(app.code || '').trim().toLowerCase()
+      if (c && c === want) return app
+    }
+    return null
+  }
+
+  const buildDeliveryBarFields = (
+    order: Order
+  ): Pick<OrderBarItem, 'deliveryAppAccent' | 'deliveryAppName' | 'posOrderNo' | 'platformOrderNo' | 'rightLabel'> => {
+    const tableName = String(order.tableName || '').trim()
+    const memo = String(order.memo || '').trim()
+    const orderNoRaw = String(order.orderNo || '').trim()
+    const pick = pickPosChannelOrderNo({ tableName, orderNo: orderNoRaw, memo })
+    const orderNoDisp = orderNoRaw ? formatPosOrderNoForPrint(orderNoRaw) : ''
+    const platformOrderNo =
+      pick.kind === 'hash' || pick.kind === 'memo_anchor'
+        ? (pick.text.trim() ? `#${pick.text.trim()}` : '')
+        : pick.text.trim()
+          ? formatPosOrderNoForPrint(pick.text.trim())
+          : ''
+
+    const matched = resolveMatchedDeliveryAppForOrder(order)
+    const platformLabel = (matched?.name || getPosDeliveryPlatformName({ tableName, orderNo: orderNoRaw, memo }, deliveryAppsFromApi)).trim()
+    const accentRaw = matched?.accentColor || null
+    const accent = mapPosAccentToBar(accentRaw || (platformLabel.toLowerCase().includes('grab') ? 'lime' : platformLabel.toLowerCase().includes('line') ? 'sky' : platformLabel.toLowerCase().includes('shopee') ? 'amber' : 'slate'))
+
+    const customer = String(order.customerName || '').trim()
+    return {
+      deliveryAppAccent: accent,
+      deliveryAppName: platformLabel || undefined,
+      ...(orderNoDisp ? { posOrderNo: orderNoDisp } : {}),
+      ...(platformOrderNo ? { platformOrderNo } : {}),
+      ...(customer ? { rightLabel: customer } : {}),
+    }
+  }
+
   const deliveryBarItems = useMemo<OrderBarItem[]>(() => {
     const orders = [...deliveryOrders]
     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return orders.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
       const visual = getOrderVisual(order)
-      const app = detectDeliveryApp(label)
-      const appLabelEn = app ? app.name : (t('posOrderTypeDelivery') || '배달')
-      const no = detectDeliveryOrderNo(label)
-      const rightLabel = app ? (no ? `#${no}` : undefined) : [appLabelEn, no ? `#${no}` : ''].filter(Boolean).join(' · ')
+      const bar = buildDeliveryBarFields(order)
       return {
         id: `delivery-order-${order.id}`,
         label,
@@ -1961,9 +2361,7 @@ export default function PosTerminalPage() {
         createdAt: visual.createdAt,
         targetMin: visual.targetMin,
         subLabel: t('posOrderStatusPreparing') || '진행 중',
-        rightLabel: rightLabel || undefined,
-        deliveryAppAccent: (app?.accentColor as OrderBarItem['deliveryAppAccent']) || undefined,
-        deliveryAppName: app?.name,
+        ...bar,
       } satisfies OrderBarItem
     })
   }, [deliveryOrders, menuTargets, t, deliveryAppsFromApi])
@@ -1973,10 +2371,7 @@ export default function PosTerminalPage() {
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
-      const app = detectDeliveryApp(label)
-      const appLabelEn = app ? app.name : (t('posOrderTypeDelivery') || '배달')
-      const no = detectDeliveryOrderNo(label)
-      const rightLabel = app ? (no ? `#${no}` : undefined) : [appLabelEn, no ? `#${no}` : ''].filter(Boolean).join(' · ')
+      const bar = buildDeliveryBarFields(order)
       return {
         id: `delivery-order-${order.id}`,
         label,
@@ -1984,9 +2379,7 @@ export default function PosTerminalPage() {
         createdAt: order.createdAt ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt)) : undefined,
         targetMin: 0,
         subLabel: t('posDeliveryPackagingComplete') || '포장 완료',
-        rightLabel: rightLabel || undefined,
-        deliveryAppAccent: (app?.accentColor as OrderBarItem['deliveryAppAccent']) || undefined,
-        deliveryAppName: app?.name,
+        ...bar,
       } satisfies OrderBarItem
     })
   }, [packagedDeliveryOrders, t, deliveryAppsFromApi])
@@ -1996,10 +2389,7 @@ export default function PosTerminalPage() {
     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
-      const app = detectDeliveryApp(label)
-      const appLabelEn = app ? app.name : (t('posOrderTypeDelivery') || '배달')
-      const no = detectDeliveryOrderNo(label)
-      const rightLabel = app ? (no ? `#${no}` : undefined) : [appLabelEn, no ? `#${no}` : ''].filter(Boolean).join(' · ')
+      const bar = buildDeliveryBarFields(order)
       return {
         id: `delivery-order-${order.id}`,
         label,
@@ -2007,9 +2397,7 @@ export default function PosTerminalPage() {
         createdAt: order.createdAt ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt)) : undefined,
         targetMin: 0,
         subLabel: formatPosOrderNoForPrint(order.orderNo || ''),
-        rightLabel: rightLabel || undefined,
-        deliveryAppAccent: (app?.accentColor as OrderBarItem['deliveryAppAccent']) || undefined,
-        deliveryAppName: app?.name,
+        ...bar,
       } satisfies OrderBarItem
     })
   }, [completedDeliveryOrders, t, deliveryAppsFromApi])
@@ -2021,17 +2409,37 @@ export default function PosTerminalPage() {
       ...packagedDeliveryOrders.map((o) => ({ ...o, _listType: 'packaged' as const })),
       ...completedDeliveryOrders.map((o) => ({ ...o, _listType: 'completed' as const })),
     ]
-    const filtered = merged
+    const listTypeRank = (lt: 'in_progress' | 'packaged' | 'completed') =>
+      lt === 'completed' ? 3 : lt === 'packaged' ? 2 : 1
+    const byId = new Map<string, Tagged>()
+    for (const row of merged) {
+      const oid = String(row.id || '').trim()
+      if (!oid) continue
+      const lt = (row as Tagged)._listType || 'in_progress'
+      const prev = byId.get(oid)
+      if (!prev) {
+        byId.set(oid, row)
+        continue
+      }
+      const prevLt = (prev as Tagged)._listType || 'in_progress'
+      if (listTypeRank(lt) > listTypeRank(prevLt)) {
+        byId.set(oid, row)
+        continue
+      }
+      if (listTypeRank(lt) === listTypeRank(prevLt)) {
+        const prevTime = new Date(prev.createdAt || 0).getTime()
+        const nextTime = new Date(row.createdAt || 0).getTime()
+        if (nextTime >= prevTime) byId.set(oid, row)
+      }
+    }
+    const filtered = Array.from(byId.values())
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
       const listType = (order as Tagged)._listType
-      const app = detectDeliveryApp(label)
-      const appLabelEn = app ? app.name : (t('posOrderTypeDelivery') || '배달')
-      const no = detectDeliveryOrderNo(label)
       const visual = getOrderVisual(order)
       const barStatus = listType === 'completed' ? 'completed' as const : listType === 'packaged' ? 'packaged' as const : visual.status
-      const rightLabel = app ? (no ? `#${no}` : undefined) : [appLabelEn, no ? `#${no}` : ''].filter(Boolean).join(' · ')
+      const bar = buildDeliveryBarFields(order)
       return {
         id: `delivery-order-${order.id}`,
         label,
@@ -2044,17 +2452,45 @@ export default function PosTerminalPage() {
             : listType === 'packaged'
               ? t('posDeliveryPackagingComplete') || '포장 완료'
               : t('posOrderStatusPreparing') || '진행 중',
-        rightLabel: rightLabel || undefined,
-        deliveryAppAccent: (app?.accentColor as OrderBarItem['deliveryAppAccent']) || undefined,
-        deliveryAppName: app?.name,
+        ...bar,
       } satisfies OrderBarItem
     })
   }, [deliveryOrders, packagedDeliveryOrders, completedDeliveryOrders, menuTargets, t, deliveryAppsFromApi])
 
   const inProgressOrPackagedDeliveryBarItems = useMemo(() => {
     const merged = [...deliveryBarItems, ...packagedDeliveryBarItems]
-    merged.sort((a, b) => (new Date(a.createdAt || 0).getTime()) - (new Date(b.createdAt || 0).getTime()))
-    return merged
+    const statusRank = (st: OrderBarItem['status']) => {
+      if (st === 'packaged') return 4
+      if (st === 'completed') return 3
+      if (st === 'partial_served') return 2
+      if (st === 'preparing') return 1
+      return 0
+    }
+    const byId = new Map<string, OrderBarItem>()
+    for (const it of merged) {
+      const m = /^delivery-order-(.+)$/.exec(String(it.id || '').trim())
+      const oid = (m?.[1] || '').trim()
+      if (!oid) continue
+      const prev = byId.get(oid)
+      if (!prev) {
+        byId.set(oid, it)
+        continue
+      }
+      const a = statusRank(it.status)
+      const b = statusRank(prev.status)
+      if (a > b) {
+        byId.set(oid, it)
+        continue
+      }
+      if (a === b) {
+        const prevTime = new Date(prev.createdAt || 0).getTime()
+        const nextTime = new Date(it.createdAt || 0).getTime()
+        if (nextTime >= prevTime) byId.set(oid, it)
+      }
+    }
+    const deduped = Array.from(byId.values())
+    deduped.sort((a, b) => (new Date(a.createdAt || 0).getTime()) - (new Date(b.createdAt || 0).getTime()))
+    return deduped
   }, [deliveryBarItems, packagedDeliveryBarItems])
   const currentDeliveryBarItems = deliveryListMode === 'all' ? allDeliveryBarItems : deliveryListMode === 'completed' ? completedDeliveryBarItems : inProgressOrPackagedDeliveryBarItems
 
@@ -2117,7 +2553,30 @@ export default function PosTerminalPage() {
       ...packagedTakeoutOrders.map((o) => ({ ...o, _listType: 'packaged' as const })),
       ...completedTakeoutOrders.map((o) => ({ ...o, _listType: 'completed' as const })),
     ]
-    const filtered = merged
+    const listTypeRank = (lt: 'in_progress' | 'packaged' | 'completed') =>
+      lt === 'completed' ? 3 : lt === 'packaged' ? 2 : 1
+    const byId = new Map<string, Tagged>()
+    for (const row of merged) {
+      const oid = String(row.id || '').trim()
+      if (!oid) continue
+      const lt = (row as Tagged)._listType || 'in_progress'
+      const prev = byId.get(oid)
+      if (!prev) {
+        byId.set(oid, row)
+        continue
+      }
+      const prevLt = (prev as Tagged)._listType || 'in_progress'
+      if (listTypeRank(lt) > listTypeRank(prevLt)) {
+        byId.set(oid, row)
+        continue
+      }
+      if (listTypeRank(lt) === listTypeRank(prevLt)) {
+        const prevTime = new Date(prev.createdAt || 0).getTime()
+        const nextTime = new Date(row.createdAt || 0).getTime()
+        if (nextTime >= prevTime) byId.set(oid, row)
+      }
+    }
+    const filtered = Array.from(byId.values())
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
@@ -2143,8 +2602,38 @@ export default function PosTerminalPage() {
 
   const inProgressOrPackagedTakeoutBarItems = useMemo(() => {
     const merged = [...takeoutBarItems, ...packagedTakeoutBarItems]
-    merged.sort((a, b) => (new Date(a.createdAt || 0).getTime()) - (new Date(b.createdAt || 0).getTime()))
-    return merged
+    const statusRank = (st: OrderBarItem['status']) => {
+      if (st === 'packaged') return 4
+      if (st === 'completed') return 3
+      if (st === 'partial_served') return 2
+      if (st === 'preparing') return 1
+      return 0
+    }
+    const byId = new Map<string, OrderBarItem>()
+    for (const it of merged) {
+      const m = /^takeout-order-(.+)$/.exec(String(it.id || '').trim())
+      const oid = (m?.[1] || '').trim()
+      if (!oid) continue
+      const prev = byId.get(oid)
+      if (!prev) {
+        byId.set(oid, it)
+        continue
+      }
+      const a = statusRank(it.status)
+      const b = statusRank(prev.status)
+      if (a > b) {
+        byId.set(oid, it)
+        continue
+      }
+      if (a === b) {
+        const prevTime = new Date(prev.createdAt || 0).getTime()
+        const nextTime = new Date(it.createdAt || 0).getTime()
+        if (nextTime >= prevTime) byId.set(oid, it)
+      }
+    }
+    const deduped = Array.from(byId.values())
+    deduped.sort((a, b) => (new Date(a.createdAt || 0).getTime()) - (new Date(b.createdAt || 0).getTime()))
+    return deduped
   }, [takeoutBarItems, packagedTakeoutBarItems])
   const currentTakeoutBarItems = takeoutListMode === 'all' ? allTakeoutBarItems : takeoutListMode === 'completed' ? completedTakeoutBarItems : inProgressOrPackagedTakeoutBarItems
 
@@ -3561,9 +4050,10 @@ export default function PosTerminalPage() {
           const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
               orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
+              menus={menus}
               deliveryApps={deliveryAppsFromApi}
               order={selectedDeliveryOrder}
-              onPackaged={refetchCurrentStore}
+              onPackaged={() => refetchStores({ scope: 'all' })}
               onCancel={refetchCurrentStore}
               storeCode={currentStoreId}
               onPay={() => {
@@ -3574,7 +4064,11 @@ export default function PosTerminalPage() {
                   tableName: selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id),
                   items: selectedDeliveryOrder.items.map((item) => ({
                     id: item.id,
-                    name: item.name,
+                    name: resolveOrderItemDisplayName({
+                      id: item.id,
+                      name: item.name,
+                      menuId: item.menuId,
+                    }),
                     price: item.price,
                     quantity: item.quantity,
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
@@ -3649,7 +4143,7 @@ export default function PosTerminalPage() {
             <TakeoutOrderPanel
               orderLabel={selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id)}
               order={selectedTakeoutOrder}
-              onPackaged={refetchCurrentStore}
+              onPackaged={() => refetchStores({ scope: 'all' })}
               onCancel={refetchCurrentStore}
               onPay={() => {
                 if (!selectedTakeoutOrder) return

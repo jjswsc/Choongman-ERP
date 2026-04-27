@@ -21,12 +21,28 @@ function toDateStr(val: unknown): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
+function bangkokTodayDateStr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
 function normalizedEmployeeStatus(val: unknown, resignDate: unknown): 'active' | 'leave' | 'resigned' | 'suspended' {
+  const today = bangkokTodayDateStr()
+  const resignDateStr = toDateStr(resignDate)
   const raw = String(val || '')
     .trim()
     .toLowerCase()
-  if (raw === 'active' || raw === 'leave' || raw === 'resigned' || raw === 'suspended') return raw
-  return String(resignDate || '').trim() ? 'resigned' : 'active'
+  if (raw === 'active' || raw === 'leave' || raw === 'resigned' || raw === 'suspended') {
+    if (raw === 'resigned' && resignDateStr && resignDateStr > today) return 'active'
+    return raw
+  }
+  if (!resignDateStr) return 'active'
+  // 사직 예정일은 유지하고, 방콕 기준 당일이 되었을 때만 resigned 처리.
+  return resignDateStr <= today ? 'resigned' : 'active'
 }
 
 /** 직원 관리용 직원 목록. userStore/userRole로 필터링 */

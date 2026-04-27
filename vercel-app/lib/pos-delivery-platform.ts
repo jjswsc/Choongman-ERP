@@ -1,6 +1,11 @@
 import type { PosDeliveryApp } from '@/lib/api-client'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 
+export type PosChannelOrderNoPick =
+  | { kind: 'hash'; text: string }
+  | { kind: 'memo_anchor'; text: string }
+  | { kind: 'pos_order'; text: string }
+
 /** POS 주문 행(배달 라벨은 DB `table_name`에 저장되는 경우가 많음)에서 배달앱 표시명 추출 */
 export function getPosDeliveryPlatformName(
   order: { tableName?: string; orderNo?: string; memo?: string },
@@ -23,20 +28,45 @@ export function getPosDeliveryPlatformName(
   return ''
 }
 
-/** 라벨/주문번호/메모에서 `#ABC123` 형태 번호 추출, 없으면 POS 주문번호 */
+function tryPickMemoAnchorChannelNo(memo: string): string {
+  const m = String(memo || '')
+  const grab = /grab_order:([A-Za-z0-9._:-]+)/i.exec(m)?.[1]?.trim()
+  if (grab) return grab
+  const lm = /lineman_order:([A-Za-z0-9._:-]+)/i.exec(m)?.[1]?.trim()
+  if (lm) return lm
+  const sp = /shopee_order:([A-Za-z0-9._:-]+)/i.exec(m)?.[1]?.trim()
+  if (sp) return sp
+  return ''
+}
+
+/** 라벨/주문번호/메모에서 채널 주문번호 우선 추출 (`#…`, memo 앵커), 없으면 POS 주문번호 */
+export function pickPosChannelOrderNo(order: {
+  tableName?: string
+  orderNo?: string
+  memo?: string
+}): PosChannelOrderNoPick {
+  const joined = [order.tableName ?? '', order.orderNo ?? '', order.memo ?? ''].filter(Boolean).join(' ')
+  const m = joined.match(/#\s*([A-Za-z0-9-]+)/i)
+  if (m?.[1]) {
+    const token = m[1].trim()
+    if (token) return { kind: 'hash', text: token }
+  }
+  const memoOnly = String(order.memo ?? '')
+  const anchor = tryPickMemoAnchorChannelNo(memoOnly)
+  if (anchor) return { kind: 'memo_anchor', text: anchor }
+  const fallback = String(order.orderNo ?? '').trim()
+  return { kind: 'pos_order', text: fallback }
+}
+
+/** @deprecated `pickPosChannelOrderNo` 사용 권장 */
 export function getPosChannelOrderNoDisplay(order: {
   tableName?: string
   orderNo?: string
   memo?: string
 }): { text: string; usedHash: boolean } {
-  const joined = [order.tableName ?? '', order.orderNo ?? '', order.memo ?? ''].filter(Boolean).join(' ')
-  const m = joined.match(/#\s*([A-Za-z0-9-]+)/i)
-  if (m?.[1]) {
-    const token = m[1].trim()
-    if (token) return { text: token, usedHash: true }
-  }
-  const fallback = String(order.orderNo ?? '').trim()
-  return { text: fallback, usedHash: false }
+  const pick = pickPosChannelOrderNo(order)
+  if (pick.kind === 'pos_order') return { text: pick.text, usedHash: false }
+  return { text: pick.text, usedHash: true }
 }
 
 /** 배달·포장 유형 문자열 뒤에 붙이는 번호(예: ` · #A1B2` 또는 ` · POS-001`) */
@@ -45,9 +75,10 @@ export function formatPosOrderTypeChannelSuffix(order: {
   orderNo?: string
   memo?: string
 }): string {
-  const { text, usedHash } = getPosChannelOrderNoDisplay(order)
-  if (!text) return ''
-  return usedHash ? ` · #${text}` : ` · ${text}`
+  const pick = pickPosChannelOrderNo(order)
+  if (!pick.text) return ''
+  if (pick.kind === 'hash' || pick.kind === 'memo_anchor') return ` · #${pick.text}`
+  return ` · ${formatPosOrderNoForPrint(pick.text)}`
 }
 
 /** table_name/memo 등에 `#채널주문번호`가 있으면 그 문자열, 없으면 POS order_no */
@@ -56,12 +87,12 @@ export function resolvePosReceiptOrderNoRaw(args: {
   tableName?: string
   memo?: string
 }): string {
-  const ch = getPosChannelOrderNoDisplay({
+  const pick = pickPosChannelOrderNo({
     tableName: args.tableName,
     orderNo: args.posOrderNo,
     memo: args.memo ?? '',
   })
-  if (ch.usedHash && ch.text.trim()) return ch.text.trim()
+  if (pick.kind !== 'pos_order' && pick.text.trim()) return pick.text.trim()
   return String(args.posOrderNo ?? '').trim()
 }
 

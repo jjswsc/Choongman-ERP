@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
 import { persistGrabOrderToPos, resolveGrabStoreCode } from '@/lib/grab-order-to-pos'
+import { grabListOrdersByIds } from '@/lib/grab-partner-api'
 import { getPosDeliveryPolicyBundle, resolveOrderAcceptanceMode } from '@/lib/pos-delivery-policy'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +36,27 @@ export async function POST(req: NextRequest) {
     : null
   const acceptanceMode = resolveOrderAcceptanceMode(policyBundle)
   const initialStatus = acceptanceMode === 'auto' ? 'cooking' : 'pending'
-  const persisted = await persistGrabOrderToPos(body, { initialStatus })
+  let persisted = await persistGrabOrderToPos(body, { initialStatus })
+  const firstPersistError = persisted.ok ? '' : String(persisted.message || '')
+  // 일부 매장에서 submit_order payload에 items가 누락되어 no line items로 실패하는 케이스 폴백
+  if (!persisted.ok && firstPersistError === 'no line items' && merchantID) {
+    try {
+      const listed = await grabListOrdersByIds({ merchantID, orderIDs: [orderID] })
+      const fullOrder = (listed?.orders || []).find((o) => String(o.orderID || '').trim() === orderID)
+      if (fullOrder) {
+        persisted = await persistGrabOrderToPos(fullOrder as Record<string, unknown>, { initialStatus })
+      }
+    } catch (e) {
+      logGrabWebhook('submit_order', req, {
+        orderID,
+        merchantID,
+        resolvedStoreCode,
+        partnerMerchantID: String(body.partnerMerchantID ?? ''),
+        persistError: firstPersistError,
+        fallbackListOrdersError: String(e ?? 'unknown'),
+      })
+    }
+  }
   if (!persisted.ok) {
     logGrabWebhook('submit_order', req, {
       orderID,

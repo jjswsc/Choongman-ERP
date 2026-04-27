@@ -5,7 +5,7 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
-import { getPosTableLayout, type PosTableItem, type PosOrder } from '@/lib/api-client'
+import { getPosTableLayout, type PosTableItem, type PosOrder, type PosOrderItem } from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
@@ -70,20 +70,26 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     id: String(po.id),
     tableId: undefined,
     type: inferredType,
-    items: (po.items || []).map((it) => ({
-      id: String(it.id ?? ''),
-      name: String(it.name ?? ''),
-      quantity: Number(it.qty ?? 0) || 0,
-      price: Number(it.price ?? 0) || 0,
-      ...(typeof it.note === 'string' && String(it.note).trim()
-        ? { note: String(it.note).trim() }
-        : {}),
-      servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
-      servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
-    })),
+    items: (po.items || []).map((it) => {
+      const row = it as PosOrderItem
+      const menuId1 = String(row.menuId1 ?? row.menuId2 ?? '').trim()
+      return {
+        id: String(it.id ?? ''),
+        name: String(it.name ?? ''),
+        quantity: Number(it.qty ?? 0) || 0,
+        price: Number(it.price ?? 0) || 0,
+        ...(menuId1 ? { menuId: menuId1 } : {}),
+        ...(typeof it.note === 'string' && String(it.note).trim()
+          ? { note: String(it.note).trim() }
+          : {}),
+        servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
+        servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
+      }
+    }),
     total: Number(po.total ?? 0) || 0,
     status: mapOrderStatus(po.status),
     createdAt: new Date(po.createdAt || Date.now()),
+    tableName: String(po.tableName || '').trim() || undefined,
     customerName: String(po.tableName || '').trim() || undefined,
     memo: String(po.memo || '').trim() || undefined,
     orderNo: String(po.orderNo ?? '').trim() || undefined,
@@ -197,14 +203,38 @@ export function usePosStore() {
   }, [layoutByStoreId])
 
   const fetchStoreSnapshot = useCallback(async (storeCode: string, businessDate: string): Promise<StoreSnapshot> => {
-    const [layoutRes, ordersRes] = await Promise.all([
+    const candidates = new Set<string>()
+    const primary = String(storeCode || '').trim()
+    if (primary) candidates.add(primary)
+    const directCanonical = String(legacyToCanonical[primary.toLowerCase()] || '').trim()
+    if (directCanonical) candidates.add(directCanonical)
+    for (const [legacyRaw, canonicalRaw] of Object.entries(legacyToCanonical || {})) {
+      const legacy = String(legacyRaw || '').trim()
+      const canonical = String(canonicalRaw || '').trim()
+      if (!legacy || !canonical) continue
+      if (canonical.toLowerCase() === primary.toLowerCase()) candidates.add(legacy)
+    }
+    const storeCandidates = Array.from(candidates).filter(Boolean)
+    const [layoutRes, orderLists] = await Promise.all([
       getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-      getPosOrdersWithCache({
-        storeCode,
-        startStr: businessDate,
-        endStr: businessDate,
-      }).catch(() => []),
+      Promise.all(
+        (storeCandidates.length ? storeCandidates : [storeCode]).map((sc) =>
+          getPosOrdersWithCache({
+            storeCode: sc,
+            startStr: businessDate,
+            endStr: businessDate,
+          }).catch(() => [])
+        )
+      ),
     ])
+    const mergedOrdersById = new Map<number, PosOrder>()
+    for (const rows of orderLists || []) {
+      for (const row of rows || []) {
+        const id = Number(row.id || 0)
+        if (id > 0) mergedOrdersById.set(id, row)
+      }
+    }
+    const ordersRes = Array.from(mergedOrdersById.values())
     const fetchedLayout = layoutRes.layout || []
     const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
     const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
@@ -230,7 +260,7 @@ export function usePosStore() {
       layout,
       activeOrders,
     }
-  }, [])
+  }, [legacyToCanonical])
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {

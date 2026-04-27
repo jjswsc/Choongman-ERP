@@ -249,7 +249,7 @@ export function NoticeHistory() {
         </span>
         {hasSearched && sentTruncated && (
           <span className="text-[10px] text-amber-600 dark:text-amber-500">
-            기간 내 일부만 불러왔습니다. 기간을 나누어 검색해 보세요.
+            {t("noticeSentListTruncatedHint")}
           </span>
         )}
       </div>
@@ -355,7 +355,7 @@ export function NoticeHistory() {
                         </span>
                       </div>
                       <p className="text-xs text-card-foreground leading-relaxed whitespace-pre-wrap">
-                        {getTrans(notice.content || notice.preview || "") || "(내용 없음)"}
+                        {getTrans(notice.content || notice.preview || "") || t("noticeEmptyContent")}
                       </p>
                     </div>
                     <div className="mb-3 rounded-lg bg-card border px-3 py-2.5">

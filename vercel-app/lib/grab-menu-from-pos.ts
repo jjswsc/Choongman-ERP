@@ -60,6 +60,15 @@ function normalizeId(raw: string, fallback: string): string {
   return cleaned || fallback
 }
 
+function buildGrabItemId(menu: MenuRow, itemIndex: number): string {
+  const menuId = Number(menu.id ?? 0)
+  const code = String(menu.code ?? '').trim()
+  const base = normalizeId(code, '')
+  if (menuId > 0 && base) return `item-${menuId}-${base}`
+  if (menuId > 0) return `item-${menuId}`
+  return normalizeId(`item-${code}-${itemIndex + 1}`, `item-${itemIndex + 1}`)
+}
+
 function toMinorUnit(value: unknown): number {
   const n = Number(value ?? 0)
   if (!Number.isFinite(n) || n < 0) return 0
@@ -305,9 +314,8 @@ export async function buildGrabMenuFromPos(params: {
     })
     const items = sortedMenus.map((menu, itemIndex) => {
       const menuId = Number(menu.id ?? 0)
-      const menuCode = String(menu.code ?? '').trim()
       const policy = menuPolicyMap.get(menuId)
-      const itemId = normalizeId(menuCode, `menu-${menuId || itemIndex + 1}`)
+      const itemId = buildGrabItemId(menu, itemIndex)
       const menuOptions = (optionByMenuId.get(menuId) || []).sort((a, b) => {
         const ao = Number(a.sort_order ?? 0)
         const bo = Number(b.sort_order ?? 0)
@@ -350,7 +358,10 @@ export async function buildGrabMenuFromPos(params: {
             selectionRangeMin: 0,
             selectionRangeMax: Math.max(1, Math.min(10, rows.length)),
             modifiers: rows.map((opt, idx) => {
-              const modId = normalizeId(String(opt.id ?? ''), `${itemId}-mod-${idx + 1}`)
+                  const modId = normalizeId(
+                    `mod-${String(opt.id ?? '')}-${itemId}-${idx + 1}`,
+                    `${itemId}-mod-${idx + 1}`
+                  )
               const modPrice =
                 opt.price_modifier_delivery != null ? opt.price_modifier_delivery : opt.price_modifier
               const modDescDelivery = String(opt.description_delivery ?? '').trim()
@@ -380,7 +391,8 @@ export async function buildGrabMenuFromPos(params: {
         nameTranslation: {},
         sequence: itemIndex + 1,
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
-        price: toMinorUnit(deliveryPrice ?? 0),
+        // Grab 메뉴 검증에서 item price=0 이 거절될 수 있어 최소 1 minor unit 보정
+        price: Math.max(1, toMinorUnit(deliveryPrice ?? 0)),
         campaignInfo: null,
         description: menuDesc,
         photos: isValidPhotoUrl(menu.image) ? [menu.image] : [],

@@ -22,6 +22,19 @@ interface EmployeeFilterBarProps {
 
 const GRADES = ["All", "S", "A", "B", "C", "F"]
 
+function getJobOptionLabel(job: string, t: (k: string) => string): string {
+  const raw = String(job || "").trim()
+  if (!raw) return raw
+  const key = raw.toLowerCase()
+  if (key === "service") return t("empJobService")
+  if (key === "kitchen") return t("empJobKitchen")
+  if (key === "officer") return t("empJobOfficer")
+  if (key === "director") return t("empJobDirector")
+  if (key === "logistic") return t("empJobLogistic")
+  if (raw === "기타" || key === "other") return t("workLogOther")
+  return raw
+}
+
 export function EmployeeFilterBar({
   stores,
   storeFilter,
@@ -58,7 +71,7 @@ export function EmployeeFilterBar({
       >
         <option value="All">{t("emp_job_all")}</option>
         {jobOptions.map((j) => (
-          <option key={j} value={j}>{j}</option>
+          <option key={j} value={j}>{getJobOptionLabel(j, t)}</option>
         ))}
       </select>
       <select
@@ -78,8 +91,8 @@ export function EmployeeFilterBar({
       >
         <option value="all">{t("emp_status_all")}</option>
         <option value="active">{t("emp_status_active")}</option>
-        <option value="leave">{t("leaveStatusApproved")}</option>
-        <option value="suspended">{t("warningStatusSuspended") || "Suspended"}</option>
+        <option value="leave">{t("emp_status_leave")}</option>
+        <option value="suspended">{t("emp_status_suspended")}</option>
         <option value="resigned">{t("emp_status_resigned")}</option>
       </select>
       <div className="relative flex-1 min-w-[120px] max-w-[200px]">

@@ -199,7 +199,7 @@ export function TakeoutOrderPanel({
                         <Button
                           size="sm"
                           variant={packaged ? 'default' : 'outline'}
-                          className="shrink-0 h-8 min-w-[80px] self-center"
+                          className="shrink-0 h-9 w-9 p-0 self-start mt-0.5"
                           onClick={() => { void toggleItemPackaged(item.id) }}
                           disabled={savingItemId === item.id}
                           aria-label={
@@ -208,8 +208,7 @@ export function TakeoutOrderPanel({
                               : (t('posDeliveryPackagingComplete') || '포장 완료')
                           }
                         >
-                          {packaged ? <Check className="w-4 h-4 mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
-                          {packaged ? (t('cancel') || '취소') : (t('posDeliveryPackagingComplete') || '포장 완료')}
+                          {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                         </Button>
                       </li>
                     )

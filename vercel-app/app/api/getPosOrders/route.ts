@@ -276,6 +276,36 @@ export async function GET(request: NextRequest) {
             rows = Array.from(mergedById.values())
           }
         }
+        const hasNonNumericStoreLabel =
+          Boolean(primaryStoreFilter) &&
+          /[a-zA-Z\u3131-\uD79D]/.test(primaryStoreFilter) &&
+          !/^\d+$/.test(primaryStoreFilter.replace(/^CM\s+/i, '').trim())
+        if (!rows?.length && hasNonNumericStoreLabel) {
+          const fallbackFilterNoStore = buildListFilter('')
+          const fallbackRows = (await supabaseSelectFilter('pos_orders', fallbackFilterNoStore, {
+            order: listOrder,
+            limit: listLimit,
+            select: POS_ORDER_SELECT,
+          })) as typeof rows
+          const distinctStoreCodes = Array.from(
+            new Set((fallbackRows || []).map((r) => String(r.store_code || '').trim()).filter(Boolean))
+          )
+          if (distinctStoreCodes.length === 1) {
+            rows = fallbackRows || []
+            if (process.env.NODE_ENV === 'development' || debugPosOrders) {
+              console.log('[getPosOrders] non-numeric store fallback applied', {
+                requestedStore: primaryStoreFilter,
+                resolvedStoreCode: distinctStoreCodes[0],
+                fallbackRowCount: rows.length,
+              })
+            }
+          } else if (process.env.NODE_ENV === 'development' || debugPosOrders) {
+            console.log('[getPosOrders] non-numeric store fallback skipped', {
+              requestedStore: primaryStoreFilter,
+              distinctStoreCodes,
+            })
+          }
+        }
       } else {
         rows = (await supabaseSelect('pos_orders', {
           order: 'created_at.desc',
@@ -395,6 +425,41 @@ export async function GET(request: NextRequest) {
         memoHead: String(r.memo ?? '').slice(0, 120),
       }))
       console.log('[getPosOrders] debug sample rows:', sample)
+      if (list.length === 0 && primaryStoreFilter) {
+        try {
+          const recentRows = (await supabaseSelectFilter('pos_orders', '', {
+            order: 'created_at.desc',
+            limit: 50,
+            select: 'id,store_code,order_no,order_type,status,created_at,memo',
+          })) as {
+            id?: number
+            store_code?: string
+            order_no?: string
+            order_type?: string
+            status?: string
+            created_at?: string
+            memo?: string
+          }[]
+          const recentStoreCodes = Array.from(
+            new Set((recentRows || []).map((r) => String(r.store_code || '').trim()).filter(Boolean))
+          )
+          console.log('[getPosOrders] debug fallback recent store codes:', recentStoreCodes)
+          console.log(
+            '[getPosOrders] debug fallback recent rows:',
+            (recentRows || []).slice(0, 20).map((r) => ({
+              id: Number(r.id || 0),
+              storeCode: String(r.store_code || ''),
+              orderNo: String(r.order_no || ''),
+              status: String(r.status || ''),
+              orderType: String(r.order_type || ''),
+              createdAt: String(r.created_at || ''),
+              memoHead: String(r.memo || '').slice(0, 80),
+            }))
+          )
+        } catch (e) {
+          console.log('[getPosOrders] debug fallback query failed:', String(e))
+        }
+      }
     }
     headers.set('X-Pos-Orders-Count', String(list.length))
     return NextResponse.json(list, { headers })

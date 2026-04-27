@@ -17,7 +17,12 @@ import { registerAppMessage, unregisterAppMessage } from "@/lib/app-message"
 
 type QueueItem =
   | { kind: "alert"; message: string; resolve: () => void }
-  | { kind: "confirm"; message: string; resolve: (ok: boolean) => void }
+  | {
+      kind: "confirm"
+      message: string
+      resolve: (ok: boolean) => void
+      options?: import("@/lib/app-message").AppConfirmOptions
+    }
   | {
       kind: "prompt"
       message: string
@@ -58,9 +63,9 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
         new Promise<void>((resolve) => {
           enqueue({ kind: "alert", message, resolve })
         }),
-      confirm: (message) =>
+      confirm: (message, options) =>
         new Promise<boolean>((resolve) => {
-          enqueue({ kind: "confirm", message, resolve })
+          enqueue({ kind: "confirm", message, resolve, options })
         }),
       prompt: (message, defaultValue = "") =>
         new Promise<string | null>((resolve) => {
@@ -109,7 +114,7 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
 
   const title =
     current?.kind === "confirm"
-      ? t("appDialogConfirmTitle")
+      ? current.options?.title || t("appDialogConfirmTitle")
       : t("appDialogAlertTitle")
 
   return (
@@ -161,10 +166,10 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
             {current?.kind === "confirm" ? (
               <>
                 <Button type="button" variant="outline" onClick={() => onConfirm(false)}>
-                  {t("cancel")}
+                  {current.options?.cancelLabel || t("cancel")}
                 </Button>
                 <Button type="button" onClick={() => onConfirm(true)}>
-                  {t("btn_ok")}
+                  {current.options?.confirmLabel || t("btn_ok")}
                 </Button>
               </>
             ) : current?.kind === "prompt" ? (

@@ -203,10 +203,33 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const routeMain = opts.kitchenRouteByCategoryMain || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
 
+  const resolveMenuIdFromComposite = (rawId: string): string => {
+    const id = String(rawId || "").trim()
+    if (!id) return ""
+    if (id in catMap || id in routeMenu || id in kpMap) return id
+    // cart item id can be `${menuId}-${optionId}`; when menuId/optionId include '-'
+    // (e.g. UUID), simple split('-')[0] breaks. Find the longest known menu-id prefix.
+    const candidates = new Set<string>([
+      ...Object.keys(catMap),
+      ...Object.keys(routeMenu),
+      ...Object.keys(kpMap),
+    ])
+    let best = ""
+    for (const key of candidates) {
+      if (!key) continue
+      if (id === key || id.startsWith(`${key}-`)) {
+        if (key.length > best.length) best = key
+      }
+    }
+    if (best) return best
+    const firstDash = id.indexOf("-")
+    return firstDash > 0 ? id.slice(0, firstDash) : id
+  }
+
   const menuIdOf = (it: T) => {
     const kr = String((it as KitchenSlipRoutingItem).kitchenRouteMenuId ?? '').trim()
     if (kr) return kr
-    return String(it.id ?? '').split('-')[0]
+    return resolveMenuIdFromComposite(String(it.id ?? ""))
   }
   const menuCat = (it: T) => String(catMap[menuIdOf(it)] ?? '')
   const menuMain = (it: T) => String(mainMap[menuIdOf(it)] ?? '').trim()

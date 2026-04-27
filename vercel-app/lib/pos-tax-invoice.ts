@@ -75,14 +75,28 @@ export interface ParsedPosOrderMemo {
 
 export const TAX_INVOICE_MARKER = '[TAX_INVOICE]'
 
+function stripPosInternalMemoTokens(input: string): string {
+  let text = String(input || '').trim()
+  if (!text) return ''
+  // 플랫폼 내부 추적 토큰은 손님 메모에서 숨긴다.
+  text = text
+    .replace(/\b(grab|lineman|shopee)_order:[A-Za-z0-9._:-]+/gi, '')
+    .replace(/\|?\s*grab_state:[A-Za-z0-9._-]+/gi, '')
+    .replace(/\|?\s*(grab|lineman|shopee)_state:[A-Za-z0-9._-]+/gi, '')
+    .replace(/\|\s*\|+/g, '|')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[|,\s]+|[|,\s]+$/g, '')
+  return text.trim()
+}
+
 export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrderMemo {
   const raw = String(memo || '')
   if (!raw.trim()) return { plainMemo: '', taxInvoice: null }
 
   const markerIndex = raw.indexOf(TAX_INVOICE_MARKER)
-  if (markerIndex < 0) return { plainMemo: raw.trim(), taxInvoice: null }
+  if (markerIndex < 0) return { plainMemo: stripPosInternalMemoTokens(raw), taxInvoice: null }
 
-  const plainMemo = raw.slice(0, markerIndex).trim()
+  const plainMemo = stripPosInternalMemoTokens(raw.slice(0, markerIndex))
   const payloadRaw = raw.slice(markerIndex + TAX_INVOICE_MARKER.length).trim()
   const parsed: Record<string, string> = {}
 

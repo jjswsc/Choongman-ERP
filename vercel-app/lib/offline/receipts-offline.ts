@@ -42,8 +42,9 @@ export async function getPosOrdersWithCache(params: {
   endStr: string
   storeCode?: string
   status?: string
+  debugPosOrders?: boolean
 }): Promise<PosOrder[]> {
-  const { startStr, endStr, storeCode, status } = params
+  const { startStr, endStr, storeCode, status, debugPosOrders } = params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr)
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
@@ -63,6 +64,7 @@ export async function getPosOrdersWithCache(params: {
         endStr,
         storeCode: storeCode || undefined,
         status,
+        debugPosOrders,
       })
       await setCache('pos_orders_cache', key, data)
       return mergePendingIntoRows(data, range)
@@ -83,6 +85,7 @@ export async function getPosOrdersWithCache(params: {
       startStr,
       endStr,
       storeCode: storeCode || undefined,
+      debugPosOrders,
     })
     await setCache('pos_orders_cache', key, data)
     const merged = await mergePendingIntoRows(data, range)
