@@ -44,7 +44,7 @@ type TimeRange = {
 }
 
 type ModifierGroupBucket = {
-  groupName: string
+  sourceGroupName: string
   firstSort: number
   rows: OptionRow[]
 }
@@ -176,6 +176,34 @@ function serviceHoursFromRanges(ranges: TimeRange[]) {
     sat: specific,
     sun: specific,
   }
+}
+
+function flattenSectionsToSingle(
+  sections: Array<{
+    id: string
+    name: string
+    sequence: number
+    serviceHours: ReturnType<typeof serviceHoursFromRanges>
+    categories: unknown[]
+  }>
+) {
+  const mergedCategories: unknown[] = []
+  for (const sec of sections) {
+    for (const cat of sec.categories || []) mergedCategories.push(cat)
+  }
+  const openAllDay = serviceHoursFromRanges([])
+  return [
+    {
+      id: 'SECTION-01',
+      name: 'Menu',
+      sequence: 1,
+      serviceHours: openAllDay,
+      categories: mergedCategories.map((cat, idx) => ({
+        ...(cat as Record<string, unknown>),
+        sequence: idx + 1,
+      })),
+    },
+  ]
 }
 
 async function loadMenus(): Promise<MenuRow[]> {
@@ -329,19 +357,23 @@ export async function buildGrabMenuFromPos(params: {
         const key = split.groupName.toLowerCase()
         const sort = Number(opt.sort_order ?? 0)
         if (!modifierGroupBuckets.has(key)) {
-          modifierGroupBuckets.set(key, { groupName: split.groupName, firstSort: sort, rows: [] })
+          modifierGroupBuckets.set(key, { sourceGroupName: split.groupName, firstSort: sort, rows: [] })
         }
         const bucket = modifierGroupBuckets.get(key)!
         if (sort < bucket.firstSort) bucket.firstSort = sort
+        const normalizedOptionName =
+          split.groupName && split.groupName.toLowerCase() !== 'options'
+            ? `${split.groupName} - ${split.optionName}`
+            : split.optionName
         bucket.rows.push({
           ...opt,
-          name: split.optionName,
+          name: normalizedOptionName,
         })
       }
       const modifierGroups = Array.from(modifierGroupBuckets.values())
         .sort((a, b) => {
           if (a.firstSort !== b.firstSort) return a.firstSort - b.firstSort
-          return a.groupName.localeCompare(b.groupName)
+          return a.sourceGroupName.localeCompare(b.sourceGroupName)
         })
         .map((bucket, gidx) => {
           const rows = [...bucket.rows].sort((a, b) => {
@@ -351,8 +383,8 @@ export async function buildGrabMenuFromPos(params: {
             return String(a.name ?? '').localeCompare(String(b.name ?? ''))
           })
           return {
-            id: `${itemId}-mods-${normalizeId(bucket.groupName, `group-${gidx + 1}`)}`,
-            name: bucket.groupName,
+            id: gidx === 0 ? `${itemId}-mods` : `${itemId}-mods-${gidx + 1}`,
+            name: 'Options',
             sequence: gidx + 1,
             availableStatus: 'AVAILABLE' as const,
             selectionRangeMin: 0,
@@ -421,7 +453,7 @@ export async function buildGrabMenuFromPos(params: {
     categoriesBySection.set(sectionName, sectionCategoryList)
   }
 
-  const sections = Array.from(categoriesBySection.entries())
+  let sections = Array.from(categoriesBySection.entries())
     .map(([sectionName, categories]) => ({
       sectionName,
       categories: (categories || []).filter(
@@ -443,6 +475,10 @@ export async function buildGrabMenuFromPos(params: {
       serviceHours: section.serviceHours,
       categories: section.categories,
     }))
+
+  // Grab 메뉴 검증/온보딩 안정성을 위해 섹션을 항상 단일 Menu 섹션으로 평탄화한다.
+  // (다중 섹션 + 시간/카테고리 조합에서 매장별 Validation 편차가 발생할 수 있음)
+  sections = flattenSectionsToSingle(sections)
 
   if (!sections.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 

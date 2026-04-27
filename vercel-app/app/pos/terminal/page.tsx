@@ -895,8 +895,12 @@ export default function PosTerminalPage() {
     const order = tourServingOrder
     if (!order) return false
     const st = String(order.status)
-    if (st === 'partial_served' || st === 'ready') return true
-    return (order.items || []).some((it) => Boolean(it?.servedAt))
+    const items = order.items || []
+    const servedCount = items.filter((it) => Boolean(it?.servedAt)).length
+    const allServed = items.length > 0 && servedCount >= items.length
+    if (st === 'ready') return allServed
+    if (st === 'partial_served') return true
+    return servedCount > 0
   }, [tourServingOrder])
 
   const selectedDeliveryOrderId = selectedDeliveryTargetId?.startsWith('delivery-order-')
@@ -2235,10 +2239,11 @@ export default function PosTerminalPage() {
     const items = Array.isArray(order.items) ? order.items : []
     const servedCount = items.filter((item) => Boolean(item.servedAt)).length
     const normalizedStatus = String(order.status || '').toLowerCase()
+    const allServed = items.length > 0 && servedCount >= items.length
     const status: 'preparing' | 'partial_served' | 'packaged' | 'completed' =
       normalizedStatus === 'completed'
         ? 'completed'
-        : normalizedStatus === 'ready'
+        : normalizedStatus === 'ready' && allServed
           ? 'packaged'
           : servedCount > 0
             ? 'partial_served'
@@ -3894,8 +3899,9 @@ export default function PosTerminalPage() {
                           }
                           const items = Array.isArray(order.items) ? order.items : []
                           const servedCount = items.filter((item) => Boolean(item.servedAt)).length
+                          const allServed = items.length > 0 && servedCount >= items.length
                           const status: 'preparing' | 'partial_served' | 'completed' =
-                            (order.status === 'completed' || order.status === 'ready')
+                            (order.status === 'completed' || (order.status === 'ready' && allServed))
                               ? 'completed'
                               : servedCount > 0
                                 ? 'partial_served'

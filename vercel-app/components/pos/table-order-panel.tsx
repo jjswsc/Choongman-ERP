@@ -65,7 +65,6 @@ export function TableOrderPanel({
   const { lang } = useLang()
   const tDefault = useT(lang)
   const t = tProp ?? tDefault
-  const isServedReadyForPayment = order?.status === 'ready'
   const isPaidPrepaid = order?.status === 'paid'
   const mergeDisabledByPayment = isPaidPrepaid
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
@@ -134,6 +133,7 @@ export function TableOrderPanel({
 
   const servedCount = order?.items?.filter((it) => itemServed[it.id]).length ?? 0
   const allServed = order?.items?.length ? servedCount >= order.items.length : false
+  const isServedReadyForPayment = order?.status === 'ready' && allServed
 
   const [cancelling, setCancelling] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
