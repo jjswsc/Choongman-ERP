@@ -8199,6 +8199,8 @@ export async function getPosOrders(params?: {
   endStr?: string
   storeCode?: string
   status?: string
+  /** 임시 디버그: getPosOrders 상세 서버 로그 출력 */
+  debugPosOrders?: boolean
   sinceId?: number
   /** 단건 조회(결제 영수증 동기화 등). 지정 시 날짜·sinceId 없이 id 우선 조회 */
   orderId?: number
@@ -8214,6 +8216,7 @@ export async function getPosOrders(params?: {
   if (params?.endStr) q.set('endStr', params.endStr)
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.status) q.set('status', params.status)
+  if (params?.debugPosOrders) q.set('debugPosOrders', '1')
   if (params?.sinceId != null && params.sinceId > 0) q.set('sinceId', String(params.sinceId))
   if (params?.statusPaidLike) q.set('statusPaidLike', '1')
   if (params?.orderBy) q.set('orderBy', params.orderBy)

@@ -184,6 +184,7 @@ export default function PosTerminalPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const posOrdersDebugEnabled = true
   const isPosDemo = isPosDemoFromQuery(searchParams)
   const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams)
   const [tourMainDeviceTouched, setTourMainDeviceTouched] = useState(false)
@@ -1408,7 +1409,7 @@ export default function PosTerminalPage() {
         const paySum = posOrderRowPaymentSum(row)
         if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
           printedPaymentReceiptIdsRef.current.add(orderId)
-          void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
+          void getPosOrders({ orderId, storeCode: currentStoreId, debugPosOrders: posOrdersDebugEnabled }).then((list) => {
             const order = list[0] as PosOrder | undefined
             if (!order?.items?.length) {
               printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -1526,7 +1527,7 @@ export default function PosTerminalPage() {
       if (posOrderRowPaymentSum(row) <= 0) return
       if (printedPaymentReceiptIdsRef.current.has(orderId)) return
       printedPaymentReceiptIdsRef.current.add(orderId)
-      void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
+      void getPosOrders({ orderId, storeCode: currentStoreId, debugPosOrders: posOrdersDebugEnabled }).then((list) => {
         const order = list[0] as PosOrder | undefined
         if (!order?.items?.length) {
           printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -1568,6 +1569,7 @@ export default function PosTerminalPage() {
               startStr: today,
               endStr: today,
               storeCode: currentStoreId,
+              debugPosOrders: posOrdersDebugEnabled,
               statusPaidLike: true,
               limit: 800,
               orderBy: 'id.desc',
@@ -1615,6 +1617,7 @@ export default function PosTerminalPage() {
           startStr: today,
           endStr: today,
           storeCode: currentStoreId,
+          debugPosOrders: posOrdersDebugEnabled,
           ...(sinceId != null ? { sinceId } : {}),
         })
         if (!hasInitializedMainPosPollRef.current) {

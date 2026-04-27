@@ -4,10 +4,11 @@ import {
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES } from '@/lib/supabase-storage-limits'
 
 const BUCKET = 'store-repair-photos'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-const MAX_VIDEO_BYTES = 80 * 1024 * 1024
+const MAX_VIDEO_BYTES = SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES
 const IMAGE_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       )
     }
     if (fileSize > maxForType) {
-      const msg = VIDEO_TYPES.has(ct) ? '동영상은 80MB 이하여야 합니다.' : '이미지는 5MB 이하여야 합니다.'
+      const msg = VIDEO_TYPES.has(ct) ? '동영상은 50MB 이하여야 합니다.' : '이미지는 5MB 이하여야 합니다.'
       return NextResponse.json({ success: false, message: msg }, { status: 400, headers })
     }
 

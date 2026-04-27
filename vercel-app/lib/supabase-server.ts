@@ -15,6 +15,7 @@ import "server-only"
 
 import https from "https"
 import { resolveSupabaseProjectConfig } from '@/lib/supabase-project-resolver'
+import { SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES } from '@/lib/supabase-storage-limits'
 import type { TenantContext } from '@/lib/tenant-context'
 
 const SUPABASE_RETRY_MAX = 3
@@ -642,7 +643,12 @@ export async function supabaseStorageCreateBucketIfNeeded(
     name: bucketName,
     public: options.public,
   }
-  if (options.file_size_limit != null) body.file_size_limit = options.file_size_limit
+  if (options.file_size_limit != null) {
+    body.file_size_limit = Math.min(
+      options.file_size_limit,
+      SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES
+    )
+  }
   if (options.allowed_mime_types != null) body.allowed_mime_types = options.allowed_mime_types
 
   const res = await supabaseFetch(`${base}/storage/v1/bucket`, {

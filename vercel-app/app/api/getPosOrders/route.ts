@@ -34,6 +34,17 @@ function addStoreVariants(set: Set<string>, raw: string) {
   if (noPrefix && noPrefix !== v) set.add(noPrefix)
 }
 
+function addMasterRowVariants(
+  set: Set<string>,
+  row: { store_code?: string; display_name?: string; aliases?: string[] | null }
+) {
+  addStoreVariants(set, String(row.store_code || ''))
+  addStoreVariants(set, String(row.display_name || ''))
+  for (const alias of row.aliases || []) {
+    addStoreVariants(set, String(alias || ''))
+  }
+}
+
 async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]> {
   const base = String(rawStore || '').trim()
   if (!base || base.toLowerCase() === 'all') return []
@@ -45,6 +56,20 @@ async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]>
       const legacyToCanonical = buildLegacyToCanonicalMap(masters)
       const canonical = String(legacyToCanonical[normStoreKey(base)] || '').trim()
       if (canonical) addStoreVariants(variants, canonical)
+      const baseKey = normStoreKey(base)
+      const canonicalKey = normStoreKey(canonical)
+      for (const row of masters) {
+        const keys = [
+          String(row.store_code || '').trim(),
+          String(row.display_name || '').trim(),
+          ...((row.aliases || []).map((a) => String(a || '').trim())),
+        ]
+        const matched = keys.some((k) => {
+          const nk = normStoreKey(k)
+          return Boolean(nk && (nk === baseKey || (canonicalKey && nk === canonicalKey)))
+        })
+        if (matched) addMasterRowVariants(variants, row)
+      }
     }
   } catch {
     // ignore master resolve failure; fall back to raw variants
@@ -52,11 +77,49 @@ async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]>
   return Array.from(variants)
 }
 
+function inferOrderTypeForResponse(row: {
+  order_type?: string
+  memo?: string
+  table_name?: string
+  delivery_payment_channel?: string
+  items_json?: string
+}) {
+  const explicit = coercePosOrderTypeForDb(row.order_type)
+  if (explicit !== 'dine_in') return explicit
+  const channel = String(row.delivery_payment_channel || '').trim().toLowerCase()
+  if (channel === 'grab' || channel === 'lineman' || channel === 'shopee') return 'delivery' as const
+  const memo = String(row.memo || '').toLowerCase()
+  const tableName = String(row.table_name || '').toLowerCase()
+  if (
+    memo.includes('grab_order:') ||
+    memo.includes('lineman_order:') ||
+    memo.includes('shopee_order:') ||
+    memo.includes('delivery') ||
+    tableName.includes('grab') ||
+    tableName.includes('line man') ||
+    tableName.includes('lineman') ||
+    tableName.includes('shopee')
+  ) {
+    return 'delivery' as const
+  }
+  try {
+    const items = JSON.parse(String(row.items_json || '[]'))
+    if (Array.isArray(items) && items.some((it) => String((it as { deliveryAppCode?: string }).deliveryAppCode || '').trim())) {
+      return 'delivery' as const
+    }
+  } catch {
+    // keep dine_in fallback
+  }
+  return 'dine_in' as const
+}
+
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
+  const debugPosOrders =
+    searchParams.get('debugPosOrders') === '1' || searchParams.get('debugPosOrders') === 'true'
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
@@ -222,7 +285,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'development' || debugPosOrders) {
       console.log('[getPosOrders]', {
         rowCount: (rows || []).length,
         startDate,
@@ -247,65 +310,91 @@ export async function GET(request: NextRequest) {
         if (endDate && rowDate > endDate) return false
         return true
       })
-      .map((r) => ({
-        id: r.id,
+      .map((r) => {
+        const inferredOrderType = inferOrderTypeForResponse({
+          order_type: r.order_type,
+          memo: r.memo,
+          table_name: r.table_name,
+          delivery_payment_channel: (r as { delivery_payment_channel?: string }).delivery_payment_channel,
+          items_json: r.items_json,
+        })
+        return {
+          id: r.id,
+          orderNo: String(r.order_no ?? ''),
+          storeCode: String(r.store_code ?? ''),
+          orderType: inferredOrderType,
+          tableName: String(r.table_name ?? ''),
+          memo: String(r.memo ?? ''),
+          discountAmt: Number(r.discount_amt) ?? 0,
+          discountReason: String(r.discount_reason ?? ''),
+          deliveryFee: Number(r.delivery_fee) ?? 0,
+          packagingFee: Number(r.packaging_fee) ?? 0,
+          paymentCash: Number(r.payment_cash) ?? 0,
+          paymentCard: Number(r.payment_card) ?? 0,
+          paymentQr: Number(r.payment_qr) ?? 0,
+          paymentOther: Number(r.payment_other) ?? 0,
+          paymentDeliveryApp: Number((r as { payment_delivery_app?: number }).payment_delivery_app) || 0,
+          deliveryPaymentChannel: (() => {
+            const c = String((r as { delivery_payment_channel?: string }).delivery_payment_channel ?? '').trim()
+            return c || undefined
+          })(),
+          memberId: Number(r.member_id) || 0,
+          memberNo: String(r.member_no ?? ''),
+          couponCode: String(r.coupon_code ?? ''),
+          couponDiscountAmt: Number(r.coupon_discount_amt) ?? 0,
+          pointUsed: Number(r.point_used) ?? 0,
+          pointEarned: Number(r.point_earned) ?? 0,
+          guestCount: Math.max(0, Math.trunc(Number(r.guest_count) || 0)),
+          items: (() => {
+            try {
+              const arr = JSON.parse(r.items_json || '[]')
+              return Array.isArray(arr) ? arr : []
+            } catch {
+              return []
+            }
+          })(),
+          subtotal: Number(r.subtotal) ?? 0,
+          vat: Number(r.vat) ?? 0,
+          total: Number(r.total) ?? 0,
+          status: String(r.status ?? 'pending'),
+          createdAt: String(r.created_at ?? ''),
+          linkposProvider: String(r.linkpos_provider ?? ''),
+          linkposMode: String(r.linkpos_mode ?? ''),
+          linkposTxCode: String(r.linkpos_tx_code ?? ''),
+          linkposBankId: String(r.linkpos_bank_id ?? ''),
+          linkposResponseCode: String(r.linkpos_response_code ?? ''),
+          linkposApprovalCode: String(r.linkpos_approval_code ?? ''),
+          linkposTraceNo: String(r.linkpos_trace_no ?? ''),
+          linkposRefNo: String(r.linkpos_ref_no ?? ''),
+          linkposTerminalId: String(r.linkpos_terminal_id ?? ''),
+          linkposMerchantId: String(r.linkpos_merchant_id ?? ''),
+          linkposReference1: String(r.linkpos_reference1 ?? ''),
+          linkposRequestedAmount: Number(r.linkpos_requested_amount ?? 0),
+          linkposApprovedAmount: Number(r.linkpos_approved_amount ?? 0),
+          linkposRequestedAt: String(r.linkpos_requested_at ?? ''),
+          linkposRespondedAt: String(r.linkpos_responded_at ?? ''),
+        }
+      })
+
+    if (process.env.NODE_ENV === 'development' || debugPosOrders) {
+      console.log('[getPosOrders] result count:', list.length)
+      const sample = (rows || []).slice(0, 20).map((r) => ({
+        id: Number(r.id || 0),
         orderNo: String(r.order_no ?? ''),
         storeCode: String(r.store_code ?? ''),
-        orderType: coercePosOrderTypeForDb(r.order_type),
+        status: String(r.status ?? ''),
+        dbOrderType: String(r.order_type ?? ''),
+        inferredOrderType: inferOrderTypeForResponse({
+          order_type: r.order_type,
+          memo: r.memo,
+          table_name: r.table_name,
+          delivery_payment_channel: (r as { delivery_payment_channel?: string }).delivery_payment_channel,
+          items_json: r.items_json,
+        }),
         tableName: String(r.table_name ?? ''),
-        memo: String(r.memo ?? ''),
-        discountAmt: Number(r.discount_amt) ?? 0,
-        discountReason: String(r.discount_reason ?? ''),
-        deliveryFee: Number(r.delivery_fee) ?? 0,
-        packagingFee: Number(r.packaging_fee) ?? 0,
-        paymentCash: Number(r.payment_cash) ?? 0,
-        paymentCard: Number(r.payment_card) ?? 0,
-        paymentQr: Number(r.payment_qr) ?? 0,
-        paymentOther: Number(r.payment_other) ?? 0,
-        paymentDeliveryApp: Number((r as { payment_delivery_app?: number }).payment_delivery_app) || 0,
-        deliveryPaymentChannel: (() => {
-          const c = String((r as { delivery_payment_channel?: string }).delivery_payment_channel ?? '').trim()
-          return c || undefined
-        })(),
-        memberId: Number(r.member_id) || 0,
-        memberNo: String(r.member_no ?? ''),
-        couponCode: String(r.coupon_code ?? ''),
-        couponDiscountAmt: Number(r.coupon_discount_amt) ?? 0,
-        pointUsed: Number(r.point_used) ?? 0,
-        pointEarned: Number(r.point_earned) ?? 0,
-        guestCount: Math.max(0, Math.trunc(Number(r.guest_count) || 0)),
-        items: (() => {
-          try {
-            const arr = JSON.parse(r.items_json || '[]')
-            return Array.isArray(arr) ? arr : []
-          } catch {
-            return []
-          }
-        })(),
-        subtotal: Number(r.subtotal) ?? 0,
-        vat: Number(r.vat) ?? 0,
-        total: Number(r.total) ?? 0,
-        status: String(r.status ?? 'pending'),
-        createdAt: String(r.created_at ?? ''),
-        linkposProvider: String(r.linkpos_provider ?? ''),
-        linkposMode: String(r.linkpos_mode ?? ''),
-        linkposTxCode: String(r.linkpos_tx_code ?? ''),
-        linkposBankId: String(r.linkpos_bank_id ?? ''),
-        linkposResponseCode: String(r.linkpos_response_code ?? ''),
-        linkposApprovalCode: String(r.linkpos_approval_code ?? ''),
-        linkposTraceNo: String(r.linkpos_trace_no ?? ''),
-        linkposRefNo: String(r.linkpos_ref_no ?? ''),
-        linkposTerminalId: String(r.linkpos_terminal_id ?? ''),
-        linkposMerchantId: String(r.linkpos_merchant_id ?? ''),
-        linkposReference1: String(r.linkpos_reference1 ?? ''),
-        linkposRequestedAmount: Number(r.linkpos_requested_amount ?? 0),
-        linkposApprovedAmount: Number(r.linkpos_approved_amount ?? 0),
-        linkposRequestedAt: String(r.linkpos_requested_at ?? ''),
-        linkposRespondedAt: String(r.linkpos_responded_at ?? ''),
+        memoHead: String(r.memo ?? '').slice(0, 120),
       }))
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[getPosOrders] result count:', list.length)
+      console.log('[getPosOrders] debug sample rows:', sample)
     }
     headers.set('X-Pos-Orders-Count', String(list.length))
     return NextResponse.json(list, { headers })

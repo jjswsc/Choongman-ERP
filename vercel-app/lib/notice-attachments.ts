@@ -1,8 +1,11 @@
 /** 공지 첨부 — 클라이언트/서버 공용 크기·타입 제한 (presign + sendNotice URL만 저장) */
 
+import { SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES } from '@/lib/supabase-storage-limits'
+
 export const MAX_NOTICE_FILES = 3
 export const MAX_NOTICE_NON_VIDEO_BYTES = 5 * 1024 * 1024
-export const MAX_NOTICE_VIDEO_BYTES = 80 * 1024 * 1024
+/** Supabase Storage 전역 한 파일 상한(일반·Free 50MB) — 동영상도 동일 */
+export const MAX_NOTICE_VIDEO_BYTES = SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES
 
 const CT = (s: string) => s.toLowerCase().split(';')[0].trim()
 

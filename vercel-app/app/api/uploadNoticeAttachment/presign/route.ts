@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (fileSize > maxB) {
       const m = contentType.toLowerCase().split(';')[0].trim()
       const msg = m.startsWith('video/')
-        ? '동영상은 80MB 이하여야 합니다.'
+        ? '동영상은 50MB 이하여야 합니다.'
         : '이미지·PDF·문서는 파일당 5MB 이하여야 합니다.'
       return NextResponse.json({ success: false, message: msg }, { status: 400, headers })
     }

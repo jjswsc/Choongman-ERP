@@ -34,7 +34,7 @@ export async function uploadAndBuildNoticeAttachment(
   if (file.size > maxBytesForNoticeMime(mime)) {
     const m = mime.toLowerCase().split(';')[0].trim()
     throw new Error(
-      m.startsWith('video/') ? '동영상은 80MB 이하여야 합니다.' : '이미지·PDF·문서는 파일당 5MB 이하여야 합니다.'
+      m.startsWith('video/') ? '동영상은 50MB 이하여야 합니다.' : '이미지·PDF·문서는 파일당 5MB 이하여야 합니다.'
     )
   }
   const p = await presignNoticeAttachment({

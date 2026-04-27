@@ -145,7 +145,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "수리 사진 저장소가 설정되지 않았습니다.": "repair_photo_storage_not_configured",
   "이미지 또는 동영상 파일만 업로드할 수 있습니다.": "repair_upload_media_type",
   "이미지는 5MB 이하여야 합니다.": "repair_upload_image_max_5mb",
-  "동영상은 80MB 이하여야 합니다.": "repair_upload_video_max_80mb",
+  "동영상은 50MB 이하여야 합니다.": "repair_upload_video_max_50mb",
 
   // 주문 수령 / 공통 API 타임아웃 (클라이언트)
   "요청 시간이 초과되었습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.": "apiRequestTimeout",
