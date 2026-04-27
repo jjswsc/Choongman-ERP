@@ -49,7 +49,7 @@ function looksLikeMissingStorageBucket(msg: string): boolean {
     (/not found/i.test(normalized) && /bucket/i.test(normalized)) ||
     // Supabase Storage가 버킷 누락 시 404 InvalidRequest("The related resource doesn't exist")를 주는 경우 대응
     (/InvalidRequest/i.test(normalized) &&
-      /related resource doesn't exist/i.test(normalized) &&
+      /related resource does(?: not|n't) exist/i.test(normalized) &&
       /404/.test(normalized))
   )
 }
