@@ -989,15 +989,32 @@ export default function PosTerminalPage() {
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
   const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  /** 주방 주문서 자동 인쇄 중복 방지(수락/Realtime/폴링 동시 발화) */
+  const printedKitchenSlipKeysRef = useRef<Map<string, number>>(new Map())
   /** 신규 배달 안내(도착/수락/Grab 승인)·탭 포커스: 주문 id당 한 번만 (last-id 한 개 비교는 다른 주문 처리 후 동일 id 재이벤트에서 뚫림) */
   const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
+    printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     paymentReceiptScanSeededRef.current = false
   }, [currentStoreId])
+
+  const reserveKitchenAutoPrintKey = useCallback((rawKey: string, ttlMs = 20_000) => {
+    const key = String(rawKey || '').trim()
+    if (!key) return true
+    const now = Date.now()
+    const map = printedKitchenSlipKeysRef.current
+    for (const [k, ts] of map.entries()) {
+      if (!Number.isFinite(ts) || now - ts > 120_000) map.delete(k)
+    }
+    const prev = map.get(key)
+    if (typeof prev === 'number' && now - prev < ttlMs) return false
+    map.set(key, now)
+    return true
+  }, [])
 
   /**
    * 신규 주문 알림음 (브라우저 autoplay 정책에 따라 무음 처리될 수 있음)
@@ -1119,11 +1136,13 @@ export default function PosTerminalPage() {
                   name: displayName,
                   price: Number(it.price ?? 0),
                   qty: Number(it.qty ?? 1),
+                  ...(menuId ? { menuId } : {}),
                   ...(note ? { note } : {}),
                 }
               })
               const runKitchenForAcceptedOrder = () => {
                 if (!autoPrintKitchenSlipOnOrder) return
+                if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
                 void (async () => {
                   try {
                     const effectiveStoreCode = order.storeCode ?? currentStoreId
@@ -1698,6 +1717,7 @@ export default function PosTerminalPage() {
         total,
       }
       const runKitchenFromRealtimeOrderInsert = () => {
+        if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
         getPrinterSettingsForStore(storeCode)
           .then((settings) => {
             const orderTypeLabels: Record<string, string> = {
@@ -2031,6 +2051,7 @@ export default function PosTerminalPage() {
             total: order.total ?? 0,
           }
           const runKitchenForPolledOrder = () => {
+            if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
             void (async () => {
               try {
                 const settings = await getPrinterSettingsForStore(order.storeCode ?? currentStoreId)
@@ -3098,15 +3119,34 @@ export default function PosTerminalPage() {
                 }
                 const runKitchenAfterDineInSubmit = () => {
                   if (kitchenCartLines.length === 0) return
-                  const itemsForKitchen = kitchenCartLines.map((i) => ({
-                    id: i.id,
-                    name: i.name,
-                    price: i.price,
-                    qty: i.quantity || 1,
-                    ...(String((i as { note?: string }).note ?? '').trim()
-                      ? { note: String((i as { note?: string }).note).trim() }
-                      : {}),
-                  }))
+                  const kitchenPrintKey =
+                    savedOrderId != null
+                      ? isAddOrder
+                        ? `order:${savedOrderId}:kitchen:add:${kitchenCartLines.length}`
+                        : `order:${savedOrderId}:kitchen`
+                      : `submit:${orderNoStr}:${payload.tableName || ''}:${isAddOrder ? 'add' : 'new'}`
+                  if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
+                  const itemsForKitchen = kitchenCartLines.map((i) => {
+                    const line = i as {
+                      menuId?: string
+                      menuId1?: string
+                      menu_id1?: string
+                      menuId2?: string
+                      note?: string
+                    }
+                    const menuId = String(
+                      line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
+                    ).trim()
+                    const note = String(line.note ?? '').trim()
+                    return {
+                      id: i.id,
+                      name: i.name,
+                      price: i.price,
+                      qty: i.quantity || 1,
+                      ...(menuId ? { menuId } : {}),
+                      ...(note ? { note } : {}),
+                    }
+                  })
                   getPrinterSettingsForStore(currentStoreId)
                     .then((settings) => {
                       const orderTypeLabels: Record<string, string> = {

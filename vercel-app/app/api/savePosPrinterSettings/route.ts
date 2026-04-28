@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
+import {
+  supabaseInsert,
+  supabaseSelect,
+  supabaseSelectFilter,
+  supabaseUpdateByFilter,
+  supabaseUpsertMerge,
+} from '@/lib/supabase-server'
 import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
+import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, isOfficeRole } from '@/lib/permissions'
 
@@ -43,6 +50,63 @@ async function upsertWithMissingColumnFallback(storeCode: string, patch: Record<
     }
   }
   throw new Error('savePosPrinterSettings: too many missing-column retries')
+}
+
+/**
+ * 대분류/카테고리/메뉴별 라우팅 선택을 pos_menus.kitchen_printer로 실체화.
+ * 최종 우선순위는 main -> category -> menu.
+ */
+async function materializeKitchenPrintersToMenus(params: {
+  routeByMenu: Record<string, 0 | 1 | 2 | 3>
+  routeByCategory: Record<string, 0 | 1 | 2 | 3>
+  routeByCategoryMain: Record<string, 0 | 1 | 2 | 3>
+}) {
+  const rows = (await supabaseSelect('pos_menus', {
+    select: 'id,category,category_main,kitchen_printer',
+    limit: 10000,
+  })) as
+    | {
+        id?: number | string
+        category?: string
+        category_main?: string
+        kitchen_printer?: number | null
+      }[]
+    | null
+  const menus = Array.isArray(rows) ? rows : []
+  if (!menus.length) return
+
+  const mapMenu = params.routeByMenu || {}
+  const mapCatRaw = params.routeByCategory || {}
+  const mapMainRaw = params.routeByCategoryMain || {}
+  const mapCat: Record<string, 0 | 1 | 2 | 3> = {}
+  const mapMain: Record<string, 0 | 1 | 2 | 3> = {}
+  for (const [k, v] of Object.entries(mapCatRaw)) {
+    const key = normalizePromotionCategoryMain(String(k).trim())
+    if (key) mapCat[key] = v
+  }
+  for (const [k, v] of Object.entries(mapMainRaw)) {
+    const key = normalizePromotionCategoryMain(String(k).trim())
+    if (key) mapMain[key] = v
+  }
+
+  for (const m of menus) {
+    const id = String(m.id ?? '').trim()
+    if (!id) continue
+    const cat = normalizePromotionCategoryMain(String(m.category ?? '').trim())
+    const main = normalizePromotionCategoryMain(String(m.category_main ?? '').trim())
+    const prev =
+      m.kitchen_printer === 0 || m.kitchen_printer === 1 || m.kitchen_printer === 2 || m.kitchen_printer === 3
+        ? (m.kitchen_printer as 0 | 1 | 2 | 3)
+        : null
+    let next: 0 | 1 | 2 | 3 = prev ?? 1
+    if (main && mapMain[main] !== undefined) next = mapMain[main]
+    if (cat && mapCat[cat] !== undefined) next = mapCat[cat]
+    if (mapMenu[id] !== undefined) next = mapMenu[id]
+    if (prev === next) continue
+    await supabaseUpdateByFilter('pos_menus', `id=eq.${encodeURIComponent(id)}`, {
+      kitchen_printer: next,
+    })
+  }
 }
 
 /** POS 프린터 설정 저장 */
@@ -204,6 +268,23 @@ export async function POST(req: NextRequest) {
       { limit: 1 }
     )) as Record<string, unknown>[] | null
     const previous = previousRows?.[0] || {}
+
+    if (routeMenuPatch !== undefined || routeCatPatch !== undefined || routeMainPatch !== undefined) {
+      try {
+        await materializeKitchenPrintersToMenus({
+          routeByMenu: routeMenuPatch || {},
+          routeByCategory: routeCatPatch || {},
+          routeByCategoryMain: routeMainPatch || {},
+        })
+      } catch (menuSyncErr) {
+        const msg = String(menuSyncErr ?? '')
+        if (msg.includes('kitchen_printer') || msg.includes('42703')) {
+          console.warn('savePosPrinterSettings: skip menu kitchen_printer materialize (column missing)')
+        } else {
+          throw menuSyncErr
+        }
+      }
+    }
 
     const patch = {
       kitchen_mode: kitchenMode,

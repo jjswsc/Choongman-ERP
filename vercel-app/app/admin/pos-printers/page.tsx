@@ -62,6 +62,7 @@ import {
   formatPosOrderNoForPrint,
   normalizeStoreSlugForOrderNo,
 } from "@/lib/pos-order-no"
+import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import {
   RECEIPT_AMOUNT_COL_MM,
   RECEIPT_CONTENT_NUDGE_LEFT_MM,
@@ -381,25 +382,19 @@ export default function PosPrintersPage() {
     [menusList]
   )
 
-  const ensureRouteDefaults = React.useCallback(
-    (keys: string[], src: Record<string, KitchenRouteValue>) => {
-      const next: Record<string, KitchenRouteValue> = {}
-      for (const key of keys) {
-        const v = src[key]
-        next[key] = v === 0 || v === 1 || v === 2 || v === 3 ? v : 1
-      }
-      return next
-    },
-    []
-  )
-
-  /** 키 목록이 아직 없으면(초기 로딩·API 실패) `ensureRouteDefaults([], …) === {}` 가 되어 DB json 을 싹 지우는 일이 생기지 않게 함 */
+  /** 저장 시에는 명시된 키만 보존(암묵 기본값 1 채우기 금지: 상위 규칙을 덮어쓰는 부작용 방지) */
   const routeMapForSave = React.useCallback(
     (keys: string[], src: Record<string, KitchenRouteValue>) => {
-      if (keys.length > 0) return ensureRouteDefaults(keys, src)
-      return src
+      if (keys.length === 0) return src
+      const allowed = new Set(keys)
+      const out: Record<string, KitchenRouteValue> = {}
+      for (const [k, v] of Object.entries(src || {})) {
+        if (!allowed.has(k)) continue
+        if (v === 0 || v === 1 || v === 2 || v === 3) out[k] = v
+      }
+      return out
     },
-    [ensureRouteDefaults]
+    []
   )
 
   const readAsDataUrl = React.useCallback((file: File) => {
@@ -1500,7 +1495,7 @@ export default function PosPrintersPage() {
                     {tr("posKitchenRouteSection", "주방 프린터 지정 (대분류·카테고리·메뉴)")}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {tr("posKitchenRouteHint", "우선순위: 메뉴별 → 카테고리별 → 대분류별. 미지정은 주방 1로 처리됩니다.")}
+                    {tr("posKitchenRouteHint", "최종 인쇄는 메뉴별 설정만 따릅니다. 대분류/카테고리 변경은 해당 메뉴들에 일괄 덮어쓰기 적용됩니다.")}
                   </p>
                 </div>
                 {mainCategories.length > 0 ? (
@@ -1517,12 +1512,39 @@ export default function PosPrintersPage() {
                           maxK={kitchenMode}
                           t={t}
                           onChange={(v) =>
-                            setKitchenRouteByCategoryMain((prev) => {
-                              const next = { ...prev }
-                              if (v == null) delete next[main]
-                              else next[main] = v
-                              return next
-                            })
+                            {
+                              setKitchenRouteByCategoryMain((prev) => {
+                                const next = { ...prev }
+                                if (v == null) delete next[main]
+                                else next[main] = v
+                                return next
+                              })
+                              if (v != null) {
+                                const mainNorm = normalizePromotionCategoryMain(main)
+                                setKitchenRouteByCategory((prev) => {
+                                  const next = { ...prev }
+                                  for (const m of menusList) {
+                                    const mm = normalizePromotionCategoryMain(
+                                      String((m as PosMenu).categoryMain ?? "").trim()
+                                    )
+                                    if (mm !== mainNorm) continue
+                                    const cat = normalizePromotionCategoryMain(String(m.category ?? "").trim())
+                                    if (cat) next[cat] = v
+                                  }
+                                  return next
+                                })
+                                setKitchenRouteByMenu((prev) => {
+                                  const next = { ...prev }
+                                  for (const m of menusList) {
+                                    const mm = normalizePromotionCategoryMain(
+                                      String((m as PosMenu).categoryMain ?? "").trim()
+                                    )
+                                    if (mm === mainNorm) next[String(m.id)] = v
+                                  }
+                                  return next
+                                })
+                              }
+                            }
                           }
                         />
                       ))}
@@ -1543,12 +1565,25 @@ export default function PosPrintersPage() {
                           maxK={kitchenMode}
                           t={t}
                           onChange={(v) =>
-                            setKitchenRouteByCategory((prev) => {
-                              const next = { ...prev }
-                              if (v == null) delete next[cat]
-                              else next[cat] = v
-                              return next
-                            })
+                            {
+                              setKitchenRouteByCategory((prev) => {
+                                const next = { ...prev }
+                                if (v == null) delete next[cat]
+                                else next[cat] = v
+                                return next
+                              })
+                              if (v != null) {
+                                const catNorm = normalizePromotionCategoryMain(cat)
+                                setKitchenRouteByMenu((prev) => {
+                                  const next = { ...prev }
+                                  for (const m of menusList) {
+                                    const mc = normalizePromotionCategoryMain(String(m.category ?? "").trim())
+                                    if (mc === catNorm) next[String(m.id)] = v
+                                  }
+                                  return next
+                                })
+                              }
+                            }
                           }
                         />
                       ))}

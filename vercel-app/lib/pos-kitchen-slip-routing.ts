@@ -3,8 +3,9 @@ import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 /**
  * 주방 주문서 분할
  * - kitchenMode: 주방 프린터 대수(1~3). 1대여도 품목별 "주방 미인쇄(0)"는 제외됨.
- * - 우선순위: 프린터 탭 메뉴별 → pos_menus.kitchen_printer(0=미인쇄) → 카테고리 → 대분류
- *   → (레거시) 주방2·3 카테고리 체크 목록이 비어 있지 않을 때만 예전 규칙 → 없으면 주방 1
+ * - 최종 판정은 메뉴별(pos_menus.kitchen_printer)만 사용.
+ * - 대분류/카테고리 선택은 관리자 화면에서 메뉴별 값을 일괄 갱신하는 도구이며,
+ *   인쇄 시점 라우팅 우선순위에는 참여하지 않음.
  * - 프로모션 줄에 promoItems 가 있으면(저장된 스냅샷) 구성 메뉴별로 펼쳐 각 메뉴의 주방으로 라우팅(splitPromoKitchenLines 기본 true)
  */
 
@@ -12,6 +13,10 @@ import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 export type KitchenSlipRoutingItem = {
   id?: string
   kitchenRouteMenuId?: string
+  menuId?: string
+  menuId1?: string
+  menu_id1?: string
+  menuId2?: string
   name?: string
   qty?: number
   note?: string
@@ -186,7 +191,7 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
 
 /**
  * 주방 슬립 그룹. 주방으로 나갈 품목이 없으면 빈 배열.
- * kitchenMode 1: 미인쇄 제외 후 한 장(통합 라벨). 2·3: 프린터별 버킷.
+ * kitchenMode 1: 메뉴별 미인쇄(0) 제외 후 한 장(통합 라벨). 2·3: 프린터별 버킷.
  */
 export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   items: T[],
@@ -197,29 +202,29 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const expanded = expandPromoLinesForKitchenRouting(items, nameMap, splitPromo) as T[]
 
   const mode = Math.min(3, Math.max(1, Number(opts.kitchenMode) || 1))
-  const k2 = opts.kitchen2Categories || []
-  const k3 = opts.kitchen3Categories || []
-  const legacyActive = k2.length > 0 || k3.length > 0
   const catMap = opts.categoryByMenuId || {}
   const mainMap = opts.categoryMainByMenuId || {}
-  const routeMenu = opts.kitchenRouteByMenu || {}
-  const routeCat = opts.kitchenRouteByCategory || {}
-  const routeMain = opts.kitchenRouteByCategoryMain || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
-  const routeCatNorm: Record<string, KitchenRouteValue> = {}
-  for (const [k, v] of Object.entries(routeCat)) routeCatNorm[normalizeRouteKey(k)] = v
-  const routeMainNorm: Record<string, KitchenRouteValue> = {}
-  for (const [k, v] of Object.entries(routeMain)) routeMainNorm[normalizeRouteKey(k)] = v
+  const menuIdByName: Record<string, string> = {}
+  const ambiguousMenuNames = new Set<string>()
+  for (const [mid, nm] of Object.entries(nameMap)) {
+    const key = String(nm || '').trim().toLowerCase()
+    if (!key) continue
+    if (menuIdByName[key] && menuIdByName[key] !== mid) {
+      ambiguousMenuNames.add(key)
+      continue
+    }
+    menuIdByName[key] = mid
+  }
 
   const resolveMenuIdFromComposite = (rawId: string): string => {
     const id = String(rawId || "").trim()
     if (!id) return ""
-    if (id in catMap || id in routeMenu || id in kpMap) return id
+    if (id in catMap || id in kpMap) return id
     // cart item id can be `${menuId}-${optionId}`; when menuId/optionId include '-'
     // (e.g. UUID), simple split('-')[0] breaks. Find the longest known menu-id prefix.
     const candidates = new Set<string>([
       ...Object.keys(catMap),
-      ...Object.keys(routeMenu),
       ...Object.keys(kpMap),
     ])
     let best = ""
@@ -237,6 +242,18 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const menuIdOf = (it: T) => {
     const kr = String((it as KitchenSlipRoutingItem).kitchenRouteMenuId ?? '').trim()
     if (kr) return kr
+    const rawMenuId = String(
+      (it as KitchenSlipRoutingItem).menuId ??
+        (it as KitchenSlipRoutingItem).menuId1 ??
+        (it as KitchenSlipRoutingItem).menu_id1 ??
+        (it as KitchenSlipRoutingItem).menuId2 ??
+        ''
+    ).trim()
+    if (rawMenuId) return resolveMenuIdFromComposite(rawMenuId)
+    const itemNameKey = String((it as KitchenSlipRoutingItem).name ?? '').trim().toLowerCase()
+    if (itemNameKey && !ambiguousMenuNames.has(itemNameKey) && menuIdByName[itemNameKey]) {
+      return resolveMenuIdFromComposite(menuIdByName[itemNameKey])
+    }
     return resolveMenuIdFromComposite(String(it.id ?? ""))
   }
   const menuCat = (it: T) => String(catMap[menuIdOf(it)] ?? '')
@@ -245,39 +262,11 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   /** 0 = 스킵, 1~3 = 주방 번호 */
   const resolveRoute = (it: T): KitchenRouteValue => {
     const mid = menuIdOf(it)
-    const cat = menuCat(it)
-    const main = menuMain(it)
-
-    if (mid in routeMenu) {
-      const v = routeMenu[mid]
-      if (v === 0 || v === 1 || v === 2 || v === 3) {
-        return v === 0 ? 0 : clampPrinterIndex(v, mode)
-      }
-    }
-
     if (mid in kpMap) {
       const v = kpMap[mid]
       if (v === 0 || v === 1 || v === 2 || v === 3) {
         return v === 0 ? 0 : clampPrinterIndex(v, mode)
       }
-    }
-
-    if (cat) {
-      const v = routeCat[cat] ?? routeCatNorm[normalizeRouteKey(cat)]
-      if (v === 0 || v === 1 || v === 2 || v === 3) {
-        return v === 0 ? 0 : clampPrinterIndex(v, mode)
-      }
-    }
-
-    if (main) {
-      const v = routeMain[main] ?? routeMainNorm[normalizeRouteKey(main)]
-      if (v === 0 || v === 1 || v === 2 || v === 3) {
-        return v === 0 ? 0 : clampPrinterIndex(v, mode)
-      }
-    }
-
-    if (legacyActive) {
-      return clampPrinterIndex(legacyKitchenIndex(cat, mode, k2, k3), mode)
     }
 
     return 1
