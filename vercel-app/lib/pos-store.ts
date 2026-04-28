@@ -5,7 +5,14 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
-import { getPosTableLayout, type PosTableItem, type PosOrder, type PosOrderItem } from '@/lib/api-client'
+import {
+  getPosTableLayout,
+  getGrabStoreIntegrations,
+  type GrabStoreIntegrationSnapshot,
+  type PosTableItem,
+  type PosOrder,
+  type PosOrderItem,
+} from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
@@ -198,11 +205,28 @@ export function usePosStore() {
   const layoutByStoreIdRef = useRef<Record<string, PosTableItem[]>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
   const [ordersByStoreId, setOrdersByStoreId] = useState<Record<string, Order[]>>({})
+  const [grabIntegrations, setGrabIntegrations] = useState<GrabStoreIntegrationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     layoutByStoreIdRef.current = layoutByStoreId
   }, [layoutByStoreId])
+
+  useEffect(() => {
+    let cancelled = false
+    getGrabStoreIntegrations({ status: 'ACTIVE', limit: 500 })
+      .then((rows) => {
+        if (cancelled) return
+        setGrabIntegrations(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setGrabIntegrations([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const fetchStoreSnapshot = useCallback(async (storeCode: string, businessDate: string): Promise<StoreSnapshot> => {
     const candidates = new Set<string>()
@@ -217,6 +241,27 @@ export function usePosStore() {
       if (canonical.toLowerCase() === primary.toLowerCase()) candidates.add(legacy)
     }
     const storeCandidates = Array.from(candidates).filter(Boolean)
+    const currentVariantKeys = new Set(storeCandidates.map((c) => String(c).trim().toLowerCase()).filter(Boolean))
+    for (const row of grabIntegrations || []) {
+      const status = String(row.integrationStatus || '').trim().toLowerCase()
+      if (status && status !== 'active') continue
+      const partner = String(row.partnerMerchantID || '').trim()
+      const grab = String(row.grabMerchantID || '').trim()
+      if (!partner || !grab) continue
+      const partnerKey = partner.toLowerCase()
+      const grabKey = grab.toLowerCase()
+      if (currentVariantKeys.has(partnerKey)) {
+        if (!currentVariantKeys.has(grabKey)) {
+          currentVariantKeys.add(grabKey)
+          storeCandidates.push(grab)
+        }
+      } else if (currentVariantKeys.has(grabKey)) {
+        if (!currentVariantKeys.has(partnerKey)) {
+          currentVariantKeys.add(partnerKey)
+          storeCandidates.push(partner)
+        }
+      }
+    }
     const [layoutRes, orderLists] = await Promise.all([
       getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
       Promise.all(
@@ -262,7 +307,7 @@ export function usePosStore() {
       layout,
       activeOrders,
     }
-  }, [legacyToCanonical])
+  }, [legacyToCanonical, grabIntegrations])
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {

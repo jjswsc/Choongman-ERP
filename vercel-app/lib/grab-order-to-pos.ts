@@ -127,8 +127,8 @@ export function resolveGrabStoreCode(order: Record<string, unknown>): string {
   const payloadDerived = extractStoreCodeFromOrderPayload(order)
   const mapped = map[partnerMerchantID] || map[merchantID] || ''
   return (
-    payloadDerived ||
     normalizeStoreCodeCandidate(mapped) ||
+    payloadDerived ||
     normalizeStoreCodeCandidate(partnerMerchantID) ||
     normalizeStoreCodeCandidate(merchantID) ||
     partnerMerchantID

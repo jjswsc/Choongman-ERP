@@ -733,12 +733,21 @@ export async function GET(request: NextRequest) {
         ? Math.min(Math.max(0, Math.round(earlyMinDb as number)), computedEarlyMin)
         : computedEarlyMin
 
-      // 연장: 차이가 음수(조퇴)면 OT 없음. 그 외는 DB 조정값 또는 스케줄 차이(급여 집계와 동일)
+      // 연장: 차이가 음수(조퇴)면 OT 없음.
+      // DB ot_min=0이 "기본값(미조정)"일 수 있어, 조정 이력/승인 상태가 없으면 diff 기반 계산을 우선한다.
+      const hasOtAdjustment = hasMetricAdjustment(outLogIdForRow ?? null, 'ot_min')
+      const otFromDb =
+        otMinForRow != null && Number.isFinite(Number(otMinForRow))
+          ? Math.max(0, Math.round(Number(otMinForRow)))
+          : null
+      const shouldUseDbOt =
+        otFromDb != null &&
+        (otFromDb > 0 || hasOtAdjustment || approvedOut)
       const effectiveOtMinRaw =
         actualWorkMin <= 0 || plannedWorkMin <= 0 || diffMin < 0
           ? 0
-          : otMinForRow != null
-            ? otMinForRow
+          : shouldUseDbOt
+            ? (otFromDb as number)
             : Math.max(0, diffMin)
       // 급여 기준과 동일: OT 30분 미만은 0분으로 표시/반영
       const displayOtMin = diffMin < 0 ? 0 : otMinutesForPayroll(Math.max(0, effectiveOtMinRaw))

@@ -78,6 +78,33 @@ async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]>
   } catch {
     // ignore master resolve failure; fall back to raw variants
   }
+  try {
+    const integrationRows = (await supabaseSelect('pos_grab_store_integrations', {
+      order: 'updated_at.desc',
+      limit: 500,
+      select: 'grab_merchant_id,partner_merchant_id,integration_status',
+    })) as {
+      grab_merchant_id?: string
+      partner_merchant_id?: string
+      integration_status?: string
+    }[]
+    const variantKeys = new Set(
+      Array.from(variants)
+        .map((v) => normStoreKey(v))
+        .filter(Boolean)
+    )
+    for (const row of integrationRows || []) {
+      const status = String(row.integration_status || '').trim().toLowerCase()
+      if (status && status !== 'active') continue
+      const partnerId = String(row.partner_merchant_id || '').trim()
+      const partnerKey = normStoreKey(partnerId)
+      if (!partnerKey || !variantKeys.has(partnerKey)) continue
+      addStoreVariants(variants, partnerId)
+      addStoreVariants(variants, String(row.grab_merchant_id || ''))
+    }
+  } catch {
+    // ignore integration resolve failure; keep existing variants
+  }
   return Array.from(variants)
 }
 
