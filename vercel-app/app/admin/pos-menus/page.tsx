@@ -1637,9 +1637,11 @@ export default function PosMenusPage() {
       keySet.add(key)
       rows.push({ main, category, key })
     }
+    const fallbackRank = new Map<string, number>()
+    rows.forEach((r, i) => fallbackRank.set(r.key, i + 1))
     rows.sort((a, b) => {
-      const ao = Number(deliveryOpsCategoryOrderMap[a.key] ?? 0)
-      const bo = Number(deliveryOpsCategoryOrderMap[b.key] ?? 0)
+      const ao = Number(deliveryOpsCategoryOrderMap[a.key] ?? fallbackRank.get(a.key) ?? 9999)
+      const bo = Number(deliveryOpsCategoryOrderMap[b.key] ?? fallbackRank.get(b.key) ?? 9999)
       if (ao !== bo) return ao - bo
       if (a.main !== b.main) return a.main.localeCompare(b.main)
       return a.category.localeCompare(b.category)
@@ -1671,7 +1673,8 @@ export default function PosMenusPage() {
       for (const row of res.categoryOrders || []) {
         const key = `${String(row.categoryMain ?? "").trim()}::${String(row.category ?? "").trim()}`
         if (key.endsWith("::")) continue
-        catMap[key] = Number(row.sortOrder ?? 0) || 0
+        const n = Number(row.sortOrder ?? 0) || 0
+        if (n > 0) catMap[key] = n
       }
       setDeliveryOpsCategoryOrderMap(catMap)
     } catch (e) {
@@ -1742,7 +1745,7 @@ export default function PosMenusPage() {
         appCode: deliveryOpsAppCode,
         categoryMain: r.main,
         category: r.category,
-        sortOrder: Number(deliveryOpsCategoryOrderMap[r.key] ?? idx + 1),
+        sortOrder: Math.max(1, Number(deliveryOpsCategoryOrderMap[r.key] ?? idx + 1) || (idx + 1)),
       }))
       const res = await savePosDeliveryAppPolicies({
         storeCode,
@@ -1846,7 +1849,7 @@ export default function PosMenusPage() {
                 </TabsTrigger>
                 <TabsTrigger value="deliveryOps" className={adminTabsTriggerCn}>
                   <Monitor className={adminTabsIconCn} aria-hidden />
-                  {t("배달앱 운영") || "배달앱 운영"}
+                  {t("posMenuTabDeliveryOps") || "배달앱 운영"}
                 </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
@@ -1891,6 +1894,9 @@ export default function PosMenusPage() {
                         </TabsTrigger>
                         <TabsTrigger value="description" className={adminTabsTriggerCn}>
                           {t("posFormTabDescription") || "설명"}
+                        </TabsTrigger>
+                        <TabsTrigger value="packagingChecklist" className={adminTabsTriggerCn}>
+                          {t("posFormTabPackagingChecklist") || "포장 체크리스트"}
                         </TabsTrigger>
                       </TabsList>
                     </div>
@@ -2338,6 +2344,137 @@ export default function PosMenusPage() {
                             </div>
                           )}
                         </>
+                      )}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="packagingChecklist" className="mt-4 space-y-3">
+                    <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-semibold">
+                            {t("posPackagingChecklistTitle") || "포장 체크리스트"}
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("posPackagingChecklistAdminHint") || "포장/배달 완료 전에 확인할 항목을 메뉴·옵션별로 관리합니다."}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs"
+                            onClick={() => setPackagingChecklistRows((prev) => [...prev, newPackagingChecklistRow(prev.length)])}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            {t("add") || "추가"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={handleSavePackagingChecklist}
+                            disabled={packagingChecklistSaving || packagingChecklistLoading}
+                          >
+                            {packagingChecklistSaving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
+                          </Button>
+                        </div>
+                      </div>
+                      {packagingChecklistLoading ? (
+                        <p className="text-xs text-muted-foreground">{t("loading") || "불러오는 중..."}</p>
+                      ) : packagingChecklistRows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t("posPackagingChecklistEmpty") || "등록된 체크 항목이 없습니다. [추가]로 첫 항목을 만드세요."}
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {packagingChecklistRows.map((row, idx) => (
+                            <div key={row.localId} className="grid grid-cols-12 gap-2 rounded-md border bg-background p-2">
+                              <div className="col-span-12 md:col-span-4">
+                                <label className="mb-1 block text-[11px] font-semibold">{t("itemName") || "항목명"}</label>
+                                <Input
+                                  className="h-8 text-xs"
+                                  value={row.itemName}
+                                  onChange={(e) => handlePackagingChecklistRowPatch(row.localId, { itemName: e.target.value })}
+                                  placeholder={t("posPackagingChecklistItemNamePh") || "예: 소스컵 2개"}
+                                />
+                              </div>
+                              <div className="col-span-6 md:col-span-3">
+                                <label className="mb-1 block text-[11px] font-semibold">{t("option") || "옵션"}</label>
+                                <Select
+                                  value={row.optionId || "__menu__"}
+                                  onValueChange={(v) => handlePackagingChecklistRowPatch(row.localId, { optionId: v === "__menu__" ? "" : v })}
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__menu__">{t("posPackagingChecklistMenuCommon") || "메뉴 공통"}</SelectItem>
+                                    {menuOptions.map((opt) => (
+                                      <SelectItem key={opt.id} value={opt.id}>
+                                        {optionPartLabel(opt.name)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="col-span-6 md:col-span-2">
+                                <label className="mb-1 block text-[11px] font-semibold">{t("applyTo") || "적용"}</label>
+                                <Select
+                                  value={row.orderType}
+                                  onValueChange={(v) => handlePackagingChecklistRowPatch(row.localId, { orderType: v as PosPackagingChecklistOrderType })}
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="both">{t("posPackagingChecklistBoth") || "포장+배달"}</SelectItem>
+                                    <SelectItem value="takeout">{t("posOrderTypeTakeout") || "포장"}</SelectItem>
+                                    <SelectItem value="delivery">{t("posOrderTypeDelivery") || "배달"}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="col-span-6 md:col-span-2">
+                                <label className="mb-1 block text-[11px] font-semibold">{t("sortOrder") || "순서"}</label>
+                                <Input
+                                  type="number"
+                                  className="h-8 text-xs text-right"
+                                  value={row.sortOrder}
+                                  onChange={(e) => handlePackagingChecklistRowPatch(row.localId, { sortOrder: Number(e.target.value) || 0 })}
+                                />
+                              </div>
+                              <div className="col-span-6 md:col-span-1 flex items-end justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-destructive hover:text-destructive"
+                                  onClick={() => handlePackagingChecklistRowRemove(row.localId)}
+                                  title={t("delete") || "삭제"}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              <div className="col-span-12 flex items-center gap-4 text-xs">
+                                <label className="inline-flex items-center gap-2">
+                                  <Checkbox
+                                    checked={row.isRequired}
+                                    onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isRequired: v === true })}
+                                  />
+                                  <span>{t("posRequired") || "필수 항목"}</span>
+                                </label>
+                                <label className="inline-flex items-center gap-2">
+                                  <Checkbox
+                                    checked={row.isActive}
+                                    onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isActive: v === true })}
+                                  />
+                                  <span>{t("useYn") || "사용"}</span>
+                                </label>
+                                <span className="ml-auto text-muted-foreground">#{idx + 1}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </TabsContent>
@@ -3264,9 +3401,9 @@ export default function PosMenusPage() {
             <div className="rounded-xl border bg-card p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold">{t("배달앱 운영") || "배달앱 운영"}</h3>
+                  <h3 className="text-sm font-bold">{t("posMenuTabDeliveryOps") || "배달앱 운영"}</h3>
                   <p className="text-xs text-muted-foreground">
-                    {t("앱별 메뉴 노출/시간대/품절/재고/주문수락 정책을 설정합니다.") || "앱별 메뉴 노출/시간대/품절/재고/주문수락 정책을 설정합니다."}
+                    {t("posDeliveryOpsDesc") || "앱별 메뉴 노출/시간대/품절/재고/주문수락 정책을 설정합니다."}
                   </p>
                 </div>
                 <Button type="button" onClick={handleSaveDeliveryOpsPolicy} disabled={deliveryOpsSaving}>
@@ -3290,7 +3427,7 @@ export default function PosMenusPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">App</label>
+                  <label className="text-xs font-semibold">{t("posDeliveryOpsApp") || "앱"}</label>
                   <Select value={deliveryOpsAppCode} onValueChange={(v) => setDeliveryOpsAppCode(v as DeliveryAppCode)}>
                     <SelectTrigger className="mt-1 h-9">
                       <SelectValue />
@@ -3303,7 +3440,7 @@ export default function PosMenusPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">{t("주문 수락 모드") || "주문 수락 모드"}</label>
+                  <label className="text-xs font-semibold">{t("posDeliveryOpsAcceptMode") || "주문 수락 모드"}</label>
                   <Select
                     value={deliveryOpsAppPolicy.orderAcceptanceMode}
                     onValueChange={(v) =>
@@ -3314,8 +3451,8 @@ export default function PosMenusPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manual">Manual</SelectItem>
-                      <SelectItem value="auto">Auto</SelectItem>
+                      <SelectItem value="manual">{t("posDeliveryOpsAcceptModeManual") || "수동"}</SelectItem>
+                      <SelectItem value="auto">{t("posDeliveryOpsAcceptModeAuto") || "자동"}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -3326,7 +3463,7 @@ export default function PosMenusPage() {
                       checked={deliveryOpsAppPolicy.enabled}
                       onChange={(e) => setDeliveryOpsAppPolicy((p) => ({ ...p, enabled: e.target.checked }))}
                     />
-                    {t("앱 연동 사용") || "앱 연동 사용"}
+                    {t("posDeliveryOpsEnabled") || "앱 연동 사용"}
                   </label>
                   <label className="flex items-center gap-2 text-xs">
                     <input
@@ -3334,15 +3471,15 @@ export default function PosMenusPage() {
                       checked={deliveryOpsAppPolicy.autoAcceptEnabled}
                       onChange={(e) => setDeliveryOpsAppPolicy((p) => ({ ...p, autoAcceptEnabled: e.target.checked }))}
                     />
-                    {t("자동승인 강제") || "자동승인 강제"}
+                    {t("posDeliveryOpsAutoAcceptForce") || "자동승인 강제"}
                   </label>
                 </div>
               </div>
 
               <div className="rounded-lg border p-3 space-y-2">
-                <h4 className="text-xs font-semibold">{t("카테고리 순서") || "카테고리 순서"}</h4>
+                <h4 className="text-xs font-semibold">{t("posDeliveryOpsCategoryOrder") || "카테고리 순서"}</h4>
                 <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                  {deliveryCategoryRows.map((row) => (
+                  {deliveryCategoryRows.map((row, idx) => (
                     <div key={row.key} className="flex items-center gap-2 rounded border px-2 py-1.5">
                       <span className="text-[11px] text-muted-foreground min-w-0 flex-1 truncate">
                         {row.main ? `${row.main} / ${translatePosMenuCategoryLabel(row.category, t)}` : translatePosMenuCategoryLabel(row.category, t)}
@@ -3350,11 +3487,11 @@ export default function PosMenusPage() {
                       <Input
                         type="number"
                         className="h-7 w-20 text-xs text-right"
-                        value={String(deliveryOpsCategoryOrderMap[row.key] ?? 0)}
+                        value={String(deliveryOpsCategoryOrderMap[row.key] ?? (idx + 1))}
                         onChange={(e) =>
                           setDeliveryOpsCategoryOrderMap((prev) => ({
                             ...prev,
-                            [row.key]: Number(e.target.value) || 0,
+                            [row.key]: Math.max(1, Number(e.target.value) || (idx + 1)),
                           }))
                         }
                       />
@@ -3365,7 +3502,7 @@ export default function PosMenusPage() {
 
               <div className="rounded-lg border p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold">{t("배달앱 노출 메뉴") || "배달앱 노출 메뉴"}</h4>
+                  <h4 className="text-xs font-semibold">{t("posDeliveryOpsVisibleMenus") || "배달앱 노출 메뉴"}</h4>
                   <Input
                     className="h-8 w-60 text-xs"
                     value={deliveryOpsSearch}
@@ -3377,12 +3514,12 @@ export default function PosMenusPage() {
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted/80">
                       <tr className="border-b">
-                        <th className="p-2 text-left">Menu</th>
+                        <th className="p-2 text-left">{t("posMenuName") || "메뉴"}</th>
                         <th className="p-2 text-center w-16">{t("use") || "사용"}</th>
-                        <th className="p-2 text-center w-20">Sort</th>
-                        <th className="p-2 text-center w-24">Start</th>
-                        <th className="p-2 text-center w-24">End</th>
-                        <th className="p-2 text-center w-24">Stock</th>
+                        <th className="p-2 text-center w-20">{t("sortOrder") || "순서"}</th>
+                        <th className="p-2 text-center w-24">{t("posDeliveryOpsSellStart") || "판매 시작"}</th>
+                        <th className="p-2 text-center w-24">{t("posDeliveryOpsSellEnd") || "판매 종료"}</th>
+                        <th className="p-2 text-center w-24">{t("posDeliveryOpsStockQty") || "재고수량"}</th>
                         <th className="p-2 text-center w-20">{t("posSoldOut") || "품절"}</th>
                       </tr>
                     </thead>
