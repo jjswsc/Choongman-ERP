@@ -20,6 +20,7 @@ type MenuRow = {
   is_active?: boolean
   sort_order?: number
   sold_out_date?: string | null
+  is_banban?: boolean
   description_default?: string
   description_delivery?: string | null
   description_table?: string | null
@@ -67,6 +68,34 @@ function buildGrabItemId(menu: MenuRow, itemIndex: number): string {
   if (menuId > 0 && base) return `item-${menuId}-${base}`
   if (menuId > 0) return `item-${menuId}`
   return normalizeId(`item-${code}-${itemIndex + 1}`, `item-${itemIndex + 1}`)
+}
+
+function isBanbanMenuRow(menu: MenuRow): boolean {
+  if (menu.is_banban === true) return true
+  const name = String(menu.name ?? '').trim().toLowerCase()
+  const code = String(menu.code ?? '').trim().toLowerCase().replace(/[\s\-_.#]/g, '')
+  if (name.includes('banban') || name.includes('반반')) return true
+  return code === 'c024' || code.includes('banban') || code.startsWith('bb')
+}
+
+function isBanbanFlavorCandidate(menu: MenuRow, banbanMenu: MenuRow): boolean {
+  if (menu.is_active === false) return false
+  if (isSoldOutDate(menu.sold_out_date)) return false
+  if (isBanbanMenuRow(menu)) return false
+  const menuId = Number(menu.id ?? 0)
+  const banbanId = Number(banbanMenu.id ?? 0)
+  if (menuId > 0 && banbanId > 0 && menuId === banbanId) return false
+
+  const code = String(menu.code ?? '').trim().toLowerCase()
+  const main = String(menu.category_main ?? '').trim().toLowerCase()
+  const cat = String(menu.category ?? '').trim().toLowerCase()
+  const banbanMain = String(banbanMenu.category_main ?? '').trim().toLowerCase()
+
+  if (code.startsWith('c')) return true
+  if (main && banbanMain && main === banbanMain) return true
+  if (main.includes('chicken') || main.includes('치킨')) return true
+  if (cat.includes('chicken') || cat.includes('치킨')) return true
+  return false
 }
 
 function toMinorUnit(value: unknown): number {
@@ -147,7 +176,6 @@ function serviceHoursFromRanges(ranges: TimeRange[]) {
   if (!ranges.length) {
     const openAllDay = {
       openPeriodType: 'OpenAllDay' as const,
-      periods: [] as { startTime: string; endTime: string }[],
     }
     return {
       mon: openAllDay,
@@ -159,10 +187,27 @@ function serviceHoursFromRanges(ranges: TimeRange[]) {
       sun: openAllDay,
     }
   }
-  const normalized = mergeTimeRanges(ranges).slice(0, 4).map((r) => ({
-    startTime: `${r.start}:00`,
-    endTime: `${r.end}:00`,
-  }))
+  const normalized = mergeTimeRanges(ranges)
+    .filter((r) => r.start < r.end)
+    .slice(0, 4)
+    .map((r) => ({
+      startTime: `${r.start}:00`,
+      endTime: `${r.end}:00`,
+    }))
+  if (!normalized.length) {
+    const openAllDay = {
+      openPeriodType: 'OpenAllDay' as const,
+    }
+    return {
+      mon: openAllDay,
+      tue: openAllDay,
+      wed: openAllDay,
+      thu: openAllDay,
+      fri: openAllDay,
+      sat: openAllDay,
+      sun: openAllDay,
+    }
+  }
   const specific = {
     openPeriodType: 'SpecificTimes' as const,
     periods: normalized,
@@ -208,10 +253,10 @@ function flattenSectionsToSingle(
 
 async function loadMenus(): Promise<MenuRow[]> {
   const colsAll =
-    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,description_default,description_delivery,description_table'
+    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table'
   const colsWithoutDelivery =
-    'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,description_default,description_delivery,description_table'
-  const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order'
+    'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table'
+  const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order,is_banban'
   for (const cols of [colsAll, colsWithoutDelivery, colsBase]) {
     try {
       const rows = (await supabaseSelectAllPages('pos_menus', {
@@ -248,7 +293,14 @@ function resolveStoreCodeFromGrabMerchant(merchantID: string, partnerMerchantID:
   const map = parseGrabStoreMap()
   const m1 = String(merchantID || '').trim()
   const m2 = String(partnerMerchantID || '').trim()
-  return map[m1] || map[m2] || m2 || m1
+  const normalize = (raw: string) => {
+    const s = String(raw || '').trim()
+    if (!s) return ''
+    const noPrefix = s.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
+    const digits = noPrefix.match(/\b(\d{3,6})\b/)
+    return digits?.[1] || noPrefix
+  }
+  return normalize(map[m1] || map[m2] || '') || normalize(m2) || normalize(m1)
 }
 
 async function loadOptions(): Promise<OptionRow[]> {
@@ -410,6 +462,33 @@ export async function buildGrabMenuFromPos(params: {
           }
         })
 
+      const banbanFlavorMenus = isBanbanMenuRow(menu)
+        ? menus.filter((m) => isBanbanFlavorCandidate(m, menu)).slice(0, 30)
+        : []
+      const banbanModifierGroups =
+        banbanFlavorMenus.length > 0
+          ? [1, 2].map((slot) => ({
+              id: `${itemId}-banban-${slot}`,
+              name: slot === 1 ? 'Flavor 1' : 'Flavor 2',
+              sequence: modifierGroups.length + slot,
+              availableStatus: 'AVAILABLE' as const,
+              selectionRangeMin: 1,
+              selectionRangeMax: 1,
+              modifiers: banbanFlavorMenus.map((flavor, idx) => {
+                const fid = Number(flavor.id ?? 0)
+                const fcode = String(flavor.code ?? '').trim()
+                const baseId = fid > 0 ? `f-${fid}` : normalizeId(fcode, `f-${idx + 1}`)
+                return {
+                  id: `${itemId}-banban-${slot}-${baseId}`,
+                  name: String(flavor.name ?? `Flavor ${idx + 1}`),
+                  sequence: idx + 1,
+                  availableStatus: 'AVAILABLE' as const,
+                  price: 0,
+                }
+              }),
+            }))
+          : []
+
       const soldOut = isSoldOutDate(menu.sold_out_date)
       const active = menu.is_active !== false
       const available = active && !soldOut && isMenuAvailableByDeliveryPolicy(policy)
@@ -428,7 +507,7 @@ export async function buildGrabMenuFromPos(params: {
         campaignInfo: null,
         description: menuDesc,
         photos: isValidPhotoUrl(menu.image) ? [menu.image] : [],
-        modifierGroups,
+        modifierGroups: [...modifierGroups, ...banbanModifierGroups],
       }
     })
 

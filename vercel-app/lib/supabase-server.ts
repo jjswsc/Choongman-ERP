@@ -626,6 +626,21 @@ export function supabaseStoragePublicUrl(bucket: string, objectPath: string): st
 }
 
 /**
+ * createSignedUploadUrl 등 Storage API 실패 시: 버킷 미생성 응답은 Supabase 버전에 따라
+ * "Bucket not found"가 아니라 404 + "The related resource does not exist" 로만 올 수 있음.
+ */
+export function looksLikeSupabaseStorageMissingBucketError(msg: string): boolean {
+  if (!msg || typeof msg !== 'string') return false
+  return (
+    /Bucket not found/i.test(msg) ||
+    /bucket does not exist/i.test(msg) ||
+    /No such bucket/i.test(msg) ||
+    (/not found/i.test(msg) && /bucket/i.test(msg)) ||
+    /The related resource does(?:n't| not) exist/i.test(msg)
+  )
+}
+
+/**
  * Storage: 버킷 생성 (service_role). 이미 있으면 성공으로 간주.
  * presign 전에 버킷 누락을 자동 복구할 때 사용.
  */

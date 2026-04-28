@@ -1,5 +1,5 @@
 /**
- * 미수금 receivable_transactions (주문 행) 수금 확인 플래그
+ * 미수금 receivable_transactions (주문·강제출고 등 매출 행) 수금 확인 플래그
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
@@ -45,9 +45,10 @@ export async function POST(request: NextRequest) {
     if (!row?.id) {
       return NextResponse.json({ success: false, message: '해당 미수금 내역을 찾을 수 없습니다.' }, { headers })
     }
-    if (String(row.ref_type || '') !== 'Order') {
+    const rt = String(row.ref_type || '')
+    if (rt !== 'Order' && rt !== 'ForceOutbound') {
       return NextResponse.json(
-        { success: false, message: '주문(미수) 행만 수금 확인을 변경할 수 있습니다.' },
+        { success: false, message: '주문 또는 강제출고(미수) 행만 수금 확인을 변경할 수 있습니다.' },
         { headers }
       )
     }

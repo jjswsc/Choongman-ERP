@@ -5,9 +5,14 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
-import type { PosDeliveryApp, PosMenu } from '@/lib/api-client'
+import type { PosDeliveryApp, PosMenu, PosOrderPackagingChecklistGroup } from '@/lib/api-client'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
-import { grabCancelOrderByStoreApi, markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
+import {
+  getPosPackagingChecklistByOrder,
+  grabCancelOrderByStoreApi,
+  markPosOrderItemServed,
+  updatePosOrderStatus,
+} from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
@@ -19,6 +24,7 @@ import {
   grabStateToStageIndex,
   GRAB_DELIVERY_PROGRESS_STAGE_COUNT,
 } from '@/lib/grab-delivery-progress'
+import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
 
 export interface DeliveryOrderPanelProps {
   orderLabel: string
@@ -54,6 +60,9 @@ export function DeliveryOrderPanel({
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
   const [optimisticGrabState, setOptimisticGrabState] = useState<string | null>(null)
+  const [checklistOpen, setChecklistOpen] = useState(false)
+  const [checklistSubmitting, setChecklistSubmitting] = useState(false)
+  const [checklistGroups, setChecklistGroups] = useState<PosOrderPackagingChecklistGroup[]>([])
 
   const parseItemMeta = (rawNote?: string) => {
     const note = String(rawNote || '').trim()
@@ -185,11 +194,33 @@ export function DeliveryOrderPanel({
     if (!order || order.status === 'completed' || order.status === 'ready') return
     const id = Number(order.id)
     if (Number.isNaN(id)) return
+    const completeReady = async () => {
+      try {
+        await updatePosOrderStatus({ id, status: 'ready' })
+        onPackaged?.()
+      } catch (e) {
+        console.error('updatePosOrderStatus:', e)
+      }
+    }
     try {
-      await updatePosOrderStatus({ id, status: 'ready' })
-      onPackaged?.()
+      const checklistRes = await getPosPackagingChecklistByOrder({ orderId: id })
+      if (!checklistRes.success) {
+        const go = await appConfirm(
+          t('posPackagingChecklistFetchFailContinue') ||
+            '체크리스트를 불러오지 못했습니다. 체크 없이 포장 완료를 진행할까요?'
+        )
+        if (!go) return
+        await completeReady()
+        return
+      }
+      if (!checklistRes.hasChecklist || !Array.isArray(checklistRes.groups) || checklistRes.groups.length === 0) {
+        await completeReady()
+        return
+      }
+      setChecklistGroups(checklistRes.groups)
+      setChecklistOpen(true)
     } catch (e) {
-      console.error('updatePosOrderStatus:', e)
+      console.error('packaging checklist:', e)
     }
   }
 
@@ -245,7 +276,8 @@ export function DeliveryOrderPanel({
   }
 
   return (
-    <div className="h-full flex flex-col border-l border-border bg-card">
+    <>
+      <div className="h-full flex flex-col border-l border-border bg-card">
       <div className="px-3 py-3 border-b flex items-center justify-between">
         <h3 className="text-sm font-semibold truncate">
           {orderLabel} {t('posOrderTypeDelivery') || '배달'}
@@ -437,6 +469,33 @@ export function DeliveryOrderPanel({
         </div>
       )}
 
-    </div>
+      </div>
+      <PackagingChecklistDialog
+        open={checklistOpen}
+        onOpenChange={setChecklistOpen}
+        groups={checklistGroups}
+        submitting={checklistSubmitting}
+        t={t}
+        onConfirm={async ({ checkedItemIds, uncheckedRequiredCount, totalRequiredCount }) => {
+          if (!order) return
+          const id = Number(order.id)
+          if (Number.isNaN(id)) return
+          setChecklistSubmitting(true)
+          try {
+            await updatePosOrderStatus({ id, status: 'ready' })
+            console.info('[packaging-checklist] delivery confirmed', {
+              orderId: id,
+              checkedCount: checkedItemIds.length,
+              uncheckedRequiredCount,
+              totalRequiredCount,
+            })
+            setChecklistOpen(false)
+            onPackaged?.()
+          } finally {
+            setChecklistSubmitting(false)
+          }
+        }}
+      />
+    </>
   )
 }

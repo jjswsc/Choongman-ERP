@@ -881,11 +881,11 @@ export function ReceivablePayableTab() {
                       : "")
             : ""
         const receiveCheckCell = isRec
-          ? (row.ref_type === "Order"
+          ? row.ref_type === "Order" || row.ref_type === "ForceOutbound"
             ? ((row as { receive_checked?: boolean }).receive_checked
               ? (t("recCheckPaid") || "Collected")
               : (t("recCheckWait") || "Pending"))
-            : "-")
+            : "-"
           : ""
         const invPayable = !isRec
           ? ((row as { invoice_received?: boolean; invoice_no?: string }).invoice_received === true
@@ -1028,7 +1028,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
                           {isRec && (
                             <td className="py-1 px-2 text-center text-xs">
-                              {row.ref_type === "Order"
+                              {row.ref_type === "Order" || row.ref_type === "ForceOutbound"
                                 ? (row.receive_checked ? (t("recCheckPaid") || "Collected") : (t("recCheckWait") || "Pending"))
                                 : "—"}
                             </td>
@@ -1271,7 +1271,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recLinesLoading = loadingItemsFor === recRowKey
                                     const recLineColSpan = 9 + (showRecSyncBtn ? 1 : 0)
                                     const canEditReceiveCheck =
-                                      row.ref_type === "Order" &&
+                                      (row.ref_type === "Order" || row.ref_type === "ForceOutbound") &&
                                       row.id != null &&
                                       canUpdateReceivableReceiveCheck(
                                         auth?.role || "",
@@ -1360,7 +1360,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         </span>
                                       </td>
                                       <td className="py-1.5 px-2 w-[108px] text-center align-middle">
-                                        {row.ref_type === "Order" && row.id != null ? (
+                                        {(row.ref_type === "Order" || row.ref_type === "ForceOutbound") && row.id != null ? (
                                           <div className="flex flex-col items-center gap-0.5">
                                             <Checkbox
                                               checked={!!row.receive_checked}

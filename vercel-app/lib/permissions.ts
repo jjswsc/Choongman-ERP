@@ -122,7 +122,7 @@ export function canDeleteOutbound(role: string): boolean {
   return isOfficeRole(role)
 }
 
-/** 미수금 목록에서 주문 건 수금 확인(receive_checked) 수정 가능 */
+/** 미수금 목록에서 주문·강제출고 건 수금 확인(receive_checked) 수정 가능 */
 export function canUpdateReceivableReceiveCheck(
   role: string,
   userStore: string,

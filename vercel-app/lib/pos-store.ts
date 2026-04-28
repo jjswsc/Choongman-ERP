@@ -73,12 +73,14 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     items: (po.items || []).map((it) => {
       const row = it as PosOrderItem
       const menuId1 = String(row.menuId1 ?? row.menuId2 ?? '').trim()
+      const optionId1 = String(row.optionId1 ?? row.optionId2 ?? '').trim()
       return {
         id: String(it.id ?? ''),
         name: String(it.name ?? ''),
         quantity: Number(it.qty ?? 0) || 0,
         price: Number(it.price ?? 0) || 0,
         ...(menuId1 ? { menuId: menuId1 } : {}),
+        ...(optionId1 ? { optionId: optionId1 } : {}),
         ...(typeof it.note === 'string' && String(it.note).trim()
           ? { note: String(it.note).trim() }
           : {}),
@@ -441,13 +443,31 @@ export function usePosStore() {
   }, [refetchStoresImmediate])
 
   const orders = useMemo(() => Object.values(ordersByStoreId).flat(), [ordersByStoreId])
+  const currentStoreOrders = useMemo(() => {
+    if (currentStoreId && Array.isArray(ordersByStoreId[currentStoreId])) {
+      return ordersByStoreId[currentStoreId]
+    }
+    return orders
+  }, [ordersByStoreId, currentStoreId, orders])
 
-  const deliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed')
-  const packagedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'ready')
-  const completedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'completed')
-  const takeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status !== 'ready' && o.status !== 'completed')
-  const packagedTakeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status === 'ready')
-  const completedTakeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status === 'completed')
+  const deliveryOrders = currentStoreOrders.filter(
+    (o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed'
+  )
+  const packagedDeliveryOrders = currentStoreOrders.filter(
+    (o) => o.type === 'delivery' && o.status === 'ready'
+  )
+  const completedDeliveryOrders = currentStoreOrders.filter(
+    (o) => o.type === 'delivery' && o.status === 'completed'
+  )
+  const takeoutOrders = currentStoreOrders.filter(
+    (o) => o.type === 'takeout' && o.status !== 'ready' && o.status !== 'completed'
+  )
+  const packagedTakeoutOrders = currentStoreOrders.filter(
+    (o) => o.type === 'takeout' && o.status === 'ready'
+  )
+  const completedTakeoutOrders = currentStoreOrders.filter(
+    (o) => o.type === 'takeout' && o.status === 'completed'
+  )
 
   const updateOrderStatus = useCallback((orderId: string, status: Order['status']) => {
     setOrdersByStoreId((prev) => {

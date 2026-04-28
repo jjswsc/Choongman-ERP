@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
@@ -20,15 +21,6 @@ const IMAGE_TYPES = new Set([
 const VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime', 'video/webm', 'video/3gpp'])
 
 const ALL_ALLOWED_TYPES = new Set([...IMAGE_TYPES, ...VIDEO_TYPES])
-
-function looksLikeMissingStorageBucket(msg: string): boolean {
-  return (
-    /Bucket not found/i.test(msg) ||
-    /bucket does not exist/i.test(msg) ||
-    /No such bucket/i.test(msg) ||
-    (/not found/i.test(msg) && /bucket/i.test(msg))
-  )
-}
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -81,7 +73,7 @@ export async function POST(request: NextRequest) {
       ;({ signedUrl, publicUrl } = await issue())
     } catch (firstErr) {
       const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
-      if (looksLikeMissingStorageBucket(fm)) {
+      if (looksLikeSupabaseStorageMissingBucketError(fm)) {
         await supabaseStorageCreateBucketIfNeeded(BUCKET, {
           public: true,
           file_size_limit: MAX_VIDEO_BYTES,
@@ -97,7 +89,7 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('uploadStoreRepairPhoto/presign:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (looksLikeMissingStorageBucket(msg)) {
+    if (looksLikeSupabaseStorageMissingBucketError(msg)) {
       return NextResponse.json(
         {
           success: false,

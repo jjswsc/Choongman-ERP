@@ -8,21 +8,13 @@ import {
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
 import { slugifyStoreForCompanyDocPath } from '@/lib/company-hybrid-documents'
 import {
+  looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 
 const BUCKET = COMPANY_DOCUMENTS_BUCKET
-
-function looksLikeMissingStorageBucket(msg: string): boolean {
-  return (
-    /Bucket not found/i.test(msg) ||
-    /bucket does not exist/i.test(msg) ||
-    /No such bucket/i.test(msg) ||
-    (/not found/i.test(msg) && /bucket/i.test(msg))
-  )
-}
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -102,7 +94,7 @@ export async function POST(request: NextRequest) {
       ;({ signedUrl, publicUrl } = await issue())
     } catch (firstErr) {
       const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
-      if (!looksLikeMissingStorageBucket(fm)) throw firstErr
+      if (!looksLikeSupabaseStorageMissingBucketError(fm)) throw firstErr
       await supabaseStorageCreateBucketIfNeeded(BUCKET, {
         public: true,
         file_size_limit: maxB,
@@ -115,7 +107,7 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('uploadCompanyHybridDocument/presign:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (looksLikeMissingStorageBucket(msg)) {
+    if (looksLikeSupabaseStorageMissingBucketError(msg)) {
       return NextResponse.json(
         { success: false, message: 'Storage 버킷(company-documents) 생성 또는 권한을 확인하세요.' },
         { status: 400, headers }

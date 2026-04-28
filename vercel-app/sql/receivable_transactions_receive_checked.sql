@@ -2,4 +2,4 @@
 ALTER TABLE receivable_transactions
   ADD COLUMN IF NOT EXISTS receive_checked BOOLEAN NOT NULL DEFAULT false;
 
-COMMENT ON COLUMN receivable_transactions.receive_checked IS '미수금 화면에서 주문(ref_type=Order) 건의 대금 수령 확인(수동). 회계 표시용.';
+COMMENT ON COLUMN receivable_transactions.receive_checked IS '미수금 화면에서 주문·강제출고(ref_type=Order|ForceOutbound) 건의 대금 수령 확인(수동). 회계 표시용.';

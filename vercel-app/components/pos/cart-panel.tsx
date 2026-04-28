@@ -249,11 +249,22 @@ export interface CartPanelHandle {
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
+    existingOrderId?: number | null
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
+    existingOrderId?: number | null
   }) => void
+}
+
+function normalizeExistingPosOrderId(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return null
+  const id = Math.trunc(n)
+  return id > 0 ? id : null
 }
 
 interface CartPanelProps {
@@ -614,6 +625,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     takeoutLabel: takeoutLabelProp,
   })
   const isCartControlled = cartItemsProp !== undefined && setCartItemsProp !== undefined
+  /** 터미널: 배달/포장 상세 패널 → 카트 전환 시 `pendingOrderId` prop 한 틱 늦음·effect 미실행 대비 */
+  const checkoutExistingPosOrderIdRef = useRef<number | null>(null)
+  /** 기존 pos_orders 행에 매장 결제 등 → 전체 결제 UI(현금/카드). 신규 배달(플랫폼 결제)만 단순 안내 다이얼로그 */
+  const [isExistingOrderCheckout, setIsExistingOrderCheckout] = useState(false)
   const [internalCartItems, setInternalCartItems] = useState<CartItem[]>(() => {
     if (cartItemsProp !== undefined && setCartItemsProp !== undefined) return []
     return cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? [])
@@ -1589,7 +1604,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPayAdminLineAmounts(Object.fromEntries(adminPaymentLinesRef.current.map((i) => [i.id, '0'])))
     setShowPaymentModal(true)
   }
-  const openPaymentModal = () => void openPaymentModalWithAmount(total)
+  const openPaymentModal = () => {
+    checkoutExistingPosOrderIdRef.current = null
+    setIsExistingOrderCheckout(false)
+    void openPaymentModalWithAmount(total)
+  }
 
   const submitNonDineOrder = (withPayment: boolean) => {
     if (orderType === 'dine-in') return
@@ -1694,6 +1713,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         }).catch(() => {})
       }
     }
+    const resolvedExistingCheckoutId =
+      checkoutExistingPosOrderIdRef.current ?? normalizeExistingPosOrderId(pendingOrderId)
+
     if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
       onDineInOrderComplete(
         {
@@ -1719,7 +1741,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         },
         pendingOrderId ?? undefined
       )
-    } else if (orderType === 'delivery' && pendingOrderId != null && paymentTableNameOverride && onDeliveryOrderComplete) {
+    } else if (
+      orderType === 'delivery' &&
+      resolvedExistingCheckoutId != null &&
+      paymentTableNameOverride &&
+      onDeliveryOrderComplete
+    ) {
       onDeliveryOrderComplete(
         {
           items: cartItems.map(mapCartItemToOrderPayload),
@@ -1740,9 +1767,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           couponDiscountAmt: couponAppliedAmt || undefined,
           pointUsed: pointUsedNum || undefined,
         },
-        pendingOrderId
+        resolvedExistingCheckoutId
       )
-    } else if (orderType === 'takeout' && pendingOrderId != null && paymentTableNameOverride && onTakeoutOrderComplete) {
+    } else if (
+      orderType === 'takeout' &&
+      resolvedExistingCheckoutId != null &&
+      paymentTableNameOverride &&
+      onTakeoutOrderComplete
+    ) {
       onTakeoutOrderComplete(
         {
           items: cartItems.map(mapCartItemToOrderPayload),
@@ -1763,7 +1795,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           couponDiscountAmt: couponAppliedAmt || undefined,
           pointUsed: pointUsedNum || undefined,
         },
-        pendingOrderId
+        resolvedExistingCheckoutId
       )
     } else if (orderType !== 'dine-in' && onNonDineOrderComplete) {
       submitNonDineOrder(true)
@@ -1808,6 +1840,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     tableName: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => {
+    checkoutExistingPosOrderIdRef.current = null
+    setIsExistingOrderCheckout(false)
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
@@ -1831,7 +1865,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const openTakeoutPaymentFromOrder = (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    existingOrderId?: number | null
   }) => {
+    const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
+    checkoutExistingPosOrderIdRef.current = existingId
+    setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
@@ -1855,7 +1893,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const openDeliveryPaymentFromOrder = (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    existingOrderId?: number | null
   }) => {
+    const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
+    checkoutExistingPosOrderIdRef.current = existingId
+    setIsExistingOrderCheckout(existingId != null)
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
@@ -1889,6 +1931,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setDiscountReason('')
     setAppliedCollabId(null)
     setPaymentTableNameOverride(null)
+    checkoutExistingPosOrderIdRef.current = null
+    setIsExistingOrderCheckout(false)
   }
 
   const imperativeApiRef = useRef<CartPanelHandle | null>(null)
@@ -2685,7 +2729,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             )}
           </div>
         </DialogHeader>
-        {orderType === 'delivery' ? (
+        {orderType === 'delivery' && !isExistingOrderCheckout ? (
           <>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-5 py-5">
               <PosPaymentModalAmountCard

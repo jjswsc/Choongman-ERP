@@ -43,6 +43,8 @@ export interface OrderItem {
   name: string
   /** `items_json`의 menu_id1 등 — 있으면 표시명을 POS 메뉴 id로 복원 */
   menuId?: string
+  /** `items_json`의 option_id1 등 — 포장 체크리스트 옵션 매핑용 */
+  optionId?: string
   quantity: number
   price: number
   /** 줄 단위 메모 (주방·items_json) */

@@ -7,6 +7,7 @@ import {
   MAX_NOTICE_VIDEO_BYTES,
 } from '@/lib/notice-attachments'
 import {
+  looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
@@ -39,20 +40,6 @@ const ALL_ALLOWED_MIME: string[] = (() => {
   s.add('application/octet-stream')
   return Array.from(s)
 })()
-
-function looksLikeMissingStorageBucket(msg: string): boolean {
-  const normalized = String(msg || '')
-  return (
-    /Bucket not found/i.test(normalized) ||
-    /bucket does not exist/i.test(normalized) ||
-    /No such bucket/i.test(normalized) ||
-    (/not found/i.test(normalized) && /bucket/i.test(normalized)) ||
-    // Supabase Storage가 버킷 누락 시 404 InvalidRequest("The related resource doesn't exist")를 주는 경우 대응
-    (/InvalidRequest/i.test(normalized) &&
-      /related resource does(?: not|n't) exist/i.test(normalized) &&
-      /404/.test(normalized))
-  )
-}
 
 function slugifyStore(store: string) {
   return String(store || '')
@@ -121,7 +108,7 @@ export async function POST(request: NextRequest) {
       ;({ signedUrl, publicUrl } = await issue())
     } catch (firstErr) {
       const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
-      if (looksLikeMissingStorageBucket(fm)) {
+      if (looksLikeSupabaseStorageMissingBucketError(fm)) {
         await supabaseStorageCreateBucketIfNeeded(BUCKET, {
           public: true,
           file_size_limit: Math.max(MAX_NOTICE_NON_VIDEO_BYTES, MAX_NOTICE_VIDEO_BYTES),
@@ -137,7 +124,7 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('uploadNoticeAttachment/presign:', e)
     const msg = e instanceof Error ? e.message : String(e)
-    if (looksLikeMissingStorageBucket(msg)) {
+    if (looksLikeSupabaseStorageMissingBucketError(msg)) {
       return NextResponse.json(
         { success: false, message: '공지 첨부 저장소가 설정되지 않았습니다. 관리자에게 문의하세요.' },
         { status: 400, headers }

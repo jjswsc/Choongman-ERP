@@ -681,7 +681,14 @@ export async function GET(request: NextRequest) {
       const outAppr = String(outApprovedForRow || '').trim()
       const approvedOut = outAppr === '승인완료' || outAppr === '승인'
       const statusStr = String(statusForRow || '').trim()
-      const computedEarlyMin = plannedWorkMin > 0 && diffMin < 0 ? Math.abs(diffMin) : 0
+      // 실제 근무시간이 0이면 지각 의미 없음. 늦게 퇴근해 diff>0이어도 출근 지각 분은 별도 유지(OT와 상쇄하지 않음)
+      const rawLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
+      const effectiveLateMin = rawLateMin
+      // 조퇴 기본값은 "총 부족분 - 지각분"으로 산출해 지각이 조퇴 칸으로 중복 집계되지 않게 한다.
+      const computedEarlyMin =
+        plannedWorkMin > 0 && diffMin < 0
+          ? Math.max(0, Math.abs(diffMin) - effectiveLateMin)
+          : 0
       const hasEarlyAdjustment = hasMetricAdjustment(outLogIdForRow ?? null, 'early_min')
       const hasEarlyOverride =
         (earlyMinDb != null && Number.isFinite(earlyMinDb) && Number(earlyMinDb) > 0) || hasEarlyAdjustment
@@ -698,9 +705,6 @@ export async function GET(request: NextRequest) {
         ? Math.min(Math.max(0, Math.round(earlyMinDb as number)), computedEarlyMin)
         : computedEarlyMin
 
-      // 실제 근무시간이 0이면 지각 의미 없음. 늦게 퇴근해 diff>0이어도 출근 지각 분은 별도 유지(OT와 상쇄하지 않음)
-      const rawLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
-      const effectiveLateMin = rawLateMin
       // 연장: 차이가 음수(조퇴)면 OT 없음. 그 외는 DB 조정값 또는 스케줄 차이(급여 집계와 동일)
       const effectiveOtMinRaw =
         actualWorkMin <= 0 || plannedWorkMin <= 0 || diffMin < 0

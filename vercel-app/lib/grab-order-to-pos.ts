@@ -90,11 +90,49 @@ function parseGrabStoreMap(): Record<string, string> {
   }
 }
 
+function normalizeStoreCodeCandidate(raw: string): string {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  const noPrefix = s.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
+  if (!noPrefix) return ''
+  // "CM 1048" 같이 접두가 붙은 경우 숫자 코드 우선
+  const m = noPrefix.match(/\b(\d{3,6})\b/)
+  if (m?.[1]) return m[1]
+  return noPrefix
+}
+
+function extractStoreCodeFromOrderPayload(order: Record<string, unknown>): string {
+  const fields = [
+    order.partnerMerchantID,
+    order.partnerStoreID,
+    order.partnerStoreId,
+    order.storeCode,
+    order.store_code,
+    order.storeID,
+    order.storeId,
+    order.storeName,
+    order.partnerStoreName,
+  ]
+  for (const f of fields) {
+    const norm = normalizeStoreCodeCandidate(String(f ?? ''))
+    if (norm) return norm
+  }
+  return ''
+}
+
 export function resolveGrabStoreCode(order: Record<string, unknown>): string {
   const partnerMerchantID = String(order.partnerMerchantID ?? '').trim()
   const merchantID = String(order.merchantID ?? '').trim()
   const map = parseGrabStoreMap()
-  return map[partnerMerchantID] || map[merchantID] || partnerMerchantID
+  const payloadDerived = extractStoreCodeFromOrderPayload(order)
+  const mapped = map[partnerMerchantID] || map[merchantID] || ''
+  return (
+    payloadDerived ||
+    normalizeStoreCodeCandidate(mapped) ||
+    normalizeStoreCodeCandidate(partnerMerchantID) ||
+    normalizeStoreCodeCandidate(merchantID) ||
+    partnerMerchantID
+  )
 }
 
 function resolveEcoCutlerySummary(order: Record<string, unknown>): string | null {
@@ -165,7 +203,16 @@ function buildPosItems(order: Record<string, unknown>): PosItem[] {
 
     out.push({
       id: `grab:${String(item.id ?? item.grabItemID ?? idx)}`,
-      name: String(item.name ?? item.grabItemID ?? `Grab item ${idx + 1}`),
+      name: String(
+        item.name ??
+          item.title ??
+          item.displayName ??
+          item.itemName ??
+          item.grabItemName ??
+          item.grabItemID ??
+          item.id ??
+          `Grab item ${idx + 1}`
+      ),
       price: minorToMajor(unitMinor, exponent),
       qty,
       note: noteParts.length ? noteParts.join(' · ') : undefined,

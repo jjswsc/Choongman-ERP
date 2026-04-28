@@ -38,9 +38,11 @@ import {
   type PosDeliveryMenuPolicy,
   getPosMenuOptions,
   getPosMenuIngredients,
+  getPosMenuPackagingChecklist,
   getMenuCost,
   getAdminItems,
   savePosMenu,
+  savePosMenuPackagingChecklist,
   savePosMenuOption,
   savePosMenuIngredient,
   deletePosMenu,
@@ -53,7 +55,9 @@ import {
   refreshPosMenusCatalogCache,
   useStoreList,
   type PosMenu,
+  type PosMenuPackagingCheckItem,
   type PosMenuOption,
+  type PosPackagingChecklistOrderType,
   type PosMenuIngredient,
   type PosPromo,
 } from "@/lib/api-client"
@@ -146,6 +150,28 @@ const emptyForm = {
   isBanban: false,
 }
 
+type PackagingChecklistDraftRow = {
+  localId: string
+  optionId: string
+  orderType: PosPackagingChecklistOrderType
+  itemName: string
+  isRequired: boolean
+  sortOrder: number
+  isActive: boolean
+}
+
+function newPackagingChecklistRow(sortOrder: number): PackagingChecklistDraftRow {
+  return {
+    localId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    optionId: "",
+    orderType: "both",
+    itemName: "",
+    isRequired: true,
+    sortOrder,
+    isActive: true,
+  }
+}
+
 export default function PosMenusPage() {
   const { auth } = useAuth()
   const { stores } = useStoreList()
@@ -202,7 +228,10 @@ export default function PosMenusPage() {
   const [baseMenuCost, setBaseMenuCost] = React.useState<number | null>(null)
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
-  const [formTab, setFormTab] = React.useState<"info" | "options" | "cost" | "description">("info")
+  const [packagingChecklistRows, setPackagingChecklistRows] = React.useState<PackagingChecklistDraftRow[]>([])
+  const [packagingChecklistLoading, setPackagingChecklistLoading] = React.useState(false)
+  const [packagingChecklistSaving, setPackagingChecklistSaving] = React.useState(false)
+  const [formTab, setFormTab] = React.useState<"info" | "options" | "cost" | "description" | "packagingChecklist">("info")
   const [mainTab, setMainTab] = React.useState<
     "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "finalPrice" | "deliveryOps"
   >("screen")
@@ -517,6 +546,7 @@ export default function PosMenusPage() {
 
   const handleNewRegister = () => {
     setEditingId(null)
+    setPackagingChecklistRows([])
     const filter = mainCategoryFilter === "all" ? "" : mainCategoryFilter.trim()
     if (!filter) {
       setFormData(emptyForm)
@@ -550,11 +580,90 @@ export default function PosMenusPage() {
           isActive: m.isActive,
           isBanban: m.isBanban ?? false,
         })
+        void loadPackagingChecklistRows(editingId)
       }
     } else {
       setFormData(emptyForm)
+      setPackagingChecklistRows([])
     }
   }
+
+  const loadPackagingChecklistRows = React.useCallback(async (menuId: string) => {
+    if (!menuId) {
+      setPackagingChecklistRows([])
+      return
+    }
+    setPackagingChecklistLoading(true)
+    try {
+      const res = await getPosMenuPackagingChecklist({ menuId })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || (t("msg_load_fail") || "불러오기 실패"))
+        setPackagingChecklistRows([])
+        return
+      }
+      const next = (res.items || []).map((it: PosMenuPackagingCheckItem) => ({
+        localId: `db-${it.id}`,
+        optionId: it.optionId ? String(it.optionId) : "",
+        orderType: (it.orderType || "both") as PosPackagingChecklistOrderType,
+        itemName: String(it.itemName || ""),
+        isRequired: it.isRequired !== false,
+        sortOrder: Number(it.sortOrder ?? 0) || 0,
+        isActive: it.isActive !== false,
+      }))
+      setPackagingChecklistRows(next)
+    } catch (e) {
+      await appAlert(`${t("error") || "오류"}: ${String(e)}`)
+      setPackagingChecklistRows([])
+    } finally {
+      setPackagingChecklistLoading(false)
+    }
+  }, [t])
+
+  const handlePackagingChecklistRowPatch = React.useCallback(
+    (localId: string, patch: Partial<PackagingChecklistDraftRow>) => {
+      setPackagingChecklistRows((prev) => prev.map((row) => (row.localId === localId ? { ...row, ...patch } : row)))
+    },
+    []
+  )
+
+  const handlePackagingChecklistRowRemove = React.useCallback((localId: string) => {
+    setPackagingChecklistRows((prev) =>
+      prev
+        .filter((row) => row.localId !== localId)
+        .map((row, idx) => ({ ...row, sortOrder: idx }))
+    )
+  }, [])
+
+  const handleSavePackagingChecklist = React.useCallback(async () => {
+    if (!editingId) return
+    setPackagingChecklistSaving(true)
+    try {
+      const payload = packagingChecklistRows
+        .map((row, idx) => ({
+          optionId: row.optionId.trim() || null,
+          orderType: row.orderType,
+          itemName: row.itemName.trim(),
+          isRequired: row.isRequired,
+          sortOrder: idx,
+          isActive: row.isActive,
+        }))
+        .filter((row) => row.itemName.length > 0)
+      const res = await savePosMenuPackagingChecklist({
+        menuId: editingId,
+        items: payload,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || (t("msg_save_fail_detail") || "저장에 실패했습니다."))
+        return
+      }
+      await appAlert((t("itemsAlertSaved") || "저장되었습니다."))
+      await loadPackagingChecklistRows(editingId)
+    } catch (e) {
+      await appAlert(`${t("error") || "오류"}: ${String(e)}`)
+    } finally {
+      setPackagingChecklistSaving(false)
+    }
+  }, [editingId, loadPackagingChecklistRows, packagingChecklistRows, t])
 
   const editingMenuLinkedPromoId = React.useMemo(() => {
     if (!editingId) return null
@@ -696,6 +805,7 @@ export default function PosMenusPage() {
     setNewOptionDescriptionDelivery("")
     setNewOptionDescriptionTable("")
     setSelectedIngredientOptionId("")
+    void loadPackagingChecklistRows(menu.id)
   }
 
   const handleAddOption = async () => {

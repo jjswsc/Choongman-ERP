@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
@@ -16,15 +17,6 @@ const ALLOWED_TYPES = new Set([
   'image/webp',
   'image/gif',
 ])
-
-function looksLikeMissingStorageBucket(msg: string): boolean {
-  return (
-    /Bucket not found/i.test(msg) ||
-    /bucket does not exist/i.test(msg) ||
-    /No such bucket/i.test(msg) ||
-    (/not found/i.test(msg) && /bucket/i.test(msg))
-  )
-}
 
 function slugStore(s: string): string {
   return String(s || '')
@@ -95,7 +87,7 @@ export async function POST(request: NextRequest) {
       ;({ signedUrl, publicUrl, storagePath } = await issue())
     } catch (firstErr) {
       const fm = firstErr instanceof Error ? firstErr.message : String(firstErr)
-      if (!looksLikeMissingStorageBucket(fm)) throw firstErr
+      if (!looksLikeSupabaseStorageMissingBucketError(fm)) throw firstErr
       await supabaseStorageCreateBucketIfNeeded(BUCKET, {
         public: true,
         file_size_limit: MAX_FILE_BYTES,

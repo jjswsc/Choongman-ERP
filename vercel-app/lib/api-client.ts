@@ -5466,8 +5466,84 @@ export interface PosMenuOption {
   descriptionTable?: string | null
 }
 
+export type PosPackagingChecklistOrderType = 'takeout' | 'delivery' | 'both'
+
+export interface PosMenuPackagingCheckItem {
+  id: string
+  menuId: string
+  optionId?: string | null
+  orderType: PosPackagingChecklistOrderType
+  itemName: string
+  isRequired: boolean
+  sortOrder: number
+  isActive: boolean
+}
+
+export interface PosOrderPackagingChecklistGroup {
+  orderItemId: string
+  itemName: string
+  menuId: string
+  menuName?: string
+  optionId?: string | null
+  optionName?: string | null
+  checks: {
+    id: string
+    itemName: string
+    isRequired: boolean
+    sortOrder: number
+    optionId?: string | null
+  }[]
+}
+
 export async function getPosMenus() {
   return fetchPosCatalogCached<PosMenu[]>(ERP_POS_CATALOG_MENUS_CACHE_KEY, '/api/getPosMenus', [])
+}
+
+export async function getPosMenuPackagingChecklist(params: { menuId: string }) {
+  const q = new URLSearchParams()
+  q.set('menuId', params.menuId)
+  const res = await apiFetchWithOffline(`/api/getPosMenuPackagingChecklist?${q.toString()}`)
+  return res.json() as Promise<{
+    success: boolean
+    schemaReady?: boolean
+    message?: string
+    items: PosMenuPackagingCheckItem[]
+  }>
+}
+
+export async function savePosMenuPackagingChecklist(params: {
+  menuId: string
+  items: {
+    id?: string
+    optionId?: string | null
+    orderType: PosPackagingChecklistOrderType
+    itemName: string
+    isRequired: boolean
+    sortOrder: number
+    isActive: boolean
+  }[]
+}) {
+  const res = await apiFetchWithOffline('/api/savePosMenuPackagingChecklist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; saved?: number }>
+}
+
+export async function getPosPackagingChecklistByOrder(params: { orderId: number }) {
+  const q = new URLSearchParams()
+  q.set('orderId', String(params.orderId))
+  const res = await apiFetchWithOffline(`/api/getPosPackagingChecklistByOrder?${q.toString()}`)
+  return res.json() as Promise<{
+    success: boolean
+    schemaReady?: boolean
+    message?: string
+    orderType?: 'takeout' | 'delivery' | null
+    hasChecklist: boolean
+    groups: PosOrderPackagingChecklistGroup[]
+    unresolvedMappings: { orderItemId: string; itemName: string }[]
+  }>
 }
 
 export async function getNextPosMenuCode(mainCategory: string) {

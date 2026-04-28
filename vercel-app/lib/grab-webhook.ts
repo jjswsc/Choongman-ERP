@@ -190,7 +190,6 @@ export async function grabPartnerOauthTokenResponse(): Promise<Response> {
 export function grabStubMenuJson(merchantID: string, partnerMerchantID: string): unknown {
   const openAllDay = {
     openPeriodType: 'OpenAllDay' as const,
-    periods: [] as { startTime: string; endTime: string }[],
   }
   const serviceHours = {
     mon: openAllDay,

@@ -1,7 +1,7 @@
 'use client'
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useState, useEffect, useMemo, useRef, useCallback, type ComponentProps } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, type ComponentProps } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
@@ -720,32 +720,34 @@ export default function PosTerminalPage() {
       })
   }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pendingPayRequest) return
     if (!cartRef.current) return
     cartRef.current.openDineInPaymentFromOrder(pendingPayRequest)
     setPendingPayRequest(null)
   }, [pendingPayRequest])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pendingTakeoutPayRequest) return
     if (!cartRef.current) return
     cartRef.current.openTakeoutPaymentFromOrder({
       orderLabel: pendingTakeoutPayRequest.tableName,
       items: pendingTakeoutPayRequest.items,
+      existingOrderId: pendingTakeoutOrderId,
     })
     setPendingTakeoutPayRequest(null)
-  }, [pendingTakeoutPayRequest])
+  }, [pendingTakeoutPayRequest, pendingTakeoutOrderId])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pendingDeliveryPayRequest) return
     if (!cartRef.current) return
     cartRef.current.openDeliveryPaymentFromOrder({
       orderLabel: pendingDeliveryPayRequest.tableName,
       items: pendingDeliveryPayRequest.items,
+      existingOrderId: pendingDeliveryOrderId,
     })
     setPendingDeliveryPayRequest(null)
-  }, [pendingDeliveryPayRequest])
+  }, [pendingDeliveryPayRequest, pendingDeliveryOrderId])
 
   useEffect(() => {
     if (!currentStoreId) return
@@ -1079,9 +1081,13 @@ export default function PosTerminalPage() {
             status: 'cooking',
             ...(grabOrderId ? { grabState: 'ACCEPTED' } : {}),
           })
-          if (!res.success) {
+          const applied = Boolean(res.success || res.statusAlreadyApplied)
+          if (!applied) {
             await appAlert(res.message || (t('processFail') || '처리 실패'))
             return
+          }
+          if (!res.success && res.statusAlreadyApplied && res.message) {
+            await appAlert(res.message)
           }
           refetchStores({ scope: 'all' })
           setActiveTab('delivery')
@@ -1224,9 +1230,13 @@ export default function PosTerminalPage() {
           status: 'cancelled',
           ...(grabOrderId ? { grabState: 'CANCELLED' } : {}),
         })
-        if (!rejectRes.success) {
+        const rejectedApplied = Boolean(rejectRes.success || rejectRes.statusAlreadyApplied)
+        if (!rejectedApplied) {
           await appAlert(rejectRes.message || (t('processFail') || '처리 실패'))
           return
+        }
+        if (!rejectRes.success && rejectRes.statusAlreadyApplied && rejectRes.message) {
+          await appAlert(rejectRes.message)
         }
         if (grabOrderId) {
           await grabCancelOrderByStoreApi({
