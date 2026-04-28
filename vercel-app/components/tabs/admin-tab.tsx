@@ -38,11 +38,9 @@ import {
   type AttendanceNoRecordRow,
 } from "@/lib/api-client"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -464,6 +462,7 @@ export function AdminTab() {
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_in")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_out")}</th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_break_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_break_over_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_actual_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_planned_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                     <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3.5rem]">{t("att_adjust_late")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
@@ -546,6 +545,12 @@ export function AdminTab() {
                         <td className="px-2 py-2 text-center">{row.inTimeStr}</td>
                         <td className="px-2 py-2 text-center">{row.outTimeStr}</td>
                         <td className="px-2 py-2 text-center">{row.breakMin}</td>
+                        <td className={cn(
+                          "px-2 py-2 text-center tabular-nums",
+                          (row.breakOverMin ?? 0) > 0 ? "font-semibold text-red-600" : "text-muted-foreground"
+                        )}>
+                          {row.breakOverMin ?? 0}
+                        </td>
                         <td className="px-2 py-2 text-center">{row.actualWorkHrs}</td>
                         <td className="px-2 py-2 text-center">{row.plannedWorkHrs}</td>
                         <td className="px-2 py-2 text-center">
@@ -819,6 +824,12 @@ export function AdminTab() {
                       </td>
                       <td className="px-2 py-2 text-center tabular-nums whitespace-nowrap">{row.employeeCode || "-"}</td>
                       <td className="px-2 py-2 text-center">-</td>
+                      <td className={cn(
+                        "px-2 py-2 text-center tabular-nums",
+                        (row.breakOverMin ?? 0) > 0 ? "font-semibold text-red-600" : "text-muted-foreground"
+                      )}>
+                        {row.breakOverMin ?? 0}
+                      </td>
                       <td className="px-2 py-2 text-center">-</td>
                       <td className="px-2 py-2 text-center">-</td>
                       <td className="px-2 py-2 text-center">-</td>

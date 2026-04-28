@@ -1295,21 +1295,21 @@ function resolveThermalDeviceForHtmlPrintSync(opts) {
   const o = opts && typeof opts === "object" ? opts : {};
   const cfg = readRuntimeConfig();
   const p = cfg.print || {};
-  const legacyDefault = String(
+  const legacyDefault = normalizePrinterNameValue(
     process.env.WINDOWS_POS_PRINT_DEVICE ?? cfg.printDeviceName ?? p.deviceName ?? ""
-  ).trim();
-  const receiptDev = String(p.receiptDeviceName || "").trim() || legacyDefault;
+  );
+  const receiptDev = normalizePrinterNameValue(p.receiptDeviceName || "") || legacyDefault;
 
-  const explicit = String(o.deviceName || "").trim();
+  const explicit = normalizePrinterNameValue(o.deviceName || "");
   if (explicit) return explicit;
 
   if (o.printRole === "kitchen") {
     const stRaw = o.kitchenStation != null ? Number(o.kitchenStation) : 1;
     const st = Math.min(3, Math.max(1, Number.isFinite(stRaw) ? stRaw : 1));
-    const k1 = String(p.kitchen1DeviceName || "").trim();
-    const k2 = String(p.kitchen2DeviceName || "").trim();
-    const k3 = String(p.kitchen3DeviceName || "").trim();
-    const kAny = String(p.kitchenDeviceName || "").trim();
+    const k1 = normalizePrinterNameValue(p.kitchen1DeviceName || "");
+    const k2 = normalizePrinterNameValue(p.kitchen2DeviceName || "");
+    const k3 = normalizePrinterNameValue(p.kitchen3DeviceName || "");
+    const kAny = normalizePrinterNameValue(p.kitchenDeviceName || "");
     const slot = st === 2 ? k2 : st === 3 ? k3 : k1;
     return slot || kAny || receiptDev;
   }
@@ -1364,7 +1364,10 @@ function getPrintConfigSnapshotForIpc() {
 
 function normalizePrinterNameValue(value) {
   if (value === null || value === undefined) return "";
-  return String(value).trim();
+  const s = String(value).trim();
+  // 점검 UI에서 미지정 값을 "-"로 두는 경우가 있어 실제 프린터명 저장/사용 시 실패를 유발함
+  if (!s || s === "-" || s === "—") return "";
+  return s;
 }
 
 /**

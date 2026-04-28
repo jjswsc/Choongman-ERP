@@ -4,6 +4,7 @@ import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 import {
   attendanceStoreNamePostgrestFilter,
   employeeStorePostgrestFilter,
+  parsePlanToMinutes,
 } from '@/lib/attendance-utils'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { requireAuth } from '@/lib/verify-auth'
@@ -50,12 +51,9 @@ function parsePlanToDate(dateStr: string, planVal: string): Date | null {
 
 function calcBreakMin(breakStart: string, breakEnd: string): number {
   if (!breakStart || !breakEnd) return 0
-  const m1 = breakStart.trim().match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
-  const m2 = breakEnd.trim().match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
-  if (!m1 || !m2) return 0
-  const bs = parseInt(m1[1], 10) * 60 + parseInt(m1[2], 10)
-  const be = parseInt(m2[1], 10) * 60 + parseInt(m2[2], 10)
-  return Math.max(0, be - bs)
+  const bs = parsePlanToMinutes(breakStart)
+  const be = parsePlanToMinutes(breakEnd)
+  return be > bs ? Math.max(0, be - bs) : 0
 }
 
 export async function POST(request: NextRequest) {

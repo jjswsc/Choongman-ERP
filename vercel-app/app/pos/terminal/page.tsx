@@ -2167,15 +2167,14 @@ export default function PosTerminalPage() {
       if (!payment || !currentStoreId) return
       const cashAmt = Math.max(0, Number(payment.paymentCash || 0))
       if (cashAmt <= 0) return
-      // drawerOpenOption=force 는 '수동 강제 열기'용 — 결제 자동 오픈과 섞이지 않게 payment_auto 에서는 사용하지 않음
-      const optionForAutoPayment: 'password_and_reason' | 'reason_only' =
-        drawerOpenOption === 'force' ? 'reason_only' : drawerOpenOption
+      // force 는 "수동 강제 열기 전용"으로 간주: 자동 결제 오픈은 수행하지 않음
+      if (drawerOpenOption === 'force') return
       const res = await openPosCashDrawer({
         reason: 'cash_payment',
         source: 'payment_auto',
         storeCode: currentStoreId,
         userName: auth?.user || '',
-        drawerOpenOption: optionForAutoPayment,
+        drawerOpenOption,
       })
       if (!res.success && !drawerOpenWarnedRef.current) {
         drawerOpenWarnedRef.current = true

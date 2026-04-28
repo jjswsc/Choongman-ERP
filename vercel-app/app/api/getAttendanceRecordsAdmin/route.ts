@@ -7,6 +7,7 @@ import {
 import {
   attendanceStoreNamePostgrestFilter,
   bangkokDateRangeToUtc,
+  parsePlanToMinutes,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
   scheduleDateKey,
@@ -60,6 +61,18 @@ function getBangkokHour(iso: string): number {
   return parseInt(str, 10) || 0
 }
 
+/** log_at(ISO) → 방콕 기준 분(minute of day) 0~1439 */
+function getBangkokMinuteOfDay(iso: string): number {
+  if (!iso) return 0
+  const d = new Date(iso)
+  const hh = d.toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false })
+  const mm = d.toLocaleTimeString('en-US', { timeZone: TZ, minute: '2-digit', hour12: false })
+  const h = parseInt(hh, 10)
+  const m = parseInt(mm, 10)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0
+  return Math.max(0, Math.min(23, h)) * 60 + Math.max(0, Math.min(59, m))
+}
+
 /** Mr./Ms./Mrs./Miss 접두어 제거 - 스케줄·근태 이름 매칭용 */
 function normalizeNameForSchedule(name: string): string {
   return normalizeEmployeeNameForGradeMatch(name)
@@ -74,6 +87,7 @@ export interface AttendanceDailyRow {
   inTimeStr: string
   outTimeStr: string
   breakMin: number
+  breakOverMin: number
   actualWorkHrs: number
   plannedWorkHrs: number
   diffMin: number
@@ -672,18 +686,32 @@ export async function GET(request: NextRequest) {
       const plannedWorkMin = sch
         ? plannedWorkMinutesFromPlans(planIn, planOut, planBS, planBE, planInPrevDay)
         : 0
+      const plannedBreakMin =
+        sch && parsePlanToMinutes(planBE) > parsePlanToMinutes(planBS)
+          ? Math.max(0, parsePlanToMinutes(planBE) - parsePlanToMinutes(planBS))
+          : 0
       const plannedWorkHrs = Math.round((plannedWorkMin / 60) * 100) / 100
       const actualWorkHrs = actualWorkMin / 60
       const diffMin = Math.round(actualWorkMin - plannedWorkMin)
+      const breakOverMin = Math.max(0, Math.round(breakMinForRow - plannedBreakMin))
 
       const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
       const isPending = inIdForRow != null || outIdForRow != null
       const outAppr = String(outApprovedForRow || '').trim()
       const approvedOut = outAppr === '승인완료' || outAppr === '승인'
       const statusStr = String(statusForRow || '').trim()
+      const hasLateAdjustment = hasMetricAdjustment(inLogIdForRow ?? null, 'late_min')
       // 실제 근무시간이 0이면 지각 의미 없음. 늦게 퇴근해 diff>0이어도 출근 지각 분은 별도 유지(OT와 상쇄하지 않음)
       const rawLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
-      const effectiveLateMin = rawLateMin
+      const planInMin = parsePlanToMinutes(planIn)
+      const inMinuteOfDay = getBangkokMinuteOfDay(inTimeForRow)
+      const lateFromPlan =
+        plannedWorkMin > 0 && planInMin > 0
+          ? Math.max(0, inMinuteOfDay - planInMin)
+          : 0
+      // DB late_min이 0/미설정이면서 조정 이력도 없으면, 스케줄 plan_in 기준으로 지각분을 보정.
+      const effectiveLateMin =
+        rawLateMin > 0 || hasLateAdjustment ? rawLateMin : lateFromPlan
       // 조퇴 기본값은 "총 부족분 - 지각분"으로 산출해 지각이 조퇴 칸으로 중복 집계되지 않게 한다.
       const computedEarlyMin =
         plannedWorkMin > 0 && diffMin < 0
@@ -769,6 +797,7 @@ export async function GET(request: NextRequest) {
         inTimeStr: sameMinute ? toTimeStrWithSec(inTimeForRow) : inStr,
         outTimeStr: outTimeForRow ? (sameMinute ? toTimeStrWithSec(outTimeForRow) : outStr) : '-',
         breakMin: breakMinForRow,
+        breakOverMin,
         actualWorkHrs: Math.round(actualWorkHrs * 100) / 100,
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,

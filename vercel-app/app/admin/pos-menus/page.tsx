@@ -603,8 +603,8 @@ export default function PosMenusPage() {
       }
       const next = (res.items || []).map((it: PosMenuPackagingCheckItem) => ({
         localId: `db-${it.id}`,
-        optionId: it.optionId ? String(it.optionId) : "",
-        orderType: (it.orderType || "both") as PosPackagingChecklistOrderType,
+        optionId: "",
+        orderType: "both" as PosPackagingChecklistOrderType,
         itemName: String(it.itemName || ""),
         isRequired: it.isRequired !== false,
         sortOrder: Number(it.sortOrder ?? 0) || 0,
@@ -640,8 +640,8 @@ export default function PosMenusPage() {
     try {
       const payload = packagingChecklistRows
         .map((row, idx) => ({
-          optionId: row.optionId.trim() || null,
-          orderType: row.orderType,
+          optionId: null,
+          orderType: "both" as PosPackagingChecklistOrderType,
           itemName: row.itemName.trim(),
           isRequired: row.isRequired,
           sortOrder: idx,
@@ -1889,9 +1889,6 @@ export default function PosMenusPage() {
                         <TabsTrigger value="options" className={adminTabsTriggerCn}>
                           {t("posFormTabOptions") || "옵션"}
                         </TabsTrigger>
-                        <TabsTrigger value="cost" className={adminTabsTriggerCn}>
-                          {t("posFormTabCost") || "원가"}
-                        </TabsTrigger>
                         <TabsTrigger value="description" className={adminTabsTriggerCn}>
                           {t("posFormTabDescription") || "설명"}
                         </TabsTrigger>
@@ -2050,6 +2047,35 @@ export default function PosMenusPage() {
                       )
                       })()}
                       <Button variant="outline" size="sm" className="mt-2 text-xs" onClick={() => { setFormTab("options"); setMainTab("optionsConfig"); setOptionsConfigSelectedMenuId(editingId); }}>{t("posMenuTabOptionsConfig") || "옵션 구성"}</Button>
+                    </div>
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-xs text-muted-foreground">{t("posMenuCostRatio") || "최종 원가율"}</span>
+                          <span className="ml-2 text-lg font-bold text-amber-600">
+                            {baseMenuCost != null && (Number(formData.price) || 0) > 0
+                              ? `${((baseMenuCost / (Number(formData.price) || 1)) * 100).toFixed(1)}%`
+                              : "-"}
+                          </span>
+                        </div>
+                        {editingId && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
+                            onClick={() => {
+                              const qs = new URLSearchParams({
+                                menuId: editingId,
+                                menuCode: formData.code || "",
+                              })
+                              window.location.href = `/admin/pos-cost-analysis?${qs.toString()}`
+                            }}
+                          >
+                            {t("posMenuCostAnalysisShortcut") || "원가 분석 바로가기"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </TabsContent>
                   <TabsContent value="options" className="mt-4">
@@ -2350,14 +2376,9 @@ export default function PosMenusPage() {
                   <TabsContent value="packagingChecklist" className="mt-4 space-y-3">
                     <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="text-xs font-semibold">
-                            {t("posPackagingChecklistTitle") || "포장 체크리스트"}
-                          </h4>
-                          <p className="text-[11px] text-muted-foreground">
-                            {t("posPackagingChecklistAdminHint") || "포장/배달 완료 전에 확인할 항목을 메뉴·옵션별로 관리합니다."}
-                          </p>
-                        </div>
+                        <h4 className="text-xs font-semibold">
+                          {t("posPackagingChecklistTitle") || "포장 체크리스트"}
+                        </h4>
                         <div className="flex items-center gap-2">
                           <Button
                             type="button"
@@ -2367,7 +2388,7 @@ export default function PosMenusPage() {
                             onClick={() => setPackagingChecklistRows((prev) => [...prev, newPackagingChecklistRow(prev.length)])}
                           >
                             <Plus className="mr-1 h-3.5 w-3.5" />
-                            {t("add") || "추가"}
+                            {t("posPackagingChecklistAddRow") || "항목 추가"}
                           </Button>
                           <Button
                             type="button"
@@ -2387,11 +2408,11 @@ export default function PosMenusPage() {
                           {t("posPackagingChecklistEmpty") || "등록된 체크 항목이 없습니다. [추가]로 첫 항목을 만드세요."}
                         </p>
                       ) : (
-                        <div className="space-y-2">
-                          {packagingChecklistRows.map((row, idx) => (
-                            <div key={row.localId} className="grid grid-cols-12 gap-2 rounded-md border bg-background p-2">
-                              <div className="col-span-12 md:col-span-4">
-                                <label className="mb-1 block text-[11px] font-semibold">{t("itemName") || "항목명"}</label>
+                        <div className="divide-y rounded-md border bg-background">
+                          {packagingChecklistRows.map((row) => (
+                            <div key={row.localId} className="grid grid-cols-12 gap-2 p-2 md:items-end">
+                              <div className="col-span-12 md:col-span-8">
+                                <label className="mb-1 block text-[11px] font-semibold">{t("posPackagingChecklistColItemName") || "항목명"}</label>
                                 <Input
                                   className="h-8 text-xs"
                                   value={row.itemName}
@@ -2399,51 +2420,29 @@ export default function PosMenusPage() {
                                   placeholder={t("posPackagingChecklistItemNamePh") || "예: 소스컵 2개"}
                                 />
                               </div>
-                              <div className="col-span-6 md:col-span-3">
-                                <label className="mb-1 block text-[11px] font-semibold">{t("option") || "옵션"}</label>
-                                <Select
-                                  value={row.optionId || "__menu__"}
-                                  onValueChange={(v) => handlePackagingChecklistRowPatch(row.localId, { optionId: v === "__menu__" ? "" : v })}
-                                >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__menu__">{t("posPackagingChecklistMenuCommon") || "메뉴 공통"}</SelectItem>
-                                    {menuOptions.map((opt) => (
-                                      <SelectItem key={opt.id} value={opt.id}>
-                                        {optionPartLabel(opt.name)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                              <div className="col-span-6 md:col-span-4">
+                                <label className="mb-1 block text-[11px] font-semibold">{t("posPackagingChecklistMenuCommon") || "메뉴 공통"}</label>
+                                <div className="h-8 rounded-md border bg-muted/40 px-2 text-xs text-muted-foreground flex items-center">
+                                  {t("posPackagingChecklistMenuCommon") || "메뉴 공통"}
+                                </div>
                               </div>
-                              <div className="col-span-6 md:col-span-2">
-                                <label className="mb-1 block text-[11px] font-semibold">{t("applyTo") || "적용"}</label>
-                                <Select
-                                  value={row.orderType}
-                                  onValueChange={(v) => handlePackagingChecklistRowPatch(row.localId, { orderType: v as PosPackagingChecklistOrderType })}
-                                >
-                                  <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="both">{t("posPackagingChecklistBoth") || "포장+배달"}</SelectItem>
-                                    <SelectItem value="takeout">{t("posOrderTypeTakeout") || "포장"}</SelectItem>
-                                    <SelectItem value="delivery">{t("posOrderTypeDelivery") || "배달"}</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="col-span-6 md:col-span-2">
-                                <label className="mb-1 block text-[11px] font-semibold">{t("sortOrder") || "순서"}</label>
-                                <Input
-                                  type="number"
-                                  className="h-8 text-xs text-right"
-                                  value={row.sortOrder}
-                                  onChange={(e) => handlePackagingChecklistRowPatch(row.localId, { sortOrder: Number(e.target.value) || 0 })}
-                                />
-                              </div>
-                              <div className="col-span-6 md:col-span-1 flex items-end justify-end gap-1">
+                              <div className="col-span-12 flex items-center justify-between gap-2 text-xs">
+                                <div className="flex items-center gap-4">
+                                  <label className="inline-flex items-center gap-2">
+                                    <Checkbox
+                                      checked={row.isRequired}
+                                      onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isRequired: v === true })}
+                                    />
+                                    <span>{t("posRequired") || "필수 항목"}</span>
+                                  </label>
+                                  <label className="inline-flex items-center gap-2">
+                                    <Checkbox
+                                      checked={row.isActive}
+                                      onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isActive: v === true })}
+                                    />
+                                    <span>{t("use") || "사용"}</span>
+                                  </label>
+                                </div>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -2454,23 +2453,6 @@ export default function PosMenusPage() {
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
-                              </div>
-                              <div className="col-span-12 flex items-center gap-4 text-xs">
-                                <label className="inline-flex items-center gap-2">
-                                  <Checkbox
-                                    checked={row.isRequired}
-                                    onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isRequired: v === true })}
-                                  />
-                                  <span>{t("posRequired") || "필수 항목"}</span>
-                                </label>
-                                <label className="inline-flex items-center gap-2">
-                                  <Checkbox
-                                    checked={row.isActive}
-                                    onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isActive: v === true })}
-                                  />
-                                  <span>{t("useYn") || "사용"}</span>
-                                </label>
-                                <span className="ml-auto text-muted-foreground">#{idx + 1}</span>
                               </div>
                             </div>
                           ))}

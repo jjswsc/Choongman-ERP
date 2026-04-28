@@ -39,6 +39,7 @@ export interface AttendanceNoRecordRow {
   inTimeStr: string
   outTimeStr: string
   breakMin: number
+  breakOverMin: number
   planIn: string
   planOut: string
   breakStart: string
@@ -246,6 +247,7 @@ export async function GET(request: NextRequest) {
         inTimeStr: planIn,
         outTimeStr: planOut,
         breakMin,
+        breakOverMin: 0,
         planIn,
         planOut,
         breakStart: planBS,

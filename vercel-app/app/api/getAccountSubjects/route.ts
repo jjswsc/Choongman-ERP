@@ -3,10 +3,6 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-function norm(v: string): string {
-  return String(v || '').trim().toLowerCase().replace(/\s+/g, '')
-}
-
 /** 계정과목 목록 조회 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -111,9 +107,21 @@ export async function GET(request: NextRequest) {
         const code = String(x.code || '').trim()
         // 매입: 식품원재료(5111), 포장재(5112)만 (코드 고정)
         const isAllowedCost = x.pAndLSection === 'cost' && (code === '5111' || code === '5112')
-        // 비용: 소모품비(5521)만 (코드 고정)
-        const isAllowedExpense = x.pAndLSection === 'expense' && code === '5521'
+        // 비용: 소모품비(5521), 잡비(5520)만 (코드 고정)
+        const isAllowedExpense = x.pAndLSection === 'expense' && (code === '5521' || code === '5520')
         return isAllowedCost || isAllowedExpense
+      })
+      // 품목 화면에서는 고정 코드 계정명을 표준 라벨로 노출한다.
+      // (기존 DB에 남아있는 과거 영문명 예: 5521=Service costs 정리)
+      list = list.map((x) => {
+        const code = String(x.code || '').trim()
+        if (code === '5521') {
+          return { ...x, name: '소모품비', nameEn: 'Supplies Expense' }
+        }
+        if (code === '5520') {
+          return { ...x, name: '기타경비', nameEn: 'Misc Expense' }
+        }
+        return x
       })
     }
 

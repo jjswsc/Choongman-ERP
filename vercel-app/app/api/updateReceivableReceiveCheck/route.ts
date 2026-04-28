@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '해당 미수금 내역을 찾을 수 없습니다.' }, { headers })
     }
     const rt = String(row.ref_type || '')
-    if (rt !== 'Order' && rt !== 'ForceOutbound') {
+    if (rt !== 'Order' && rt !== 'ForceOutbound' && rt !== 'AccountingPO') {
       return NextResponse.json(
-        { success: false, message: '주문 또는 강제출고(미수) 행만 수금 확인을 변경할 수 있습니다.' },
+        { success: false, message: '주문·강제출고·회계발주(미수) 행만 수금 확인을 변경할 수 있습니다.' },
         { headers }
       )
     }

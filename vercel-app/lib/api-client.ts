@@ -1347,6 +1347,7 @@ export interface AttendanceNoRecordRow {
   inTimeStr: string
   outTimeStr: string
   breakMin: number
+  breakOverMin?: number
   planIn: string
   planOut: string
   breakStart: string
@@ -1414,6 +1415,7 @@ export interface AttendanceDailyRow {
   inTimeStr: string
   outTimeStr: string
   breakMin: number
+  breakOverMin?: number
   actualWorkHrs: number
   plannedWorkHrs: number
   diffMin: number

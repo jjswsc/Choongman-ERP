@@ -70,6 +70,7 @@ INSERT INTO public.account_subjects
 VALUES
   ('5111', '식품원재료', 'Food Raw Materials', 'expense', 'cost', 91, 'pl', 'debit', FALSE),
   ('5112', '포장재', 'Packaging Materials', 'expense', 'cost', 92, 'pl', 'debit', FALSE),
+  ('5520', '기타경비', 'Misc Expense', 'expense', 'expense', 149, 'pl', 'debit', FALSE),
   ('5521', '소모품비', 'Supplies Expense', 'expense', 'expense', 150, 'pl', 'debit', FALSE)
 ON CONFLICT (code) DO UPDATE
 SET

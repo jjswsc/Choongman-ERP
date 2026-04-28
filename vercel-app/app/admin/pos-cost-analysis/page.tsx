@@ -51,6 +51,7 @@ import {
   isCostAnalysisBaseRow,
   posCostAnalysisRowKey,
 } from "@/lib/pos-cost-analysis-keys"
+import { useSearchParams } from "next/navigation"
 
 const MISE_RATE_DEFAULT = 3
 
@@ -105,6 +106,7 @@ function formatCookingTimeList(v: number | null | undefined): string {
 }
 
 export default function PosCostAnalysisPage() {
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
@@ -121,6 +123,7 @@ export default function PosCostAnalysisPage() {
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
   const [listSort, setListSort] = React.useState<{ key: PosCostListSortKey; dir: "asc" | "desc" } | null>(null)
   const searchInputRef = React.useRef<HTMLInputElement>(null)
+  const initialDeepLinkHandledRef = React.useRef(false)
   const allowed = canAccessPosCostAnalysis(auth?.role || "")
 
   const setListSortKey = React.useCallback((key: PosCostListSortKey) => {
@@ -170,6 +173,35 @@ export default function PosCostAnalysisPage() {
   const loadList = React.useCallback(() => {
     void refreshRows()
   }, [refreshRows])
+
+  React.useEffect(() => {
+    if (initialDeepLinkHandledRef.current) return
+    if (!allowed) return
+    const focusMenuId = (searchParams.get("menuId") || "").trim()
+    const focusMenuCode = (searchParams.get("menuCode") || "").trim().toLowerCase()
+    if (!focusMenuId && !focusMenuCode) {
+      initialDeepLinkHandledRef.current = true
+      return
+    }
+    initialDeepLinkHandledRef.current = true
+    if (focusMenuCode) {
+      setSearchTerm((prev) => prev || focusMenuCode.toUpperCase())
+    }
+    void refreshRows().then((arr) => {
+      const source = Array.isArray(arr) ? arr : []
+      const baseRow = source.find((r) => {
+        if (!isCostAnalysisBaseRow(r)) return false
+        if (focusMenuId && String(r.menuId) === focusMenuId) return true
+        return focusMenuCode ? String(r.menuCode || "").trim().toLowerCase() === focusMenuCode : false
+      })
+      if (!baseRow) return
+      setSelectedForCalculator({
+        ...baseRow,
+        breakdown: Array.isArray(baseRow.breakdown) ? baseRow.breakdown : [],
+      })
+      setActiveTab("calculator")
+    })
+  }, [allowed, refreshRows, searchParams])
 
   const categories = React.useMemo(() => {
     const set = new Set(rows.map((r) => r.category).filter(Boolean))

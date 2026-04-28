@@ -17,8 +17,10 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import {
   getPosDeliveryApps,
+  getGrabStoreIntegrations,
   savePosDeliveryApps,
   useStoreList,
+  type GrabStoreIntegrationSnapshot,
   type PosDeliveryApp,
 } from '@/lib/api-client'
 import { isOfficeRole } from '@/lib/permissions'
@@ -39,6 +41,16 @@ export function PosDeliveryAppsContent() {
   const [saving, setSaving] = React.useState(false)
   const [items, setItems] = React.useState<PosDeliveryApp[]>([])
   const [includeDisabled, setIncludeDisabled] = React.useState(true)
+  const [grabLoading, setGrabLoading] = React.useState(false)
+  const [grabActionLoading, setGrabActionLoading] = React.useState(false)
+  const [grabIntegrations, setGrabIntegrations] = React.useState<GrabStoreIntegrationSnapshot[]>([])
+  const [selectedGrabMerchantID, setSelectedGrabMerchantID] = React.useState('')
+  const [grabLastActionLog, setGrabLastActionLog] = React.useState<{
+    action: 'status' | 'menu_refresh'
+    ok: boolean
+    message: string
+    at: string
+  } | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || '')
 
@@ -61,6 +73,33 @@ export function PosDeliveryAppsContent() {
   React.useEffect(() => {
     loadData()
   }, [loadData])
+
+  const loadGrabIntegrations = React.useCallback(async () => {
+    setGrabLoading(true)
+    try {
+      const rows = await getGrabStoreIntegrations({ status: 'ACTIVE', limit: 200 })
+      const deduped = Array.from(
+        new Map(rows.map((r) => [String(r.grabMerchantID || '').trim(), r])).values()
+      ).filter((r) => String(r.grabMerchantID || '').trim())
+      setGrabIntegrations(deduped)
+      if (!selectedGrabMerchantID && deduped[0]?.grabMerchantID) {
+        setSelectedGrabMerchantID(String(deduped[0].grabMerchantID))
+      } else if (
+        selectedGrabMerchantID &&
+        !deduped.some((r) => String(r.grabMerchantID || '').trim() === selectedGrabMerchantID)
+      ) {
+        setSelectedGrabMerchantID(String(deduped[0]?.grabMerchantID || ''))
+      }
+    } catch {
+      setGrabIntegrations([])
+    } finally {
+      setGrabLoading(false)
+    }
+  }, [selectedGrabMerchantID])
+
+  React.useEffect(() => {
+    void loadGrabIntegrations()
+  }, [loadGrabIntegrations])
 
   const updateItem = (index: number, patch: Partial<PosDeliveryApp>) => {
     setItems((prev) => {
@@ -164,6 +203,93 @@ export function PosDeliveryAppsContent() {
   const deliveryCopyTarget = canSearchAll ? (storeCode?.trim() || '') : String(auth?.store || '').trim()
   const showStoreCopy =
     Boolean(deliveryCopyTarget) && stores.filter((s) => s && s !== deliveryCopyTarget).length > 0
+  const selectedGrabIntegration = React.useMemo(
+    () =>
+      grabIntegrations.find(
+        (r) => String(r.grabMerchantID || '').trim() === String(selectedGrabMerchantID || '').trim()
+      ) || null,
+    [grabIntegrations, selectedGrabMerchantID]
+  )
+
+  const handleGrabStoreStatus = React.useCallback(async () => {
+    const merchantID = String(selectedGrabMerchantID || '').trim()
+    if (!merchantID) {
+      await appAlert(tr('posDeliveryGrabMerchantRequired', 'Grab 매장을 먼저 선택해 주세요.'))
+      return
+    }
+    setGrabActionLoading(true)
+    try {
+      const res = await fetch(`/api/grab/getStoreStatus?merchantID=${encodeURIComponent(merchantID)}`, {
+        method: 'GET',
+      })
+      const json = (await res.json()) as { success?: boolean; data?: { isOpen?: boolean; closeReason?: string }; message?: string }
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.message || `HTTP ${res.status}`)
+      }
+      const isOpen = Boolean(json?.data?.isOpen)
+      const closeReason = String(json?.data?.closeReason || '').trim()
+      setGrabLastActionLog({
+        action: 'status',
+        ok: true,
+        message: isOpen
+          ? tr('posDeliveryGrabStatusOpen', 'Grab 매장 상태: 영업 중')
+          : `${tr('posDeliveryGrabStatusClosed', 'Grab 매장 상태: 휴점')}${closeReason ? ` (${closeReason})` : ''}`,
+        at: new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok', hour12: false }),
+      })
+      await appAlert(
+        isOpen
+          ? tr('posDeliveryGrabStatusOpen', 'Grab 매장 상태: 영업 중')
+          : `${tr('posDeliveryGrabStatusClosed', 'Grab 매장 상태: 휴점')}${closeReason ? ` (${closeReason})` : ''}`
+      )
+    } catch (e) {
+      setGrabLastActionLog({
+        action: 'status',
+        ok: false,
+        message: String(e),
+        at: new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok', hour12: false }),
+      })
+      await appAlert(String(e))
+    } finally {
+      setGrabActionLoading(false)
+    }
+  }, [selectedGrabMerchantID, tr])
+
+  const handleGrabMenuRefresh = React.useCallback(async () => {
+    const merchantID = String(selectedGrabMerchantID || '').trim()
+    if (!merchantID) {
+      await appAlert(tr('posDeliveryGrabMerchantRequired', 'Grab 매장을 먼저 선택해 주세요.'))
+      return
+    }
+    setGrabActionLoading(true)
+    try {
+      const res = await fetch('/api/grab/updateMenuNotification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ merchantID }),
+      })
+      const json = (await res.json()) as { success?: boolean; message?: string }
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.message || `HTTP ${res.status}`)
+      }
+      setGrabLastActionLog({
+        action: 'menu_refresh',
+        ok: true,
+        message: tr('posDeliveryGrabMenuRefreshRequested', 'Grab 메뉴 갱신 요청을 보냈습니다.'),
+        at: new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok', hour12: false }),
+      })
+      await appAlert(tr('posDeliveryGrabMenuRefreshRequested', 'Grab 메뉴 갱신 요청을 보냈습니다.'))
+    } catch (e) {
+      setGrabLastActionLog({
+        action: 'menu_refresh',
+        ok: false,
+        message: String(e),
+        at: new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok', hour12: false }),
+      })
+      await appAlert(String(e))
+    } finally {
+      setGrabActionLoading(false)
+    }
+  }, [selectedGrabMerchantID, tr])
 
   return (
     <div className="space-y-4">
@@ -231,6 +357,81 @@ export function PosDeliveryAppsContent() {
             )}
           </p>
         )}
+      </div>
+
+      <div className="rounded-xl border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold">
+            {tr('posDeliveryGrabOpsTitle', 'Grab 운영')}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={() => void loadGrabIntegrations()}
+            disabled={grabLoading || grabActionLoading}
+          >
+            <RotateCw className={cn('h-4 w-4', grabLoading && 'animate-spin')} />
+            {tr('posRefresh', '새로고침')}
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={selectedGrabMerchantID || '__none__'} onValueChange={(v) => setSelectedGrabMerchantID(v === '__none__' ? '' : v)}>
+            <SelectTrigger className="h-9 w-[240px]">
+              <SelectValue placeholder={tr('posDeliveryGrabMerchantSelect', 'Grab 매장 선택')} />
+            </SelectTrigger>
+            <SelectContent>
+              {grabIntegrations.length === 0 ? (
+                <SelectItem value="__none__">{tr('posDeliveryGrabMerchantEmpty', '연동된 Grab 매장 없음')}</SelectItem>
+              ) : (
+                grabIntegrations.map((row) => {
+                  const merchantID = String(row.grabMerchantID || '').trim()
+                  const partnerID = String(row.partnerMerchantID || '').trim()
+                  return (
+                    <SelectItem key={merchantID} value={merchantID}>
+                      {partnerID ? `${merchantID} (파트너 ${partnerID})` : merchantID}
+                    </SelectItem>
+                  )
+                })
+              )}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => void handleGrabStoreStatus()}
+            disabled={grabActionLoading || !selectedGrabMerchantID}
+          >
+            {tr('posDeliveryGrabCheckStoreStatus', '상태 확인')}
+          </Button>
+          <Button
+            size="sm"
+            className="h-9"
+            onClick={() => void handleGrabMenuRefresh()}
+            disabled={grabActionLoading || !selectedGrabMerchantID}
+          >
+            {tr('posDeliveryGrabMenuRefresh', '메뉴 갱신 요청')}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {selectedGrabIntegration
+            ? `${tr('posDeliveryGrabSelectedPartner', '선택 파트너 매장')}: ${selectedGrabIntegration.partnerMerchantID || '-'}`
+            : tr('posDeliveryGrabOpsHint', '연동된 Grab 매장을 선택한 뒤 상태 확인 또는 메뉴 갱신 요청을 실행하세요.')}
+        </p>
+        {grabLastActionLog ? (
+          <div
+            className={cn(
+              'rounded-md border px-3 py-2 text-xs',
+              grabLastActionLog.ok
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                : 'border-red-300 bg-red-50 text-red-900'
+            )}
+          >
+            [{grabLastActionLog.at}] {grabLastActionLog.action === 'status' ? '상태 확인' : '메뉴 갱신'} ·{' '}
+            {grabLastActionLog.ok ? '성공' : '실패'} · {grabLastActionLog.message}
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-xl border bg-card p-4 space-y-4">
@@ -353,6 +554,7 @@ export function PosDeliveryAppsContent() {
           {tr('posDeliveryAppsGuide', '인식 키워드: 주문 라벨(customerName, orderNo, memo)에 포함되면 해당 배달앱으로 인식됩니다. 매장결제 노출: 테이블 결제 시 "배달앱 결제" 옵션에 표시됩니다.')}
         </p>
       </div>
+
     </div>
   )
 }

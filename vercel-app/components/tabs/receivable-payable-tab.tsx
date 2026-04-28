@@ -173,7 +173,7 @@ export function ReceivablePayableTab() {
       row: NonNullable<ReceivablePayableItem["items"]>[number],
       recItem: ReceivablePayableItem
     ) => {
-      let refType: "Order" | "ForceOutbound" | null = null
+      let refType: "Order" | "ForceOutbound" | "PO" | null = null
       let refId: number | null = null
       if (row.ref_type === "Order") {
         if (!row.receive_checked) return
@@ -192,12 +192,24 @@ export function ReceivablePayableTab() {
         }
         refType = "ForceOutbound"
         refId = sid
+      } else if (row.ref_type === "AccountingPO") {
+        if (!row.receive_checked) return
+        const poId = Number(row.ref_id)
+        if (!Number.isFinite(poId) || poId <= 0) {
+          await appAlert(tt("recTaxInvoiceNoPoId", "Cannot identify accounting PO."))
+          return
+        }
+        refType = "PO"
+        refId = poId
       } else {
         return
       }
 
-      const loadKey =
-        refType === "Order" ? `tax-${row.id ?? refId}` : `tax-fo-${row.id ?? refId}`
+      const loadKey = refType === "Order"
+        ? `tax-${row.id ?? refId}`
+        : refType === "ForceOutbound"
+          ? `tax-fo-${row.id ?? refId}`
+          : `tax-apo-${row.id ?? refId}`
       setTaxInvoiceLoadingKey(loadKey)
       try {
         const targetLabel = String(recItem.storeName || recItem.vendorName || "").trim()
@@ -881,7 +893,7 @@ export function ReceivablePayableTab() {
                       : "")
             : ""
         const receiveCheckCell = isRec
-          ? row.ref_type === "Order" || row.ref_type === "ForceOutbound"
+          ? row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO"
             ? ((row as { receive_checked?: boolean }).receive_checked
               ? (t("recCheckPaid") || "Collected")
               : (t("recCheckWait") || "Pending"))
@@ -1028,7 +1040,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
                           {isRec && (
                             <td className="py-1 px-2 text-center text-xs">
-                              {row.ref_type === "Order" || row.ref_type === "ForceOutbound"
+                              {row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO"
                                 ? (row.receive_checked ? (t("recCheckPaid") || "Collected") : (t("recCheckWait") || "Pending"))
                                 : "—"}
                             </td>
@@ -1271,7 +1283,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recLinesLoading = loadingItemsFor === recRowKey
                                     const recLineColSpan = 9 + (showRecSyncBtn ? 1 : 0)
                                     const canEditReceiveCheck =
-                                      (row.ref_type === "Order" || row.ref_type === "ForceOutbound") &&
+                                      (row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO") &&
                                       row.id != null &&
                                       canUpdateReceivableReceiveCheck(
                                         auth?.role || "",
@@ -1360,7 +1372,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         </span>
                                       </td>
                                       <td className="py-1.5 px-2 w-[108px] text-center align-middle">
-                                        {(row.ref_type === "Order" || row.ref_type === "ForceOutbound") && row.id != null ? (
+                                        {(row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO") && row.id != null ? (
                                           <div className="flex flex-col items-center gap-0.5">
                                             <Checkbox
                                               checked={!!row.receive_checked}
@@ -1392,7 +1404,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </td>
                                       <td className="py-1.5 px-1 w-[72px] text-center align-middle">
                                         {((row.ref_type === "Order" && row.receive_checked && rowOrderId != null) ||
-                                          (row.ref_type === "ForceOutbound" && rowForceLogId != null)) ? (
+                                          (row.ref_type === "ForceOutbound" && rowForceLogId != null) ||
+                                          (row.ref_type === "AccountingPO" && row.receive_checked && row.ref_id != null)) ? (
                                           <Button
                                             type="button"
                                             variant="ghost"
@@ -1409,7 +1422,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             {taxInvoiceLoadingKey ===
                                             (row.ref_type === "Order"
                                               ? `tax-${row.id ?? rowOrderId}`
-                                              : `tax-fo-${row.id ?? rowForceLogId}`) ? (
+                                              : row.ref_type === "ForceOutbound"
+                                                ? `tax-fo-${row.id ?? rowForceLogId}`
+                                                : `tax-apo-${row.id ?? row.ref_id}`) ? (
                                               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                             ) : (
                                               <FileText className="h-4 w-4" />

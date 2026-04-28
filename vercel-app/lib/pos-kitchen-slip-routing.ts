@@ -4,8 +4,7 @@ import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
  * 주방 주문서 분할
  * - kitchenMode: 주방 프린터 대수(1~3). 1대여도 품목별 "주방 미인쇄(0)"는 제외됨.
  * - 우선순위: 프린터 탭 메뉴별 → pos_menus.kitchen_printer(0=미인쇄) → 카테고리 → 대분류
- *   → (레거시) 주방2·3 카테고리 체크 목록이 비어 있지 않을 때만 예전 규칙
- *   → 그다음 음료 휴리스틱(대분류·소분류·품목명, 기본 주방1로 떨어질 때만) → 없으면 주방 1
+ *   → (레거시) 주방2·3 카테고리 체크 목록이 비어 있지 않을 때만 예전 규칙 → 없으면 주방 1
  * - 프로모션 줄에 promoItems 가 있으면(저장된 스냅샷) 구성 메뉴별로 펼쳐 각 메뉴의 주방으로 라우팅(splitPromoKitchenLines 기본 true)
  */
 
@@ -74,33 +73,6 @@ function legacyKitchenIndex(cat: string, mode: number, k2: string[], k3: string[
   return 1
 }
 
-/**
- * 명시 라우팅이 없어 기본값(주방 1)으로 떨어질 때만 사용.
- * 대/소분류·품목명에 음료 힌트가 있으면 주방전에서 제외(0). 메뉴별 0·프린터 탭 지정이 항상 우선.
- */
-function defaultSkipKitchenLikelyBeverage(cat: string, main: string, lineName: string | undefined): boolean {
-  const name = String(lineName || "").trim()
-  const blob = `${main}\n${cat}\n${name}`
-  const ln = name.toLowerCase()
-
-  if (
-    /\b(beverages?|soft\s+drinks?|beers?|alcohol|liquor|spirits?|wine|smoothie|juice|\bcoffee\b|\btea\b)\b/i.test(
-      blob
-    ) ||
-    /เครื่องดื่ม|เบียร์|ไวน์|เหล้า|กาแฟ/.test(blob) ||
-    /(?:^|\s)(?:음료|주류)(?:\s|$)/.test(blob)
-  ) {
-    return true
-  }
-
-  /** 맥주·소주 등 병/캔 품목명 (CHANG … ML, JINRO … 등) */
-  if (/\bjinro\b/i.test(ln) || /\bchamisul\b/i.test(ln)) return true
-  if (/\bchang\b/i.test(ln) && /\bml\b/i.test(ln)) return true
-  if (/\b(singha|heineken|corona|san miguel|tsingtao)\b/i.test(ln) && /\b(ml|bottle|can|ลิตร)\b/i.test(ln)) return true
-
-  return false
-}
-
 type MenuLike = {
   id: string
   name?: string
@@ -117,6 +89,10 @@ function normRouteMap(raw?: Record<string, number | undefined>): Record<string, 
     if (n === 0 || n === 1 || n === 2 || n === 3) out[String(k)] = n as KitchenRouteValue
   }
   return out
+}
+
+function normalizeRouteKey(raw: string): string {
+  return String(raw || "").trim().toLowerCase()
 }
 
 /** API·설정 객체와 메뉴 목록으로 buildKitchenSlipGroups 옵션 생성 */
@@ -230,6 +206,10 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const routeCat = opts.kitchenRouteByCategory || {}
   const routeMain = opts.kitchenRouteByCategoryMain || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
+  const routeCatNorm: Record<string, KitchenRouteValue> = {}
+  for (const [k, v] of Object.entries(routeCat)) routeCatNorm[normalizeRouteKey(k)] = v
+  const routeMainNorm: Record<string, KitchenRouteValue> = {}
+  for (const [k, v] of Object.entries(routeMain)) routeMainNorm[normalizeRouteKey(k)] = v
 
   const resolveMenuIdFromComposite = (rawId: string): string => {
     const id = String(rawId || "").trim()
@@ -267,7 +247,6 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     const mid = menuIdOf(it)
     const cat = menuCat(it)
     const main = menuMain(it)
-    const lineLabel = String((it as KitchenSlipRoutingItem).name ?? "").trim()
 
     if (mid in routeMenu) {
       const v = routeMenu[mid]
@@ -283,32 +262,23 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
       }
     }
 
-    if (cat && cat in routeCat) {
-      const v = routeCat[cat]
+    if (cat) {
+      const v = routeCat[cat] ?? routeCatNorm[normalizeRouteKey(cat)]
       if (v === 0 || v === 1 || v === 2 || v === 3) {
         return v === 0 ? 0 : clampPrinterIndex(v, mode)
       }
     }
 
-    if (main && main in routeMain) {
-      const v = routeMain[main]
+    if (main) {
+      const v = routeMain[main] ?? routeMainNorm[normalizeRouteKey(main)]
       if (v === 0 || v === 1 || v === 2 || v === 3) {
         return v === 0 ? 0 : clampPrinterIndex(v, mode)
       }
     }
 
     if (legacyActive) {
-      const rawIdx = legacyKitchenIndex(cat, mode, k2, k3)
-      if (
-        rawIdx === 1 &&
-        defaultSkipKitchenLikelyBeverage(cat, main, lineLabel || undefined)
-      ) {
-        return 0
-      }
-      return clampPrinterIndex(rawIdx, mode)
+      return clampPrinterIndex(legacyKitchenIndex(cat, mode, k2, k3), mode)
     }
-
-    if (defaultSkipKitchenLikelyBeverage(cat, main, lineLabel || undefined)) return 0
 
     return 1
   }

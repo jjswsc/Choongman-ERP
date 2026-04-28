@@ -27,11 +27,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  adminTabsBarCn,
   adminTabsContentFlushCn,
   adminTabsListRowCn,
   adminTabsRootScrollableCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -635,6 +633,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_over_min")}</th>
                       {allowEdit && (
                         <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[60px]">
                           {t("att_btn_emergency_approve")}
@@ -654,6 +653,12 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
+                          <td className={cn(
+                            "px-3 py-2.5 text-center tabular-nums",
+                            (row.breakOverMin ?? 0) > 0 ? "font-semibold text-red-600" : "text-muted-foreground"
+                          )}>
+                            {row.breakOverMin ?? 0}
+                          </td>
                           {allowEdit && (
                             <td className="px-2 py-2.5 text-center">
                               <Button
@@ -708,6 +713,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_over_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_actual_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                       {allowEdit && (
@@ -787,6 +793,12 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                           <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
+                          <td className={cn(
+                            "px-3 py-2.5 text-center tabular-nums",
+                            (row.breakOverMin ?? 0) > 0 ? "font-semibold text-red-600" : "text-muted-foreground"
+                          )}>
+                            {row.breakOverMin ?? 0}
+                          </td>
                           <td className="px-3 py-2.5 text-center">{row.actualWorkHrs}</td>
                           <td className="px-3 py-2.5 text-center">{row.plannedWorkHrs}</td>
                           {allowEdit ? (
