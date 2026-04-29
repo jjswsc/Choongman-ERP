@@ -41750,7 +41750,7 @@ const i18nWithPosBackfill: Record<string, Record<string, string>> = Object.fromE
  * (useT는 미번역 시 키 이름을 그대로 반환해 `||` 폴백이 동작하지 않음)
  */
 export function getLineRemarksPh(lang: string, t: (k: string) => string): string {
-  const s = t("orderLineRemarksPh")
+  const s = t("orderLineRemarksPh").trim()
   if (s && s !== "orderLineRemarksPh") return s
   if (lang === "en") return "Remarks (weight, price, etc.)"
   if (lang === "th") return "หมายเหตุ (น้ำหนัก/ราคา ฯลฯ)"

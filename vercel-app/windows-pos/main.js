@@ -349,7 +349,8 @@ function readEscPosCutHallResolved() {
   if (runtimeConfig.printEscPosCutAfterHallOrderHtml !== undefined) {
     return readConfigBool(runtimeConfig.printEscPosCutAfterHallOrderHtml, false);
   }
-  return LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML;
+  /** 홀 주문서는 기본 끔. 레거시 `printEscPosCutAfterReceiptHtml`에 폴백하면 결제용 절단만 켠 매장에서도 주문 직후 RAW 절단·돈통 오동작이 날 수 있음 */
+  return false;
 }
 
 function readEscPosCutPaymentResolved() {

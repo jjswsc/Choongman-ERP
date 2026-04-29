@@ -708,7 +708,6 @@ export function EmployeeHeadcountTab({
     setOverviewStorePicks((prev) => {
       if (s === ALL_STORES_VALUE) return [{ id: overviewPickSeq.current, store: s }]
       const withoutAll = prev.filter((x) => x.store !== ALL_STORES_VALUE)
-      if (withoutAll.some((x) => x.store === s)) return withoutAll
       return [...withoutAll, { id: overviewPickSeq.current, store: s }]
     })
     setOverviewPickSelect("")

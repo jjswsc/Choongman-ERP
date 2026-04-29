@@ -227,6 +227,7 @@ export function OrderApprovalDetailPanel({
                                     </span>
                                     {canEdit ? (
                                       <Textarea
+                                        rows={1}
                                         value={item.lineRemarks || ""}
                                         onChange={(e) =>
                                           onUpdateOrderItem(
@@ -236,10 +237,13 @@ export function OrderApprovalDetailPanel({
                                           )
                                         }
                                         placeholder={lineRemarksPlaceholder}
-                                        className="min-h-[46px] resize-y border-primary/20 bg-background text-[11px] leading-snug"
+                                        className="!min-h-8 max-h-24 resize-y overflow-y-auto border-primary/20 bg-background py-1.5 text-[11px] leading-normal"
                                       />
                                     ) : item.lineRemarks?.trim() ? (
-                                      <div className="whitespace-pre-line rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] leading-snug text-slate-600">
+                                      <div
+                                        className="line-clamp-1 break-words rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] leading-normal text-slate-600"
+                                        title={item.lineRemarks}
+                                      >
                                         {item.lineRemarks}
                                       </div>
                                     ) : null}

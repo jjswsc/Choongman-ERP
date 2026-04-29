@@ -12,13 +12,22 @@ export type OrderCartLine = {
   lineRemarks?: string
 }
 
+/** i18n 키가 cart `line_remarks`에 잘못 저장된 경우(placeholder 혼동 등) 제거 */
+const LINE_REMARKS_SENTINEL_KEYS = new Set(["orderLineRemarksPh"])
+
+export function sanitizeCartLineRemarks(raw: unknown): string | undefined {
+  if (raw == null) return undefined
+  const s = String(raw).trim()
+  if (!s) return undefined
+  if (LINE_REMARKS_SENTINEL_KEYS.has(s)) return undefined
+  return s
+}
+
 /** cart 줄에만 저장. 송장 Description 아래에 별도 블록으로 렌더 */
 export function getLineRemarksFromCartLine(line: OrderCartLine | undefined): string | undefined {
   if (!line) return undefined
   const raw = line.line_remarks ?? line.lineRemarks
-  if (raw == null) return undefined
-  const s = String(raw).trim()
-  return s ? s : undefined
+  return sanitizeCartLineRemarks(raw)
 }
 
 const TZ_BANGKOK = 'Asia/Bangkok'

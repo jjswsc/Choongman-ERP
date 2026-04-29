@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { sanitizeCartLineRemarks } from '@/lib/outbound-order-line-match'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -54,7 +55,9 @@ export async function POST(request: NextRequest) {
       updatedCart.forEach((item: { code?: string; name?: string; price?: number; qty?: number; spec?: string; line_remarks?: string; lineRemarks?: string }, i: number) => {
         const idx = receivedIndices[i]
         if (idx !== undefined && idx >= 0 && idx < merged.length) {
-          const lineRemarks = String(item.line_remarks ?? item.lineRemarks ?? merged[idx].line_remarks ?? merged[idx].lineRemarks ?? '').trim()
+          const lineRemarks = sanitizeCartLineRemarks(
+            item.line_remarks ?? item.lineRemarks ?? merged[idx].line_remarks ?? merged[idx].lineRemarks
+          )
           merged[idx] = {
             code: String(item.code ?? merged[idx].code ?? ''),
             name: String(item.name ?? merged[idx].name ?? ''),
@@ -65,25 +68,31 @@ export async function POST(request: NextRequest) {
           }
         }
       })
-      validCart = merged.map((i) => ({
-        code: String(i.code ?? ''),
-        name: String(i.name ?? ''),
-        price: Number(i.price ?? 0),
-        qty: Number(i.qty ?? 0),
-        spec: String(i.spec ?? '-'),
-        ...(String(i.line_remarks ?? i.lineRemarks ?? '').trim() ? { line_remarks: String(i.line_remarks ?? i.lineRemarks ?? '').trim() } : {}),
-      }))
-    } else {
-      validCart = updatedCart
-        .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
-        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string; line_remarks?: string; lineRemarks?: string }) => ({
+      validCart = merged.map((i) => {
+        const lr = sanitizeCartLineRemarks(i.line_remarks ?? i.lineRemarks)
+        return {
           code: String(i.code ?? ''),
           name: String(i.name ?? ''),
           price: Number(i.price ?? 0),
           qty: Number(i.qty ?? 0),
           spec: String(i.spec ?? '-'),
-          ...(String(i.line_remarks ?? i.lineRemarks ?? '').trim() ? { line_remarks: String(i.line_remarks ?? i.lineRemarks ?? '').trim() } : {}),
-        }))
+          ...(lr ? { line_remarks: lr } : {}),
+        }
+      })
+    } else {
+      validCart = updatedCart
+        .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
+        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string; line_remarks?: string; lineRemarks?: string }) => {
+          const lr = sanitizeCartLineRemarks(i.line_remarks ?? i.lineRemarks)
+          return {
+            code: String(i.code ?? ''),
+            name: String(i.name ?? ''),
+            price: Number(i.price ?? 0),
+            qty: Number(i.qty ?? 0),
+            spec: String(i.spec ?? '-'),
+            ...(lr ? { line_remarks: lr } : {}),
+          }
+        })
     }
     let subtotal = 0
     validCart.forEach((i) => { subtotal += i.price * i.qty })

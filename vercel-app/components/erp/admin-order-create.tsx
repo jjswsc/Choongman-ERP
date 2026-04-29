@@ -24,6 +24,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT, getLineRemarksPh } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList, getAppData, processOrder, type AppItem } from "@/lib/api-client"
+import { sanitizeCartLineRemarks } from "@/lib/outbound-order-line-match"
 import { isManagerRole } from "@/lib/permissions"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
@@ -203,7 +204,7 @@ export function AdminOrderCreate() {
           price: c.price,
           qty: c.qty,
           taxType: c.taxType,
-          line_remarks: c.lineRemarks?.trim() || undefined,
+          line_remarks: sanitizeCartLineRemarks(c.lineRemarks),
         })),
       })
       if (res.success) {

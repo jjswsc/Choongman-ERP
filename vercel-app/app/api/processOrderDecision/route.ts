@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 import { requireAuth } from '@/lib/verify-auth'
+import { sanitizeCartLineRemarks } from '@/lib/outbound-order-line-match'
 
 const ALLOWED_DECISIONS = ['Approved', 'Rejected', 'Hold']
 
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
             price: Number(i.price ?? 0),
             qty,
             spec: String(i.spec ?? ''),
-            line_remarks: String(i.line_remarks ?? i.lineRemarks ?? '').trim() || undefined,
+            line_remarks: sanitizeCartLineRemarks(i.line_remarks ?? i.lineRemarks),
             _origQty: origQty,
           }
         })

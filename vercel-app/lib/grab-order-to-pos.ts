@@ -3,6 +3,7 @@ import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { consumeDeliveryMenuStockByName } from '@/lib/pos-delivery-policy'
 import { buildGrabOrderMemo, mergeGrabStateIntoFullMemo } from '@/lib/grab-order-memo'
+import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 
 type GrabOrderPersistResult =
   | {
@@ -71,23 +72,6 @@ function readFirstFinite(...values: unknown[]): number {
     if (Number.isFinite(n)) return n
   }
   return 0
-}
-
-function parseGrabStoreMap(): Record<string, string> {
-  const raw = process.env.GRAB_STORE_MAP_JSON?.trim()
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(parsed)) {
-      const key = String(k || '').trim()
-      const val = String(v || '').trim()
-      if (key && val) out[key] = val
-    }
-    return out
-  } catch {
-    return {}
-  }
 }
 
 function normalizeStoreCodeCandidate(raw: string): string {

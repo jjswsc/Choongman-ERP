@@ -32,6 +32,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole, isOfficeRole } from "@/lib/permissions"
 import { useStoreList, getAdminOrders, getAppData, processOrderDecision, updateOrderDeliveryDates, type AdminOrderItem } from "@/lib/api-client"
+import { sanitizeCartLineRemarks } from "@/lib/outbound-order-line-match"
 import { OrderApprovalDetailPanel } from "@/components/erp/order-approval-detail-panel"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
@@ -98,7 +99,9 @@ function mapApiToOrder(
     return {
       name: it.name || "-",
       spec: it.spec || "",
-      lineRemarks: String((it as { line_remarks?: string; lineRemarks?: string }).line_remarks ?? (it as { lineRemarks?: string }).lineRemarks ?? "").trim() || undefined,
+      lineRemarks: sanitizeCartLineRemarks(
+        (it as { line_remarks?: string; lineRemarks?: string }).line_remarks ?? (it as { lineRemarks?: string }).lineRemarks
+      ),
       unitPrice: price,
       qty,
       originalQty: origQty,
@@ -328,7 +331,7 @@ export function OrderApproval() {
       code: it.code,
       name: it.name,
       spec: it.spec,
-      line_remarks: it.lineRemarks?.trim() || undefined,
+      line_remarks: sanitizeCartLineRemarks(it.lineRemarks),
       price: it.unitPrice,
       qty: it.qty,
       checked: it.checked,

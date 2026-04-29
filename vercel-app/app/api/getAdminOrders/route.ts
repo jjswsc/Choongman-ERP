@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
+import { sanitizeCartLineRemarks } from '@/lib/outbound-order-line-match'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -163,7 +164,7 @@ export async function GET(request: NextRequest) {
       items = items.map((it) => ({
         ...it,
         spec: it.spec || itemSpecMap[it.code || ''] || '',
-        line_remarks: String(it.line_remarks ?? it.lineRemarks ?? '').trim() || undefined,
+        line_remarks: sanitizeCartLineRemarks(it.line_remarks ?? it.lineRemarks),
         category: (it as { category?: string }).category || itemCategoryMap[it.code || ''] || '',
         vendor: resolveVendorName(String((it as { vendor?: string }).vendor || itemVendorMap[it.code || ''] || '')),
         outboundLocation: itemOutboundMap[it.code || ''] || '',
