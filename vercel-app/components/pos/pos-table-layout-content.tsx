@@ -140,11 +140,9 @@ export function PosTableLayoutContent() {
   const floorRef = React.useRef<HTMLDivElement | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
-  const tableNumberSuffixRaw = t("posTableNumberSuffix")
-  const tableNumberSuffix = tableNumberSuffixRaw !== "posTableNumberSuffix" ? tableNumberSuffixRaw : ""
   const formatAutoTableName = React.useCallback(
-    (floor: 1 | 2 | 3, number: number) => `${floor}F-${number}${tableNumberSuffix}`,
-    [tableNumberSuffix]
+    (floor: 1 | 2 | 3, number: number) => `${floor}F-${number}`,
+    []
   )
   const currentFloorLayout = React.useMemo(
     () => layout.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) === activeFloor),
@@ -542,6 +540,35 @@ export function PosTableLayoutContent() {
     })
   }
 
+  const handleNormalizeToNumericName = () => {
+    setLayout((prev) => {
+      const floorItems = prev
+        .filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor)
+        .slice()
+        .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x))
+      const used = new Set<number>()
+      const patch = new Map<string, string>()
+      for (const tbl of floorItems) {
+        const name = String(tbl.name ?? "").trim()
+        const matches = Array.from(name.matchAll(/\d+/g))
+        const lastNum = matches.length > 0 ? Number(matches[matches.length - 1]?.[0] ?? 0) : 0
+        if (Number.isFinite(lastNum) && lastNum > 0 && !used.has(lastNum)) {
+          used.add(lastNum)
+          patch.set(tbl.id, `${activeFloor}F-${lastNum}`)
+        }
+      }
+      let next = 1
+      for (const tbl of floorItems) {
+        if (patch.has(tbl.id)) continue
+        while (used.has(next)) next += 1
+        patch.set(tbl.id, `${activeFloor}F-${next}`)
+        used.add(next)
+        next += 1
+      }
+      return prev.map((tbl) => (patch.has(tbl.id) ? { ...tbl, name: patch.get(tbl.id) || tbl.name } : tbl))
+    })
+  }
+
   const alignTables = (align: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
     const ids = selectedIds.length > 0
       ? selectedIds.filter((id) => currentFloorIdSet.has(id))
@@ -841,6 +868,10 @@ export function PosTableLayoutContent() {
         <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleAutoName}>
           <Copy className="h-4 w-4" />
           {t("posTableAutoNameAbc")}
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={handleNormalizeToNumericName}>
+          <Copy className="h-4 w-4" />
+          {t("posTableAutoNameNumber") || "번호 이름 정리(번 제거)"}
         </Button>
       </div>
 

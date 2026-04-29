@@ -499,6 +499,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (logType === '휴식종료' && breakMin > 0) {
+      // 네트워크 재시도/중복 탭으로 동일 휴식종료가 연속 저장되면 break_min이 2배 집계된다.
+      // 최근 15초 내 같은 break_min 휴식종료가 있으면 멱등 처리로 무시.
+      const storeIlikeResume = encodeURIComponent(attendanceStoreIlikeFragment(storeName))
+      const duplicateFilter =
+        empId > 0
+          ? `store_name=ilike.${storeIlikeResume}&employee_id=eq.${empId}&log_type=eq.${encodeURIComponent('휴식종료')}`
+          : `store_name=ilike.${storeIlikeResume}&name=ilike.${encodeURIComponent(empName)}&log_type=eq.${encodeURIComponent('휴식종료')}`
+      const recentResumeRows = (await supabaseSelectFilter('attendance_logs', duplicateFilter, {
+        order: 'log_at.desc',
+        limit: 1,
+        select: 'log_at,break_min',
+      })) as { log_at?: string; break_min?: number | null }[]
+      const recent = recentResumeRows?.[0]
+      const recentMs = recent?.log_at ? new Date(recent.log_at).getTime() : NaN
+      const sameBreakMin =
+        recent?.break_min != null &&
+        Number.isFinite(Number(recent.break_min)) &&
+        Math.abs(Number(recent.break_min) - breakMin) < 0.01
+      if (Number.isFinite(recentMs) && nowTime.getTime() - recentMs <= 15_000 && sameBreakMin) {
+        return NextResponse.json(
+          { success: true, message: '✅ 휴식종료 완료! (중복요청 무시)' },
+          { headers }
+        )
+      }
+    }
+
     if (needManagerApproval) status = '위치미확인(승인대기)'
 
     const payload: Record<string, unknown> = {

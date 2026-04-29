@@ -3,6 +3,7 @@
  */
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
+import { normalizePosLineNote } from '@/lib/pos-line-note'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
@@ -95,7 +96,9 @@ export function formatKitchenSlipItemRowHtml(
   opts?: { showLineNotes?: boolean }
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
-  const note = showLineNotes ? String(it.note ?? '').trim() : ''
+  const note = showLineNotes
+    ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+    : ''
   const main = Number(it.qty) + ' × ' + escapeHtml(it.name)
   if (!note) return '<div class="k-row">' + main + close('div')
   return (

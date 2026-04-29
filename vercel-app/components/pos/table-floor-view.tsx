@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { Users, Armchair } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getPosTableAabb } from '@/lib/pos-table-layout-aabb'
 import type { PosTableItem } from '@/lib/api-client'
@@ -514,33 +513,42 @@ export function TableFloorView({
                 >
                   {floorTableLabel}
                 </span>
-                {tab.seats > 0 && (
-                  <span
-                    className={cn(
-                      'inline-flex max-w-full shrink-0 items-center justify-center gap-0.5 rounded-full border px-1 py-0.5 tabular-nums shadow-sm',
-                      isOccupied
-                        ? 'border-amber-200/50 bg-amber-950/70 text-[9px] font-bold text-amber-50 ring-1 ring-amber-700/35 sm:text-[10px]'
-                        : 'border-amber-600/85 bg-amber-950/65 text-[9px] font-extrabold text-amber-50 ring-1 ring-amber-800/40 sm:text-[10px]'
+                {(tab.seats > 0 || (isOccupied && tableGuestCount > 0) || (isOccupied && !!createdAt)) && (
+                  <div className="flex max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden">
+                    {tab.seats > 0 && (
+                      <span
+                        className={cn(
+                          'inline-flex max-w-full shrink-0 items-center justify-center gap-0.5 rounded-full border px-1 py-0.5 tabular-nums shadow-sm',
+                          isOccupied
+                            ? 'border-amber-200/50 bg-amber-950/70 text-[9px] font-bold text-amber-50 ring-1 ring-amber-700/35 sm:text-[10px]'
+                            : 'border-amber-600/85 bg-amber-950/65 text-[9px] font-extrabold text-amber-50 ring-1 ring-amber-800/40 sm:text-[10px]'
+                        )}
+                        title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
+                      >
+                        <span className="leading-none">{t('posTableSeats') || '좌석'}</span>
+                        <span className="leading-none tabular-nums">{tab.seats}</span>
+                      </span>
                     )}
-                    title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
-                  >
-                    <Armchair
-                      className={cn('shrink-0 opacity-95', isOccupied ? 'h-2.5 w-2.5 sm:h-3 sm:w-3' : 'h-2.5 w-2.5 sm:h-3 sm:w-3')}
-                      strokeWidth={2.25}
-                      aria-hidden
-                    />
-                    <span className="leading-none tabular-nums">{tab.seats}</span>
-                  </span>
-                )}
-                {isOccupied && (tableGuestCount > 0 || createdAt) && (
-                  <div className="flex max-w-full flex-wrap items-center justify-center gap-1">
                     {tableGuestCount > 0 && (
                       <span
                         className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-sky-300/90 bg-sky-950/88 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-50 shadow-md ring-1 ring-sky-400/40 sm:text-xs"
                         title={t('posOrderGuestCount') || '이 테이블 주문 손님 수'}
                       >
-                        <Users className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
+                        <span className="leading-none">{t('posOrderGuestCount') || '손님 수'}</span>
                         <span className="tabular-nums leading-none">{tableGuestCount}</span>
+                      </span>
+                    )}
+                    {createdAt && (
+                      <span
+                        className="inline-flex max-w-full shrink-0 items-center rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white shadow-sm ring-1 ring-black/20 sm:text-xs"
+                        title={t('posTableOrderClockHint') || ''}
+                        data-tour={
+                          timeTourSpotlights && tab.id === timeTourSpotlights.orderClockTableId
+                            ? 'pos-tour-floor-guide-order-clock'
+                            : undefined
+                        }
+                      >
+                        {formatTableTime(createdAt)}
                       </span>
                     )}
                     {createdAt && (
@@ -582,17 +590,6 @@ export function TableFloorView({
                   {statusLabel ? (
                     <span className="max-w-[min(100%,6.5rem)] shrink truncate font-bold">{statusLabel}</span>
                   ) : null}
-                  <span
-                    className="shrink-0 tabular-nums font-semibold opacity-90"
-                    title={t('posTableOrderClockHint') || ''}
-                    data-tour={
-                      timeTourSpotlights && tab.id === timeTourSpotlights.orderClockTableId
-                        ? 'pos-tour-floor-guide-order-clock'
-                        : undefined
-                    }
-                  >
-                    {formatTableTime(createdAt)}
-                  </span>
                 </div>
               )}
               {isOccupied && !createdAt && statusLabel ? (

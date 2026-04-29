@@ -25,6 +25,7 @@ import {
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
+import { normalizePosLineNote } from '@/lib/pos-line-note'
 import {
   printPosHtmlDocument,
   POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS,
@@ -304,7 +305,7 @@ export function PosReceiptModal({
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
         ${receiptData.items
           .map((it) => {
-            const lineNote = String(it.note ?? '').trim()
+            const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const noteHtml = lineNote

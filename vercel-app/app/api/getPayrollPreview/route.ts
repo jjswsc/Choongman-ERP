@@ -102,7 +102,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     }
   }
 
-  const byDay: Record<string, { inMs: number | null; outMs: number | null; breakMin: number; outApproved: boolean; lateMin: number; earlyMin: number; otMin: number }> = {}
+  const byDay: Record<string, { inMs: number | null; outMs: number | null; breakMin: number; outApproved: boolean; lateMin: number; earlyMin: number; otMin: number; breakSeen: Set<string> }> = {}
   for (const r of attRows || []) {
     const rowDate = toDateStrBangkok(r.log_at)
     const type = String(r.log_type || '').trim()
@@ -117,7 +117,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     if (!store || !name) continue
     const dayKey = `${rowDate}|${payrollAttKey(store, name, r.employee_id)}`
     if (!byDay[dayKey]) {
-      byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, outApproved: false, lateMin: 0, earlyMin: 0, otMin: 0 }
+      byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, outApproved: false, lateMin: 0, earlyMin: 0, otMin: 0, breakSeen: new Set<string>() }
     }
     const v = byDay[dayKey]
     const approved = String(r.approved || '').trim()
@@ -140,7 +140,11 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
         v.earlyMin = Number(r.early_min) || 0
       }
     } else if (type === '휴식종료') {
-      v.breakMin += Number(r.break_min) || 0
+      const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
+      if (!v.breakSeen.has(breakLogKey)) {
+        v.breakSeen.add(breakLogKey)
+        v.breakMin += Number(r.break_min) || 0
+      }
     }
   }
 

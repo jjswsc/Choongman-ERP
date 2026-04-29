@@ -74,6 +74,118 @@ function readFirstFinite(...values: unknown[]): number {
   return 0
 }
 
+function isMachineLikeGrabToken(raw: string): boolean {
+  const s = String(raw || '').trim()
+  if (!s) return true
+  // Grab 내부 식별자 형태(mod-284-item-74-o23-2, item-123-option-9 등)는 노출하지 않음
+  if (/^(mods?:)?[a-z]+-\d+(?:-[a-z0-9]+)*$/i.test(s)) return true
+  // 사람이 읽기 어려운 id/slug 조합도 메모에서 제외
+  if (/^[a-z0-9_-]{16,}$/i.test(s) && !/\s/.test(s)) return true
+  return false
+}
+
+function pickCustomerReadableText(...values: unknown[]): string {
+  for (const value of values) {
+    const s = String(value ?? '').trim()
+    if (!s) continue
+    if (isMachineLikeGrabToken(s)) continue
+    return s
+  }
+  return ''
+}
+
+function extractReadableModifierNames(mod: Record<string, unknown>): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: mod, depth: 0 }]
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (!node) break
+    const { value, depth } = node
+    if (depth > 2 || value == null) continue
+    if (typeof value !== 'object') continue
+    const rec = asRecord(value)
+    for (const [kRaw, v] of Object.entries(rec)) {
+      const k = String(kRaw || '').trim().toLowerCase()
+      if (v && typeof v === 'object') {
+        queue.push({ value: v, depth: depth + 1 })
+        continue
+      }
+      const isNameLike =
+        k === 'name' ||
+        k === 'title' ||
+        k === 'label' ||
+        k.includes('optionname') ||
+        k.includes('selectionname') ||
+        k.includes('modifiername') ||
+        k.includes('displayname')
+      if (!isNameLike) continue
+      const text = pickCustomerReadableText(v)
+      if (!text) continue
+      const nk = text.toLowerCase()
+      if (seen.has(nk)) continue
+      seen.add(nk)
+      out.push(text)
+    }
+  }
+  return out
+}
+
+function extractModifierCandidatesFromItem(item: Record<string, unknown>): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = []
+  const visited = new Set<unknown>()
+  const queue: Array<{ key: string; value: unknown; depth: number }> = [{ key: '', value: item, depth: 0 }]
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (!node) break
+    const { key, value, depth } = node
+    if (depth > 3 || value == null) continue
+    if (typeof value !== 'object') continue
+    if (visited.has(value)) continue
+    visited.add(value)
+    const isKeyLikelyModifier =
+      key.includes('modifier') || key.includes('option') || key.includes('selection') || key.includes('addon')
+    if (isKeyLikelyModifier && !Array.isArray(value)) out.push(asRecord(value))
+    if (Array.isArray(value)) {
+      for (const x of value) queue.push({ key, value: x, depth: depth + 1 })
+      continue
+    }
+    const rec = asRecord(value)
+    for (const [kRaw, v] of Object.entries(rec)) {
+      const k = String(kRaw || '').trim().toLowerCase()
+      if (!k) continue
+      if (v && typeof v === 'object') queue.push({ key: k, value: v, depth: depth + 1 })
+    }
+  }
+  return out
+}
+
+function extractReadableOptionsFromItemText(item: Record<string, unknown>): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const fields = [item.name, item.title, item.displayName, item.itemName, item.grabItemName]
+  for (const raw of fields) {
+    const text = String(raw ?? '').trim()
+    if (!text) continue
+    // 예: "SOY ... + M · 순살" → ["M", "순살"]
+    const plusParts = text.split('+').slice(1)
+    for (const p of plusParts) {
+      const pieces = p
+        .split(/[·•|,/]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      for (const piece of pieces) {
+        if (isMachineLikeGrabToken(piece)) continue
+        const nk = piece.toLowerCase()
+        if (seen.has(nk)) continue
+        seen.add(nk)
+        out.push(piece)
+      }
+    }
+  }
+  return out
+}
+
 function normalizeStoreCodeCandidate(raw: string): string {
   const s = String(raw || '').trim()
   if (!s) return ''
@@ -174,13 +286,30 @@ function buildPosItems(order: Record<string, unknown>): PosItem[] {
       const mod = asRecord(m)
       const modQty = Math.max(1, Math.trunc(toNumber(mod.quantity) || 1))
       modifierMinor += toNumber(mod.price) * modQty
-      const modName = String(mod.name ?? mod.id ?? '').trim()
-      if (modName) modifierNames.push(modName)
+      const names = extractReadableModifierNames(mod)
+      for (const n of names) {
+        if (!modifierNames.includes(n)) modifierNames.push(n)
+      }
+    }
+    for (const mod of extractModifierCandidatesFromItem(item)) {
+      const names = extractReadableModifierNames(mod)
+      for (const n of names) {
+        if (!modifierNames.includes(n)) modifierNames.push(n)
+      }
+    }
+    for (const n of extractReadableOptionsFromItemText(item)) {
+      if (!modifierNames.includes(n)) modifierNames.push(n)
     }
 
     const unitMinor = toNumber(item.price) + modifierMinor
     const noteParts = [
-      String(item.specifications ?? '').trim(),
+      pickCustomerReadableText(
+        item.specialRequest,
+        item.specialInstruction,
+        item.instructions,
+        item.customerNote,
+        item.specifications
+      ),
       modifierNames.length ? `mods:${modifierNames.join(',')}` : '',
       ecoSummary || '',
     ].filter(Boolean)

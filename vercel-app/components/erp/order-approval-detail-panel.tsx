@@ -4,7 +4,6 @@ import * as React from "react"
 import { Package, Truck, Pause, XCircle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useT, getLineRemarksPh } from "@/lib/i18n"
@@ -226,8 +225,8 @@ export function OrderApprovalDetailPanel({
                                       {item.name}
                                     </span>
                                     {canEdit ? (
-                                      <Textarea
-                                        rows={1}
+                                      <Input
+                                        type="text"
                                         value={item.lineRemarks || ""}
                                         onChange={(e) =>
                                           onUpdateOrderItem(
@@ -237,7 +236,7 @@ export function OrderApprovalDetailPanel({
                                           )
                                         }
                                         placeholder={lineRemarksPlaceholder}
-                                        className="!min-h-8 max-h-24 resize-y overflow-y-auto border-primary/20 bg-background py-1.5 text-[11px] leading-normal"
+                                        className="h-8 border-primary/20 bg-background text-[11px] leading-normal"
                                       />
                                     ) : item.lineRemarks?.trim() ? (
                                       <div

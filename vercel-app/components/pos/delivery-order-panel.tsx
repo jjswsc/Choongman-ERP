@@ -25,6 +25,7 @@ import {
   GRAB_DELIVERY_PROGRESS_STAGE_COUNT,
 } from '@/lib/grab-delivery-progress'
 import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
+import { normalizePosLineNote } from '@/lib/pos-line-note'
 
 export interface DeliveryOrderPanelProps {
   orderLabel: string
@@ -65,7 +66,7 @@ export function DeliveryOrderPanel({
   const [checklistGroups, setChecklistGroups] = useState<PosOrderPackagingChecklistGroup[]>([])
 
   const parseItemMeta = (rawNote?: string) => {
-    const note = String(rawNote || '').trim()
+    const note = normalizePosLineNote(String(rawNote || ''), { keepOptionSummary: true })
     if (!note) return { optionSummary: '', optionChips: [] as string[], requestSummary: '' }
     const chunks = note
       .split('·')

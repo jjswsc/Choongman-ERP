@@ -351,6 +351,7 @@ function buildAttendanceSummary(
     earlyMinExplicit: number | null
     /** 직전 반영 퇴근 로그 id (조퇴 0 면제의 "명시적 조정 여부" 판별용) */
     outLogId: number | null
+    breakSeen: Set<string>
   }
   const byDay: Record<string, DayV> = {}
 
@@ -413,6 +414,7 @@ function buildAttendanceSummary(
         otMinExplicit: null,
         earlyMinExplicit: null,
         outLogId: null,
+        breakSeen: new Set<string>(),
       }
     }
     const v = byDay[dayKey]
@@ -484,7 +486,11 @@ function buildAttendanceSummary(
         applyClockOut(v)
       }
     } else if (type === '휴식종료') {
-      v.breakMin += Number(r.break_min) || 0
+      const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
+      if (!v.breakSeen.has(breakLogKey)) {
+        v.breakSeen.add(breakLogKey)
+        v.breakMin += Number(r.break_min) || 0
+      }
     }
   }
 

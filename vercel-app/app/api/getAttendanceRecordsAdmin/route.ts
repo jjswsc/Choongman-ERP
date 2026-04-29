@@ -493,6 +493,7 @@ export async function GET(request: NextRequest) {
         outLogId: number | null
         outApproved: string
         inStatus: string
+        breakSeen: Set<string>
       }
     > = {}
 
@@ -533,6 +534,7 @@ export async function GET(request: NextRequest) {
           outLogId: null,
           outApproved: '',
           inStatus: '',
+          breakSeen: new Set<string>(),
         }
       }
       const rec = byKey[key]
@@ -582,7 +584,11 @@ export async function GET(request: NextRequest) {
           rec.outLogId = r.id ?? null
         }
       } else if (type === '휴식종료') {
-        rec.breakMin += Number(r.break_min) || 0
+        const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
+        if (!rec.breakSeen.has(breakLogKey)) {
+          rec.breakSeen.add(breakLogKey)
+          rec.breakMin += Number(r.break_min) || 0
+        }
       }
     }
 

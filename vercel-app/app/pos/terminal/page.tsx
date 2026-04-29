@@ -79,6 +79,7 @@ import {
   resolveAfterReceiptToKitchenDelayMs,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
@@ -1558,7 +1559,9 @@ export default function PosTerminalPage() {
           menuId: String((it as { menuId?: string }).menuId ?? ''),
         })
         const line = translatePosMenuLineForReceipt(lineName, (k) => tPrint(k))
-        const lineNote = String((it as { note?: string }).note ?? '').trim()
+        const lineNote = normalizePosLineNote(String((it as { note?: string }).note ?? ''), {
+          keepOptionSummary: false,
+        })
         const noteHtml = lineNote
           ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
           : ''

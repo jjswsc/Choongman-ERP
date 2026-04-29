@@ -149,6 +149,7 @@ export async function GET(request: NextRequest) {
         status: string
         approval: string
         onlyIn: boolean
+        breakSeen: Set<string>
       }
     > = {}
 
@@ -188,6 +189,7 @@ export async function GET(request: NextRequest) {
           status: '',
           approval: '대기',
           onlyIn: false,
+          breakSeen: new Set<string>(),
         }
       }
       const rec = byKey[key]
@@ -207,7 +209,11 @@ export async function GET(request: NextRequest) {
           rec.approval = String(r.approved || '').trim() || '대기'
         }
       } else if (type === '휴식종료') {
-        rec.breakMin += Number(r.break_min) || 0
+        const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
+        if (!rec.breakSeen.has(breakLogKey)) {
+          rec.breakSeen.add(breakLogKey)
+          rec.breakMin += Number(r.break_min) || 0
+        }
       }
     }
 
