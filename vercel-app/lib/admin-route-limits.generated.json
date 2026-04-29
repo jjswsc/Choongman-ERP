@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-28T09:49:44.552Z",
-  "entryCount": 935,
+  "generatedAt": "2026-04-29T09:52:39.668Z",
+  "entryCount": 939,
   "entries": [
     {
       "path": "app/admin/grab-integration/page.tsx",
@@ -914,35 +914,35 @@
     },
     {
       "path": "app/api/getAdminOrders/route.ts",
-      "line": 60,
+      "line": 61,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getAdminOrders"
     },
     {
       "path": "app/api/getAdminOrders/route.ts",
-      "line": 93,
+      "line": 94,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getAdminOrders"
     },
     {
       "path": "app/api/getAdminOrders/route.ts",
-      "line": 98,
+      "line": 99,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getAdminOrders"
     },
     {
       "path": "app/api/getAdminOrders/route.ts",
-      "line": 103,
+      "line": 104,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getAdminOrders"
     },
     {
       "path": "app/api/getAdminOrders/route.ts",
-      "line": 107,
+      "line": 108,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "getAdminOrders"
@@ -2370,91 +2370,91 @@
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 840,
+      "line": 846,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 841,
+      "line": 847,
       "kind": "maxRows",
       "value": 40000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 862,
+      "line": 868,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 863,
+      "line": 869,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 888,
+      "line": 894,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 889,
+      "line": 895,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 915,
+      "line": 921,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 916,
+      "line": 922,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 938,
+      "line": 944,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 939,
+      "line": 945,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 959,
+      "line": 965,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 974,
+      "line": 980,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "getPayrollCalc"
     },
     {
       "path": "app/api/getPayrollCalc/route.ts",
-      "line": 1007,
+      "line": 1013,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "getPayrollCalc"
@@ -2475,14 +2475,14 @@
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 206,
+      "line": 210,
       "kind": "pageSize",
       "value": 2500,
       "apiLabel": "getPayrollPreview"
     },
     {
       "path": "app/api/getPayrollPreview/route.ts",
-      "line": 207,
+      "line": 211,
       "kind": "maxRows",
       "value": 120000,
       "apiLabel": "getPayrollPreview"
@@ -2699,28 +2699,35 @@
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 212,
+      "line": 95,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "getPosOrders"
+    },
+    {
+      "path": "app/api/getPosOrders/route.ts",
+      "line": 287,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 221,
+      "line": 296,
       "kind": "limit",
       "value": 1,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 316,
+      "line": 391,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosOrders"
     },
     {
       "path": "app/api/getPosOrders/route.ts",
-      "line": 436,
+      "line": 511,
       "kind": "limit",
       "value": 50,
       "apiLabel": "getPosOrders"
@@ -3854,7 +3861,7 @@
     },
     {
       "path": "app/api/processOrderDecision/route.ts",
-      "line": 78,
+      "line": 79,
       "kind": "limit",
       "value": 1,
       "apiLabel": "processOrderDecision"
@@ -4659,7 +4666,14 @@
     },
     {
       "path": "app/api/savePosPrinterSettings/route.ts",
-      "line": 204,
+      "line": 66,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "savePosPrinterSettings"
+    },
+    {
+      "path": "app/api/savePosPrinterSettings/route.ts",
+      "line": 268,
       "kind": "limit",
       "value": 1,
       "apiLabel": "savePosPrinterSettings"
@@ -4861,6 +4875,13 @@
       "apiLabel": "submitAttendance"
     },
     {
+      "path": "app/api/submitAttendance/route.ts",
+      "line": 512,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "submitAttendance"
+    },
+    {
       "path": "app/api/submitDailyClose/route.ts",
       "line": 65,
       "kind": "limit",
@@ -4981,7 +5002,7 @@
     },
     {
       "path": "app/api/updateOrderCart/route.ts",
-      "line": 32,
+      "line": 33,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updateOrderCart"
@@ -5177,14 +5198,14 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 532,
+      "line": 533,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1907,
+      "line": 1930,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
@@ -5744,21 +5765,21 @@
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 296,
+      "line": 409,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 436,
+      "line": 549,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 446,
+      "line": 559,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
@@ -6182,6 +6203,13 @@
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:pos-stock-deduction"
+    },
+    {
+      "path": "lib/pos-store.ts",
+      "line": 217,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "lib:pos-store"
     },
     {
       "path": "lib/pos-tax-invoice-recipients-server.ts",
