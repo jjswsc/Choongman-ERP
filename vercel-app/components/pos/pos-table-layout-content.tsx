@@ -47,16 +47,16 @@ const FLOOR_W = 720
 const FLOOR_H = 480
 const GRID_SIZE = 24
 /** POS 플로어 화면에서 테이블명·상태·시각 등을 담기 위한 최소 크기(픽셀, 그리드 스냅) */
-const MIN_TABLE_W = GRID_SIZE * 4
-const MIN_TABLE_H = GRID_SIZE * 3
+const MIN_TABLE_W = GRID_SIZE * 5
+const MIN_TABLE_H = GRID_SIZE * 4
 const FLOOR_PREF_KEY = "pos-table-layout-floor:"
 
 type TableShape = "rect" | "rect-wide" | "square"
 
 const SHAPE_PRESETS: { shape: TableShape; w: number; h: number; labelKey: string; defaultSeats: number }[] = [
-  { shape: "rect", w: 96, h: 72, labelKey: "posTableShapeNormal", defaultSeats: 4 },
-  { shape: "rect-wide", w: 120, h: 72, labelKey: "posTableShapeLong", defaultSeats: 6 },
-  { shape: "square", w: 96, h: 96, labelKey: "posTableShapeSquare", defaultSeats: 2 },
+  { shape: "rect", w: 120, h: 96, labelKey: "posTableShapeNormal", defaultSeats: 4 },
+  { shape: "rect-wide", w: 144, h: 96, labelKey: "posTableShapeLong", defaultSeats: 6 },
+  { shape: "square", w: 120, h: 120, labelKey: "posTableShapeSquare", defaultSeats: 2 },
 ]
 
 const SEAT_OPTIONS = [2, 3, 4, 5, 6, 8, 10]
@@ -89,6 +89,18 @@ function getSeatPositions(w: number, h: number, n: number): { x: number; y: numb
 
 function generateId() {
   return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+}
+
+function snapByGrid(v: number) {
+  return Math.round(v / GRID_SIZE) * GRID_SIZE
+}
+
+function normalizeLayoutItem(item: PosTableItem): PosTableItem {
+  const nextW = Math.max(MIN_TABLE_W, Math.min(FLOOR_W, snapByGrid(Number(item.w ?? MIN_TABLE_W) || MIN_TABLE_W)))
+  const nextH = Math.max(MIN_TABLE_H, Math.min(FLOOR_H, snapByGrid(Number(item.h ?? MIN_TABLE_H) || MIN_TABLE_H)))
+  const nextX = Math.max(0, Math.min(FLOOR_W - nextW, snapByGrid(Number(item.x ?? 0) || 0)))
+  const nextY = Math.max(0, Math.min(FLOOR_H - nextH, snapByGrid(Number(item.y ?? 0) || 0)))
+  return { ...item, w: nextW, h: nextH, x: nextX, y: nextY }
 }
 
 export function PosTableLayoutContent() {
@@ -184,7 +196,7 @@ export function PosTableLayoutContent() {
     setIsFallbackLayout(false)
     getPosTableLayout({ storeCode })
       .then(({ layout: l, isFallback }) => {
-        setLayout(l || [])
+        setLayout((l || []).map(normalizeLayoutItem))
         setIsFallbackLayout(Boolean(isFallback))
       })
       .catch(() => setLayout([]))
@@ -517,7 +529,7 @@ export function PosTableLayoutContent() {
       const copied: PosTableItem[] = items.map((t) => ({
         ...t,
         id: generateId(),
-      }))
+      })).map(normalizeLayoutItem)
       setLayout(copied)
       setSelectedId(null)
       setSelectedIds([])
@@ -705,7 +717,9 @@ export function PosTableLayoutContent() {
     }
     setSaving(true)
     try {
-      const res = await savePosTableLayout({ storeCode, layout })
+      const normalizedLayout = layout.map(normalizeLayoutItem)
+      setLayout(normalizedLayout)
+      const res = await savePosTableLayout({ storeCode, layout: normalizedLayout })
       if (res.success) {
         await appAlert(t("msg_saved") || "저장되었습니다.")
         loadLayout()

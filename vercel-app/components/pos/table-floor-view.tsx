@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
+import { Armchair, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getPosTableAabb } from '@/lib/pos-table-layout-aabb'
 import type { PosTableItem } from '@/lib/api-client'
@@ -120,6 +121,17 @@ function formatTableTime(createdAt?: string): string {
   } catch {
     return ''
   }
+}
+
+function formatDisplayTableLabel(name: string, fallbackId: string): string {
+  const raw = String(name ?? '').trim() || fallbackId
+  return raw.replace(/번\s*$/u, '')
+}
+
+function getTableBadgeNumber(label: string): string {
+  const text = String(label ?? '').trim()
+  const m = text.match(/(\d+)\s*$/)
+  return m?.[1] || text
 }
 
 function getElapsedMinutes(createdAt?: string): number {
@@ -369,14 +381,14 @@ export function TableFloorView({
         const showDelayBadge = Boolean(delayBadgeEnabled && delayOver >= delayAlertOverMin && status === 'preparing')
         const elapsedClass =
           stage === 'urgent'
-            ? 'bg-red-900/80 text-red-100'
+            ? 'border-red-300/90 bg-red-950/88 text-red-50 ring-1 ring-red-400/40'
             : stage === 'warning'
-              ? 'bg-amber-900/80 text-amber-100'
+              ? 'border-amber-300/90 bg-amber-950/88 text-amber-50 ring-1 ring-amber-400/35'
               : status === 'completed'
-                ? 'bg-slate-800/80 text-slate-100'
+                ? 'border-slate-300/90 bg-slate-900/88 text-slate-50 ring-1 ring-slate-300/25'
                 : status === 'partial_served'
-                  ? 'bg-sky-900/80 text-sky-100'
-                : 'bg-lime-900/80 text-lime-100'
+                  ? 'border-sky-300/90 bg-sky-950/88 text-sky-50 ring-1 ring-sky-400/35'
+                : 'border-lime-300/90 bg-lime-950/88 text-lime-50 ring-1 ring-lime-400/35'
         const isOccupied = status !== null
         const statusLabel =
           status === 'preparing'
@@ -386,6 +398,18 @@ export function TableFloorView({
               : status === 'completed'
                 ? (t('posTableStatusServed') || '서빙 완료')
                 : ''
+        const statusBadgeClass =
+          status === 'preparing'
+            ? (stage === 'urgent'
+                ? 'border-red-300/95 bg-red-950/90 text-red-50 ring-1 ring-red-400/45'
+                : stage === 'warning'
+                  ? 'border-amber-300/95 bg-amber-950/90 text-amber-50 ring-1 ring-amber-400/40'
+                  : 'border-lime-300/95 bg-lime-950/90 text-lime-50 ring-1 ring-lime-400/40')
+            : status === 'partial_served'
+              ? 'border-sky-300/95 bg-sky-950/90 text-sky-50 ring-1 ring-sky-400/40'
+              : status === 'completed'
+                ? 'border-slate-300/90 bg-slate-950/90 text-slate-50 ring-1 ring-slate-400/35'
+                : 'border-white/40 bg-black/50 text-white'
         const minuteUnit = t('posMinuteUnit') || '분'
         const tableMetaTitle =
           isOccupied && createdAt
@@ -431,8 +455,8 @@ export function TableFloorView({
         const rot = Number(tab.rotation) || 0
         const surfWofAabb = tab.w / tab.aabbWpx
         const surfHofAabb = tab.h / tab.aabbHpx
-        /** 바닥 카드: `번` 제거 시 `1`+`2`+`3`이 한 덩어리처럼 보일 수 있어 저장명 그대로 */
-        const floorTableLabel = String(tab.name ?? '').trim() || tab.id
+        const floorTableLabel = formatDisplayTableLabel(tab.name, tab.id)
+        const tableBadgeNumber = getTableBadgeNumber(floorTableLabel)
 
         return (
           <div
@@ -507,40 +531,42 @@ export function TableFloorView({
             >
               {/* 테이블명(한 줄·truncate) → 좌석 칩: 가로 한 줄은 좁은 칸에서 이웃과 겹침 유발 */}
               <div className="flex min-w-0 max-w-full flex-col items-center gap-0.5 px-0.5 leading-none">
-                <span
-                  className="min-w-0 w-full max-w-full truncate border-b border-current/30 pb-0.5 text-center text-sm font-extrabold tracking-tight sm:text-base"
-                  title={floorTableLabel}
-                >
-                  {floorTableLabel}
-                </span>
-                {(tab.seats > 0 || (isOccupied && tableGuestCount > 0) || (isOccupied && !!createdAt)) && (
+                <div className="flex max-w-full items-center justify-center gap-1 overflow-hidden">
+                  <span
+                    className="inline-flex h-5.5 min-w-[1.45rem] max-w-[3.5rem] shrink-0 items-center justify-center rounded-full border-2 border-white bg-black/90 px-1.5 text-center text-[11px] font-black tabular-nums tracking-tight text-white shadow-[0_2px_4px_rgba(0,0,0,0.65)] sm:h-6 sm:text-xs"
+                    title={floorTableLabel}
+                  >
+                    <span className="min-w-0 truncate leading-none">{tableBadgeNumber}</span>
+                  </span>
+                  {tab.seats > 0 && (
+                    <span
+                      className={cn(
+                        'inline-flex max-w-full shrink-0 items-center justify-center gap-0.5 rounded-full border px-1.5 py-0.5 tabular-nums text-[10px] shadow-sm sm:text-xs',
+                        isOccupied
+                          ? 'border-amber-200/50 bg-amber-950/70 font-bold text-amber-50 ring-1 ring-amber-700/35'
+                          : 'border-amber-600/85 bg-amber-950/65 font-extrabold text-amber-50 ring-1 ring-amber-800/40'
+                      )}
+                      title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
+                    >
+                      <Armchair className="h-2.5 w-2.5 shrink-0 opacity-95 sm:h-3 sm:w-3" strokeWidth={2.25} aria-hidden />
+                      <span className="leading-none tabular-nums">{tab.seats}</span>
+                    </span>
+                  )}
+                  {isOccupied && (
+                    <span
+                      className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-sky-300/90 bg-sky-950/88 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-50 shadow-md ring-1 ring-sky-400/40 sm:text-xs"
+                      title={t('posOrderGuestCount') || '이 테이블 주문 손님 수'}
+                    >
+                      <Users className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
+                      <span className="tabular-nums leading-none">{tableGuestCount}</span>
+                    </span>
+                  )}
+                </div>
+                {(isOccupied && !!createdAt) && (
                   <div className="flex max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden">
-                    {tab.seats > 0 && (
-                      <span
-                        className={cn(
-                          'inline-flex max-w-full shrink-0 items-center justify-center gap-0.5 rounded-full border px-1 py-0.5 tabular-nums shadow-sm',
-                          isOccupied
-                            ? 'border-amber-200/50 bg-amber-950/70 text-[9px] font-bold text-amber-50 ring-1 ring-amber-700/35 sm:text-[10px]'
-                            : 'border-amber-600/85 bg-amber-950/65 text-[9px] font-extrabold text-amber-50 ring-1 ring-amber-800/40 sm:text-[10px]'
-                        )}
-                        title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
-                      >
-                        <span className="leading-none">{t('posTableSeats') || '좌석'}</span>
-                        <span className="leading-none tabular-nums">{tab.seats}</span>
-                      </span>
-                    )}
-                    {tableGuestCount > 0 && (
-                      <span
-                        className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-sky-300/90 bg-sky-950/88 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-50 shadow-md ring-1 ring-sky-400/40 sm:text-xs"
-                        title={t('posOrderGuestCount') || '이 테이블 주문 손님 수'}
-                      >
-                        <span className="leading-none">{t('posOrderGuestCount') || '손님 수'}</span>
-                        <span className="tabular-nums leading-none">{tableGuestCount}</span>
-                      </span>
-                    )}
                     {createdAt && (
                       <span
-                        className="inline-flex max-w-full shrink-0 items-center rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white shadow-sm ring-1 ring-black/20 sm:text-xs"
+                        className="inline-flex max-w-full shrink-0 items-center rounded border border-white/20 bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-white shadow-sm ring-1 ring-black/30 sm:text-xs"
                         title={t('posTableOrderClockHint') || ''}
                         data-tour={
                           timeTourSpotlights && tab.id === timeTourSpotlights.orderClockTableId
@@ -559,22 +585,15 @@ export function TableFloorView({
                             : undefined
                         }
                         className={cn(
-                          'inline-flex max-w-full shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums shadow-sm ring-1 ring-black/10 sm:text-xs',
+                          'inline-flex max-w-full shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums shadow-sm sm:text-xs',
                           elapsedClass
                         )}
                         title={t('posTableElapsedHint') || ''}
                       >
-                        {showDelayBadge ? (
-                          <span className="whitespace-nowrap">
-                            {t('posDelayBadge') || '지연'} {elapsedMin}
-                            {minuteUnit}
-                          </span>
-                        ) : (
-                          <span className="whitespace-nowrap">
-                            {elapsedMin}
-                            {minuteUnit}
-                          </span>
-                        )}
+                        <span className="whitespace-nowrap">
+                          {elapsedMin}
+                          {minuteUnit}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -588,13 +607,27 @@ export function TableFloorView({
                   title={tableMetaTitle}
                 >
                   {statusLabel ? (
-                    <span className="max-w-[min(100%,6.5rem)] shrink truncate font-bold">{statusLabel}</span>
+                    <span
+                      className={cn(
+                        'inline-flex max-w-[min(100%,9rem)] items-center rounded-full border px-2 py-0.5 text-xs font-black leading-none shadow-sm sm:text-base',
+                        statusBadgeClass
+                      )}
+                    >
+                      <span className="truncate">{statusLabel}</span>
+                    </span>
                   ) : null}
                 </div>
               )}
               {isOccupied && !createdAt && statusLabel ? (
-                <div className="max-w-full min-w-0 truncate px-0.5 text-xs font-bold leading-tight sm:text-sm" title={statusLabel}>
-                  {statusLabel}
+                <div className="max-w-full min-w-0 px-0.5" title={statusLabel}>
+                  <span
+                    className={cn(
+                      'inline-flex max-w-[min(100%,9rem)] items-center rounded-full border px-2 py-0.5 text-xs font-black leading-none shadow-sm sm:text-base',
+                      statusBadgeClass
+                    )}
+                  >
+                    <span className="truncate">{statusLabel}</span>
+                  </span>
                 </div>
               ) : null}
             </div>
