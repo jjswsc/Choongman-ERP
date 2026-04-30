@@ -254,12 +254,17 @@ export function TakeoutOrderPanel({
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>
 
-              <Button onClick={handlePackComplete} className="w-full h-11 text-base font-semibold" disabled={!allPackaged}>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                {allPackaged
-                  ? (t('posDeliveryPackagingComplete') || '포장 완료')
-                  : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${order.items.length})`}
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={handlePackComplete} className="h-11 text-base font-semibold" disabled={!allPackaged}>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {allPackaged
+                    ? (t('posDeliveryPackagingComplete') || '포장 완료')
+                    : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${order.items.length})`}
+                </Button>
+                <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
+                  {t('posTablePayInStore') || '매장 결제'}
+                </Button>
+              </div>
               {canCancel && (
                 <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
                   <XCircle className="w-4 h-4 mr-1" />

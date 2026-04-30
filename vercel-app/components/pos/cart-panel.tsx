@@ -668,6 +668,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [showPaymentModal, onPaymentModalOpenChange])
   const [activePaymentTab, setActivePaymentTab] = useState<PaymentMethodTab>('cash')
   const [payCash, setPayCash] = useState('')
+  const [cashTendered, setCashTendered] = useState('')
   const [payCard, setPayCard] = useState('')
   const [payTrueMoney, setPayTrueMoney] = useState('')
   const [payWeChat, setPayWeChat] = useState('')
@@ -905,6 +906,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseFloat(payPromptPay) || 0) +
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
     (parseFloat(payDeliveryApp) || 0)
+  const nonCashPaymentSum =
+    (parseFloat(payCard) || 0) +
+    (parseFloat(payPromptPay) || 0) +
+    (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
+    (parseFloat(payDeliveryApp) || 0)
+  const cashRequiredAmount = Math.max(0, total - nonCashPaymentSum)
+  const cashTenderedNum = parseFloat(cashTendered) || 0
+  const cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
+  const cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
 
   const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
@@ -1251,6 +1261,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const resetPaymentInputs = () => {
     setPayCash('0')
+    setCashTendered('')
     setPayCard('0')
     setPayPromptPay('0')
     setPayTrueMoney('0')
@@ -3167,6 +3178,69 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
                     </div>
                   </div>
+                  {key === 'cash' && (
+                    <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                      <p className="text-xs font-semibold text-foreground">
+                        {tr('posCashChangeCalculatorTitle', '거스름돈 계산')}
+                      </p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] sm:items-end">
+                        <div className="grid gap-1">
+                          <Label className="text-[11px] text-sky-800 dark:text-sky-300">
+                            {tr('posCashTenderedAmount', '받은 금액')}
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={cashTendered}
+                              onChange={(e) => setCashTendered(e.target.value)}
+                              className="h-10 rounded-lg border-sky-300/70 bg-sky-50/60 text-right tabular-nums text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/30 dark:text-sky-100"
+                              placeholder="0"
+                            />
+                            <span className="w-4 shrink-0 text-sm font-semibold text-sky-800 dark:text-sky-300">฿</span>
+                          </div>
+                        </div>
+                        <div className="grid gap-1">
+                          <Label className="text-[11px] text-violet-800 dark:text-violet-300">
+                            {tr('posCashRequiredAmount', '필요 현금')}
+                          </Label>
+                          <div className="h-10 rounded-lg border border-violet-300/60 bg-violet-50/70 px-3 text-right text-sm font-semibold leading-10 tabular-nums text-violet-800 dark:border-violet-500/40 dark:bg-violet-950/30 dark:text-violet-200">
+                            {formatBahtNum(cashRequiredAmount)} ฿
+                          </div>
+                        </div>
+                        <div className="grid gap-1">
+                          <Label className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                            {tr('posCashChangeAmount', '거슬러줄 금액')}
+                          </Label>
+                          <div className="h-10 rounded-lg border border-emerald-300/60 bg-emerald-50 px-3 text-right text-lg font-extrabold leading-10 tabular-nums text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-950/35 dark:text-emerald-300">
+                            {formatBahtNum(cashChangeAmount)} ฿
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {[10, 20, 100, 200, 500, 1000].map((amount) => (
+                          <Button
+                            key={amount}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-md px-3 text-sm font-semibold tabular-nums justify-center"
+                            onClick={() => setCashTendered(String(amount))}
+                          >
+                            {amount}฿
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="mt-2 grid gap-1 text-xs">
+                        {cashShortAmount > 0.001 && (
+                          <p className="font-medium text-amber-700 dark:text-amber-400">
+                            {tr('posCashShortAmount', '추가로 받아야 할 금액')}: {formatBahtNum(cashShortAmount)} ฿
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
 
