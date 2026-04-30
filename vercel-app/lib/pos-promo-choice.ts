@@ -1,0 +1,75 @@
+export type PromoChoiceLine = {
+  menuId: string
+  optionId: string | null
+  quantity: number
+  choiceGroup?: string | null
+  choicePickCount?: number | null
+}
+
+export type PromoChoiceGroup = {
+  key: string
+  pickCount: number
+  lines: Array<PromoChoiceLine & { rowKey: string }>
+}
+
+const SLOT_LABEL_MAP: Record<string, string> = {
+  main: '메인',
+  side: '사이드',
+  drink: '음료',
+  sauce: '소스',
+}
+
+export function getPromoChoiceSlotLabel(key: string): string {
+  const normalized = String(key || '').trim().toLowerCase()
+  return SLOT_LABEL_MAP[normalized] || String(key || '').trim()
+}
+
+function normalizeGroupKey(raw: unknown): string {
+  return String(raw ?? '').trim()
+}
+
+function normalizePickCount(raw: unknown): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return 1
+  return Math.max(1, Math.floor(n))
+}
+
+function buildRowKey(line: PromoChoiceLine, idx: number): string {
+  return `${idx}:${String(line.menuId)}:${String(line.optionId ?? '')}`
+}
+
+export function splitPromoChoiceGroups(items: PromoChoiceLine[]): {
+  fixedItems: PromoChoiceLine[]
+  groups: PromoChoiceGroup[]
+} {
+  const fixedItems: PromoChoiceLine[] = []
+  const groupsMap = new Map<string, PromoChoiceGroup>()
+
+  items.forEach((line, idx) => {
+    const groupKey = normalizeGroupKey(line.choiceGroup)
+    if (!groupKey) {
+      fixedItems.push(line)
+      return
+    }
+    const row = { ...line, rowKey: buildRowKey(line, idx) }
+    const pickCount = normalizePickCount(line.choicePickCount)
+    const existing = groupsMap.get(groupKey)
+    if (existing) {
+      existing.lines.push(row)
+      existing.pickCount = Math.max(existing.pickCount, pickCount)
+      return
+    }
+    groupsMap.set(groupKey, {
+      key: groupKey,
+      pickCount,
+      lines: [row],
+    })
+  })
+
+  const groups = [...groupsMap.values()].map((g) => ({
+    ...g,
+    pickCount: Math.min(g.pickCount, g.lines.length),
+  }))
+  return { fixedItems, groups }
+}
+

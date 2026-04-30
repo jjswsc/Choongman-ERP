@@ -62,6 +62,7 @@ import {
   promotionSubcategoriesEqual,
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
+import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from "@/lib/pos-promo-choice"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
@@ -120,6 +121,13 @@ interface CartItem {
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
 }
 
+type PromoChoiceDialogState = {
+  promo: PosPromoWithItems
+  fixedItems: { menuId: string; optionId: string | null; quantity: number }[]
+  groups: PromoChoiceGroup[]
+  selectedRowKeysByGroup: Record<string, string[]>
+}
+
 function getInitialOrderType(searchParams: URLSearchParams | null): OrderType {
   const type = searchParams?.get("type")?.toLowerCase()
   if (type === "takeout" || type === "delivery" || type === "dine_in") return type
@@ -164,6 +172,7 @@ export default function PosOrderPage() {
   const [optionPickerBanbanFirst, setOptionPickerBanbanFirst] = React.useState<PosMenu | null>(null)
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
+  const [promoChoiceDialog, setPromoChoiceDialog] = React.useState<PromoChoiceDialogState | null>(null)
   const [orderType] = React.useState<OrderType>(() => getInitialOrderType(searchParams))
   const [storeCode, setStoreCode] = React.useState("")
   const [tableName, setTableName] = React.useState("")
@@ -720,35 +729,117 @@ export default function PosOrderPage() {
     setOptionPickerBanbanFirst(null)
   }
 
-  const addPromoToCart = async (promo: PosPromoWithItems) => {
-    const cartId = `promo-${promo.id}`
-    const resolvedItems =
-      Array.isArray(promo.items) && promo.items.length > 0
-        ? promo.items
-        : await getPosPromoItems({ promoId: promo.id }).catch(() => [])
-    const resolvedPromo: PosPromoWithItems = { ...promo, items: resolvedItems || [] }
+  const addResolvedPromoToCart = React.useCallback((resolvedPromo: PosPromoWithItems) => {
+    const normalizedItems = (resolvedPromo.items || []).map((x) => ({
+      menuId: String(x.menuId),
+      optionId: x.optionId ? String(x.optionId) : null,
+      quantity: Math.max(1, Number(x.quantity) || 1),
+    }))
+    const signature = normalizedItems
+      .map((x) => `${x.menuId}:${x.optionId || "-"}:${x.quantity}`)
+      .join("|")
+    const cartId = `promo-${resolvedPromo.id}-${signature || "base"}`
     const price = getPromoPrice(resolvedPromo)
     setCart((prev) => {
       const i = prev.findIndex((x) => x.id === cartId)
       if (i >= 0) {
         const n = [...prev]
-        n[i] = {
-          ...n[i],
-          qty: n[i].qty + 1,
-        }
+        n[i] = { ...n[i], qty: n[i].qty + 1 }
         return n
       }
-      return [...prev, {
-        id: cartId,
-        name: resolvedPromo.name,
-        price,
-        qty: 1,
-        promoId: resolvedPromo.id,
-        promoCode: resolvedPromo.code,
-        promoItems: resolvedPromo.items || [],
-      }]
+      return [
+        ...prev,
+        {
+          id: cartId,
+          name: resolvedPromo.name,
+          price,
+          qty: 1,
+          promoId: resolvedPromo.id,
+          promoCode: resolvedPromo.code,
+          promoItems: normalizedItems,
+        },
+      ]
+    })
+  }, [getPromoPrice])
+
+  const addPromoToCart = async (promo: PosPromoWithItems) => {
+    const freshItems = await getPosPromoItems({ promoId: promo.id }).catch(() => null)
+    const resolvedItems =
+      Array.isArray(freshItems) && freshItems.length > 0
+        ? freshItems
+        : Array.isArray(promo.items)
+          ? promo.items
+          : []
+    const resolvedPromo: PosPromoWithItems = { ...promo, items: resolvedItems || [] }
+    const { fixedItems, groups } = splitPromoChoiceGroups((resolvedPromo.items || []).map((it) => ({
+      menuId: String(it.menuId ?? ""),
+      optionId: it.optionId ? String(it.optionId) : null,
+      quantity: Math.max(1, Number(it.quantity) || 1),
+      choiceGroup: String(it.choiceGroup ?? "").trim() || null,
+      choicePickCount:
+        it.choicePickCount != null && Number.isFinite(Number(it.choicePickCount))
+          ? Math.max(1, Math.floor(Number(it.choicePickCount)))
+          : null,
+    })))
+    if (groups.length === 0) {
+      addResolvedPromoToCart({ ...resolvedPromo, items: fixedItems })
+      return
+    }
+    const selectedRowKeysByGroup: Record<string, string[]> = {}
+    for (const g of groups) selectedRowKeysByGroup[g.key] = []
+    setPromoChoiceDialog({
+      promo: resolvedPromo,
+      fixedItems,
+      groups,
+      selectedRowKeysByGroup,
     })
   }
+
+  const togglePromoChoice = React.useCallback((groupKey: string, rowKey: string) => {
+    setPromoChoiceDialog((prev) => {
+      if (!prev) return prev
+      const group = prev.groups.find((g) => g.key === groupKey)
+      if (!group) return prev
+      const current = prev.selectedRowKeysByGroup[groupKey] || []
+      const exists = current.includes(rowKey)
+      let next = exists ? current.filter((x) => x !== rowKey) : [...current, rowKey]
+      if (next.length > group.pickCount) next = next.slice(next.length - group.pickCount)
+      return {
+        ...prev,
+        selectedRowKeysByGroup: {
+          ...prev.selectedRowKeysByGroup,
+          [groupKey]: next,
+        },
+      }
+    })
+  }, [])
+
+  const confirmPromoChoice = React.useCallback(async () => {
+    const state = promoChoiceDialog
+    if (!state) return
+    for (const g of state.groups) {
+      const selected = state.selectedRowKeysByGroup[g.key] || []
+      if (selected.length !== g.pickCount) {
+        await appAlert(`"${g.key}" 그룹은 ${g.pickCount}개 선택해야 합니다.`)
+        return
+      }
+    }
+    const selectedItems = state.groups.flatMap((g) => {
+      const pick = new Set(state.selectedRowKeysByGroup[g.key] || [])
+      return g.lines
+        .filter((line) => pick.has(line.rowKey))
+        .map((line) => ({
+          menuId: line.menuId,
+          optionId: line.optionId,
+          quantity: line.quantity,
+        }))
+    })
+    addResolvedPromoToCart({
+      ...state.promo,
+      items: [...state.fixedItems, ...selectedItems],
+    })
+    setPromoChoiceDialog(null)
+  }, [addResolvedPromoToCart, promoChoiceDialog])
 
   const updateQty = (id: string, delta: number) => {
     setCart((prev) => {
@@ -2057,6 +2148,62 @@ export default function PosOrderPage() {
               </div>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!promoChoiceDialog} onOpenChange={(open) => !open && setPromoChoiceDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>세트 구성 선택</DialogTitle>
+          </DialogHeader>
+          {promoChoiceDialog ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">{promoChoiceDialog.promo.name}</p>
+              {promoChoiceDialog.groups.map((group) => {
+                const selected = promoChoiceDialog.selectedRowKeysByGroup[group.key] || []
+                return (
+                  <div key={group.key} className="rounded-lg border border-border/60 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {getPromoChoiceSlotLabel(group.key)} ({selected.length}/{group.pickCount})
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {group.lines.map((line) => {
+                        const menu = menus.find((m) => String(m.id) === String(line.menuId))
+                        const option = line.optionId
+                          ? allOptions.find((o) => String(o.id) === String(line.optionId))
+                          : null
+                        const label = `${menu?.name ?? `#${line.menuId}`}${option?.name ? ` (${option.name})` : ''}`
+                        const active = selected.includes(line.rowKey)
+                        return (
+                          <button
+                            key={line.rowKey}
+                            type="button"
+                            onClick={() => togglePromoChoice(group.key, line.rowKey)}
+                            className={cn(
+                              "rounded-md border px-3 py-2 text-left text-sm transition",
+                              active
+                                ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                                : "border-border/70 bg-background hover:border-emerald-300"
+                            )}
+                          >
+                            {label} x{Math.max(1, Number(line.quantity) || 1)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setPromoChoiceDialog(null)}>
+                  취소
+                </Button>
+                <Button type="button" onClick={() => void confirmPromoChoice()}>
+                  담기
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

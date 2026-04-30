@@ -50,6 +50,7 @@ import {
   resolveCostFromAnalysisMaps,
   type PromoLineLike,
 } from "@/lib/promo-economics"
+import { getPromoChoiceSlotLabel } from "@/lib/pos-promo-choice"
 
 const CHICKEN_CODE_PREFIX = "c"
 function isChickenMenu(code: string | undefined): boolean {
@@ -72,6 +73,25 @@ const DEFAULT_PICKER_DELIVERY_APPS = [
 ]
 
 const CANON_DELIVERY_CODES = new Set(DEFAULT_PICKER_DELIVERY_APPS.map((d) => d.code))
+
+const CHOICE_SLOT_PRESETS: Array<{ key: string; label: string; pickCount: number; keywords: string[] }> = [
+  { key: "main", label: "메인", pickCount: 1, keywords: ["main", "메인", "chicken", "burger", "pizza", "rice", "noodle"] },
+  { key: "side", label: "사이드", pickCount: 1, keywords: ["side", "사이드", "snack", "fries", "감자", "튀김"] },
+  { key: "drink", label: "음료", pickCount: 1, keywords: ["drink", "beverage", "음료", "콜라", "coffee", "tea", "juice"] },
+  { key: "sauce", label: "소스", pickCount: 1, keywords: ["sauce", "dip", "소스"] },
+]
+
+function inferChoiceSlotKeyByMenu(menu?: PosMenu | null): string | null {
+  if (!menu) return null
+  const haystack = `${String(menu.categoryMain ?? "")} ${String(menu.category ?? "")} ${String(menu.name ?? "")} ${String(menu.code ?? "")}`
+    .toLowerCase()
+    .trim()
+  if (!haystack) return null
+  for (const preset of CHOICE_SLOT_PRESETS) {
+    if (preset.keywords.some((kw) => haystack.includes(kw.toLowerCase()))) return preset.key
+  }
+  return null
+}
 
 function normalizeDeliveryAppCode(raw: string): string {
   const x = String(raw ?? "")
@@ -119,6 +139,8 @@ type ComposerLine = {
   menuId: string
   optionId: string | null
   qty: number
+  choiceGroup?: string
+  choicePickCount?: number
   menuName: string
   optionLabel?: string
   /** 행 단위 할인율(%) — 비우면 세트 규칙을 따름 */
@@ -194,6 +216,8 @@ export function PosSetMenuTabWorkspace({
   const [pickQty, setPickQty] = React.useState("1")
   /** Step 1 메뉴 고를 때 참고할 가격 기준(매장/배달) */
   const [pickPricingBasis, setPickPricingBasis] = React.useState<"hall" | "delivery">("hall")
+  const [newChoiceSlotName, setNewChoiceSlotName] = React.useState("")
+  const [newChoiceSlotPickCount, setNewChoiceSlotPickCount] = React.useState("1")
 
   const [discountMode, setDiscountMode] = React.useState<"pct" | "baht">("pct")
   const [discountPctStr, setDiscountPctStr] = React.useState("")
@@ -697,6 +721,11 @@ export function PosSetMenuTabWorkspace({
             menuId: String(it.menuId),
             optionId: it.optionId ? String(it.optionId) : null,
             qty: Number(it.quantity) || 1,
+            choiceGroup: String(it.choiceGroup ?? "").trim(),
+            choicePickCount:
+              it.choicePickCount != null && Number.isFinite(Number(it.choicePickCount))
+                ? Math.max(1, Math.floor(Number(it.choicePickCount)))
+                : 1,
             menuName: menu?.name ?? `menu ${it.menuId}`,
             optionLabel: opt?.name,
             lineDiscountPct: "",
@@ -1003,6 +1032,8 @@ export function PosSetMenuTabWorkspace({
           menuId,
           optionId,
           qty,
+          choiceGroup: "",
+          choicePickCount: 1,
           menuName: menu.name ?? "",
           optionLabel: opt?.name,
           lineDiscountPct: "",
@@ -1051,6 +1082,121 @@ export function PosSetMenuTabWorkspace({
     if (isChickenMenu(menu.code)) return raw.filter((o) => !isChickenDefaultOption(o.name))
     return raw
   }, [pickMenuId, optionsByMenuId, menuById])
+
+  const choiceSlots = React.useMemo(() => {
+    const map = new Map<string, { key: string; pickCount: number }>()
+    for (const ln of lines) {
+      const key = String(ln.choiceGroup ?? "").trim()
+      if (!key) continue
+      const pick = Math.max(1, Number(ln.choicePickCount) || 1)
+      const hit = map.get(key)
+      if (hit) {
+        hit.pickCount = Math.max(hit.pickCount, pick)
+      } else {
+        map.set(key, { key, pickCount: pick })
+      }
+    }
+    return [...map.values()]
+  }, [lines])
+
+  const applySlotPickCountToLines = React.useCallback((slotKey: string, pickCount: number) => {
+    const key = String(slotKey).trim()
+    if (!key) return
+    const nextPick = Math.max(1, Math.floor(Number(pickCount) || 1))
+    setLines((prev) =>
+      prev.map((ln) =>
+        String(ln.choiceGroup ?? "").trim() === key ? { ...ln, choicePickCount: nextPick } : ln
+      )
+    )
+  }, [])
+
+  const removeChoiceSlot = React.useCallback((slotKey: string) => {
+    const key = String(slotKey).trim()
+    if (!key) return
+    setLines((prev) =>
+      prev.map((ln) =>
+        String(ln.choiceGroup ?? "").trim() === key ? { ...ln, choiceGroup: "", choicePickCount: 1 } : ln
+      )
+    )
+  }, [])
+
+  const attachSlotToFirstUnassignedLine = React.useCallback(
+    async (slotKeyRaw: string, pickCountRaw: number) => {
+      const key = String(slotKeyRaw).trim()
+      if (!key) return false
+      if (!lines.some((ln) => !String(ln.choiceGroup ?? "").trim())) {
+        await appAlert("먼저 슬롯에 넣을 구성 라인을 1개 이상 추가해 주세요.")
+        return false
+      }
+      const pick = Math.max(1, Math.floor(Number(pickCountRaw) || 1))
+      setLines((prev) => {
+        const firstNoSlotIdx = prev.findIndex((ln) => !String(ln.choiceGroup ?? "").trim())
+        if (firstNoSlotIdx < 0) return prev
+        return prev.map((ln, idx) =>
+          idx === firstNoSlotIdx ? { ...ln, choiceGroup: key, choicePickCount: pick } : ln
+        )
+      })
+      return true
+    },
+    [lines]
+  )
+
+  const addChoiceSlot = React.useCallback(async () => {
+    const key = newChoiceSlotName.trim()
+    if (!key) {
+      await appAlert("선택 슬롯 이름을 입력해 주세요.")
+      return
+    }
+    if (choiceSlots.some((s) => s.key === key)) {
+      await appAlert("같은 슬롯 이름이 이미 있습니다.")
+      return
+    }
+    const pick = Math.max(1, Math.floor(Number(newChoiceSlotPickCount) || 1))
+    const ok = await attachSlotToFirstUnassignedLine(key, pick)
+    if (!ok) return
+    setNewChoiceSlotName("")
+    setNewChoiceSlotPickCount("1")
+  }, [attachSlotToFirstUnassignedLine, choiceSlots, newChoiceSlotName, newChoiceSlotPickCount])
+
+  const addPresetChoiceSlot = React.useCallback(
+    async (presetKey: string) => {
+      const preset = CHOICE_SLOT_PRESETS.find((p) => p.key === presetKey)
+      if (!preset) return
+      if (choiceSlots.some((s) => s.key === preset.key)) {
+        await appAlert("이미 생성된 슬롯입니다.")
+        return
+      }
+      const ok = await attachSlotToFirstUnassignedLine(preset.key, preset.pickCount)
+      if (!ok) return
+    },
+    [attachSlotToFirstUnassignedLine, choiceSlots]
+  )
+
+  const autoAssignChoiceSlots = React.useCallback(async () => {
+    if (lines.length === 0) {
+      await appAlert("먼저 구성 라인을 추가해 주세요.")
+      return
+    }
+    let assigned = 0
+    const next = lines.map((ln) => {
+      if (String(ln.choiceGroup ?? "").trim()) return ln
+      const menu = menuById[String(ln.menuId)]
+      const slotKey = inferChoiceSlotKeyByMenu(menu)
+      if (!slotKey) return ln
+      const preset = CHOICE_SLOT_PRESETS.find((p) => p.key === slotKey)
+      assigned += 1
+      return {
+        ...ln,
+        choiceGroup: slotKey,
+        choicePickCount: preset?.pickCount ?? 1,
+      }
+    })
+    if (assigned === 0) {
+      await appAlert("자동 추천할 라인이 없거나 카테고리 규칙과 맞는 항목이 없습니다.")
+      return
+    }
+    setLines(next)
+  }, [lines, menuById])
 
   const resolvedDiscountSaleHallThb = React.useMemo(
     () =>
@@ -1114,6 +1260,8 @@ export function PosSetMenuTabWorkspace({
         optionId: ln.optionId ? Number(ln.optionId) : null,
         quantity: ln.qty,
         sortOrder: i,
+        choiceGroup: String(ln.choiceGroup ?? "").trim() || null,
+        choicePickCount: String(ln.choiceGroup ?? "").trim() ? Math.max(1, Number(ln.choicePickCount) || 1) : null,
       })
       if (!res.success) {
         await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail"))
@@ -1162,7 +1310,7 @@ export function PosSetMenuTabWorkspace({
     }
   }
 
-  /** 프로모 마스터만 (이름·채널·가격·VAT 등). 조합 줄은 저장하지 않음 */
+  /** 프로모 마스터 저장. 구성 줄이 있으면 조합도 함께 저장 */
   const handleSavePromo = async () => {
     if (savingPromo || savingSet) return
     const { name, codeTrim, payload } = buildSavePromoPayload()
@@ -1191,11 +1339,14 @@ export function PosSetMenuTabWorkspace({
         return
       }
       const pidStr = String(pid)
+      setEditPromoId(pidStr)
       if (lines.length > 0) {
         preserveLinesAfterMasterSaveRef.current = pidStr
         lastHydratedPromoIdRef.current = null
+        const itemsOk = await replacePromoItems(pidStr)
+        if (!itemsOk) return
+        void refreshSavedSetComposePreview(pidStr)
       }
-      setEditPromoId(pidStr)
       await appAlert(t("posSetTabPromoSaved"))
       onAfterSave()
     } catch (e) {
@@ -1655,8 +1806,83 @@ export function PosSetMenuTabWorkspace({
 
           <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm">
             <p className="mb-2 text-sm font-bold">{t("posMenuBundleSimComposeTitle")}</p>
+            <div className="mb-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+              <p className="text-xs font-semibold text-muted-foreground">선택 슬롯 관리</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                예: 음료 슬롯(3개 후보 중 1개 선택)처럼 슬롯을 먼저 만들고 라인에 배정하세요.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {CHOICE_SLOT_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => void addPresetChoiceSlot(preset.key)}
+                  >
+                    + {preset.label}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => void autoAssignChoiceSlots()}
+                >
+                  자동 슬롯 추천
+                </Button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <Input
+                  className="h-9 w-44 text-xs"
+                  placeholder="슬롯명 (예: 음료)"
+                  value={newChoiceSlotName}
+                  onChange={(e) => setNewChoiceSlotName(e.target.value)}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  className="h-9 w-24 text-right text-xs tabular-nums"
+                  value={newChoiceSlotPickCount}
+                  onChange={(e) => setNewChoiceSlotPickCount(e.target.value)}
+                />
+                <Button type="button" size="sm" className="h-9" onClick={() => void addChoiceSlot()}>
+                  슬롯 생성
+                </Button>
+              </div>
+              {choiceSlots.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {choiceSlots.map((slot) => (
+                    <div key={slot.key} className="flex flex-wrap items-center gap-2 rounded border border-border/50 bg-background/70 px-2 py-2">
+                      <span className="min-w-24 text-xs font-medium">{getPromoChoiceSlotLabel(slot.key)}</span>
+                      <span className="text-[11px] text-muted-foreground">선택수</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        className="h-8 w-20 text-right text-xs tabular-nums"
+                        value={String(slot.pickCount)}
+                        onChange={(e) => applySlotPickCountToLines(slot.key, Number(e.target.value))}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => removeChoiceSlot(slot.key)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div className="max-h-[min(28rem,70vh)] overflow-auto rounded-lg border border-border/60">
-              <table className="w-full min-w-[56rem] text-sm">
+              <table className="w-full min-w-[68rem] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/60">
                     <th className="w-10 px-1 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1664,6 +1890,9 @@ export function PosSetMenuTabWorkspace({
                     </th>
                     <th className="min-w-[9rem] px-2 py-2.5 text-left text-sm font-semibold">{t("posPromoItems")}</th>
                     <th className="w-16 px-2 py-2.5 text-right text-sm font-semibold">{t("qty")}</th>
+                    <th className="w-[9rem] px-2 py-2.5 text-left text-xs font-semibold leading-tight text-muted-foreground">
+                      선택그룹
+                    </th>
                     <th className="w-[5rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
                       {t("itemsCost")}
                     </th>
@@ -1727,6 +1956,41 @@ export function PosSetMenuTabWorkspace({
                                 )
                               }}
                             />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <Select
+                              value={String(ln.choiceGroup ?? "").trim() || "__none__"}
+                              onValueChange={(v) => {
+                                if (v === "__none__") {
+                                  setLines((prev) =>
+                                    prev.map((x) =>
+                                      x.key === ln.key ? { ...x, choiceGroup: "", choicePickCount: 1 } : x
+                                    )
+                                  )
+                                  return
+                                }
+                                const slot = choiceSlots.find((s) => s.key === v)
+                                setLines((prev) =>
+                                  prev.map((x) =>
+                                    x.key === ln.key
+                                      ? { ...x, choiceGroup: v, choicePickCount: slot?.pickCount ?? 1 }
+                                      : x
+                                  )
+                                )
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-xs">
+                                <SelectValue placeholder="슬롯 미지정" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">슬롯 미지정</SelectItem>
+                                {choiceSlots.map((slot) => (
+                                  <SelectItem key={slot.key} value={slot.key}>
+                                    {getPromoChoiceSlotLabel(slot.key)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="px-1 py-2 text-right font-mono text-sm tabular-nums text-muted-foreground">
                             {!costsReady && lines.length > 0 ? "…" : `฿${lineCost.toFixed(1)}`}
@@ -1792,6 +2056,7 @@ export function PosSetMenuTabWorkspace({
                           ? t("posSetTabComposeSummaryLabelHall")
                           : t("posSetTabComposeSummaryLabelDel")}
                       </td>
+                      <td className="px-2 py-3 text-right text-sm text-muted-foreground">—</td>
                       <td className="px-2 py-3 text-right text-sm text-muted-foreground">—</td>
                       <td className="px-1 py-3 text-right font-mono text-sm font-semibold tabular-nums">
                         {!costsReady ? "…" : `฿${paCostTotal.toFixed(1)}`}

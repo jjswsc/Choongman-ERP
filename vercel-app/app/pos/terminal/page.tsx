@@ -619,7 +619,7 @@ export default function PosTerminalPage() {
           delayAlertOverMin: Math.max(0, Number(s.cookingDelayAlertOverMin ?? 0)),
         })
         setAutoPrintReceiptOnOrder(Boolean(s.autoPrintReceiptOnOrder))
-        setAutoPrintReceiptOnAddOrder(Boolean(s.autoPrintReceiptOnAddOrder))
+        setAutoPrintReceiptOnAddOrder(Boolean(s.autoPrintReceiptOnAddOrder || s.autoPrintReceiptOnOrder))
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
         setAutoPrintFinalOrderBeforePayment(Boolean(s.autoPrintFinalOrderBeforePayment))
@@ -694,6 +694,15 @@ export default function PosTerminalPage() {
       })
       .catch(() => {
         if (seq !== storeSettingsLoadSeqRef.current) return
+        /**
+         * 설정 재조회가 일시 실패해도, 같은 매장에 이미 로드된 프린터 설정이 있으면
+         * 자동인쇄 플래그를 false 기본값으로 덮어쓰지 않는다.
+         * (주문 직전/직후 네트워크 흔들림으로 수동 인쇄 팝업이 뜨는 현상 방지)
+         */
+        const hasUsableCachedSettings =
+          posPrinterSettingsRef.current != null &&
+          String(posPrinterSettingsStoreCodeRef.current || '').trim() === requestStoreCode
+        if (hasUsableCachedSettings) return
         posPrinterSettingsRef.current = null
         posPrinterSettingsStoreCodeRef.current = ""
         setCookingRules({
@@ -3071,7 +3080,9 @@ export default function PosTerminalPage() {
               const existingOrder = selectedTable?.order ?? null
               const existingOrderId = Number(existingOrder?.id ?? 0)
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
-              const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
+              const shouldAutoPrintReceipt = isAddOrder
+                ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
+                : autoPrintReceiptOnOrder
               try {
                 if (isPosDemo) {
                   const tid = selectedTableId
@@ -3135,6 +3146,13 @@ export default function PosTerminalPage() {
                       price: it.price,
                       qty: it.quantity || 1,
                       ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+                      ...(it.promoId && Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
+                        ? {
+                            promoId: it.promoId,
+                            promoCode: it.promoCode,
+                            promoItems: (it as { promoItems: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems,
+                          }
+                        : {}),
                       ...(it.servedAt ? { servedAt: it.servedAt } : {}),
                       ...(it.servedBy ? { servedBy: it.servedBy } : {}),
                     })),
@@ -3427,7 +3445,9 @@ export default function PosTerminalPage() {
                 } else if (
                   isMainPosDevice &&
                   !skipLocalAutoPrint &&
-                  !(isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder) &&
+                  !(isAddOrder
+                    ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
+                    : autoPrintReceiptOnOrder) &&
                   !autoPrintKitchenSlipOnOrder
                 ) {
                   /** 자동 인쇄(영수증·주방) 모두 꺼진 경우: 수동 인쇄 안내 모달(Windows 인쇄 대화상자로 이어짐) */
@@ -3858,6 +3878,22 @@ export default function PosTerminalPage() {
             }}
           />
   )
+  const hasCurrentStorePrinterSettings =
+    String(posPrinterSettingsStoreCodeRef.current || '').trim() === String(currentStoreId || '').trim()
+  const effectivePrinterSettings = hasCurrentStorePrinterSettings ? posPrinterSettingsRef.current : null
+  const effectiveAutoPrintReceiptOnOrder =
+    autoPrintReceiptOnOrder || Boolean(effectivePrinterSettings?.autoPrintReceiptOnOrder)
+  const effectiveAutoPrintReceiptOnAddOrder =
+    autoPrintReceiptOnAddOrder ||
+    Boolean(effectivePrinterSettings?.autoPrintReceiptOnAddOrder) ||
+    Boolean(effectivePrinterSettings?.autoPrintReceiptOnOrder)
+  const effectiveAutoPrintReceiptOnPayment =
+    autoPrintReceiptOnPayment ||
+    Boolean(effectivePrinterSettings?.autoPrintReceiptOnPayment) ||
+    Boolean(effectivePrinterSettings?.autoPrintReceiptOnOrder)
+  const effectiveAutoPrintKitchenSlipOnOrder =
+    autoPrintKitchenSlipOnOrder || Boolean(effectivePrinterSettings?.autoPrintKitchenSlipOnOrder)
+
   return (
     <PosTourProvider isDemo={isPosDemo} scenarioId={tourScenarioId}>
       <PosTourTerminalManualNextGates
@@ -4563,10 +4599,10 @@ export default function PosTerminalPage() {
           delivery: tPrint('posOrderTypeDelivery') ?? '배달',
         }}
         t={tPrint}
-        autoPrintReceiptOnOrder={autoPrintReceiptOnOrder}
-        autoPrintReceiptOnAddOrder={autoPrintReceiptOnAddOrder}
-        autoPrintReceiptOnPayment={autoPrintReceiptOnPayment}
-        autoPrintKitchenSlipOnOrder={autoPrintKitchenSlipOnOrder}
+        autoPrintReceiptOnOrder={effectiveAutoPrintReceiptOnOrder}
+        autoPrintReceiptOnAddOrder={effectiveAutoPrintReceiptOnAddOrder}
+        autoPrintReceiptOnPayment={effectiveAutoPrintReceiptOnPayment}
+        autoPrintKitchenSlipOnOrder={effectiveAutoPrintKitchenSlipOnOrder}
         receiptBizName={receiptBizName}
         receiptBizTaxId={receiptBizTaxId}
         receiptBizAbn={receiptBizAbn}

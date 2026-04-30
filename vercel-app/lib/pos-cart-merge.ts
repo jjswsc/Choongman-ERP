@@ -13,9 +13,17 @@ export type MergeCartItemInput = {
 
 /** CartPanel.addItem 과 동일한 병합 규칙 (단일 진실 원천용 순수 함수) */
 export function mergeCartPanelAddItem(prev: OrderItem[], item: MergeCartItemInput): OrderItem[] {
-  const lineId = item.promoId ? `promo-cart-${item.promoId}` : `cart-${Date.now()}-${item.id}`
+  const promoSignature = JSON.stringify(
+    (item.promoItems || []).map((r) => [String(r.menuId), r.optionId ? String(r.optionId) : null, Number(r.quantity) || 1])
+  )
+  const lineId = item.promoId ? `promo-cart-${item.promoId}-${promoSignature}` : `cart-${Date.now()}-${item.id}`
   if (item.promoId) {
-    const existing = prev.find((p) => p.promoId === item.promoId)
+    const stringifyPromoItems = (rows: { menuId: string; optionId: string | null; quantity: number }[] | undefined) =>
+      JSON.stringify((rows || []).map((r) => [String(r.menuId), r.optionId ? String(r.optionId) : null, Number(r.quantity) || 1]))
+    const incomingSignature = stringifyPromoItems(item.promoItems)
+    const existing = prev.find(
+      (p) => p.promoId === item.promoId && stringifyPromoItems(p.promoItems as MergeCartItemInput['promoItems']) === incomingSignature
+    )
     if (existing) {
       return prev.map((p) =>
         p.id === existing.id

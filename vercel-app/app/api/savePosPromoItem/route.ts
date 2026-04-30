@@ -14,6 +14,8 @@ export async function POST(req: NextRequest) {
       optionId?: number | null
       quantity?: number
       sortOrder?: number
+      choiceGroup?: string | null
+      choicePickCount?: number | null
     }
 
     const promoId = Number(body.promoId)
@@ -25,16 +27,34 @@ export async function POST(req: NextRequest) {
     }
 
     const optionId = body.optionId != null ? Number(body.optionId) : null
+    const choiceGroup = String(body.choiceGroup ?? '').trim() || null
+    const choicePickCountRaw = body.choicePickCount
+    const choicePickCount =
+      choicePickCountRaw == null || String(choicePickCountRaw).trim() === ''
+        ? null
+        : Math.max(1, Math.floor(Number(choicePickCountRaw) || 1))
     const row = {
       promo_id: promoId,
       menu_id: menuId,
       option_id: optionId,
       quantity: Number(body.quantity) ?? 1,
       sort_order: Number(body.sortOrder) ?? 0,
+      choice_group: choiceGroup,
+      choice_pick_count: choiceGroup ? choicePickCount ?? 1 : null,
     }
 
     if (editingId) {
-      await supabaseUpdateByFilter('pos_promo_items', `id=eq.${editingId}`, row)
+      try {
+        await supabaseUpdateByFilter('pos_promo_items', `id=eq.${editingId}`, row)
+      } catch {
+        await supabaseUpdateByFilter('pos_promo_items', `id=eq.${editingId}`, {
+          promo_id: promoId,
+          menu_id: menuId,
+          option_id: optionId,
+          quantity: Number(body.quantity) ?? 1,
+          sort_order: Number(body.sortOrder) ?? 0,
+        })
+      }
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
@@ -55,7 +75,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: '기존 구성에 수량을 합산했습니다.' }, { headers })
     }
 
-    await supabaseInsert('pos_promo_items', row)
+    try {
+      await supabaseInsert('pos_promo_items', row)
+    } catch {
+      await supabaseInsert('pos_promo_items', {
+        promo_id: promoId,
+        menu_id: menuId,
+        option_id: optionId,
+        quantity: Number(body.quantity) ?? 1,
+        sort_order: Number(body.sortOrder) ?? 0,
+      })
+    }
     return NextResponse.json({ success: true, message: '추가되었습니다.' }, { headers })
   } catch (e) {
     console.error('savePosPromoItem:', e)

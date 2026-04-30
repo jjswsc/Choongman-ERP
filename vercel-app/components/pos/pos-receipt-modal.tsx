@@ -453,7 +453,7 @@ export function PosReceiptModal({
       ctx === 'payment'
         ? autoPrintReceiptOnPayment
         : ctx === 'add_order'
-          ? autoPrintReceiptOnAddOrder
+          ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
           : ctx === 'order'
             ? autoPrintReceiptOnOrder
             : false
@@ -506,7 +506,7 @@ export function PosReceiptModal({
     ctxManual === 'payment'
       ? autoPrintReceiptOnPayment
       : ctxManual === 'add_order'
-        ? autoPrintReceiptOnAddOrder
+        ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
         : ctxManual === 'order'
           ? autoPrintReceiptOnOrder
           : false

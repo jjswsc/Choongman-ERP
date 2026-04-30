@@ -6319,6 +6319,10 @@ export interface PosPromoItem {
   optionId: string | null
   quantity: number
   sortOrder: number
+  /** 같은 값끼리 한 선택 그룹(예: drink) */
+  choiceGroup?: string | null
+  /** 그룹에서 선택해야 하는 개수(예: 1 = 3개 중 1개) */
+  choicePickCount?: number | null
 }
 
 /** 목록 API: 비 JSON·HTML 오류 페이지·빈 본문 시 빈 배열 (통합 캘린더 등에서 Promise.all 전체 실패 방지) */
@@ -6357,7 +6361,13 @@ export async function getNextPosPromoCode(params: { campaignId: string }) {
 }
 
 export interface PosPromoWithItems extends PosPromo {
-  items: { menuId: string; optionId: string | null; quantity: number }[]
+  items: {
+    menuId: string
+    optionId: string | null
+    quantity: number
+    choiceGroup?: string | null
+    choicePickCount?: number | null
+  }[]
 }
 
 export async function getPosPromosWithItems(params?: { campaignId?: string; includeInactive?: boolean }) {
@@ -6424,6 +6434,8 @@ export async function savePosPromoItem(params: {
   optionId?: number | null
   quantity?: number
   sortOrder?: number
+  choiceGroup?: string | null
+  choicePickCount?: number | null
 }) {
   const res = await apiFetchWithOffline('/api/savePosPromoItem', {
     method: 'POST',

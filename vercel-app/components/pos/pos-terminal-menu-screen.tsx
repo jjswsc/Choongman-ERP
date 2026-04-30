@@ -52,6 +52,7 @@ import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import { PosMenuFillImage } from '@/components/pos/pos-menu-image'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
+import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from '@/lib/pos-promo-choice'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
 import {
   posDescriptionChannelFromTerminalType,
@@ -103,6 +104,13 @@ export interface PosTerminalMenuScreenProps {
   hideTableContextBar?: boolean
 }
 
+type PromoChoiceDialogState = {
+  promo: PosPromoWithItems
+  fixedItems: { menuId: string; optionId: string | null; quantity: number }[]
+  groups: PromoChoiceGroup[]
+  selectedRowKeysByGroup: Record<string, string[]>
+}
+
 export function PosTerminalMenuScreen({
   selectedTableName,
   mode = 'pos-order',
@@ -145,6 +153,7 @@ export function PosTerminalMenuScreen({
   const [optionPickerStep, setOptionPickerStep] = React.useState(0)
   const [optionPickerSelections, setOptionPickerSelections] = React.useState<Record<string, string>>({})
   const [optionPickerBanbanFirst, setOptionPickerBanbanFirst] = React.useState<PosMenu | null>(null)
+  const [promoChoiceDialog, setPromoChoiceDialog] = React.useState<PromoChoiceDialogState | null>(null)
   const [searchKeyword, setSearchKeyword] = React.useState('')
   const [listPage, setListPage] = React.useState(0)
   const [screenConfig, setScreenConfig] = React.useState<PosMenuScreenConfig>(DEFAULT_POS_MENU_SCREEN_CONFIG)
@@ -293,21 +302,6 @@ export function PosTerminalMenuScreen({
     setListPage(0)
   }, [selectedMainCategory, selectedCategory, searchKeyword, screenConfig.menuListPageSize])
 
-  const filteredMenus = React.useMemo(() => {
-    const active = menus.filter((m) => m.isActive)
-    const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
-    if (!selectedMainCategory || !selectedCategory) return []
-    const subOk = (cat: string | undefined) =>
-      selectedMainCategory === PROMOTION_MAIN_CATEGORY
-        ? promotionSubcategoriesEqual(cat, selectedCategory)
-        : (cat ?? '').trim() === selectedCategory
-    const byMainAndSub = notSoldOut.filter(
-      (m) => (m.categoryMain ?? '') === selectedMainCategory && subOk(m.category)
-    )
-    if (byMainAndSub.length > 0) return byMainAndSub
-    return notSoldOut.filter((m) => subOk(m.category))
-  }, [menus, selectedCategory, selectedMainCategory, todayStr])
-
   const linkedPromoIds = React.useMemo(() => {
     const s = new Set<string>()
     for (const m of menus) {
@@ -318,9 +312,45 @@ export function PosTerminalMenuScreen({
   }, [menus])
 
   const businessDateYmd = getPosBusinessDateStr()
+  const promoVisibilityById = React.useMemo(() => {
+    const ot = orderType === 'dine-in' ? 'dine_in' : orderType === 'delivery' ? 'delivery' : 'takeout'
+    const out = new Map<string, boolean>()
+    for (const p of promos) {
+      out.set(
+        p.id,
+        isPromoVisibleInContext(p, {
+          businessDateYmd,
+          orderType: ot,
+          deliveryAppCode: deliveryAppCode || null,
+        })
+      )
+    }
+    return out
+  }, [promos, businessDateYmd, orderType, deliveryAppCode])
+
+  const filteredMenus = React.useMemo(() => {
+    const active = menus.filter((m) => m.isActive)
+    const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
+    const visibleByPromoChannel = notSoldOut.filter((m) => {
+      const pid = m.promoId?.trim()
+      if (!pid) return true
+      // 미러 세트 메뉴는 원본 프로모 채널/기간 가시성과 동일하게 노출한다.
+      const visible = promoVisibilityById.get(pid)
+      return visible == null ? true : visible
+    })
+    if (!selectedMainCategory || !selectedCategory) return []
+    const subOk = (cat: string | undefined) =>
+      selectedMainCategory === PROMOTION_MAIN_CATEGORY
+        ? promotionSubcategoriesEqual(cat, selectedCategory)
+        : (cat ?? '').trim() === selectedCategory
+    const byMainAndSub = visibleByPromoChannel.filter(
+      (m) => (m.categoryMain ?? '') === selectedMainCategory && subOk(m.category)
+    )
+    if (byMainAndSub.length > 0) return byMainAndSub
+    return visibleByPromoChannel.filter((m) => subOk(m.category))
+  }, [menus, selectedCategory, selectedMainCategory, todayStr, promoVisibilityById])
 
   const filteredPromos = React.useMemo(() => {
-    const ot = orderType === 'dine-in' ? 'dine_in' : orderType === 'delivery' ? 'delivery' : 'takeout'
     return promos.filter((p) => {
       if (!p.isActive) return false
       if (linkedPromoIds.has(p.id)) return false
@@ -334,20 +364,14 @@ export function PosTerminalMenuScreen({
           return false
         }
       }
-      return isPromoVisibleInContext(p, {
-        businessDateYmd,
-        orderType: ot,
-        deliveryAppCode: deliveryAppCode || null,
-      })
+      return promoVisibilityById.get(p.id) ?? false
     })
   }, [
     promos,
     selectedCategory,
     selectedMainCategory,
     linkedPromoIds,
-    businessDateYmd,
-    orderType,
-    deliveryAppCode,
+    promoVisibilityById,
   ])
 
   const getMenuPrice = (menu: PosMenu) =>
@@ -420,21 +444,103 @@ export function PosTerminalMenuScreen({
     setOptionPickerBanbanFirst(null)
   }
 
-  const addPromo = async (p: PosPromoWithItems) => {
-    const resolvedItems =
-      Array.isArray(p.items) && p.items.length > 0
-        ? p.items
-        : await getPosPromoItems({ promoId: p.id }).catch(() => [])
-    const resolvedPromo: PosPromoWithItems = { ...p, items: resolvedItems || [] }
+  const addResolvedPromo = React.useCallback((resolvedPromo: PosPromoWithItems) => {
+    const normalizedItems = (resolvedPromo.items || []).map((x) => ({
+      menuId: String(x.menuId),
+      optionId: x.optionId ? String(x.optionId) : null,
+      quantity: Math.max(1, Number(x.quantity) || 1),
+    }))
+    const signature = normalizedItems
+      .map((x) => `${x.menuId}:${x.optionId || '-'}:${x.quantity}`)
+      .join('|')
     onAddItem?.({
-      id: `promo-${resolvedPromo.id}`,
+      id: `promo-${resolvedPromo.id}-${signature || 'base'}`,
       name: resolvedPromo.name,
       price: getPromoPrice(resolvedPromo),
       promoId: resolvedPromo.id,
       promoCode: resolvedPromo.code,
-      promoItems: resolvedPromo.items || [],
+      promoItems: normalizedItems,
+    })
+  }, [getPromoPrice, onAddItem])
+
+  const addPromo = async (p: PosPromoWithItems) => {
+    const freshItems = await getPosPromoItems({ promoId: p.id }).catch(() => null)
+    const resolvedItems =
+      Array.isArray(freshItems) && freshItems.length > 0
+        ? freshItems
+        : Array.isArray(p.items)
+          ? p.items
+          : []
+    const resolvedPromo: PosPromoWithItems = { ...p, items: resolvedItems || [] }
+    const { fixedItems, groups } = splitPromoChoiceGroups((resolvedPromo.items || []).map((it) => ({
+      menuId: String(it.menuId ?? ''),
+      optionId: it.optionId ? String(it.optionId) : null,
+      quantity: Math.max(1, Number(it.quantity) || 1),
+      choiceGroup: String(it.choiceGroup ?? '').trim() || null,
+      choicePickCount:
+        it.choicePickCount != null && Number.isFinite(Number(it.choicePickCount))
+          ? Math.max(1, Math.floor(Number(it.choicePickCount)))
+          : null,
+    })))
+    if (groups.length === 0) {
+      addResolvedPromo({ ...resolvedPromo, items: fixedItems })
+      return
+    }
+    const selectedRowKeysByGroup: Record<string, string[]> = {}
+    for (const g of groups) selectedRowKeysByGroup[g.key] = []
+    setPromoChoiceDialog({
+      promo: resolvedPromo,
+      fixedItems,
+      groups,
+      selectedRowKeysByGroup,
     })
   }
+
+  const togglePromoChoice = React.useCallback((groupKey: string, rowKey: string) => {
+    setPromoChoiceDialog((prev) => {
+      if (!prev) return prev
+      const group = prev.groups.find((g) => g.key === groupKey)
+      if (!group) return prev
+      const current = prev.selectedRowKeysByGroup[groupKey] || []
+      const exists = current.includes(rowKey)
+      let next = exists ? current.filter((x) => x !== rowKey) : [...current, rowKey]
+      if (next.length > group.pickCount) next = next.slice(next.length - group.pickCount)
+      return {
+        ...prev,
+        selectedRowKeysByGroup: {
+          ...prev.selectedRowKeysByGroup,
+          [groupKey]: next,
+        },
+      }
+    })
+  }, [])
+
+  const confirmPromoChoice = React.useCallback(async () => {
+    const state = promoChoiceDialog
+    if (!state) return
+    for (const g of state.groups) {
+      const selected = state.selectedRowKeysByGroup[g.key] || []
+      if (selected.length !== g.pickCount) {
+        await appAlert(`"${g.key}" 그룹은 ${g.pickCount}개 선택해야 합니다.`)
+        return
+      }
+    }
+    const selectedItems = state.groups.flatMap((g) => {
+      const pick = new Set(state.selectedRowKeysByGroup[g.key] || [])
+      return g.lines
+        .filter((line) => pick.has(line.rowKey))
+        .map((line) => ({
+          menuId: line.menuId,
+          optionId: line.optionId,
+          quantity: line.quantity,
+        }))
+    })
+    addResolvedPromo({
+      ...state.promo,
+      items: [...state.fixedItems, ...selectedItems],
+    })
+    setPromoChoiceDialog(null)
+  }, [addResolvedPromo, promoChoiceDialog])
 
   const openMenuPicker = (menu: PosMenu) => {
     if (isBanbanMenu(menu)) {
@@ -1337,6 +1443,62 @@ export function PosTerminalMenuScreen({
               </div>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!promoChoiceDialog} onOpenChange={(open) => !open && setPromoChoiceDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>세트 구성 선택</DialogTitle>
+          </DialogHeader>
+          {promoChoiceDialog ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">{promoChoiceDialog.promo.name}</p>
+              {promoChoiceDialog.groups.map((group) => {
+                const selected = promoChoiceDialog.selectedRowKeysByGroup[group.key] || []
+                return (
+                  <div key={group.key} className="rounded-lg border border-border/60 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {getPromoChoiceSlotLabel(group.key)} ({selected.length}/{group.pickCount})
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {group.lines.map((line) => {
+                        const menu = menus.find((m) => String(m.id) === String(line.menuId))
+                        const option = line.optionId
+                          ? allOptions.find((o) => String(o.id) === String(line.optionId))
+                          : null
+                        const label = `${menu?.name ?? `#${line.menuId}`}${option?.name ? ` (${option.name})` : ''}`
+                        const active = selected.includes(line.rowKey)
+                        return (
+                          <button
+                            key={line.rowKey}
+                            type="button"
+                            onClick={() => togglePromoChoice(group.key, line.rowKey)}
+                            className={cn(
+                              "rounded-md border px-3 py-2 text-left text-sm transition",
+                              active
+                                ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                                : "border-border/70 bg-background hover:border-emerald-300"
+                            )}
+                          >
+                            {label} x{Math.max(1, Number(line.quantity) || 1)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setPromoChoiceDialog(null)}>
+                  취소
+                </Button>
+                <Button type="button" onClick={() => void confirmPromoChoice()}>
+                  담기
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

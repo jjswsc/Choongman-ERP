@@ -191,9 +191,18 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   const nameMap = opts.menuNameByMenuId || {}
   const expanded = expandPromoLinesForKitchenRouting(items, nameMap, splitPromo) as T[]
 
-  const mode = Math.min(3, Math.max(1, Number(opts.kitchenMode) || 1))
   const catMap = opts.categoryByMenuId || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
+  const configuredMode = Math.min(3, Math.max(1, Number(opts.kitchenMode) || 1))
+  const printerHintMax = Math.max(
+    1,
+    ...Object.values(kpMap).map((v) => (v === 2 || v === 3 ? v : 1))
+  )
+  /**
+   * 메뉴별 주방프린터가 2·3으로 지정되어 있으면 kitchenMode가 낮아도 라우팅을 보존한다.
+   * (운영 현장에서 메뉴별 설정을 최종 기준으로 쓰기 위함)
+   */
+  const mode = Math.min(3, Math.max(configuredMode, printerHintMax))
   const menuIdByName: Record<string, string> = {}
   const ambiguousMenuNames = new Set<string>()
   for (const [mid, nm] of Object.entries(nameMap)) {

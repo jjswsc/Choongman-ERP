@@ -13,18 +13,35 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'pos_promo_items',
-      `promo_id=eq.${encodeURIComponent(promoId)}`,
-      { order: 'sort_order.asc,id.asc', limit: 100, select: 'id,promo_id,menu_id,option_id,quantity,sort_order' }
-    )) as {
+    type PromoItemRow = {
       id?: number
       promo_id?: number
       menu_id?: number
       option_id?: number | null
       quantity?: number
       sort_order?: number
-    }[] | null
+      choice_group?: string | null
+      choice_pick_count?: number | null
+    }
+    let rows: PromoItemRow[] | null = null
+    try {
+      rows = (await supabaseSelectFilter(
+        'pos_promo_items',
+        `promo_id=eq.${encodeURIComponent(promoId)}`,
+        {
+          order: 'sort_order.asc,id.asc',
+          limit: 100,
+          select:
+            'id,promo_id,menu_id,option_id,quantity,sort_order,choice_group,choice_pick_count',
+        }
+      )) as PromoItemRow[] | null
+    } catch {
+      rows = (await supabaseSelectFilter(
+        'pos_promo_items',
+        `promo_id=eq.${encodeURIComponent(promoId)}`,
+        { order: 'sort_order.asc,id.asc', limit: 100, select: 'id,promo_id,menu_id,option_id,quantity,sort_order' }
+      )) as PromoItemRow[] | null
+    }
 
     const list = (rows || []).map((row) => ({
       id: String(row.id ?? ''),
@@ -33,6 +50,11 @@ export async function GET(request: NextRequest) {
       optionId: row.option_id != null ? String(row.option_id) : null,
       quantity: Number(row.quantity) ?? 1,
       sortOrder: Number(row.sort_order) ?? 0,
+      choiceGroup: row.choice_group != null ? String(row.choice_group).trim() || null : null,
+      choicePickCount:
+        row.choice_pick_count != null && Number.isFinite(Number(row.choice_pick_count))
+          ? Math.max(1, Math.floor(Number(row.choice_pick_count)))
+          : null,
     }))
 
     return NextResponse.json(list, { headers })

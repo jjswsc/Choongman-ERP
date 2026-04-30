@@ -106,19 +106,49 @@ export async function GET(req: NextRequest) {
       composePricingBasis: normalizeComposePricingBasis(p.compose_pricing_basis),
     }))
 
-    const itemsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number }[]> = {}
+    const itemsByPromo: Record<
+      string,
+      {
+        menuId: string
+        optionId: string | null
+        quantity: number
+        choiceGroup?: string | null
+        choicePickCount?: number | null
+      }[]
+    > = {}
     for (const p of promoList) itemsByPromo[p.id] = []
 
     const promoIds = promoList.map((p) => p.id).filter(Boolean)
     if (promoIds.length > 0) {
+      type PromoComposeRow = {
+        promo_id?: number
+        menu_id?: number
+        option_id?: number | null
+        quantity?: number
+        choice_group?: string | null
+        choice_pick_count?: number | null
+      }
       const chunkSize = 300
       for (let i = 0; i < promoIds.length; i += chunkSize) {
         const chunk = promoIds.slice(i, i + chunkSize)
-        const rows = (await supabaseSelectFilter(
-          'pos_promo_items',
-          `promo_id=in.(${chunk.join(',')})`,
-          { order: 'sort_order.asc,id.asc', limit: 10000, select: 'promo_id,menu_id,option_id,quantity' }
-        )) as { promo_id?: number; menu_id?: number; option_id?: number | null; quantity?: number }[] | null
+        let rows: PromoComposeRow[] | null = null
+        try {
+          rows = (await supabaseSelectFilter(
+            'pos_promo_items',
+            `promo_id=in.(${chunk.join(',')})`,
+            {
+              order: 'sort_order.asc,id.asc',
+              limit: 10000,
+              select: 'promo_id,menu_id,option_id,quantity,choice_group,choice_pick_count',
+            }
+          )) as PromoComposeRow[] | null
+        } catch {
+          rows = (await supabaseSelectFilter(
+            'pos_promo_items',
+            `promo_id=in.(${chunk.join(',')})`,
+            { order: 'sort_order.asc,id.asc', limit: 10000, select: 'promo_id,menu_id,option_id,quantity' }
+          )) as PromoComposeRow[] | null
+        }
 
         for (const r of rows || []) {
           const pid = r.promo_id != null ? String(r.promo_id) : ''
@@ -127,6 +157,11 @@ export async function GET(req: NextRequest) {
             menuId: String(r.menu_id ?? ''),
             optionId: r.option_id != null ? String(r.option_id) : null,
             quantity: Number(r.quantity) ?? 1,
+            choiceGroup: r.choice_group != null ? String(r.choice_group).trim() || null : null,
+            choicePickCount:
+              r.choice_pick_count != null && Number.isFinite(Number(r.choice_pick_count))
+                ? Math.max(1, Math.floor(Number(r.choice_pick_count)))
+                : null,
           })
         }
       }
