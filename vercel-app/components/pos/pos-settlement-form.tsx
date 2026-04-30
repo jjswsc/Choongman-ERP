@@ -38,6 +38,7 @@ import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
 import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
 import { tr as i18nTr } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
@@ -622,7 +623,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
         loadData()
       } else {
-        await appAlert(res.message || t('msg_save_fail_detail'))
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
       }
     } catch (e) {
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))

@@ -24,6 +24,9 @@ export type PosSettlementResponse = {
     diffVsApproved: number
     autoCardBreakdown?: Record<string, number>
     autoQrBreakdown?: Record<string, number>
+    autoDeliveryAppBreakdown?: Record<string, number>
+    autoDineInDeliveryBreakdown?: Record<string, number>
+    autoOtherBreakdown?: Record<string, number>
   } | null
   settlement: PosSettlement | PosSettlement[] | null
 }

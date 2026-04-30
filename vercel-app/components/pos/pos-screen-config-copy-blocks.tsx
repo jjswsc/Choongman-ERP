@@ -20,6 +20,7 @@ import {
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 
 function isSyntheticPaymentMethodId(id: string | undefined): boolean {
   return Boolean(id?.startsWith("syn:"))
@@ -79,7 +80,7 @@ export async function runPosScreenConfigCopyMenu(
     kioskGroupFontSize: cfg.kioskGroupFontSize,
   })
   if (!res?.success) {
-    await appAlert(res?.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(translateApiMessage(res?.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
     return false
   }
   await appAlert(tr("posScreenConfigMenuCopyDone", "메뉴 화면 구성을 복사했습니다. 미리보기 탭을 새로고침하세요."))
@@ -110,7 +111,7 @@ export async function runPosScreenConfigCopyCustomerDisplay(
   }
   const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
   if (!res.success) {
-    await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
     return false
   }
   await appAlert(tr("posScreenConfigDisplayCopyDone", "고객 화면(듀얼 모니터) 설정을 복사해 저장했습니다."))
@@ -141,7 +142,7 @@ export async function runPosScreenConfigCopyCooking(
   }
   const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
   if (!res.success) {
-    await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
     return false
   }
   await appAlert(tr("posScreenConfigCookingCopyDone", "조리 시간·색상 규칙을 복사해 저장했습니다."))
@@ -171,7 +172,7 @@ export async function runPosScreenConfigCopyPayment(
   for (const it of toDelete) {
     const del = await deletePosPaymentMethodItem({ id: it.id })
     if (!del.success) {
-      await appAlert(del.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+      await appAlert(translateApiMessage(del.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
       return false
     }
   }
@@ -184,7 +185,7 @@ export async function runPosScreenConfigCopyPayment(
       hidden: it.hidden,
     })
     if (!res.success) {
-      await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+      await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
       return false
     }
   }
@@ -223,7 +224,7 @@ export async function runPosScreenConfigCopyDelivery(
     }))
   const res = await savePosDeliveryApps({ storeCode: t, items: payload })
   if (!res.success) {
-    await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
     return false
   }
   await appAlert(tr("posScreenConfigDeliveryCopyDone", "배달앱 인식 설정을 복사했습니다."))

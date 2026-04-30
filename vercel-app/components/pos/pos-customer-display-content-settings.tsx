@@ -16,6 +16,7 @@ import {
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { localizeApiMessage } from "@/lib/translate-api-message"
 
 function ToggleRow({
   label,
@@ -144,7 +145,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
         posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
       )
       if (!res.success) {
-        await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+        await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
         return
       }
       await appAlert(tr("itemsAlertSaved", "저장되었습니다."))
@@ -191,7 +192,7 @@ export const PosCustomerDisplayContentSettings = React.forwardRef<
       try {
         const res = await uploadCustomerDisplayMedia({ storeCode: sc, file })
         if (!res.success || !res.url) {
-          await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+          await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
           return
         }
         setIdleMediaUrl(res.url)

@@ -15,6 +15,7 @@ import {
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   getPosPaymentMethodItems,
   savePosPaymentMethodItem,
@@ -138,7 +139,7 @@ export function PosPaymentSettingsContent() {
           if (next) setSelected(next)
         }
       } else {
-        await appAlert(res.message || t('msg_save_fail_detail'))
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -158,7 +159,7 @@ export function PosPaymentSettingsContent() {
         setEditName('')
         await loadData()
       } else {
-        await appAlert(res.message || t('msg_save_fail_detail'))
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
       }
     } catch (e) {
       await appAlert(String(e))

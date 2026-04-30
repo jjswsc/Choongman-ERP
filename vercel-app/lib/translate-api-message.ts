@@ -268,3 +268,25 @@ export function translateApiMessage(
   }
   return msg
 }
+
+/**
+ * API message를 UI 노출용으로 안전하게 정규화.
+ * - 매핑된 번역이 있으면 사용
+ * - 비한국어 언어에서 한글 원문이 남으면 fallback으로 대체
+ */
+export function localizeApiMessage(
+  msg: string | undefined,
+  t: (k: string) => string,
+  fallback: string,
+  lang: string
+): string {
+  const translated = translateApiMessage(msg, t).trim()
+  if (translated) {
+    if (lang !== "ko" && /[가-힣]/.test(translated)) return fallback
+    return translated
+  }
+  const raw = String(msg || "").trim()
+  if (!raw) return fallback
+  if (lang !== "ko" && /[가-힣]/.test(raw)) return fallback
+  return raw
+}

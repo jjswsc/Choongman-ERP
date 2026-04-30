@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { cn } from '@/lib/utils'
 import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Pencil, Save, Upload } from 'lucide-react'
 import {
@@ -588,7 +589,7 @@ export function PosTerminalMenuScreen({
         isBanban: menuEditForm.isBanban,
       })
       if (!res?.success) {
-        await appAlert(res?.message || (t('posSaveFail') || '저장 실패'))
+        await appAlert(localizeApiMessage(res?.message, t, t('posSaveFail') || '저장 실패', lang))
         return
       }
       await loadMenuData()

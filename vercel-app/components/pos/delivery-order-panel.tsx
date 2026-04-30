@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { extractGrabOrderIdFromMemo, extractGrabStateFromMemo } from '@/lib/grab-order-memo'
 import {
@@ -129,7 +130,7 @@ export function DeliveryOrderPanel({
         served: nextPackaged,
       })
       if (!res.success) {
-        await appAlert(res.message || (t('processFail') || '처리 실패'))
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return
       }
       setItemPackaged((prev) => ({ ...prev, [itemId]: nextPackaged }))

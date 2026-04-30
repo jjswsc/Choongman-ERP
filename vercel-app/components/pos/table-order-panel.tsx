@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Check, CheckCircle, Users, XCircle, ArrowRightLeft, Combine, LayoutGrid, ArrowLeft } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 
@@ -120,7 +121,7 @@ export function TableOrderPanel({
         served: nextServed,
       })
       if (!res.success) {
-        await appAlert(res.message || (t('processFail') || '처리 실패'))
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return
       }
       setItemServed((prev) => ({ ...prev, [itemId]: nextServed }))
@@ -271,7 +272,7 @@ export function TableOrderPanel({
         targetTableName: moveTargetName.trim(),
       })
       if (!res.success) {
-        await appAlert(res.message || (t('processFail') || '처리 실패'))
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return
       }
       setMoveOpen(false)
@@ -308,7 +309,7 @@ export function TableOrderPanel({
         mergeDirection === 'into_selected' ? Number(order.id) : Number(peer.order.id)
       const res = await posDineInTableMerge({ keepOrderId: keepId, absorbOrderId: absorbId })
       if (!res.success) {
-        await appAlert(res.message || (t('processFail') || '처리 실패'))
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return
       }
       setMergeOpen(false)

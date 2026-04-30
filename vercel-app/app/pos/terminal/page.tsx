@@ -57,6 +57,7 @@ import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { translateApiMessage } from '@/lib/translate-api-message'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
@@ -272,6 +273,18 @@ export default function PosTerminalPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const localizeApiPopupMessage = useCallback((msg: string | undefined, fallback: string): string => {
+    const translated = translateApiMessage(msg, t).trim()
+    if (translated) {
+      // Non-Korean locales should never show raw Korean text in frontline POS popups.
+      if (lang !== 'ko' && /[가-힣]/.test(translated)) return fallback
+      return translated
+    }
+    const original = String(msg || '').trim()
+    if (!original) return fallback
+    if (lang !== 'ko' && /[가-힣]/.test(original)) return fallback
+    return original
+  }, [lang, t])
   const isPosDemo = isPosDemoFromQuery(searchParams)
   const tourScenarioId = getPosTourScenarioIdFromQuery(searchParams)
   const [tourMainDeviceTouched, setTourMainDeviceTouched] = useState(false)
@@ -1144,11 +1157,11 @@ export default function PosTerminalPage() {
           })
           const applied = Boolean(res.success || res.statusAlreadyApplied)
           if (!applied) {
-            await appAlert(res.message || (t('processFail') || '처리 실패'))
+            await appAlert(localizeApiPopupMessage(res.message, t('processFail') || '처리 실패'))
             return
           }
           if (!res.success && res.statusAlreadyApplied && res.message) {
-            await appAlert(res.message)
+            await appAlert(localizeApiPopupMessage(res.message, t('processFail') || '처리 실패'))
           }
           refetchStores({ scope: 'all' })
           setActiveTab('delivery')
@@ -1309,11 +1322,11 @@ export default function PosTerminalPage() {
         })
         const rejectedApplied = Boolean(rejectRes.success || rejectRes.statusAlreadyApplied)
         if (!rejectedApplied) {
-          await appAlert(rejectRes.message || (t('processFail') || '처리 실패'))
+          await appAlert(localizeApiPopupMessage(rejectRes.message, t('processFail') || '처리 실패'))
           return
         }
         if (!rejectRes.success && rejectRes.statusAlreadyApplied && rejectRes.message) {
-          await appAlert(rejectRes.message)
+          await appAlert(localizeApiPopupMessage(rejectRes.message, t('processFail') || '처리 실패'))
         }
         if (grabOrderId) {
           await grabCancelOrderByStoreApi({
@@ -3149,7 +3162,7 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!res.success) {
-                    const msg = res.message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                    const msg = localizeApiPopupMessage(res.message, t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
                     await appAlert(msg)
                     return
                   }
@@ -3180,7 +3193,7 @@ export default function PosTerminalPage() {
                     items: incomingItems,
                   })
                   if (!res.success) {
-                    const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                    const msg = localizeApiPopupMessage((res as { message?: string }).message, t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
                     await appAlert(msg)
                     return
                   }
@@ -3681,18 +3694,25 @@ export default function PosTerminalPage() {
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                const paymentSum =
+                  Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
+                  Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
+                const hasPayment = paymentSum > 0.0001
                 await tryOpenDrawerForPayment(payload.payment)
-                setReceiptData({
+                const receiptItems = cartLinesToPosOrderItems(payload.items)
+                const receiptPayloadSubmit = {
                   orderNo,
-                  items: cartLinesToPosOrderItems(payload.items),
-                  subtotal,
-                  discountAmt,
-                  total: pricing.finalTotal,
                   storeCode: currentStoreId,
                   orderType: payload.orderType,
                   tableName: payload.orderLabel,
                   memo: payload.memo,
-                  discountReason: payload.discountReason,
+                  items: receiptItems,
+                  subtotal,
+                  discountAmt,
+                  total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
                   serviceFeeAmt: pricing.serviceFeeAmt,
@@ -3701,9 +3721,126 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
-                  receiptAutoPrintContext: 'order',
-                  suppressReceiptModalAutoPrint,
-                })
+                }
+                const runKitchenAfterNonDineSubmit = () => {
+                  const kitchenPrintKey =
+                    newOrderId != null && newOrderId > 0
+                      ? `order:${newOrderId}:kitchen`
+                      : `submit:${orderNo}:${payload.orderLabel || ''}:${payload.orderType}`
+                  if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
+                  const itemsForKitchen = payload.items.map((i) => {
+                    const line = i as {
+                      menuId?: string
+                      menuId1?: string
+                      menu_id1?: string
+                      menuId2?: string
+                      note?: string
+                      promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+                    }
+                    const menuId = String(
+                      line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
+                    ).trim()
+                    const note = String(line.note ?? '').trim()
+                    return {
+                      id: i.id,
+                      name: i.name,
+                      price: i.price,
+                      qty: i.quantity || 1,
+                      ...(menuId ? { menuId } : {}),
+                      ...(note ? { note } : {}),
+                      ...(Array.isArray(line.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) } : {}),
+                    }
+                  })
+                  getPrinterSettingsForStore(currentStoreId)
+                    .then((settings) => {
+                      const orderTypeLabels: Record<string, string> = {
+                        dine_in: t('posOrderTypeDineIn') ?? '매장',
+                        takeout: t('posOrderTypeTakeout') ?? '포장',
+                        delivery: t('posOrderTypeDelivery') ?? '배달',
+                      }
+                      const kLabels = {
+                        unified: t('posKitchenOrder') || '주방 주문서',
+                        kitchen1: `${t('posKitchen1') || '주방 1'}`,
+                        kitchen2: `${t('posKitchen2') || '주방 2'}`,
+                        kitchen3: `${t('posKitchen3') || '주방 3'}`,
+                      }
+                      const slips = buildKitchenSlipGroups(
+                        itemsForKitchen,
+                        buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                      )
+                      if (!slips.length) return
+                      const slipDesign = resolveKitchenSlipDesign(settings)
+                      const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
+                      const memoLine = kitchenMemo.trim()
+                        ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                        : ''
+                      const tablePartR = payload.orderLabel
+                        ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.orderLabel, t)
+                        : ''
+                      const orderTypeLabel = orderTypeLabels[payload.orderType] || payload.orderType
+                      const printOne = (idx: number) => {
+                        if (idx >= slips.length) return
+                        const slip = slips[idx]
+                        const html = buildKitchenSlipDocumentHtml({
+                          label: slip.label,
+                          orderNo,
+                          storeCode: currentStoreId,
+                          orderTypeLabel,
+                          tablePart: tablePartR,
+                          dateStr: formatPosDateTimeMedium(new Date(), lang),
+                          items: slip.items.map((it) => ({
+                            name: translatePosMenuLineForReceipt(it.name, t),
+                            qty: it.qty,
+                            note: it.note,
+                          })),
+                          memoLine: memoLine || null,
+                          escapeHtml,
+                          design: slipDesign,
+                          printColorAdjust: 'exact',
+                        })
+                        printPosHtmlDocument(html, {
+                          title: slip.label,
+                          printDelayMs: 0,
+                          focusIframeBeforePrint: false,
+                          printRole: 'kitchen',
+                          kitchenStation: slip.station,
+                          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                          onPrintUnavailable: () => {
+                            void appAlert(t('posPrintUnavailable'))
+                          },
+                          onAfterCleanup: () => {
+                            if (idx + 1 < slips.length) {
+                              setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                            }
+                          },
+                        })
+                      }
+                      setTimeout(() => printOne(0), 0)
+                    })
+                    .catch((e) => console.error('Kitchen slip print(non-dine):', e))
+                }
+
+                if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
+                  if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                    void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)
+                  } else if (autoPrintReceiptOnOrder) {
+                    void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
+                  } else if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                    setTimeout(runKitchenAfterNonDineSubmit, 180)
+                  } else {
+                    setReceiptData({
+                      ...receiptPayloadSubmit,
+                      receiptAutoPrintContext: 'order',
+                      suppressReceiptModalAutoPrint: false,
+                    })
+                  }
+                } else {
+                  setReceiptData({
+                    ...receiptPayloadSubmit,
+                    receiptAutoPrintContext: hasPayment ? 'payment' : 'order',
+                    suppressReceiptModalAutoPrint,
+                  })
+                }
                 if (payload.orderType === 'delivery') {
                   setSelectedDeliveryTargetId(null)
                   setSelectedDeliveryTargetLabel('')
@@ -3714,7 +3851,7 @@ export default function PosTerminalPage() {
                   setSelectedTakeoutTargetLabel('')
                 }
                 await refetchCurrentStore()
-                if (payload.payment) schedulePostPaymentCustomerQr()
+                if (hasPayment) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)
               }

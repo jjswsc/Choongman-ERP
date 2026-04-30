@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   getPosPrinterSettings,
   clearPosMainDevice,
@@ -115,7 +116,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens([])
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || t('posTerminalUnassignFailed'))
+          await appAlert(localizeApiMessage((res as { message?: string }).message, t, t('posTerminalUnassignFailed'), lang))
         }
       })
       .finally(() => setClearing(false))
@@ -136,7 +137,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => prev.filter((x) => x !== deviceToken))
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || t('posTerminalUnassignFailed'))
+          await appAlert(localizeApiMessage((res as { message?: string }).message, t, t('posTerminalUnassignFailed'), lang))
         }
       })
       .finally(() => setActionToken(null))
@@ -181,7 +182,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || t('posTerminalAssignMainFailed'))
+          await appAlert(localizeApiMessage((res as { message?: string }).message, t, t('posTerminalAssignMainFailed'), lang))
         }
       })
       .finally(() => setActionToken(null))
@@ -200,7 +201,7 @@ export function PosTerminalSettingsContent() {
       if (res.success) {
         loadData()
       } else {
-        await appAlert((res as { message?: string }).message || t('posTerminalLabelSaveFail') || '저장에 실패했습니다.')
+        await appAlert(localizeApiMessage((res as { message?: string }).message, t, t('posTerminalLabelSaveFail') || '저장에 실패했습니다.', lang))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -228,7 +229,7 @@ export function PosTerminalSettingsContent() {
           setMainDeviceTokens((prev) => prev.filter((x) => x !== deviceToken))
           loadData()
         } else {
-          await appAlert((res as { message?: string }).message || t('posTerminalUnassignFailed'))
+          await appAlert(localizeApiMessage((res as { message?: string }).message, t, t('posTerminalUnassignFailed'), lang))
         }
       })
       .finally(() => setActionToken(null))

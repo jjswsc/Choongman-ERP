@@ -19,6 +19,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useLang } from '@/lib/lang-context'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   getPosMenuCategories,
   getPosMenus,
@@ -221,6 +223,7 @@ export function LiveMenuSearchDialog({
   isDemo = false,
   onServedUpdated,
 }: LiveMenuSearchDialogProps) {
+  const { lang } = useLang()
   const [loading, setLoading] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [orders, setOrders] = React.useState<PosOrder[]>([])
@@ -404,7 +407,7 @@ export function LiveMenuSearchDialog({
           served: true,
         })
         if (!res.success) {
-          await appAlert(res.message || (t('processFail') || '처리 실패'))
+          await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
           return
         }
         setServingMap((prev) => ({ ...prev, [key]: true }))
@@ -417,7 +420,7 @@ export function LiveMenuSearchDialog({
             status: 'ready',
           })
           if (!statusRes?.success) {
-            await appAlert(statusRes?.message || '서빙 완료 상태 반영에 실패했습니다.')
+            await appAlert(localizeApiMessage(statusRes?.message, t, t('processFail') || '처리 실패', lang))
           }
         }
         if (onServedUpdated) await onServedUpdated()

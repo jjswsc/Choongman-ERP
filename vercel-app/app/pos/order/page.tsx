@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
+import { localizeApiMessage } from "@/lib/translate-api-message"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
@@ -874,7 +875,7 @@ export default function PosOrderPage() {
         setDiscountValue("")
         setDiscountReason("")
       } else {
-        await appAlert(res.message ?? (t("posCouponInvalid") || "유효하지 않은 쿠폰입니다."))
+        await appAlert(localizeApiMessage(res.message, t, t("posCouponInvalid") || "유효하지 않은 쿠폰입니다.", lang))
       }
     } catch (e) {
       await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
@@ -982,7 +983,7 @@ export default function PosOrderPage() {
         handleClearCoupon()
         loadTodaySales()
       } else {
-        await appAlert(res.message || t("msg_save_fail"))
+        await appAlert(localizeApiMessage(res.message, t, t("msg_save_fail"), lang))
       }
     } catch (e) {
       await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))

@@ -11,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { updatePosOrder, type PosDeliveryApp } from '@/lib/api-client'
+import { useLang } from '@/lib/lang-context'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import type { Order } from '@/lib/pos-types'
 
 function detectDeliveryApp(text: string, apps: PosDeliveryApp[]): PosDeliveryApp | null {
@@ -46,6 +48,7 @@ export function DeliveryEditOrderNoDialog({
   t: (key: string) => string
   deliveryApps: PosDeliveryApp[]
 }) {
+  const { lang } = useLang()
   if (!order) return null
   const label = String(order.customerName || '').trim() || ''
   const app = detectDeliveryApp(label, deliveryApps)
@@ -90,7 +93,14 @@ export function DeliveryEditOrderNoDialog({
                     memo: order.memo,
                   })
                   if (!(res as { success?: boolean }).success) {
-                    await appAlert((res as { message?: string }).message || (t('posOrderSaveFailed') || '저장에 실패했습니다.'))
+                    await appAlert(
+                      localizeApiMessage(
+                        (res as { message?: string }).message,
+                        t,
+                        t('posOrderSaveFailed') || '저장에 실패했습니다.',
+                        lang
+                      )
+                    )
                     return
                   }
                   onOpenChange(false)

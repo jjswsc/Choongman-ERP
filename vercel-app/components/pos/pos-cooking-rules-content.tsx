@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { localizeApiMessage } from "@/lib/translate-api-message"
 import { getPosPrinterSettings, savePosPrinterSettings, useStoreList } from "@/lib/api-client"
 import { isOfficeRole } from "@/lib/permissions"
 import { PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
@@ -126,7 +127,7 @@ export function PosCookingRulesContent() {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         await loadData()
       } else {
-        await appAlert(res.message || t("msg_save_fail_detail"))
+        await appAlert(localizeApiMessage(res.message, t, t("msg_save_fail_detail"), lang))
       }
     } catch (e) {
       await appAlert(String(e))
@@ -171,7 +172,7 @@ export function PosCookingRulesContent() {
       if (res.success) {
         await appAlert(t("posCookingCopySaved") || "현재 규칙을 대상 매장에 복사 저장했습니다.")
       } else {
-        await appAlert(res.message || t("msg_save_fail_detail"))
+        await appAlert(localizeApiMessage(res.message, t, t("msg_save_fail_detail"), lang))
       }
     } catch (e) {
       await appAlert(String(e))

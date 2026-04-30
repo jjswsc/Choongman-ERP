@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 
 const TYPE_OPTIONS = [
   { value: 'dine_in', labelKey: 'posMenuBoardTypeDineIn' },
@@ -148,7 +149,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
       isActive: form.isActive,
     })
     if (!res?.success) {
-      await appAlert(res?.message || t('msg_save_fail'))
+      await appAlert(localizeApiMessage(res?.message, t, t('msg_save_fail'), lang))
       return
     }
     setDialogOpen(false)
@@ -159,7 +160,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
     if (!await appConfirm(tr(t, 'posMenuBoardDeleteConfirm', { name: row.boardName }))) return
     const res = await deletePosMenuBoard({ id: row.id })
     if (!res?.success) {
-      await appAlert(res?.message || t('msg_delete_fail'))
+      await appAlert(localizeApiMessage(res?.message, t, t('msg_delete_fail'), lang))
       return
     }
     load()

@@ -9,6 +9,7 @@ import { getPosPrinterSettings, savePosPrinterSettings, type PosPrinterSettings 
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
+import { localizeApiMessage } from "@/lib/translate-api-message"
 
 function ToggleRow({
   label,
@@ -102,7 +103,7 @@ export function PosDualMonitorSettingsContent({ storeCode }: { storeCode: string
         posPrinterSettingsToSaveParams(merged, { omitKitchenRoutes: true })
       )
       if (!res.success) {
-        await appAlert(res.message || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+        await appAlert(localizeApiMessage(res.message, t, tr("msg_save_fail_detail", "저장에 실패했습니다."), lang))
         return
       }
       const shell = window.cmPosShell

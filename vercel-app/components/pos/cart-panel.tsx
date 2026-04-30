@@ -1488,10 +1488,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [activePaymentTab])
 
   // 할인/포인트 변경 시 결제 입력 금액 즉시 반영 (더치페이·일부 분할 입력 중에는 건너뜀)
+  // 기존 합계가 일시적으로 불일치해도 즉시 재정렬해서 "결제 완료" 버튼이 바로 복구되도록 한다.
   useEffect(() => {
     if (!showPaymentModal || total <= 0 || showSplit) return
     if (splitPaidSteps > 0) return
-    if (!paymentSumMatch && paymentSum > 0.005) return
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const newTotal = computePosPricing({
       subtotal: st,
@@ -1499,7 +1499,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       adjustments: pricingAdjustments,
     }).finalTotal
     resetPaymentInputs()
-    setPayCash(String(newTotal))
+    if (activePaymentTab === 'cash') {
+      setPayCash(String(newTotal))
+      return
+    }
+    if (activePaymentTab === 'card') {
+      setPayCard(String(newTotal))
+      return
+    }
+    if (activePaymentTab === 'qr') {
+      setPayPromptPay(String(newTotal))
+      return
+    }
+    if (activePaymentTab === 'delivery_app') {
+      setPayDeliveryApp(String(newTotal))
+      return
+    }
+    if (useAdminPaymentLines) {
+      const firstLineId = adminPaymentLinesRef.current[0]?.id
+      if (firstLineId) {
+        setPayAdminLineAmounts({
+          ...Object.fromEntries(adminPaymentLinesRef.current.map((line) => [line.id, '0'])),
+          [firstLineId]: String(newTotal),
+        })
+        return
+      }
+    }
+    setPayOther(String(newTotal))
   }, [
     showPaymentModal,
     total,
@@ -1513,6 +1539,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     paymentSumMatch,
     cartItems,
     pricingAdjustments,
+    activePaymentTab,
+    useAdminPaymentLines,
   ])
 
   const buildOrderMemo = (baseMemo: string) => {
@@ -1914,7 +1942,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     })
   }
 
-  const openDeliveryPaymentFromOrder = (payload: {
+  const openDeliveryPaymentFromOrder = async (payload: {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
     existingOrderId?: number | null
@@ -1935,6 +1963,38 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    if (existingId != null && onDeliveryOrderComplete) {
+      const payChannel =
+        typeof deliveryAppProp === 'string' && deliveryAppProp.trim().length > 0
+          ? deliveryAppProp.trim().toLowerCase()
+          : null
+      onDeliveryOrderComplete(
+        {
+          items: normalized.map(mapCartItemToOrderPayload),
+          orderLabel: payload.orderLabel,
+          memo: buildOrderMemo(customerMemo),
+          discountAmt: discount,
+          discountReason: paymentDiscountReason,
+          payment: {
+            paymentCash: 0,
+            paymentCard: 0,
+            paymentQr: 0,
+            paymentOther: 0,
+            paymentDeliveryApp: amount,
+            deliveryPaymentChannel: payChannel,
+          },
+          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          couponCode: couponAppliedCode || undefined,
+          couponDiscountAmt: couponAppliedAmt || undefined,
+          pointUsed: pointUsedNum || undefined,
+        },
+        existingId
+      )
+      onPaymentComplete?.()
+      handleClearCart()
+      return
+    }
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
       receiptSubtotal: amount,
