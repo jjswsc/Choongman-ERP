@@ -17,8 +17,10 @@ export function buildReceiptDocumentHtml(params: {
   bodyContent: string
   /** 인쇄 창에만 보이고, 인쇄 시에는 안 나오는 푸터(예: 인쇄 버튼) */
   footerContent?: string
+  /** 기본 영수증 CSS 뒤에 이어 붙일 화면별 추가 CSS */
+  extraStyles?: string
 }): string {
-  const { title, bodyContent, footerContent } = params
+  const { title, bodyContent, footerContent, extraStyles } = params
   const c = (tag: string) => '\u003c/' + tag + '>'
   const printOverscale = 1
   const printActionsStyle =
@@ -46,7 +48,8 @@ export function buildReceiptDocumentHtml(params: {
     'mm; column-gap: ' +
     String(gap) +
     'px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #000; color: #000; box-sizing: border-box; } .receipt-item-head > span:last-child { font-size: 10px; } .biz-line { margin: 2px 0; font-size: 11px; } .biz-strong { color: #000; font-weight: 600; } .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; color: #000; } .discount { color: #000; font-weight: 700; } .memo { margin-top: 6px; font-size: 11px; color: #000; } .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 1.5mm; margin: -2px 0 4px 0; line-height: 1.35; } .receipt-muted { color: #000; } .paid-stamp-wrap { text-align: center; margin: 10px 0; } .paid-stamp { display: inline-block; border: 1px solid #000; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #000; } .footer-strong { color: #000; font-weight: 600; } .text-center { text-align: center; } .text-xs { font-size: 11px; } ' +
-    printActionsStyle
+    printActionsStyle +
+    (extraStyles ? ' ' + extraStyles : '')
   const footer = footerContent
     ? '<div class="receipt-print-actions">' + footerContent + c('div')
     : ''

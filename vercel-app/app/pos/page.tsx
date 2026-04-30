@@ -193,6 +193,8 @@ function POSMainPageInner() {
           // 직원(staff/pos_staff)도 영업 시작/마감 화면을 사용할 수 있게 허용
           return canAccessPosSettlement(auth?.role || '') || canAccessPosOrder(auth?.role || '')
         case 'cash':
+          // 직원(staff/pos_staff)도 Pay In/Pay Out(시재) 화면을 사용 가능해야 함
+          return canAccessPosSettlement(auth?.role || '') || canAccessPosOrder(auth?.role || '')
         case 'petty-cash':
           return isManagerOrFranchiseeRole(auth?.role || '') || isOfficeRole(auth?.role || '')
         case 'operations':

@@ -257,6 +257,8 @@ export default function PosMenusPage() {
   const [optionsConfigApplyingGroups, setOptionsConfigApplyingGroups] = React.useState(false)
   /** 비치킨·선택 단계 없음: POS에서 한 줄로 고르는 치환 옵션 */
   const [optionsConfigCustomOptionName, setOptionsConfigCustomOptionName] = React.useState("")
+  /** set_main 단계 빠른 생성 입력 (예: 후라이드, 양념, 간장) */
+  const [optionsConfigSetMainQuickValues, setOptionsConfigSetMainQuickValues] = React.useState("")
   const [promoListForSetTab, setPromoListForSetTab] = React.useState<PosPromo[]>([])
   const [setTabPromosLoading, setSetTabPromosLoading] = React.useState(false)
   const [schemaStatus, setSchemaStatus] = React.useState<{
@@ -1254,6 +1256,69 @@ export default function PosMenusPage() {
       console.error("handleAddOptionForConfig:", e)
       await appAlert(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  /**
+   * set_main 단일 선택(예: 3개 중 1개) 옵션을 빠르게 생성
+   * - 단계가 없으면 set_main으로 자동 저장
+   * - 입력값은 쉼표/줄바꿈으로 구분
+   */
+  const handleQuickCreateSetMainOptions = async () => {
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
+    const pid = optionsConfigSelectedMenu.promoId?.trim()
+    if (pid) {
+      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
+      return
+    }
+    const labels = optionsConfigSetMainQuickValues
+      .split(/[,，\n\r]+/)
+      .map((v) => v.trim())
+      .filter(Boolean)
+    if (labels.length < 2) {
+      await appAlert("최소 2개 이상 입력해 주세요. (예: 후라이드, 양념, 간장)")
+      return
+    }
+
+    const currentGroups = optionsConfigStepGroups
+    if (!(currentGroups.length === 1 && currentGroups[0] === "set_main")) {
+      await handleApplyOptionPresetAndSave(["set_main"])
+    }
+
+    const latestOptions = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).catch(() => optionsConfigMenuOptions)
+    const existing = Array.isArray(latestOptions) ? latestOptions : []
+    const existingSet = new Set(
+      existing.map((o) => String(o.optionStepValues?.set_main ?? o.name ?? "").trim().toLowerCase()).filter(Boolean)
+    )
+
+    let added = 0
+    for (const label of labels) {
+      const key = label.toLowerCase()
+      if (existingSet.has(key)) continue
+      const res = await savePosMenuOption({
+        menuId: Number(optionsConfigSelectedMenuId),
+        name: label,
+        priceModifier: Number(newOptionModifier) || 0,
+        priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
+        priceModifierPackaging: newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
+        sortOrder: existing.length + added,
+        optionType: "substitution",
+        optionStepValues: { set_main: label },
+        sellHall: true,
+        sellDelivery: true,
+        sellPackaging: true,
+      })
+      if (!res.success) {
+        await appAlert(res.message || t("msg_save_fail_detail"))
+        return
+      }
+      existingSet.add(key)
+      added++
+    }
+
+    const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
+    setOptionsConfigMenuOptions(Array.isArray(refreshed) ? refreshed : [])
+    setOptionsConfigSetMainQuickValues("")
+    await appAlert(added > 0 ? `${added}개 옵션을 추가했습니다.` : "이미 같은 옵션이 있어 추가된 항목이 없습니다.")
   }
 
   const handleAddAllOptionsForConfig = async () => {
@@ -3100,7 +3165,46 @@ export default function PosMenusPage() {
                           {t("posOptionConfigStepsSaveHint") ||
                             "프리셋은 단계를 DB에 바로 저장합니다. 수동 입력은 쉼표·줄바꿈으로 구분 후 [단계 저장]을 누르세요. 그다음 아래에서 조합을 추가합니다."}
                         </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px]"
+                            disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
+                            onClick={() => void handleApplyOptionPresetAndSave(["set_main"])}
+                          >
+                            단일선택: set_main (3개 중 1개)
+                          </Button>
+                        </div>
                       </div>
+                      {optionsConfigStepGroups.length === 1 && optionsConfigStepGroups[0] === "set_main" ? (
+                        <div className="rounded border p-3 bg-muted/15 space-y-2">
+                          <p className="text-xs font-medium">set_main 빠른 생성 (예: banban chicken 3중1)</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            메인 후보를 쉼표로 입력하면 옵션을 한 번에 만듭니다. 예: 후라이드, 양념, 간장
+                          </p>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <Input
+                              className="h-8 min-w-[260px] flex-1 text-xs"
+                              placeholder="후라이드, 양념, 간장"
+                              value={optionsConfigSetMainQuickValues}
+                              onChange={(e) => setOptionsConfigSetMainQuickValues(e.target.value)}
+                              disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 text-xs"
+                              disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
+                              onClick={() => void handleQuickCreateSetMainOptions()}
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              3중1 옵션 생성
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="rounded border p-3 bg-muted/20">
                         <div className="flex flex-wrap gap-2 items-end">
                           {optionsConfigUseSizePartUi ? (

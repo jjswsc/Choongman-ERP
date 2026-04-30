@@ -36,6 +36,16 @@ type ExistingMenuRow = {
   category?: string
   image?: string
   promo_id?: number | null
+  vat_included?: boolean | null
+  is_active?: boolean | null
+  sort_order?: number | null
+  option_selection_groups?: unknown
+  kitchen_printer?: number | null
+  cooking_time_min?: number | null
+  is_banban?: boolean | null
+  description_default?: string | null
+  description_delivery?: string | null
+  description_table?: string | null
 }
 
 /**
@@ -152,7 +162,11 @@ export async function upsertPosMenuFromBody(
         existing = (await supabaseSelectFilter(
           'pos_menus',
           `id=eq.${editingId}`,
-          { limit: 1, select: 'id,price,price_delivery,name,category_main,category,image,promo_id' }
+          {
+            limit: 1,
+            select:
+              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table',
+          }
         )) as ExistingMenuRow[] | null
       } catch {
         existing = (await supabaseSelectFilter(
@@ -165,14 +179,48 @@ export async function upsertPosMenuFromBody(
         const prev = existing[0]
         const pid = prev.promo_id
         if (pid != null && Number(pid) > 0) {
-          return {
-            success: false,
-            message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
+          const rowWithoutImage = { ...row }
+          delete rowWithoutImage.image
+          const asNumberOrNull = (v: unknown): number | null => {
+            if (v == null || v === '') return null
+            const n = Number(v)
+            return Number.isFinite(n) ? n : null
+          }
+          const asString = (v: unknown): string => String(v ?? '').trim()
+          const asBool = (v: unknown): boolean => v === true
+          const asStringArray = (v: unknown): string[] => {
+            if (!Array.isArray(v)) return []
+            return v.map((x) => String(x).trim()).filter(Boolean)
+          }
+          const sameFieldsExceptImage =
+            asString(rowWithoutImage.name) === asString(prev.name) &&
+            asString(rowWithoutImage.category_main) === asString(prev.category_main) &&
+            asString(rowWithoutImage.category) === asString(prev.category) &&
+            asNumberOrNull(rowWithoutImage.price) === asNumberOrNull(prev.price) &&
+            asNumberOrNull(rowWithoutImage.price_delivery) === asNumberOrNull(prev.price_delivery) &&
+            asBool(rowWithoutImage.vat_included) === asBool(prev.vat_included) &&
+            asBool(rowWithoutImage.is_active) === asBool(prev.is_active) &&
+            asNumberOrNull(rowWithoutImage.sort_order) === asNumberOrNull(prev.sort_order) &&
+            asNumberOrNull(rowWithoutImage.kitchen_printer) === asNumberOrNull(prev.kitchen_printer) &&
+            asNumberOrNull(rowWithoutImage.cooking_time_min) === asNumberOrNull(prev.cooking_time_min) &&
+            asBool(rowWithoutImage.is_banban) === asBool(prev.is_banban) &&
+            asString(rowWithoutImage.description_default) === asString(prev.description_default) &&
+            asString(rowWithoutImage.description_delivery) === asString(prev.description_delivery) &&
+            asString(rowWithoutImage.description_table) === asString(prev.description_table) &&
+            JSON.stringify(asStringArray(rowWithoutImage.option_selection_groups)) ===
+              JSON.stringify(asStringArray(prev.option_selection_groups))
+          if (!sameFieldsExceptImage) {
+            return {
+              success: false,
+              message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
+            }
           }
         }
-        const incomingImage = String(body.imageUrl ?? '').trim()
-        if (!incomingImage && prev.image != null && String(prev.image).trim()) {
-          row.image = String(prev.image).trim()
+        if (pid != null && Number(pid) > 0) {
+          const incomingImage = String(body.imageUrl ?? '').trim()
+          if (!incomingImage && prev.image != null && String(prev.image).trim()) {
+            row.image = String(prev.image).trim()
+          }
         }
         const changedFields: string[] = []
         const nextName = String(row.name ?? prev.name ?? '').trim()

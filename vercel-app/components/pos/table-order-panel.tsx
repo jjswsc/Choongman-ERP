@@ -65,6 +65,7 @@ export function TableOrderPanel({
   const { lang } = useLang()
   const tDefault = useT(lang)
   const t = tProp ?? tDefault
+  const serveActionLabel = t('posServeAction') || '서빙'
   const isPaidPrepaid = order?.status === 'paid'
   const mergeDisabledByPayment = isPaidPrepaid
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
@@ -564,7 +565,7 @@ export function TableOrderPanel({
                           aria-label={
                             served
                               ? (t('cancel') || '취소')
-                              : (t('posTableStatusServed') || '서빙 완료')
+                              : serveActionLabel
                           }
                         >
                           {served ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}

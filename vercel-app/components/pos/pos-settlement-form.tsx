@@ -36,7 +36,7 @@ import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
-import { useLang } from '@/lib/lang-context'
+import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
 import { tr as i18nTr } from '@/lib/i18n'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
@@ -46,6 +46,7 @@ import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
 import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import {
   Collapsible,
   CollapsibleContent,
@@ -53,16 +54,7 @@ import {
 } from '@/components/ui/collapsible'
 
 function getBangkokDateYmd() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-  const year = parts.find((p) => p.type === 'year')?.value ?? '1970'
-  const month = parts.find((p) => p.type === 'month')?.value ?? '01'
-  const day = parts.find((p) => p.type === 'day')?.value ?? '01'
-  return `${year}-${month}-${day}`
+  return getPosBusinessDateStr()
 }
 
 function shiftYmd(dateYmd: string, deltaDays: number) {
@@ -73,6 +65,16 @@ function shiftYmd(dateYmd: string, deltaDays: number) {
 
 function normalizePayKey(key: string): string {
   return String(key || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
+}
+
+function normalizeDigitChars(raw: string): string {
+  return String(raw || '')
+    .replace(/[๐-๙]/g, (ch) => String(ch.charCodeAt(0) - 3664))
+    .replace(/[０-９]/g, (ch) => String(ch.charCodeAt(0) - 65296))
+}
+
+function toIntegerInput(raw: string): string {
+  return normalizeDigitChars(raw).replace(/[^\d]/g, '')
 }
 
 function isBreakdownEmpty(breakdown: Record<string, string | number>): boolean {
@@ -166,7 +168,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     () => (isPosDemoFromQuery(searchParams) ? '/pos?demo=1' : '/pos'),
     [searchParams]
   )
-  const { lang } = useLang()
+  const { lang, setLang } = useLang()
   const { auth } = useAuth()
   const { stores } = useStoreList()
   const online = useOnlineStatus()
@@ -188,6 +190,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     diffVsApproved: number
     autoCardBreakdown?: Record<string, number>
     autoQrBreakdown?: Record<string, number>
+    autoDeliveryAppBreakdown?: Record<string, number>
+    autoDineInDeliveryBreakdown?: Record<string, number>
+    autoOtherBreakdown?: Record<string, number>
   } | null>(null)
   const [activeTab, setActiveTab] = React.useState<'entry' | 'history'>('entry')
   const [historyRange, setHistoryRange] = React.useState<'7' | '30'>('7')
@@ -218,6 +223,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [deliveryApps, setDeliveryApps] = React.useState<PosDeliveryApp[]>([])
   const [memo, setMemo] = React.useState('')
   const [closed, setClosed] = React.useState(false)
+  const [openingCashActual, setOpeningCashActual] = React.useState<number | null>(null)
+  const [autoFilledFlags, setAutoFilledFlags] = React.useState({
+    card: false,
+    qr: false,
+    delivery: false,
+    other: false,
+  })
   /** 영업 시작: 단위별 현금 수량 (장/개) */
   const [denomCounts, setDenomCounts] = React.useState<Record<number, string>>(
     Object.fromEntries(CASH_DENOMINATIONS.map((d) => [d.value, '']))
@@ -308,8 +320,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         const { systemTotal: st, systemSubtotal: sub, systemVat: vat, linkpos, settlement: s } = main
         const autoCardMap = (linkpos?.autoCardBreakdown || {}) as Record<string, number>
         const autoQrMap = (linkpos?.autoQrBreakdown || {}) as Record<string, number>
+        const autoDeliveryMap = (linkpos?.autoDeliveryAppBreakdown || {}) as Record<string, number>
+        const autoDineInMap = (linkpos?.autoDineInDeliveryBreakdown || {}) as Record<string, number>
+        const autoOtherMap = (linkpos?.autoOtherBreakdown || {}) as Record<string, number>
         const autoCardTotal = Object.values(autoCardMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
         const autoQrTotal = Object.values(autoQrMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
+        const autoDeliveryTotal = Object.values(autoDeliveryMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
+        const autoDineInTotal = Object.values(autoDineInMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
+        const autoOtherTotal = Object.values(autoOtherMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
         setSystemTotal(st)
         setSystemSubtotal(sub ?? st)
         setSystemVat(vat ?? 0)
@@ -329,7 +347,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           })
           const autoCb = buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
           const cardBreakdownEmpty = isBreakdownEmpty(cb)
-          setCardBreakdown(cardBreakdownEmpty && autoCardTotal > 0 ? autoCb : cb)
+          const cardAutoApplied = cardBreakdownEmpty && autoCardTotal > 0
+          setCardBreakdown(cardAutoApplied ? autoCb : cb)
           if ((Number(single.cardAmt ?? 0) || 0) <= 0 && autoCardTotal > 0) {
             setCardAmt(String(autoCardTotal))
           }
@@ -338,18 +357,31 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const hydrated = hydrateSettlementQrOtherBreakdowns(single, qk, ok)
           const autoQb = buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
           const qrBreakdownEmpty = isBreakdownEmpty(hydrated.qrBreakdown)
-          setQrBreakdown(qrBreakdownEmpty && autoQrTotal > 0 ? autoQb : hydrated.qrBreakdown)
+          const qrAutoApplied = qrBreakdownEmpty && autoQrTotal > 0
+          setQrBreakdown(qrAutoApplied ? autoQb : hydrated.qrBreakdown)
           if ((Number(single.qrAmt ?? 0) || 0) <= 0 && autoQrTotal > 0) {
             setQrAmt(String(autoQrTotal))
           }
           setOtherBreakdown(hydrated.otherBreakdown)
+          const hydratedOtherEmpty = isBreakdownEmpty(hydrated.otherBreakdown)
+          const autoOtherBreakdownNext = buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true })
+          const otherAutoApplied = hydratedOtherEmpty && autoOtherTotal > 0
+          if (otherAutoApplied) {
+            setOtherBreakdown(autoOtherBreakdownNext)
+          }
+          if ((Number(single.otherAmt ?? 0) || 0) <= 0 && autoOtherTotal > 0) {
+            setOtherAmt(String(autoOtherTotal))
+          }
           const oldDel = (single.deliveryAppBreakdown ?? {}) as Record<string, number>
           const newDine = (single.dineInDeliveryBreakdown ?? {}) as Record<string, number>
           const db: Record<string, string> = {}
           platformKeys.forEach((k) => {
             db[k] = String(oldDel[k] ?? '')
           })
-          setDeliveryAppBreakdown(db)
+          const autoDb = buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true })
+          const deliveryBreakdownEmpty = isBreakdownEmpty(db)
+          const deliveryAutoApplied = deliveryBreakdownEmpty && autoDeliveryTotal > 0
+          setDeliveryAppBreakdown(deliveryAutoApplied ? autoDb : db)
           const di: Record<string, string> = {}
           dineInKeys.forEach((k) => {
             di[k] = String(newDine[k] ?? oldDel[k] ?? '')
@@ -371,9 +403,21 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           ) {
             di[dineInKeys[0]] = String(single.dineInDeliveryAmt)
           }
-          setDineInDeliveryBreakdown(di)
+          const autoDi = buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false })
+          const dineInBreakdownEmpty = isBreakdownEmpty(di)
+          setDineInDeliveryBreakdown(dineInBreakdownEmpty && autoDineInTotal > 0 ? autoDi : di)
+          if ((Number(single.deliveryAppAmt ?? 0) || 0) <= 0 && autoDeliveryTotal > 0) {
+            setDeliveryAppAmt(String(autoDeliveryTotal))
+          }
           setMemo(single.memo ?? '')
           setClosed(single.closed ?? false)
+          setOpeningCashActual(single.cashActual != null ? Number(single.cashActual) : null)
+          setAutoFilledFlags({
+            card: cardAutoApplied,
+            qr: qrAutoApplied,
+            delivery: deliveryAutoApplied || (dineInBreakdownEmpty && autoDineInTotal > 0),
+            other: otherAutoApplied,
+          })
         } else {
           setSettlement(null)
           setSystemSubtotal(0)
@@ -382,19 +426,26 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setCashAmt('')
           setCardAmt(String(autoCardTotal || 0))
           setQrAmt(String(autoQrTotal || 0))
-          setDeliveryAppAmt('0')
-          setOtherAmt('0')
+          setDeliveryAppAmt(String(autoDeliveryTotal || 0))
+          setOtherAmt(String(autoOtherTotal || 0))
           setCardBreakdown(buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false }))
           {
             const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
             const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
             setQrBreakdown(buildAutoBreakdown(autoQrMap, qk, { allowExtra: true }))
-            setOtherBreakdown(Object.fromEntries(ok.map((k) => [k, ''])))
+            setOtherBreakdown(buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true }))
           }
-          setDeliveryAppBreakdown(Object.fromEntries(platformKeys.map((k) => [k, ''])))
-          setDineInDeliveryBreakdown(Object.fromEntries(dineInKeys.map((k) => [k, ''])))
+          setDeliveryAppBreakdown(buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true }))
+          setDineInDeliveryBreakdown(buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false }))
           setMemo('')
           setClosed(false)
+          setOpeningCashActual(null)
+          setAutoFilledFlags({
+            card: autoCardTotal > 0,
+            qr: autoQrTotal > 0,
+            delivery: autoDeliveryTotal > 0 || autoDineInTotal > 0,
+            other: autoOtherTotal > 0,
+          })
         }
         if (openMode && prev) {
           const prevS = Array.isArray(prev.settlement) ? prev.settlement[0] : prev.settlement
@@ -411,6 +462,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSettlement(null)
         setPrevDayCashActual(null)
         setDineInDeliveryBreakdown({})
+        setOpeningCashActual(null)
+        setAutoFilledFlags({ card: false, qr: false, delivery: false, other: false })
       })
       .finally(() => setLoading(false))
   }, [
@@ -497,7 +550,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
   /** 영업 시작: 단위별 합산 */
   const denomTotal = CASH_DENOMINATIONS.reduce(
-    (sum, d) => sum + d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0),
+    (sum, d) => sum + d.value * (parseInt(toIntegerInput(denomCounts[d.value] || '0') || '0', 10) || 0),
     0
   )
   /** 돈통 시제: 영업시작·결산 모두 화폐 단위 입력 사용 */
@@ -524,6 +577,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const savedDineIn = Number(settlement?.dineInDeliveryAmt ?? 0)
   const savedOther = Number(settlement?.otherAmt ?? 0)
   const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther
+  const expectedDrawerByOpenAndCash = (openingCashActual ?? 0) + cashAmtNum
+  const drawerVsExpectedDiff = cashActualNum - expectedDrawerByOpenAndCash
 
   /** 서버에 마감 확정된 건만 잠금. 체크만 한 뒤에는 저장까지 입력·저장 가능 */
   const inputsLocked = Boolean(settlement?.closed) && !canUnclose
@@ -647,6 +702,20 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 : (t('posSettlementSub') || '일별 매출·결제수단 입력, 돈통 시제')}
             </p>
           </div>
+          <div className="shrink-0">
+            <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
+              <SelectTrigger className="h-10 w-36">
+                <SelectValue placeholder={`🌐 ${t('posLanguage') || '언어'}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {ADMIN_UI_LANG_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    🌐 {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div
@@ -721,7 +790,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                       className="h-10 w-20 text-right"
                       value={denomCounts[d.value] ?? ''}
                       onChange={(e) =>
-                        setDenomCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, '') }))
+                        setDenomCounts((prev) => ({ ...prev, [d.value]: toIntegerInput(e.target.value) }))
                       }
                       disabled={inputsLocked}
                     />
@@ -876,7 +945,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <Collapsible open={cardExpanded} onOpenChange={setCardExpanded}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
-                      <span className="font-medium">{t('posCard') || '카드'}</span>
+                      <span className="font-medium flex items-center gap-2">
+                        {t('posCard') || '카드'}
+                        {autoFilledFlags.card && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            AUTO
+                          </span>
+                        )}
+                      </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">{cardNum.toLocaleString()}{currencySuffix}</span>
                         {cardExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -908,8 +984,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <Collapsible open={qrExpanded} onOpenChange={setQrExpanded}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
-                      <span className="font-medium">
+                      <span className="font-medium flex items-center gap-2">
                         {t('posPaymentQrCode') || 'QR 코드'} ({t('posQrBankTransfer') || 'PromptPay 등'})
+                        {autoFilledFlags.qr && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            AUTO
+                          </span>
+                        )}
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">{qrNum.toLocaleString()}{currencySuffix}</span>
@@ -942,7 +1023,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <Collapsible open={deliveryExpanded} onOpenChange={setDeliveryExpanded}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
-                      <span className="font-medium">{t('posPaymentDeliveryApp') || '배달앱'}</span>
+                      <span className="font-medium flex items-center gap-2">
+                        {t('posPaymentDeliveryApp') || '배달앱'}
+                        {autoFilledFlags.delivery && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            AUTO
+                          </span>
+                        )}
+                      </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">
                           {deliveryAppTotalNum.toLocaleString()}
@@ -1033,8 +1121,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <Collapsible open={otherExpanded} onOpenChange={setOtherExpanded}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
-                      <span className="font-medium">
+                      <span className="font-medium flex items-center gap-2">
                         {t('posPaymentOther') || '기타'} · {t('posPaymentOtherExpand') || '세부 수단'}
+                        {autoFilledFlags.other && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            AUTO
+                          </span>
+                        )}
                       </span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums font-semibold">{otherNum.toLocaleString()}{currencySuffix}</span>
@@ -1100,6 +1193,33 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <div className="flex justify-between items-center pt-1 border-t font-medium">
                   <span>{t('posInputTotal') || '입력 합계'}</span>
                   <span className="font-bold tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('posMorningOpeningFloat') || '아침 시작 시제'}</span>
+                  <span className="tabular-nums">{openingCashActual != null ? `${openingCashActual.toLocaleString()} ฿` : '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('posTodayCashTotal') || '당일 현금 총액'}</span>
+                  <span className="tabular-nums">{cashAmtNum.toLocaleString()} ฿</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">{t('posExpectedDrawerCash') || '예상 돈통 시제(시작+현금)'}</span>
+                  <span className="tabular-nums font-semibold">
+                    {openingCashActual != null ? `${expectedDrawerByOpenAndCash.toLocaleString()} ฿` : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('posCashActual') || '현재 돈통 시제'}</span>
+                  <span className="tabular-nums">{cashActualNum.toLocaleString()} ฿</span>
+                </div>
+                <div className="flex justify-between border-t pt-1 font-medium">
+                  <span>{t('posDrawerCashDiff') || '돈통 차이(현재-예상)'}</span>
+                  <span className={cn('tabular-nums', Math.abs(drawerVsExpectedDiff) > 0.005 ? 'text-amber-700' : 'text-emerald-700')}>
+                    {openingCashActual != null ? `${drawerVsExpectedDiff >= 0 ? '+' : ''}${drawerVsExpectedDiff.toLocaleString()} ฿` : '-'}
+                  </span>
                 </div>
               </div>
 

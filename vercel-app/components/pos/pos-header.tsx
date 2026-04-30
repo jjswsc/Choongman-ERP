@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, LayoutDashboard } from "lucide-react"
+import { Home, ArrowLeft, Settings, RefreshCw, Monitor, Smartphone, LayoutDashboard } from "lucide-react"
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -187,14 +187,13 @@ export function POSHeader({
 
       <div className="flex min-w-0 shrink-0 items-center justify-end gap-1 overflow-x-auto sm:gap-1.5 md:gap-2 lg:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
-          <SelectTrigger className="h-8 w-[4.75rem] shrink-0 gap-0.5 sm:w-[5.5rem] sm:gap-1 md:w-[100px]" aria-label={t('posLanguage')}>
-            <Languages className="w-3.5 h-3.5 shrink-0" />
-            <SelectValue />
+          <SelectTrigger className="h-8 w-[7rem] shrink-0 sm:w-[8rem] md:w-[8.5rem]" aria-label={t('posLanguage')}>
+            <SelectValue placeholder={`🌐 ${t('posLanguage')}`} />
           </SelectTrigger>
           <SelectContent>
             {langOptions.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
-                {t(opt.labelKey)}
+                🌐 {t(opt.labelKey)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -39,6 +39,7 @@ interface LiveMenuSearchDialogProps {
   storeCode: string
   t: (key: string) => string
   isDemo?: boolean
+  onServedUpdated?: () => void | Promise<void>
 }
 
 interface MatchedTarget {
@@ -218,6 +219,7 @@ export function LiveMenuSearchDialog({
   storeCode,
   t,
   isDemo = false,
+  onServedUpdated,
 }: LiveMenuSearchDialogProps) {
   const [loading, setLoading] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
@@ -241,6 +243,7 @@ export function LiveMenuSearchDialog({
   const tableLabel = t('posTable') || 'Table'
   const cookingLabel = t('posTableStatusPreparing') || 'Preparing'
   const servedLabel = t('posTableStatusServed') || 'Served'
+  const serveActionLabel = t('posServeAction') || 'Serve'
 
   const loadAll = React.useCallback(async () => {
     if (!storeCode) return
@@ -417,6 +420,7 @@ export function LiveMenuSearchDialog({
             await appAlert(statusRes?.message || '서빙 완료 상태 반영에 실패했습니다.')
           }
         }
+        if (onServedUpdated) await onServedUpdated()
         await loadAll()
       } catch (e) {
         await appAlert(String(e))
@@ -424,7 +428,7 @@ export function LiveMenuSearchDialog({
         setServingBusyMap((prev) => ({ ...prev, [key]: false }))
       }
     },
-    [loadAll, servingBusyMap, t]
+    [loadAll, onServedUpdated, servingBusyMap, t]
   )
 
   return (
@@ -557,7 +561,7 @@ export function LiveMenuSearchDialog({
                           }}
                         >
                           <CheckCircle2 className="h-4 w-4" />
-                          {resolvedServed ? 'เสิร์ฟแล้ว' : 'เสิร์ฟ'}
+                          {resolvedServed ? servedLabel : serveActionLabel}
                         </Button>
                       )}
                     </div>

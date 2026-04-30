@@ -4414,6 +4414,7 @@ export default function PosTerminalPage() {
         storeCode={currentStoreId}
         t={t}
         isDemo={isPosDemo}
+        onServedUpdated={refetchCurrentStore}
       />
       <PosReceiptModal
         onOpenChange={(open) => !open && setReceiptData(null)}

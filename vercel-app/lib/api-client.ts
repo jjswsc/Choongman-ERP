@@ -8385,6 +8385,9 @@ export async function getPosSettlement(params: {
       diffVsApproved: number
       autoCardBreakdown?: Record<string, number>
       autoQrBreakdown?: Record<string, number>
+      autoDeliveryAppBreakdown?: Record<string, number>
+      autoDineInDeliveryBreakdown?: Record<string, number>
+      autoOtherBreakdown?: Record<string, number>
     }
     settlement: PosSettlement | PosSettlement[] | null
   }>

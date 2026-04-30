@@ -35,6 +35,7 @@ export function TableOrderModal({
   t = (k) => k,
 }: TableOrderModalProps) {
   const { lang } = useLang()
+  const serveActionLabel = t('posServeAction') || '서빙'
   const isServedReadyForPayment = order?.status === 'completed' || order?.status === 'ready'
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
 
@@ -123,7 +124,7 @@ export function TableOrderModal({
                               onClick={() => markItemServed(item.id)}
                             >
                               <CheckCircle className="w-3.5 h-3.5 mr-1" />
-                              {t('posTableStatusServed') || '서빙 완료'}
+                              {serveActionLabel}
                             </Button>
                           )}
                         </li>

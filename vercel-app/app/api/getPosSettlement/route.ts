@@ -120,13 +120,18 @@ export async function GET(request: NextRequest) {
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
       select:
-        'subtotal,vat,total,status,payment_card,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+        'subtotal,vat,total,status,payment_card,payment_qr,payment_delivery_app,payment_other,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
     })) as {
       subtotal?: number
       vat?: number
       total?: number
       status?: string
       payment_card?: number
+      payment_qr?: number
+      payment_delivery_app?: number
+      payment_other?: number
+      delivery_payment_channel?: string
+      delivery_app_code?: string
       linkpos_response_code?: string
       linkpos_requested_amount?: number
       linkpos_approved_amount?: number
@@ -141,12 +146,44 @@ export async function GET(request: NextRequest) {
     let linkposRequestedTotal = 0
     let linkposApprovedTotal = 0
     let cardReportedTotal = 0
+    const autoQrBreakdownFromOrders: Record<string, number> = {}
+    const autoDeliveryAppBreakdown: Record<string, number> = {}
+    const autoDineInDeliveryBreakdown: Record<string, number> = {}
+    const autoOtherBreakdown: Record<string, number> = {}
+
+    const normalizeDeliveryCode = (raw: string): string => {
+      const v = String(raw || '').trim().toLowerCase()
+      if (!v) return 'Other'
+      if (v === 'lineman') return 'Line Man'
+      if (v === 'grab') return 'Grab'
+      if (v === 'shopee') return 'Shopee'
+      return v.replace(/[_-]/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
+    }
+
     for (const o of orders || []) {
       if (!completedStatuses.includes(o.status || '')) continue
       systemTotal += Number(o.total) || 0
       systemSubtotal += Number(o.subtotal) ?? Number(o.total) ?? 0
       systemVat += Number(o.vat) ?? 0
       cardReportedTotal += Number(o.payment_card) || 0
+      const qrAmt = Number(o.payment_qr) || 0
+      if (qrAmt > 0) {
+        autoQrBreakdownFromOrders.PromptPay = (autoQrBreakdownFromOrders.PromptPay || 0) + qrAmt
+      }
+      const deliveryAmt = Number(o.payment_delivery_app) || 0
+      if (deliveryAmt > 0) {
+        const channel = String(o.delivery_payment_channel || '').trim().toLowerCase()
+        if (channel === 'dine_in') {
+          autoDineInDeliveryBreakdown.DineIn = (autoDineInDeliveryBreakdown.DineIn || 0) + deliveryAmt
+        } else {
+          const key = normalizeDeliveryCode(String(o.delivery_app_code || 'Other'))
+          autoDeliveryAppBreakdown[key] = (autoDeliveryAppBreakdown[key] || 0) + deliveryAmt
+        }
+      }
+      const otherAmt = Number(o.payment_other) || 0
+      if (otherAmt > 0) {
+        autoOtherBreakdown.Other = (autoOtherBreakdown.Other || 0) + otherAmt
+      }
       const responseCode = String(o.linkpos_response_code ?? '').trim()
       const hasLinkpos = responseCode.length > 0
       if (!hasLinkpos) continue
@@ -197,6 +234,12 @@ export async function GET(request: NextRequest) {
       const tender = classifyByRules(haystack, attemptStoreCode, sharedRules, storeRulesMap) || classifyLinkposTender(haystack)
       const bucket = tender.group === 'qr' ? autoQrBreakdown : autoCardBreakdown
       bucket[tender.key] = (bucket[tender.key] || 0) + amount
+    }
+
+    // LinkPOS 분류값 + 주문 결제수단(비-LinkPOS 포함) 합산.
+    const mergedAutoQrBreakdown: Record<string, number> = { ...autoQrBreakdownFromOrders }
+    for (const [k, v] of Object.entries(autoQrBreakdown)) {
+      mergedAutoQrBreakdown[k] = (mergedAutoQrBreakdown[k] || 0) + (Number(v) || 0)
     }
 
     const storeFilter =
@@ -263,7 +306,10 @@ export async function GET(request: NextRequest) {
           cardReportedTotal,
           diffVsApproved: cardReportedTotal - linkposApprovedTotal,
           autoCardBreakdown,
-          autoQrBreakdown,
+          autoQrBreakdown: mergedAutoQrBreakdown,
+          autoDeliveryAppBreakdown,
+          autoDineInDeliveryBreakdown,
+          autoOtherBreakdown,
         },
         settlement: storeCode && storeCode !== 'All' ? list[0] ?? null : list,
       },
