@@ -46,7 +46,15 @@ import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from '@/l
 
 export type ReceiptModalData = {
   orderNo: string
-  items: { id: string; name: string; price: number; qty: number; note?: string }[]
+  items: {
+    id: string
+    name: string
+    price: number
+    qty: number
+    note?: string
+    promoId?: string
+    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  }[]
   subtotal: number
   discountAmt: number
   deliveryFee?: number
@@ -308,13 +316,28 @@ export function PosReceiptModal({
             const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
+            const promoComposeLines =
+              Array.isArray(it.promoItems) && it.promoItems.length > 0
+                ? it.promoItems.slice(0, 4).map((pi) => {
+                    const menuName =
+                      menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                      `#${String(pi.menuId)}`
+                    return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
+                  })
+                : []
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
+            const promoComposeHtml =
+              promoComposeLines.length > 0
+                ? `<div class="receipt-line-note">${promoComposeLines
+                    .map((line) => `- ${esc(line)}`)
+                    .join('<br/>')}</div>`
+                : ''
             const barcodeHtml = itemBarcodeUrl
               ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${esc(itemBarcodeUrl)}" alt="Item barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>`
               : ''
-            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(it.name, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${noteHtml}${barcodeHtml}`
+            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(it.name, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${promoComposeHtml}${noteHtml}${barcodeHtml}`
           })
           .join('')}
         <div class="receipt-divider"></div>
@@ -424,7 +447,7 @@ export function PosReceiptModal({
       }
       const slips = buildKitchenSlipGroups(
         receiptData.items,
-        buildKitchenSlipGroupOpts(settings, menus, slipLabels)
+        { ...buildKitchenSlipGroupOpts(settings, menus, slipLabels), splitPromoKitchenLines: true }
       )
       if (slips.length === 0) {
         await appAlert(t('posKitchenNoItemsToPrint') || '주방으로 출력할 품목이 없습니다.')

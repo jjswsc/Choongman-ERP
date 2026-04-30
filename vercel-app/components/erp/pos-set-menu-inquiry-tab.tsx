@@ -29,6 +29,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
   deletePosPromo,
+  getPosMenus,
   getMarketingCampaigns,
   getNextPosPromoCode,
   getPosMenuCostAnalysis,
@@ -130,6 +131,7 @@ export function PosSetMenuInquiryTab({
   const [campaignsLoading, setCampaignsLoading] = React.useState(false)
   const [economicsByPromoId, setEconomicsByPromoId] = React.useState<Record<string, InquiryPromoEconomics>>({})
   const [economicsLoading, setEconomicsLoading] = React.useState(false)
+  const [menuNameById, setMenuNameById] = React.useState<Record<string, string>>({})
 
   React.useEffect(() => {
     if (!linkTarget) {
@@ -152,6 +154,27 @@ export function PosSetMenuInquiryTab({
       cancelled = true
     }
   }, [linkTarget])
+
+  React.useEffect(() => {
+    let cancelled = false
+    getPosMenus()
+      .then((list) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        for (const row of list || []) {
+          const id = String(row.id ?? "").trim()
+          if (!id) continue
+          map[id] = String(row.name ?? "").trim() || `#${id}`
+        }
+        setMenuNameById(map)
+      })
+      .catch(() => {
+        if (!cancelled) setMenuNameById({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   React.useEffect(() => {
     if (!promos.length) {
@@ -522,6 +545,7 @@ export function PosSetMenuInquiryTab({
                 <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColCostHall")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColCostRateHall")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColCostRateDel")}</th>
+                <th className="min-w-[220px] px-3 py-2.5 align-bottom">{t("posSetTabSavedSetBundleLines")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("posSetInquiryColStatus")}</th>
                 <th className="min-w-[200px] px-3 py-2.5 text-right align-bottom">{t("posSetInquiryColActions")}</th>
               </tr>
@@ -530,7 +554,7 @@ export function PosSetMenuInquiryTab({
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showCampaignCol ? 10 : 9}
+                    colSpan={showCampaignCol ? 11 : 10}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
                     {t("posSetInquiryEmpty")}
@@ -539,6 +563,14 @@ export function PosSetMenuInquiryTab({
               ) : (
                 filtered.map((p) => {
                   const b = busyId === p.id
+                  const promoItems = (p as PosPromo & {
+                    items?: { menuId: string; optionId: string | null; quantity: number }[]
+                  }).items || []
+                  const lines = promoItems.slice(0, 2).map((it: { menuId: string; optionId: string | null; quantity: number }) => {
+                    const menuName = menuNameById[String(it.menuId)] || `#${String(it.menuId)}`
+                    const optPart = it.optionId ? ` + ${String(it.optionId)}` : ""
+                    return `${menuName}${optPart} ×${Math.max(1, Number(it.quantity) || 1)}`
+                  })
                   const ec = economicsByPromoId[p.id]
                   const costCell =
                     ec == null || ec.lineCount === 0
@@ -580,6 +612,24 @@ export function PosSetMenuInquiryTab({
                       </td>
                       <td className="px-3 py-2.5 align-middle text-right font-mono tabular-nums text-muted-foreground">
                         {economicsLoading && ec == null ? "…" : rateDelCell}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-xs text-muted-foreground">
+                        {lines.length > 0 ? (
+                          <div className="space-y-0.5">
+                            {lines.map((line, idx) => (
+                              <p key={`${p.id}-${idx}`} className="line-clamp-1">
+                                · {line}
+                              </p>
+                            ))}
+                            {promoItems.length > lines.length ? (
+                              <p className="text-[10px] text-muted-foreground/90">
+                                +{String(promoItems.length - lines.length)}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="px-3 py-2.5 align-middle whitespace-nowrap">
                         {p.isActive ? (

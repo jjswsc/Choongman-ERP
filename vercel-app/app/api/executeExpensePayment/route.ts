@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
-  const authResult = await requireAuth(request, 'office')
+  const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     authResult.errorResponse.headers.set('Content-Type', 'application/json')
@@ -127,7 +127,6 @@ export async function POST(request: NextRequest) {
     const transDate = String(body.transDate || body.trans_date || getBangkokTodayDateString()).slice(0, 10)
     const memo = String(body.memo || '').trim()
     const store = String(body.store || '').trim()
-    const userRole = String(auth.role || '')
 
     if (!expenseAccrualId) {
       return NextResponse.json({ success: false, message: '지출 발생 ID가 필요합니다.' }, { status: 400, headers })
@@ -228,7 +227,7 @@ export async function POST(request: NextRequest) {
             vGps = String((v as { gps_name?: string }).gps_name || '').trim() || undefined
           }
         }
-        const memEv = evaluatePayeeBankMemoMatch({
+        void evaluatePayeeBankMemoMatch({
           bankMemo: String(bankRow.memo || ''),
           bankNote: String(bankRow.note || ''),
           payeeName: payeeNameForMatch,

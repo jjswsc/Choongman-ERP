@@ -185,7 +185,7 @@ export async function fetchInboundBankPurchaseSyntheticRows(params: {
       date: transDate,
       vendor: vendorLabel,
       name: '__BANK_PURCHASE_PAYMENT__',
-      spec: '—',
+      spec: '',
       qty: 1,
       amount: paidAmount,
       vatAmount: 0,

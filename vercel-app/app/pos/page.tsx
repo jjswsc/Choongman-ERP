@@ -190,7 +190,8 @@ function POSMainPageInner() {
         case 'attendance':
           return canAccessPosOrder(auth?.role || '')
         case 'business':
-          return canAccessPosSettlement(auth?.role || '')
+          // 직원(staff/pos_staff)도 영업 시작/마감 화면을 사용할 수 있게 허용
+          return canAccessPosSettlement(auth?.role || '') || canAccessPosOrder(auth?.role || '')
         case 'cash':
         case 'petty-cash':
           return isManagerOrFranchiseeRole(auth?.role || '') || isOfficeRole(auth?.role || '')

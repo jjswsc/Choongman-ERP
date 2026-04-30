@@ -5,6 +5,7 @@ export type MergeCartItemInput = {
   id: string
   name: string
   price: number
+  note?: string
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
@@ -16,7 +17,24 @@ export function mergeCartPanelAddItem(prev: OrderItem[], item: MergeCartItemInpu
   if (item.promoId) {
     const existing = prev.find((p) => p.promoId === item.promoId)
     if (existing) {
-      return prev.map((p) => (p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p))
+      return prev.map((p) =>
+        p.id === existing.id
+          ? {
+              ...p,
+              quantity: p.quantity + 1,
+              ...(Array.isArray(p.promoItems) && p.promoItems.length > 0
+                ? {}
+                : Array.isArray(item.promoItems) && item.promoItems.length > 0
+                  ? { promoItems: item.promoItems }
+                  : {}),
+              ...(String(p.note ?? '').trim()
+                ? {}
+                : String(item.note ?? '').trim()
+                  ? { note: String(item.note).trim() }
+                  : {}),
+            }
+          : p
+      )
     }
     return [
       ...prev,
@@ -25,6 +43,7 @@ export function mergeCartPanelAddItem(prev: OrderItem[], item: MergeCartItemInpu
         name: item.name,
         price: item.price,
         quantity: 1,
+        ...(String(item.note ?? '').trim() ? { note: String(item.note).trim() } : {}),
         promoId: item.promoId,
         promoCode: item.promoCode,
         promoItems: item.promoItems,

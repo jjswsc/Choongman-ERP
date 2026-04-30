@@ -39,12 +39,12 @@ export function resolveKitchenSlipDesign(s?: {
 function typographyForScale(scale: KitchenSlipFontScale) {
   switch (scale) {
     case 'sm':
-      return { header: 18, row: 14, lineNote: 12, memo: 14, body: 14 }
+      return { header: 18, row: 13, lineNote: 11, memo: 13, body: 13 }
     case 'lg':
-      return { header: 26, row: 22, lineNote: 16, memo: 18, body: 22 }
+      return { header: 24, row: 19, lineNote: 14, memo: 16, body: 19 }
     default:
       /** md: 80mm·Electron 인쇄에서 한 줄이 과하게 잘리지 않도록 약간 축소 */
-      return { header: 20, row: 16, lineNote: 13, memo: 15, body: 16 }
+      return { header: 20, row: 15, lineNote: 12, memo: 14, body: 15 }
   }
 }
 
@@ -82,9 +82,12 @@ function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
   const tp = typographyForScale(design.fontScale)
   return `
 .k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: break-word; overflow-wrap: anywhere; }
-.k-row { margin: 6px 0; font-size: ${tp.row}px; max-width: 100%; word-break: break-word; overflow-wrap: anywhere; white-space: normal; line-height: 1.35; }
-.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
+.k-row { margin: 6px 0; font-size: ${tp.row}px; max-width: 100%; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.4; letter-spacing: -0.01em; }
+.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.3; letter-spacing: -0.01em; }
 .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: ${tp.memo}px; }
+.k-row-main { display: flex; align-items: flex-start; gap: 4px; width: 100%; }
+.k-row-qty { flex: 0 0 auto; min-width: 2.5em; font-variant-numeric: tabular-nums; }
+.k-row-name { flex: 1 1 auto; min-width: 0; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
 `
 }
 
@@ -99,7 +102,16 @@ export function formatKitchenSlipItemRowHtml(
   const note = showLineNotes
     ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
     : ''
-  const main = Number(it.qty) + ' × ' + escapeHtml(it.name)
+  const main =
+    '<div class="k-row-main">' +
+    '<span class="k-row-qty">' +
+    Number(it.qty) +
+    ' ×' +
+    close('span') +
+    '<span class="k-row-name">' +
+    escapeHtml(it.name) +
+    close('span') +
+    close('div')
   if (!note) return '<div class="k-row">' + main + close('div')
   return (
     '<div class="k-row">' +

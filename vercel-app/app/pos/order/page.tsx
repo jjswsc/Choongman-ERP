@@ -7,6 +7,7 @@ import {
   getPosMenus,
   getPosMenuCategories,
   getPosMenuOptions,
+  getPosPromoItems,
   getPosPromosWithItems,
   getPosOrders,
   getPosTodaySales,
@@ -105,6 +106,7 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  note?: string
   optionId?: string
   optionName?: string
   /** 반반: 1번째 맛 메뉴/옵션 ID (S 순살) */
@@ -128,6 +130,18 @@ export default function PosOrderPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const translateChickenPartLabel = React.useCallback((name: string | undefined): string => {
+    const raw = String(name || "")
+    if (!raw) return raw
+    let out = raw
+    const boneless = t("posOptionPartBoneless")
+    const wing = t("posOptionPartWing")
+    const drum = t("posOptionPartDrumstick")
+    if (boneless && boneless !== "posOptionPartBoneless") out = out.replace(/순살/g, boneless)
+    if (wing && wing !== "posOptionPartWing") out = out.replace(/윙/g, wing)
+    if (drum && drum !== "posOptionPartDrumstick") out = out.replace(/봉/g, drum)
+    return out
+  }, [t])
   const { stores } = useStoreList()
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStores = React.useMemo(
@@ -545,6 +559,61 @@ export default function PosOrderPage() {
   const getPromoPrice = (p: PosPromoWithItems) =>
     orderType === "delivery" && p.priceDelivery != null ? p.priceDelivery : p.price
 
+  const resolveCartLineNote = React.useCallback(
+    (item: CartItem) => {
+      const raw = String(item.note ?? "").trim()
+      if (raw) return raw
+      if (!Array.isArray(item.promoItems) || item.promoItems.length === 0) return ""
+      const lines = item.promoItems.slice(0, 4).map((line) => {
+        const menu = menus.find((m) => String(m.id) === String(line.menuId))
+        const menuName = (menu?.name ?? "").trim() || `#${String(line.menuId)}`
+        const option = line.optionId
+          ? allOptions.find((o) => String(o.id) === String(line.optionId))
+          : null
+        const optionLabel = option?.name?.trim() ? ` (${option.name.trim()})` : ""
+        return `${menuName}${optionLabel} x${Math.max(1, Number(line.quantity) || 1)}`
+      })
+      const hiddenCount = Math.max(0, item.promoItems.length - lines.length)
+      return hiddenCount > 0 ? `${lines.join(", ")}, +${hiddenCount}` : lines.join(", ")
+    },
+    [menus, allOptions]
+  )
+
+  React.useEffect(() => {
+    const targets = cart
+      .filter((it) => it.promoId && (!Array.isArray(it.promoItems) || it.promoItems.length === 0))
+      .map((it) => String(it.promoId ?? "").trim())
+      .filter(Boolean)
+    if (targets.length === 0) return
+    const uniq = Array.from(new Set(targets))
+    let cancelled = false
+    void (async () => {
+      const rowsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number }[]> = {}
+      for (const pid of uniq) {
+        const rows = await getPosPromoItems({ promoId: pid }).catch(() => [])
+        rowsByPromo[pid] = (rows || []).map((r) => ({
+          menuId: String(r.menuId ?? ""),
+          optionId: r.optionId ? String(r.optionId) : null,
+          quantity: Math.max(1, Number(r.quantity) || 1),
+        }))
+      }
+      if (cancelled) return
+      setCart((prev) =>
+        prev.map((it) => {
+          const pid = String(it.promoId ?? "").trim()
+          if (!pid) return it
+          if (Array.isArray(it.promoItems) && it.promoItems.length > 0) return it
+          const resolved = rowsByPromo[pid] || []
+          if (resolved.length === 0) return it
+          return { ...it, promoItems: resolved }
+        })
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [cart])
+
   const getMenuPrice = (menu: PosMenu) =>
     orderType === "delivery" && menu.priceDelivery != null ? menu.priceDelivery : menu.price
   const getOptionModifier = (opt: PosMenuOption) => {
@@ -578,12 +647,34 @@ export default function PosOrderPage() {
     setOptionPickerSelections({})
   }
 
-  const addToCart = (menu: PosMenu) => {
+  const addToCart = async (menu: PosMenu) => {
     const mirrorPromoId = menu.promoId?.trim()
     if (mirrorPromoId) {
       const pr = promos.find((x) => x.id === mirrorPromoId)
-      if (pr && isPromoVisibleInContext(pr, { businessDateYmd, orderType, deliveryAppCode: null })) {
-        addPromoToCart(pr)
+      if (pr) {
+        void addPromoToCart(pr)
+        return
+      }
+      const rows = await getPosPromoItems({ promoId: mirrorPromoId }).catch(() => [])
+      if (rows.length > 0) {
+        const fallbackPromo: PosPromoWithItems = {
+          id: mirrorPromoId,
+          code: menu.code,
+          name: menu.name,
+          category: menu.category,
+          categoryMain: menu.categoryMain,
+          price: menu.price,
+          priceDelivery: menu.priceDelivery,
+          vatIncluded: menu.vatIncluded !== false,
+          isActive: menu.isActive !== false,
+          sortOrder: menu.sortOrder ?? 0,
+          items: rows.map((r) => ({
+            menuId: String(r.menuId ?? ""),
+            optionId: r.optionId ? String(r.optionId) : null,
+            quantity: Math.max(1, Number(r.quantity) || 1),
+          })),
+        }
+        void addPromoToCart(fallbackPromo)
         return
       }
     }
@@ -628,24 +719,32 @@ export default function PosOrderPage() {
     setOptionPickerBanbanFirst(null)
   }
 
-  const addPromoToCart = (promo: PosPromoWithItems) => {
+  const addPromoToCart = async (promo: PosPromoWithItems) => {
     const cartId = `promo-${promo.id}`
-    const price = getPromoPrice(promo)
+    const resolvedItems =
+      Array.isArray(promo.items) && promo.items.length > 0
+        ? promo.items
+        : await getPosPromoItems({ promoId: promo.id }).catch(() => [])
+    const resolvedPromo: PosPromoWithItems = { ...promo, items: resolvedItems || [] }
+    const price = getPromoPrice(resolvedPromo)
     setCart((prev) => {
       const i = prev.findIndex((x) => x.id === cartId)
       if (i >= 0) {
         const n = [...prev]
-        n[i] = { ...n[i], qty: n[i].qty + 1 }
+        n[i] = {
+          ...n[i],
+          qty: n[i].qty + 1,
+        }
         return n
       }
       return [...prev, {
         id: cartId,
-        name: promo.name,
+        name: resolvedPromo.name,
         price,
         qty: 1,
-        promoId: promo.id,
-        promoCode: promo.code,
-        promoItems: promo.items || [],
+        promoId: resolvedPromo.id,
+        promoCode: resolvedPromo.code,
+        promoItems: resolvedPromo.items || [],
       }]
     })
   }
@@ -690,14 +789,15 @@ export default function PosOrderPage() {
     if (!order.items?.length) return
     setCart((prev) => {
       const next = [...prev]
-      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; menuId1?: string; optionId1?: string; menuId2?: string; optionId2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[]) {
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; note?: string; menuId1?: string; optionId1?: string; menuId2?: string; optionId2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[]) {
         const id = String(it.id ?? "")
         const name = String(it.name ?? "")
         const price = Number(it.price ?? 0)
         const qty = Number(it.qty ?? 1)
+        const note = String(it.note ?? "").trim()
         if (!id) continue
         const i = next.findIndex((x) => x.id === id)
-        const item = { id, name, price, qty, ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }), ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }) }
+        const item = { id, name, price, qty, ...(note && { note }), ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }), ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }) }
         if (i >= 0) {
           next[i] = { ...next[i], qty: next[i].qty + qty }
         } else {
@@ -840,6 +940,7 @@ export default function PosOrderPage() {
           name: it.name,
           price: it.price,
           qty: it.qty,
+          note: it.note,
           orderType,
           ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
           ...(it.promoId &&
@@ -1007,7 +1108,7 @@ export default function PosOrderPage() {
       }
       const slips = buildKitchenSlipGroups(
         receiptData.items,
-        buildKitchenSlipGroupOpts(settings, menus, kLabels)
+        { ...buildKitchenSlipGroupOpts(settings, menus, kLabels), splitPromoKitchenLines: true }
       )
       if (slips.length === 0) {
         await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 출력할 품목이 없습니다.")
@@ -1180,7 +1281,7 @@ export default function PosOrderPage() {
             {filteredPromos.map((p) => (
               <button
                 key={`promo-${p.id}`}
-                onClick={() => addPromoToCart(p)}
+                onClick={() => void addPromoToCart(p)}
                 className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98] touch-manipulation"
               >
                 <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-amber-100 flex items-center justify-center">
@@ -1387,38 +1488,50 @@ export default function PosOrderPage() {
           ) : (
             <div className="space-y-2">
               {cart.map((it) => (
+                (() => {
+                  const lineNote = resolveCartLineNote(it)
+                  return (
                 <div
                   key={it.id}
-                  className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2"
+                  className="rounded-lg bg-white border border-slate-200 px-3 py-2"
                 >
-                  <div className="flex-1 truncate text-sm text-slate-800">{it.name}</div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => updateQty(it.id, -1)}
-                      className="rounded p-1 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="w-6 text-center text-sm font-medium tabular-nums text-slate-800">
-                      {it.qty}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate text-sm text-slate-800">{it.name}</div>
+                      {lineNote ? (
+                        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">{lineNote}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => updateQty(it.id, -1)}
+                        className="rounded p-1 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="w-6 text-center text-sm font-medium tabular-nums text-slate-800">
+                        {it.qty}
+                      </span>
+                      <button
+                        onClick={() => updateQty(it.id, 1)}
+                        className="rounded p-1 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <span className="w-16 text-right text-xs font-bold text-emerald-600 tabular-nums">
+                      {formatBahtNum(it.price * it.qty)} ฿
                     </span>
                     <button
-                      onClick={() => updateQty(it.id, 1)}
-                      className="rounded p-1 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                      onClick={() => removeFromCart(it.id)}
+                      className="rounded p-1 text-slate-500 hover:text-red-400"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <span className="w-16 text-right text-xs font-bold text-emerald-600 tabular-nums">
-                    {formatBahtNum(it.price * it.qty)} ฿
-                  </span>
-                  <button
-                    onClick={() => removeFromCart(it.id)}
-                    className="rounded p-1 text-slate-500 hover:text-red-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
                 </div>
+                  )
+                })()
               ))}
             </div>
           )}
@@ -1898,7 +2011,7 @@ export default function PosOrderPage() {
                         onClick={() => handleStepSelect(val)}
                         className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
                       >
-                        {val}
+                        {translateChickenPartLabel(val)}
                       </button>
                     ))}
                   </div>
@@ -1927,7 +2040,7 @@ export default function PosOrderPage() {
                     className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                   >
                     <span className="min-w-0 flex-1 text-slate-800">
-                      <span className="block font-medium">{opt.name}</span>
+                      <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
                       {optDesc ? (
                         <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
                           {optDesc}

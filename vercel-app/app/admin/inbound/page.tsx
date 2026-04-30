@@ -18,11 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -668,7 +666,7 @@ export default function InboundPage() {
   }
 
   const formatInboundLineName = React.useCallback(
-    (it: InboundHistoryItem) =>
+    (it: Pick<InboundHistoryItem, "name">) =>
       it.name === "__BANK_PURCHASE_PAYMENT__" ? t("inBankPurchasePaymentLabel") : it.name || "",
     [t]
   )
@@ -1523,7 +1521,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                             <tr key={`${row.code}-${row.name}-${row.spec}`} className="border-b">
                               <td className="py-2 px-2">
                                 {row.code ? `[${row.code}] ` : ""}
-                                {row.name || "-"}
+                                {formatInboundLineName({ name: row.name })}
                                 {row.spec ? ` (${row.spec})` : ""}
                               </td>
                               <td className="py-2 px-2 text-right tabular-nums">{row.qty.toLocaleString()}</td>

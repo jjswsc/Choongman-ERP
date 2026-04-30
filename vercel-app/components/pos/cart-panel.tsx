@@ -69,6 +69,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth-context'
 import {
+  getPosMenuOptions,
   getMembers,
   getPosCollabCampaigns,
   getPosPaymentMethodItems,
@@ -76,6 +77,7 @@ import {
   upsertPosTaxInvoiceRecipient,
   validatePosCoupon,
   type PosMenu,
+  type PosMenuOption,
   type PosPaymentMethodItem,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
@@ -234,6 +236,7 @@ export type CartPanelAddItemPayload = {
   id: string
   name: string
   price: number
+  note?: string
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
@@ -678,6 +681,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [showOtherPayments, setShowOtherPayments] = useState(false)
   /** 관리자 POS 설정 > 결제 관리(pos_payment_method_items)의 qr·other 분류 — POS 기타 세부와 연동 */
   const [posPaymentMethodItems, setPosPaymentMethodItems] = useState<PosPaymentMethodItem[]>([])
+  const [posMenuOptions, setPosMenuOptions] = useState<PosMenuOption[]>([])
   const [payAdminLineAmounts, setPayAdminLineAmounts] = useState<Record<string, string>>({})
   const [needTaxInvoice, setNeedTaxInvoice] = useState(false)
   const [showTaxInvoiceDetails, setShowTaxInvoiceDetails] = useState(true)
@@ -832,6 +836,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!posMenus?.length) return new Map<string, PosMenu>()
     return new Map(posMenus.map((m) => [String(m.id), m]))
   }, [posMenus])
+  const optionById = useMemo(() => {
+    if (!posMenuOptions.length) return new Map<string, PosMenuOption>()
+    return new Map(posMenuOptions.map((o) => [String(o.id), o]))
+  }, [posMenuOptions])
   const appliedCollab = useMemo(
     () => collabOptions.find((c) => c.id === appliedCollabId) ?? null,
     [collabOptions, appliedCollabId]
@@ -857,6 +865,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
+
+  useEffect(() => {
+    let cancelled = false
+    void getPosMenuOptions()
+      .then((rows) => {
+        if (cancelled) return
+        setPosMenuOptions(rows || [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setPosMenuOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const confirmGuestDirect = () => {
     const v = parseInt(guestDirectValue, 10)
@@ -2229,6 +2253,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   const optionPart = optMatch ? optMatch[2].trim() : null
                   const isBanban = optionPart?.includes(' / ')
                   const [flavor1, flavor2] = isBanban && optionPart ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
+                  const promoComposeLines =
+                    Array.isArray(item.promoItems) && item.promoItems.length > 0
+                      ? item.promoItems.slice(0, 4).map((p) => {
+                          const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
+                          const optionName = p.optionId ? optionById.get(String(p.optionId))?.name?.trim() : ''
+                          const optionLabel = optionName ? ` (${optionName})` : ''
+                          return `${menuName}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
+                        })
+                      : []
+                  const promoComposeAllLines =
+                    Array.isArray(item.promoItems) && item.promoItems.length > 0
+                      ? item.promoItems.map((p) => {
+                          const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
+                          const optionName = p.optionId ? optionById.get(String(p.optionId))?.name?.trim() : ''
+                          const optionLabel = optionName ? ` (${optionName})` : ''
+                          return `${menuName}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
+                        })
+                      : []
+                  const promoComposeMoreCount =
+                    promoComposeLines.length > 0 && item.promoItems
+                      ? Math.max(0, item.promoItems.length - promoComposeLines.length)
+                      : 0
                   return (
                   <div
                     key={item.id}
@@ -2263,6 +2309,37 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 min-w-0 break-words" title={optionPart}>
                             {optionPart}
                           </p>
+                        ) : null}
+                        {promoComposeLines.length > 0 ? (
+                          <div className="mt-0.5 space-y-0.5">
+                            {promoComposeLines.map((line, idx) => (
+                              <p
+                                key={`${item.id}-promo-line-${idx}`}
+                                className="text-xs text-blue-700/90 dark:text-blue-300 min-w-0 break-words"
+                                title={line}
+                              >
+                                - {line}
+                              </p>
+                            ))}
+                            {promoComposeMoreCount > 0 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <p className="inline-block cursor-help text-[10px] text-blue-700/70 dark:text-blue-300/80">
+                                    +{promoComposeMoreCount}
+                                  </p>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[min(20rem,85vw)] text-left whitespace-normal">
+                                  <div className="space-y-0.5">
+                                    {promoComposeAllLines.map((line, idx) => (
+                                      <p key={`${item.id}-promo-all-line-${idx}`} className="text-xs break-words">
+                                        - {line}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : null}
+                          </div>
                         ) : null}
                         <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
                           {formatBahtNum(item.price)} ฿
@@ -2641,9 +2718,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <Button
               data-tour="pos-tour-cart-order"
               className="w-full h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
-              disabled={total <= 0 || cartItems.length === 0 || guestCount <= 0}
+              disabled={cartItems.length === 0 || guestCount <= 0}
               onClick={() => {
-                if (total <= 0 || !selectedTable || cartItems.length === 0 || guestCount <= 0) return
+                if (!selectedTable || cartItems.length === 0 || guestCount <= 0) return
                 onOrderSubmit?.({
                   items: cartItems.map(mapCartItemToOrderPayload),
                   tableName: selectedTable.name,
@@ -2666,7 +2743,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <div className="w-full grid grid-cols-2 gap-2">
               <Button
                 className="h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
-                disabled={total <= 0 || !canSubmit || cartItems.length === 0}
+                disabled={!canSubmit || cartItems.length === 0}
                 onClick={() => {
                   submitNonDineOrder(false)
                   handleClearCart()

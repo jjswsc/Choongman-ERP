@@ -2,7 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, type ComponentProps } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
@@ -30,6 +30,7 @@ import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
 import {
   getMembers,
   getPosMenus,
+  getPosMenuOptions,
   getPosOrders,
   getPosPrinterSettings,
   getPosTodaySales,
@@ -39,6 +40,7 @@ import {
   updatePosOrder,
   updatePosOrderStatus,
   type PosMenu,
+  type PosMenuOption,
   type PosDeliveryApp,
   type LinkposPaymentSummary,
   type PosOrder,
@@ -258,6 +260,7 @@ function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView>
 }
 
 export default function PosTerminalPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const typeParam = searchParams.get('type') ?? 'dine_in'
   const orderType = useMemo(() => {
@@ -299,7 +302,6 @@ export default function PosTerminalPage() {
     currentStore,
     currentStoreId,
     currentLayout,
-    setCurrentStoreId,
     deliveryOrders,
     packagedDeliveryOrders,
     completedDeliveryOrders,
@@ -310,6 +312,12 @@ export default function PosTerminalPage() {
     clearTableOrder,
     loadingTables,
   } = usePosStore()
+
+  useEffect(() => {
+    if (loadingTables) return
+    if (currentStoreId) return
+    router.replace('/pos')
+  }, [loadingTables, currentStoreId, router])
 
   const notifyQueuedSave = useCallback(async (orderNo?: string, queued?: boolean) => {
     await notifyQueuedPosSave({
@@ -373,6 +381,7 @@ export default function PosTerminalPage() {
   const [tableListMode, setTableListMode] = useState<'in_progress' | 'completed' | 'all'>('all')
   const [deliveryAppsFromApi, setDeliveryAppsFromApi] = useState<PosDeliveryApp[]>([])
   const [menus, setMenus] = useState<PosMenu[]>([])
+  const [menuOptions, setMenuOptions] = useState<PosMenuOption[]>([])
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
@@ -480,12 +489,31 @@ export default function PosTerminalPage() {
     })
     setMenuTargets({ byId, byName })
   }, [])
+  const optionNameById = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const opt of menuOptions) {
+      const id = String(opt.id ?? '').trim()
+      const name = String(opt.name ?? '').trim()
+      if (!id || !name) continue
+      out.set(id, name)
+    }
+    return out
+  }, [menuOptions])
+  const enrichPromoItemsWithOptionName = useCallback(
+    (list: { menuId: string; optionId: string | null; quantity: number }[]) =>
+      list.map((p) => ({
+        ...p,
+        ...(p.optionId && optionNameById.get(String(p.optionId)) ? { optionName: optionNameById.get(String(p.optionId)) } : {}),
+      })),
+    [optionNameById]
+  )
   usePosMenusCatalogLiveRefresh(applyPosMenusList)
   const drawerOpenWarnedRef = useRef(false)
   const posPrinterSettingsRef = useRef<PosPrinterSettings | null>(null)
   const posPrinterSettingsStoreCodeRef = useRef("")
   const posPrinterSettingsInFlightStoreCodeRef = useRef("")
   const posPrinterSettingsInFlightRef = useRef<Promise<PosPrinterSettings> | null>(null)
+  const storeSettingsLoadSeqRef = useRef(0)
 
   const getPrinterSettingsForStore = useCallback(async (targetStoreCode: string): Promise<PosPrinterSettings> => {
     const normalizedStoreCode = String(targetStoreCode || "").trim()
@@ -555,10 +583,14 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!currentStoreId) return
-    getPrinterSettingsForStore(currentStoreId)
+    const requestStoreCode = String(currentStoreId || '').trim()
+    if (!requestStoreCode) return
+    const seq = ++storeSettingsLoadSeqRef.current
+    getPrinterSettingsForStore(requestStoreCode)
       .then((s) => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
         posPrinterSettingsRef.current = s
-        posPrinterSettingsStoreCodeRef.current = currentStoreId
+        posPrinterSettingsStoreCodeRef.current = requestStoreCode
         const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
         const warning = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
         const warnDiff = Math.max(0, Number(s.cookingRecipeWarningDiffMin ?? 0))
@@ -648,6 +680,7 @@ export default function PosTerminalPage() {
         setCustomerDisplayIdleMediaUrl(String(s.customerDisplayIdleMediaUrl ?? '').trim())
       })
       .catch(() => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
         posPrinterSettingsRef.current = null
         posPrinterSettingsStoreCodeRef.current = ""
         setCookingRules({
@@ -716,8 +749,18 @@ export default function PosTerminalPage() {
     getPosMenus()
       .then(applyPosMenusList)
       .catch(() => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
         setMenus([])
         setMenuTargets({ byId: new Map(), byName: new Map() })
+      })
+    getPosMenuOptions()
+      .then((rows) => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
+        setMenuOptions(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
+        setMenuOptions([])
       })
   }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore])
 
@@ -1118,9 +1161,14 @@ export default function PosTerminalPage() {
             let list = await getPosOrders({
               orderId,
               storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
+              strictStore: true,
             })
             if (!list.length) {
-              list = await getPosOrders({ orderId })
+              list = await getPosOrders({
+                orderId,
+                storeCode: String(currentStoreId || '').trim() || undefined,
+                strictStore: true,
+              })
             }
             const order = list[0]
             if (order?.items?.length) {
@@ -1139,6 +1187,15 @@ export default function PosTerminalPage() {
                   qty: Number(it.qty ?? 1),
                   ...(menuId ? { menuId } : {}),
                   ...(note ? { note } : {}),
+                  ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
+                    ? {
+                        promoItems: enrichPromoItemsWithOptionName(
+                          (it as {
+                            promoItems: { menuId: string; optionId: string | null; quantity: number }[]
+                          }).promoItems
+                        ),
+                      }
+                    : {}),
                 }
               })
               const runKitchenForAcceptedOrder = () => {
@@ -1349,6 +1406,22 @@ export default function PosTerminalPage() {
     [playIncomingOrderBeep, t, refetchStores, decideIncomingPendingDeliveryOrder]
   )
 
+  const isCurrentStoreOrder = useCallback(
+    (rawStoreCode: unknown) => {
+      const rowStore = String(rawStoreCode ?? '').trim()
+      if (!rowStore || !currentStoreId) return false
+      const variants = [
+        currentStoreId,
+        currentStoreId.startsWith('CM ')
+          ? currentStoreId.slice(3).trim()
+          : `CM ${currentStoreId}`.trim(),
+        currentStoreId.replace(/^CM\s+/i, ''),
+      ].filter(Boolean)
+      return variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))
+    },
+    [currentStoreId]
+  )
+
   const schedulePostPaymentCustomerQr = useCallback(() => {
     if (!dualMonitorEnabled) return
     const q = String(customerDisplayQrPayload || '').trim()
@@ -1487,7 +1560,16 @@ export default function PosTerminalPage() {
       orderType: string
       tableName?: string
       memo?: string
-      items: { id: string; name: string; price: number; qty: number; note?: string; isAddon?: boolean; menuId?: string }[]
+      items: {
+        id: string
+        name: string
+        price: number
+        qty: number
+        note?: string
+        isAddon?: boolean
+        menuId?: string
+        promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+      }[]
       subtotal: number
       discountAmt: number
       total: number
@@ -1562,6 +1644,32 @@ export default function PosTerminalPage() {
         const lineNote = normalizePosLineNote(String((it as { note?: string }).note ?? ''), {
           keepOptionSummary: false,
         })
+        const promoComposeLines =
+          Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems) &&
+          (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems!.length > 0
+            ? (it as { promoItems: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
+                .slice(0, 4)
+                .map((p) => {
+                  const menuName = menus.find((m) => String(m.id) === String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
+                  return `${menuName} x${Math.max(1, Number(p.quantity) || 1)}`
+                })
+            : []
+        const promoComposeMoreCount =
+          promoComposeLines.length > 0 &&
+          Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
+            ? Math.max(
+                0,
+                ((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems?.length || 0) -
+                  promoComposeLines.length
+              )
+            : 0
+        const promoComposeHtml =
+          promoComposeLines.length > 0
+            ? '<div class="receipt-line-note">' +
+              promoComposeLines.map((line) => '- ' + esc(line)).join('<br/>') +
+              (promoComposeMoreCount > 0 ? '<br/>+' + String(promoComposeMoreCount) : '') +
+              ct('div')
+            : ''
         const noteHtml = lineNote
           ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
           : ''
@@ -1576,6 +1684,7 @@ export default function PosTerminalPage() {
           formatBahtNum(it.price * it.qty) +
           ct('span') +
           ct('div') +
+          promoComposeHtml +
           noteHtml
         )
       })
@@ -1652,19 +1761,38 @@ export default function PosTerminalPage() {
       if (!isSessionNewOrder(row.created_at, posSessionStartedAtRef.current)) return
       const rowStore = String(row.store_code ?? '').trim()
       const variants = [currentStoreId, currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(), currentStoreId.replace(/^CM\s+/i, '')].filter(Boolean)
-      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (!rowStore) return
+      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
       if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
         seenOrderIdsRef.current.add(orderId)
         if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
         return
       }
       if (seenOrderIdsRef.current.has(orderId)) return
-      let items: { id: string; name: string; price: number; qty: number; note?: string }[] = []
+      let items: {
+        id: string
+        name: string
+        price: number
+        qty: number
+        note?: string
+        promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+      }[] = []
       try {
         const raw = row.items_json
         const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : []
         items = (Array.isArray(arr) ? arr : []).map(
-          (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string; menuId1?: string; menu_id1?: string; menuId?: string }) => {
+          (it: {
+            id?: string
+            name?: string
+            price?: number
+            qty?: number
+            quantity?: number
+            note?: string
+            menuId1?: string
+            menu_id1?: string
+            menuId?: string
+            promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+          }) => {
             const note = String(it.note ?? '').trim()
             const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
             const displayName = resolveOrderItemDisplayName({
@@ -1679,6 +1807,7 @@ export default function PosTerminalPage() {
               qty: Number(it.qty ?? it.quantity ?? 1),
               ...(menuId ? { menuId } : {}),
               ...(note ? { note } : {}),
+              ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
             }
           }
         )
@@ -1801,7 +1930,7 @@ export default function PosTerminalPage() {
         const paySum = posOrderRowPaymentSum(row)
         if (isPosOrderPaidLikeStatus(st) && paySum > 0 && !printedPaymentReceiptIdsRef.current.has(orderId)) {
           printedPaymentReceiptIdsRef.current.add(orderId)
-          void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
+          void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true }).then((list) => {
             const order = list[0] as PosOrder | undefined
             if (!order?.items?.length) {
               printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -1815,7 +1944,7 @@ export default function PosTerminalPage() {
           })
         }
       }
-    })
+    }, { store: currentStoreId })
     return () => {
       if (channel) channel.unsubscribe()
     }
@@ -1846,7 +1975,8 @@ export default function PosTerminalPage() {
         currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
         currentStoreId.replace(/^CM\s+/i, ''),
       ].filter(Boolean)
-      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (!rowStore) return
+      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
       if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
@@ -1860,7 +1990,7 @@ export default function PosTerminalPage() {
         memo: String(row.memo ?? ''),
       })
       refetchCurrentStore()
-    })
+    }, { store: currentStoreId })
     return () => {
       if (channel) channel.unsubscribe()
     }
@@ -1879,12 +2009,13 @@ export default function PosTerminalPage() {
         currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(),
         currentStoreId.replace(/^CM\s+/i, ''),
       ].filter(Boolean)
-      if (rowStore && !variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
+      if (!rowStore) return
+      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
       if (!isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
       if (posOrderRowPaymentSum(row) <= 0) return
       if (printedPaymentReceiptIdsRef.current.has(orderId)) return
       printedPaymentReceiptIdsRef.current.add(orderId)
-      void getPosOrders({ orderId, storeCode: currentStoreId }).then((list) => {
+      void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true }).then((list) => {
         const order = list[0] as PosOrder | undefined
         if (!order?.items?.length) {
           printedPaymentReceiptIdsRef.current.delete(orderId)
@@ -1896,7 +2027,7 @@ export default function PosTerminalPage() {
         }
         setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments))
       })
-    })
+    }, { store: currentStoreId })
     return () => {
       if (channel) channel.unsubscribe()
     }
@@ -1926,6 +2057,7 @@ export default function PosTerminalPage() {
               startStr: today,
               endStr: today,
               storeCode: currentStoreId,
+              strictStore: true,
               statusPaidLike: true,
               limit: 800,
               orderBy: 'id.desc',
@@ -1973,6 +2105,7 @@ export default function PosTerminalPage() {
           startStr: today,
           endStr: today,
           storeCode: currentStoreId,
+          strictStore: true,
           ...(sinceId != null ? { sinceId } : {}),
         })
         if (!hasInitializedMainPosPollRef.current) {
@@ -1991,6 +2124,7 @@ export default function PosTerminalPage() {
         for (const order of newOrders) {
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
+          if (!isCurrentStoreOrder(order.storeCode ?? '')) continue
           if (!isSessionNewOrder(order.createdAt, posSessionStartedAtRef.current)) {
             lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
             continue
@@ -2005,7 +2139,18 @@ export default function PosTerminalPage() {
             continue
           }
           const items = (order.items || []).map(
-            (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string; menuId1?: string; menu_id1?: string; menuId?: string }) => {
+            (it: {
+              id?: string
+              name?: string
+              price?: number
+              qty?: number
+              quantity?: number
+              note?: string
+              menuId1?: string
+              menu_id1?: string
+              menuId?: string
+              promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+            }) => {
               const note = String(it.note ?? '').trim()
               const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
               const displayName = resolveOrderItemDisplayName({
@@ -2020,6 +2165,7 @@ export default function PosTerminalPage() {
                 qty: Number(it.qty ?? it.quantity ?? 1),
                 ...(menuId ? { menuId } : {}),
                 ...(note ? { note } : {}),
+                ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
               }
             }
           )
@@ -2161,6 +2307,7 @@ export default function PosTerminalPage() {
     t,
     lang,
     refetchCurrentStore,
+    isCurrentStoreOrder,
   ])
 
   useEffect(() => {
@@ -2711,7 +2858,7 @@ export default function PosTerminalPage() {
               stores={stores}
             currentStoreId={currentStoreId}
             selectedTable={selectedTable}
-            onStoreChange={setCurrentStoreId}
+            onStoreChange={() => {}}
             t={t}
             onPaymentModalOpenChange={(open) => {
               setTourPaymentModalOpen(open)
@@ -3060,6 +3207,7 @@ export default function PosTerminalPage() {
                   qty: number
                   note?: string
                   isAddon?: boolean
+                  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
                 }
                 const mapPosItemToReceiptLine = (
                   it: (typeof incomingItems)[number],
@@ -3072,6 +3220,13 @@ export default function PosTerminalPage() {
                   ...(String((it as { note?: string }).note ?? '').trim()
                     ? { note: String((it as { note?: string }).note).trim() }
                     : {}),
+                  ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
+                    ? {
+                        promoItems: enrichPromoItemsWithOptionName(
+                          (it as { promoItems: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
+                        ),
+                      }
+                    : {}),
                   ...(addon ? { isAddon: true as const } : {}),
                 })
                 const receiptPrintItems: ReceiptPrintLine[] =
@@ -3083,6 +3238,15 @@ export default function PosTerminalPage() {
                           price: it.price,
                           qty: Math.max(1, it.quantity || 1),
                           ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+                          ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
+                            ? {
+                                promoItems: enrichPromoItemsWithOptionName(
+                                  (it as {
+                                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
+                                  }).promoItems
+                                ),
+                              }
+                            : {}),
                         })),
                         ...incomingItems.map((it) => mapPosItemToReceiptLine(it, true)),
                       ]
@@ -3136,6 +3300,7 @@ export default function PosTerminalPage() {
                       menu_id1?: string
                       menuId2?: string
                       note?: string
+                      promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
                     }
                     const menuId = String(
                       line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
@@ -3148,6 +3313,7 @@ export default function PosTerminalPage() {
                       qty: i.quantity || 1,
                       ...(menuId ? { menuId } : {}),
                       ...(note ? { note } : {}),
+                      ...(Array.isArray(line.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) } : {}),
                     }
                   })
                   getPrinterSettingsForStore(currentStoreId)
@@ -3598,12 +3764,12 @@ export default function PosTerminalPage() {
         dataTour={isPosDemo ? 'pos-tour-header' : undefined}
         stores={stores}
         currentStoreId={currentStoreId}
-        onStoreChange={setCurrentStoreId}
+        onStoreChange={() => {}}
         onRefresh={refetchCurrentStore}
         todayCompleted={todayCompleted}
         totalSales={totalSales}
         showBackButton
-        canChangeStore={stores.length > 0}
+        canChangeStore={false}
         canAccessAdmin={false}
         isMainPosDevice={isMainPosDevice}
         onMainPosDeviceChange={(v) => {

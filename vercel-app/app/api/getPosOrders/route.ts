@@ -211,8 +211,6 @@ export async function GET(request: NextRequest) {
     }
     effectiveStoreCode = own
   }
-  const storeFilterCandidates = await resolveStoreFilterCandidates(effectiveStoreCode)
-  const primaryStoreFilter = storeFilterCandidates[0] || ''
   const status = String(searchParams.get('status') || '').trim()
   const sinceIdRaw = searchParams.get('sinceId')?.trim()
   const sinceId = sinceIdRaw && /^\d+$/.test(sinceIdRaw) ? parseInt(sinceIdRaw, 10) : null
@@ -220,6 +218,16 @@ export async function GET(request: NextRequest) {
   const orderId = orderIdRaw && /^\d+$/.test(orderIdRaw) ? parseInt(orderIdRaw, 10) : null
   const statusPaidLike =
     searchParams.get('statusPaidLike') === '1' || searchParams.get('statusPaidLike') === 'true'
+  const strictStore =
+    searchParams.get('strictStore') === '1' || searchParams.get('strictStore') === 'true'
+  const storeFilterCandidates = strictStore
+    ? (() => {
+        const variants = new Set<string>()
+        addStoreVariants(variants, effectiveStoreCode)
+        return Array.from(variants)
+      })()
+    : await resolveStoreFilterCandidates(effectiveStoreCode)
+  const primaryStoreFilter = storeFilterCandidates[0] || ''
   const limitRaw = searchParams.get('limit')?.trim()
   const parsedListLimit = limitRaw && /^\d+$/.test(limitRaw) ? parseInt(limitRaw, 10) : null
   const listLimit =
@@ -288,7 +296,7 @@ export async function GET(request: NextRequest) {
         select: POS_ORDER_SELECT,
       })) as typeof rows
 
-      if (!idRows?.length && storeFilterCandidates.length > 1) {
+      if (!strictStore && !idRows?.length && storeFilterCandidates.length > 1) {
         for (const alt of storeFilterCandidates.slice(1)) {
           const altFilter = `id=eq.${orderId}&store_code=ilike.${encodeURIComponent(alt)}`
           idRows = (await supabaseSelectFilter('pos_orders', altFilter, {
@@ -332,7 +340,7 @@ export async function GET(request: NextRequest) {
           select: POS_ORDER_SELECT,
         })) as typeof rows
 
-        if (storeFilterCandidates.length > 1) {
+        if (!strictStore && storeFilterCandidates.length > 1) {
           const variants = storeFilterCandidates.slice(1)
           if (variants.length > 0) {
             const mergedById = new Map<number, (typeof rows)[number]>()
@@ -359,7 +367,7 @@ export async function GET(request: NextRequest) {
           Boolean(primaryStoreFilter) &&
           /[a-zA-Z\u3131-\uD79D]/.test(primaryStoreFilter) &&
           !/^\d+$/.test(primaryStoreFilter.replace(/^CM\s+/i, '').trim())
-        if (!rows?.length && hasNonNumericStoreLabel) {
+        if (!strictStore && !rows?.length && hasNonNumericStoreLabel) {
           const fallbackFilterNoStore = buildListFilter('')
           const fallbackRows = (await supabaseSelectFilter('pos_orders', fallbackFilterNoStore, {
             order: listOrder,
@@ -403,6 +411,7 @@ export async function GET(request: NextRequest) {
         effectiveStore: effectiveStoreCode || '(all)',
         primaryStoreFilter: primaryStoreFilter || '(all)',
         storeFilterCandidates,
+        strictStore,
         status: statusPaidLike ? 'paidLike' : status || '(all)',
         sinceId: sinceId ?? '(none)',
         listLimit,

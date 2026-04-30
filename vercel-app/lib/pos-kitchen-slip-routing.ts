@@ -20,7 +20,7 @@ export type KitchenSlipRoutingItem = {
   name?: string
   qty?: number
   note?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; optionName?: string; quantity: number }[]
 }
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */
@@ -70,14 +70,6 @@ function clampPrinterIndex(idx: KitchenPrinterIndex, mode: number): KitchenPrint
   return x as KitchenPrinterIndex
 }
 
-function legacyKitchenIndex(cat: string, mode: number, k2: string[], k3: string[]): KitchenPrinterIndex {
-  if (mode <= 1) return 1
-  if (mode === 2) return k2.includes(cat) ? 2 : 1
-  if (k3.includes(cat)) return 3
-  if (k2.includes(cat)) return 2
-  return 1
-}
-
 type MenuLike = {
   id: string
   name?: string
@@ -94,10 +86,6 @@ function normRouteMap(raw?: Record<string, number | undefined>): Record<string, 
     if (n === 0 || n === 1 || n === 2 || n === 3) out[String(k)] = n as KitchenRouteValue
   }
   return out
-}
-
-function normalizeRouteKey(raw: string): string {
-  return String(raw || "").trim().toLowerCase()
 }
 
 /** API·설정 객체와 메뉴 목록으로 buildKitchenSlipGroups 옵션 생성 */
@@ -167,15 +155,17 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
         if (!mid) continue
         n += 1
         const q = Math.max(0.0001, Number(p.quantity ?? 1)) * parentQty
-        const displayName = (names[mid] || '').trim() || parentName || mid
+        const childName = (names[mid] || '').trim() || mid
+        const optionName = String((p as { optionName?: string }).optionName ?? '').trim()
+        const optionLabel = optionName ? ` (${optionName})` : ''
+        const displayName = parentName ? `[${parentName}] ${childName}` : childName
         const baseNote = String(it.note ?? '').trim()
-        const promoMark = parentName ? `〔${parentName}〕` : ''
-        const mergedNote = [promoMark, baseNote].filter(Boolean).join(' ').trim()
+        const mergedNote = baseNote
         out.push({
           ...it,
           id: `${String(it.id ?? 'promo')}-k${n}`,
           kitchenRouteMenuId: mid,
-          name: displayName,
+          name: `${displayName}${optionLabel}`,
           qty: q,
           ...(mergedNote ? { note: mergedNote } : { note: undefined }),
           promoItems: undefined,
@@ -203,7 +193,6 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
 
   const mode = Math.min(3, Math.max(1, Number(opts.kitchenMode) || 1))
   const catMap = opts.categoryByMenuId || {}
-  const mainMap = opts.categoryMainByMenuId || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
   const menuIdByName: Record<string, string> = {}
   const ambiguousMenuNames = new Set<string>()
@@ -256,9 +245,6 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     }
     return resolveMenuIdFromComposite(String(it.id ?? ""))
   }
-  const menuCat = (it: T) => String(catMap[menuIdOf(it)] ?? '')
-  const menuMain = (it: T) => String(mainMap[menuIdOf(it)] ?? '').trim()
-
   /** 0 = 스킵, 1~3 = 주방 번호 */
   const resolveRoute = (it: T): KitchenRouteValue => {
     const mid = menuIdOf(it)

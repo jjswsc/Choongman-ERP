@@ -227,6 +227,7 @@ export function canAccessPosOrder(role: string): boolean {
 /** POS 결산 가능 */
 export function canAccessPosSettlement(role: string): boolean {
   return (
+    isPosOrderOnlyRole(role) ||
     isPosSettlementOnlyRole(role) ||
     isManagerRole(role) ||
     isFranchiseeRole(role) ||

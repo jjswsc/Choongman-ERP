@@ -34,6 +34,30 @@ import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 const ERP_HISTORY_KEY_CURR = "erp_back_curr"
 const ERP_HISTORY_KEY_PREV = "erp_back_prev"
+const ERP_HISTORY_BY_SCOPE_KEY = "erp_back_by_scope_v1"
+
+type ScopeHistoryEntry = {
+  curr: string
+  prev: string
+}
+
+function normalizePath(path: string): string {
+  if (!path) return path
+  if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1)
+  return path
+}
+
+/**
+ * 관리자 메뉴의 "같은 메뉴" 범위를 계산한다.
+ * 예) /admin/members/points -> /admin/members
+ */
+function getAdminMenuScope(path: string): string {
+  const normalized = normalizePath(path)
+  if (!normalized.startsWith("/admin")) return normalized
+  const parts = normalized.split("/").filter(Boolean) // ["admin", "..."]
+  if (parts.length <= 2) return normalized
+  return `/${parts[0]}/${parts[1]}`
+}
 
 export function ErpHeader() {
   const router = useRouter()
@@ -70,16 +94,57 @@ export function ErpHeader() {
   useEffect(() => {
     if (typeof window === "undefined" || !pathname || isLoginPage) return
     if (!pathname.startsWith("/admin")) return
+    const normalizedPath = normalizePath(pathname)
     const curr = sessionStorage.getItem(ERP_HISTORY_KEY_CURR)
-    if (curr !== pathname) {
+    if (curr !== normalizedPath) {
       sessionStorage.setItem(ERP_HISTORY_KEY_PREV, curr || "")
-      sessionStorage.setItem(ERP_HISTORY_KEY_CURR, pathname)
+      sessionStorage.setItem(ERP_HISTORY_KEY_CURR, normalizedPath)
+    }
+
+    const scope = getAdminMenuScope(normalizedPath)
+    try {
+      const raw = sessionStorage.getItem(ERP_HISTORY_BY_SCOPE_KEY)
+      const parsed = raw ? (JSON.parse(raw) as Record<string, ScopeHistoryEntry>) : {}
+      const existing = parsed[scope]
+      if (!existing || existing.curr !== normalizedPath) {
+        parsed[scope] = {
+          prev: existing?.curr || "",
+          curr: normalizedPath,
+        }
+        sessionStorage.setItem(ERP_HISTORY_BY_SCOPE_KEY, JSON.stringify(parsed))
+      }
+    } catch {
+      // 세션스토리지 파싱 오류 시에도 뒤로가기는 동작해야 하므로 무시
     }
   }, [pathname, isLoginPage])
 
   const handleBack = () => {
+    const normalizedPath = normalizePath(pathname || "")
+    const currentScope = getAdminMenuScope(normalizedPath)
+    try {
+      const raw = sessionStorage.getItem(ERP_HISTORY_BY_SCOPE_KEY)
+      const parsed = raw ? (JSON.parse(raw) as Record<string, ScopeHistoryEntry>) : {}
+      const entry = parsed[currentScope]
+      const scopePrev = entry?.prev
+      if (
+        scopePrev &&
+        scopePrev !== normalizedPath &&
+        scopePrev.startsWith(currentScope)
+      ) {
+        router.push(scopePrev)
+        return
+      }
+    } catch {
+      // 파싱 실패 시 기존 fallback 사용
+    }
+
+    if (normalizedPath !== currentScope && currentScope.startsWith("/admin")) {
+      router.push(currentScope)
+      return
+    }
+
     const prev = sessionStorage.getItem(ERP_HISTORY_KEY_PREV)
-    if (prev && prev !== pathname && prev.startsWith("/admin")) {
+    if (prev && prev !== normalizedPath && prev.startsWith("/admin")) {
       router.push(prev)
       return
     }

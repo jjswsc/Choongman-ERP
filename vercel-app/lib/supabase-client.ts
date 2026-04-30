@@ -28,7 +28,7 @@ export function subscribePosOrdersInsert(
   const filter = options?.tenantId
     ? `tenant_id=eq.${options.tenantId}`
     : options?.store
-      ? `store_name=eq.${options.store}`
+      ? `store_code=eq.${options.store}`
       : undefined
   const channel = supabase
     .channel(`pos-orders-insert-${options?.tenantId || options?.store || "all"}`)
@@ -47,7 +47,7 @@ export function subscribePosOrdersUpdate(
   const filter = options?.tenantId
     ? `tenant_id=eq.${options.tenantId}`
     : options?.store
-      ? `store_name=eq.${options.store}`
+      ? `store_code=eq.${options.store}`
       : undefined
   const channel = supabase
     .channel(`pos-orders-update-${options?.tenantId || options?.store || "all"}`)

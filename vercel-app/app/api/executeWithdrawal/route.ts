@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
-  const authResult = await requireAuth(request, 'office')
+  const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     authResult.errorResponse.headers.set('Content-Type', 'application/json')

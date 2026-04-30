@@ -1,15 +1,17 @@
 'use client'
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
 import {
   getPosMenus,
   getPosMenuCategories,
   getPosMenuOptions,
+  getPosPromoItems,
   getPosPromosWithItems,
   getPosMenuScreenConfig,
   savePosMenuScreenConfig,
   savePosMenu,
+  savePosMenuOption,
   uploadPosMenuImage,
   POS_MENU_UPLOAD_TOO_LARGE,
   type PosMenu,
@@ -118,6 +120,18 @@ export function PosTerminalMenuScreen({
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const translateChickenPartLabel = React.useCallback((name: string | undefined): string => {
+    const raw = String(name || '')
+    if (!raw) return raw
+    let out = raw
+    const boneless = t('posOptionPartBoneless')
+    const wing = t('posOptionPartWing')
+    const drum = t('posOptionPartDrumstick')
+    if (boneless && boneless !== 'posOptionPartBoneless') out = out.replace(/순살/g, boneless)
+    if (wing && wing !== 'posOptionPartWing') out = out.replace(/윙/g, wing)
+    if (drum && drum !== 'posOptionPartDrumstick') out = out.replace(/봉/g, drum)
+    return out
+  }, [t])
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
@@ -140,6 +154,7 @@ export function PosTerminalMenuScreen({
   const descriptionChannel = posDescriptionChannelFromTerminalType(orderType)
   const [menuEditOpen, setMenuEditOpen] = React.useState(false)
   const [menuEditSaving, setMenuEditSaving] = React.useState(false)
+  const [setTemplateApplying, setSetTemplateApplying] = React.useState(false)
   const [menuEditTargetId, setMenuEditTargetId] = React.useState<string | null>(null)
   const [menuEditTab, setMenuEditTab] = React.useState<'menu' | 'general' | 'item'>('menu')
   const [imageUploading, setImageUploading] = React.useState(false)
@@ -350,20 +365,34 @@ export function PosTerminalMenuScreen({
     return getBanbanFlavorMenuList(menus, optionPickerMenu, todayStr)
   }, [menus, optionPickerMenu, todayStr])
 
-  const addWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionName?: string) => {
+  const addWithOption = async (menu: PosMenu, opt: PosMenuOption | null, defaultOptionName?: string) => {
     const mirrorPid = menu.promoId?.trim()
     if (mirrorPid && !opt) {
       const pr = promos.find((x) => x.id === mirrorPid)
-      const ot = orderType === 'dine-in' ? 'dine_in' : orderType === 'delivery' ? 'delivery' : 'takeout'
-      if (
-        pr &&
-        isPromoVisibleInContext(pr, {
-          businessDateYmd,
-          orderType: ot,
-          deliveryAppCode: deliveryAppCode || null,
-        })
-      ) {
-        addPromo(pr)
+      if (pr) {
+        void addPromo(pr)
+        return
+      }
+      const rows = await getPosPromoItems({ promoId: mirrorPid }).catch(() => [])
+      if (rows.length > 0) {
+        const fallbackPromo: PosPromoWithItems = {
+          id: mirrorPid,
+          code: menu.code,
+          name: menu.name,
+          category: menu.category,
+          categoryMain: menu.categoryMain,
+          price: menu.price,
+          priceDelivery: menu.priceDelivery,
+          vatIncluded: menu.vatIncluded !== false,
+          isActive: menu.isActive !== false,
+          sortOrder: menu.sortOrder ?? 0,
+          items: rows.map((r) => ({
+            menuId: String(r.menuId ?? ''),
+            optionId: r.optionId ? String(r.optionId) : null,
+            quantity: Math.max(1, Number(r.quantity) || 1),
+          })),
+        }
+        void addPromo(fallbackPromo)
         return
       }
     }
@@ -390,14 +419,19 @@ export function PosTerminalMenuScreen({
     setOptionPickerBanbanFirst(null)
   }
 
-  const addPromo = (p: PosPromoWithItems) => {
+  const addPromo = async (p: PosPromoWithItems) => {
+    const resolvedItems =
+      Array.isArray(p.items) && p.items.length > 0
+        ? p.items
+        : await getPosPromoItems({ promoId: p.id }).catch(() => [])
+    const resolvedPromo: PosPromoWithItems = { ...p, items: resolvedItems || [] }
     onAddItem?.({
-      id: `promo-${p.id}`,
-      name: p.name,
-      price: getPromoPrice(p),
-      promoId: p.id,
-      promoCode: p.code,
-      promoItems: p.items || [],
+      id: `promo-${resolvedPromo.id}`,
+      name: resolvedPromo.name,
+      price: getPromoPrice(resolvedPromo),
+      promoId: resolvedPromo.id,
+      promoCode: resolvedPromo.code,
+      promoItems: resolvedPromo.items || [],
     })
   }
 
@@ -414,7 +448,7 @@ export function PosTerminalMenuScreen({
       setOptionPickerSelections({})
       return
     }
-    addWithOption(menu, null)
+    void addWithOption(menu, null)
   }
 
   // 실제 담기 가능 여부는 콜백 존재로 판단 (모드 문자열 불일치로 클릭이 막히는 케이스 방지)
@@ -636,6 +670,63 @@ export function PosTerminalMenuScreen({
     setSelectedOptionGroups(copy)
   }
 
+  const applySetChoiceTemplate = async () => {
+    if (setTemplateApplying) return
+    setSelectedOptionGroups(['set_main', 'drink'])
+    const targetId = menuEditTargetId ? String(menuEditTargetId).trim() : ''
+    const targetMenuId = Number(targetId)
+    if (!targetId || !Number.isFinite(targetMenuId) || targetMenuId <= 0) {
+      await appAlert('옵션 단계 템플릿만 적용되었습니다. 메뉴 저장 후 다시 누르면 예시 옵션도 자동 생성됩니다.')
+      return
+    }
+    const hasExistingSubstitution = allOptions.some(
+      (o) =>
+        String(o.menuId) === targetId &&
+        (o.optionType == null || o.optionType === 'substitution')
+    )
+    if (hasExistingSubstitution) {
+      await appAlert('옵션 단계를 set_main, drink로 적용했습니다. 기존 옵션이 있어 예시 옵션 생성은 건너뛰었습니다.')
+      return
+    }
+    const confirmed = await appConfirm(
+      '이 메뉴에 세트 택1 예시 옵션 4개를 자동 생성할까요?\n(필요 없으면 취소를 누른 뒤 옵션 단계만 사용하세요.)'
+    )
+    if (!confirmed) return
+
+    setSetTemplateApplying(true)
+    try {
+      const samples: Array<{ name: string; step: Record<string, string> }> = [
+        { name: '메인A + 음료A', step: { set_main: '메인A', drink: '음료A' } },
+        { name: '메인A + 음료B', step: { set_main: '메인A', drink: '음료B' } },
+        { name: '메인B + 음료A', step: { set_main: '메인B', drink: '음료A' } },
+        { name: '메인B + 음료B', step: { set_main: '메인B', drink: '음료B' } },
+      ]
+      for (let i = 0; i < samples.length; i++) {
+        const row = samples[i]
+        const res = await savePosMenuOption(
+          {
+            menuId: targetMenuId,
+            name: row.name,
+            optionType: 'substitution',
+            sortOrder: i + 1,
+            priceModifier: 0,
+            optionStepValues: row.step,
+          },
+          { requireOnline: true }
+        )
+        if (!res?.success) {
+          throw new Error(res?.message || '옵션 생성 실패')
+        }
+      }
+      await loadMenuData()
+      await appAlert('세트 택1 템플릿을 적용했고, 예시 옵션 4개를 생성했습니다. 옵션명은 메뉴에 맞게 수정해서 사용하세요.')
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setSetTemplateApplying(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className={cn('flex h-full items-center justify-center rounded-lg border bg-card text-muted-foreground text-sm', className)}>
@@ -795,7 +886,7 @@ export function PosTerminalMenuScreen({
               <button
                 key={`promo-${p.id}`}
                 type="button"
-                onClick={() => interactive && fireMenuAction(() => addPromo(p))}
+                onClick={() => interactive && fireMenuAction(() => { void addPromo(p) })}
                 className={cn(
                   'touch-manipulation flex h-full flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition',
                   !isAdminMode &&
@@ -936,7 +1027,7 @@ export function PosTerminalMenuScreen({
                           onClick={() => {
                             if (!interactive) return
                             fireMenuAction(() => {
-                              if (row.rowType === 'promo' && row.promo) addPromo(row.promo)
+                              if (row.rowType === 'promo' && row.promo) void addPromo(row.promo)
                               if (row.rowType === 'menu' && row.menu) openMenuPicker(row.menu)
                             })
                           }}
@@ -1149,7 +1240,7 @@ export function PosTerminalMenuScreen({
             const defaultBtn = isChickenBase && (
               <button
                 type="button"
-                onClick={() => fireMenuAction(() => addWithOption(optionPickerMenu, null, 'S 순살'))}
+                onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null, 'S 순살') })}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
                 <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S 순살)'}</span>
@@ -1199,7 +1290,7 @@ export function PosTerminalMenuScreen({
                         onClick={() => fireMenuAction(() => handleStepSelect(val))}
                         className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
                       >
-                        {val}
+                        {translateChickenPartLabel(val)}
                       </button>
                     ))}
                   </div>
@@ -1225,11 +1316,11 @@ export function PosTerminalMenuScreen({
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => fireMenuAction(() => addWithOption(optionPickerMenu, opt))}
+                    onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, opt) })}
                     className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                   >
                     <span className="min-w-0 flex-1 text-slate-800">
-                      <span className="block font-medium">{opt.name}</span>
+                      <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
                       {optDesc ? (
                         <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
                           {optDesc}
@@ -1502,6 +1593,20 @@ export function PosTerminalMenuScreen({
                         value={menuEditForm.optionSelectionGroupsText}
                         onChange={(e) => setMenuEditForm((p) => ({ ...p, optionSelectionGroupsText: e.target.value }))}
                       />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={setTemplateApplying}
+                          onClick={() => void applySetChoiceTemplate()}
+                        >
+                          {setTemplateApplying ? '세트 템플릿 적용중...' : '세트 택1 템플릿 적용'}
+                        </Button>
+                        <span className="text-[11px] text-muted-foreground">
+                          set_main, drink 단계와 기본 예시 옵션을 자동으로 만듭니다.
+                        </span>
+                      </div>
                       {selectedOptionGroups.length > 0 && (
                         <div className="space-y-2 rounded-md border bg-muted/20 p-2">
                           {selectedOptionGroups.map((group, idx) => (
