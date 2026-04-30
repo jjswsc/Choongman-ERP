@@ -4,6 +4,8 @@ import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
+import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
 
 type PosOrderRow = {
@@ -12,6 +14,7 @@ type PosOrderRow = {
   order_type?: string
   table_name?: string
   status?: string
+  created_at?: string
   items_json?: string
   memo?: string
   discount_amt?: number
@@ -97,9 +100,21 @@ async function hasOtherActiveOrderOnTable(
     { limit: 50 }
   )) as PosOrderRow[] | null
   if (!rows?.length) return false
+  const currentBusinessDate = getPosBusinessDateStr(new Date())
   return rows.some((r) => {
     const rid = Number(r.id)
     if (!rid || rid === excludeOrderId) return false
+    // 테이블 이동/합석은 홀 주문 기준으로 동작하므로, 비표준/배달/포장 주문은 점유 판정에서 제외한다.
+    if (normalizePosOrderTypeKey(r.order_type) !== 'dine_in') return false
+    // POS 테이블 화면과 동일하게 "현재 방콕 영업일" 주문만 점유로 본다.
+    const createdAtRaw = String(r.created_at ?? '').trim()
+    if (createdAtRaw) {
+      const createdAt = new Date(createdAtRaw)
+      if (!Number.isNaN(createdAt.getTime())) {
+        const rowBusinessDate = getPosBusinessDateStr(createdAt)
+        if (rowBusinessDate !== currentBusinessDate) return false
+      }
+    }
     return !isClosedStatus(String(r.status ?? ''))
   })
 }

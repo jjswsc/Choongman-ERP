@@ -14,6 +14,14 @@ function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: numbe
   return 'grab'
 }
 
+function sanitizeTableNameByOrderType(
+  orderType: string | null | undefined,
+  rawTableName: unknown
+): string {
+  const tableName = String(rawTableName ?? '').trim()
+  return isDineInOrderTypeForGuestCount(orderType) ? tableName : ''
+}
+
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
 
 /** POS 주문 수정 (항목·메모·할인·주문번호 등) - completed 전까지 수정 가능 */
@@ -32,7 +40,6 @@ export async function POST(req: NextRequest) {
     }
     const id = Number(body?.id)
     const items = Array.isArray(body?.items) ? body.items : []
-    const tableName = String(body?.tableName ?? '').trim()
     const memo = String(body?.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()
@@ -74,6 +81,7 @@ export async function POST(req: NextRequest) {
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
+    const tableName = sanitizeTableNameByOrderType(existing[0]?.order_type, body?.tableName)
 
     const status = String(existing[0]?.status ?? '')
     if (!EDITABLE_STATUSES.includes(status)) {

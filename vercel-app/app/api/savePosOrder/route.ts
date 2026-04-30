@@ -132,6 +132,11 @@ function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: numbe
   return 'grab'
 }
 
+function sanitizeTableNameByOrderType(orderType: string, rawTableName: unknown): string {
+  const tableName = String(rawTableName ?? '').trim()
+  return orderType === 'dine_in' ? tableName : ''
+}
+
 /** POS 주문 저장 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -170,7 +175,7 @@ export async function POST(req: NextRequest) {
     const orderType = coercePosOrderTypeForDb(
       String(body.orderType ?? body.order_type ?? '')
     )
-    const tableName = String(body.tableName ?? '')
+    const tableName = sanitizeTableNameByOrderType(orderType, body.tableName)
     const memo = String(body.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body.discountAmt ?? 0))
     const discountReason = String(body.discountReason ?? '').trim()
