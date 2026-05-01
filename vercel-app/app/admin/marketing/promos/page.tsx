@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import {
   getPosMenus,
   getPosMenuCategories,
@@ -40,14 +41,7 @@ export default function MarketingPromosPage() {
   const t = useT(lang)
   const marketingPromoSetsBannerText = t('marketingPromoSetsBanner')
   const marketingPromoCampaignSelectHelpText = t('marketingPromoCampaignSelectHelp')
-  const optionPartLabel = (name: string) => {
-    if (!name?.trim()) return name ?? ''
-    let s = String(name)
-    if (s.includes('순살')) s = s.replace(/순살/g, t('posOptionPartBoneless'))
-    if (s.includes('윙')) s = s.replace(/윙/g, t('posOptionPartWing'))
-    if (s.includes('봉')) s = s.replace(/봉/g, t('posOptionPartDrumstick'))
-    return s
-  }
+  const optionPartLabel = (name: string) => translatePosMenuLineForReceipt(name, t)
 
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [workspaceCampaignId, setWorkspaceCampaignId] = React.useState('')

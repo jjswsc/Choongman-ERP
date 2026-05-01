@@ -19,8 +19,21 @@ const SLOT_LABEL_MAP: Record<string, string> = {
   sauce: '소스',
 }
 
-export function getPromoChoiceSlotLabel(key: string): string {
+const SLOT_I18N_KEYS: Record<string, string> = {
+  main: 'posPromoChoiceSlotMain',
+  side: 'posPromoChoiceSlotSide',
+  drink: 'posPromoChoiceSlotDrink',
+  sauce: 'posPromoChoiceSlotSauce',
+}
+
+/** 번들 슬롯 키(main/side/drink/sauce) 표시 — `t`가 있으면 i18n, 없으면 한글 폴백 후 raw key */
+export function getPromoChoiceSlotLabel(key: string, t?: (k: string) => string): string {
   const normalized = String(key || '').trim().toLowerCase()
+  const i18nKey = SLOT_I18N_KEYS[normalized]
+  if (t && i18nKey) {
+    const s = t(i18nKey)
+    if (s && s !== i18nKey) return s
+  }
   return SLOT_LABEL_MAP[normalized] || String(key || '').trim()
 }
 

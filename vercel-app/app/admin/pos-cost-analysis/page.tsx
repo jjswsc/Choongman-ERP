@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
+import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { useT } from "@/lib/i18n"
 import { getPosMenuCostAnalysis, type PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
@@ -712,15 +713,9 @@ export default function PosCostAnalysisPage() {
                   const costDMise = m.costDMise
                   const costRatioH = m.costRatioH
                   const costRatioD = m.costRatioD
-                  const optionPartLabel = (n: string) => {
-                    if (!n?.trim()) return n ?? ""
-                    let s = String(n)
-                    if (s.includes("순살")) s = s.replace(/순살/g, t("posOptionPartBoneless"))
-                    if (s.includes("윙")) s = s.replace(/윙/g, t("posOptionPartWing"))
-                    if (s.includes("봉")) s = s.replace(/봉/g, t("posOptionPartDrumstick"))
-                    return s
-                  }
-                  const menuLabel = (r.menuName ?? "—") + (r.optionName ? ` (${optionPartLabel(r.optionName)})` : "")
+                  const menuLabel =
+                    (r.menuName ?? "—") +
+                    (r.optionName ? ` (${translatePosMenuLineForReceipt(r.optionName, t)})` : "")
                   return (
                     <React.Fragment key={key}>
                       <tr

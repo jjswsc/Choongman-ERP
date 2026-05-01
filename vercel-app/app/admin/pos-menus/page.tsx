@@ -88,6 +88,7 @@ import {
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
+import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
@@ -177,15 +178,8 @@ export default function PosMenusPage() {
   const { stores } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
-  /** 옵션 부위명(순살/윙/봉) 표시 시 현재 언어로 번역. "M - 순살" 등 포함 형태도 처리 */
-  const optionPartLabel = (name: string) => {
-    if (!name?.trim()) return name ?? ""
-    let s = String(name)
-    if (s.includes("순살")) s = s.replace(/순살/g, t("posOptionPartBoneless"))
-    if (s.includes("윙")) s = s.replace(/윙/g, t("posOptionPartWing"))
-    if (s.includes("봉")) s = s.replace(/봉/g, t("posOptionPartDrumstick"))
-    return s
-  }
+  /** 옵션 부위명(순살/윙/봉) — POS/영수증과 동일 규칙(미번역·폴백 t 시에도 언어 사전 적용) */
+  const optionPartLabel = (name: string) => translatePosMenuLineForReceipt(name, t)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [allCategories, setAllCategories] = React.useState<string[]>([])
   const [allMainCategories, setAllMainCategories] = React.useState<string[]>([])
@@ -3043,7 +3037,16 @@ export default function PosMenusPage() {
                     <ul className="space-y-0.5">
                       {optionsConfigFilteredMenus.map((m) => {
                         const isSelected = optionsConfigSelectedMenuId === m.id
-                        const optCount = isSelected ? optionsConfigMenuOptions.length : null
+                        const optCount = isSelected
+                          ? isChickenMenu(m.code)
+                            ? (() => {
+                                const nd = optionsConfigMenuOptions.filter((o) => !isChickenDefaultOption(o.name))
+                                const hasHiddenS = optionsConfigMenuOptions.some((o) => isChickenDefaultOption(o.name))
+                                if (nd.length === 0 && hasHiddenS) return 1
+                                return nd.length
+                              })()
+                            : optionsConfigMenuOptions.length
+                          : null
                         return (
                           <li key={m.id}>
                             <button

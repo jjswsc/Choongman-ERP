@@ -62,6 +62,20 @@ function isChickenDefaultOption(name: string | undefined): boolean {
   return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
 }
 
+/** 치킨 + optionId 없음 = 메뉴 기본가(S 순살). 세트·미리보기에도 M과 같이 사이즈가 보이게 함 */
+const CHICKEN_IMPLICIT_BASE_OPTION_NAME = "S 순살"
+
+function chickenLineOptionDisplayName(
+  menuCode: string | undefined,
+  optionId: string | null | undefined,
+  optionLabel: string | undefined
+): string | null {
+  const trimmed = optionLabel?.trim()
+  if (trimmed) return trimmed
+  if (isChickenMenu(menuCode) && !optionId) return CHICKEN_IMPLICIT_BASE_OPTION_NAME
+  return null
+}
+
 /** 세트·시뮬 드롭다운: 숨긴 S 기본과 구분하기 위한 Select value */
 const CHICKEN_BASE_SELECT_VALUE = "__pos_chicken_s_default__"
 
@@ -74,11 +88,11 @@ const DEFAULT_PICKER_DELIVERY_APPS = [
 
 const CANON_DELIVERY_CODES = new Set(DEFAULT_PICKER_DELIVERY_APPS.map((d) => d.code))
 
-const CHOICE_SLOT_PRESETS: Array<{ key: string; label: string; pickCount: number; keywords: string[] }> = [
-  { key: "main", label: "메인", pickCount: 1, keywords: ["main", "메인", "chicken", "burger", "pizza", "rice", "noodle"] },
-  { key: "side", label: "사이드", pickCount: 1, keywords: ["side", "사이드", "snack", "fries", "감자", "튀김"] },
-  { key: "drink", label: "음료", pickCount: 1, keywords: ["drink", "beverage", "음료", "콜라", "coffee", "tea", "juice"] },
-  { key: "sauce", label: "소스", pickCount: 1, keywords: ["sauce", "dip", "소스"] },
+const CHOICE_SLOT_PRESETS: Array<{ key: string; labelKey: string; pickCount: number; keywords: string[] }> = [
+  { key: "main", labelKey: "posPromoChoiceSlotMain", pickCount: 1, keywords: ["main", "메인", "chicken", "burger", "pizza", "rice", "noodle"] },
+  { key: "side", labelKey: "posPromoChoiceSlotSide", pickCount: 1, keywords: ["side", "사이드", "snack", "fries", "감자", "튀김"] },
+  { key: "drink", labelKey: "posPromoChoiceSlotDrink", pickCount: 1, keywords: ["drink", "beverage", "음료", "콜라", "coffee", "tea", "juice"] },
+  { key: "sauce", labelKey: "posPromoChoiceSlotSauce", pickCount: 1, keywords: ["sauce", "dip", "소스"] },
 ]
 
 function inferChoiceSlotKeyByMenu(menu?: PosMenu | null): string | null {
@@ -885,7 +899,8 @@ export function PosSetMenuTabWorkspace({
         const opts = optionsByMenuId[mid] || []
         const opt = it.optionId ? opts.find((o) => String(o.id) === String(it.optionId)) : null
         let label = menu?.name?.trim() || `#${mid.slice(0, 8)}`
-        if (opt?.name?.trim()) label += ` (${optPart(opt.name)})`
+        const disp = chickenLineOptionDisplayName(menu?.code, it.optionId ? String(it.optionId) : null, opt?.name)
+        if (disp) label += ` (${optPart(disp)})`
         const q = Number(it.quantity) || 1
         if (q !== 1) label += ` ×${q}`
         return label
@@ -1125,7 +1140,7 @@ export function PosSetMenuTabWorkspace({
       const key = String(slotKeyRaw).trim()
       if (!key) return false
       if (!lines.some((ln) => !String(ln.choiceGroup ?? "").trim())) {
-        await appAlert("먼저 슬롯에 넣을 구성 라인을 1개 이상 추가해 주세요.")
+        await appAlert(t("posSetTabAlertNeedLinesForSlot"))
         return false
       }
       const pick = Math.max(1, Math.floor(Number(pickCountRaw) || 1))
@@ -1138,17 +1153,17 @@ export function PosSetMenuTabWorkspace({
       })
       return true
     },
-    [lines]
+    [lines, t]
   )
 
   const addChoiceSlot = React.useCallback(async () => {
     const key = newChoiceSlotName.trim()
     if (!key) {
-      await appAlert("선택 슬롯 이름을 입력해 주세요.")
+      await appAlert(t("posSetTabAlertSlotNameRequired"))
       return
     }
     if (choiceSlots.some((s) => s.key === key)) {
-      await appAlert("같은 슬롯 이름이 이미 있습니다.")
+      await appAlert(t("posSetTabAlertSlotNameDuplicate"))
       return
     }
     const pick = Math.max(1, Math.floor(Number(newChoiceSlotPickCount) || 1))
@@ -1156,25 +1171,25 @@ export function PosSetMenuTabWorkspace({
     if (!ok) return
     setNewChoiceSlotName("")
     setNewChoiceSlotPickCount("1")
-  }, [attachSlotToFirstUnassignedLine, choiceSlots, newChoiceSlotName, newChoiceSlotPickCount])
+  }, [attachSlotToFirstUnassignedLine, choiceSlots, newChoiceSlotName, newChoiceSlotPickCount, t])
 
   const addPresetChoiceSlot = React.useCallback(
     async (presetKey: string) => {
       const preset = CHOICE_SLOT_PRESETS.find((p) => p.key === presetKey)
       if (!preset) return
       if (choiceSlots.some((s) => s.key === preset.key)) {
-        await appAlert("이미 생성된 슬롯입니다.")
+        await appAlert(t("posSetTabAlertSlotPresetExists"))
         return
       }
       const ok = await attachSlotToFirstUnassignedLine(preset.key, preset.pickCount)
       if (!ok) return
     },
-    [attachSlotToFirstUnassignedLine, choiceSlots]
+    [attachSlotToFirstUnassignedLine, choiceSlots, t]
   )
 
   const autoAssignChoiceSlots = React.useCallback(async () => {
     if (lines.length === 0) {
-      await appAlert("먼저 구성 라인을 추가해 주세요.")
+      await appAlert(t("posSetTabAlertNeedLinesFirst"))
       return
     }
     let assigned = 0
@@ -1192,11 +1207,11 @@ export function PosSetMenuTabWorkspace({
       }
     })
     if (assigned === 0) {
-      await appAlert("자동 추천할 라인이 없거나 카테고리 규칙과 맞는 항목이 없습니다.")
+      await appAlert(t("posSetTabAlertAutoSuggestNoMatch"))
       return
     }
     setLines(next)
-  }, [lines, menuById])
+  }, [lines, menuById, t])
 
   const resolvedDiscountSaleHallThb = React.useMemo(
     () =>
@@ -1807,10 +1822,8 @@ export function PosSetMenuTabWorkspace({
           <div className="rounded-xl border border-border/80 bg-card/90 p-4 shadow-sm">
             <p className="mb-2 text-sm font-bold">{t("posMenuBundleSimComposeTitle")}</p>
             <div className="mb-3 rounded-lg border border-border/60 bg-muted/20 p-3">
-              <p className="text-xs font-semibold text-muted-foreground">선택 슬롯 관리</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                예: 음료 슬롯(3개 후보 중 1개 선택)처럼 슬롯을 먼저 만들고 라인에 배정하세요.
-              </p>
+              <p className="text-xs font-semibold text-muted-foreground">{t("posSetTabChoiceSlotManageTitle")}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{t("posSetTabChoiceSlotIntroHint")}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {CHOICE_SLOT_PRESETS.map((preset) => (
                   <Button
@@ -1821,7 +1834,7 @@ export function PosSetMenuTabWorkspace({
                     className="h-7 px-2 text-[11px]"
                     onClick={() => void addPresetChoiceSlot(preset.key)}
                   >
-                    + {preset.label}
+                    + {t(preset.labelKey)}
                   </Button>
                 ))}
                 <Button
@@ -1831,13 +1844,13 @@ export function PosSetMenuTabWorkspace({
                   className="h-7 px-2 text-[11px]"
                   onClick={() => void autoAssignChoiceSlots()}
                 >
-                  자동 슬롯 추천
+                  {t("posSetTabChoiceSlotAutoSuggest")}
                 </Button>
               </div>
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <Input
                   className="h-9 w-44 text-xs"
-                  placeholder="슬롯명 (예: 음료)"
+                  placeholder={t("posSetTabChoiceSlotNamePh")}
                   value={newChoiceSlotName}
                   onChange={(e) => setNewChoiceSlotName(e.target.value)}
                 />
@@ -1850,15 +1863,15 @@ export function PosSetMenuTabWorkspace({
                   onChange={(e) => setNewChoiceSlotPickCount(e.target.value)}
                 />
                 <Button type="button" size="sm" className="h-9" onClick={() => void addChoiceSlot()}>
-                  슬롯 생성
+                  {t("posSetTabChoiceSlotCreate")}
                 </Button>
               </div>
               {choiceSlots.length > 0 ? (
                 <div className="mt-3 space-y-2">
                   {choiceSlots.map((slot) => (
                     <div key={slot.key} className="flex flex-wrap items-center gap-2 rounded border border-border/50 bg-background/70 px-2 py-2">
-                      <span className="min-w-24 text-xs font-medium">{getPromoChoiceSlotLabel(slot.key)}</span>
-                      <span className="text-[11px] text-muted-foreground">선택수</span>
+                      <span className="min-w-24 text-xs font-medium">{getPromoChoiceSlotLabel(slot.key, t)}</span>
+                      <span className="text-[11px] text-muted-foreground">{t("posSetTabChoiceSlotPickCount")}</span>
                       <Input
                         type="number"
                         min={1}
@@ -1891,7 +1904,7 @@ export function PosSetMenuTabWorkspace({
                     <th className="min-w-[9rem] px-2 py-2.5 text-left text-sm font-semibold">{t("posPromoItems")}</th>
                     <th className="w-16 px-2 py-2.5 text-right text-sm font-semibold">{t("qty")}</th>
                     <th className="w-[9rem] px-2 py-2.5 text-left text-xs font-semibold leading-tight text-muted-foreground">
-                      선택그룹
+                      {t("posSetTabComposeColChoiceGroup")}
                     </th>
                     <th className="w-[5rem] px-1 py-2.5 text-right text-xs font-semibold leading-tight text-muted-foreground">
                       {t("itemsCost")}
@@ -1938,9 +1951,13 @@ export function PosSetMenuTabWorkspace({
                           <td className="px-1 py-2.5 text-center text-sm tabular-nums text-muted-foreground">{idx + 1}</td>
                           <td className="px-2 py-2.5">
                             <span className="text-sm font-medium">{ln.menuName}</span>
-                            {ln.optionLabel ? (
-                              <span className="text-sm text-muted-foreground"> ({optionPartLabel(ln.optionLabel)})</span>
-                            ) : null}
+                            {(() => {
+                              const menuRow = menuById[ln.menuId]
+                              const disp = chickenLineOptionDisplayName(menuRow?.code, ln.optionId, ln.optionLabel)
+                              return disp ? (
+                                <span className="text-sm text-muted-foreground"> ({optionPartLabel(disp)})</span>
+                              ) : null
+                            })()}
                           </td>
                           <td className="px-2 py-2 text-right">
                             <Input
@@ -1980,13 +1997,13 @@ export function PosSetMenuTabWorkspace({
                               }}
                             >
                               <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="슬롯 미지정" />
+                                <SelectValue placeholder={t("posSetTabChoiceSlotUnassigned")} />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__none__">슬롯 미지정</SelectItem>
+                                <SelectItem value="__none__">{t("posSetTabChoiceSlotUnassigned")}</SelectItem>
                                 {choiceSlots.map((slot) => (
                                   <SelectItem key={slot.key} value={slot.key}>
-                                    {getPromoChoiceSlotLabel(slot.key)}
+                                    {getPromoChoiceSlotLabel(slot.key, t)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

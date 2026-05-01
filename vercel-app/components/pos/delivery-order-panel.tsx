@@ -28,6 +28,7 @@ import {
 } from '@/lib/grab-delivery-progress'
 import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import {
   buildUpdatePosOrderParamsFromOrder,
   canRemovePosOrderLine,
@@ -212,12 +213,10 @@ export function DeliveryOrderPanel({
       const oid = Number(order.id)
       await updatePosOrderStatus({ id: oid, status: 'cancelled' })
       if (order.items.length > 0) {
-        const kitchenLines = order.items.map((it) =>
-          kitchenRoutingItemFromOrderItem(
-            it,
-            resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
-          )
-        )
+        const kitchenLines = order.items.map((it) => {
+          const raw = resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
+          return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw, ti))
+        })
         await onAfterFullOrderKitchenReprint?.(oid, {
           removedKitchenLines: kitchenLines,
           orderNoForPrint: order.orderNo,
@@ -246,10 +245,11 @@ export function DeliveryOrderPanel({
       }
       return
     }
-    const label = resolvePosOrderItemMenuDisplayName(
+    const labelRaw = resolvePosOrderItemMenuDisplayName(
       { id: target.id, name: target.name, menuId: target.menuId },
       menusFromProps
     )
+    const label = translatePosMenuLineForReceipt(labelRaw, ti)
     const ask = i18nTr(ti, 'posLineItemCancelConfirm', { name: label })
     if (!await appConfirm(ask)) return
     const id = Number(order.id)
@@ -363,12 +363,10 @@ export function DeliveryOrderPanel({
         })
       }
       if (!Number.isNaN(id) && order.items.length > 0) {
-        const kitchenLines = order.items.map((it) =>
-          kitchenRoutingItemFromOrderItem(
-            it,
-            resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
-          )
-        )
+        const kitchenLines = order.items.map((it) => {
+          const raw = resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
+          return kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(raw, ti))
+        })
         await onAfterFullOrderKitchenReprint?.(id, {
           removedKitchenLines: kitchenLines,
           orderNoForPrint: order.orderNo,
@@ -465,10 +463,11 @@ export function DeliveryOrderPanel({
               <ScrollArea className="flex-1 max-h-[320px] rounded-md border">
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
-                    const displayName = resolvePosOrderItemMenuDisplayName(
+                    const displayNameRaw = resolvePosOrderItemMenuDisplayName(
                       { id: item.id, name: item.name, menuId: item.menuId },
                       menusFromProps
                     )
+                    const displayName = translatePosMenuLineForReceipt(displayNameRaw, ti)
                     const packaged = itemPackaged[item.id]
                     const optMatch = displayName.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : displayName

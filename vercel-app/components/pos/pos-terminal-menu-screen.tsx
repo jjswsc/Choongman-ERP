@@ -130,18 +130,10 @@ export function PosTerminalMenuScreen({
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const translateChickenPartLabel = React.useCallback((name: string | undefined): string => {
-    const raw = String(name || '')
-    if (!raw) return raw
-    let out = raw
-    const boneless = t('posOptionPartBoneless')
-    const wing = t('posOptionPartWing')
-    const drum = t('posOptionPartDrumstick')
-    if (boneless && boneless !== 'posOptionPartBoneless') out = out.replace(/순살/g, boneless)
-    if (wing && wing !== 'posOptionPartWing') out = out.replace(/윙/g, wing)
-    if (drum && drum !== 'posOptionPartDrumstick') out = out.replace(/봉/g, drum)
-    return out
-  }, [t])
+  const translateChickenPartLabel = React.useCallback(
+    (name: string | undefined): string => translatePosMenuLineForReceipt(String(name || ''), t),
+    [t]
+  )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   usePosMenusCatalogLiveRefresh(React.useCallback((list) => setMenus(list), []))
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
@@ -1462,7 +1454,7 @@ export function PosTerminalMenuScreen({
                 return (
                   <div key={group.key} className="rounded-lg border border-border/60 p-3 space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground">
-                      {getPromoChoiceSlotLabel(group.key)} ({selected.length}/{group.pickCount})
+                      {getPromoChoiceSlotLabel(group.key, t)} ({selected.length}/{group.pickCount})
                     </p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {group.lines.map((line) => {

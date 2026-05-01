@@ -35,6 +35,19 @@ function isChickenDefaultOption(name: string | undefined): boolean {
   return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
 }
 
+const CHICKEN_IMPLICIT_BASE_OPTION_NAME = "S 순살"
+
+function chickenLineOptionDisplayName(
+  menuCode: string | undefined,
+  optionId: string | null | undefined,
+  optionLabel: string | undefined
+): string | null {
+  const trimmed = optionLabel?.trim()
+  if (trimmed) return trimmed
+  if (isChickenMenu(menuCode) && !optionId) return CHICKEN_IMPLICIT_BASE_OPTION_NAME
+  return null
+}
+
 export type PosMenuBundleSimulatorPanelProps = {
   menus: PosMenu[]
   mainCategories: string[]
@@ -431,9 +444,13 @@ export function PosMenuBundleSimulatorPanel({
                         <tr key={ln.key} className="border-b border-border/50 last:border-0">
                           <td className="px-2 py-1.5">
                             <span className="font-medium">{ln.menuName}</span>
-                            {ln.optionLabel ? (
-                              <span className="text-muted-foreground"> ({optionPartLabel(ln.optionLabel)})</span>
-                            ) : null}
+                            {(() => {
+                              const menuRow = menuById[ln.menuId]
+                              const disp = chickenLineOptionDisplayName(menuRow?.code, ln.optionId, ln.optionLabel)
+                              return disp ? (
+                                <span className="text-muted-foreground"> ({optionPartLabel(disp)})</span>
+                              ) : null
+                            })()}
                           </td>
                           <td className="px-2 py-1.5 text-right tabular-nums">
                             <Input
