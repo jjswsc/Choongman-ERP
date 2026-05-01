@@ -305,20 +305,21 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .tax-invoice-label { font-weight: 600; color: #000; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
         .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
-        /* 일부 하이브리드+드라이버 조합(Ekkamai)에서 결제 영수증의 CSS grid가 좌우 분리 인쇄되는 현상 완화 */
+        /* 일부 하이브리드+드라이버 조합(CP-802 포함)에서 결제 영수증의 CSS grid/flex가 좌우 분리 인쇄되는 현상 완화 */
         @media print {
+          .receipt-payment { position: static !important; left: 0 !important; width: 100% !important; max-width: 100% !important; }
           .receipt-payment .receipt-row,
-          .receipt-payment .receipt-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: ${RECEIPT_GRID_COL_GAP_PX}px; }
+          .receipt-payment .receipt-item-head { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
           .receipt-payment .receipt-row > span:first-child,
-          .receipt-payment .receipt-item-head > span:first-child { flex: 1 1 auto; min-width: 0; }
+          .receipt-payment .receipt-item-head > span:first-child { display: table-cell; width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm); padding-right: ${RECEIPT_GRID_COL_GAP_PX}px; vertical-align: top; }
           .receipt-payment .receipt-row > span:last-child,
-          .receipt-payment .receipt-item-head > span:last-child { flex: 0 0 ${RECEIPT_AMOUNT_COL_MM}mm; min-width: ${RECEIPT_AMOUNT_COL_MM}mm; text-align: right; white-space: normal; }
-          .receipt-payment .receipt-meta-row { display: flex; align-items: flex-start; gap: 3mm; }
-          .receipt-payment .receipt-meta-label { flex: 0 0 auto; white-space: nowrap; }
-          .receipt-payment .receipt-meta-value { flex: 1 1 auto; min-width: 0; }
-          .receipt-payment .tax-invoice-row { display: flex; align-items: flex-start; gap: 4px; }
-          .receipt-payment .tax-invoice-row > .tax-invoice-label { flex: 0 0 22mm; }
-          .receipt-payment .tax-invoice-row > span:last-child { flex: 1 1 auto; min-width: 0; }
+          .receipt-payment .receipt-item-head > span:last-child { display: table-cell; width: ${RECEIPT_AMOUNT_COL_MM}mm; text-align: right; vertical-align: top; white-space: normal; }
+          .receipt-payment .receipt-meta-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
+          .receipt-payment .receipt-meta-label { display: table-cell; width: 22mm; vertical-align: top; white-space: nowrap; padding-right: 3mm; }
+          .receipt-payment .receipt-meta-value { display: table-cell; width: auto; vertical-align: top; }
+          .receipt-payment .tax-invoice-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
+          .receipt-payment .tax-invoice-row > .tax-invoice-label { display: table-cell; width: 22mm; vertical-align: top; padding-right: 4px; }
+          .receipt-payment .tax-invoice-row > span:last-child { display: table-cell; width: auto; vertical-align: top; }
         }
       `,
   })
