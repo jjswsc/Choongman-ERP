@@ -59,7 +59,7 @@ const steps: PosTourStep[] = [
   },
   {
     id: 'bc8_diff',
-    target: 'pos-tour-close-diff',
+    target: 'pos-tour-close-drawer-variance',
     titleKey: 'posBusinessCloseTourS3dTitle',
     bodyKey: 'posBusinessCloseTourS3dBody',
     advance: 'manual',

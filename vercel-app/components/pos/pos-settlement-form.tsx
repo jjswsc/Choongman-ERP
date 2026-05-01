@@ -26,6 +26,12 @@ import {
   type PosSettlement,
 } from '@/lib/api-client'
 import {
+  parseBahtAmount,
+  formatBahtInputDisplay,
+  formatBahtAmountForField,
+  mapBreakdownStringsToBahtDisplay,
+} from '@/lib/baht-input-format'
+import {
   computeSettlementDeliveryKeys,
   deliverySettlementKeyIsDineIn,
   POS_SETTLEMENT_DINE_IN_CODE,
@@ -41,20 +47,12 @@ import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
-import { cn, escapeHtml } from '@/lib/utils'
+import { cn, escapeHtml, formatBahtNum } from '@/lib/utils'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
 import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
-import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
-import {
-  RECEIPT_AMOUNT_COL_MM,
-  RECEIPT_GRID_COL_GAP_PX,
-  RECEIPT_INNER_INSET_LEFT_MM,
-  RECEIPT_INNER_INSET_RIGHT_MM,
-  RECEIPT_TRAILING_BOTTOM_MM,
-} from '@/lib/pos-receipt-layout'
-import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
+import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
@@ -89,7 +87,7 @@ function toIntegerInput(raw: string): string {
 }
 
 function isBreakdownEmpty(breakdown: Record<string, string | number>): boolean {
-  return Object.values(breakdown || {}).every((v) => !(Number(v) > 0))
+  return Object.values(breakdown || {}).every((v) => !(parseBahtAmount(String(v)) > 0))
 }
 
 function pickBreakdownKey(keys: string[], rawKey: string): string | null {
@@ -292,6 +290,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [memo, setMemo] = React.useState('')
   const [closed, setClosed] = React.useState(false)
   const [openingCashActual, setOpeningCashActual] = React.useState<number | null>(null)
+  /** 결산일 기준 pos_till_transactions 순액 (마감 예상 돈통·오프라인 캐시 동기화) */
+  const [tillNetForSettleDate, setTillNetForSettleDate] = React.useState(0)
   const [autoFilledFlags, setAutoFilledFlags] = React.useState({
     card: false,
     qr: false,
@@ -392,11 +392,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           systemSubtotal: sub,
           systemVat: vat,
           systemCashFromOrders: cashFromOrdersRaw,
+          tillNetForSettleDate: tillNetRaw,
           linkpos,
           settlement: s,
         } = main
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
         setSystemCashFromOrders(autoCashTotal)
+        setTillNetForSettleDate(Number(tillNetRaw ?? 0) || 0)
         const posCardOrdersTotal = Number(linkpos?.cardReportedTotal ?? 0) || 0
         const autoCardMap = (linkpos?.autoCardBreakdown || {}) as Record<string, number>
         const autoQrMap = (linkpos?.autoQrBreakdown || {}) as Record<string, number>
@@ -418,17 +420,18 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setSettlement(single)
           setCashActual(single.cashActual != null ? String(single.cashActual) : '')
           if (openMode) {
-            setCashAmt(String(single.cashAmt ?? 0))
+            let nextCashAmt = formatBahtAmountForField(single.cashAmt ?? 0)
             if ((Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0) {
-              setCashAmt(String(autoCashTotal))
+              nextCashAmt = formatBahtAmountForField(autoCashTotal)
             }
+            setCashAmt(nextCashAmt)
           } else {
-            setCashAmt(String(autoCashTotal))
+            setCashAmt(formatBahtAmountForField(autoCashTotal))
           }
-          setCardAmt(String(single.cardAmt ?? 0))
-          setQrAmt(String(single.qrAmt ?? 0))
-          setDeliveryAppAmt(String(single.deliveryAppAmt ?? 0))
-          setOtherAmt(String(single.otherAmt ?? 0))
+          setCardAmt(formatBahtAmountForField(single.cardAmt ?? 0))
+          setQrAmt(formatBahtAmountForField(single.qrAmt ?? 0))
+          setDeliveryAppAmt(formatBahtAmountForField(single.deliveryAppAmt ?? 0))
+          setOtherAmt(formatBahtAmountForField(single.otherAmt ?? 0))
           const cb: Record<string, string> = {}
           CARD_KEYS.forEach((k) => {
             cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
@@ -436,9 +439,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const autoCb = buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
           const cardBreakdownEmpty = isBreakdownEmpty(cb)
           const cardAutoApplied = cardBreakdownEmpty && autoCardTotal > 0
-          setCardBreakdown(cardAutoApplied ? autoCb : cb)
+          setCardBreakdown(
+            mapBreakdownStringsToBahtDisplay(cardAutoApplied ? autoCb : cb)
+          )
           if ((Number(single.cardAmt ?? 0) || 0) <= 0 && cardAmtFallbackFromPos > 0) {
-            setCardAmt(String(cardAmtFallbackFromPos))
+            setCardAmt(formatBahtAmountForField(cardAmtFallbackFromPos))
           }
           const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
           const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
@@ -446,19 +451,21 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const autoQb = buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
           const qrBreakdownEmpty = isBreakdownEmpty(hydrated.qrBreakdown)
           const qrAutoApplied = qrBreakdownEmpty && autoQrTotal > 0
-          setQrBreakdown(qrAutoApplied ? autoQb : hydrated.qrBreakdown)
+          setQrBreakdown(
+            mapBreakdownStringsToBahtDisplay(qrAutoApplied ? autoQb : hydrated.qrBreakdown)
+          )
           if ((Number(single.qrAmt ?? 0) || 0) <= 0 && autoQrTotal > 0) {
-            setQrAmt(String(autoQrTotal))
+            setQrAmt(formatBahtAmountForField(autoQrTotal))
           }
-          setOtherBreakdown(hydrated.otherBreakdown)
+          setOtherBreakdown(mapBreakdownStringsToBahtDisplay(hydrated.otherBreakdown))
           const hydratedOtherEmpty = isBreakdownEmpty(hydrated.otherBreakdown)
           const autoOtherBreakdownNext = buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true })
           const otherAutoApplied = hydratedOtherEmpty && autoOtherTotal > 0
           if (otherAutoApplied) {
-            setOtherBreakdown(autoOtherBreakdownNext)
+            setOtherBreakdown(mapBreakdownStringsToBahtDisplay(autoOtherBreakdownNext))
           }
           if ((Number(single.otherAmt ?? 0) || 0) <= 0 && autoOtherTotal > 0) {
-            setOtherAmt(String(autoOtherTotal))
+            setOtherAmt(formatBahtAmountForField(autoOtherTotal))
           }
           const oldDel = (single.deliveryAppBreakdown ?? {}) as Record<string, number>
           const newDine = (single.dineInDeliveryBreakdown ?? {}) as Record<string, number>
@@ -469,7 +476,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const autoDb = buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true })
           const deliveryBreakdownEmpty = isBreakdownEmpty(db)
           const deliveryAutoApplied = deliveryBreakdownEmpty && autoDeliveryTotal > 0
-          setDeliveryAppBreakdown(deliveryAutoApplied ? autoDb : db)
+          setDeliveryAppBreakdown(
+            mapBreakdownStringsToBahtDisplay(deliveryAutoApplied ? autoDb : db)
+          )
           const di: Record<string, string> = {}
           dineInKeys.forEach((k) => {
             di[k] = String(newDine[k] ?? oldDel[k] ?? '')
@@ -482,20 +491,26 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           }
           if (extraDine > 0 && dineInKeys.length > 0) {
             const pk = dineInKeys[0]
-            di[pk] = String((parseFloat(di[pk] || '0') || 0) + extraDine)
+            di[pk] = formatBahtInputDisplay(
+              String(parseBahtAmount(di[pk] || '') + extraDine)
+            )
           }
           if (
             dineInKeys.length === 1 &&
-            (parseFloat(di[dineInKeys[0]] || '0') || 0) === 0 &&
+            parseBahtAmount(di[dineInKeys[0]] || '') === 0 &&
             (single.dineInDeliveryAmt ?? 0) > 0
           ) {
-            di[dineInKeys[0]] = String(single.dineInDeliveryAmt)
+            di[dineInKeys[0]] = formatBahtAmountForField(single.dineInDeliveryAmt)
           }
           const autoDi = buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false })
           const dineInBreakdownEmpty = isBreakdownEmpty(di)
-          setDineInDeliveryBreakdown(dineInBreakdownEmpty && autoDineInTotal > 0 ? autoDi : di)
+          setDineInDeliveryBreakdown(
+            mapBreakdownStringsToBahtDisplay(
+              dineInBreakdownEmpty && autoDineInTotal > 0 ? autoDi : di
+            )
+          )
           if ((Number(single.deliveryAppAmt ?? 0) || 0) <= 0 && autoDeliveryTotal > 0) {
-            setDeliveryAppAmt(String(autoDeliveryTotal))
+            setDeliveryAppAmt(formatBahtAmountForField(autoDeliveryTotal))
           }
           setMemo(single.memo ?? '')
           setClosed(single.closed ?? false)
@@ -535,20 +550,40 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setSystemSubtotal(0)
           setSystemVat(0)
           setCashActual('')
-          setCashAmt(String(autoCashTotal || 0))
-          setCardAmt(String(cardAmtFallbackFromPos || 0))
-          setQrAmt(String(autoQrTotal || 0))
-          setDeliveryAppAmt(String(autoDeliveryTotal || 0))
-          setOtherAmt(String(autoOtherTotal || 0))
-          setCardBreakdown(buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false }))
+          setCashAmt(formatBahtAmountForField(autoCashTotal || 0))
+          setCardAmt(formatBahtAmountForField(cardAmtFallbackFromPos || 0))
+          setQrAmt(formatBahtAmountForField(autoQrTotal || 0))
+          setDeliveryAppAmt(formatBahtAmountForField(autoDeliveryTotal || 0))
+          setOtherAmt(formatBahtAmountForField(autoOtherTotal || 0))
+          setCardBreakdown(
+            mapBreakdownStringsToBahtDisplay(
+              buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
+            )
+          )
           {
             const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
             const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
-            setQrBreakdown(buildAutoBreakdown(autoQrMap, qk, { allowExtra: true }))
-            setOtherBreakdown(buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true }))
+            setQrBreakdown(
+              mapBreakdownStringsToBahtDisplay(
+                buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
+              )
+            )
+            setOtherBreakdown(
+              mapBreakdownStringsToBahtDisplay(
+                buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true })
+              )
+            )
           }
-          setDeliveryAppBreakdown(buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true }))
-          setDineInDeliveryBreakdown(buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false }))
+          setDeliveryAppBreakdown(
+            mapBreakdownStringsToBahtDisplay(
+              buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true })
+            )
+          )
+          setDineInDeliveryBreakdown(
+            mapBreakdownStringsToBahtDisplay(
+              buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false })
+            )
+          )
           setMemo('')
           setClosed(false)
           setOpeningCashActual(null)
@@ -573,6 +608,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSystemSubtotal(0)
         setSystemVat(0)
         setSystemCashFromOrders(0)
+        setTillNetForSettleDate(0)
         setLinkposSummary(null)
         setSettlement(null)
         setPrevDayCashActual(null)
@@ -671,22 +707,21 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   )
   /** 돈통 시제: 영업시작·결산 모두 화폐 단위 입력 사용 */
   const cashActualNum = denomTotal
-  const cashAmtNum = openMode ? parseFloat(cashAmt) || 0 : systemCashFromOrders
-  const cardFromBreakdownLines = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0)
+  const cashAmtNum = openMode ? parseBahtAmount(cashAmt) : systemCashFromOrders
+  const cardFromBreakdownLines = CARD_KEYS.reduce((s, k) => s + parseBahtAmount(cardBreakdown[k]), 0)
   const cardNum =
-    cardFromBreakdownLines > 0.005 ? cardFromBreakdownLines : parseFloat(cardAmt) || 0
-  const qrFromLines = displayQrKeyList.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0)
-  const qrNum = qrFromLines > 0.005 ? qrFromLines : parseFloat(qrAmt) || 0
-  const otherFromLines = OTHER_KEYS.reduce((s, k) => s + (parseFloat(otherBreakdown[k]) || 0), 0)
-  const otherNum = otherFromLines > 0.005 ? otherFromLines : parseFloat(otherAmt) || 0
+    cardFromBreakdownLines > 0.005 ? cardFromBreakdownLines : parseBahtAmount(cardAmt)
+  const qrFromLines = displayQrKeyList.reduce((s, k) => s + parseBahtAmount(qrBreakdown[k]), 0)
+  const qrNum = qrFromLines > 0.005 ? qrFromLines : parseBahtAmount(qrAmt)
+  const otherFromLines = OTHER_KEYS.reduce((s, k) => s + parseBahtAmount(otherBreakdown[k]), 0)
+  const otherNum = otherFromLines > 0.005 ? otherFromLines : parseBahtAmount(otherAmt)
   const deliveryNum =
-    PLATFORM_DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(deliveryAppBreakdown[k]) || 0), 0) ||
-    parseFloat(deliveryAppAmt) ||
+    PLATFORM_DELIVERY_KEYS.reduce((s, k) => s + parseBahtAmount(deliveryAppBreakdown[k]), 0) ||
+    parseBahtAmount(deliveryAppAmt) ||
     0
-  const dineInNum = DINE_IN_DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(dineInDeliveryBreakdown[k]) || 0), 0)
+  const dineInNum = DINE_IN_DELIVERY_KEYS.reduce((s, k) => s + parseBahtAmount(dineInDeliveryBreakdown[k]), 0)
   const deliveryAppTotalNum = deliveryNum + dineInNum
   const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + dineInNum + otherNum
-  const diff = totalInput - systemTotal
   const currencySuffix = ' ฿'
   const savedCash = Number(settlement?.cashAmt ?? 0)
   const savedCard = Number(settlement?.cardAmt ?? 0)
@@ -695,8 +730,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const savedDineIn = Number(settlement?.dineInDeliveryAmt ?? 0)
   const savedOther = Number(settlement?.otherAmt ?? 0)
   const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther
-  const expectedDrawerByOpenAndCash = (openingCashActual ?? 0) + cashAmtNum
-  const drawerVsExpectedDiff = cashActualNum - expectedDrawerByOpenAndCash
+  const tillNetAppliedToDrawer = openMode ? 0 : tillNetForSettleDate
+  const expectedDrawerByOpenAndCash = (openingCashActual ?? 0) + cashAmtNum + tillNetAppliedToDrawer
+  /** 직원 확인용: 아침 권종 베이스(=시작 시제) unchanged 시 −당일 현금 매출처럼 보임. 재실사·출금 반영 시 0 또는 시재 순액 쪽으로 맞춤 */
+  const drawerDenomDeltaVsPosCash =
+    openingCashActual != null ? cashActualNum - Number(openingCashActual) - cashAmtNum : null
 
   /** 서버에 마감 확정된 건만 잠금. 체크만 한 뒤에는 저장까지 입력·저장 가능 */
   const inputsLocked = Boolean(settlement?.closed) && !canUnclose
@@ -734,23 +772,23 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         cashAmt: cashAmtNum,
         cardAmt: cardNum,
         cardBreakdown: Object.fromEntries(
-          CARD_KEYS.map((k) => [k, parseFloat(cardBreakdown[k]) || 0])
+          CARD_KEYS.map((k) => [k, parseBahtAmount(cardBreakdown[k])])
         ) as Record<string, number>,
         qrAmt: qrNum,
         qrBreakdown: Object.fromEntries(
-          displayQrKeyList.map((k) => [k, parseFloat(qrBreakdown[k]) || 0])
+          displayQrKeyList.map((k) => [k, parseBahtAmount(qrBreakdown[k])])
         ) as Record<string, number>,
         deliveryAppAmt: deliveryNum,
         deliveryAppBreakdown: Object.fromEntries(
-          PLATFORM_DELIVERY_KEYS.map((k) => [k, parseFloat(deliveryAppBreakdown[k]) || 0])
+          PLATFORM_DELIVERY_KEYS.map((k) => [k, parseBahtAmount(deliveryAppBreakdown[k])])
         ) as Record<string, number>,
         dineInDeliveryAmt: dineInNum,
         dineInDeliveryBreakdown: Object.fromEntries(
-          DINE_IN_DELIVERY_KEYS.map((k) => [k, parseFloat(dineInDeliveryBreakdown[k]) || 0])
+          DINE_IN_DELIVERY_KEYS.map((k) => [k, parseBahtAmount(dineInDeliveryBreakdown[k])])
         ) as Record<string, number>,
         otherAmt: otherNum,
         otherBreakdown: Object.fromEntries(
-          OTHER_KEYS.map((k) => [k, parseFloat(otherBreakdown[k]) || 0])
+          OTHER_KEYS.map((k) => [k, parseBahtAmount(otherBreakdown[k])])
         ) as Record<string, number>,
         memo,
         closed,
@@ -779,92 +817,79 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       : t('posSettlementReport') || 'POS 결산 리포트'
     const dateLabel =
       openMode ? t('posOpenReportDate') || t('posSettleDate') || '결산일' : t('posSettleDate') || '결산일'
-    /** 80mm 열전사: 일반 영수증(pos-receipt-html)과 동일 @page·안쪽 여백·금액 열 — 오른쪽 비인쇄영역 큰 기기에서 잘림 방지 */
-    const amt = RECEIPT_AMOUNT_COL_MM
-    const gap = RECEIPT_GRID_COL_GAP_PX
-    const printCss =
-      posThermalReceiptPageSizeRule() +
-      'html,body{margin:0;padding:0}' +
-      '*,*::before,*::after{box-sizing:border-box}' +
-      `body{font-family:'Noto Sans Thai','Leelawadee UI',Tahoma,'Sarabun','Inter','Noto Sans KR',Arial,sans-serif;width:${POS_THERMAL_RECEIPT_WIDTH_MM}mm;max-width:${POS_THERMAL_RECEIPT_WIDTH_MM}mm;` +
-      `padding:2mm ${RECEIPT_INNER_INSET_RIGHT_MM}mm ${RECEIPT_TRAILING_BOTTOM_MM}mm ${RECEIPT_INNER_INSET_LEFT_MM}mm;` +
-      'font-size:11px;line-height:1.48;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow-x:hidden}' +
-      '@media print{body{zoom:1}}' +
-      'h2{font-size:13px;margin:0 0 6px;word-break:normal;overflow-wrap:break-word}' +
-      'p{margin:2px 0;word-break:normal;overflow-wrap:break-word}' +
-      `.sr{display:grid;grid-template-columns:minmax(0,1fr) ${amt}mm;column-gap:${gap}px;align-items:start;font-size:10px;margin:3px 0}` +
-      '.sr-l{min-width:0;overflow-wrap:break-word;word-break:normal}' +
-      '.sr-r{min-width:0;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}' +
-      '.sr-l.sr-ind{padding-left:3mm}' +
-      '.sr.b .sr-l,.sr.b .sr-r{font-weight:700}' +
-      '.sr.t{margin-top:6px;padding-top:6px;border-top:1px solid #333}'
-    const htmlLangAttr =
-      typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim())
-        ? ` lang="${lang.trim().replace(/"/g, '')}"`
-        : ''
+    const htmlLang =
+      typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim()) ? lang.trim() : undefined
     const docTitle = `${reportTitle} - ${storeLabel} - ${settleDate}`
+
+    /** 홀 주문서·결제 미리보기와 동일: buildReceiptDocumentHtml + hall_order 컷 설정 */
+    const amt = (label: string, value: string, rowClass = '') =>
+      `<div class="receipt-row${rowClass}"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
+    const amtIndent = (label: string, value: string) =>
+      `<div class="receipt-row"><span style="padding-left:2mm">${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
+    const headerBlock = `
+      <div class="receipt-order-header text-center">
+        <div class="receipt-store-name">${escapeHtml(String(storeLabel))}</div>
+        <div class="receipt-order-label">${escapeHtml(reportTitle)}</div>
+      </div>
+      <div class="receipt-divider"></div>
+      <div class="text-xs text-center">${escapeHtml(dateLabel)}: ${escapeHtml(settleDate)}</div>
+      <div class="receipt-divider"></div>`
+    const footerStamp = `
+      ${closed ? `<div class="text-center" style="margin-top:6px;font-weight:700">${escapeHtml(t('posClosed') || '마감')}</div>` : ''}
+      <div class="text-xs text-center" style="margin-top:8px;color:#333">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</div>`
+
     const bodyInner = openMode
-      ? (() => {
-          const qtyWord = escapeHtml(t('qty') || '수량')
+        ? (() => {
           const denomRows = CASH_DENOMINATIONS.map((d) => {
             const qty = parseInt(toIntegerInput(denomCounts[d.value] || '0'), 10) || 0
             if (qty === 0) return ''
             const line = d.value * qty
-            const labelEsc = escapeHtml(`${d.label} ฿`)
-            return `<div class="sr"><span class="sr-l">${labelEsc} × ${qtyWord} ${qty}</span><span class="sr-r">${line.toLocaleString()}</span></div>`
+            return amt(`${d.label} ฿ × ${t('qty') || '수량'} ${qty}`, formatBahtNum(line))
           }).join('')
           const prevDayRow =
             prevDayCashActual != null
-              ? `<div class="sr"><span class="sr-l">${escapeHtml(t('posPrevDayCash') || '전날 시재')}</span><span class="sr-r">${prevDayCashActual.toLocaleString()}</span></div>`
+              ? amt(t('posPrevDayCash') || '전날 시재', formatBahtNum(prevDayCashActual))
               : ''
-          const denomHeading = escapeHtml(t('posOpenPrintDenomHeading') || '권종')
+          const denomHeadingEsc = escapeHtml(t('posOpenPrintDenomHeading') || '권종')
           const noDenomNote =
             denomRows.trim().length === 0
-              ? `<p style="font-size:10px;color:#555;margin:4px 0">${escapeHtml(t('posOpenPrintNoDenom') || '권종 수량이 없습니다.')}</p>`
+              ? `<p class="memo" style="color:#444">${escapeHtml(t('posOpenPrintNoDenom') || '권종 수량이 없습니다.')}</p>`
               : ''
-          return `
-      <h2>${escapeHtml(reportTitle)}</h2>
-      <p><strong>${escapeHtml(t('store') || '매장')}</strong>: ${escapeHtml(String(storeLabel))}</p>
-      <p><strong>${escapeHtml(dateLabel)}</strong>: ${escapeHtml(settleDate)}</p>
-      ${prevDayRow}
-      <p style="margin-top:6px;margin-bottom:2px;font-size:11px;font-weight:600">${denomHeading}</p>
-      ${denomRows || noDenomNote}
-      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posCashActual') || '돈통 시제')}</span><span class="sr-r">${cashActualNum.toLocaleString()}</span></div>
-      ${memo.trim() ? `<p class="t" style="word-break:break-word"><strong>${escapeHtml(t('posMemo') || '비고')}</strong>: ${escapeHtml(memo.trim())}</p>` : ''}
-      <p class="t" style="font-size:11px;color:#666">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</p>`
+          return `<div class="receipt-content receipt-order-simple">${headerBlock}${prevDayRow}<div class="text-xs" style="font-weight:700;margin:8px 0 4px;text-align:center">${denomHeadingEsc}</div>${denomRows || noDenomNote}<div class="receipt-divider"></div>${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum), ' receipt-total')}${memo.trim() ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo.trim())}</div>` : ''}${footerStamp}</div>`
         })()
-      : `
-      <h2>${escapeHtml(reportTitle)}</h2>
-      <p><strong>${escapeHtml(t('store') || '매장')}</strong>: ${escapeHtml(String(storeLabel))}</p>
-      <p><strong>${escapeHtml(dateLabel)}</strong>: ${escapeHtml(settleDate)}</p>
-      <div class="sr"><span class="sr-l">${escapeHtml(t('posSystemSubtotal') || '공급가액')}</span><span class="sr-r">${systemSubtotal.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${escapeHtml(t('posSystemVat') || 'VAT (7%)')}</span><span class="sr-r">${systemVat.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posSystemTotal') || '시스템 매출')}</span><span class="sr-r">${systemTotal.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${escapeHtml(t('posCashActual') || '돈통 시제')}</span><span class="sr-r">${cashActualNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${escapeHtml(t('posCard') || '카드')}</span><span class="sr-r">${cardNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${escapeHtml(t('posPaymentQrCode') || 'QR 코드')}</span><span class="sr-r">${qrNum.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posPaymentDeliveryApp') || '배달앱')}</span><span class="sr-r">${deliveryAppTotalNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l sr-ind">${escapeHtml(t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)')}</span><span class="sr-r">${deliveryNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l sr-ind">${escapeHtml(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)')}</span><span class="sr-r">${dineInNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${escapeHtml(t('posPaymentOther') || '기타')}</span><span class="sr-r">${otherNum.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posInputTotal') || '입력 합계')}</span><span class="sr-r">${totalInput.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posDifference') || '차액')}</span><span class="sr-r">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</span></div>
-      ${memo ? `<p class="t"><strong>${escapeHtml(t('posMemo') || '비고')}</strong>: ${escapeHtml(memo)}</p>` : ''}
-      ${closed ? `<p><strong>${escapeHtml(t('posClosed') || '마감')}</strong></p>` : ''}
-      <p class="t" style="font-size:12px;color:#666">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</p>`
-    const fullHtml = `
-      <!DOCTYPE html>
-      <html${htmlLangAttr}><head><meta charset="utf-8"/>${POS_PRINT_NOTO_SANS_THAI_FONT_LINKS}<title>${escapeHtml(docTitle)}</title>
-      <style>${printCss}</style>
-      </head><body>${bodyInner}
-      </body></html>`
+      : `<div class="receipt-content receipt-order-simple">${headerBlock}
+${amt(t('posSystemSubtotal') || '공급가액', formatBahtNum(systemSubtotal))}
+${amt(t('posSystemVat') || 'VAT (7%)', formatBahtNum(systemVat))}
+<div class="receipt-divider"></div>
+${amt(t('posSystemTotal') || '시스템 매출', formatBahtNum(systemTotal), ' receipt-total')}
+<div class="receipt-divider"></div>
+${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum))}
+${amt(t('posCard') || '카드', formatBahtNum(cardNum))}
+${amt(t('posPaymentQrCode') || 'QR 코드', formatBahtNum(qrNum))}
+<div class="receipt-divider-strong"></div>
+${amt(t('posPaymentDeliveryApp') || '배달앱', formatBahtNum(deliveryAppTotalNum))}
+${amtIndent(t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)', formatBahtNum(deliveryNum))}
+${amtIndent(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)', formatBahtNum(dineInNum))}
+${amt(t('posPaymentOther') || '기타', formatBahtNum(otherNum))}
+<div class="receipt-divider"></div>
+${amt(t('posInputTotal') || '입력 합계', formatBahtNum(totalInput), ' receipt-total')}
+${memo ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo)}</div>` : ''}
+${footerStamp}
+</div>`
+
+    const fullHtml = buildReceiptDocumentHtml({
+      title: escapeHtml(docTitle),
+      bodyContent: bodyInner,
+      htmlLang,
+    })
+
     printPosHtmlDocument(fullHtml, {
       title: reportTitle,
       printDelayMs: 0,
       fallbackCleanupMs: 120_000,
       printRole: 'receipt',
-      printReceiptKind: 'payment',
-      escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'payment' }),
+      printReceiptKind: 'hall_order',
+      escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'hall_order' }),
       onPrintUnavailable: () => {
         void appAlert(t('posPrintUnavailable'))
       },
@@ -1043,7 +1068,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 data-tour="pos-tour-open-denom-total"
               >
                 <div className="text-xs font-semibold uppercase tracking-wide text-primary/80">
-                  {t('posCashActual') || '현금 시제 합계'}
+                  {t('posCashActualDenomGrandTotal') || t('posCashActual')}
                 </div>
                 <div className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary">
                   {denomTotal.toLocaleString()} <span className="text-xl font-bold text-primary/70">฿</span>
@@ -1193,7 +1218,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                     })}
                   </div>
                   <p className="mt-1.5 text-sm font-semibold tabular-nums">
-                    {t('posCashActual') || '돈통 시제'} 합계: {denomTotal.toLocaleString()}{currencySuffix}
+                    {t('posCashActualDenomGrandTotal') || `${t('posCashActual')} 합계`}:{' '}
+                    {denomTotal.toLocaleString()}
+                    {currencySuffix}
                   </p>
                 </div>
 
@@ -1264,13 +1291,17 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                           <label key={k} className="flex items-center gap-2 text-xs">
                             <span className="w-16 shrink-0">{k}</span>
                             <Input
-                              type="number"
+                              type="text"
                               inputMode="decimal"
-                              min={0}
-                              step="0.01"
-                              className="h-8 text-right"
+                              autoComplete="off"
+                              className="h-8 text-right tabular-nums"
                               value={cardBreakdown[k] ?? ''}
-                              onChange={(e) => setCardBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                              onChange={(e) =>
+                                setCardBreakdown((prev) => ({
+                                  ...prev,
+                                  [k]: formatBahtInputDisplay(e.target.value),
+                                }))
+                              }
                               disabled={inputsLocked}
                             />
                             <span className="text-muted-foreground w-5">฿</span>
@@ -1305,12 +1336,17 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                         <label key={k} className="flex items-center gap-2 text-xs">
                           <span className="w-16 shrink-0">{k}</span>
                           <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className="h-8 text-right"
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            className="h-8 text-right tabular-nums"
                             value={qrBreakdown[k] ?? ''}
-                            onChange={(e) => setQrBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                            onChange={(e) =>
+                              setQrBreakdown((prev) => ({
+                                ...prev,
+                                [k]: formatBahtInputDisplay(e.target.value),
+                              }))
+                            }
                             disabled={inputsLocked}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
@@ -1364,13 +1400,16 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                             <label key={k} className="flex items-center gap-2 text-xs">
                               <span className="w-16 shrink-0">{k}</span>
                               <Input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="h-8 text-right"
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                className="h-8 text-right tabular-nums"
                                 value={deliveryAppBreakdown[k] ?? ''}
                                 onChange={(e) =>
-                                  setDeliveryAppBreakdown((prev) => ({ ...prev, [k]: e.target.value }))
+                                  setDeliveryAppBreakdown((prev) => ({
+                                    ...prev,
+                                    [k]: formatBahtInputDisplay(e.target.value),
+                                  }))
                                 }
                                 disabled={inputsLocked}
                               />
@@ -1400,13 +1439,16 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                                   : k}
                               </span>
                               <Input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="h-8 text-right"
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                className="h-8 text-right tabular-nums"
                                 value={dineInDeliveryBreakdown[k] ?? ''}
                                 onChange={(e) =>
-                                  setDineInDeliveryBreakdown((prev) => ({ ...prev, [k]: e.target.value }))
+                                  setDineInDeliveryBreakdown((prev) => ({
+                                    ...prev,
+                                    [k]: formatBahtInputDisplay(e.target.value),
+                                  }))
                                 }
                                 disabled={inputsLocked}
                               />
@@ -1446,13 +1488,16 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                         <label key={k} className="flex items-center gap-2 text-xs">
                           <span className="w-16 shrink-0">{k}</span>
                           <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className="h-8 text-right"
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            className="h-8 text-right tabular-nums"
                             value={otherBreakdown[k] ?? ''}
                             onChange={(e) =>
-                              setOtherBreakdown((prev) => ({ ...prev, [k]: e.target.value }))
+                              setOtherBreakdown((prev) => ({
+                                ...prev,
+                                [k]: formatBahtInputDisplay(e.target.value),
+                              }))
                             }
                             disabled={inputsLocked}
                           />
@@ -1464,12 +1509,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                       <span>{t('posSettlementOtherLegacyAmt') || '구 방식 합계(상세 없음)'}</span>
                       <div className="flex items-center gap-1">
                         <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          className="h-8 w-28 text-right"
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          className="h-8 w-28 text-right tabular-nums"
                           value={otherAmt}
-                          onChange={(e) => setOtherAmt(e.target.value)}
+                          onChange={(e) => setOtherAmt(formatBahtInputDisplay(e.target.value))}
                           disabled={inputsLocked}
                         />
                         <span className="w-5">{currencySuffix}</span>
@@ -1480,14 +1525,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
               </div>
 
               <div className="space-y-1 rounded-lg border px-4 py-2 text-sm" data-tour="pos-tour-close-input-totals">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t('posCashActual') || '돈통 시제'}</span>
-                  <span className="tabular-nums">{cashActualNum.toLocaleString()}{currencySuffix}</span>
-                </div>
+                <p className="text-[11px] leading-snug text-muted-foreground pb-1">
+                  {t('posSettlementInputTotalsScopeHint') ||
+                    '아래 「입력 합계」는 결제 수단별 금액(POS 매출 대사용)입니다. 서랍의 실물 현금과의 일치 여부는 하단 「돈통 차이」를 확인하세요.'}
+                </p>
                 <div className="flex justify-between text-muted-foreground">
                   <span>
                     {t('posCash') || '현금'} + {t('posCard') || '카드'} + {t('posPaymentQrCode') || 'QR'} +{' '}
-                    {t('posPaymentDeliveryApp') || '배달앱'}(2종) + {t('posPaymentOther') || '기타'}
+                    {t('posPaymentDeliveryApp') || '배달앱'} + {t('posPaymentOther') || '기타'}
                   </span>
                   <span className="tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
                 </div>
@@ -1506,36 +1551,59 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   <span className="text-muted-foreground">{t('posTodayCashTotal') || '당일 현금 총액'}</span>
                   <span className="tabular-nums">{cashAmtNum.toLocaleString()} ฿</span>
                 </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground shrink">
+                    {t('posSettlementTillNetLine') || 'Till in/out net (transactions dated close day)'}
+                  </span>
+                  <span
+                    className={cn(
+                      'tabular-nums shrink-0',
+                      Math.abs(tillNetAppliedToDrawer) > 0.005 ? 'font-medium text-foreground' : 'text-muted-foreground'
+                    )}
+                  >
+                    {tillNetAppliedToDrawer !== 0
+                      ? `${tillNetAppliedToDrawer >= 0 ? '+' : ''}${tillNetAppliedToDrawer.toLocaleString()} ฿`
+                      : `0${currencySuffix}`}
+                  </span>
+                </div>
                 <div className="flex justify-between">
                   <span className="font-medium">{t('posExpectedDrawerCash') || '예상 돈통 시제(시작+현금)'}</span>
                   <span className="tabular-nums font-semibold">
                     {openingCashActual != null ? `${expectedDrawerByOpenAndCash.toLocaleString()} ฿` : '-'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('posCashActual') || '현재 돈통 시제'}</span>
-                  <span className="tabular-nums">{cashActualNum.toLocaleString()} ฿</span>
-                </div>
-                <div className="flex justify-between border-t pt-1 font-medium">
-                  <span>{t('posDrawerCashDiff') || '돈통 차이(현재-예상)'}</span>
-                  <span className={cn('tabular-nums', Math.abs(drawerVsExpectedDiff) > 0.005 ? 'text-amber-700' : 'text-emerald-700')}>
-                    {openingCashActual != null ? `${drawerVsExpectedDiff >= 0 ? '+' : ''}${drawerVsExpectedDiff.toLocaleString()} ฿` : '-'}
-                  </span>
-                </div>
-              </div>
 
-              <div
-                className={cn(
-                  'flex justify-between items-center rounded-lg px-4 py-3',
-                  diff === 0 ? 'bg-green-500/10 text-green-700' : 'bg-amber-500/10 text-amber-700'
-                )}
-                data-tour="pos-tour-close-diff"
-              >
-                <span className="font-medium">{t('posDifference') || '차액'} ({t('posDifferenceHint') || '입력−시스템'})</span>
-                <span className="font-bold tabular-nums">
-                  {diff >= 0 ? '+' : ''}
-                  {diff.toLocaleString()} ฿
-                </span>
+                <div
+                  className="mt-3 space-y-2 rounded-xl border-2 border-primary/45 bg-background/90 px-3 py-3.5 shadow-sm"
+                  data-tour="pos-tour-close-drawer-variance"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/90">
+                    {t('posSettlementDrawerVarianceBadge') || '돈통 점검'}
+                  </p>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    {t('posSettlementDrawerVarianceHint') ||
+                      '(권종 합 − 아침 시작 시제 − 당일 POS 현금). 아침 권종 그대로라면 차이만큼 권종을 늘리면 「당일 현금 총액」 반영처럼 확인됩니다. 출금까지 맞추려면 「예상 돈통 시제」에 맞춰 줄이거나 재실사하세요.'}
+                  </p>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-primary/15 pt-2">
+                    <span className="text-base font-bold text-foreground">
+                      {t('posDrawerVarianceFocusTitle') || t('posDrawerCashDiff')}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-xl font-black tabular-nums tracking-tight',
+                        drawerDenomDeltaVsPosCash == null
+                          ? 'text-muted-foreground'
+                          : Math.abs(drawerDenomDeltaVsPosCash) > 0.005
+                            ? 'text-amber-700'
+                            : 'text-emerald-700'
+                      )}
+                    >
+                      {drawerDenomDeltaVsPosCash != null
+                        ? `${drawerDenomDeltaVsPosCash >= 0 ? '+' : ''}${drawerDenomDeltaVsPosCash.toLocaleString()} ฿`
+                        : '-'}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <div data-tour="pos-tour-close-memo">

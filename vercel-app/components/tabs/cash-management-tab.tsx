@@ -348,11 +348,18 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
 
   const fmt = (n: number) => (n ?? 0).toLocaleString()
 
-  const currentBalance = listData.length > 0 && listData[0].balance_after != null
-    ? listData[0].balance_after
-    : !listLoading && effectiveStore
-      ? 0
-      : null
+  const singleDayRange = startStr === endStr
+  const ledgerEndBalance = listData.length > 0 ? listData[0].balance_after : null
+  const todayTillNetMovement = listData.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  /** 하루만 볼 때: 당일 입출금 순액(전일 마감 시제와 무관). 여러 날: 기간 말 시점 누적 원장 */
+  let balanceCardAmount: number | null = null
+  if (!listLoading && effectiveStore) {
+    if (singleDayRange) {
+      balanceCardAmount = todayTillNetMovement
+    } else {
+      balanceCardAmount = ledgerEndBalance != null ? ledgerEndBalance : 0
+    }
+  }
 
   return (
     <div className="space-y-4" data-tour="pos-tour-cash-shell">
@@ -364,16 +371,23 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
         retryLabel={t('posRetrySync') || '재시도'}
       />
 
-      {(currentBalance != null || completedCash != null) && (
+      {(balanceCardAmount != null || completedCash != null) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-tour="pos-tour-cash-balance-cards">
-          {currentBalance != null && (
+          {balanceCardAmount != null && (
             <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-6 py-4 text-center">
               <div className="text-sm font-medium text-muted-foreground mb-1">
-                {t('pettyCurrentBalance') || '현재 잔액'}
+                {singleDayRange
+                  ? t('posTillDayNetMovement') || 'Net till movement (this day)'
+                  : t('pettyCurrentBalance') || '현재 잔액'}
               </div>
               <div className="text-2xl font-bold tabular-nums text-primary">
-                ฿{(currentBalance ?? 0).toLocaleString()}
+                ฿{(balanceCardAmount ?? 0).toLocaleString()}
               </div>
+              {singleDayRange && (
+                <p className="mt-2 text-[11px] leading-snug text-muted-foreground px-1">
+                  {t('posTillDayNetMovementHint') || 'Shows today’s ledger entry sum; not drawer cash from settlement.'}
+                </p>
+              )}
             </div>
           )}
           {completedCash != null && (

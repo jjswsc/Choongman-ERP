@@ -91,7 +91,15 @@ export async function GET(request: NextRequest) {
 
   if (!settleDate) {
     return NextResponse.json(
-      { systemTotal: 0, systemSubtotal: 0, systemVat: 0, systemCashFromOrders: 0, linkpos: null, settlement: null },
+      {
+        systemTotal: 0,
+        systemSubtotal: 0,
+        systemVat: 0,
+        systemCashFromOrders: 0,
+        tillNetForSettleDate: 0,
+        linkpos: null,
+        settlement: null,
+      },
       { headers }
     )
   }
@@ -293,6 +301,24 @@ export async function GET(request: NextRequest) {
       mergedAutoQrBreakdown[k] = (mergedAutoQrBreakdown[k] || 0) + (Number(v) || 0)
     }
 
+    /** 결산일 `trans_date` 기준 입출금(시재)·매출출금 순액 → 마감 예상 돈통에 반영 */
+    let tillNetForSettleDate = 0
+    if (storeCode && storeCode !== 'All' && /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)) {
+      try {
+        const tillRows = (await supabaseSelectFilter(
+          'pos_till_transactions',
+          `store_code=eq.${encodeURIComponent(storeCode)}&trans_date=eq.${encodeURIComponent(settleYmd)}`,
+          { limit: 5000, select: 'amount' }
+        )) as { amount?: number }[] | null
+        for (const tr of tillRows || []) {
+          tillNetForSettleDate += Number(tr.amount) || 0
+        }
+      } catch (tillErr) {
+        console.warn('getPosSettlement till net:', tillErr)
+        tillNetForSettleDate = 0
+      }
+    }
+
     const storeFilter =
       storeCode && storeCode !== 'All'
         ? `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${settleDate}`
@@ -352,6 +378,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal,
         systemVat,
         systemCashFromOrders,
+        tillNetForSettleDate,
         linkpos: {
           approvedCount: linkposApprovedCount,
           failedCount: linkposFailedCount,
@@ -372,7 +399,15 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     console.error('getPosSettlement:', e)
     return NextResponse.json(
-      { systemTotal: 0, systemSubtotal: 0, systemVat: 0, systemCashFromOrders: 0, linkpos: null, settlement: null },
+      {
+        systemTotal: 0,
+        systemSubtotal: 0,
+        systemVat: 0,
+        systemCashFromOrders: 0,
+        tillNetForSettleDate: 0,
+        linkpos: null,
+        settlement: null,
+      },
       { headers }
     )
   }

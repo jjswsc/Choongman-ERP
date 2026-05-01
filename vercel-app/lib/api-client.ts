@@ -8501,6 +8501,8 @@ export async function getPosSettlement(params: {
     systemVat?: number
     /** 완료 주문 `payment_cash` 합계 — 결산 현금 줄 자동 채움용 */
     systemCashFromOrders?: number
+    /** 해당 결산일(trans_date)·매장 시재 거래 순액(입금+, 출금-/매출출금-) — 마감 예상 돈통용 */
+    tillNetForSettleDate?: number
     linkpos?: {
       approvedCount: number
       failedCount: number
