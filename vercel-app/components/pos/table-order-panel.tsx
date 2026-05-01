@@ -16,6 +16,7 @@ import {
   markPosOrderItemServed,
   posDineInTableMerge,
   posDineInTableMove,
+  updatePosOrder,
   type PosOrderStatusUpdateResult,
   updatePosOrderStatus,
 } from '@/lib/api-client'
@@ -23,12 +24,33 @@ import { cn } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Check, CheckCircle, Users, XCircle, ArrowRightLeft, Combine, LayoutGrid, ArrowLeft } from 'lucide-react'
+import {
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  XCircle,
+  ArrowRightLeft,
+  Combine,
+  LayoutGrid,
+  ArrowLeft,
+} from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
+import {
+  buildUpdatePosOrderParamsFromOrder,
+  canRemovePosOrderLine,
+  orderItemsToPosOrderItems,
+  orderPaymentsSum,
+} from '@/lib/pos-order-line-update'
+import {
+  kitchenRoutingItemFromOrderItem,
+  type PosKitchenReprintPayload,
+} from '@/lib/pos-kitchen-slip-routing'
 
 export interface TableOrderPanelProps {
   tableName: string
@@ -42,6 +64,10 @@ export interface TableOrderPanelProps {
   onLeaveTable?: () => void | Promise<void>
   /** 주문 취소 시 */
   onCancel?: () => void
+  /** 일부 취소(updatePosOrder) 직후 — 터미널에서 홀·주방 재인쇄 */
+  onAfterPartialLineRemoved?: (orderId: number, detail?: PosKitchenReprintPayload) => void | Promise<void>
+  /** 전체 취소 직후 — 터미널에서 주방 취소 전표(줄 앞 `-`) */
+  onAfterFullOrderKitchenReprint?: (orderId: number, detail: PosKitchenReprintPayload) => void | Promise<void>
   onClose?: () => void
   t?: (key: string) => string
   /** 데모: 서빙 API 없이 부모 state만 갱신 */
@@ -58,6 +84,8 @@ export function TableOrderPanel({
   onPay,
   onLeaveTable,
   onCancel,
+  onAfterPartialLineRemoved,
+  onAfterFullOrderKitchenReprint,
   onClose,
   t: tProp,
   isDemo,
@@ -144,6 +172,9 @@ export function TableOrderPanel({
   const [mergeTargetName, setMergeTargetName] = useState('')
   const [mergeDirection, setMergeDirection] = useState<'into_selected' | 'into_current'>('into_selected')
   const [transferSubmitting, setTransferSubmitting] = useState(false)
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null)
+  /** 일부 취소: 먼저 품목 줄을 눌러 선택 */
+  const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
 
   const canCancel = order && !['completed', 'cancelled'].includes(order.status ?? '')
   const currentNameNorm = String(tableName ?? '').trim()
@@ -183,6 +214,72 @@ export function TableOrderPanel({
     }
   }, [mergeOpen, mergePeerOptions])
 
+  useEffect(() => {
+    if (!order?.items?.length) {
+      setSelectedLineItemId(null)
+      return
+    }
+    setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev) ? prev : null))
+  }, [order?.id, order?.items])
+
+  const handleRemoveOrderLine = async (itemId: string) => {
+    if (!order) return
+    const target = order.items.find((it) => it.id === itemId)
+    if (!target) return
+    if (isDemo && onDemoOrderReplace) {
+      const nextItems = order.items.filter((it) => it.id !== itemId)
+      if (nextItems.length < 1) return
+      const nextTotal = nextItems.reduce((s, it) => s + it.price * it.quantity, 0)
+      onDemoOrderReplace({ ...order, items: nextItems, total: nextTotal })
+      setSelectedLineItemId(null)
+      return
+    }
+    if (!canRemovePosOrderLine(order)) {
+      if (order.items.length <= 1) {
+        await appAlert(t('posLineItemCancelLastHint') || tDefault('posLineItemCancelLastHint'))
+      } else if (orderPaymentsSum(order) > 0.005) {
+        await appAlert(t('posLineItemCancelPaidBlocked') || tDefault('posLineItemCancelPaidBlocked'))
+      }
+      return
+    }
+    const label = translatePosMenuLineForReceipt(target.name, t)
+    const ask = i18nTr(tDefault, 'posLineItemCancelConfirm', { name: label })
+    if (!await appConfirm(ask)) return
+    const id = Number(order.id)
+    if (Number.isNaN(id) || !posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : tDefault('posServedNeedsOrderId'))
+      return
+    }
+    const nextOrderItems = order.items.filter((it) => it.id !== itemId)
+    const nextPosItems = orderItemsToPosOrderItems(nextOrderItems)
+    setRemovingItemId(itemId)
+    try {
+      const res = await updatePosOrder(buildUpdatePosOrderParamsFromOrder(order, nextPosItems))
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+        return
+      }
+      setSelectedLineItemId(null)
+      const removedLine = kitchenRoutingItemFromOrderItem(target, label)
+      await onAfterPartialLineRemoved?.(id, { removedKitchenLines: [removedLine] })
+      onServed?.()
+    } catch (e) {
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setRemovingItemId(null)
+    }
+  }
+
+  const handlePartialCancel = async () => {
+    if (!order) return
+    if (!selectedLineItemId) {
+      await appAlert(t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst'))
+      return
+    }
+    await handleRemoveOrderLine(selectedLineItemId)
+  }
+
   const handleCancelOrder = async () => {
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
     setCancelling(true)
@@ -210,6 +307,18 @@ export function TableOrderPanel({
         return retried
       })()
       if (!resolved) return
+      const oid = Number(order.id)
+      if (order.items.length > 0) {
+        const kitchenLines = order.items.map((it) =>
+          kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(it.name, t))
+        )
+        await onAfterFullOrderKitchenReprint?.(oid, {
+          removedKitchenLines: kitchenLines,
+          orderNoForPrint: order.orderNo,
+          tableName: order.tableName,
+          memo: order.memo,
+        })
+      }
       onCancel?.()
       onClose?.()
     } catch (e) {
@@ -465,7 +574,7 @@ export function TableOrderPanel({
               {canCancel && (
                 <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
                   <XCircle className="w-4 h-4 mr-1" />
-                  {t('posOrderCancel') || '주문 취소'}
+                  {t('posOrderCancelFull') || t('posOrderCancel') || '전체 취소'}
                 </Button>
               )}
             </>
@@ -489,7 +598,7 @@ export function TableOrderPanel({
               {canCancel && (
                 <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
                   <XCircle className="w-4 h-4 mr-1" />
-                  {t('posOrderCancel') || '주문 취소'}
+                  {t('posOrderCancelFull') || t('posOrderCancel') || '전체 취소'}
                 </Button>
               )}
             </>
@@ -511,21 +620,47 @@ export function TableOrderPanel({
                       <li
                         key={item.id}
                         className={cn(
-                          'flex items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50',
-                          served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                          'flex cursor-default items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
+                          served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
+                          selectedLineItemId === item.id &&
+                            'ring-2 ring-primary/45 border-primary/50 bg-primary/5 dark:bg-primary/10'
                         )}
+                        onClick={() => setSelectedLineItemId(null)}
                       >
                         <div className="min-w-0 flex-1 space-y-1">
-                          <button
-                            type="button"
-                            className="block w-full min-w-0 text-left hover:underline"
-                            onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
-                            title={fullNameT}
-                          >
-                            <span className="block text-base font-medium leading-snug break-words">
-                              {mainNameT}
-                            </span>
-                          </button>
+                          <div className="flex min-w-0 items-start gap-0.5">
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 rounded-sm px-0.5 text-left hover:underline -mx-0.5"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
+                              }}
+                              title={fullNameT}
+                            >
+                              <span className="block text-base font-medium leading-snug break-words">
+                                {mainNameT}
+                              </span>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground"
+                              aria-label={t('posOrderLineExpandHint') || tDefault('posOrderLineExpandHint')}
+                              title={t('posOrderLineExpandHint') || tDefault('posOrderLineExpandHint')}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setExpandedItemId((prev) => (prev === item.id ? null : item.id))
+                              }}
+                            >
+                              {expanded ? (
+                                <ChevronUp className="h-4 w-4" aria-hidden />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" aria-hidden />
+                              )}
+                            </Button>
+                          </div>
                           {optionPart && (
                             <p
                               className="text-sm text-muted-foreground line-clamp-2 break-words pl-0 leading-snug"
@@ -561,8 +696,11 @@ export function TableOrderPanel({
                           size="sm"
                           variant={served ? 'default' : 'outline'}
                           className="shrink-0 h-9 w-9 p-0 self-start mt-0.5"
-                          onClick={() => { void toggleItemServed(item.id) }}
-                          disabled={savingItemId === item.id}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void toggleItemServed(item.id)
+                          }}
+                          disabled={savingItemId === item.id || removingItemId !== null}
                           aria-label={
                             served
                               ? (t('cancel') || '취소')
@@ -605,10 +743,41 @@ export function TableOrderPanel({
                 </Button>
               </div>
               {canCancel && (
-                <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
-                  <XCircle className="w-4 h-4 mr-1" />
-                  {t('posOrderCancel') || '주문 취소'}
-                </Button>
+                <div className="space-y-1.5">
+                  {canRemovePosOrderLine(order) && !selectedLineItemId ? (
+                    <p className="text-center text-xs text-muted-foreground px-1">
+                      {t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
+                    </p>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                      disabled={
+                        cancelling ||
+                        removingItemId !== null ||
+                        !canRemovePosOrderLine(order) ||
+                        !selectedLineItemId
+                      }
+                      onClick={() => { void handlePartialCancel() }}
+                    >
+                      {t('posOrderCancelPartial') || tDefault('posOrderCancelPartial')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="disabled:opacity-50"
+                      disabled={cancelling || removingItemId !== null}
+                      onClick={handleCancelOrder}
+                    >
+                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
+                      {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}

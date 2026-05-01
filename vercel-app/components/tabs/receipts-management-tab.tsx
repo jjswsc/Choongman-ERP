@@ -36,6 +36,10 @@ import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
+import { receiptModalDataFromPosOrderReprint } from '@/lib/pos-payment-receipt-from-order'
+import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return '-'
@@ -340,6 +344,50 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       cancelledTotal: cancelled.reduce((s, o) => s + (o.total ?? 0), 0),
     }
   }, [isToday, orders, statusFilter])
+
+  const handlePrintCustomerReceipt = async (o: PosOrder) => {
+    const store = (o.storeCode ?? '').trim()
+    if (!store || !o.items?.length) {
+      await appAlert(t('posPrintUnavailable'))
+      return
+    }
+    try {
+      const settings = await getPosPrinterSettings({ storeCode: store })
+      const receiptData = receiptModalDataFromPosOrderReprint(o)
+      const paidAt = o.linkposRespondedAt
+        ? new Date(o.linkposRespondedAt)
+        : o.createdAt
+          ? new Date(o.createdAt)
+          : new Date()
+      const fullHtml = buildPosPaymentReceiptDocumentHtml({
+        receiptData,
+        menus,
+        orderTypeLabels,
+        t,
+        lang,
+        origin: typeof window !== 'undefined' ? window.location.origin : '',
+        printedAt: paidAt,
+        printerSettings: settings,
+      })
+      printPosHtmlDocument(fullHtml, {
+        title: t('posReceipt') || '영수증',
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        focusIframeBeforePrint: false,
+        printRole: 'receipt',
+        printReceiptKind: 'payment',
+        escPosCutOverride: resolveEscPosCutOverride(settings, {
+          printRole: 'receipt',
+          printReceiptKind: 'payment',
+        }),
+        onPrintUnavailable: () => {
+          void appAlert(t('posPrintUnavailable'))
+        },
+      })
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    }
+  }
 
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const store = (o.storeCode ?? '').trim()
@@ -680,7 +728,19 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       </span>
                                     </div>
                                   ))}
-                                  <div className="pt-2">
+                                  <div className="flex flex-wrap gap-2 pt-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 gap-1 px-2 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handlePrintCustomerReceipt(o)
+                                      }}
+                                    >
+                                      <Printer className="h-3 w-3" />
+                                      {t('posCustomerReceiptPrint') || '손님 영수증'}
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="outline"

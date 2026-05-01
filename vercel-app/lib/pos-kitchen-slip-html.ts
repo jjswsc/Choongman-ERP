@@ -89,23 +89,27 @@ function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
 .k-row-main { display: flex; align-items: flex-start; gap: 4px; width: 100%; }
 .k-row-qty { flex: 0 0 auto; min-width: 2.5em; font-variant-numeric: tabular-nums; }
 .k-row-name { flex: 1 1 auto; min-width: 0; white-space: normal; word-break: normal; overflow-wrap: break-word; }
+.k-row-cancelled .k-row-qty { letter-spacing: 0.02em; }
 `
 }
 
-/** 주방전표 한 줄: 수량 × 메뉴명 + (선택) 줄 메모 */
+/** 주방전표 한 줄: 수량 × 메뉴명 + (선택) 줄 메모. `cancelled`면 수량 앞에 `-`로 취소 표기 */
 export function formatKitchenSlipItemRowHtml(
-  it: { name: string; qty: number; note?: string | null | undefined },
+  it: { name: string; qty: number; note?: string | null | undefined; cancelled?: boolean },
   escapeHtml: (s: string) => string,
   close: (tag: string) => string,
   opts?: { showLineNotes?: boolean }
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
+  const cancelled = Boolean(it.cancelled)
   const note = showLineNotes
     ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
     : ''
+  const rowOpen = cancelled ? '<div class="k-row k-row-cancelled">' : '<div class="k-row">'
   const main =
     '<div class="k-row-main">' +
     '<span class="k-row-qty">' +
+    (cancelled ? '- ' : '') +
     Number(it.qty) +
     ' ×' +
     close('span') +
@@ -113,9 +117,9 @@ export function formatKitchenSlipItemRowHtml(
     escapeHtml(it.name) +
     close('span') +
     close('div')
-  if (!note) return '<div class="k-row">' + main + close('div')
+  if (!note) return rowOpen + main + close('div')
   return (
-    '<div class="k-row">' +
+    rowOpen +
     main +
     '<div class="k-line-note">' +
     escapeHtml(note) +
@@ -125,7 +129,7 @@ export function formatKitchenSlipItemRowHtml(
 }
 
 export function buildKitchenSlipItemsHtml(
-  items: { name: string; qty: number; note?: string | null | undefined }[],
+  items: { name: string; qty: number; note?: string | null | undefined; cancelled?: boolean }[],
   escapeHtml: (s: string) => string,
   design: KitchenSlipDesignResolved,
   prependHtml = ''
@@ -228,7 +232,7 @@ export function buildKitchenSlipDocumentHtml(params: {
   orderTypeLabel: string
   tablePart: string
   dateStr: string
-  items: { name: string; qty: number; note?: string | null | undefined }[]
+  items: { name: string; qty: number; note?: string | null | undefined; cancelled?: boolean }[]
   memoLine: string | null | undefined
   escapeHtml: (s: string) => string
   design: KitchenSlipDesignResolved

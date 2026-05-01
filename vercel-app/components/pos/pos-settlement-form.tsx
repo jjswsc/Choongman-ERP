@@ -41,7 +41,7 @@ import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
-import { cn } from '@/lib/utils'
+import { cn, escapeHtml } from '@/lib/utils'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -295,6 +295,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     qr: false,
     delivery: false,
     other: false,
+    cash: false,
   })
   /** 영업 시작: 단위별 현금 수량 (장/개) */
   const [denomCounts, setDenomCounts] = React.useState<Record<number, string>>(
@@ -383,7 +384,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     Promise.all([mainPromise, prevDayPromise])
       .then(([main, prev]) => {
         const { platformKeys, dineInKeys } = computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps)
-        const { systemTotal: st, systemSubtotal: sub, systemVat: vat, linkpos, settlement: s } = main
+        const {
+          systemTotal: st,
+          systemSubtotal: sub,
+          systemVat: vat,
+          systemCashFromOrders: cashFromOrdersRaw,
+          linkpos,
+          settlement: s,
+        } = main
+        const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
         const autoCardMap = (linkpos?.autoCardBreakdown || {}) as Record<string, number>
         const autoQrMap = (linkpos?.autoQrBreakdown || {}) as Record<string, number>
         const autoDeliveryMap = (linkpos?.autoDeliveryAppBreakdown || {}) as Record<string, number>
@@ -403,6 +412,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setSettlement(single)
           setCashActual(single.cashActual != null ? String(single.cashActual) : '')
           setCashAmt(String(single.cashAmt ?? 0))
+          if ((Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0) {
+            setCashAmt(String(autoCashTotal))
+          }
           setCardAmt(String(single.cardAmt ?? 0))
           setQrAmt(String(single.qrAmt ?? 0))
           setDeliveryAppAmt(String(single.deliveryAppAmt ?? 0))
@@ -478,11 +490,13 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setMemo(single.memo ?? '')
           setClosed(single.closed ?? false)
           setOpeningCashActual(single.cashActual != null ? Number(single.cashActual) : null)
+          const cashAutoApplied = (Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0
           setAutoFilledFlags({
             card: cardAutoApplied,
             qr: qrAutoApplied,
             delivery: deliveryAutoApplied || (dineInBreakdownEmpty && autoDineInTotal > 0),
             other: otherAutoApplied,
+            cash: cashAutoApplied,
           })
           const savedDenoms =
             single.cashActualDenoms && typeof single.cashActualDenoms === 'object'
@@ -507,7 +521,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setSystemSubtotal(0)
           setSystemVat(0)
           setCashActual('')
-          setCashAmt('')
+          setCashAmt(String(autoCashTotal || 0))
           setCardAmt(String(autoCardTotal || 0))
           setQrAmt(String(autoQrTotal || 0))
           setDeliveryAppAmt(String(autoDeliveryTotal || 0))
@@ -529,6 +543,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             qr: autoQrTotal > 0,
             delivery: autoDeliveryTotal > 0 || autoDineInTotal > 0,
             other: autoOtherTotal > 0,
+            cash: autoCashTotal > 0,
           })
           setDenomCounts(emptyDenomCountRecord())
         }
@@ -548,7 +563,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setPrevDayCashActual(null)
         setDineInDeliveryBreakdown({})
         setOpeningCashActual(null)
-        setAutoFilledFlags({ card: false, qr: false, delivery: false, other: false })
+        setAutoFilledFlags({ card: false, qr: false, delivery: false, other: false, cash: false })
         setDenomCounts(emptyDenomCountRecord())
       })
       .finally(() => setLoading(false))
@@ -770,29 +785,61 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim())
         ? ` lang="${lang.trim().replace(/"/g, '')}"`
         : ''
+    const docTitle = `${reportTitle} - ${storeLabel} - ${settleDate}`
+    const bodyInner = openMode
+      ? (() => {
+          const qtyWord = escapeHtml(t('qty') || '수량')
+          const denomRows = CASH_DENOMINATIONS.map((d) => {
+            const qty = parseInt(toIntegerInput(denomCounts[d.value] || '0'), 10) || 0
+            if (qty === 0) return ''
+            const line = d.value * qty
+            const labelEsc = escapeHtml(`${d.label} ฿`)
+            return `<div class="sr"><span class="sr-l">${labelEsc} × ${qtyWord} ${qty}</span><span class="sr-r">${line.toLocaleString()}</span></div>`
+          }).join('')
+          const prevDayRow =
+            prevDayCashActual != null
+              ? `<div class="sr"><span class="sr-l">${escapeHtml(t('posPrevDayCash') || '전날 시재')}</span><span class="sr-r">${prevDayCashActual.toLocaleString()}</span></div>`
+              : ''
+          const denomHeading = escapeHtml(t('posOpenPrintDenomHeading') || '권종')
+          const noDenomNote =
+            denomRows.trim().length === 0
+              ? `<p style="font-size:10px;color:#555;margin:4px 0">${escapeHtml(t('posOpenPrintNoDenom') || '권종 수량이 없습니다.')}</p>`
+              : ''
+          return `
+      <h2>${escapeHtml(reportTitle)}</h2>
+      <p><strong>${escapeHtml(t('store') || '매장')}</strong>: ${escapeHtml(String(storeLabel))}</p>
+      <p><strong>${escapeHtml(dateLabel)}</strong>: ${escapeHtml(settleDate)}</p>
+      ${prevDayRow}
+      <p style="margin-top:6px;margin-bottom:2px;font-size:11px;font-weight:600">${denomHeading}</p>
+      ${denomRows || noDenomNote}
+      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posCashActual') || '돈통 시제')}</span><span class="sr-r">${cashActualNum.toLocaleString()}</span></div>
+      ${memo.trim() ? `<p class="t" style="word-break:break-word"><strong>${escapeHtml(t('posMemo') || '비고')}</strong>: ${escapeHtml(memo.trim())}</p>` : ''}
+      <p class="t" style="font-size:11px;color:#666">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</p>`
+        })()
+      : `
+      <h2>${escapeHtml(reportTitle)}</h2>
+      <p><strong>${escapeHtml(t('store') || '매장')}</strong>: ${escapeHtml(String(storeLabel))}</p>
+      <p><strong>${escapeHtml(dateLabel)}</strong>: ${escapeHtml(settleDate)}</p>
+      <div class="sr"><span class="sr-l">${escapeHtml(t('posSystemSubtotal') || '공급가액')}</span><span class="sr-r">${systemSubtotal.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${escapeHtml(t('posSystemVat') || 'VAT (7%)')}</span><span class="sr-r">${systemVat.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posSystemTotal') || '시스템 매출')}</span><span class="sr-r">${systemTotal.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${escapeHtml(t('posCashActual') || '돈통 시제')}</span><span class="sr-r">${cashActualNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${escapeHtml(t('posCard') || '카드')}</span><span class="sr-r">${cardNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${escapeHtml(t('posPaymentQrCode') || 'QR 코드')}</span><span class="sr-r">${qrNum.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posPaymentDeliveryApp') || '배달앱')}</span><span class="sr-r">${deliveryAppTotalNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l sr-ind">${escapeHtml(t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)')}</span><span class="sr-r">${deliveryNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l sr-ind">${escapeHtml(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)')}</span><span class="sr-r">${dineInNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${escapeHtml(t('posPaymentOther') || '기타')}</span><span class="sr-r">${otherNum.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posInputTotal') || '입력 합계')}</span><span class="sr-r">${totalInput.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${escapeHtml(t('posDifference') || '차액')}</span><span class="sr-r">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</span></div>
+      ${memo ? `<p class="t"><strong>${escapeHtml(t('posMemo') || '비고')}</strong>: ${escapeHtml(memo)}</p>` : ''}
+      ${closed ? `<p><strong>${escapeHtml(t('posClosed') || '마감')}</strong></p>` : ''}
+      <p class="t" style="font-size:12px;color:#666">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</p>`
     const fullHtml = `
       <!DOCTYPE html>
-      <html${htmlLangAttr}><head><meta charset="utf-8"/>${POS_PRINT_NOTO_SANS_THAI_FONT_LINKS}<title>${reportTitle} - ${storeLabel} - ${settleDate}</title>
+      <html${htmlLangAttr}><head><meta charset="utf-8"/>${POS_PRINT_NOTO_SANS_THAI_FONT_LINKS}<title>${escapeHtml(docTitle)}</title>
       <style>${printCss}</style>
-      </head><body>
-      <h2>${reportTitle}</h2>
-      <p><strong>${t('store') || '매장'}</strong>: ${storeLabel}</p>
-      <p><strong>${dateLabel}</strong>: ${settleDate}</p>
-      <div class="sr"><span class="sr-l">${t('posSystemSubtotal') || '공급가액'}</span><span class="sr-r">${systemSubtotal.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${t('posSystemVat') || 'VAT (7%)'}</span><span class="sr-r">${systemVat.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${t('posSystemTotal') || '시스템 매출'}</span><span class="sr-r">${systemTotal.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${t('posCashActual') || '돈통 시제'}</span><span class="sr-r">${cashActualNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${t('posCard') || '카드'}</span><span class="sr-r">${cardNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${t('posPaymentQrCode') || 'QR 코드'}</span><span class="sr-r">${qrNum.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${t('posPaymentDeliveryApp') || '배달앱'}</span><span class="sr-r">${deliveryAppTotalNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l sr-ind">${t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}</span><span class="sr-r">${deliveryNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l sr-ind">${t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}</span><span class="sr-r">${dineInNum.toLocaleString()}</span></div>
-      <div class="sr"><span class="sr-l">${t('posPaymentOther') || '기타'}</span><span class="sr-r">${otherNum.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${t('posInputTotal') || '입력 합계'}</span><span class="sr-r">${totalInput.toLocaleString()}</span></div>
-      <div class="sr t b"><span class="sr-l">${t('posDifference') || '차액'}</span><span class="sr-r">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</span></div>
-      ${memo ? `<p class="t"><strong>${t('posMemo') || '비고'}</strong>: ${memo}</p>` : ''}
-      ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}
-      <p class="t" style="font-size:12px;color:#666">${formatPosDateTimeMedium(new Date(), lang)}</p>
+      </head><body>${bodyInner}
       </body></html>`
     printPosHtmlDocument(fullHtml, {
       title: reportTitle,
@@ -896,58 +943,114 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         )}
 
         {effectiveStore && !loading && openMode && (
-          <div className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')} data-tour="pos-tour-open-cash-counts">
-            <div className="space-y-4">
-              <div className="rounded-lg bg-muted/50 px-4 py-3" data-tour="pos-tour-open-prev-summary">
-                <p className="text-sm text-muted-foreground mb-1">{t('posPrevDayCash') || '전날 시재'}</p>
-                <p className="text-xl font-bold tabular-nums">
+          <div
+            className={cn(
+              'overflow-hidden rounded-2xl border border-border/70 bg-card shadow-md ring-1 ring-black/[0.04] dark:ring-white/[0.07]',
+              compact ? 'p-4' : 'p-6 sm:p-8'
+            )}
+            data-tour="pos-tour-open-cash-counts"
+          >
+            <div className="space-y-6">
+              <div
+                className="rounded-xl border border-border/50 bg-gradient-to-br from-muted/60 to-muted/20 px-4 py-3.5 shadow-sm"
+                data-tour="pos-tour-open-prev-summary"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t('posPrevDayCash') || '전날 시재'}
+                </p>
+                <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground">
                   {prevDayCashActual != null ? `${prevDayCashActual.toLocaleString()} ฿` : '—'}
                 </p>
               </div>
               {settlement?.cashActual != null && Number(settlement.cashActual) > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t('posSavedCashActual') || '저장된 시제'}: {Number(settlement.cashActual).toLocaleString()} ฿
+                <p className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-900 dark:text-emerald-200">
+                  {t('posSavedCashActual') || '저장된 시제'}:{' '}
+                  <span className="font-semibold tabular-nums">{Number(settlement.cashActual).toLocaleString()} ฿</span>
                 </p>
               )}
-              <div className="grid grid-cols-5 gap-3" data-tour="pos-tour-open-denom-grid">
-                {CASH_DENOMINATIONS.map((d) => (
-                  <div key={d.value} className="flex items-center gap-2">
-                    <span className="w-12 text-sm font-medium tabular-nums">{d.label}฿</span>
-                    <span className="text-muted-foreground text-xs">×</span>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={1}
-                      placeholder="0"
-                      className="h-10 w-20 text-right"
-                      value={denomCounts[d.value] ?? ''}
-                      onChange={(e) =>
-                        setDenomCounts((prev) => ({ ...prev, [d.value]: toIntegerInput(e.target.value) }))
-                      }
-                      disabled={inputsLocked}
-                    />
-                    <span className="text-xs text-muted-foreground w-8 tabular-nums">
-                      ={(d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0)).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+              <div>
+                <p className="text-sm font-semibold text-foreground">{t('posCashActual') || '돈통 시제'}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t('posOpenCashCountHint') || '현금 시제를 화폐 단위별로 입력하세요.'}
+                </p>
               </div>
-              <div className="rounded-lg bg-primary/10 px-4 py-4 text-center" data-tour="pos-tour-open-denom-total">
-                <div className="text-sm text-muted-foreground mb-1">{t('posCashActual') || '현금 시제 합계'}</div>
-                <div className="text-2xl font-bold tabular-nums">{denomTotal.toLocaleString()} ฿</div>
-              </div>
-              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked} data-tour="pos-tour-open-save">
-                <Save className="mr-2 h-4 w-4" />
-                {saving ? '...' : t('itemsBtnSave') || '저장'}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => router.push(settlementFullCloseHref)}
-                data-tour="pos-tour-open-link-full-settlement"
+              <div
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3"
+                data-tour="pos-tour-open-denom-grid"
               >
-                {t('posSettlement') || '전체 결산'}
-              </Button>
+                {CASH_DENOMINATIONS.map((d) => {
+                  const qty = parseInt(toIntegerInput(denomCounts[d.value] || '0'), 10) || 0
+                  const line = d.value * qty
+                  const qtyLabel = t('qty') || '수량'
+                  return (
+                    <div
+                      key={d.value}
+                      className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-background/90 py-2 pl-3 pr-2.5 shadow-sm transition-colors hover:border-primary/25 hover:bg-background sm:gap-2"
+                    >
+                      <span className="shrink-0 basis-[4rem] text-sm font-bold tabular-nums text-foreground sm:basis-[4.25rem] sm:text-base">
+                        {d.label}
+                        <span className="ml-0.5 text-xs font-semibold text-muted-foreground">฿</span>
+                      </span>
+                      <span className="shrink-0 select-none text-muted-foreground/70" aria-hidden>
+                        ×
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
+                        placeholder="0"
+                        aria-label={`${d.label} ${qtyLabel}`}
+                        className="h-9 w-[3.25rem] shrink-0 border-input/80 px-2 text-center text-sm font-semibold tabular-nums shadow-inner sm:w-14 sm:text-base"
+                        value={denomCounts[d.value] ?? ''}
+                        onChange={(e) =>
+                          setDenomCounts((prev) => ({ ...prev, [d.value]: toIntegerInput(e.target.value) }))
+                        }
+                        disabled={inputsLocked}
+                      />
+                      <span className="mx-0.5 shrink-0 text-muted-foreground/50 sm:mx-1" aria-hidden>
+                        =
+                      </span>
+                      <div className="ml-auto min-w-[4.5rem] shrink-0 text-right sm:min-w-[5.25rem]">
+                        <span className="text-sm font-bold tabular-nums text-primary sm:text-base">
+                          {line.toLocaleString()}
+                        </span>
+                        <span className="ml-0.5 text-xs font-medium text-muted-foreground">฿</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div
+                className="rounded-xl border border-primary/25 bg-gradient-to-br from-primary/12 via-primary/[0.07] to-transparent px-5 py-5 text-center shadow-inner"
+                data-tour="pos-tour-open-denom-total"
+              >
+                <div className="text-xs font-semibold uppercase tracking-wide text-primary/80">
+                  {t('posCashActual') || '현금 시제 합계'}
+                </div>
+                <div className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight text-primary">
+                  {denomTotal.toLocaleString()} <span className="text-xl font-bold text-primary/70">฿</span>
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                <Button
+                  className="h-12 w-full text-base font-semibold shadow-md transition-shadow hover:shadow-lg"
+                  onClick={handleSave}
+                  disabled={saving || inputsLocked}
+                  data-tour="pos-tour-open-save"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? '...' : t('itemsBtnSave') || '저장'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-11 w-full border-dashed"
+                  onClick={() => router.push(settlementFullCloseHref)}
+                  data-tour="pos-tour-open-link-full-settlement"
+                >
+                  {t('posSettlement') || '전체 결산'}
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -1027,27 +1130,50 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                       {t('posSavedCashActual') || '저장된 시제'}: {Number(settlement.cashActual).toLocaleString()} ฿
                     </p>
                   )}
-                  <div className="grid grid-cols-5 gap-2">
-                    {CASH_DENOMINATIONS.map((d) => (
-                      <div key={d.value} className="flex items-center gap-1.5">
-                        <span className="w-10 text-xs font-medium tabular-nums">{d.label}฿</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          placeholder="0"
-                          className="h-8 w-14 text-right text-sm"
-                          value={denomCounts[d.value] ?? ''}
-                          onChange={(e) =>
-                            setDenomCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, '') }))
-                          }
-                          disabled={inputsLocked}
-                        />
-                        <span className="text-xs text-muted-foreground w-7 tabular-nums">
-                          ={(d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0)).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {CASH_DENOMINATIONS.map((d) => {
+                      const qty = parseInt(toIntegerInput(denomCounts[d.value] || '0'), 10) || 0
+                      const line = d.value * qty
+                      const qtyLabel = t('qty') || '수량'
+                      return (
+                        <div
+                          key={d.value}
+                          className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/20 py-1.5 pl-2.5 pr-2 shadow-sm sm:gap-2"
+                        >
+                          <span className="shrink-0 basis-[3.5rem] text-sm font-bold tabular-nums text-foreground sm:basis-[4rem]">
+                            {d.label}
+                            <span className="ml-0.5 text-xs font-semibold text-muted-foreground">฿</span>
+                          </span>
+                          <span className="shrink-0 select-none text-muted-foreground/70" aria-hidden>
+                            ×
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            placeholder="0"
+                            aria-label={`${d.label} ${qtyLabel}`}
+                            className="h-8 w-[3rem] shrink-0 px-1.5 text-center text-sm font-semibold tabular-nums sm:h-9 sm:w-[3.25rem]"
+                            value={denomCounts[d.value] ?? ''}
+                            onChange={(e) =>
+                              setDenomCounts((prev) => ({
+                                ...prev,
+                                [d.value]: toIntegerInput(e.target.value),
+                              }))
+                            }
+                            disabled={inputsLocked}
+                          />
+                          <span className="mx-0.5 shrink-0 text-muted-foreground/50 sm:mx-1" aria-hidden>
+                            =
+                          </span>
+                          <div className="ml-auto min-w-[4rem] shrink-0 text-right sm:min-w-[4.75rem]">
+                            <span className="text-sm font-bold tabular-nums text-primary">{line.toLocaleString()}</span>
+                            <span className="ml-0.5 text-xs text-muted-foreground">฿</span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                   <p className="mt-1.5 text-sm font-semibold tabular-nums">
                     {t('posCashActual') || '돈통 시제'} 합계: {denomTotal.toLocaleString()}{currencySuffix}
@@ -1058,7 +1184,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   className="flex items-center justify-between text-sm"
                   data-tour="pos-tour-close-cash-line"
                 >
-                  <span>{t('posCash') || '현금'}</span>
+                  <span className="flex items-center gap-2">
+                    {t('posCash') || '현금'}
+                    {autoFilledFlags.cash && (
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                        AUTO
+                      </span>
+                    )}
+                  </span>
                   <div className="flex items-center gap-1">
                     <Input
                       type="number"

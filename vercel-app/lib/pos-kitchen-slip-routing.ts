@@ -1,4 +1,5 @@
 import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
+import type { OrderItem } from "@/lib/pos-types"
 
 /**
  * 주방 주문서 분할
@@ -291,6 +292,86 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
         items: bucket,
         station: i as KitchenPrinterIndex,
       })
+  }
+  return out
+}
+
+/** `OrderItem` → 주방 라우팅용 한 줄 (`displayName`은 이미 POS 표시명으로 만든 값) */
+export function kitchenRoutingItemFromOrderItem(it: OrderItem, displayName: string): KitchenSlipRoutingItem {
+  const qty = Math.max(1, Math.trunc(Number(it.quantity) || 1))
+  const note = String(it.note ?? "").trim()
+  const menuId = String(it.menuId ?? "").trim()
+  const row: KitchenSlipRoutingItem = {
+    id: String(it.id ?? ""),
+    name: displayName,
+    qty,
+    ...(note ? { note } : {}),
+    ...(menuId ? { menuId1: menuId } : {}),
+  }
+  if (Array.isArray(it.promoItems) && it.promoItems.length > 0) {
+    row.promoItems = it.promoItems
+  }
+  return row
+}
+
+/** 일부 취소 주방 재인쇄 시 콜백·전체 취소 주방용 */
+export type PosKitchenReprintPayload = {
+  removedKitchenLines: KitchenSlipRoutingItem[]
+  /** 전체 취소 등 서버 재조회 없이 헤더에 쓸 값 */
+  orderNoForPrint?: string
+  tableName?: string
+  memo?: string
+}
+
+export type KitchenSlipItemWithCancelFlag<T extends KitchenSlipRoutingItem> = T & { kitchenLineCancelled?: boolean }
+
+/**
+ * 같은 `station` 기준으로 취소된 줄을 위에 두고, 그 아래 현재 주문 줄을 붙인다.
+ * `cancelledSlips`가 비면 `activeSlips`만 반환한다.
+ */
+export function mergeKitchenSlipGroupsCancelledFirst<T extends KitchenSlipRoutingItem>(
+  cancelledSlips: KitchenSlipGroupRow<T>[],
+  activeSlips: KitchenSlipGroupRow<T>[]
+): KitchenSlipGroupRow<KitchenSlipItemWithCancelFlag<T>>[] {
+  type Out = KitchenSlipItemWithCancelFlag<T>
+  if (!cancelledSlips.length) {
+    return activeSlips.map((s) => ({
+      ...s,
+      items: s.items.map((it) => ({ ...it }) as Out),
+    }))
+  }
+  const map = new Map<
+    number,
+    { label: string; cancelled: T[]; active: T[] }
+  >()
+  for (const s of cancelledSlips) {
+    const prev = map.get(s.station)
+    const e = prev ?? { label: s.label, cancelled: [] as T[], active: [] as T[] }
+    e.cancelled.push(...s.items)
+    if (!prev) e.label = s.label
+    map.set(s.station, e)
+  }
+  for (const s of activeSlips) {
+    const prev = map.get(s.station)
+    const e = prev ?? { label: s.label, cancelled: [] as T[], active: [] as T[] }
+    e.active.push(...s.items)
+    e.label = s.label
+    map.set(s.station, e)
+  }
+  const stations = [...map.keys()].sort((a, b) => a - b)
+  const out: KitchenSlipGroupRow<Out>[] = []
+  for (const st of stations) {
+    const e = map.get(st)!
+    const items: Out[] = [
+      ...e.cancelled.map((it) => ({ ...it, kitchenLineCancelled: true } as Out)),
+      ...e.active.map((it) => ({ ...it }) as Out),
+    ]
+    if (!items.length) continue
+    out.push({
+      label: e.label,
+      items,
+      station: st as KitchenPrinterIndex,
+    })
   }
   return out
 }

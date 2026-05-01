@@ -34,7 +34,30 @@ function posOrderItemsToReceiptLines(order: PosOrder) {
     price: Number(it.price ?? 0),
     qty: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
     ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+    ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
   }))
+}
+
+/** 영수증 관리 등: DB에 저장된 합계·부가세로 재인쇄 (당시 요금 재계산 없음) */
+export function receiptModalDataFromPosOrderReprint(order: PosOrder): ReceiptModalData {
+  const v = Number(order.vat ?? 0) || 0
+  return {
+    orderNo: order.orderNo ?? '',
+    items: posOrderItemsToReceiptLines(order),
+    subtotal: order.subtotal ?? 0,
+    discountAmt: order.discountAmt ?? 0,
+    deliveryFee: order.deliveryFee,
+    packagingFee: order.packagingFee,
+    total: order.total ?? 0,
+    storeCode: order.storeCode,
+    orderType: order.orderType,
+    tableName: order.tableName,
+    memo: order.memo,
+    discountReason: order.discountReason,
+    ...(v > 0.001 ? { vatFeeAmt: v, vatFeeMode: 'separate' as const } : {}),
+    receiptAutoPrintContext: 'payment',
+    suppressReceiptModalAutoPrint: true,
+  }
 }
 
 /** 결제 완료 영수증 모달용 데이터 (메인 포스 Realtime·폴링에서 인쇄) */

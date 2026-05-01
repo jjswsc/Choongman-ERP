@@ -9,12 +9,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  adminTabsBarCn,
   adminTabsContentCn,
   adminTabsIconCn,
   adminTabsListRowCn,
   adminTabsRootCn,
-  adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -46,6 +44,7 @@ import {
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
+import { escapeHtmlReceiptEmphasizeChannelTokenAfterHash } from "@/lib/pos-delivery-platform"
 import { cn, escapeHtml } from "@/lib/utils"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import {
@@ -314,6 +313,7 @@ export default function PosPrintersPage() {
   const [activeTab, setActiveTab] = React.useState("printer")
 
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
+  const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(false)
 
   const [logoPrint, setLogoPrint] = React.useState(false)
   const [receiptPrintTiming, setReceiptPrintTiming] = React.useState<'per_payment' | 'final_payment'>('per_payment')
@@ -473,6 +473,7 @@ export default function PosPrintersPage() {
         ? settings.drawerOpenOption
         : "reason_only") as "password_and_reason" | "reason_only" | "force"
     )
+    setLinkposSkipTerminalForCard(Boolean(settings.linkposSkipTerminalForCard))
     setLogoPrint(Boolean(settings.logoPrint))
     setReceiptPrintTiming(settings.receiptPrintTiming === "final_payment" ? "final_payment" : "per_payment")
     setSignatureLine(Boolean(settings.signatureLine))
@@ -690,6 +691,7 @@ export default function PosPrintersPage() {
         // 레거시 필드: 서버/클라이언트 정책상 비활성(현금 결제 + 수동 강제 열기만 사용)
         cardAutoOpen: false,
         checkAutoOpen: false,
+        linkposSkipTerminalForCard,
         drawerOpenOption,
         logoPrint,
         receiptPrintTiming,
@@ -984,7 +986,7 @@ export default function PosPrintersPage() {
         ])
       }
       if (copyTabDrawer) {
-        copyKeys(["drawerOpenOption"])
+        copyKeys(["drawerOpenOption", "linkposSkipTerminalForCard"])
       }
       if (copyTabDualMonitor) {
         copyKeys([
@@ -1190,6 +1192,7 @@ export default function PosPrintersPage() {
             .biz-strong { color: #111; font-weight: 600; }
             .text-center { text-align: center; }
             .text-xs { font-size: 11px; }
+            .receipt-delivery-channel-no { font-size: 2em; font-weight: 700; line-height: 1.12; vertical-align: baseline; }
           </style>
         </head>
         <body>
@@ -1206,7 +1209,7 @@ export default function PosPrintersPage() {
           }
           <div class="text-xs">
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderNo", "주문번호"))}</span><span class="receipt-meta-value">${escapeHtml(formatPosOrderNoForPrint(previewData.orderNo))}</span></div>
-            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posTable", "테이블"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.tableName)}</span></div>
+            <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posTable", "테이블"))}</span><span class="receipt-meta-value">${escapeHtmlReceiptEmphasizeChannelTokenAfterHash(previewData.tableName)}</span></div>
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("date", "일시"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.now)}</span></div>
             <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${escapeHtml(tr("posOrderType", "주문 유형"))}</span><span class="receipt-meta-value">${escapeHtml(previewData.orderType)}</span></div>
           </div>
@@ -2063,6 +2066,23 @@ export default function PosPrintersPage() {
                       </label>
                     ))}
                   </div>
+                </div>
+                <div className="pt-2 border-t border-border/60">
+                  <p className="text-sm font-medium text-foreground mb-1">
+                    {tr("posLinkposSkipTerminalCardTitle", "카드 결제 (LINKPOS)")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {tr(
+                      "posLinkposSkipTerminalCardHint",
+                      "은행 단말·LINKPOS 릴레이 없이 카드 금액만 POS에 입력해 정산할 때 켜세요. 켜면 승인 API를 호출하지 않습니다."
+                    )}
+                  </p>
+                  <ToggleRow
+                    label={tr("posLinkposSkipTerminalCardLabel", "단말 승인 없이 카드 금액만 반영")}
+                    value={linkposSkipTerminalForCard}
+                    onChange={setLinkposSkipTerminalForCard}
+                    t={t}
+                  />
                 </div>
               </div>
             </TabsContent>

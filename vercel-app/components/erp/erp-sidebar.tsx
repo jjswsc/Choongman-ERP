@@ -47,6 +47,7 @@ import {
   PackageSearch,
   UtensilsCrossed,
   BookOpen,
+  Radio,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -107,7 +108,10 @@ const menuSections: MenuSection[] = [
   },
   {
     titleKey: "adminSectionSales",
-    items: [{ titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" }],
+    items: [
+      { titleKey: "adminLiveStoreSales", icon: Radio, href: "/admin/live-store-sales" },
+      { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
+    ],
   },
   {
     titleKey: "adminSectionMarketing",

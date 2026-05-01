@@ -7547,6 +7547,8 @@ export interface PosPrinterSettings {
   cookingDelayAlertOverMin?: number
   cardAutoOpen?: boolean
   checkAutoOpen?: boolean
+  /** true면 카드 금액만 반영하고 LINKPOS 단말/릴레이 승인 호출을 하지 않음 */
+  linkposSkipTerminalForCard?: boolean
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
   logoPrint?: boolean
   receiptPrintTiming?: 'per_payment' | 'final_payment'
@@ -7688,6 +7690,7 @@ export async function savePosPrinterSettings(params: {
   cookingDelayAlertOverMin?: number
   cardAutoOpen?: boolean
   checkAutoOpen?: boolean
+  linkposSkipTerminalForCard?: boolean
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
   logoPrint?: boolean
   receiptPrintTiming?: 'per_payment' | 'final_payment'
@@ -8486,6 +8489,8 @@ export async function getPosSettlement(params: {
     systemTotal: number
     systemSubtotal?: number
     systemVat?: number
+    /** 완료 주문 `payment_cash` 합계 — 결산 현금 줄 자동 채움용 */
+    systemCashFromOrders?: number
     linkpos?: {
       approvedCount: number
       failedCount: number

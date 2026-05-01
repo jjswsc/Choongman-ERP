@@ -979,6 +979,7 @@ function getThermalHtmlDialogPrintOptions(resolvedDevice) {
     printBackground: true,
     scaleFactor: 100,
     landscape: false,
+    preferCSSPageSize: true,
     pagesPerSheet: 1,
     margins: { marginType: "printableArea" },
     pageSize: {
@@ -997,6 +998,8 @@ function getThermalHtmlPrintOptions() {
     printBackground: true,
     scaleFactor: 100,
     landscape: false,
+    /** CSS @page size(80mm)와 API pageSize 이중 지정 충돌로 일부 열전사에서 본문이 좌우로 찢어지는 사례 완화 */
+    preferCSSPageSize: true,
     /** 한 장에 여러 페이지 축소 배치 방지(일부 드라이버 기본값 이슈) */
     pagesPerSheet: 1,
     /** none 은 논리 폭을 용지 끝까지 쓰여 열전사 오른쪽 비인쇄 영역에서 잘리기 쉬움 → 드라이버 printable area 사용 */

@@ -89,7 +89,10 @@ export async function GET(request: NextRequest) {
   const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
 
   if (!settleDate) {
-    return NextResponse.json({ systemTotal: 0, linkpos: null, settlement: null }, { headers })
+    return NextResponse.json(
+      { systemTotal: 0, systemSubtotal: 0, systemVat: 0, systemCashFromOrders: 0, linkpos: null, settlement: null },
+      { headers }
+    )
   }
 
   try {
@@ -144,12 +147,13 @@ export async function GET(request: NextRequest) {
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
       select:
-        'subtotal,vat,total,status,payment_card,payment_qr,payment_delivery_app,payment_other,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+        'subtotal,vat,total,status,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
     })) as {
       subtotal?: number
       vat?: number
       total?: number
       status?: string
+      payment_cash?: number
       payment_card?: number
       payment_qr?: number
       payment_delivery_app?: number
@@ -165,6 +169,7 @@ export async function GET(request: NextRequest) {
     let systemTotal = 0
     let systemSubtotal = 0
     let systemVat = 0
+    let systemCashFromOrders = 0
     let linkposApprovedCount = 0
     let linkposFailedCount = 0
     let linkposRequestedTotal = 0
@@ -187,8 +192,9 @@ export async function GET(request: NextRequest) {
     for (const o of orders || []) {
       if (!completedStatuses.includes(o.status || '')) continue
       systemTotal += Number(o.total) || 0
-      systemSubtotal += Number(o.subtotal) ?? Number(o.total) ?? 0
-      systemVat += Number(o.vat) ?? 0
+      systemSubtotal += Number(o.subtotal ?? o.total) || 0
+      systemVat += Number(o.vat ?? 0) || 0
+      systemCashFromOrders += Number(o.payment_cash) || 0
       cardReportedTotal += Number(o.payment_card) || 0
       const qrAmt = Number(o.payment_qr) || 0
       if (qrAmt > 0) {
@@ -324,6 +330,7 @@ export async function GET(request: NextRequest) {
         systemTotal,
         systemSubtotal,
         systemVat,
+        systemCashFromOrders,
         linkpos: {
           approvedCount: linkposApprovedCount,
           failedCount: linkposFailedCount,
@@ -343,6 +350,9 @@ export async function GET(request: NextRequest) {
     )
   } catch (e) {
     console.error('getPosSettlement:', e)
-    return NextResponse.json({ systemTotal: 0, linkpos: null, settlement: null }, { headers })
+    return NextResponse.json(
+      { systemTotal: 0, systemSubtotal: 0, systemVat: 0, systemCashFromOrders: 0, linkpos: null, settlement: null },
+      { headers }
+    )
   }
 }

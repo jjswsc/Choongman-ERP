@@ -1,5 +1,6 @@
 import type { PosDeliveryApp } from '@/lib/api-client'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
+import { escapeHtml } from '@/lib/utils'
 
 export type PosChannelOrderNoPick =
   | { kind: 'hash'; text: string }
@@ -116,4 +117,27 @@ export function formatPosReceiptOrderNoDisplay(args: {
   memo?: string
 }): string {
   return formatPosOrderNoForPrint(resolvePosReceiptOrderNoRaw(args))
+}
+
+/**
+ * 테이블 표시(예: `Line Man #0660`)에서 `#` 뒤 채널 주문번호만 크게 보이게 하는 HTML.
+ * `.receipt-delivery-channel-no`는 `pos-receipt-html` 등 영수증 CSS에 정의.
+ */
+export function escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableLine: string): string {
+  const s = String(tableLine ?? '').trimEnd()
+  const lastHash = s.lastIndexOf('#')
+  if (lastHash < 0) return escapeHtml(s)
+  const rest = s
+    .slice(lastHash + 1)
+    .replace(/^\s+/, '')
+    .replace(/\s+$/, '')
+  if (!/^[A-Za-z0-9-]+$/i.test(rest)) return escapeHtml(s)
+  const head = s.slice(0, lastHash)
+  return (
+    escapeHtml(head) +
+    escapeHtml('#') +
+    '<span class="receipt-delivery-channel-no">' +
+    escapeHtml(rest) +
+    '</span>'
+  )
 }

@@ -65,6 +65,7 @@ function inferOrderType(po: PosOrder & { orderNo?: string }): Order['type'] {
 function mapOrderStatus(status: string): Order['status'] {
   const v = String(status || '').toLowerCase()
   if (v === 'completed' || v === 'done') return 'completed'
+  if (v === 'cancelled' || v === 'canceled') return 'cancelled'
   if (v === 'paid') return 'paid'
   if (v === 'ready') return 'ready'
   if (v === 'pending') return 'pending'
@@ -79,20 +80,38 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     type: inferredType,
     items: (po.items || []).map((it) => {
       const row = it as PosOrderItem
-      const menuId1 = String(row.menuId1 ?? row.menuId2 ?? '').trim()
-      const optionId1 = String(row.optionId1 ?? row.optionId2 ?? '').trim()
+      const menuId1 = String(row.menuId1 ?? '').trim()
+      const menuId2 = String(row.menuId2 ?? '').trim()
+      const optionId1 = String(row.optionId1 ?? '').trim()
+      const optionId2 = String(row.optionId2 ?? '').trim()
+      const promoItems =
+        row.promoId && Array.isArray(row.promoItems) && row.promoItems.length > 0
+          ? row.promoItems
+          : undefined
       return {
         id: String(it.id ?? ''),
         name: String(it.name ?? ''),
         quantity: Number(it.qty ?? 0) || 0,
         price: Number(it.price ?? 0) || 0,
-        ...(menuId1 ? { menuId: menuId1 } : {}),
-        ...(optionId1 ? { optionId: optionId1 } : {}),
+        ...(menuId1 || menuId2 ? { menuId: menuId1 || menuId2 } : {}),
+        ...(optionId1 || optionId2 ? { optionId: optionId1 || optionId2 } : {}),
         ...(typeof it.note === 'string' && String(it.note).trim()
           ? { note: String(it.note).trim() }
           : {}),
         servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
         servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
+        ...(row.promoId && String(row.promoId).trim()
+          ? {
+              promoId: String(row.promoId).trim(),
+              ...(row.promoCode && String(row.promoCode).trim()
+                ? { promoCode: String(row.promoCode).trim() }
+                : {}),
+              ...(promoItems ? { promoItems } : {}),
+            }
+          : {}),
+        ...(String(row.deliveryAppCode ?? '').trim()
+          ? { deliveryAppCode: String(row.deliveryAppCode).trim() }
+          : {}),
       }
     }),
     total: Number(po.total ?? 0) || 0,
@@ -110,6 +129,20 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
       inferredType === 'dine-in'
         ? Math.max(0, Math.min(99, Math.trunc(Number(po.guestCount ?? 0) || 0)))
         : undefined,
+    discountAmt: Math.max(0, Number(po.discountAmt ?? 0) || 0),
+    discountReason: String(po.discountReason ?? '').trim() || undefined,
+    paymentCash: Math.max(0, Number(po.paymentCash ?? 0) || 0),
+    paymentCard: Math.max(0, Number(po.paymentCard ?? 0) || 0),
+    paymentQr: Math.max(0, Number(po.paymentQr ?? 0) || 0),
+    paymentOther: Math.max(0, Number(po.paymentOther ?? 0) || 0),
+    paymentDeliveryApp: Math.max(0, Number(po.paymentDeliveryApp ?? 0) || 0),
+    deliveryPaymentChannel: String(po.deliveryPaymentChannel ?? '').trim() || undefined,
+    memberId: Math.max(0, Math.trunc(Number(po.memberId ?? 0) || 0)) || undefined,
+    memberNo: String(po.memberNo ?? '').trim() || undefined,
+    couponCode: String(po.couponCode ?? '').trim().toUpperCase() || undefined,
+    couponDiscountAmt: Math.max(0, Number(po.couponDiscountAmt ?? 0) || 0),
+    pointUsed: Math.max(0, Math.trunc(Number(po.pointUsed ?? 0) || 0)) || undefined,
+    pointEarned: Math.max(0, Math.trunc(Number(po.pointEarned ?? 0) || 0)) || undefined,
   }
 }
 

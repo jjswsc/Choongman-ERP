@@ -11,11 +11,12 @@ import {
   getPosPackagingChecklistByOrder,
   grabCancelOrderByStoreApi,
   markPosOrderItemServed,
+  updatePosOrder,
   updatePosOrderStatus,
 } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
-import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown, ChevronUp, Clock, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -27,6 +28,16 @@ import {
 } from '@/lib/grab-delivery-progress'
 import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
+import {
+  buildUpdatePosOrderParamsFromOrder,
+  canRemovePosOrderLine,
+  orderItemsToPosOrderItems,
+  orderPaymentsSum,
+} from '@/lib/pos-order-line-update'
+import {
+  kitchenRoutingItemFromOrderItem,
+  type PosKitchenReprintPayload,
+} from '@/lib/pos-kitchen-slip-routing'
 
 export interface DeliveryOrderPanelProps {
   orderLabel: string
@@ -38,6 +49,10 @@ export interface DeliveryOrderPanelProps {
   onPay?: () => void
   /** 주문 취소 시 */
   onCancel?: () => void
+  /** 일부 취소 직후 홀·주방 재인쇄(터미널) */
+  onAfterPartialLineRemoved?: (orderId: number, detail?: PosKitchenReprintPayload) => void | Promise<void>
+  /** 전체 취소·거절 직후 주방 취소 전표 */
+  onAfterFullOrderKitchenReprint?: (orderId: number, detail: PosKitchenReprintPayload) => void | Promise<void>
   onClose?: () => void
   storeCode?: string
   t?: (key: string) => string
@@ -51,6 +66,8 @@ export function DeliveryOrderPanel({
   onPackaged,
   onPay,
   onCancel,
+  onAfterPartialLineRemoved,
+  onAfterFullOrderKitchenReprint,
   onClose,
   storeCode,
   t = (k) => k,
@@ -148,6 +165,16 @@ export function DeliveryOrderPanel({
   const canCancel = order && !['completed', 'cancelled'].includes(order.status ?? '')
   const [cancelling, setCancelling] = useState(false)
   const [deciding, setDeciding] = useState(false)
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null)
+  const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!order?.items?.length) {
+      setSelectedLineItemId(null)
+      return
+    }
+    setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev) ? prev : null))
+  }, [order?.id, order?.items])
 
   const grabOrderId = order ? extractGrabOrderIdFromMemo(String(order.memo ?? '')) : ''
 
@@ -182,7 +209,22 @@ export function DeliveryOrderPanel({
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
     setCancelling(true)
     try {
-      await updatePosOrderStatus({ id: Number(order.id), status: 'cancelled' })
+      const oid = Number(order.id)
+      await updatePosOrderStatus({ id: oid, status: 'cancelled' })
+      if (order.items.length > 0) {
+        const kitchenLines = order.items.map((it) =>
+          kitchenRoutingItemFromOrderItem(
+            it,
+            resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
+          )
+        )
+        await onAfterFullOrderKitchenReprint?.(oid, {
+          removedKitchenLines: kitchenLines,
+          orderNoForPrint: order.orderNo,
+          tableName: order.tableName,
+          memo: order.memo,
+        })
+      }
       onCancel?.()
       onClose?.()
     } catch (e) {
@@ -190,6 +232,59 @@ export function DeliveryOrderPanel({
     } finally {
       setCancelling(false)
     }
+  }
+
+  const handleRemoveOrderLine = async (itemId: string) => {
+    if (!order) return
+    const target = order.items.find((it) => it.id === itemId)
+    if (!target) return
+    if (!canRemovePosOrderLine(order)) {
+      if (order.items.length <= 1) {
+        await appAlert(t('posLineItemCancelLastHint') || ti('posLineItemCancelLastHint'))
+      } else if (orderPaymentsSum(order) > 0.005) {
+        await appAlert(t('posLineItemCancelPaidBlocked') || ti('posLineItemCancelPaidBlocked'))
+      }
+      return
+    }
+    const label = resolvePosOrderItemMenuDisplayName(
+      { id: target.id, name: target.name, menuId: target.menuId },
+      menusFromProps
+    )
+    const ask = i18nTr(ti, 'posLineItemCancelConfirm', { name: label })
+    if (!await appConfirm(ask)) return
+    const id = Number(order.id)
+    if (Number.isNaN(id) || !posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
+      return
+    }
+    const nextOrderItems = order.items.filter((it) => it.id !== itemId)
+    const nextPosItems = orderItemsToPosOrderItems(nextOrderItems)
+    setRemovingItemId(itemId)
+    try {
+      const res = await updatePosOrder(buildUpdatePosOrderParamsFromOrder(order, nextPosItems))
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+        return
+      }
+      setSelectedLineItemId(null)
+      const removedLine = kitchenRoutingItemFromOrderItem(target, label)
+      await onAfterPartialLineRemoved?.(id, { removedKitchenLines: [removedLine] })
+      onPackaged?.()
+    } catch (e) {
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setRemovingItemId(null)
+    }
+  }
+
+  const handlePartialCancel = async () => {
+    if (!order) return
+    if (!selectedLineItemId) {
+      await appAlert(t('posLineItemSelectFirst') || ti('posLineItemSelectFirst'))
+      return
+    }
+    await handleRemoveOrderLine(selectedLineItemId)
   }
 
   const handlePackComplete = async () => {
@@ -265,6 +360,20 @@ export function DeliveryOrderPanel({
           orderID: grabOrderId,
           storeCode: storeCode || undefined,
           cancelCode: 1002,
+        })
+      }
+      if (!Number.isNaN(id) && order.items.length > 0) {
+        const kitchenLines = order.items.map((it) =>
+          kitchenRoutingItemFromOrderItem(
+            it,
+            resolvePosOrderItemMenuDisplayName({ id: it.id, name: it.name, menuId: it.menuId }, menusFromProps)
+          )
+        )
+        await onAfterFullOrderKitchenReprint?.(id, {
+          removedKitchenLines: kitchenLines,
+          orderNoForPrint: order.orderNo,
+          tableName: order.tableName,
+          memo: order.memo,
         })
       }
       onCancel?.()
@@ -347,7 +456,7 @@ export function DeliveryOrderPanel({
               {canCancel && (
                 <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
                   <XCircle className="w-4 h-4 mr-1" />
-                  {t('posOrderCancel') || '주문 취소'}
+                  {t('posOrderCancelFull') || t('posOrderCancel') || '전체 취소'}
                 </Button>
               )}
             </>
@@ -369,19 +478,45 @@ export function DeliveryOrderPanel({
                       <li
                         key={item.id}
                         className={cn(
-                          'grid grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50',
-                          packaged && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                          'grid cursor-default grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50 transition-shadow',
+                          packaged && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
+                          selectedLineItemId === item.id &&
+                            'ring-2 ring-primary/45 border-primary/50 bg-primary/5 dark:bg-primary/10'
                         )}
+                        onClick={() => setSelectedLineItemId(null)}
                       >
                         <div className="min-w-0 flex-1">
-                          <button
-                            type="button"
-                            className="text-sm font-medium truncate text-left w-full hover:underline"
-                            onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
-                            title={displayName}
-                          >
-                            {mainName}
-                          </button>
+                          <div className="flex min-w-0 items-start gap-0.5">
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 truncate rounded-sm px-0.5 text-left text-sm font-medium hover:underline -mx-0.5"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
+                              }}
+                              title={displayName}
+                            >
+                              {mainName}
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground"
+                              aria-label={t('posOrderLineExpandHint') || ti('posOrderLineExpandHint')}
+                              title={t('posOrderLineExpandHint') || ti('posOrderLineExpandHint')}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setExpandedItemId((prev) => (prev === item.id ? null : item.id))
+                              }}
+                            >
+                              {expandedItemId === item.id ? (
+                                <ChevronUp className="h-4 w-4" aria-hidden />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" aria-hidden />
+                              )}
+                            </Button>
+                          </div>
                           <p className="text-xs text-muted-foreground tabular-nums">
                             {optionPart && <span className="mr-1">{optionPart}</span>}
                             x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
@@ -418,8 +553,11 @@ export function DeliveryOrderPanel({
                           size="sm"
                           variant={packaged ? 'default' : 'outline'}
                           className="shrink-0 h-9 w-9 p-0 self-start mt-0.5"
-                          onClick={() => { void toggleItemPackaged(item.id) }}
-                          disabled={savingItemId === item.id}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void toggleItemPackaged(item.id)
+                          }}
+                          disabled={savingItemId === item.id || removingItemId !== null}
                           aria-label={
                             packaged
                               ? (t('cancel') || '취소')
@@ -461,10 +599,41 @@ export function DeliveryOrderPanel({
                 {t('posTablePayInStore') || '매장 결제'}
               </Button>
               {canCancel && (
-                <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
-                  <XCircle className="w-4 h-4 mr-1" />
-                  {t('posOrderCancel') || '주문 취소'}
-                </Button>
+                <div className="space-y-1.5">
+                  {canRemovePosOrderLine(order) && !selectedLineItemId ? (
+                    <p className="text-center text-xs text-muted-foreground px-1">
+                      {t('posLineItemSelectFirst') || ti('posLineItemSelectFirst')}
+                    </p>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                      disabled={
+                        cancelling ||
+                        removingItemId !== null ||
+                        !canRemovePosOrderLine(order) ||
+                        !selectedLineItemId
+                      }
+                      onClick={() => { void handlePartialCancel() }}
+                    >
+                      {t('posOrderCancelPartial') || ti('posOrderCancelPartial')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="disabled:opacity-50"
+                      disabled={cancelling || removingItemId !== null}
+                      onClick={handleCancelOrder}
+                    >
+                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
+                      {t('posOrderCancelFull') || ti('posOrderCancelFull')}
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}

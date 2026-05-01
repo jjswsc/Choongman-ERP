@@ -14,6 +14,7 @@ const menuItems = [
   { href: "/admin/work-log", label: "업무일지" },
   // 1. 매출 관리
   { header: "매출 관리" },
+  { href: "/admin/live-store-sales", label: "실시간 매출" },
   { href: "/admin/sales-management", label: "매출 관리" },
   // 2. 매장 관리
   { header: "매장 관리" },

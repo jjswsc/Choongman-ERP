@@ -15,6 +15,7 @@ export type PosSettlementResponse = {
   systemTotal: number
   systemSubtotal?: number
   systemVat?: number
+  systemCashFromOrders?: number
   linkpos?: {
     approvedCount: number
     failedCount: number
@@ -50,6 +51,7 @@ export async function getPosSettlementWithCache(params: {
           systemTotal: 0,
           systemSubtotal: 0,
           systemVat: 0,
+          systemCashFromOrders: 0,
           linkpos: null,
           settlement: null,
         }
@@ -63,6 +65,7 @@ export async function getPosSettlementWithCache(params: {
       systemTotal: 0,
       systemSubtotal: 0,
       systemVat: 0,
+      systemCashFromOrders: 0,
       linkpos: null,
       settlement: null,
     }

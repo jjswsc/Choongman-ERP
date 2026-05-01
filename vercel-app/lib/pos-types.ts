@@ -24,7 +24,7 @@ export interface Order {
   type: "dine-in" | "delivery" | "takeout"
   items: OrderItem[]
   total: number
-  status: "pending" | "preparing" | "ready" | "paid" | "completed"
+  status: "pending" | "preparing" | "ready" | "paid" | "completed" | "cancelled"
   createdAt: Date
   /** API `table_name` (배달: 플랫폼/테이블 표시 — 주문 번호·채널 추론에 사용) */
   tableName?: string
@@ -38,6 +38,21 @@ export interface Order {
   deliveryAppCode?: string
   /** 홀(dine-in) 손님 수 (POS guest_count) */
   guestCount?: number
+  /** `updatePosOrder` 시 기존 값 유지용 (pos_orders에서 채움) */
+  discountAmt?: number
+  discountReason?: string
+  paymentCash?: number
+  paymentCard?: number
+  paymentQr?: number
+  paymentOther?: number
+  paymentDeliveryApp?: number
+  deliveryPaymentChannel?: string
+  memberId?: number
+  memberNo?: string
+  couponCode?: string
+  couponDiscountAmt?: number
+  pointUsed?: number
+  pointEarned?: number
 }
 
 export interface OrderItem {
@@ -57,6 +72,8 @@ export interface OrderItem {
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  /** items_json 줄 단위 (연동 등) */
+  deliveryAppCode?: string
 }
 
 export interface Store {
