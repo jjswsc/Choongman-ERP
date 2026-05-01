@@ -249,6 +249,12 @@ export default function PosOrderPage() {
     cardFeeMode?: 'included' | 'separate'
     otherFeeAmt?: number
     otherFeeMode?: 'included' | 'separate'
+    paymentCash?: number
+    paymentCard?: number
+    paymentQr?: number
+    paymentOther?: number
+    paymentDeliveryApp?: number
+    deliveryPaymentChannel?: string | null
   } | null>(null)
   const receiptRef = React.useRef<HTMLDivElement>(null)
   const autoPrintedKeyRef = React.useRef<string>("")
@@ -1088,6 +1094,13 @@ export default function PosOrderPage() {
           cardFeeMode: checkoutPricing.cardFeeMode,
           otherFeeAmt: checkoutPricing.otherFeeAmt,
           otherFeeMode: checkoutPricing.otherFeeMode,
+          paymentCash: payment.cash,
+          paymentCard: payment.card,
+          paymentQr: payment.qr,
+          paymentOther: payment.other,
+          paymentDeliveryApp: payment.deliveryApp,
+          deliveryPaymentChannel:
+            payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,
         })
         clearCart()
         setMemo("")

@@ -17,6 +17,71 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 
+function deliveryPaymentChannelLabel(
+  raw: string | null | undefined,
+  tr: (key: string, fallback: string) => string
+): string {
+  const c = String(raw || '').trim().toLowerCase()
+  if (c === 'grab') return tr('posDeliveryPayGrab', 'Grab')
+  if (c === 'lineman') return tr('posDeliveryPayLineman', 'Line Man')
+  if (c === 'shopee') return tr('posDeliveryPayShopeeFood', 'Shopee Food')
+  if (c === 'dine_in') return tr('posDeliveryPayDineIn', 'Dine in')
+  return String(raw || '').trim()
+}
+
+function receiptPaymentBreakdownRows(
+  receiptData: ReceiptModalData,
+  tr: (key: string, fallback: string) => string
+): { label: string; amountStr: string }[] {
+  const cash = Math.max(0, Number(receiptData.paymentCash ?? 0) || 0)
+  const card = Math.max(0, Number(receiptData.paymentCard ?? 0) || 0)
+  const qr = Math.max(0, Number(receiptData.paymentQr ?? 0) || 0)
+  const other = Math.max(0, Number(receiptData.paymentOther ?? 0) || 0)
+  const del = Math.max(0, Number(receiptData.paymentDeliveryApp ?? 0) || 0)
+  const rows: { label: string; amountStr: string }[] = []
+  const push = (label: string, n: number) => {
+    if (n > 0.005) rows.push({ label, amountStr: formatBahtNum(n) })
+  }
+  push(tr('posPaymentCash', '현금'), cash)
+  push(tr('posPaymentCard', '카드'), card)
+  push(tr('posPaymentQr', 'QR'), qr)
+  push(tr('posPaymentOther', '기타'), other)
+  const ch = deliveryPaymentChannelLabel(receiptData.deliveryPaymentChannel, tr)
+  const delLabel =
+    del > 0.005 && ch
+      ? `${tr('posPaymentDeliveryApp', '배달앱')} (${ch})`
+      : tr('posPaymentDeliveryApp', '배달앱')
+  push(delLabel, del)
+  return rows
+}
+
+function receiptPaymentBreakdownHtml(
+  receiptData: ReceiptModalData,
+  tr: (key: string, fallback: string) => string,
+  esc: (value: string) => string,
+  mode: 'simple' | 'grid'
+): string {
+  const isPaymentReceipt =
+    !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
+  if (!isPaymentReceipt) return ''
+  const rows = receiptPaymentBreakdownRows(receiptData, tr)
+  if (!rows.length) return ''
+  const title = esc(tr('posReceiptPaymentMethods', '결제 수단'))
+  if (mode === 'simple') {
+    const body = rows
+      .map(
+        (r) =>
+          `<tr><td class="simple-k">${esc(r.label)}</td><td class="simple-v">${esc(r.amountStr)}</td></tr>`
+      )
+      .join('')
+    return `<div class="simple-divider"></div><div class="simple-line simple-pay-title"><b>${title}</b></div><table class="simple-table simple-summary">${body}</table>`
+  }
+  const body = rows
+    .map((r) => `<div class="receipt-row"><span>${esc(r.label)}</span><span>${esc(r.amountStr)}</span></div>`)
+    .join('')
+  return `<div class="receipt-section-title receipt-pay-title">${title}</div>${body}<div class="receipt-divider"></div>`
+}
+
 export function buildCode128BarcodeUrl(raw: string): string {
   const text = String(raw || '').trim()
   if (!text) return ''
@@ -192,6 +257,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     hour12: false,
   }).format(at)
   const isTaxInvoice = !!taxInvoice
+  const paymentBreakdownSimpleHtml = receiptPaymentBreakdownHtml(receiptData, tr, esc, 'simple')
+  const paymentBreakdownGridHtml = receiptPaymentBreakdownHtml(receiptData, tr, esc, 'grid')
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
@@ -224,7 +291,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       .join('')
     const simpleHtml = `
       <div class="receipt-content receipt-payment-simple">
+        ${showLogo ? `<div class="simple-logo-wrap"><img src="${esc(logoUrl)}" alt="Company logo" class="simple-logo" /></div>` : ''}
         <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
+        <div class="simple-subtitle">${esc(tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div>
         <div class="simple-store">${esc(receiptData.storeCode)}</div>
         <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
         <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
@@ -238,6 +307,12 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
+        ${paymentBreakdownSimpleHtml}
+        ${d.receiptShowPaidStamp ? `<div class="simple-paid">${esc(tr('posReceiptPaid', '결제완료'))}</div>` : ''}
+        ${footerPrimaryText || footerSecondaryText ? '<div class="simple-footer">' : ''}
+        ${footerPrimaryText ? `<div class="simple-footer-strong">${esc(footerPrimaryText)}</div>` : ''}
+        ${footerSecondaryText ? `<div>${esc(footerSecondaryText)}</div>` : ''}
+        ${footerPrimaryText || footerSecondaryText ? '</div>' : ''}
       </div>
     `
     return buildReceiptDocumentHtml({
@@ -246,7 +321,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       bodyContent: simpleHtml,
       extraStyles: `
         .receipt-payment-simple { color: #000; }
-        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+        .simple-logo-wrap { text-align: center; margin-bottom: 2px; }
+        .simple-logo { width: 82px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.1); }
+        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 1px; }
+        .simple-subtitle { text-align: center; font-size: 10px; margin-bottom: 3px; }
         .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
         .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
         .simple-biz { color: #111; }
@@ -257,7 +335,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-item-amt { width: 28%; text-align: right; white-space: nowrap; }
         .simple-k { width: 72%; }
         .simple-v { width: 28%; text-align: right; white-space: nowrap; }
-        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; }
+        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; }
+        .simple-pay-title { font-size: 11px; margin-top: 4px; }
+        .simple-paid { display: inline-block; border: 1px solid #000; padding: 1px 10px; font-size: 10px; font-weight: 700; margin-top: 8px; }
+        .simple-footer { margin-top: 6px; text-align: center; font-size: 10px; }
+        .simple-footer-strong { font-weight: 700; }
       `,
     })
   }
@@ -355,6 +437,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="receipt-divider-strong"></div>
         <div class="receipt-row receipt-total"><span>${esc(tr('posTotal', '합계'))}</span><span>${formatBahtNum(receiptData.total)}</span></div>
         <div class="receipt-divider"></div>
+        ${paymentBreakdownGridHtml}
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}
         ${d.receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
@@ -376,6 +459,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-brand-logo.sm { width: 84px; }
         .receipt-brand-logo.md { width: 108px; }
         .receipt-brand-logo.lg { width: 132px; }
+        .receipt-pay-title { font-size: 11px; font-weight: 700; margin: 4px 0 2px; color: #000; }
         .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 700; }
         .receipt-order-no-print { color: #000 !important; font-weight: 700 !important; }
         .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }

@@ -63,6 +63,13 @@ export type ReceiptModalData = {
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number
   otherFeeMode?: 'included' | 'separate'
+  /** 결제 완료·재인쇄 영수증에 수단별 금액 표시 (주문 접수용 slip에는 생략) */
+  paymentCash?: number
+  paymentCard?: number
+  paymentQr?: number
+  paymentOther?: number
+  paymentDeliveryApp?: number
+  deliveryPaymentChannel?: string | null
   /** 모달 자동 영수증 인쇄 시 어떤 설정을 따를지 (주문/추가주문/결제) */
   receiptAutoPrintContext?: 'order' | 'add_order' | 'payment'
   /** 실시간/폴링 등에서 이미 자동 인쇄된 주문이면 모달 자동 인쇄 생략 */

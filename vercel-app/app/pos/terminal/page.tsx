@@ -3355,6 +3355,16 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  ...(payload.payment
+                    ? {
+                        paymentCash: payload.payment.paymentCash,
+                        paymentCard: payload.payment.paymentCard,
+                        paymentQr: payload.payment.paymentQr,
+                        paymentOther: payload.payment.paymentOther,
+                        paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
+                        deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                      }
+                    : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
                 })
@@ -3437,6 +3447,16 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  ...(payload.payment
+                    ? {
+                        paymentCash: payload.payment.paymentCash,
+                        paymentCard: payload.payment.paymentCard,
+                        paymentQr: payload.payment.paymentQr,
+                        paymentOther: payload.payment.paymentOther,
+                        paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
+                        deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                      }
+                    : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
                 })
@@ -4011,6 +4031,16 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  ...(pay
+                    ? {
+                        paymentCash: pay.paymentCash,
+                        paymentCard: pay.paymentCard,
+                        paymentQr: pay.paymentQr,
+                        paymentOther: pay.paymentOther,
+                        paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
+                        deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
+                      }
+                    : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
                 })
@@ -4115,6 +4145,16 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  ...(hasPayment && payload.payment
+                    ? {
+                        paymentCash: payload.payment.paymentCash,
+                        paymentCard: payload.payment.paymentCard,
+                        paymentQr: payload.payment.paymentQr,
+                        paymentOther: payload.payment.paymentOther,
+                        paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
+                        deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
+                      }
+                    : {}),
                 }
                 const runKitchenAfterNonDineSubmit = () => {
                   const kitchenPrintKey =

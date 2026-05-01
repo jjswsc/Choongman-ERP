@@ -48,7 +48,7 @@ function isNetworkError(e: unknown): boolean {
   return false
 }
 
-export type AddTillResult = { success: boolean; message?: string }
+export type AddTillResult = { success: boolean; message?: string; queued?: boolean }
 
 /** 시재 입출금 - 온라인 시 API 호출, 오프라인 시 큐에 적재 */
 export async function addTillTransactionWithOffline(
@@ -63,6 +63,6 @@ export async function addTillTransactionWithOffline(
       method: 'POST',
       body: JSON.stringify(params),
     })
-    return { success: true }
+    return { success: true, queued: true }
   }
 }

@@ -1470,6 +1470,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   /** 모달을 닫을 때 더치페이·일부 결제 진행 초기화 (다음 결제 시 전액 자동 입력과 충돌 방지) */
   useEffect(() => {
     if (!showPaymentModal) {
+      resetPaymentInputs()
       setShowSplit(false)
       setSplitPaidSteps(0)
       setSplitMode('amount')
@@ -1548,13 +1549,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     pointUsedNum,
     showSplit,
     splitPaidSteps,
-    paymentSum,
-    paymentSumMatch,
     cartItems,
     pricingAdjustments,
     activePaymentTab,
     useAdminPaymentLines,
   ])
+
+  /**
+   * 결제 모달을 연 직후에는 수단 금액을 비워 둠(위 할인·합계 동기화 effect가 현금 전액을 넣어
+   * 「수단 선택 전 결제 완료」가 활성화되던 문제 방지). 동일 틱에서 할인 effect 다음에 실행.
+   */
+  useEffect(() => {
+    if (!showPaymentModal) return
+    resetPaymentInputs()
+  }, [showPaymentModal])
 
   const buildOrderMemo = (baseMemo: string) => {
     if (!needTaxInvoice) return baseMemo
@@ -1655,18 +1663,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         })
       )
     }
-    setPayCash(String(amount))
-    setPayCard('0')
-    setPayTrueMoney('0')
-    setPayWeChat('0')
-    setPayAlipay('0')
-    setPayPromptPay('0')
-    setPayLinePay('0')
-    setPayShopeePay('0')
-    setPayOther('0')
-    setPayDeliveryApp('0')
+    resetPaymentInputs()
     setDeliveryPaymentChannel('grab')
-    setPayAdminLineAmounts(Object.fromEntries(adminPaymentLinesRef.current.map((i) => [i.id, '0'])))
     setShowPaymentModal(true)
   }
   const openPaymentModal = () => {

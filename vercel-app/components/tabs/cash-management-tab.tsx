@@ -40,6 +40,13 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+/** 조회 기간(start~end)에 거래일이 포함되도록 YYYY-MM-DD 범위 확장 */
+function expandDateRangeForInclusiveDate(startStr: string, endStr: string, includeDate: string) {
+  const lo = includeDate < startStr ? includeDate : startStr
+  const hi = includeDate > endStr ? includeDate : endStr
+  return { start: lo, end: hi, changed: lo !== startStr || hi !== endStr }
+}
+
 export interface CashManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용 */
   offlineAware?: boolean
@@ -213,8 +220,19 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
       if (res.success) {
         setAddAmount('')
         setAddMemo('')
-        loadList()
-        await appAlert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
+        const { start, end, changed } = expandDateRangeForInclusiveDate(startStr, endStr, addDate)
+        if (changed) {
+          setStartStr(start)
+          setEndStr(end)
+        } else {
+          void loadList()
+        }
+        const queued = Boolean(res.queued)
+        await appAlert(
+          queued || !online
+            ? t('offlineBannerAdminSaved')
+            : translateApiMessage(res.message, t) || t('msg_saved')
+        )
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
       }
@@ -240,15 +258,15 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
     if (salesDateForWithdrawal) loadSalesWithdrawalCash()
   }, [salesDateForWithdrawal, loadSalesWithdrawalCash])
 
-  const loadSalesWithdrawalList = React.useCallback(() => {
-    if (!effectiveStore) return
+  const loadSalesWithdrawalList = React.useCallback((): Promise<void> => {
+    if (!effectiveStore) return Promise.resolve()
     setSalesWithdrawalListLoading(true)
     const start = new Date()
     start.setDate(start.getDate() - 90)
     const rangeStart = start.toISOString().slice(0, 10)
     const rangeEnd = todayStr()
     const fetcher = offlineAware ? getTillListWithCache : getTillList
-    fetcher({
+    return fetcher({
       startStr: rangeStart,
       endStr: rangeEnd,
       storeFilter: effectiveStore,
@@ -259,6 +277,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
       .then(setSalesWithdrawalList)
       .catch(() => setSalesWithdrawalList([]))
       .finally(() => setSalesWithdrawalListLoading(false))
+      .then(() => undefined)
   }, [effectiveStore, auth?.store, auth?.role, offlineAware])
 
   React.useEffect(() => {
@@ -301,10 +320,22 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
       if (res.success) {
         setSalesWithdrawalAmount('')
         setSalesWithdrawalMemo('')
-        loadList()
-        loadSalesWithdrawalList()
+        const transDay = todayStr()
+        const { start, end, changed } = expandDateRangeForInclusiveDate(startStr, endStr, transDay)
+        if (changed) {
+          setStartStr(start)
+          setEndStr(end)
+        } else {
+          void loadList()
+        }
+        await loadSalesWithdrawalList()
         loadSalesWithdrawalCash()
-        await appAlert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
+        const queued = Boolean(res.queued)
+        await appAlert(
+          queued || !online
+            ? t('offlineBannerAdminSaved')
+            : translateApiMessage(res.message, t) || t('msg_saved')
+        )
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
       }

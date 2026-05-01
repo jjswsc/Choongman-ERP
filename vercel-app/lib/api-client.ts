@@ -1947,13 +1947,19 @@ export async function addTillTransaction(params: {
   userRole?: string
   /** 매출액 출금 시 해당 현금 매출의 영업일 (YYYY-MM-DD) */
   salesDate?: string
-}) {
+}): Promise<{ success: boolean; message?: string; queued?: boolean }> {
   const res = await apiFetchWithOffline('/api/addTillTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const data = (await res.json()) as { success?: boolean; message?: string; queued?: boolean }
+  const queued = res.headers.get('X-Offline-Queued') === '1' || data.queued === true
+  return {
+    success: Boolean(data.success),
+    message: typeof data.message === 'string' ? data.message : undefined,
+    queued,
+  }
 }
 
 /** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
