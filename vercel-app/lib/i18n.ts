@@ -38822,8 +38822,6 @@ orderItemQty: 'ຈຳນວນ',
     posKitchenPartialReprintBanner: 'Đã cập nhật sau khi hủy một phần (đơn hiện tại)',
     posKitchenFullCancelBanner: 'Order fully cancelled — kitchen check',
     posCustomerReceiptPrint: 'Customer receipt',
-    posOpenPrintDenomHeading: 'Denominations',
-    posOpenPrintNoDenom: 'No denomination quantities entered.',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -42076,8 +42074,6 @@ orderItemQty: 'ຈຳນວນ',
     posKitchenPartialReprintBanner: 'Dikemas kini selepas batal sebahagian (pesanan semasa)',
     posKitchenFullCancelBanner: 'Order fully cancelled — kitchen check',
     posCustomerReceiptPrint: 'Customer receipt',
-    posOpenPrintDenomHeading: 'Denominations',
-    posOpenPrintNoDenom: 'No denomination quantities entered.',
   } as Record<string, string>,
 } as const
 
