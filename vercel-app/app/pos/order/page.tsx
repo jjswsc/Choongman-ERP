@@ -1611,7 +1611,9 @@ export default function PosOrderPage() {
                 >
                   <div className="flex items-center gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="truncate text-sm text-slate-800">{it.name}</div>
+                      <div className="truncate text-sm text-slate-800">
+                        {translatePosMenuLineForReceipt(it.name, t)}
+                      </div>
                       {lineNote ? (
                         <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">{lineNote}</p>
                       ) : null}

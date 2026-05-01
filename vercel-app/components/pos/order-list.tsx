@@ -9,6 +9,7 @@ import type { Order } from '@/lib/pos-types'
 import { cn } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 
 interface OrderListProps {
   deliveryOrders: Order[]
@@ -97,7 +98,7 @@ function OrderCard({
       <div className="space-y-1 mb-2">
         {order.items.slice(0, 2).map(item => (
           <p key={item.id} className="text-sm text-foreground">
-            {item.name} x{item.quantity}
+            {translatePosMenuLineForReceipt(item.name, t)} x{item.quantity}
           </p>
         ))}
         {order.items.length > 2 && (

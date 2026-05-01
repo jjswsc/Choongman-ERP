@@ -11,6 +11,7 @@ import {
   RECEIPT_TRAILING_BOTTOM_MM,
 } from '@/lib/pos-receipt-layout'
 import { posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
+import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 
 export function buildReceiptDocumentHtml(params: {
   title: string
@@ -19,17 +20,23 @@ export function buildReceiptDocumentHtml(params: {
   footerContent?: string
   /** 기본 영수증 CSS 뒤에 이어 붙일 화면별 추가 CSS */
   extraStyles?: string
+  /** BCP 47 (예: th, ko). 태국어 등 복합 스크립트 셰이핑·줄바꿈 힌트 */
+  htmlLang?: string
 }): string {
-  const { title, bodyContent, footerContent, extraStyles } = params
+  const { title, bodyContent, footerContent, extraStyles, htmlLang } = params
   const c = (tag: string) => '\u003c/' + tag + '>'
   const printOverscale = 1
   const printActionsStyle =
     '.receipt-print-actions { margin-top: 12px; text-align: center; } @media print { .receipt-print-actions { display: none !important; } } '
   const amt = RECEIPT_AMOUNT_COL_MM
   const gap = RECEIPT_GRID_COL_GAP_PX
+  const langAttr =
+    typeof htmlLang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(htmlLang.trim())
+      ? ' lang="' + htmlLang.trim().replace(/"/g, '') + '"'
+      : ''
   const styles =
     posThermalReceiptPageSizeRule() +
-    ' html, body { margin: 0; padding: 0; } html { height: auto; } body { width: 80mm; max-width: 80mm; min-height: auto; height: auto; box-sizing: border-box; font-family: \'Inter\', \'Pretendard\', \'Noto Sans KR\', \'Sukhumvit Set\', \'Noto Sans Thai\', \'Malgun Gothic\', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.42; letter-spacing: 0; padding-top: 0; padding-left: ' +
+    ' html, body { margin: 0; padding: 0; } html { height: auto; } body { width: 80mm; max-width: 80mm; min-height: auto; height: auto; box-sizing: border-box; font-family: \'Noto Sans Thai\', \'Leelawadee UI\', Tahoma, \'Sukhumvit Set\', \'Inter\', \'Pretendard\', \'Noto Sans KR\', \'Malgun Gothic\', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.48; letter-spacing: 0; padding-top: 0; padding-left: ' +
     String(RECEIPT_INNER_INSET_LEFT_MM) +
     'mm; padding-right: ' +
     String(RECEIPT_INNER_INSET_RIGHT_MM) +
@@ -39,11 +46,11 @@ export function buildReceiptDocumentHtml(params: {
     String(printOverscale) +
     '; } } .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -' +
     String(RECEIPT_CONTENT_NUDGE_LEFT_MM) +
-    'mm; break-inside: avoid; page-break-inside: avoid; } .receipt-order-header .receipt-store-name { font-weight: 700; font-size: 13px; color: #000; } .receipt-order-label { font-size: 11px; color: #000; font-weight: 700; margin-top: 2px; white-space: normal; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; } .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; color: #000; } .receipt-sub-title { text-align: center; font-size: 11px; color: #000; } .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; } .receipt-divider-strong { border-top: 2px solid #000; margin: 8px 0; } .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ' +
+    'mm; break-inside: avoid; page-break-inside: avoid; } .receipt-order-header .receipt-store-name { font-weight: 700; font-size: 13px; color: #000; } .receipt-order-label { font-size: 11px; color: #000; font-weight: 700; margin-top: 2px; white-space: normal; overflow-wrap: break-word; word-break: normal; max-width: 100%; } .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; color: #000; } .receipt-sub-title { text-align: center; font-size: 11px; color: #000; } .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; } .receipt-divider-strong { border-top: 2px solid #000; margin: 8px 0; } .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ' +
     String(amt) +
     'mm; column-gap: ' +
     String(gap) +
-    'px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; color: #000; } .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; } .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; font-size: 10px; line-height: 1.2; } .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; } .receipt-meta-row { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; color: #000; } .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; color: #000; } .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; color: #000; font-weight: 600; } .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ' +
+    'px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; color: #000; } .receipt-row > span:first-child { min-width: 0; overflow-wrap: break-word; word-break: normal; } .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: break-word; word-break: normal; font-size: 10px; line-height: 1.2; } .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; } .receipt-meta-row { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; color: #000; } .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: normal; color: #000; } .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: break-word; word-break: normal; color: #000; font-weight: 600; } .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ' +
     String(amt) +
     'mm; column-gap: ' +
     String(gap) +
@@ -53,5 +60,24 @@ export function buildReceiptDocumentHtml(params: {
   const footer = footerContent
     ? '<div class="receipt-print-actions">' + footerContent + c('div')
     : ''
-  return '<!DOCTYPE html><html><head><title>' + title + '</title><style>' + styles + '</style>' + c('head') + '<body>' + bodyContent + footer + c('body') + c('html')
+  const headInner =
+    '<meta charset="utf-8"/>' +
+    POS_PRINT_NOTO_SANS_THAI_FONT_LINKS +
+    '<title>' +
+    title +
+    '</title><style>' +
+    styles +
+    '</style>'
+  return (
+    '<!DOCTYPE html><html' +
+    langAttr +
+    '><head>' +
+    headInner +
+    c('head') +
+    '<body>' +
+    bodyContent +
+    footer +
+    c('body') +
+    c('html')
+  )
 }

@@ -15,7 +15,9 @@ import { updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { Clock, CheckCircle, Check } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
+import { useT } from '@/lib/i18n'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 
 export interface TableOrderModalProps {
   open: boolean
@@ -35,6 +37,7 @@ export function TableOrderModal({
   t = (k) => k,
 }: TableOrderModalProps) {
   const { lang } = useLang()
+  const ti = useT(lang)
   const serveActionLabel = t('posServeAction') || '서빙'
   const isServedReadyForPayment = order?.status === 'completed' || order?.status === 'ready'
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
@@ -106,7 +109,9 @@ export function TableOrderModal({
                           )}
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{item.name}</p>
+                            <p className="text-sm font-medium truncate">
+                              {translatePosMenuLineForReceipt(item.name, ti)}
+                            </p>
                             <p className="text-xs text-muted-foreground tabular-nums">
                               x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
                             </p>

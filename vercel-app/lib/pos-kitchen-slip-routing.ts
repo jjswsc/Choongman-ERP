@@ -2,8 +2,8 @@ import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 
 /**
  * 주방 주문서 분할
- * - kitchenMode: 주방 프린터 대수(1~3). 1대여도 품목별 "주방 미인쇄(0)"는 제외됨.
- * - 최종 판정은 메뉴별(pos_menus.kitchen_printer)만 사용.
+ * - kitchenMode: 주방 프린터 대수(1~3). **1대(모드 1)**이면 항상 통합 한 장(메뉴에 2·3이 남아 있어도 분할하지 않음).
+ * - kitchenMode 2·3일 때만 메뉴별 pos_menus.kitchen_printer(0~3)로 버킷을 나눈다.
  * - 대분류/카테고리 선택은 관리자 화면에서 메뉴별 값을 일괄 갱신하는 도구이며,
  *   인쇄 시점 라우팅 우선순위에는 참여하지 않음.
  * - 프로모션 줄에 promoItems 가 있으면(저장된 스냅샷) 구성 메뉴별로 펼쳐 각 메뉴의 주방으로 라우팅(splitPromoKitchenLines 기본 true)
@@ -181,7 +181,7 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
 
 /**
  * 주방 슬립 그룹. 주방으로 나갈 품목이 없으면 빈 배열.
- * kitchenMode 1: 메뉴별 미인쇄(0) 제외 후 한 장(통합 라벨). 2·3: 프린터별 버킷.
+ * kitchenMode 1: 미인쇄(0) 제외 후 한 장(통합). 2·3: 프린터별 버킷(메뉴 kp 2·3이 있으면 effective mode 상향).
  */
 export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   items: T[],
@@ -199,10 +199,11 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     ...Object.values(kpMap).map((v) => (v === 2 || v === 3 ? v : 1))
   )
   /**
-   * 메뉴별 주방프린터가 2·3으로 지정되어 있으면 kitchenMode가 낮아도 라우팅을 보존한다.
-   * (운영 현장에서 메뉴별 설정을 최종 기준으로 쓰기 위함)
+   * 모드 1대: 설정을 우선해 항상 통합 슬립만 낸다(메뉴에 kitchen_printer=2·3 잔재가 있어도 한 장).
+   * 모드 2·3대: 메뉴에 2·3 라우트가 있으면 effective mode를 올려 버킷을 유지한다.
    */
-  const mode = Math.min(3, Math.max(configuredMode, printerHintMax))
+  const mode =
+    configuredMode === 1 ? 1 : Math.min(3, Math.max(configuredMode, printerHintMax))
   const menuIdByName: Record<string, string> = {}
   const ambiguousMenuNames = new Set<string>()
   for (const [mid, nm] of Object.entries(nameMap)) {

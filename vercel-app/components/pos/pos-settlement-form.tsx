@@ -46,6 +46,7 @@ import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
 import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
@@ -663,11 +664,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       : t('posSettlementReport') || 'POS 결산 리포트'
     const dateLabel =
       openMode ? t('posOpenReportDate') || t('posSettleDate') || '결산일' : t('posSettleDate') || '결산일'
-    /** 80mm 열전사: 과한 가로폭·좁은 우측 여백 시 오른쪽 잘림 — @page·padding·word-break 정렬 */
-    const printCss = `@page{size:80mm auto;margin:0}html,body{margin:0;padding:0}body{font-family:'Noto Sans Thai','Sarabun','Inter','Noto Sans KR',Arial,sans-serif;box-sizing:border-box;max-width:80mm;width:100%;padding:2mm 5mm 3mm 3mm;font-size:11px;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{font-size:13px;margin:0 0 6px;word-break:break-word}p{margin:2px 0;word-break:break-word}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}td{padding:2px 0;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}td.r{text-align:right;white-space:nowrap;word-break:normal;padding-left:4px;width:26%}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:6px;margin-top:6px}`
+    /** 80mm 열전사: 태국어는 overflow-wrap:anywhere 금지(모음·자모 분리). OS 폰트 폴백 포함 */
+    const printCss = `@page{size:80mm auto;margin:0}html,body{margin:0;padding:0}body{font-family:'Noto Sans Thai','Leelawadee UI',Tahoma,'Sarabun','Inter','Noto Sans KR',Arial,sans-serif;box-sizing:border-box;max-width:80mm;width:100%;padding:2mm 5mm 3mm 3mm;font-size:11px;line-height:1.48;-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{font-size:13px;margin:0 0 6px;word-break:normal;overflow-wrap:break-word}p{margin:2px 0;word-break:normal;overflow-wrap:break-word}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}td{padding:2px 0;vertical-align:top;word-break:normal;overflow-wrap:break-word}td.r{text-align:right;white-space:nowrap;word-break:normal;overflow-wrap:normal;padding-left:4px;width:26%}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:6px;margin-top:6px}`
+    const htmlLangAttr =
+      typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim())
+        ? ` lang="${lang.trim().replace(/"/g, '')}"`
+        : ''
     const fullHtml = `
       <!DOCTYPE html>
-      <html><head><meta charset="utf-8"/><title>${reportTitle} - ${storeLabel} - ${settleDate}</title>
+      <html${htmlLangAttr}><head><meta charset="utf-8"/>${POS_PRINT_NOTO_SANS_THAI_FONT_LINKS}<title>${reportTitle} - ${storeLabel} - ${settleDate}</title>
       <style>${printCss}</style>
       </head><body>
       <h2>${reportTitle}</h2>

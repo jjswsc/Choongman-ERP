@@ -1754,6 +1754,7 @@ export default function PosTerminalPage() {
     const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
     const receiptHtml = buildReceiptDocumentHtml({
       title: tPrint('posReceipt') || '영수증',
+      htmlLang: printLang,
       bodyContent: printContent,
       footerContent: showPrintButtonInReceipt
         ? '<button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +

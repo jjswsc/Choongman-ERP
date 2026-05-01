@@ -65,6 +65,7 @@ import {
 } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth-context'
@@ -588,6 +589,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const v = t(key)
     return !v || v === key ? fallback : v
   }
+  const trMenuLine = (s: string) => translatePosMenuLineForReceipt(s, t)
 
   const mapCartItemToOrderPayload = (i: CartItem) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
@@ -2333,15 +2335,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                   const mainName = optMatch ? optMatch[1].trim() : item.name
                   const optionPart = optMatch ? optMatch[2].trim() : null
+                  const mainNameDisp = trMenuLine(mainName)
+                  const optionPartDisp = optionPart ? trMenuLine(optionPart) : null
                   const isBanban = optionPart?.includes(' / ')
                   const [flavor1, flavor2] = isBanban && optionPart ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
+                  const flavor1Disp = flavor1 ? trMenuLine(flavor1) : null
+                  const flavor2Disp = flavor2 ? trMenuLine(flavor2) : null
                   const promoComposeLines =
                     Array.isArray(item.promoItems) && item.promoItems.length > 0
                       ? item.promoItems.slice(0, 4).map((p) => {
                           const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
                           const optionName = p.optionId ? optionById.get(String(p.optionId))?.name?.trim() : ''
-                          const optionLabel = optionName ? ` (${optionName})` : ''
-                          return `${menuName}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
+                          const optionLabel = optionName ? ` (${trMenuLine(optionName)})` : ''
+                          return `${trMenuLine(menuName)}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
                         })
                       : []
                   const promoComposeAllLines =
@@ -2349,8 +2355,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       ? item.promoItems.map((p) => {
                           const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
                           const optionName = p.optionId ? optionById.get(String(p.optionId))?.name?.trim() : ''
-                          const optionLabel = optionName ? ` (${optionName})` : ''
-                          return `${menuName}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
+                          const optionLabel = optionName ? ` (${trMenuLine(optionName)})` : ''
+                          return `${trMenuLine(menuName)}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
                         })
                       : []
                   const promoComposeMoreCount =
@@ -2371,25 +2377,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           <TooltipTrigger asChild>
                             <p
                               className="text-sm font-medium cursor-default touch-manipulation select-none line-clamp-2 min-w-0"
-                              title={item.name}
+                              title={trMenuLine(item.name)}
                               onClick={() => setMenuNameTooltipOpen((prev) => (prev === item.id ? null : item.id))}
                             >
-                              {mainName}
+                              {mainNameDisp}
                             </p>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[min(20rem,85vw)] text-left whitespace-normal">
-                            {item.name}
+                            {trMenuLine(item.name)}
                           </TooltipContent>
                         </Tooltip>
                         {isBanban && flavor1 && flavor2 ? (
                           <p className="text-xs text-muted-foreground mt-0.5 break-words">
-                            <span>① {flavor1}</span>
+                            <span>① {flavor1Disp}</span>
                             <span className="mx-1">·</span>
-                            <span>② {flavor2}</span>
+                            <span>② {flavor2Disp}</span>
                           </p>
-                        ) : optionPart ? (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 min-w-0 break-words" title={optionPart}>
-                            {optionPart}
+                        ) : optionPartDisp ? (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 min-w-0 break-words" title={optionPartDisp}>
+                            {optionPartDisp}
                           </p>
                         ) : null}
                         {promoComposeLines.length > 0 ? (
@@ -2400,7 +2406,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                 className="text-xs text-blue-700/90 dark:text-blue-300 min-w-0 break-words"
                                 title={line}
                               >
-                                - {line}
+                                - {trMenuLine(line)}
                               </p>
                             ))}
                             {promoComposeMoreCount > 0 ? (
@@ -2414,7 +2420,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                   <div className="space-y-0.5">
                                     {promoComposeAllLines.map((line, idx) => (
                                       <p key={`${item.id}-promo-all-line-${idx}`} className="text-xs break-words">
-                                        - {line}
+                                        - {trMenuLine(line)}
                                       </p>
                                     ))}
                                   </div>
@@ -3864,7 +3870,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5"
                             >
                               <div className="min-w-0">
-                                <p className="truncate text-xs font-medium">{item.name}</p>
+                                <p className="truncate text-xs font-medium">{trMenuLine(item.name)}</p>
                                 <p className="text-[11px] text-muted-foreground">
                                   {tr('qty', '수량')}: {formatBahtNum(item.quantity)} · {tr('posUnassignedShort', '미배정')}: {formatBahtNum(remain)}
                                 </p>

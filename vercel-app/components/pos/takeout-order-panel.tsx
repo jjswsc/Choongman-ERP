@@ -19,6 +19,7 @@ import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 
 export interface TakeoutOrderPanelProps {
   orderLabel: string
@@ -202,6 +203,9 @@ export function TakeoutOrderPanel({
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : item.name
                     const optionPart = optMatch ? optMatch[2].trim() : null
+                    const mainDisp = translatePosMenuLineForReceipt(mainName, ti)
+                    const optionDisp = optionPart ? translatePosMenuLineForReceipt(optionPart, ti) : null
+                    const fullDisp = translatePosMenuLineForReceipt(item.name, ti)
                     return (
                       <li
                         key={item.id}
@@ -215,17 +219,17 @@ export function TakeoutOrderPanel({
                             type="button"
                             className="text-sm font-medium truncate text-left w-full hover:underline"
                             onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
-                            title={item.name}
+                            title={fullDisp}
                           >
-                            {mainName}
+                            {mainDisp}
                           </button>
                           <p className="text-xs text-muted-foreground tabular-nums">
-                            {optionPart && <span className="mr-1">{optionPart}</span>}
+                            {optionDisp && <span className="mr-1">{optionDisp}</span>}
                             x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
                           </p>
                           {expandedItemId === item.id && (
                             <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">
-                              {item.name}
+                              {fullDisp}
                             </p>
                           )}
                         </div>

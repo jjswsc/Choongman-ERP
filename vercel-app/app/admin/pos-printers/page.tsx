@@ -2029,6 +2029,10 @@ export default function PosPrintersPage() {
               <p className="text-xs text-muted-foreground">
                 {tr("posDrawerBridgeHint", "")}
               </p>
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+                <p className="mb-1.5 font-semibold text-foreground">{t("posDrawerStaffCriteriaTitle")}</p>
+                <p className="whitespace-pre-line leading-relaxed">{t("posDrawerStaffCriteriaBody")}</p>
+              </div>
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium">{tr("posDrawerOpenOption", "돈통열기 옵션")}</label>

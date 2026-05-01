@@ -334,6 +334,7 @@ export function PosReceiptModal({
     `
     const fullHtml = buildReceiptDocumentHtml({
       title: t('posReceipt') || '영수증',
+      htmlLang: lang,
       bodyContent: printContent,
       extraStyles: `
         .receipt-brand-wrap { text-align: center; }

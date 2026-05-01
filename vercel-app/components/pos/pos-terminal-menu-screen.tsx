@@ -59,6 +59,7 @@ import {
   resolvePosMenuDescriptionForChannel,
   resolvePosMenuOptionDescriptionForChannel,
 } from '@/lib/pos-menu-display-description'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
@@ -1121,7 +1122,9 @@ export function PosTerminalMenuScreen({
                     <tr key={row.id} className="border-t">
                       <td className="px-2 py-1.5">
                         <span style={{ fontSize: `${screenConfig.menuListFontSize}px` }}>
-                          {row.rowType === 'promo' ? `[Promo] ${row.name}` : row.name}
+                          {row.rowType === 'promo'
+                            ? `[Promo] ${translatePosMenuLineForReceipt(row.name, t)}`
+                            : translatePosMenuLineForReceipt(row.name, t)}
                         </span>
                       </td>
                       <td className="px-2 py-1.5 text-right tabular-nums">{row.price.toLocaleString()}</td>

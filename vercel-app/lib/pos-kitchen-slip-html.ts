@@ -4,6 +4,7 @@
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
+import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
@@ -69,7 +70,7 @@ export function getKitchenSlipPaperCss(
     height: auto;
     margin: 0 auto;
     box-sizing: border-box;
-    font-family: Inter, Pretendard, "Noto Sans KR", "Sukhumvit Set", "Noto Sans Thai", "Malgun Gothic", Arial, sans-serif;
+    font-family: "Noto Sans Thai", "Leelawadee UI", Tahoma, "Sukhumvit Set", Inter, Pretendard, "Noto Sans KR", "Malgun Gothic", Arial, sans-serif;
     font-size: ${tp.body}px;
     padding: ${KITCHEN_SLIP_PADDING_MM.t}mm ${KITCHEN_SLIP_PADDING_MM.r}mm ${KITCHEN_SLIP_PADDING_MM.b}mm ${KITCHEN_SLIP_PADDING_MM.l}mm;
     -webkit-print-color-adjust: ${color};
@@ -81,13 +82,13 @@ export function getKitchenSlipPaperCss(
 function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
   const tp = typographyForScale(design.fontScale)
   return `
-.k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: break-word; overflow-wrap: anywhere; }
-.k-row { margin: 6px 0; font-size: ${tp.row}px; max-width: 100%; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.4; letter-spacing: -0.01em; }
-.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.3; letter-spacing: -0.01em; }
+.k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: normal; overflow-wrap: break-word; line-height: 1.35; }
+.k-row { margin: 6px 0; font-size: ${tp.row}px; max-width: 100%; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.45; letter-spacing: -0.01em; }
+.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.35; letter-spacing: -0.01em; }
 .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: ${tp.memo}px; }
 .k-row-main { display: flex; align-items: flex-start; gap: 4px; width: 100%; }
 .k-row-qty { flex: 0 0 auto; min-width: 2.5em; font-variant-numeric: tabular-nums; }
-.k-row-name { flex: 1 1 auto; min-width: 0; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
+.k-row-name { flex: 1 1 auto; min-width: 0; white-space: normal; word-break: normal; overflow-wrap: break-word; }
 `
 }
 
@@ -189,6 +190,7 @@ export function buildKitchenSlipHtml(params: {
   const c = (tag: string) => '\u003c/' + tag + '>'
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
+    POS_PRINT_NOTO_SANS_THAI_FONT_LINKS +
     '<meta name="viewport" content="width=device-width,initial-scale=1"/>' +
     '<title>' +
     escapeHtml(label) +

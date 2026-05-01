@@ -4081,6 +4081,9 @@ export const i18n = {
     posDrawerForceOpen: '강제열기',
     posDrawerBridgeHint:
       '※ 실제 자동 열림은 POS PC의 로컬 드로어 브리지(127.0.0.1) 실행이 필요합니다. 브리지가 없으면 설정은 저장되지만 하드웨어는 열리지 않습니다.',
+    posDrawerStaffCriteriaTitle: '[직원 안내] 돈통이 자동으로 열릴 때',
+    posDrawerStaffCriteriaBody:
+      '• 현금을 받는 결제를 완료할 때 — 단, 아래 「돈통열기 옵션」이 「강제 열기」이면 현금 결제만으로는 자동으로 열리지 않습니다. 그때는 결제 화면에서 수동 돈통 열기를 사용하세요.\n• POS 홈에서 「영업 시작」 또는 「영업 마감」을 눌렀을 때\n• 영업 시작 화면에서 오픈 시제를 저장할 때\n• POS 시재 관리에서 「시재 입금」을 등록할 때\n• 사유·비밀번호가 필요한 수동 열기는 위 옵션을 따릅니다.\n※ 실제 린이 나오려면 Windows POS(하이브리드) 또는 PC의 로컬 돈통 브리지(127.0.0.1)가 동작 중이어야 합니다.',
     posPromoCostSummary: '원가·할인·마진',
     posPromoRegularSum: '정가 합계',
     posPromoCostSum: '원가 합계',
@@ -11107,6 +11110,9 @@ orderItemQty: 'Qty',
     posDrawerReasonOnly: 'Reason only',
     posDrawerBridgeHint:
       '※ Auto-open requires the local cash drawer bridge (127.0.0.1) on the POS PC. Without the bridge, settings save but the drawer hardware will not open.',
+    posDrawerStaffCriteriaTitle: '[Staff] When the cash drawer opens automatically',
+    posDrawerStaffCriteriaBody:
+      '• When you complete a payment that includes cash — except if the drawer option below is **Force open only**: then cash payments do not auto-open the drawer; use manual drawer open on the payment screen.\n• When you tap **Business open** or **Business close** on the POS home screen.\n• When you save opening drawer cash on the business-open screen.\n• When you register **Cash in** (till deposit) on POS cash management.\n• Manual open (reason / password) follows the option below.\n※ The physical drawer only kicks when the Windows hybrid POS app or the local drawer bridge (127.0.0.1) is running on the PC.',
     posKitchenOptionsHint: 'Configure kitchen slip output mode, category routing, and auto print.',
     posKitchenAutoPrintOnOrder: 'Auto print kitchen slip when order is completed',
     posItemBarcode: 'Item barcode',
@@ -19073,7 +19079,7 @@ orderItemQty: 'จำนวน',
     posOpenReportDate: 'วันที่เปิดร้าน',
     posSettlementOfflineSaved: 'บันทึกข้อมูลปิดยอดแบบออฟไลน์แล้ว',
     posSystemTotal: 'ยอดตามระบบ',
-    posSystemSubtotal: 'ยอดย่อย',
+    posSystemSubtotal: 'ยอดรวมย่อย',
     posSystemVat: 'VAT (7%)',
     posCashActual: 'เงินสดจริงในลิ้นชัก',
     posMorningOpeningFloat: 'เงินตั้งต้นตอนเปิดร้านเช้า',
@@ -19448,6 +19454,9 @@ orderItemQty: 'จำนวน',
     posDrawerReasonOnly: 'ระบุเหตุผลเท่านั้น',
     posDrawerBridgeHint:
       '※ การเปิดอัตโนมัติต้องใช้แบริดจ์ลิ้นชักแบบโลคัล (127.0.0.1) บนเครื่อง POS หากไม่มีแบริดจ์ การตั้งค่าจะถูกบันทึกแต่ฮาร์ดแวร์จะไม่เปิด',
+    posDrawerStaffCriteriaTitle: '[พนักงาน] ลิ้นชักเงินเปิดอัตโนมัติเมื่อไหร่',
+    posDrawerStaffCriteriaBody:
+      '• เมื่อชำระเงินที่มีเงินสดเสร็จ — ยกเว้นถ้าตั้งค่า「ตัวเลือกการเปิดลิ้นชัก」เป็น「บังคับเปิด」อย่างเดียว: ระบบจะไม่เปิดอัตโนมัติตอนรับเงินสด ให้ใช้เมนูเปิดลิ้นชักด้วยมือในหน้าชำระเงิน\n• เมื่อกด「เปิดร้าน」หรือ「ปิดร้าน」ที่หน้าแรก POS\n• เมื่อบันทึกเงินสดเปิดร้าน ที่หน้าเปิดร้าน\n• เมื่อบันทึก「นำเงินเข้า」(สาส์ด) ในหน้าจัดการเงินสด POS\n• การเปิดด้วยมือ(เหตุผล/รหัส) เป็นไปตามตัวเลือกด้านล่าง\n※ ลิ้นชักจะดีดจริงเมื่อใช้แอป Windows POS (ไฮบริด) หรือ bridge บนเครื่อง (127.0.0.1) ทำงานอยู่',
     posDrawerTab: 'ลิ้นชักเงิน',
     posEditOrderNo: 'แก้ไข',
     posEditOrderNoDialogTitle: 'แก้ไขเลขที่ออเดอร์',
@@ -26417,6 +26426,8 @@ orderItemQty: 'အရေအတွက်',
     posReceiptSegmentSearchPh: 'Search segment (delivery app, takeout label…)',
     posReceiptDeliveryAppFilter: 'Delivery app',
     posDrawerHintV2: 'Auto-opens when a sale includes cash. Also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
+    posDrawerStaffCriteriaBody: '• When you complete a payment that includes cash — except if the drawer option below is **Force open only**: then cash payments do not auto-open the drawer; use manual drawer open on the payment screen.\n• When you tap **Business open** or **Business close** on the POS home screen.\n• When you save opening drawer cash on the business-open screen.\n• When you register **Cash in** (till deposit) on POS cash management.\n• Manual open (reason / password) follows the option below.\n※ The physical drawer only kicks when the Windows hybrid POS app or the local drawer bridge (127.0.0.1) is running on the PC.',
+    posDrawerStaffCriteriaTitle: '[Staff] When the cash drawer opens automatically',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -32239,6 +32250,8 @@ orderItemQty: 'ຈຳນວນ',
     posOpenReportDate: 'Business date',
     posSettlementOpenReport: 'POS opening report',
     posDrawerHintV2: 'Auto-opens when a sale includes cash. Also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
+    posDrawerStaffCriteriaBody: '• When you complete a payment that includes cash — except if the drawer option below is **Force open only**: then cash payments do not auto-open the drawer; use manual drawer open on the payment screen.\n• When you tap **Business open** or **Business close** on the POS home screen.\n• When you save opening drawer cash on the business-open screen.\n• When you register **Cash in** (till deposit) on POS cash management.\n• Manual open (reason / password) follows the option below.\n※ The physical drawer only kicks when the Windows hybrid POS app or the local drawer bridge (127.0.0.1) is running on the PC.',
+    posDrawerStaffCriteriaTitle: '[Staff] When the cash drawer opens automatically',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -35454,6 +35467,8 @@ orderItemQty: 'ຈຳນວນ',
     posOpenReportDate: 'Business date',
     posSettlementOpenReport: 'POS opening report',
     posDrawerHintV2: 'Auto-opens when a sale includes cash. Also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
+    posDrawerStaffCriteriaBody: '• When you complete a payment that includes cash — except if the drawer option below is **Force open only**: then cash payments do not auto-open the drawer; use manual drawer open on the payment screen.\n• When you tap **Business open** or **Business close** on the POS home screen.\n• When you save opening drawer cash on the business-open screen.\n• When you register **Cash in** (till deposit) on POS cash management.\n• Manual open (reason / password) follows the option below.\n※ The physical drawer only kicks when the Windows hybrid POS app or the local drawer bridge (127.0.0.1) is running on the PC.',
+    posDrawerStaffCriteriaTitle: '[Staff] When the cash drawer opens automatically',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -38675,6 +38690,8 @@ orderItemQty: 'ຈຳນວນ',
     posOpenReportDate: 'Business date',
     posSettlementOpenReport: 'POS opening report',
     posDrawerHintV2: 'Auto-opens when a sale includes cash. Also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
+    posDrawerStaffCriteriaBody: '• When you complete a payment that includes cash — except if the drawer option below is **Force open only**: then cash payments do not auto-open the drawer; use manual drawer open on the payment screen.\n• When you tap **Business open** or **Business close** on the POS home screen.\n• When you save opening drawer cash on the business-open screen.\n• When you register **Cash in** (till deposit) on POS cash management.\n• Manual open (reason / password) follows the option below.\n※ The physical drawer only kicks when the Windows hybrid POS app or the local drawer bridge (127.0.0.1) is running on the PC.',
+    posDrawerStaffCriteriaTitle: '[Staff] When the cash drawer opens automatically',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -41911,6 +41928,8 @@ orderItemQty: 'ຈຳນວນ',
     posOpenReportDate: 'Business date',
     posSettlementOpenReport: 'POS opening report',
     posDrawerHintV2: 'Auto-opens when a sale includes cash. Also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
+    posDrawerStaffCriteriaBody: '• When you complete a payment that includes cash — except if the drawer option below is **Force open only**: then cash payments do not auto-open the drawer; use manual drawer open on the payment screen.\n• When you tap **Business open** or **Business close** on the POS home screen.\n• When you save opening drawer cash on the business-open screen.\n• When you register **Cash in** (till deposit) on POS cash management.\n• Manual open (reason / password) follows the option below.\n※ The physical drawer only kicks when the Windows hybrid POS app or the local drawer bridge (127.0.0.1) is running on the PC.',
+    posDrawerStaffCriteriaTitle: '[Staff] When the cash drawer opens automatically',
   } as Record<string, string>,
 } as const
 
