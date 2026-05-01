@@ -187,6 +187,7 @@ export function PosReceiptModal({
       lang,
       origin: typeof window !== 'undefined' ? window.location.origin : '',
       printedAt: new Date(),
+      forceSimpleTextMode: /ekkamai/i.test(String(receiptData.storeCode || '')),
       designOverride: {
         receiptBizName,
         receiptBizTaxId,

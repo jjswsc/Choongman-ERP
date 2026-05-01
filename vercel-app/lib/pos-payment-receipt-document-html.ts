@@ -130,10 +130,23 @@ export type BuildPosPaymentReceiptDocumentHtmlParams = {
   printerSettings?: PosPrinterSettings | null
   /** 모달 등: API 설정 위에 덮어쓸 필드 */
   designOverride?: Partial<PosPaymentReceiptDesignResolved>
+  /** true면 2열 레이아웃(grid/flex/table)을 쓰지 않는 초단순 텍스트 모드 강제 */
+  forceSimpleTextMode?: boolean
 }
 
 export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceiptDocumentHtmlParams): string {
-  const { receiptData, menus, orderTypeLabels, t, lang, origin, printedAt, printerSettings, designOverride } = params
+  const {
+    receiptData,
+    menus,
+    orderTypeLabels,
+    t,
+    lang,
+    origin,
+    printedAt,
+    printerSettings,
+    designOverride,
+    forceSimpleTextMode,
+  } = params
   const tr = (key: string, fallback: string) => {
     const value = t(key)
     return value && value !== key ? value : fallback
@@ -179,6 +192,55 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     hour12: false,
   }).format(at)
   const isTaxInvoice = !!taxInvoice
+  const forceSimple =
+    typeof forceSimpleTextMode === 'boolean'
+      ? forceSimpleTextMode
+      : /ekkamai/i.test(String(receiptData.storeCode || ''))
+  if (forceSimple) {
+    const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
+    const itemLines = (receiptData.items || [])
+      .map((it) => {
+        const name = translatePosMenuLineForReceipt(it.name, t)
+        const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
+        return `${Number(it.qty) || 1}x ${name} = ${amt}`
+      })
+      .join('<br/>')
+    const simpleHtml = `
+      <div class="receipt-content receipt-payment-simple">
+        <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
+        <div class="simple-line">${esc(tr('store', '매장'))}: ${esc(receiptData.storeCode)}</div>
+        <div class="simple-line">${esc(tr('posOrderNo', '주문번호'))}: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
+        <div class="simple-line">${esc(tr('date', 'Date'))}: ${esc(printedAtStr)}</div>
+        <div class="simple-line">${esc(tr('posOrderType', 'Order Type'))}: ${esc(orderTypeLabel)}</div>
+        ${tableForPrint ? `<div class="simple-line">${esc(tr('posTable', '테이블'))}: ${escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableForPrint)}</div>` : ''}
+        ${d.receiptBizName ? `<div class="simple-line">${esc(d.receiptBizName)}</div>` : ''}
+        ${d.receiptBizAddress ? `<div class="simple-line">${esc(d.receiptBizAddress)}</div>` : ''}
+        ${d.receiptBizPhone ? `<div class="simple-line">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
+        <div class="simple-divider"></div>
+        ${itemLines ? `<div class="simple-block">${itemLines}</div>` : ''}
+        <div class="simple-divider"></div>
+        <div class="simple-line">${esc(t('posSubtotal') || '소계')}: ${formatBahtNum(receiptData.subtotal)}</div>
+        ${receiptData.discountAmt > 0 ? `<div class="simple-line">${esc(t('posDiscount') || '할인')}: -${formatBahtNum(receiptData.discountAmt)}</div>` : ''}
+        ${(receiptData.deliveryFee ?? 0) > 0 ? `<div class="simple-line">${esc(t('posDeliveryFee') || '배달 수수료')}: +${formatBahtNum(receiptData.deliveryFee)}</div>` : ''}
+        ${(receiptData.packagingFee ?? 0) > 0 ? `<div class="simple-line">${esc(t('posPackagingFee') || '포장 수수료')}: +${formatBahtNum(receiptData.packagingFee)}</div>` : ''}
+        ${(receiptData.vatFeeAmt ?? 0) > 0 ? `<div class="simple-line">${esc(t('posVatLabel') || '부가세')}: ${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</div>` : ''}
+        <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
+      </div>
+    `
+    return buildReceiptDocumentHtml({
+      title: t('posReceipt') || '영수증',
+      htmlLang: lang,
+      bodyContent: simpleHtml,
+      extraStyles: `
+        .receipt-payment-simple { color: #000; }
+        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
+        .simple-block { font-size: 11px; line-height: 1.45; margin: 4px 0; word-break: break-word; }
+        .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
+        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; }
+      `,
+    })
+  }
   const taxCustType = taxInvoice
     ? taxInvoice.customerType === 'company'
       ? tr('posTaxCustomerCorporate', '법인')

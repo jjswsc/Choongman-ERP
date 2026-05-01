@@ -368,6 +368,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         origin: typeof window !== 'undefined' ? window.location.origin : '',
         printedAt: paidAt,
         printerSettings: settings,
+        forceSimpleTextMode: /ekkamai/i.test(store),
       })
       printPosHtmlDocument(fullHtml, {
         title: t('posReceipt') || '영수증',
