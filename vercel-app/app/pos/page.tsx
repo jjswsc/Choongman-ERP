@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo, Suspense } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
 import { POSHeader } from '@/components/pos/pos-header'
@@ -12,7 +12,7 @@ import { Circle, PlayCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { ADMIN_UI_LANG_OPTIONS, useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { useStoreList, getPosTodaySales, getLoginData, loginCheck } from '@/lib/api-client'
+import { useStoreList, getPosTodaySales, getLoginData, loginCheck, getPosPrinterSettings } from '@/lib/api-client'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import type { Store } from '@/lib/pos-types'
 import {
@@ -51,6 +51,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { appAlert } from '@/lib/app-message'
+import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
 
 /** POS 첫 화면: 주문(매장/포장/배달), 영수증, 결산, 근태 등 타일 */
 function POSMainPageInner() {
@@ -111,6 +113,7 @@ function POSMainPageInner() {
   const [demoIntroAccepted, setDemoIntroAccepted] = useState(false)
   const showDemoIntro = isPosDemo && !requestedScenarioId && !demoIntroAccepted
   const isDemoTourEnabled = isPosDemo && !showDemoIntro
+  const businessNavDrawerWarnedRef = useRef(false)
   useEffect(() => {
     setHybridPosShell(
       typeof window !== 'undefined' &&
@@ -205,20 +208,44 @@ function POSMainPageInner() {
     })
   }, [auth?.role, isPosDemo])
 
+  const kickDrawerThenNavigate = useCallback(
+    async (mode: 'open' | 'close', path: string) => {
+      if (!isPosDemo && storeCode) {
+        const hw = await getPosPrinterSettings({ storeCode }).catch(() => null)
+        const dr = await openPosCashDrawer({
+          reason: mode === 'open' ? 'business_open_nav' : 'business_close_nav',
+          source: mode === 'open' ? 'business_open_nav' : 'business_close_nav',
+          storeCode,
+          userName: auth?.user,
+          drawerOpenOption: drawerOpenOptionFromPrinterSettings(hw),
+        })
+        if (!dr.success && !businessNavDrawerWarnedRef.current) {
+          businessNavDrawerWarnedRef.current = true
+          await appAlert(
+            t('posDrawerOpenBridgeFail') ||
+              '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.'
+          )
+        }
+      }
+      navigatePosOfflineAware(path, (p) => router.push(p))
+    },
+    [isPosDemo, storeCode, auth?.user, t, router]
+  )
+
   /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
   const handleSubAction = useCallback(
     (subType: string) => {
       switch (subType) {
         case 'open':
-          navigatePosOfflineAware(
-            isPosDemo ? POS_DEMO_ROUTES.businessOpen : '/pos/settlement?mode=open',
-            (p) => router.push(p)
+          void kickDrawerThenNavigate(
+            'open',
+            isPosDemo ? POS_DEMO_ROUTES.businessOpen : '/pos/settlement?mode=open'
           )
           break
         case 'close':
-          navigatePosOfflineAware(
-            isPosDemo ? POS_DEMO_ROUTES.businessClose : '/pos/settlement',
-            (p) => router.push(p)
+          void kickDrawerThenNavigate(
+            'close',
+            isPosDemo ? POS_DEMO_ROUTES.businessClose : '/pos/settlement'
           )
           break
         case 'refresh':
@@ -234,7 +261,7 @@ function POSMainPageInner() {
           break
       }
     },
-    [router, logout, isPosDemo]
+    [router, logout, isPosDemo, kickDrawerThenNavigate]
   )
 
   const [submenuParent, setSubmenuParent] = useState<'business' | 'operations' | null>(null)

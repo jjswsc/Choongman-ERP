@@ -2,6 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
-import { useStoreList } from '@/lib/api-client'
+import { getPosPrinterSettings, useStoreList } from '@/lib/api-client'
 import { getTillList, getPosTodaySales, translateTexts, type TillItem } from '@/lib/api-client'
 import { getPettyCashOptionsWithCache } from '@/lib/offline/cash-offline'
 import { getTillListWithCache } from '@/lib/offline/till-offline'
@@ -26,6 +27,8 @@ import { isOfficeRole } from '@/lib/permissions'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { cn } from '@/lib/utils'
+import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
+import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 
 const tillTypeKeys: Record<string, string> = {
   deposit: 'posCashDeposit',
@@ -43,11 +46,14 @@ export interface CashManagementTabProps {
 }
 
 export function CashManagementTab({ offlineAware = false }: CashManagementTabProps = {}) {
+  const searchParams = useSearchParams()
+  const isPosDemo = isPosDemoFromQuery(searchParams)
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const { stores } = useStoreList()
   const online = useOnlineStatus()
+  const tillDepositDrawerWarnedRef = React.useRef(false)
   const canSearchAll = isOfficeRole(auth?.role || '')
   const storeCode = auth?.store || stores[0] || ''
 
@@ -176,6 +182,24 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
     }
     setAddSaving(true)
     try {
+      if (addType === 'deposit' && !isPosDemo) {
+        const hw = await getPosPrinterSettings({ storeCode: addStore }).catch(() => null)
+        const drawerOpenOption = drawerOpenOptionFromPrinterSettings(hw)
+        const dr = await openPosCashDrawer({
+          reason: 'till_deposit',
+          source: 'till_deposit',
+          storeCode: addStore,
+          userName: auth?.user,
+          drawerOpenOption,
+        })
+        if (!dr.success && !tillDepositDrawerWarnedRef.current) {
+          tillDepositDrawerWarnedRef.current = true
+          await appAlert(
+            t('posDrawerOpenBridgeFail') ||
+              '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.'
+          )
+        }
+      }
       const res = await addTillTransactionWithOffline({
         storeCode: addStore,
         transDate: addDate,

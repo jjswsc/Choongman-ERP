@@ -260,6 +260,7 @@ export function LiveMenuSearchDialog({
           storeCode,
           startStr: today,
           endStr: today,
+          posBizDayScope: true,
         }),
       ])
       const mains = normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY])

@@ -5,7 +5,8 @@ import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
-import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
+import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
 
 type PosOrderRow = {
@@ -100,7 +101,8 @@ async function hasOtherActiveOrderOnTable(
     { limit: 50 }
   )) as PosOrderRow[] | null
   if (!rows?.length) return false
-  const currentBusinessDate = getPosBusinessDateStr(new Date())
+  const bizStart = await loadPosBusinessDayStartForServer(storeCode)
+  const currentBusinessDate = getPosBusinessDateStrFromConfig(new Date(), bizStart)
   return rows.some((r) => {
     const rid = Number(r.id)
     if (!rid || rid === excludeOrderId) return false
@@ -111,7 +113,7 @@ async function hasOtherActiveOrderOnTable(
     if (createdAtRaw) {
       const createdAt = new Date(createdAtRaw)
       if (!Number.isNaN(createdAt.getTime())) {
-        const rowBusinessDate = getPosBusinessDateStr(createdAt)
+        const rowBusinessDate = getPosBusinessDateStrFromConfig(createdAt, bizStart)
         if (rowBusinessDate !== currentBusinessDate) return false
       }
     }

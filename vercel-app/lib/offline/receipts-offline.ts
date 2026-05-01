@@ -43,10 +43,12 @@ export async function getPosOrdersWithCache(params: {
   storeCode?: string
   status?: string
   debugPosOrders?: boolean
+  /** POS 단말 당일 스냅샷 — 영업일 경계 UTC 구간 */
+  posBizDayScope?: boolean
 }): Promise<PosOrder[]> {
-  const { startStr, endStr, storeCode, status, debugPosOrders } = params
+  const { startStr, endStr, storeCode, status, debugPosOrders, posBizDayScope } = params
   const cacheStore = storeCode || 'all'
-  const key = cacheKeyOrders(cacheStore, startStr, endStr)
+  const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
 
   const applyStatus = (rows: PosOrder[]) => {
@@ -65,6 +67,7 @@ export async function getPosOrdersWithCache(params: {
         storeCode: storeCode || undefined,
         status,
         debugPosOrders,
+        ...(posBizDayScope ? { posBizDayScope: true } : {}),
       })
       await setCache('pos_orders_cache', key, data)
       return mergePendingIntoRows(data, range)
@@ -86,6 +89,7 @@ export async function getPosOrdersWithCache(params: {
       endStr,
       storeCode: storeCode || undefined,
       debugPosOrders,
+      ...(posBizDayScope ? { posBizDayScope: true } : {}),
     })
     await setCache('pos_orders_cache', key, data)
     const merged = await mergePendingIntoRows(data, range)

@@ -48,6 +48,7 @@ import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import {
   Collapsible,
   CollapsibleContent,
@@ -158,6 +159,7 @@ export type PosSettlementFormProps = {
 export function PosSettlementForm({ t, compact, offlineAware = false, openMode = false }: PosSettlementFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const businessOpenDrawerWarnedRef = React.useRef(false)
   const settlementFullCloseHref = React.useMemo(
     () =>
       isPosDemoFromQuery(searchParams)
@@ -591,6 +593,24 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     }
     setSaving(true)
     try {
+      if (openMode && !isPosDemoFromQuery(searchParams)) {
+        const hw = await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
+        const drawerOpenOption = drawerOpenOptionFromPrinterSettings(hw)
+        const dr = await openPosCashDrawer({
+          reason: 'business_open_save',
+          source: 'business_open_save',
+          storeCode: effectiveStore,
+          userName: auth?.user,
+          drawerOpenOption,
+        })
+        if (!dr.success && !businessOpenDrawerWarnedRef.current) {
+          businessOpenDrawerWarnedRef.current = true
+          await appAlert(
+            t('posDrawerOpenBridgeFail') ||
+              '돈통 열기를 시도했지만 로컬 브리지 연결에 실패했습니다. POS PC의 로컬 드로어 브리지 실행 상태를 확인해 주세요.'
+          )
+        }
+      }
       const res = await savePosSettlementWithOffline({
         storeCode: effectiveStore,
         settleDate,
@@ -638,13 +658,21 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       effectiveStore.length > 0
         ? await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
         : null
+    const reportTitle = openMode
+      ? t('posSettlementOpenReport') || t('posBusinessOpen') || 'POS opening report'
+      : t('posSettlementReport') || 'POS 결산 리포트'
+    const dateLabel =
+      openMode ? t('posOpenReportDate') || t('posSettleDate') || '결산일' : t('posSettleDate') || '결산일'
+    /** 80mm 열전사: 과한 가로폭·좁은 우측 여백 시 오른쪽 잘림 — @page·padding·word-break 정렬 */
+    const printCss = `@page{size:80mm auto;margin:0}html,body{margin:0;padding:0}body{font-family:'Noto Sans Thai','Sarabun','Inter','Noto Sans KR',Arial,sans-serif;box-sizing:border-box;max-width:80mm;width:100%;padding:2mm 5mm 3mm 3mm;font-size:11px;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{font-size:13px;margin:0 0 6px;word-break:break-word}p{margin:2px 0;word-break:break-word}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}td{padding:2px 0;vertical-align:top;word-break:break-word;overflow-wrap:anywhere}td.r{text-align:right;white-space:nowrap;word-break:normal;padding-left:4px;width:26%}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:6px;margin-top:6px}`
     const fullHtml = `
       <!DOCTYPE html>
-      <html><head><title>${t('posSettlementReport') || 'POS 결산 리포트'} - ${storeLabel} - ${settleDate}</title>
-      <style>body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;padding:20px;max-width:400px;margin:0 auto}table{width:100%;border-collapse:collapse}.r{text-align:right}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:8px;margin-top:8px}</style>
+      <html><head><meta charset="utf-8"/><title>${reportTitle} - ${storeLabel} - ${settleDate}</title>
+      <style>${printCss}</style>
       </head><body>
-      <h2>${t('posSettlementReport') || 'POS 결산 리포트'}</h2>
-      <p><strong>${t('store') || '매장'}</strong>: ${storeLabel} &nbsp;|&nbsp; <strong>${t('posSettleDate') || '결산일'}</strong>: ${settleDate}</p>
+      <h2>${reportTitle}</h2>
+      <p><strong>${t('store') || '매장'}</strong>: ${storeLabel}</p>
+      <p><strong>${dateLabel}</strong>: ${settleDate}</p>
       <table>
       <tr><td>${t('posSystemSubtotal') || '공급가액'}</td><td class="r">${systemSubtotal.toLocaleString()}</td></tr>
       <tr><td>${t('posSystemVat') || 'VAT (7%)'}</td><td class="r">${systemVat.toLocaleString()}</td></tr>
@@ -664,7 +692,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       <p class="t" style="font-size:12px;color:#666">${formatPosDateTimeMedium(new Date(), lang)}</p>
       </body></html>`
     printPosHtmlDocument(fullHtml, {
-      title: t('posSettlementReport') || 'POS 결산 리포트',
+      title: reportTitle,
       printDelayMs: 0,
       fallbackCleanupMs: 120_000,
       printRole: 'receipt',

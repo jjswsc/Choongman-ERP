@@ -10,6 +10,7 @@ import {
   getPosPromoItems,
   getPosPromosWithItems,
   getPosOrders,
+  getPosBusinessDaySettings,
   getPosTodaySales,
   getPosTableLayout,
   getPosPrinterSettings,
@@ -25,7 +26,7 @@ import {
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { collabDiscountAmountForCart } from "@/lib/pos-collab-discount"
 import { savePosOrderWithOffline } from "@/lib/offline"
-import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
+import { getBangkokDateStr, getPosBusinessDateStr, setPosBusinessHoursClient } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -268,6 +269,26 @@ export default function PosOrderPage() {
   React.useEffect(() => {
     loadTodaySales()
   }, [loadTodaySales])
+
+  React.useEffect(() => {
+    if (!storeCode.trim()) return
+    let cancel = false
+    void (async () => {
+      try {
+        const j = await getPosBusinessDaySettings(storeCode.trim())
+        if (cancel) return
+        setPosBusinessHoursClient({
+          start: { hour: j.hour, minute: j.minute },
+          end: { hour: j.endHour, minute: j.endMinute },
+        })
+      } catch {
+        /* 기본값 유지 */
+      }
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [storeCode])
 
   const loadTableLayout = React.useCallback(() => {
     if (!storeCode) return
@@ -870,6 +891,7 @@ export default function PosOrderPage() {
     getPosOrders({
       startStr: today,
       endStr: today,
+      posBizDayScope: true,
       storeCode: storeCode || undefined,
     })
       .then((list) => setRecentOrders((list || []).slice(0, 10)))

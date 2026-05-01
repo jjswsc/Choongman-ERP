@@ -7,6 +7,11 @@ import {
   getBangkokHour,
 } from '@/lib/attendance-utils'
 import {
+  getPosBusinessDateStrFromConfig,
+  POS_BUSINESS_DAY_DEFAULT_HOURS,
+  type PosBusinessHoursConfig,
+} from '@/lib/pos-business-day'
+import {
   normalizePosOrderTypeKey,
   rowMatchesOrderFilter,
   type PosOrderTypeValue,
@@ -105,8 +110,13 @@ const emptyBucket = (): Bucket => ({
 export function aggregatePosSalesByPeriod(
   rows: PeriodOrderRow[],
   groupBy: string,
-  orderTypesAllowed: PosOrderTypeValue[] | null
+  orderTypesAllowed: PosOrderTypeValue[] | null,
+  businessDayStart?: PosBusinessHoursConfig,
+  /** 제공 시 매장별 영업 시간(행의 store_code 기준), 없으면 `businessDayStart` 단일값 */
+  resolveBusinessDayStart?: (storeCode: string) => PosBusinessHoursConfig
 ): PeriodAggRow[] {
+  const defaultHours = businessDayStart ?? POS_BUSINESS_DAY_DEFAULT_HOURS
+  const getHours = (sc: string) => (resolveBusinessDayStart ? resolveBusinessDayStart(sc) : defaultHours)
   const byKey: Record<string, Bucket> = {}
 
   const add = (key: string, r: PeriodOrderRow) => {
@@ -136,11 +146,12 @@ export function aggregatePosSalesByPeriod(
 
     const bkkDate = toDateStrBangkok(dt)
     if (!bkkDate) continue
+    const bizYmd = getPosBusinessDateStrFromConfig(new Date(dt), getHours(String(r.store_code ?? '').trim()))
 
     if (groupBy === 'month') {
-      add(bkkDate.slice(0, 7), r)
+      add(bizYmd.slice(0, 7), r)
     } else if (groupBy === 'year') {
-      add(bkkDate.slice(0, 4), r)
+      add(bizYmd.slice(0, 4), r)
     } else if (groupBy === 'week') {
       const start = getStartOfWeek(new Date(dt))
       const end = new Date(start)
@@ -148,14 +159,14 @@ export function aggregatePosSalesByPeriod(
       const k = `${start.toISOString().slice(0, 10)}~${end.toISOString().slice(0, 10)}`
       add(k, r)
     } else if (groupBy === 'dow') {
-      const dow = getDayOfWeekBangkok(bkkDate)
+      const dow = getDayOfWeekBangkok(bizYmd)
       add(String(dow), r)
     } else if (groupBy === 'hour') {
       const h = getBangkokHour(dt)
       const hk = String(Math.min(23, Math.max(0, h))).padStart(2, '0')
       add(hk, r)
     } else {
-      add(bkkDate, r)
+      add(bizYmd, r)
     }
   }
 

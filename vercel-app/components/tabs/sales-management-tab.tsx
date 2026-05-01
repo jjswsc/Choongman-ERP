@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isFranchiseeRole, isManagerRole, isOfficeRole } from "@/lib/permissions"
 import {
   parseOrderTypesParam,
   normalizeOrderTypesQueryString,
@@ -34,6 +34,7 @@ import {
   getPosSalesByStore,
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
+import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
 import {
@@ -175,11 +176,6 @@ function diffDaysInclusive(startStr: string, endStr: string): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 1
 }
 
-function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`
-  return value
-}
-
 type AnalyticsView =
   | "period"
   | "delivery"
@@ -301,8 +297,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const isHoursPanel = searchParams.get("hours") === "1"
   const { auth } = useAuth()
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const canEditPosBizDayStore = React.useMemo(() => {
+    const r = String(auth?.role || "").toLowerCase()
+    return isManagerRole(r) || isFranchiseeRole(r)
+  }, [auth?.role])
   const defaultLanding = React.useMemo(() => resolveDefaultSalesLanding(pathname), [pathname])
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
   const monthStart = React.useMemo(() => {
@@ -314,6 +315,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [endStr, setEndStr] = React.useState(today)
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [posOptions, setPosOptions] = React.useState<string[]>([])
+  const posBizDayStoreChoices = React.useMemo(() => {
+    if (canSearchAll) return posOptions
+    const out: string[] = []
+    const main = String(auth?.store || "").trim()
+    if (main) out.push(main)
+    for (const x of auth?.allowedStores || []) {
+      const s = String(x || "").trim()
+      if (s && !out.includes(s)) out.push(s)
+    }
+    return out
+  }, [canSearchAll, posOptions, auth?.store, auth?.allowedStores])
   const [loading, setLoading] = React.useState(false)
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
   const [fetchedAnalyticsKey, setFetchedAnalyticsKey] = React.useState("")
@@ -330,6 +342,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [menuSearchAnd, setMenuSearchAnd] = React.useState(false)
   const storePickerListId = React.useId()
   const storePickerBtnId = React.useId()
+  const [salesNavPickerOpen, setSalesNavPickerOpen] = React.useState(false)
+  const [salesNavQuery, setSalesNavQuery] = React.useState("")
+  const salesNavPickerRef = React.useRef<HTMLDivElement | null>(null)
+  const salesNavPickerBtnId = React.useId()
+  const salesNavPickerListId = React.useId()
+  const [orderTypesPickerOpen, setOrderTypesPickerOpen] = React.useState(false)
+  const [orderTypesQuery, setOrderTypesQuery] = React.useState("")
+  const orderTypesPickerRef = React.useRef<HTMLDivElement | null>(null)
+  const orderTypesPickerBtnId = React.useId()
+  const orderTypesPickerListId = React.useId()
+  const [periodPickerOpen, setPeriodPickerOpen] = React.useState(false)
+  const [periodQuery, setPeriodQuery] = React.useState("")
+  const periodPickerRef = React.useRef<HTMLDivElement | null>(null)
+  const periodPickerBtnId = React.useId()
+  const periodPickerListId = React.useId()
 
   const [activeSubMenuId, setActiveSubMenuId] = React.useState<string>(defaultLanding.menuId)
   const [selectedTopicBySubMenu, setSelectedTopicBySubMenu] = React.useState<Record<string, string>>(() =>
@@ -491,6 +518,146 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
   }, [storePickerOpen])
 
+  const salesNavFlatRows = React.useMemo(() => {
+    const rows: {
+      subMenuId: string
+      topicId: string
+      menuLabel: string
+      topicLabel: string
+      haystack: string
+    }[] = []
+    for (const menu of SALES_IA) {
+      const menuLabel = tr(menu.labelKey, menu.fallbackLabel)
+      for (const topic of menu.topics) {
+        const topicLabel = tr(topic.labelKey, I18N_KO[topic.labelKey] ?? topic.labelKey)
+        rows.push({
+          subMenuId: menu.id,
+          topicId: topic.id,
+          menuLabel,
+          topicLabel,
+          haystack: `${menuLabel} ${topicLabel}`.toLowerCase(),
+        })
+      }
+    }
+    return rows
+  }, [tr])
+
+  const filteredSalesNavRows = React.useMemo(() => {
+    const q = salesNavQuery.trim().toLowerCase()
+    if (!q) return salesNavFlatRows
+    return salesNavFlatRows.filter((r) => r.haystack.includes(q))
+  }, [salesNavFlatRows, salesNavQuery])
+
+  React.useEffect(() => {
+    if (!salesNavPickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      const root = salesNavPickerRef.current
+      const target = e.target as Node | null
+      if (root && target && !root.contains(target)) {
+        setSalesNavPickerOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSalesNavPickerOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [salesNavPickerOpen])
+
+  const orderTypesPickerFlatRows = React.useMemo(() => {
+    const allLabel = tr("salesAmountKindAll", "전체")
+    const rows: { kind: "all" | "type"; type?: PosOrderTypeValue; label: string; haystack: string }[] = [
+      { kind: "all", label: allLabel, haystack: `${allLabel} all 전체`.toLowerCase() },
+    ]
+    for (const row of SALES_ORDER_TYPE_TOGGLES) {
+      const label = tr(row.labelKey, row.fallback)
+      rows.push({
+        kind: "type",
+        type: row.type,
+        label,
+        haystack: `${label} ${row.type}`.toLowerCase(),
+      })
+    }
+    return rows
+  }, [tr])
+
+  const filteredOrderTypesPickerRows = React.useMemo(() => {
+    const q = orderTypesQuery.trim().toLowerCase()
+    if (!q) return orderTypesPickerFlatRows
+    return orderTypesPickerFlatRows.filter((r) => r.haystack.includes(q))
+  }, [orderTypesPickerFlatRows, orderTypesQuery])
+
+  const periodPickerFlatRows = React.useMemo(
+    () =>
+      PERIOD_GROUP.map((g) => ({
+        value: g.value,
+        label: tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey),
+        haystack: `${tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)} ${g.value}`.toLowerCase(),
+      })),
+    [tr]
+  )
+
+  const filteredPeriodPickerRows = React.useMemo(() => {
+    const q = periodQuery.trim().toLowerCase()
+    if (!q) return periodPickerFlatRows
+    return periodPickerFlatRows.filter((r) => r.haystack.includes(q))
+  }, [periodPickerFlatRows, periodQuery])
+
+  const orderTypesSummaryLabel = React.useMemo(() => {
+    if (orderTypesKey === "") return tr("salesAmountKindAll", "전체")
+    const parts = orderTypesKey.split(",").filter(Boolean) as PosOrderTypeValue[]
+    return parts
+      .map((type) => {
+        const hit = SALES_ORDER_TYPE_TOGGLES.find((x) => x.type === type)
+        return hit ? tr(hit.labelKey, hit.fallback) : type
+      })
+      .join(", ")
+  }, [orderTypesKey, tr])
+
+  React.useEffect(() => {
+    if (!orderTypesPickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      const root = orderTypesPickerRef.current
+      const target = e.target as Node | null
+      if (root && target && !root.contains(target)) {
+        setOrderTypesPickerOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOrderTypesPickerOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [orderTypesPickerOpen])
+
+  React.useEffect(() => {
+    if (!periodPickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      const root = periodPickerRef.current
+      const target = e.target as Node | null
+      if (root && target && !root.contains(target)) {
+        setPeriodPickerOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPeriodPickerOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [periodPickerOpen])
+
   /** 구버전·캐시 행에 누락된 집계 필드 보정 — 홀 전용 지표와 조회 건당 분리 */
   const periodChartRows = React.useMemo(
     () => periodData.map((r) => mapPosSalesPeriodRowToChartRow(r, periodGroup, tr)),
@@ -516,6 +683,34 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const selectedTopicId = selectedTopicBySubMenu[currentSubMenu.id] ?? currentSubMenu.topics[0].id
   const selectedTopic = currentSubMenu.topics.find((topic) => topic.id === selectedTopicId) ?? currentSubMenu.topics[0]
   const selectedView = selectedTopic?.view ?? null
+
+  const navigateToSalesReports = React.useCallback(() => {
+    const p = new URLSearchParams()
+    p.set("menu", activeSubMenuId)
+    p.set("topic", selectedTopicId)
+    p.set("group", periodGroup)
+    if (startStr) p.set("start", startStr)
+    if (endStr) p.set("end", endStr)
+    if (selectedStoresKey) p.set("stores", selectedStoresKey)
+    if (compareStores) p.set("compare", "1")
+    if (orderTypesKey) p.set("orderTypes", orderTypesKey)
+    router.replace(`${pathname}?${p.toString()}`, { scroll: false })
+  }, [
+    activeSubMenuId,
+    selectedTopicId,
+    periodGroup,
+    startStr,
+    endStr,
+    selectedStoresKey,
+    compareStores,
+    orderTypesKey,
+    pathname,
+    router,
+  ])
+
+  const navigateToBusinessHours = React.useCallback(() => {
+    router.replace(`${pathname}?hours=1`, { scroll: false })
+  }, [pathname, router])
   /** 하단 인사이트(총액 / TOP·LOW 메뉴 / TOP 채널)는 현재 주제에 맞는 것만 — 탭마다 전부 있으면 집중이 흐려짐 */
   const insightShowTotals =
     selectedView != null &&
@@ -660,10 +855,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   /** 상단(현재·직전동일·전주) — 기간/매장×기간 탐색 주제만 3칸 비교, 그 외 금액 위주는 현재만, 메뉴·채널·배달은 생략 */
   const summaryRowShowFull =
     showSalesResults &&
+    !isHoursPanel &&
     selectedView != null &&
     (selectedView === "period" || selectedView === "store-period")
   const summaryRowShowCurrentOnly =
     showSalesResults &&
+    !isHoursPanel &&
     selectedView != null &&
     (selectedView === "store" || selectedView === "store-category" || selectedView === "payment")
 
@@ -687,82 +884,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     () => [...channelChartRows].sort((a, b) => b.sales - a.sales).slice(0, 3),
     [channelChartRows]
   )
-
-  const exportCurrentCsv = React.useCallback(() => {
-    if (!showSalesResults || selectedView == null) return
-    let headers: string[] = []
-    let rows: string[][] = []
-    if (selectedView === "period") {
-      headers = ["기간", "주문건수", "손님수(홀)", "공급가액", "세금", "할인", "매출액"]
-      rows = periodChartRows.map((r) => [
-        String(r.axisLabel),
-        String(r.count ?? 0),
-        String(r.hallGuestSum ?? 0),
-        String(r.subtotal ?? 0),
-        String(r.vat ?? 0),
-        String(r.discount ?? 0),
-        String(r.total ?? 0),
-      ])
-    } else if (selectedView === "store-period") {
-      headers = ["매장", "기간", "주문건수", "손님수(홀)", "공급가액", "세금", "할인", "매출액"]
-      rows = storeByPeriodFlatRows.map((r) => [
-        r.storeDisplay,
-        String(r.axisLabel),
-        String(r.count ?? 0),
-        String(r.hallGuestSum ?? 0),
-        String(r.subtotal ?? 0),
-        String(r.vat ?? 0),
-        String(r.discount ?? 0),
-        String(r.total ?? 0),
-      ])
-    } else if (selectedView === "channel") {
-      headers = ["채널", "매출액"]
-      rows = channelChartRows.map((r) => [r.axisLabel, String(r.sales)])
-    } else if (selectedView === "payment") {
-      headers = ["결제수단", "매출액"]
-      rows = paymentChartRows.map((r) => [r.axisLabel, String(r.sales)])
-    } else if (selectedView === "menu") {
-      headers = ["메뉴", "수량", "매출액"]
-      rows = menuData.map((r) => [r.name, String(r.qty), String(r.sales)])
-    } else if (selectedView === "store" || selectedView === "store-category") {
-      headers = ["매장", "주문건수", "손님수(홀)", "공급가액", "세금", "할인", "매출액"]
-      rows = storeChartRows.map((r) => [
-        r.storeDisplayName,
-        String(r.count ?? 0),
-        String(r.guestSum ?? 0),
-        String(r.subtotal ?? 0),
-        String(r.vat ?? 0),
-        String(r.discount ?? 0),
-        String(r.total ?? 0),
-      ])
-    } else if (selectedView === "delivery") {
-      headers = ["채널", "매출액", "비중(%)"]
-      rows = deliveryPieRows.map((r) => [String(r.axisLabel), String(r.sales), String((r.pct ?? 0).toFixed(2))])
-    }
-    if (rows.length === 0) return
-    const csv = [headers, ...rows]
-      .map((line) => line.map((cell) => csvEscape(String(cell ?? ""))).join(","))
-      .join("\n")
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `sales-report-${selectedView}-${startStr}-${endStr}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [
-    showSalesResults,
-    selectedView,
-    periodChartRows,
-    storeByPeriodFlatRows,
-    channelChartRows,
-    paymentChartRows,
-    menuData,
-    storeChartRows,
-    deliveryPieRows,
-    startStr,
-    endStr,
-  ])
 
   React.useEffect(() => {
     setPeriodData([])
@@ -868,6 +989,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [selectedStoresParam, compareStores])
 
   React.useEffect(() => {
+    if (searchParams.get("hours") === "1") return
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
@@ -963,6 +1085,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   ])
 
   React.useEffect(() => {
+    if (searchParams.get("hours") === "1") return
     const currentTopic = selectedTopic?.id
     if (!currentTopic) return
 
@@ -1077,6 +1200,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const loadIdRef = React.useRef(0)
 
   const loadAllAnalytics = React.useCallback(() => {
+    if (isHoursPanel) return
     if (!startStr || !endStr) return
     const keySnapshot = analyticsParamKey
     const id = ++loadIdRef.current
@@ -1221,6 +1345,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     menuSearch,
     menuSearchAnd,
     sumPeriodTotal,
+    isHoursPanel,
   ])
 
   const online = useOnlineStatus()
@@ -1260,6 +1385,25 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4">
+          <div className="mb-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={!isHoursPanel ? "default" : "outline"}
+              onClick={() => navigateToSalesReports()}
+            >
+              {tr("salesMainTabReports", "매출 리포트")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={isHoursPanel ? "default" : "outline"}
+              onClick={() => navigateToBusinessHours()}
+            >
+              {tr("salesMainTabBusinessHours", "영업시간 설정")}
+            </Button>
+          </div>
+          {!isHoursPanel ? (
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <Input
               type="date"
@@ -1406,20 +1550,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <Button size="sm" onClick={loadAllAnalytics} disabled={!hasData || loading}>
               {tr("salesQuery", "조회")}
             </Button>
-            <Button size="sm" variant="outline" onClick={saveCurrentPreset}>
-              {tr("salesPresetSave", "현재 조건 저장")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={exportCurrentCsv}
-              disabled={!showSalesResults}
-            >
-              {tr("salesExportCsv", "CSV 내보내기")}
+            <Button type="button" size="sm" variant="outline" onClick={saveCurrentPreset}>
+              {tr("salesSavePreset", "조건 저장")}
             </Button>
           </div>
+          ) : null}
 
-          {savedPresets.length > 0 ? (
+          {!isHoursPanel && savedPresets.length > 0 ? (
             <div className="mb-3 rounded-lg border bg-muted/20 p-3">
               <div className="mb-2 text-sm font-medium">
                 {tr("salesPresetTitle", "저장된 조건")}
@@ -1451,7 +1588,96 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </div>
           ) : null}
 
-          <div className="mb-3 flex flex-wrap gap-2">
+          {!isHoursPanel ? (
+          <>
+          <div className="relative mb-3 md:hidden" ref={salesNavPickerRef}>
+            <Button
+              id={salesNavPickerBtnId}
+              type="button"
+              variant="outline"
+              className="h-10 w-full justify-between gap-2"
+              aria-expanded={salesNavPickerOpen}
+              aria-controls={salesNavPickerListId}
+              aria-haspopup="dialog"
+              onClick={() => {
+                setOrderTypesPickerOpen(false)
+                setPeriodPickerOpen(false)
+                setSalesNavPickerOpen((prev) => {
+                  const next = !prev
+                  if (next) setSalesNavQuery("")
+                  return next
+                })
+              }}
+            >
+              <span className="min-w-0 truncate text-left text-sm font-medium">
+                <span className="text-muted-foreground">
+                  {tr(currentSubMenu.labelKey, currentSubMenu.fallbackLabel)}
+                </span>
+                <span className="mx-1 text-muted-foreground">·</span>
+                <span>{tr(selectedTopic.labelKey, I18N_KO[selectedTopic.labelKey] ?? selectedTopic.labelKey)}</span>
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">{salesNavPickerOpen ? "▲" : "▼"}</span>
+            </Button>
+            {salesNavPickerOpen ? (
+              <div
+                id={salesNavPickerListId}
+                role="dialog"
+                aria-modal="false"
+                aria-labelledby={salesNavPickerBtnId}
+                className="absolute z-30 mt-1 w-full rounded-lg border bg-background shadow-lg"
+              >
+                <div className="border-b p-2">
+                  <Input
+                    value={salesNavQuery}
+                    onChange={(e) => setSalesNavQuery(e.target.value)}
+                    placeholder={tr("salesReportMenuSearchPh", "메뉴·주제 검색…")}
+                    className="h-9"
+                    autoFocus
+                  />
+                </div>
+                <ul className="max-h-[min(60vh,320px)] overflow-y-auto py-1" role="listbox">
+                  {filteredSalesNavRows.length === 0 ? (
+                    <li className="px-3 py-4 text-center text-xs text-muted-foreground">
+                      {tr("salesDataNone", "데이터 없음")}
+                    </li>
+                  ) : (
+                    filteredSalesNavRows.map((row) => {
+                      const activeRow = row.subMenuId === activeSubMenuId && row.topicId === selectedTopicId
+                      return (
+                        <li key={`${row.subMenuId}-${row.topicId}`} role="presentation">
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={activeRow}
+                            className={
+                              "flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm hover:bg-muted/80 " +
+                              (activeRow ? "bg-muted" : "")
+                            }
+                            onClick={() => {
+                              userSelectedRef.current.subMenu = row.subMenuId
+                              userSelectedRef.current.topic = row.topicId
+                              setActiveSubMenuId(row.subMenuId)
+                              setSelectedTopicBySubMenu((prev) => ({
+                                ...prev,
+                                [row.subMenuId]: row.topicId,
+                              }))
+                              setSalesNavPickerOpen(false)
+                              setSalesNavQuery("")
+                            }}
+                          >
+                            <span className="text-xs text-muted-foreground">{row.menuLabel}</span>
+                            <span className="font-medium">{row.topicLabel}</span>
+                          </button>
+                        </li>
+                      )
+                    })
+                  )}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mb-3 hidden flex-wrap gap-2 md:flex">
             {SALES_IA.map((menu) => (
               <Button
                 key={menu.id}
@@ -1467,7 +1693,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             ))}
           </div>
 
-          <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+          <div className="mb-3 hidden rounded-lg border bg-muted/20 p-3 md:block">
             <div className="mb-2 text-sm font-medium">
               {tr("salesReportTopicLabel", "리포트(주제)")}
             </div>
@@ -1490,73 +1716,249 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </Button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {tr("salesManagementSelectedReport", "선택된 리포트")}:{" "}
-              {tr(selectedTopic.labelKey, I18N_KO[selectedTopic.labelKey] ?? selectedTopic.labelKey)}
-              {selectedTopic.hintKey
-                ? ` · ${tr(selectedTopic.hintKey, I18N_KO[selectedTopic.hintKey] ?? "")}`
-                : ""}
-            </p>
           </div>
 
-          <div className="mb-3 rounded-lg border bg-muted/20 p-3">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="shrink-0 text-sm font-medium">
-                  {tr("salesAmountKindLabel", "매출액 종류")}
-                </span>
-                <div className="flex flex-wrap gap-2">
+            <div className="mb-3 space-y-4 rounded-lg border bg-muted/20 p-3 md:hidden">
+              <div className="space-y-2">
+                <span className="text-sm font-medium">{tr("salesAmountKindLabel", "매출액 종류")}</span>
+                <div className="relative" ref={orderTypesPickerRef}>
                   <Button
+                    id={orderTypesPickerBtnId}
                     type="button"
-                    size="sm"
-                    variant={orderTypesKey === "" ? "default" : "outline"}
-                    onClick={setSalesAllOrderTypes}
+                    variant="outline"
+                    className="h-10 w-full justify-between gap-2"
+                    aria-expanded={orderTypesPickerOpen}
+                    aria-controls={orderTypesPickerListId}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setSalesNavPickerOpen(false)
+                      setOrderTypesPickerOpen((prev) => {
+                        const next = !prev
+                        if (next) setOrderTypesQuery("")
+                        return next
+                      })
+                      setPeriodPickerOpen(false)
+                    }}
                   >
-                    {tr("salesAmountKindAll", "전체")}
+                    <span className="min-w-0 truncate text-left text-sm font-medium">{orderTypesSummaryLabel}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{orderTypesPickerOpen ? "▲" : "▼"}</span>
                   </Button>
-                  {SALES_ORDER_TYPE_TOGGLES.map(({ type, labelKey, fallback }) => {
-                    const active = orderTypesKey !== "" && orderTypesKey.split(",").includes(type)
-                    return (
-                      <Button
-                        key={type}
-                        type="button"
-                        size="sm"
-                        variant={active ? "default" : "outline"}
-                        onClick={() => toggleOrderTypeChannel(type)}
-                      >
-                        {tr(labelKey, fallback)}
-                      </Button>
-                    )
-                  })}
+                  {orderTypesPickerOpen ? (
+                    <div
+                      id={orderTypesPickerListId}
+                      role="dialog"
+                      aria-modal="false"
+                      aria-labelledby={orderTypesPickerBtnId}
+                      className="absolute z-30 mt-1 w-full rounded-lg border bg-background shadow-lg"
+                    >
+                      <div className="border-b p-2">
+                        <Input
+                          value={orderTypesQuery}
+                          onChange={(e) => setOrderTypesQuery(e.target.value)}
+                          placeholder={tr("salesFilterOrderTypeSearchPh", "매출액 종류 검색…")}
+                          className="h-9"
+                          autoFocus
+                        />
+                      </div>
+                      <ul className="max-h-[min(50vh,280px)] overflow-y-auto py-1" role="listbox">
+                        {filteredOrderTypesPickerRows.length === 0 ? (
+                          <li className="px-3 py-4 text-center text-xs text-muted-foreground">
+                            {tr("salesDataNone", "데이터 없음")}
+                          </li>
+                        ) : (
+                          filteredOrderTypesPickerRows.map((row) => {
+                            if (row.kind === "all") {
+                              const activeAll = orderTypesKey === ""
+                              return (
+                                <li key="all" role="presentation">
+                                  <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={activeAll}
+                                    className={
+                                      "flex w-full px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/80 " +
+                                      (activeAll ? "bg-muted" : "")
+                                    }
+                                    onClick={() => {
+                                      setSalesAllOrderTypes()
+                                    }}
+                                  >
+                                    {row.label}
+                                  </button>
+                                </li>
+                              )
+                            }
+                            const type = row.type!
+                            const active = orderTypesKey !== "" && orderTypesKey.split(",").includes(type)
+                            return (
+                              <li key={type} role="presentation">
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={active}
+                                  className={
+                                    "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/80 " +
+                                    (active ? "bg-muted" : "")
+                                  }
+                                  onClick={() => toggleOrderTypeChannel(type)}
+                                >
+                                  <span className="font-medium">{row.label}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {active ? "✓" : ""}
+                                  </span>
+                                </button>
+                              </li>
+                            )
+                          })
+                        )}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               {needsPeriodGroup ? (
-                <>
-                  <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="shrink-0 text-sm font-medium">
-                      {tr("salesPeriodGranularityLabel", "집계 기간")}
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {PERIOD_GROUP.map((g) => (
-                        <Button
-                          key={g.value}
-                          size="sm"
-                          variant={periodGroup === g.value ? "default" : "outline"}
-                          onClick={() => {
-                            userSelectedRef.current.periodGroup = g.value
-                            setPeriodGroup(g.value)
-                          }}
-                        >
-                          {tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)}
-                        </Button>
-                      ))}
-                    </div>
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">{tr("salesPeriodGranularityLabel", "집계 기간")}</span>
+                  <div className="relative" ref={periodPickerRef}>
+                    <Button
+                      id={periodPickerBtnId}
+                      type="button"
+                      variant="outline"
+                      className="h-10 w-full justify-between gap-2"
+                      aria-expanded={periodPickerOpen}
+                      aria-controls={periodPickerListId}
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        setSalesNavPickerOpen(false)
+                        setPeriodPickerOpen((prev) => {
+                          const next = !prev
+                          if (next) setPeriodQuery("")
+                          return next
+                        })
+                        setOrderTypesPickerOpen(false)
+                      }}
+                    >
+                      <span className="min-w-0 truncate text-left text-sm font-medium">
+                        {periodPickerFlatRows.find((r) => r.value === periodGroup)?.label ?? periodGroup}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{periodPickerOpen ? "▲" : "▼"}</span>
+                    </Button>
+                    {periodPickerOpen ? (
+                      <div
+                        id={periodPickerListId}
+                        role="dialog"
+                        aria-modal="false"
+                        aria-labelledby={periodPickerBtnId}
+                        className="absolute z-30 mt-1 w-full rounded-lg border bg-background shadow-lg"
+                      >
+                        <div className="border-b p-2">
+                          <Input
+                            value={periodQuery}
+                            onChange={(e) => setPeriodQuery(e.target.value)}
+                            placeholder={tr("salesFilterPeriodSearchPh", "집계 기간 검색…")}
+                            className="h-9"
+                            autoFocus
+                          />
+                        </div>
+                        <ul className="max-h-[min(50vh,280px)] overflow-y-auto py-1" role="listbox">
+                          {filteredPeriodPickerRows.length === 0 ? (
+                            <li className="px-3 py-4 text-center text-xs text-muted-foreground">
+                              {tr("salesDataNone", "데이터 없음")}
+                            </li>
+                          ) : (
+                            filteredPeriodPickerRows.map((row) => {
+                              const active = periodGroup === row.value
+                              return (
+                                <li key={row.value} role="presentation">
+                                  <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={active}
+                                    className={
+                                      "flex w-full px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/80 " +
+                                      (active ? "bg-muted" : "")
+                                    }
+                                    onClick={() => {
+                                      userSelectedRef.current.periodGroup = row.value
+                                      setPeriodGroup(row.value)
+                                      setPeriodPickerOpen(false)
+                                      setPeriodQuery("")
+                                    }}
+                                  >
+                                    {row.label}
+                                  </button>
+                                </li>
+                              )
+                            })
+                          )}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
-                </>
+                </div>
               ) : null}
             </div>
-          </div>
+
+            <div className="mb-3 hidden rounded-lg border bg-muted/20 p-3 md:block">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="shrink-0 text-sm font-medium">
+                    {tr("salesAmountKindLabel", "매출액 종류")}
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={orderTypesKey === "" ? "default" : "outline"}
+                      onClick={setSalesAllOrderTypes}
+                    >
+                      {tr("salesAmountKindAll", "전체")}
+                    </Button>
+                    {SALES_ORDER_TYPE_TOGGLES.map(({ type, labelKey, fallback }) => {
+                      const active = orderTypesKey !== "" && orderTypesKey.split(",").includes(type)
+                      return (
+                        <Button
+                          key={type}
+                          type="button"
+                          size="sm"
+                          variant={active ? "default" : "outline"}
+                          onClick={() => toggleOrderTypeChannel(type)}
+                        >
+                          {tr(labelKey, fallback)}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {needsPeriodGroup ? (
+                  <>
+                    <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="shrink-0 text-sm font-medium">
+                        {tr("salesPeriodGranularityLabel", "집계 기간")}
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {PERIOD_GROUP.map((g) => (
+                          <Button
+                            key={g.value}
+                            size="sm"
+                            variant={periodGroup === g.value ? "default" : "outline"}
+                            onClick={() => {
+                              userSelectedRef.current.periodGroup = g.value
+                              setPeriodGroup(g.value)
+                            }}
+                          >
+                            {tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </>
+          ) : null}
 
           {summaryRowShowFull ? (
             <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1582,7 +1984,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </div>
           ) : null}
 
-          {showSalesResults && (insightShowTotals || insightShowMenu || insightShowChannel) ? (
+          {!isHoursPanel &&
+          showSalesResults &&
+          (insightShowTotals || insightShowMenu || insightShowChannel) ? (
             <div className="mb-3 max-w-2xl">
               {insightShowTotals ? (
                 <div className="rounded-lg border bg-card p-3">
@@ -1645,6 +2049,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           ) : null}
 
           <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
+            {isHoursPanel ? (
+              <SalesPosBusinessDaySettings
+                tr={tr}
+                canEditGlobal={canSearchAll}
+                canEditStore={canSearchAll || canEditPosBizDayStore}
+                storeChoices={posBizDayStoreChoices}
+              />
+            ) : (
+            <>
             {selectedView === "period" && (
               !hasData ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -2580,6 +2993,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   {tr("salesManagementComingSoon", "해당 리포트는 현재 준비중입니다.")}
                 </p>
               </div>
+            )}
+            </>
             )}
           </div>
         </CardContent>

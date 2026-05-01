@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateToUtcRange, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
-import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { getPosBusinessDateStrFromConfig, posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
+import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 export const dynamic = 'force-dynamic'
@@ -16,10 +17,13 @@ export async function GET(request: NextRequest) {
   const startStr = String(searchParams.get('startStr') || '').trim()
   const endStr = String(searchParams.get('endStr') || '').trim()
 
+  const bizStart = await loadPosBusinessDayStartForServer(
+    storeCode && storeCode !== 'All' ? storeCode : null
+  )
   const { startISO, endISOExclusive } =
     startStr && endStr
       ? bangkokDateRangeToUtc(startStr, endStr)
-      : bangkokDateToUtcRange(getPosBusinessDateStr())
+      : posBusinessDateYmdToUtcRange(getPosBusinessDateStrFromConfig(new Date(), bizStart), bizStart)
 
   try {
     const rpcRows = (await supabaseRpc<

@@ -15,7 +15,15 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
 import { useStoreList } from '@/lib/api-client'
-import { getPosOrders, getPosMenus, getPosPrinterSettings, type PosOrder, type PosMenu } from '@/lib/api-client'
+import {
+  getPosOrders,
+  getPosMenus,
+  getPosPrinterSettings,
+  getPosDeliveryApps,
+  type PosOrder,
+  type PosMenu,
+  type PosDeliveryApp,
+} from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
@@ -27,6 +35,7 @@ import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/po
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
+import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return '-'
@@ -42,6 +51,63 @@ function formatBangkokDateTime(value: string | null | undefined) {
     second: '2-digit',
     hour12: false,
   }).format(dt)
+}
+
+function normalizePosOrderTypeKey(raw: string | undefined | null): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_')
+}
+
+function posDeliveryCodeToLabel(code: string | undefined | null): string {
+  const c = String(code ?? '').trim().toLowerCase()
+  if (!c) return ''
+  if (c === 'grab') return 'Grab'
+  if (c === 'lineman' || c === 'line_man') return 'Line Man'
+  if (c === 'shopee') return 'Shopee'
+  return ''
+}
+
+/** 목록「구분」열: 매장=테이블명, 배달=배달앱 종류, 포장=라벨 */
+function receiptSegmentCell(o: PosOrder): string {
+  const type = normalizePosOrderTypeKey(o.orderType)
+  if (type === 'dine_in') {
+    return (o.tableName || '').trim() || '-'
+  }
+  if (type === 'takeout') {
+    return (o.tableName || '').trim() || '-'
+  }
+  if (type === 'delivery') {
+    const fromCode = posDeliveryCodeToLabel(o.deliveryAppCode)
+    if (fromCode) return fromCode
+    const fromKw = getPosDeliveryPlatformName(
+      { tableName: o.tableName, orderNo: o.orderNo, memo: o.memo },
+      undefined
+    ).trim()
+    if (fromKw) return fromKw
+    const tn = (o.tableName || '').trim()
+    if (tn) {
+      const head = tn.replace(/\s+#\s*.+$/i, '').trim()
+      return head || tn
+    }
+    return '-'
+  }
+  return (o.tableName || '').trim() || '-'
+}
+
+function receiptSegmentSearchHaystack(o: PosOrder): string {
+  return [
+    receiptSegmentCell(o),
+    o.tableName,
+    o.deliveryAppCode,
+    posDeliveryCodeToLabel(o.deliveryAppCode),
+    getPosDeliveryPlatformName({ tableName: o.tableName, orderNo: o.orderNo, memo: o.memo }, undefined),
+  ]
+    .map((x) => String(x ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 }
 
 export interface ReceiptsManagementTabProps {
@@ -85,27 +151,129 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [searchTerm, setSearchTerm] = React.useState('')
   const [appliedSearchTerm, setAppliedSearchTerm] = React.useState('')
+  /** `__all__` = 미적용, 그 외 = 배달앱 code(소문자) */
+  const [segmentDeliveryCode, setSegmentDeliveryCode] = React.useState('__all__')
+  const [appliedSegmentDeliveryCode, setAppliedSegmentDeliveryCode] = React.useState('__all__')
   const [orders, setOrders] = React.useState<PosOrder[]>([])
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [deliveryAppsCatalog, setDeliveryAppsCatalog] = React.useState<PosDeliveryApp[]>([])
 
   const canSearchAll = isOfficeRole(auth?.role || '')
 
+  const catalogStoreKey = React.useMemo(() => {
+    const nf = storeFilter ? resolveStoreKey(storeFilter) : ''
+    const nu = storeCode ? resolveStoreKey(storeCode) : ''
+    return canSearchAll ? (nf || nu || '') : (nu || storeCode || '')
+  }, [canSearchAll, storeFilter, storeCode, resolveStoreKey])
+
+  React.useEffect(() => {
+    getPosDeliveryApps({
+      storeCode: catalogStoreKey.trim() || undefined,
+      includeDisabled: false,
+    })
+      .then((apps) => {
+        const list = Array.isArray(apps) ? apps : []
+        setDeliveryAppsCatalog(list.filter((a) => String(a.code ?? '').trim()))
+      })
+      .catch(() => setDeliveryAppsCatalog([]))
+  }, [catalogStoreKey])
+
+  const deliveryAppSelectOptions = React.useMemo((): PosDeliveryApp[] => {
+    const raw = deliveryAppsCatalog
+    if (raw.length > 0) {
+      const by = new Map<string, PosDeliveryApp>()
+      for (const a of raw) {
+        const k = String(a.code ?? '').trim().toLowerCase()
+        if (!k) continue
+        if (!by.has(k)) by.set(k, { ...a, code: k })
+      }
+      return [...by.values()].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+    }
+    return [
+      {
+        id: -1,
+        code: 'grab',
+        name: t('posDeliveryAppGrab') || 'Grab',
+        matchKeywords: [],
+        displayOrder: 0,
+        enabled: true,
+        dineOutEnabled: true,
+        accentColor: null,
+        storeCode: null,
+      },
+      {
+        id: -2,
+        code: 'lineman',
+        name: t('posDeliveryAppLineMan') || 'Line Man',
+        matchKeywords: [],
+        displayOrder: 1,
+        enabled: true,
+        dineOutEnabled: true,
+        accentColor: null,
+        storeCode: null,
+      },
+      {
+        id: -3,
+        code: 'shopee',
+        name: t('posDeliveryAppShopee') || 'Shopee',
+        matchKeywords: [],
+        displayOrder: 2,
+        enabled: true,
+        dineOutEnabled: true,
+        accentColor: null,
+        storeCode: null,
+      },
+    ]
+  }, [deliveryAppsCatalog, t])
+
+  const validSegmentCodes = React.useMemo(
+    () => new Set(['__all__', ...deliveryAppSelectOptions.map((a) => String(a.code).trim().toLowerCase()).filter(Boolean)]),
+    [deliveryAppSelectOptions]
+  )
+
+  React.useEffect(() => {
+    if (!validSegmentCodes.has(segmentDeliveryCode)) {
+      setSegmentDeliveryCode('__all__')
+    }
+    if (!validSegmentCodes.has(appliedSegmentDeliveryCode)) {
+      setAppliedSegmentDeliveryCode('__all__')
+    }
+  }, [validSegmentCodes, segmentDeliveryCode, appliedSegmentDeliveryCode])
+
   const filteredOrders = React.useMemo(() => {
-    if (!appliedSearchTerm.trim()) return orders
-    const term = appliedSearchTerm.trim().toLowerCase()
-    return orders.filter(
-      (o) =>
-        o.orderNo?.toLowerCase().includes(term) ||
-        (o.tableName && o.tableName.toLowerCase().includes(term)) ||
-        (o.memo && o.memo.toLowerCase().includes(term)) ||
-        o.items?.some(
-          (it: { name?: string }) =>
-            it.name && String(it.name).toLowerCase().includes(term)
-        )
-    )
-  }, [orders, appliedSearchTerm])
+    let rows = orders
+    if (appliedSearchTerm.trim()) {
+      const term = appliedSearchTerm.trim().toLowerCase()
+      rows = rows.filter(
+        (o) =>
+          o.orderNo?.toLowerCase().includes(term) ||
+          (o.tableName && o.tableName.toLowerCase().includes(term)) ||
+          (o.memo && o.memo.toLowerCase().includes(term)) ||
+          o.items?.some(
+            (it: { name?: string }) =>
+              it.name && String(it.name).toLowerCase().includes(term)
+          )
+      )
+    }
+    if (appliedSegmentDeliveryCode && appliedSegmentDeliveryCode !== '__all__') {
+      const code = appliedSegmentDeliveryCode.trim().toLowerCase()
+      const meta = deliveryAppSelectOptions.find((a) => String(a.code).trim().toLowerCase() === code)
+      const nameLc = (meta?.name || '').trim().toLowerCase()
+      const codeLabelLc = posDeliveryCodeToLabel(code).toLowerCase()
+      rows = rows.filter((o) => {
+        if (normalizePosOrderTypeKey(o.orderType) !== 'delivery') return false
+        const dc = String(o.deliveryAppCode ?? '').trim().toLowerCase()
+        if (dc === code) return true
+        const hay = receiptSegmentSearchHaystack(o)
+        if (nameLc && hay.includes(nameLc)) return true
+        if (codeLabelLc && hay.includes(codeLabelLc)) return true
+        return hay.includes(code)
+      })
+    }
+    return rows
+  }, [orders, appliedSearchTerm, appliedSegmentDeliveryCode, deliveryAppSelectOptions])
 
   const loadOrders = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -125,6 +293,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       .catch(() => setOrders([]))
       .finally(() => setLoading(false))
   }, [startStr, endStr, storeFilter, storeCode, statusFilter, canSearchAll, offlineAware, resolveStoreKey])
+
+  /** 날짜·매장·상태 조회 + 키워드·배달앱 클라이언트 필터를 한 번에 적용 */
+  const runReceiptSearch = React.useCallback(() => {
+    setAppliedSearchTerm(searchTerm)
+    setAppliedSegmentDeliveryCode(segmentDeliveryCode)
+    loadOrders()
+  }, [loadOrders, searchTerm, segmentDeliveryCode])
 
   React.useEffect(() => {
     loadOrders()
@@ -205,7 +380,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         const slip = slips[idx]
         const w = idx === 0 ? win : window.open('', '_blank')
         if (!w) return
-        const tablePart = o.tableName ? ` · ${t('posTable') || '테이블'}: ${o.tableName}` : ''
+        const segLabel =
+          normalizePosOrderTypeKey(o.orderType) === 'dine_in'
+            ? t('posTable') || '테이블'
+            : t('posReceiptColSegment') || '구분'
+        const tablePart = o.tableName ? ` · ${segLabel}: ${o.tableName}` : ''
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
           orderNo: String(o.orderNo ?? ''),
@@ -243,7 +422,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="mb-4 flex min-w-0 flex-wrap items-center gap-2">
             <Input
               type="date"
               value={startStr}
@@ -299,23 +478,37 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={loadOrders} disabled={loading}>
-              <Search className="mr-1 h-4 w-4" />
-              {t('search') || '조회'}
-            </Button>
             <Input
-              placeholder={t('posSearchPh') || '주문번호, 테이블, 메뉴 검색'}
+              placeholder={t('posSearchPh') || '주문번호, 메뉴, 메모 검색'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && setAppliedSearchTerm(searchTerm)}
-              className="h-9 flex-1 min-w-[180px]"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') runReceiptSearch()
+              }}
+              className="h-9 w-[min(11rem,30vw)] max-w-[200px] shrink-0"
             />
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-9 px-3"
-              onClick={() => setAppliedSearchTerm(searchTerm)}
-            >
+            <Select value={segmentDeliveryCode || '__all__'} onValueChange={(v) => setSegmentDeliveryCode(v)}>
+              <SelectTrigger
+                className="h-9 w-[112px] shrink-0 sm:w-[154px]"
+                aria-label={t('posReceiptDeliveryAppFilter') || '배달앱'}
+              >
+                <SelectValue placeholder={t('posReceiptDeliveryAppFilter') || '배달앱'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{t('posStatusAll') || '전체'}</SelectItem>
+                {deliveryAppSelectOptions.map((app) => {
+                  const v = String(app.code).trim().toLowerCase()
+                  if (!v) return null
+                  return (
+                    <SelectItem key={`${app.id}-${v}`} value={v}>
+                      {String(app.name || v).trim() || v}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            <Button size="sm" className="h-9 shrink-0 px-3" onClick={runReceiptSearch} disabled={loading}>
+              <Search className="mr-1 h-4 w-4" />
               {t('search') || '검색'}
             </Button>
           </div>
@@ -372,7 +565,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderNo') || '주문번호'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStoreSelect') || '매장'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderType') || '유형'}</th>
-                  <th className="px-4 py-3 text-left font-semibold">{t('posTable') || '테이블'}</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t('posReceiptColSegment') || '구분'}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('posInputTotal') || '합계'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStatus') || '상태'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderDateTime')}</th>
@@ -403,9 +596,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                         <td className="px-4 py-3">
                           {orderTypeLabels[o.orderType] || o.orderType}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {o.orderType === 'dine_in' && o.tableName ? o.tableName : '-'}
-                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{receiptSegmentCell(o)}</td>
                         <td className="px-4 py-3 text-right font-bold tabular-nums">
                           {formatBahtNum(o.total)} ฿
                         </td>
@@ -438,11 +629,22 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                         <tr className="border-b bg-muted/10">
                           <td colSpan={8} className="px-4 py-4">
                             <div className="space-y-2 text-xs">
-                              {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0)) && (
+                              {(o.tableName ||
+                                o.memo ||
+                                (o.discountAmt && o.discountAmt > 0) ||
+                                (['delivery', 'takeout'].includes(
+                                  normalizePosOrderTypeKey(o.orderType)
+                                ) &&
+                                  receiptSegmentCell(o) !== '-')) && (
                                 <div className="mb-2 pb-2 border-b">
-                                  {o.tableName && (
+                                  {(o.tableName?.trim() ||
+                                    (['delivery', 'takeout'].includes(
+                                      normalizePosOrderTypeKey(o.orderType)
+                                    ) &&
+                                      receiptSegmentCell(o) !== '-')) && (
                                     <div className="text-muted-foreground">
-                                      {t('posTable') || '테이블'}: {o.tableName}
+                                      {t('posReceiptColSegment') || '구분'}:{' '}
+                                      {o.tableName?.trim() || receiptSegmentCell(o)}
                                     </div>
                                   )}
                                   {o.memo && (

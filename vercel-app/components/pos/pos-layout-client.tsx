@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
 
 const POS_TOPBAR_HIDDEN_KEY = "cm-pos-topbar-hidden"
 
@@ -322,6 +323,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
+      <PosBusinessDayHydrate />
       {topBarRevealStrip}
       {showTopChrome(effectiveShowPosHeader) ? (
         <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:px-4">

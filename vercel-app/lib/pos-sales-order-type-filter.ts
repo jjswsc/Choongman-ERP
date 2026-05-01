@@ -31,6 +31,23 @@ export function isDineInOrderTypeForGuestCount(raw: string | undefined | null): 
 }
 
 /**
+ * pos_orders.table_name 저장값.
+ * - 홀: 테이블명
+ * - 배달·포장: 표시 라벨(예: `Line Man #GF-1234`, 포장 슬롯명) — 비우면 리스트/영수증이 POS 내부 번호만 노출됨
+ */
+export function sanitizePosOrderTableNameForDb(
+  orderType: string | undefined | null,
+  rawTableName: unknown,
+  maxLen = 500
+): string {
+  const tableName = String(rawTableName ?? '').trim()
+  if (!tableName) return ''
+  const k = normalizePosOrderTypeKey(orderType)
+  if (k !== 'dine_in' && k !== 'delivery' && k !== 'takeout') return ''
+  return tableName.length > maxLen ? tableName.slice(0, maxLen) : tableName
+}
+
+/**
  * 쿼리 `orderTypes=dine_in,takeout` 파싱.
  * 없거나 비어 있으면 필터 없음(전체).
  */

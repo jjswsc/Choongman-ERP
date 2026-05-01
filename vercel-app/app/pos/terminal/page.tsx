@@ -35,6 +35,7 @@ import {
   getPosPrinterSettings,
   getPosTodaySales,
   getPosDeliveryApps,
+  getPosBusinessDaySettings,
   executeLinkposPayment,
   grabCancelOrderByStoreApi,
   updatePosOrder,
@@ -64,13 +65,14 @@ import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
-import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import {
   formatPosReceiptOrderNoDisplay,
   getPosDeliveryPlatformName,
+  isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
@@ -325,6 +327,26 @@ export default function PosTerminalPage() {
     clearTableOrder,
     loadingTables,
   } = usePosStore()
+
+  useEffect(() => {
+    if (!currentStoreId) return
+    let cancel = false
+    void (async () => {
+      try {
+        const j = await getPosBusinessDaySettings(currentStoreId)
+        if (cancel) return
+        setPosBusinessHoursClient({
+          start: { hour: j.hour, minute: j.minute },
+          end: { hour: j.endHour, minute: j.endMinute },
+        })
+      } catch {
+        /* layout hydrate / 기본값 유지 */
+      }
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [currentStoreId])
 
   useEffect(() => {
     if (loadingTables) return
@@ -1399,6 +1421,8 @@ export default function PosTerminalPage() {
       playIncomingOrderBeep()
       if (status === 'pending') {
         window.setTimeout(() => {
+          /** 수동 키잉 배달은 `pending`이어도 웹훅 memo 앵커가 없음 → 수락/거절 팝업 생략 */
+          if (!isApiInboundDeliveryOrderMemo(String(params.memo ?? ''))) return
           void decideIncomingPendingDeliveryOrder({
             orderId,
             storeCode: params.storeCode,
@@ -2078,6 +2102,7 @@ export default function PosTerminalPage() {
             const paidLikeRows = await getPosOrders({
               startStr: today,
               endStr: today,
+              posBizDayScope: true,
               storeCode: currentStoreId,
               strictStore: true,
               statusPaidLike: true,
@@ -2126,6 +2151,7 @@ export default function PosTerminalPage() {
         const orders = await getPosOrders({
           startStr: today,
           endStr: today,
+          posBizDayScope: true,
           storeCode: currentStoreId,
           strictStore: true,
           ...(sinceId != null ? { sinceId } : {}),
@@ -2441,6 +2467,13 @@ export default function PosTerminalPage() {
     const items = Array.isArray(order.items) ? order.items : []
     const servedCount = items.filter((item) => Boolean(item.servedAt)).length
     const normalizedStatus = String(order.status || '').toLowerCase()
+    const createdAt = order.createdAt
+      ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt))
+      : undefined
+    /** POS `pending`은 플랫폼·수동 주문의 미수락 상태 — 목록에서 조리중과 구분 */
+    if (normalizedStatus === 'pending') {
+      return { status: 'pending' as const, createdAt, targetMin: 0 }
+    }
     const allServed = items.length > 0 && servedCount >= items.length
     const status: 'preparing' | 'partial_served' | 'packaged' | 'completed' =
       normalizedStatus === 'completed'
@@ -2463,9 +2496,6 @@ export default function PosTerminalPage() {
     const targetMin = status === 'preparing'
       ? Math.max(0, ...items.map((it) => getItemTarget({ id: String(it.id || ''), name: String(it.name || '') })))
       : 0
-    const createdAt = order.createdAt
-      ? (order.createdAt instanceof Date ? order.createdAt.toISOString() : String(order.createdAt))
-      : undefined
     return { status, createdAt, targetMin }
   }
 
@@ -2501,6 +2531,13 @@ export default function PosTerminalPage() {
   }
 
   const resolveMatchedDeliveryAppForOrder = (order: Order): PosDeliveryApp | null => {
+    const storedCode = String(order.deliveryAppCode ?? '').trim().toLowerCase()
+    if (storedCode) {
+      for (const app of deliveryAppsFromApi) {
+        const c = String(app.code || '').trim().toLowerCase()
+        if (c && c === storedCode) return app
+      }
+    }
     const tableName = String(order.tableName || '').trim()
     const memo = String(order.memo || '').trim()
     const label = String(order.customerName || '').trim()
@@ -2535,12 +2572,19 @@ export default function PosTerminalPage() {
     const platformOrderNo =
       pick.kind === 'hash' || pick.kind === 'memo_anchor'
         ? (pick.text.trim() ? `#${pick.text.trim()}` : '')
-        : pick.text.trim()
-          ? formatPosOrderNoForPrint(pick.text.trim())
-          : ''
+        : ''
 
     const matched = resolveMatchedDeliveryAppForOrder(order)
-    const platformLabel = (matched?.name || getPosDeliveryPlatformName({ tableName, orderNo: orderNoRaw, memo }, deliveryAppsFromApi)).trim()
+    const platformFromKeywords = getPosDeliveryPlatformName({ tableName, orderNo: orderNoRaw, memo }, deliveryAppsFromApi).trim()
+    const platformFromStoredCode = (() => {
+      const c = String(order.deliveryAppCode ?? '').trim().toLowerCase()
+      if (!c) return ''
+      if (c === 'grab') return 'Grab'
+      if (c === 'lineman' || c === 'line_man') return 'Line Man'
+      if (c === 'shopee') return 'Shopee'
+      return ''
+    })()
+    const platformLabel = (matched?.name || platformFromKeywords || platformFromStoredCode).trim()
     const accentRaw = matched?.accentColor || null
     const accent = mapPosAccentToBar(accentRaw || (platformLabel.toLowerCase().includes('grab') ? 'lime' : platformLabel.toLowerCase().includes('line') ? 'sky' : platformLabel.toLowerCase().includes('shopee') ? 'amber' : 'slate'))
 
@@ -2567,7 +2611,10 @@ export default function PosTerminalPage() {
         status: visual.status,
         createdAt: visual.createdAt,
         targetMin: visual.targetMin,
-        subLabel: t('posOrderStatusPreparing') || '진행 중',
+        subLabel:
+          visual.status === 'pending'
+            ? t('posOrderBarPendingAccept') || '수락 대기'
+            : t('posOrderStatusPreparing') || '진행 중',
         ...bar,
       } satisfies OrderBarItem
     })
@@ -2658,7 +2705,9 @@ export default function PosTerminalPage() {
             ? formatPosOrderNoForPrint(order.orderNo || '')
             : listType === 'packaged'
               ? t('posDeliveryPackagingComplete') || '포장 완료'
-              : t('posOrderStatusPreparing') || '진행 중',
+              : visual.status === 'pending'
+                ? t('posOrderBarPendingAccept') || '수락 대기'
+                : t('posOrderStatusPreparing') || '진행 중',
         ...bar,
       } satisfies OrderBarItem
     })
@@ -2671,6 +2720,7 @@ export default function PosTerminalPage() {
       if (st === 'completed') return 3
       if (st === 'partial_served') return 2
       if (st === 'preparing') return 1
+      if (st === 'pending') return 0
       return 0
     }
     const byId = new Map<string, OrderBarItem>()
@@ -2713,7 +2763,10 @@ export default function PosTerminalPage() {
         status: visual.status,
         createdAt: visual.createdAt,
         targetMin: visual.targetMin,
-        subLabel: t('posOrderStatusPreparing') || '진행 중',
+        subLabel:
+          visual.status === 'pending'
+            ? t('posOrderBarPendingAccept') || '수락 대기'
+            : t('posOrderStatusPreparing') || '진행 중',
         rightLabel: label,
       } satisfies OrderBarItem
     })
@@ -2801,7 +2854,9 @@ export default function PosTerminalPage() {
             ? formatPosOrderNoForPrint(order.orderNo || '')
             : listType === 'packaged'
               ? t('posDeliveryPackagingComplete') || '포장 완료'
-              : t('posOrderStatusPreparing') || '진행 중',
+              : visual.status === 'pending'
+                ? t('posOrderBarPendingAccept') || '수락 대기'
+                : t('posOrderStatusPreparing') || '진행 중',
         rightLabel: label,
       } satisfies OrderBarItem
     })
@@ -2814,6 +2869,7 @@ export default function PosTerminalPage() {
       if (st === 'completed') return 3
       if (st === 'partial_served') return 2
       if (st === 'preparing') return 1
+      if (st === 'pending') return 0
       return 0
     }
     const byId = new Map<string, OrderBarItem>()

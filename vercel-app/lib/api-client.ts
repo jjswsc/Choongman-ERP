@@ -7,6 +7,7 @@ import type { MarketingCollabDetail } from './marketing-collab-detail'
 import type { MarketingCampaignPhasePeriod } from './marketing-campaign-periods'
 import { apiFetch } from './api/fetch'
 import { apiFetchWithOffline } from './api/fetch-offline'
+import { POS_BUSINESS_DAY_DEFAULT_START, POS_BUSINESS_DAY_DEFAULT_HOURS } from './pos-business-day'
 import {
   getChecklistItemsWithCache,
   getVendorsForPurchaseWithCache,
@@ -8199,6 +8200,8 @@ export interface PosOrder {
   paymentDeliveryApp?: number
   /** grab | lineman | shopee | dine_in */
   deliveryPaymentChannel?: string
+  /** pos_orders.delivery_app_code — POS 수동 배달·연동 주문의 플랫폼 구분 */
+  deliveryAppCode?: string
   memberId?: number
   memberNo?: string
   couponCode?: string
@@ -8287,6 +8290,8 @@ export async function getPosReversalJournals(params: {
 export async function getPosOrders(params?: {
   startStr?: string
   endStr?: string
+  /** 단일 영업일(YYYY-MM-DD) 조회 시 POS 영업일 경계(설정된 시작 시각~익일 동시각)로 UTC 구간 적용 */
+  posBizDayScope?: boolean
   storeCode?: string
   status?: string
   strictStore?: boolean
@@ -8305,6 +8310,7 @@ export async function getPosOrders(params?: {
   if (params?.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
+  if (params?.posBizDayScope) q.set('posBizDayScope', '1')
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.status) q.set('status', params.status)
   if (params?.strictStore) q.set('strictStore', '1')
@@ -8317,6 +8323,96 @@ export async function getPosOrders(params?: {
   const data = await res.json().catch(() => null)
   if (!Array.isArray(data)) return []
   return data as PosOrder[]
+}
+
+export type PosBusinessDayStartDto = { hour: number; minute: number }
+
+export type PosBusinessDaySettingsDto = PosBusinessDayStartDto & {
+  endHour: number
+  endMinute: number
+  scope?: 'store_override' | 'org_default'
+  storeCode?: string | null
+  hasStoreOverride?: boolean
+  globalHour?: number
+  globalMinute?: number
+  globalEndHour?: number
+  globalEndMinute?: number
+  defaultHour?: number
+  defaultMinute?: number
+  defaultEndHour?: number
+  defaultEndMinute?: number
+}
+
+export async function getPosBusinessDaySettings(storeCode?: string | null): Promise<PosBusinessDaySettingsDto> {
+  const q = storeCode?.trim() ? `?storeCode=${encodeURIComponent(String(storeCode).trim())}` : ''
+  const res = await fetch('/api/posBusinessDaySettings' + q, { cache: 'no-store' })
+  const j = (await res.json().catch(() => null)) as Partial<PosBusinessDaySettingsDto> | null
+  const hour = Number(j?.hour)
+  const minute = Number(j?.minute ?? 0)
+  const base =
+    !Number.isFinite(hour)
+      ? { hour: POS_BUSINESS_DAY_DEFAULT_START.hour, minute: POS_BUSINESS_DAY_DEFAULT_START.minute }
+      : { hour: Math.min(23, Math.max(0, Math.trunc(hour))), minute: Math.min(59, Math.max(0, Math.trunc(minute))) }
+  const ehRaw = Number(j?.endHour)
+  const emRaw = Number(j?.endMinute ?? 0)
+  const end =
+    !Number.isFinite(ehRaw)
+      ? { hour: base.hour, minute: base.minute }
+      : {
+          hour: Math.min(23, Math.max(0, Math.trunc(ehRaw))),
+          minute: Math.min(59, Math.max(0, Math.trunc(emRaw))),
+        }
+  const def = POS_BUSINESS_DAY_DEFAULT_HOURS.start
+  const defEnd = POS_BUSINESS_DAY_DEFAULT_HOURS.end
+  return {
+    ...base,
+    endHour: end.hour,
+    endMinute: end.minute,
+    scope: j?.scope === 'store_override' ? 'store_override' : 'org_default',
+    storeCode: j?.storeCode ?? null,
+    hasStoreOverride: Boolean(j?.hasStoreOverride),
+    globalHour: Number.isFinite(Number(j?.globalHour)) ? Math.trunc(Number(j?.globalHour)) : def.hour,
+    globalMinute: Number.isFinite(Number(j?.globalMinute)) ? Math.min(59, Math.max(0, Math.trunc(Number(j?.globalMinute)))) : def.minute,
+    globalEndHour: Number.isFinite(Number(j?.globalEndHour)) ? Math.trunc(Number(j?.globalEndHour)) : defEnd.hour,
+    globalEndMinute: Number.isFinite(Number(j?.globalEndMinute))
+      ? Math.min(59, Math.max(0, Math.trunc(Number(j?.globalEndMinute))))
+      : defEnd.minute,
+    defaultHour: def.hour,
+    defaultMinute: def.minute,
+    defaultEndHour: defEnd.hour,
+    defaultEndMinute: defEnd.minute,
+  }
+}
+
+export async function savePosBusinessDaySettings(params: {
+  hour: number
+  minute: number
+  endHour?: number
+  endMinute?: number
+  /** 없으면 전사 기본값(본사만) */
+  storeCode?: string | null
+  /** true 이면 해당 매장 덮어쓰기 제거 */
+  resetStoreOverride?: boolean
+}): Promise<{ success: boolean; message?: string }> {
+  const body: Record<string, unknown> = {}
+  if (params.resetStoreOverride) {
+    body.reset = true
+    body.storeCode = params.storeCode ?? ''
+  } else {
+    body.hour = params.hour
+    body.minute = params.minute
+    body.endHour = params.endHour ?? params.hour
+    body.endMinute = params.endMinute ?? params.minute
+    if (params.storeCode != null && String(params.storeCode).trim()) body.storeCode = String(params.storeCode).trim()
+  }
+  const res = await fetch('/api/posBusinessDaySettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
+  })
+  const j = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string }
+  return { success: Boolean(j?.success), message: j?.message }
 }
 
 export interface PosSettlement {

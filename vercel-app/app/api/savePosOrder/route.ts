@@ -4,7 +4,7 @@ import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
-import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { coercePosOrderTypeForDb, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
@@ -132,11 +132,6 @@ function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: numbe
   return 'grab'
 }
 
-function sanitizeTableNameByOrderType(orderType: string, rawTableName: unknown): string {
-  const tableName = String(rawTableName ?? '').trim()
-  return orderType === 'dine_in' ? tableName : ''
-}
-
 /** POS 주문 저장 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -175,7 +170,7 @@ export async function POST(req: NextRequest) {
     const orderType = coercePosOrderTypeForDb(
       String(body.orderType ?? body.order_type ?? '')
     )
-    const tableName = sanitizeTableNameByOrderType(orderType, body.tableName)
+    const tableName = sanitizePosOrderTableNameForDb(orderType, body.tableName)
     const memo = String(body.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body.discountAmt ?? 0))
     const discountReason = String(body.discountReason ?? '').trim()

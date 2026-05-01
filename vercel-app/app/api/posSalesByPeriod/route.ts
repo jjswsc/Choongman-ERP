@@ -11,6 +11,10 @@ import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
 import { aggregatePosSalesByPeriod, type PeriodOrderRow } from '@/lib/pos-sales-period-aggregate'
+import {
+  loadPosBusinessDaySettingsContext,
+  resolvePosBusinessHoursFromContext,
+} from '@/lib/pos-business-day-server'
 
 const FETCH_LIMIT = 50000
 
@@ -64,29 +68,32 @@ export async function GET(request: NextRequest) {
     if (truncated) headers.set('X-Sales-Truncated', '1')
     headers.set('X-Pos-Sales-Source', usedRpc ? 'rpc' : 'select')
 
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const resolveSc = (sc: string) => resolvePosBusinessHoursFromContext(bizCtx, sc)
+
     if (splitByStore) {
       const series: Record<string, ReturnType<typeof aggregatePosSalesByPeriod>> = {}
       if (stores.length >= 2) {
         for (const code of stores) {
           const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
-          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed)
+          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
         }
       } else if (stores.length === 1) {
         const code = stores[0]
-        series[code] = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed)
+        series[code] = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed, undefined, resolveSc)
       } else {
         const codes = [
           ...new Set(rows.map((r) => String(r.store_code ?? '').trim()).filter(Boolean)),
         ].sort((a, b) => a.localeCompare(b))
         for (const code of codes) {
           const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
-          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed)
+          series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
         }
       }
       return NextResponse.json({ split: true as const, series, truncated }, { headers })
     }
 
-    const result = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed)
+    const result = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed, undefined, resolveSc)
     return NextResponse.json(result, { headers })
   } catch (e) {
     console.error('posSalesByPeriod:', e)

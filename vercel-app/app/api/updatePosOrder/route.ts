@@ -3,7 +3,7 @@ import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/
 import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
-import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
+import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 
@@ -12,14 +12,6 @@ function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: numbe
   const s = String(raw ?? '').trim().toLowerCase()
   if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
   return 'grab'
-}
-
-function sanitizeTableNameByOrderType(
-  orderType: string | null | undefined,
-  rawTableName: unknown
-): string {
-  const tableName = String(rawTableName ?? '').trim()
-  return isDineInOrderTypeForGuestCount(orderType) ? tableName : ''
 }
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
@@ -81,7 +73,7 @@ export async function POST(req: NextRequest) {
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
-    const tableName = sanitizeTableNameByOrderType(existing[0]?.order_type, body?.tableName)
+    const tableName = sanitizePosOrderTableNameForDb(existing[0]?.order_type, body?.tableName)
 
     const status = String(existing[0]?.status ?? '')
     if (!EDITABLE_STATUSES.includes(status)) {

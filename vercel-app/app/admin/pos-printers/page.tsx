@@ -2024,7 +2024,7 @@ export default function PosPrintersPage() {
 
             <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
-                {tr("posDrawerHintV2", "돈통은 '현금 결제가 포함된 경우'에만 자동으로 열리며, 그 외에는 열지 않습니다. (수동 열기/강제 열기는 별도 동작)")}
+                {t("posDrawerHintV2")}
               </p>
               <p className="text-xs text-muted-foreground">
                 {tr("posDrawerBridgeHint", "")}

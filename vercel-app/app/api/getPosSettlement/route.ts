@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
+import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { fromHex, parseHypercomFrame } from '@/lib/payments/hypercom-v2'
 
 type TenderGroup = 'card' | 'qr'
@@ -76,7 +78,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(settleDate, settleDate)
+    const settleYmd = settleDate.trim().slice(0, 10)
+    const bizStart = await loadPosBusinessDayStartForServer(
+      storeCode && storeCode !== 'All' ? storeCode : null
+    )
+    const { startISO, endISOExclusive } =
+      /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)
+        ? posBusinessDateYmdToUtcRange(settleYmd, bizStart)
+        : bangkokDateRangeToUtc(settleDate, settleDate)
     let sharedRules: TenderRule[] = []
     const storeRulesMap = new Map<string, TenderRule[]>()
     try {

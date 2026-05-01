@@ -102,6 +102,10 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     customerName: String(po.tableName || '').trim() || undefined,
     memo: String(po.memo || '').trim() || undefined,
     orderNo: String(po.orderNo ?? '').trim() || undefined,
+    deliveryAppCode: (() => {
+      const c = String(po.deliveryAppCode ?? '').trim()
+      return c || undefined
+    })(),
     guestCount:
       inferredType === 'dine-in'
         ? Math.max(0, Math.min(99, Math.trunc(Number(po.guestCount ?? 0) || 0)))
@@ -270,6 +274,7 @@ export function usePosStore() {
             storeCode: sc,
             startStr: businessDate,
             endStr: businessDate,
+            posBizDayScope: true,
           }).catch(() => [])
         )
       ),

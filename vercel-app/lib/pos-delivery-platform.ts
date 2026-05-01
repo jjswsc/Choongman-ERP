@@ -36,7 +36,20 @@ function tryPickMemoAnchorChannelNo(memo: string): string {
   if (lm) return lm
   const sp = /shopee_order:([A-Za-z0-9._:-]+)/i.exec(m)?.[1]?.trim()
   if (sp) return sp
+  const sf = /sf_order:([A-Za-z0-9._:-]+)/i.exec(m)?.[1]?.trim()
+  if (sf) return sf
   return ''
+}
+
+/** 웹훅/API로 유입된 배달 주문의 memo 앵커(수동 키잉은 보통 이 패턴 없음) */
+export function isApiInboundDeliveryOrderMemo(memo: string): boolean {
+  const m = String(memo || '')
+  return (
+    /grab_order:/i.test(m) ||
+    /lineman_order:/i.test(m) ||
+    /shopee_order:/i.test(m) ||
+    /sf_order:/i.test(m)
+  )
 }
 
 /** 라벨/주문번호/메모에서 채널 주문번호 우선 추출 (`#…`, memo 앵커), 없으면 POS 주문번호 */

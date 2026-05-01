@@ -1971,46 +1971,57 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setDiscountType('percent')
     setDiscountValue(0)
     setDiscountReason('')
+    setAppliedCollabId(null)
+    setCouponCode('')
+    setCouponAppliedCode('')
+    setCouponAppliedAmt(0)
+    setCouponMessage('')
+    setPointUsed('0')
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
-    if (existingId != null && onDeliveryOrderComplete) {
-      const payChannel =
-        typeof deliveryAppProp === 'string' && deliveryAppProp.trim().length > 0
-          ? deliveryAppProp.trim().toLowerCase()
-          : null
-      onDeliveryOrderComplete(
-        {
-          items: normalized.map(mapCartItemToOrderPayload),
-          orderLabel: payload.orderLabel,
-          memo: buildOrderMemo(customerMemo),
-          discountAmt: discount,
-          discountReason: paymentDiscountReason,
-          payment: {
-            paymentCash: 0,
-            paymentCard: 0,
-            paymentQr: 0,
-            paymentOther: 0,
-            paymentDeliveryApp: amount,
-            deliveryPaymentChannel: payChannel,
-          },
-          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
-          couponCode: couponAppliedCode || undefined,
-          couponDiscountAmt: couponAppliedAmt || undefined,
-          pointUsed: pointUsedNum || undefined,
-        },
-        existingId
-      )
-      onPaymentComplete?.()
-      handleClearCart()
-      return
-    }
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
       receiptSubtotal: amount,
-      receiptDiscountTotal: pointUsedNum,
+      receiptDiscountTotal: 0,
     })
+  }
+
+  /** 배달 기존 주문 「ชำระที่ร้าน」: 플랫폼 정산 전제 — 결제 수단 없이 할인만 조정 후 완료 */
+  const completeDeliveryPayInStoreFromModal = () => {
+    const existingId = normalizeExistingPosOrderId(checkoutExistingPosOrderIdRef.current)
+    if (!onDeliveryOrderComplete || existingId == null) return
+    if (total <= 0) return
+    const payChannel =
+      typeof deliveryAppProp === 'string' && deliveryAppProp.trim().length > 0
+        ? deliveryAppProp.trim().toLowerCase()
+        : null
+    onDeliveryOrderComplete(
+      {
+        items: cartItems.map(mapCartItemToOrderPayload),
+        orderLabel: (paymentTableNameOverride ?? '').trim() || '',
+        memo: buildOrderMemo(customerMemo),
+        discountAmt: discount,
+        discountReason: paymentDiscountReason,
+        payment: {
+          paymentCash: 0,
+          paymentCard: 0,
+          paymentQr: 0,
+          paymentOther: 0,
+          paymentDeliveryApp: total,
+          deliveryPaymentChannel: payChannel,
+        },
+        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+        memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+        couponCode: couponAppliedCode || undefined,
+        couponDiscountAmt: couponAppliedAmt || undefined,
+        pointUsed: pointUsedNum || undefined,
+      },
+      existingId
+    )
+    onPaymentComplete?.()
+    handleClearCart()
+    setShowPaymentModal(false)
   }
 
   const handleClearCart = () => {
@@ -2840,6 +2851,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       open={showPaymentModal}
       onOpenChange={(open) => {
         if (!open && lockPaymentModalForTour) return
+        if (!open && orderType === 'delivery' && checkoutExistingPosOrderIdRef.current != null) {
+          handleClearCart()
+        }
         setShowPaymentModal(open)
       }}
     >
@@ -2861,7 +2875,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <DialogTitle className="text-xl font-bold tracking-tight">
-                {t('posSplitPayment') || '결제 수단 입력'}
+                {orderType === 'delivery' && isExistingOrderCheckout
+                  ? t('posDeliveryPaymentConfirmTitle') || '결제 확인'
+                  : t('posSplitPayment') || '결제 수단 입력'}
               </DialogTitle>
             </div>
             {!lockPaymentModalForTour && (
@@ -2915,6 +2931,117 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 }}
               >
                 {t('posConfirm') || '확인'}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : orderType === 'delivery' && isExistingOrderCheckout ? (
+          <>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-5 py-5">
+              <PosPaymentModalAmountCard
+                subtotal={subtotal}
+                discount={discount}
+                pricing={pricing}
+                total={total}
+                totalLabelKey="posInputTotal"
+                t={t}
+              />
+              <div className="flex gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3.5 text-sm leading-relaxed text-muted-foreground dark:bg-emerald-500/10">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  <Bike className="h-4 w-4" />
+                </div>
+                <p>{t('posDeliveryPaymentNote') || '배달 주문은 플랫폼에서 결제 완료되며, 익일 통장으로 정산됩니다.'}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm dark:from-amber-950/25 dark:via-card dark:to-card">
+                <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
+                </div>
+                <div className="grid gap-3">
+                  <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
+                    {DISCOUNT_PRESETS.map((pct) => (
+                      <Button
+                        key={pct}
+                        type="button"
+                        size="default"
+                        variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
+                        className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
+                        onClick={() => {
+                          setDiscountType('percent')
+                          setDiscountValue(pct)
+                        }}
+                      >
+                        {pct}%
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_auto_7rem_1fr]">
+                    <Button
+                      type="button"
+                      size="default"
+                      variant="outline"
+                      className="h-12 px-3 text-sm font-semibold rounded-xl border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                      onClick={() => {
+                        setDiscountType('percent')
+                        setDiscountValue(0)
+                      }}
+                    >
+                      {tr('reset', '초기화')}
+                    </Button>
+                    <Select
+                      value={discountType}
+                      onValueChange={(v) => setDiscountType(v as 'percent' | 'fixed')}
+                    >
+                      <SelectTrigger className="h-12 w-[5.5rem] rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percent">%</SelectItem>
+                        <SelectItem value="fixed">฿</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={discountType === 'percent' ? 1 : 0.01}
+                      placeholder={
+                        discountType === 'percent'
+                          ? (t('posDiscount') || '할인') + ' %'
+                          : (t('posDiscount') || '할인') + ' ฿'
+                      }
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(Math.max(0, Number(e.target.value || 0)))}
+                      className="h-11 text-sm rounded-xl px-2.5"
+                    />
+                    <Input
+                      placeholder={t('posDiscountReasonPh')}
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
+                      className="h-12 text-base rounded-xl sm:col-span-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="shrink-0 flex-col gap-2 border-t border-border/60 bg-card/95 px-5 py-4 backdrop-blur-md supports-[backdrop-filter]:bg-card/85 sm:flex-row sm:justify-end">
+              {!lockPaymentModalForTour && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-xl sm:w-auto"
+                  onClick={() => setShowPaymentModal(false)}
+                >
+                  {t('posCancel') || '취소'}
+                </Button>
+              )}
+              <Button
+                type="button"
+                className="h-12 w-full rounded-xl font-semibold sm:min-w-[8rem]"
+                disabled={total <= 0}
+                onClick={completeDeliveryPayInStoreFromModal}
+              >
+                {t('posDeliveryPaymentComplete') || t('posConfirm') || '확인'}
               </Button>
             </DialogFooter>
           </>

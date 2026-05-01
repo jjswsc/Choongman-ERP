@@ -1,0 +1,14 @@
+-- POS 영업일 경계 (방콕 Asia/Bangkok)
+--
+-- 1) 전사 기본값
+--    system_settings.key = 'pos_business_day_start'
+--    value_json: {"hour": 10, "minute": 0}
+--    → 매일 해당 시각에 새 영업일 시작 (자정~시작 전은 전날 영업일)
+--
+-- 2) 매장별 덮어쓰기 (선택)
+--    system_settings.key = 'pos_business_day_start_by_store'
+--    value_json: {"v": 1, "stores": {"storecode": {"hour": 10, "minute": 0}, ...}}
+--    키는 norm(소문자·trim)로 저장됩니다. 매장에 값이 없으면 (1) 전사 기본을 따릅니다.
+--
+-- 관리자 UI: 매출 관리 → POS 운영 → 「영업일·자정 기준」
+-- 미설정 시 코드 기본: hour 8 (= 기존 0~7시 전날 귀속과 동일)

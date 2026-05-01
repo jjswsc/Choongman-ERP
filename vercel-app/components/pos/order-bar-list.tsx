@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { useLang, type LangCode } from '@/lib/lang-context'
 import { formatPosTimeHm24Bangkok } from '@/lib/pos-datetime-locale'
 
-export type OrderBarStatus = 'preparing' | 'partial_served' | 'packaged' | 'completed' | null
+export type OrderBarStatus = 'pending' | 'preparing' | 'partial_served' | 'packaged' | 'completed' | null
 type OrderBarStage = 'fresh' | 'warning' | 'urgent'
 
 export type DeliveryAppAccent = 'grab' | 'lineman' | 'shopee' | 'lime' | 'sky' | 'amber' | 'slate'
@@ -156,6 +156,8 @@ export function OrderBarList({
               ? 'bg-emerald-500 text-white ring-1 ring-emerald-600/30'
               : item.status === 'partial_served'
               ? 'bg-violet-500 text-white ring-1 ring-violet-600/30'
+              : item.status === 'pending'
+                ? 'bg-sky-600 text-white ring-1 ring-sky-700/30'
               : item.status === 'preparing' && stage === 'fresh'
                 ? 'bg-lime-500 text-white ring-1 ring-lime-600/30'
                 : item.status === 'preparing' && stage === 'warning'
@@ -166,6 +168,7 @@ export function OrderBarList({
           const statusLabel = item.status === 'completed' ? (t('posPaymentComplete') || '결제 완료') :
             item.status === 'packaged' ? (t('posDeliveryPackagingComplete') || '포장 완료') :
             item.status === 'partial_served' ? (usePackagingLabel ? (t('posPartiallyPackaged') || '일부 포장') : (t('posTableStatusPartiallyServed') || '일부서빙')) :
+            item.status === 'pending' ? (t('posOrderBarPendingAccept') || '수락 대기') :
             item.status === 'preparing' ? (t('posOrderStatusPreparing') || '조리중') : null
 
           const platformLabel = item.deliveryAppName ?? (item.deliveryAppAccent === 'grab' ? 'Grab' :
@@ -186,6 +189,7 @@ export function OrderBarList({
                 touchMode === 'large' ? 'py-3.5 min-h-[68px]' : 'py-2 min-h-[50px]',
                 isDeliveryWithAccent ? 'bg-white border-slate-200' : 'border-slate-300',
                 !isDeliveryWithAccent && item.status == null && 'bg-white text-slate-800',
+                !isDeliveryWithAccent && item.status === 'pending' && 'bg-sky-50 border-sky-400 text-sky-950',
                 !isDeliveryWithAccent && item.status === 'preparing' && stage === 'fresh' && 'bg-lime-400/95 border-lime-600 text-lime-950',
                 !isDeliveryWithAccent && item.status === 'preparing' && stage === 'warning' && 'bg-amber-500/90 border-amber-600 text-amber-950',
                 !isDeliveryWithAccent && item.status === 'preparing' && stage === 'urgent' && 'bg-red-500/90 border-red-600 text-red-950',

@@ -1,6 +1,18 @@
+export type PosCashDrawerOpenSource =
+  | 'payment_auto'
+  | 'manual'
+  /** 시재 관리 — 입금 등록 시(시제 입금 버튼) */
+  | 'till_deposit'
+  /** 영업 시작 — 오픈 시제 저장 시 */
+  | 'business_open_save'
+  /** POS 홈 — 영업 시작 메뉴로 진입 시 */
+  | 'business_open_nav'
+  /** POS 홈 — 영업 마감 메뉴로 진입 시 */
+  | 'business_close_nav'
+
 export type PosCashDrawerOpenParams = {
   reason: string
-  source: 'payment_auto' | 'manual'
+  source: PosCashDrawerOpenSource
   storeCode: string
   userName?: string
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
@@ -10,6 +22,14 @@ export type PosCashDrawerOpenResult = {
   success: boolean
   endpoint?: string
   error?: string
+}
+
+export function drawerOpenOptionFromPrinterSettings(
+  settings: { drawerOpenOption?: string } | null | undefined
+): 'password_and_reason' | 'reason_only' | 'force' {
+  const o = settings?.drawerOpenOption
+  if (o === 'password_and_reason' || o === 'reason_only' || o === 'force') return o
+  return 'reason_only'
 }
 
 const LOCAL_DRAWER_ENDPOINTS = [

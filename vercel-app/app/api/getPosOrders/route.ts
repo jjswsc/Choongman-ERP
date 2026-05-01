@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
+import {
+  loadPosBusinessDaySettingsContext,
+  posBusinessDayUtcEnvelopeBangkokYmd,
+  resolvePosBusinessHoursFromContext,
+  type PosBusinessDaySettingsContext,
+} from '@/lib/pos-business-day-server'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { isOfficeRole } from '@/lib/permissions'
@@ -23,7 +30,7 @@ async function resolveBearerCaller(
 }
 
 const POS_ORDER_SELECT =
-  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
+  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
 
 function addStoreVariants(set: Set<string>, raw: string) {
   const v = String(raw || '').trim()
@@ -283,6 +290,14 @@ export async function GET(request: NextRequest) {
 
     const startDate = startStr ? startStr.slice(0, 10) : ''
     const endDate = endStr ? endStr.slice(0, 10) : ''
+    const posBizDayScope =
+      searchParams.get('posBizDayScope') === '1' || searchParams.get('posBizDayScope') === 'true'
+    let singleBusinessDayUtcRange: { startISO: string; endISOExclusive: string } | null = null
+    let posBizDayFilterCtx: PosBusinessDaySettingsContext | null = null
+    if (posBizDayScope && startDate && endDate && startDate === endDate) {
+      posBizDayFilterCtx = await loadPosBusinessDaySettingsContext()
+      singleBusinessDayUtcRange = posBusinessDayUtcEnvelopeBangkokYmd(startDate, posBizDayFilterCtx)
+    }
 
     /** 단건 id 조회: Realtime UPDATE 후 풀 행 보강용 */
     if (orderId != null && orderId > 0) {
@@ -313,7 +328,8 @@ export async function GET(request: NextRequest) {
       const buildListFilter = (storeForFilter: string) => {
         const parts: string[] = []
         if (startDate && endDate) {
-          const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+          const { startISO, endISOExclusive } =
+            singleBusinessDayUtcRange ?? bangkokDateRangeToUtc(startDate, endDate)
           parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
           parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
         }
@@ -419,6 +435,18 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    if (posBizDayFilterCtx && posBizDayScope && startDate && endDate && startDate === endDate) {
+      rows = (rows || []).filter((r) => {
+        const ca = r.created_at
+        if (!ca) return false
+        const biz = getPosBusinessDateStrFromConfig(
+          new Date(ca),
+          resolvePosBusinessHoursFromContext(posBizDayFilterCtx, String(r.store_code ?? ''))
+        )
+        return biz === startDate
+      })
+    }
+
     const list = (rows || [])
       .filter((r) => {
         if (startDate && endDate) return true
@@ -452,6 +480,10 @@ export async function GET(request: NextRequest) {
           paymentQr: Number(r.payment_qr) ?? 0,
           paymentOther: Number(r.payment_other) ?? 0,
           paymentDeliveryApp: Number((r as { payment_delivery_app?: number }).payment_delivery_app) || 0,
+          deliveryAppCode: (() => {
+            const c = String((r as { delivery_app_code?: string }).delivery_app_code ?? '').trim()
+            return c || undefined
+          })(),
           deliveryPaymentChannel: (() => {
             const c = String((r as { delivery_payment_channel?: string }).delivery_payment_channel ?? '').trim()
             return c || undefined

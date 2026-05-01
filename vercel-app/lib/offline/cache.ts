@@ -22,8 +22,14 @@ export interface CacheEntry<T> {
   cachedAt: number
 }
 
-export function cacheKeyOrders(storeCode: string, startStr: string, endStr: string): string {
-  return `orders:${storeCode}:${startStr}:${endStr}`
+export function cacheKeyOrders(
+  storeCode: string,
+  startStr: string,
+  endStr: string,
+  opts?: { posBizDay?: boolean }
+): string {
+  const biz = opts?.posBizDay ? ':biz' : ''
+  return `orders:${storeCode}:${startStr}:${endStr}${biz}`
 }
 
 export function cacheKeySales(storeCode: string, dateStr: string): string {
