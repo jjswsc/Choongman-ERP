@@ -198,32 +198,45 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       : /ekkamai/i.test(String(receiptData.storeCode || ''))
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
-    const itemLines = (receiptData.items || [])
+    const itemRows = (receiptData.items || [])
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        return `${Number(it.qty) || 1}x ${name} = ${amt}`
+        return `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(name)}</td><td class="simple-item-amt">${amt}</td></tr>`
       })
-      .join('<br/>')
+      .join('')
+    const summaryRows = [
+      `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(receiptData.subtotal)}</td></tr>`,
+      receiptData.discountAmt > 0
+        ? `<tr><td class="simple-k">${esc(t('posDiscount') || '할인')}</td><td class="simple-v">-${formatBahtNum(receiptData.discountAmt)}</td></tr>`
+        : '',
+      (receiptData.deliveryFee ?? 0) > 0
+        ? `<tr><td class="simple-k">${esc(t('posDeliveryFee') || '배달 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.deliveryFee)}</td></tr>`
+        : '',
+      (receiptData.packagingFee ?? 0) > 0
+        ? `<tr><td class="simple-k">${esc(t('posPackagingFee') || '포장 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.packagingFee)}</td></tr>`
+        : '',
+      (receiptData.vatFeeAmt ?? 0) > 0
+        ? `<tr><td class="simple-k">${esc(t('posVatLabel') || '부가세')}</td><td class="simple-v">${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</td></tr>`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('')
     const simpleHtml = `
       <div class="receipt-content receipt-payment-simple">
         <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
-        <div class="simple-line">${esc(tr('store', '매장'))}: ${esc(receiptData.storeCode)}</div>
-        <div class="simple-line">${esc(tr('posOrderNo', '주문번호'))}: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
-        <div class="simple-line">${esc(tr('date', 'Date'))}: ${esc(printedAtStr)}</div>
-        <div class="simple-line">${esc(tr('posOrderType', 'Order Type'))}: ${esc(orderTypeLabel)}</div>
-        ${tableForPrint ? `<div class="simple-line">${esc(tr('posTable', '테이블'))}: ${escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableForPrint)}</div>` : ''}
-        ${d.receiptBizName ? `<div class="simple-line">${esc(d.receiptBizName)}</div>` : ''}
-        ${d.receiptBizAddress ? `<div class="simple-line">${esc(d.receiptBizAddress)}</div>` : ''}
-        ${d.receiptBizPhone ? `<div class="simple-line">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
+        <div class="simple-store">${esc(receiptData.storeCode)}</div>
+        <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
+        <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
+        <div class="simple-line"><b>${esc(tr('posOrderType', 'Order Type'))}</b>: ${esc(orderTypeLabel)}</div>
+        ${tableForPrint ? `<div class="simple-line"><b>${esc(tr('posTable', '테이블'))}</b>: ${escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableForPrint)}</div>` : ''}
+        ${d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
+        ${d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
+        ${d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         <div class="simple-divider"></div>
-        ${itemLines ? `<div class="simple-block">${itemLines}</div>` : ''}
+        <table class="simple-table">${itemRows}</table>
         <div class="simple-divider"></div>
-        <div class="simple-line">${esc(t('posSubtotal') || '소계')}: ${formatBahtNum(receiptData.subtotal)}</div>
-        ${receiptData.discountAmt > 0 ? `<div class="simple-line">${esc(t('posDiscount') || '할인')}: -${formatBahtNum(receiptData.discountAmt)}</div>` : ''}
-        ${(receiptData.deliveryFee ?? 0) > 0 ? `<div class="simple-line">${esc(t('posDeliveryFee') || '배달 수수료')}: +${formatBahtNum(receiptData.deliveryFee)}</div>` : ''}
-        ${(receiptData.packagingFee ?? 0) > 0 ? `<div class="simple-line">${esc(t('posPackagingFee') || '포장 수수료')}: +${formatBahtNum(receiptData.packagingFee)}</div>` : ''}
-        ${(receiptData.vatFeeAmt ?? 0) > 0 ? `<div class="simple-line">${esc(t('posVatLabel') || '부가세')}: ${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</div>` : ''}
+        <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
       </div>
     `
@@ -233,10 +246,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       bodyContent: simpleHtml,
       extraStyles: `
         .receipt-payment-simple { color: #000; }
-        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+        .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
         .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
-        .simple-block { font-size: 11px; line-height: 1.45; margin: 4px 0; word-break: break-word; }
+        .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
+        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .simple-table td { font-size: 11px; line-height: 1.4; padding: 1px 0; vertical-align: top; }
+        .simple-item-name { width: 72%; word-break: break-word; }
+        .simple-item-amt { width: 28%; text-align: right; white-space: nowrap; }
+        .simple-k { width: 72%; }
+        .simple-v { width: 28%; text-align: right; white-space: nowrap; }
         .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; }
       `,
     })
