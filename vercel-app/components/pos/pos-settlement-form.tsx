@@ -242,6 +242,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [settleDate, setSettleDate] = React.useState(() => getBangkokDateYmd())
   const [storeFilter, setStoreFilter] = React.useState('')
   const [systemTotal, setSystemTotal] = React.useState(0)
+  /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
+  const [systemCashFromOrders, setSystemCashFromOrders] = React.useState(0)
   const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -304,6 +306,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   /** 영업 시작: 전날 마감 시재 */
   const [prevDayCashActual, setPrevDayCashActual] = React.useState<number | null>(null)
   /** 결산: 카드/QR/배달앱 상세 펼침 */
+  const [cashExpanded, setCashExpanded] = React.useState(false)
   const [cardExpanded, setCardExpanded] = React.useState(false)
   const [qrExpanded, setQrExpanded] = React.useState(false)
   const [otherExpanded, setOtherExpanded] = React.useState(false)
@@ -393,12 +396,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           settlement: s,
         } = main
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
+        setSystemCashFromOrders(autoCashTotal)
+        const posCardOrdersTotal = Number(linkpos?.cardReportedTotal ?? 0) || 0
         const autoCardMap = (linkpos?.autoCardBreakdown || {}) as Record<string, number>
         const autoQrMap = (linkpos?.autoQrBreakdown || {}) as Record<string, number>
         const autoDeliveryMap = (linkpos?.autoDeliveryAppBreakdown || {}) as Record<string, number>
         const autoDineInMap = (linkpos?.autoDineInDeliveryBreakdown || {}) as Record<string, number>
         const autoOtherMap = (linkpos?.autoOtherBreakdown || {}) as Record<string, number>
         const autoCardTotal = Object.values(autoCardMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
+        const cardAmtFallbackFromPos = posCardOrdersTotal > 0 ? posCardOrdersTotal : autoCardTotal
         const autoQrTotal = Object.values(autoQrMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
         const autoDeliveryTotal = Object.values(autoDeliveryMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
         const autoDineInTotal = Object.values(autoDineInMap).reduce((sum, v) => sum + (Number(v) || 0), 0)
@@ -411,8 +417,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         if (single) {
           setSettlement(single)
           setCashActual(single.cashActual != null ? String(single.cashActual) : '')
-          setCashAmt(String(single.cashAmt ?? 0))
-          if ((Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0) {
+          if (openMode) {
+            setCashAmt(String(single.cashAmt ?? 0))
+            if ((Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0) {
+              setCashAmt(String(autoCashTotal))
+            }
+          } else {
             setCashAmt(String(autoCashTotal))
           }
           setCardAmt(String(single.cardAmt ?? 0))
@@ -427,8 +437,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const cardBreakdownEmpty = isBreakdownEmpty(cb)
           const cardAutoApplied = cardBreakdownEmpty && autoCardTotal > 0
           setCardBreakdown(cardAutoApplied ? autoCb : cb)
-          if ((Number(single.cardAmt ?? 0) || 0) <= 0 && autoCardTotal > 0) {
-            setCardAmt(String(autoCardTotal))
+          if ((Number(single.cardAmt ?? 0) || 0) <= 0 && cardAmtFallbackFromPos > 0) {
+            setCardAmt(String(cardAmtFallbackFromPos))
           }
           const qk = qrKeys.length > 0 ? qrKeys : [...DEFAULT_QR_KEYS]
           const ok = otherKeys.length > 0 ? otherKeys : [...DEFAULT_OTHER_KEYS]
@@ -492,11 +502,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setOpeningCashActual(single.cashActual != null ? Number(single.cashActual) : null)
           const cashAutoApplied = (Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0
           setAutoFilledFlags({
-            card: cardAutoApplied,
+            card:
+              cardAutoApplied ||
+              ((Number(single.cardAmt ?? 0) || 0) <= 0 &&
+                cardBreakdownEmpty &&
+                cardAmtFallbackFromPos > 0),
             qr: qrAutoApplied,
             delivery: deliveryAutoApplied || (dineInBreakdownEmpty && autoDineInTotal > 0),
             other: otherAutoApplied,
-            cash: cashAutoApplied,
+            cash: openMode ? cashAutoApplied : autoCashTotal > 0,
           })
           const savedDenoms =
             single.cashActualDenoms && typeof single.cashActualDenoms === 'object'
@@ -522,7 +536,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setSystemVat(0)
           setCashActual('')
           setCashAmt(String(autoCashTotal || 0))
-          setCardAmt(String(autoCardTotal || 0))
+          setCardAmt(String(cardAmtFallbackFromPos || 0))
           setQrAmt(String(autoQrTotal || 0))
           setDeliveryAppAmt(String(autoDeliveryTotal || 0))
           setOtherAmt(String(autoOtherTotal || 0))
@@ -539,7 +553,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setClosed(false)
           setOpeningCashActual(null)
           setAutoFilledFlags({
-            card: autoCardTotal > 0,
+            card: autoCardTotal > 0 || posCardOrdersTotal > 0,
             qr: autoQrTotal > 0,
             delivery: autoDeliveryTotal > 0 || autoDineInTotal > 0,
             other: autoOtherTotal > 0,
@@ -558,6 +572,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSystemTotal(0)
         setSystemSubtotal(0)
         setSystemVat(0)
+        setSystemCashFromOrders(0)
         setLinkposSummary(null)
         setSettlement(null)
         setPrevDayCashActual(null)
@@ -656,8 +671,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   )
   /** 돈통 시제: 영업시작·결산 모두 화폐 단위 입력 사용 */
   const cashActualNum = denomTotal
-  const cashAmtNum = parseFloat(cashAmt) || 0
-  const cardNum = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0) || parseFloat(cardAmt) || 0
+  const cashAmtNum = openMode ? parseFloat(cashAmt) || 0 : systemCashFromOrders
+  const cardFromBreakdownLines = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0)
+  const cardNum =
+    cardFromBreakdownLines > 0.005 ? cardFromBreakdownLines : parseFloat(cardAmt) || 0
   const qrFromLines = displayQrKeyList.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0)
   const qrNum = qrFromLines > 0.005 ? qrFromLines : parseFloat(qrAmt) || 0
   const otherFromLines = OTHER_KEYS.reduce((s, k) => s + (parseFloat(otherBreakdown[k]) || 0), 0)
@@ -1180,31 +1197,36 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   </p>
                 </div>
 
-                <label
-                  className="flex items-center justify-between text-sm"
-                  data-tour="pos-tour-close-cash-line"
-                >
-                  <span className="flex items-center gap-2">
-                    {t('posCash') || '현금'}
-                    {autoFilledFlags.cash && (
-                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
-                        AUTO
+                <Collapsible open={cashExpanded} onOpenChange={setCashExpanded}>
+                  <CollapsibleTrigger asChild>
+                    <div
+                      className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer"
+                      data-tour="pos-tour-close-cash-line"
+                    >
+                      <span className="font-medium flex items-center gap-2">
+                        {t('posCash') || '현금'}
+                        {systemCashFromOrders > 0 && (
+                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-800 dark:bg-slate-700 dark:text-slate-100">
+                            {t('posSettlementCashFromPosBadge') || 'POS'}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className="ml-2 h-9 w-32 text-right"
-                      value={cashAmt}
-                      onChange={(e) => setCashAmt(e.target.value)}
-                      disabled={inputsLocked}
-                    />
-                    <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
-                  </div>
-                </label>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums font-semibold">
+                          {cashAmtNum.toLocaleString()}
+                          {currencySuffix}
+                        </span>
+                        {cashExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </span>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <p className="mt-2 pl-2 text-[10px] leading-snug text-muted-foreground border-t pt-2">
+                      {t('posSettlementCashFromPosReadOnly') ||
+                        '완료 주문의 현금 결제 합계입니다. 결제 화면과 맞추기 위해 수정할 수 없습니다.'}
+                    </p>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {/* 카드: 큰 제목 + 펼치기/접기 */}
                 <Collapsible open={cardExpanded} onOpenChange={setCardExpanded}>
@@ -1225,22 +1247,36 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="grid grid-cols-2 gap-2 pl-2 pt-2 border-t mt-2">
-                      {CARD_KEYS.map((k) => (
-                        <label key={k} className="flex items-center gap-2 text-xs">
-                          <span className="w-16 shrink-0">{k}</span>
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className="h-8 text-right"
-                            value={cardBreakdown[k] ?? ''}
-                            onChange={(e) => setCardBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
-                            disabled={inputsLocked}
-                          />
-                          <span className="text-muted-foreground w-5">฿</span>
-                        </label>
-                      ))}
+                    <div className="mt-2 space-y-2 border-t pt-2 pl-2">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+                        <span className="text-muted-foreground">{t('posSettlementPosCardOrdersTotal')}</span>
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {(linkposSummary?.cardReportedTotal ?? 0).toLocaleString()}
+                          {currencySuffix}
+                        </span>
+                      </div>
+                      <p className="text-[10px] leading-snug text-muted-foreground">
+                        {t('posSettlementCardBrandEdcHint') ||
+                          '결제 화면에는 카드 구분 없이 기록됩니다. EDC 단말 결산서를 보고 아래에 브랜드별 금액을 입력해 주세요.'}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {CARD_KEYS.map((k) => (
+                          <label key={k} className="flex items-center gap-2 text-xs">
+                            <span className="w-16 shrink-0">{k}</span>
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="0.01"
+                              className="h-8 text-right"
+                              value={cardBreakdown[k] ?? ''}
+                              onChange={(e) => setCardBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                              disabled={inputsLocked}
+                            />
+                            <span className="text-muted-foreground w-5">฿</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
