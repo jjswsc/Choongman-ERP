@@ -90,7 +90,22 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
-    await supabaseUpsert('pos_settlements', [row], 'store_code,settle_date')
+    try {
+      await supabaseUpsert('pos_settlements', [row], 'store_code,settle_date')
+    } catch (firstErr) {
+      const msg = firstErr instanceof Error ? firstErr.message : String(firstErr)
+      const missingDenomCol =
+        msg.includes('cash_actual_denoms') && (msg.includes('PGRST204') || msg.includes('Could not find'))
+      if (missingDenomCol) {
+        const { cash_actual_denoms: _omit, ...rowWithoutDenoms } = row
+        await supabaseUpsert('pos_settlements', [rowWithoutDenoms], 'store_code,settle_date')
+        console.warn(
+          'savePosSettlement: DB에 cash_actual_denoms 없음 → 권종 제외 후 저장. sql/pos_settlements_cash_actual_denoms.sql 실행 권장'
+        )
+      } else {
+        throw firstErr
+      }
+    }
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('savePosSettlement:', e)
