@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { isLinkposCardApiEnabled } from '@/lib/linkpos-card-api-enabled'
 import { runHypercomSaleOnRelay } from '@/lib/payments/linkpos-server'
 import type { LinkposPaymentSummary } from '@/lib/payments/types'
 import { requireAuth } from '@/lib/verify-auth'
@@ -19,6 +20,12 @@ export async function POST(req: NextRequest) {
     const res = authResult.errorResponse
     res.headers.set('Access-Control-Allow-Origin', '*')
     return res
+  }
+  if (!isLinkposCardApiEnabled()) {
+    return NextResponse.json(
+      { success: false, message: 'linkpos_card_api_disabled' },
+      { status: 400, headers }
+    )
   }
   try {
     const body = await req.json()

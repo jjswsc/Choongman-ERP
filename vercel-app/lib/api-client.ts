@@ -35,6 +35,7 @@ import {
   parseEvalAnalyticsErrorResponse,
 } from './eval-analytics-http-error'
 import { jsonAsArray, jsonAsPlainObject, jsonAsStringArray, jsonObjectWithList } from './safe-api-json'
+import { isLinkposCardApiEnabled } from './linkpos-card-api-enabled'
 
 export { apiFetch } from './api/fetch'
 export { apiFetchWithOffline }
@@ -8781,6 +8782,14 @@ export async function executeLinkposPayment(params: {
   storeCode: string
   timeoutMs?: number
 }) {
+  if (!isLinkposCardApiEnabled()) {
+    return {
+      success: true as const,
+      payment: null as LinkposPaymentSummary | null,
+      source: 'disabled' as const,
+    }
+  }
+
   const timeoutMs = Math.max(2000, Number(params.timeoutMs ?? 12000))
   const payload = {
     action: 'sale',
@@ -8837,6 +8846,14 @@ export async function executeLinkposPaymentServer(params: {
   retryOfLocalTxId?: string
   timeoutMs?: number
 }) {
+  if (!isLinkposCardApiEnabled()) {
+    return {
+      success: false as const,
+      message: 'linkpos_card_api_disabled',
+      source: 'disabled' as const,
+    }
+  }
+
   const payload = {
     action: 'sale',
     amount: Number(params.amount),

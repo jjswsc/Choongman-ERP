@@ -313,7 +313,7 @@ export default function PosPrintersPage() {
   const [activeTab, setActiveTab] = React.useState("printer")
 
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
-  const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(false)
+  const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(true)
 
   const [logoPrint, setLogoPrint] = React.useState(false)
   const [receiptPrintTiming, setReceiptPrintTiming] = React.useState<'per_payment' | 'final_payment'>('per_payment')
@@ -2074,7 +2074,7 @@ export default function PosPrintersPage() {
                   <p className="text-xs text-muted-foreground mb-2">
                     {tr(
                       "posLinkposSkipTerminalCardHint",
-                      "은행 단말·LINKPOS 릴레이 없이 카드 금액만 POS에 입력해 정산할 때 켜세요. 켜면 승인 API를 호출하지 않습니다."
+                      "연동 전·수기: 켜 두면 카드 금액만 POS에 입력하고 승인 API를 호출하지 않습니다(앱 기본과 동일). 실제 단말 승인을 쓰려면 끄고 배포에 NEXT_PUBLIC_LINKPOS_CARD_ENABLED=true·LINKPOS_RELAY_URL 등을 설정하세요."
                     )}
                   </p>
                   <ToggleRow

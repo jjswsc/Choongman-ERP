@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isLinkposCardApiEnabled } from '@/lib/linkpos-card-api-enabled'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
+    if (!isLinkposCardApiEnabled()) {
+      return NextResponse.json({ success: false, message: 'linkpos_card_api_disabled' }, { status: 400, headers })
+    }
     const relayUrl = String(process.env.LINKPOS_RELAY_URL || '').trim()
     if (!relayUrl) {
       return NextResponse.json({ success: false, message: 'relay_not_configured' }, { status: 503, headers })
