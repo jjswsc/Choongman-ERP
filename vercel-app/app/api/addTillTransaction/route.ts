@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-
-function isMissingIdentityColumnError(e: unknown): boolean {
-  const msg = String(e || '').toLowerCase()
-  return msg.includes('user_employee_id') || msg.includes('user_employee_code')
-}
-
-function stripIdentityColumns<T extends Record<string, unknown>>(row: T): T {
-  const next = { ...row }
-  delete next.user_employee_id
-  delete next.user_employee_code
-  return next
-}
+import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 
 /** 시재(카운터 현금) 입출금 등록 - pos_till_transactions */
 export async function POST(request: NextRequest) {
@@ -77,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const amt = transType === 'withdrawal' || transType === 'sales_withdrawal' ? -amount : amount
 
-    const row = {
+    const row: Record<string, unknown> = {
       store_code: storeCode,
       trans_date: transDate,
       trans_type: transType,
@@ -88,12 +76,7 @@ export async function POST(request: NextRequest) {
       user_employee_code: userEmployeeCode,
       ...(salesDate && transType === 'sales_withdrawal' ? { sales_date: salesDate } : {}),
     }
-    try {
-      await supabaseInsert('pos_till_transactions', row)
-    } catch (e) {
-      if (!isMissingIdentityColumnError(e)) throw e
-      await supabaseInsert('pos_till_transactions', stripIdentityColumns(row))
-    }
+    await supabaseInsertWithPgrst204Fallback('pos_till_transactions', row, 'addTillTransaction')
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {

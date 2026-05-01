@@ -4,11 +4,14 @@ import {
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 
-/** PostgREST PGRST204: Could not find the 'col' column */
+/** PostgREST PGRST204: Could not find the 'col' / "col" column */
 export function extractPgrstMissingColumn(error: unknown): string | null {
   const msg = String(error ?? '')
-  const m = msg.match(/Could not find the '([^']+)' column/i)
-  return m?.[1] || null
+  const m1 = msg.match(/Could not find the '([^']+)' column/i)
+  if (m1?.[1]) return m1[1]
+  const m2 = msg.match(/Could not find the "([^"]+)" column/i)
+  if (m2?.[1]) return m2[1]
+  return null
 }
 
 /**

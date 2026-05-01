@@ -320,6 +320,7 @@ export async function POST(req: NextRequest) {
           Math.max(0, Number(keep.payment_qr) || 0) + Math.max(0, Number(absorb.payment_qr) || 0),
         payment_other:
           Math.max(0, Number(keep.payment_other) || 0) + Math.max(0, Number(absorb.payment_other) || 0),
+        payment_other_breakdown: null,
         payment_delivery_app:
           Math.max(0, Number(keep.payment_delivery_app) || 0) +
           Math.max(0, Number(absorb.payment_delivery_app) || 0),

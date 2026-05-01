@@ -3,6 +3,7 @@
  * core fetch/auth는 lib/api/ 에서 분리
  * 쓰기 API는 apiFetchWithOffline 사용 → 네트워크 실패 시 큐 적재, 복구 후 자동 전송
  */
+import type { PosPaymentOtherBreakdown } from './pos-payment-other-breakdown'
 import type { MarketingCollabDetail } from './marketing-collab-detail'
 import type { MarketingCampaignPhasePeriod } from './marketing-campaign-periods'
 import { apiFetch } from './api/fetch'
@@ -8206,6 +8207,8 @@ export interface PosOrder {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  /** payment_other 세부(트루머니·위챗·관리자 지갑 등). 합계는 payment_other 와 일치 */
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   /** 배달앱(Grab/Line Man/Shopee 등) 플랫폼 결제 금액 */
   paymentDeliveryApp?: number
   /** grab | lineman | shopee | dine_in */
@@ -8611,6 +8614,7 @@ export async function updatePosOrder(params: {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
   memberId?: number
@@ -8634,6 +8638,27 @@ export async function updatePosOrder(params: {
   }
 }) {
   const res = await apiFetchWithOffline('/api/updatePosOrder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/** 영수증 관리: 당일(방콕) 결제완료·완료 주문의 결제 수단 분해만 정정 (오프라인 시 큐 동기화 필요) */
+export async function correctPosOrderPayment(params: {
+  id: number
+  reason: string
+  paymentCash: number
+  paymentCard: number
+  paymentQr: number
+  paymentOther: number
+  /** 생략 시 기존 DB breakdown 을 새 payment_other 에 맞게 재검증·유지 */
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
+  paymentDeliveryApp: number
+  deliveryPaymentChannel?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/correctPosOrderPayment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -8908,6 +8933,7 @@ export async function savePosOrder(params: {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
   memberId?: number

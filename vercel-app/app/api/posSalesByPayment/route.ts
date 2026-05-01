@@ -6,6 +6,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
+import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 const FETCH_LIMIT = 50000
@@ -32,12 +33,14 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: FETCH_LIMIT,
-      select: 'payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,total,status,order_type,store_code',
+      select:
+        'payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,total,status,order_type,store_code',
     })) as {
       payment_cash?: number
       payment_card?: number
       payment_qr?: number
       payment_other?: number
+      payment_other_breakdown?: unknown
       payment_delivery_app?: number
       delivery_payment_channel?: string | null
       total?: number
@@ -61,7 +64,29 @@ export async function GET(request: NextRequest) {
       if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
       if (card > 0) byMethod.card = (byMethod.card || 0) + card
       if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
-      if (other > 0) byMethod.other = (byMethod.other || 0) + other
+      if (other > 0) {
+        const bo = parsePaymentOtherBreakdown(r.payment_other_breakdown)
+        if (bo && Math.abs(sumPaymentOtherBreakdown(bo) - other) <= 0.02) {
+          const add = (key: string, n: number) => {
+            if (n > 0.005) byMethod[key] = (byMethod[key] || 0) + n
+          }
+          add('other_truemoney', Number(bo.trueMoney) || 0)
+          add('other_wechat', Number(bo.weChat) || 0)
+          add('other_alipay', Number(bo.alipay) || 0)
+          add('other_linepay', Number(bo.linePay) || 0)
+          add('other_shopeepay', Number(bo.shopeePay) || 0)
+          add('other_misc', Number(bo.misc) || 0)
+          if (bo.admin && typeof bo.admin === 'object') {
+            for (const [id, rawAmt] of Object.entries(bo.admin)) {
+              const nk = String(id || '').trim()
+              if (!nk) continue
+              add(`other_wallet_${nk.replace(/[^a-zA-Z0-9_-]/g, '_')}`, Number(rawAmt) || 0)
+            }
+          }
+        } else {
+          byMethod.other = (byMethod.other || 0) + other
+        }
+      }
       if (deliveryApp > 0) {
         byMethod.delivery_app = (byMethod.delivery_app || 0) + deliveryApp
         if (deliveryCh === 'grab') byMethod.delivery_grab = (byMethod.delivery_grab || 0) + deliveryApp

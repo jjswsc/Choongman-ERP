@@ -12,6 +12,10 @@ import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
 import { resolveBangkokAccountingDate, isPosCompletionStatus } from '@/lib/pos-order-policy'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
+import {
+  coercePaymentOtherBreakdownForSave,
+  paymentOtherBreakdownForDb,
+} from '@/lib/pos-payment-other-breakdown'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -180,6 +184,11 @@ export async function POST(req: NextRequest) {
     const paymentCard = Math.max(0, Number(body.paymentCard ?? 0))
     const paymentQr = Math.max(0, Number(body.paymentQr ?? 0))
     const paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
+    const paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
+      paymentOther,
+      body.paymentOtherBreakdown ?? body.payment_other_breakdown
+    )
+    const paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
     const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
     const deliveryPaymentChannel = normalizeDeliveryPaymentChannel(
       body.deliveryPaymentChannel ?? body.delivery_payment_channel,
@@ -277,6 +286,11 @@ export async function POST(req: NextRequest) {
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
+      ...(paymentOther <= 0.005
+        ? { payment_other_breakdown: null }
+        : paymentOtherBreakdownDb
+          ? { payment_other_breakdown: paymentOtherBreakdownDb }
+          : {}),
       payment_delivery_app: paymentDeliveryApp,
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,

@@ -4,6 +4,10 @@ import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
+import {
+  coercePaymentOtherBreakdownForSave,
+  paymentOtherBreakdownForDb,
+} from '@/lib/pos-payment-other-breakdown'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 
@@ -106,6 +110,12 @@ export async function POST(req: NextRequest) {
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
 
+    const paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
+      paymentOther,
+      body?.paymentOtherBreakdown ?? body?.payment_other_breakdown
+    )
+    const paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
+
     const patch: Record<string, unknown> = {
       table_name: tableName,
       memo,
@@ -115,6 +125,11 @@ export async function POST(req: NextRequest) {
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
+      ...(paymentOther <= 0.005
+        ? { payment_other_breakdown: null }
+        : paymentOtherBreakdownDb
+          ? { payment_other_breakdown: paymentOtherBreakdownDb }
+          : { payment_other_breakdown: null }),
       payment_delivery_app: paymentDeliveryApp,
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,

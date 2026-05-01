@@ -5,8 +5,21 @@
 #
 # Next.js 번들과 무관한 경로만 바뀐 커밋은 프리뷰/프로덕션 빌드를 돌리지 않습니다.
 # (문서, windows-pos 일렉트론, Supabase용 sql 참고 파일 등)
+#
+# 동일 Git 저장소를 충만·Omni 등 Vercel "프로젝트" 두 개에 연결하면 푸시마다 둘 다 빌드되어
+# 요금이 거의 2배로 나갑니다. 당분간 쓰지 않는 프로젝트만 아래 환경변수를 켜 두세요.
+# Vercel → 해당 프로젝트 → Settings → Environment Variables (Production·Preview·Development 전부 권장)
+# CM_VERCEL_PAUSE_AUTO_BUILDS=1  (또는 true / yes, 대소문자 무관)
+# 다시 배포할 때는 해당 프로젝트에서 변수를 끄거나 삭제한 뒤 Redeploy 하면 됩니다.
 
 set -eu
+
+case "${CM_VERCEL_PAUSE_AUTO_BUILDS:-}" in
+  1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss])
+    echo "CM_VERCEL_PAUSE_AUTO_BUILDS is set — skipping build for this Vercel project."
+    exit 0
+    ;;
+esac
 
 if [ "${VERCEL_GIT_PREVIOUS_SHA:-}" = "" ]; then
   echo "No previous SHA found. Running build."

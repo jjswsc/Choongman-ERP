@@ -1,11 +1,21 @@
 'use client'
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from '@/lib/app-message'
 
 import * as React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, ChevronDown, Printer } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Search, ChevronDown, Printer, PencilLine, Banknote, CreditCard, QrCode, Bike, Wallet } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -20,6 +30,7 @@ import {
   getPosMenus,
   getPosPrinterSettings,
   getPosDeliveryApps,
+  correctPosOrderPayment,
   type PosOrder,
   type PosMenu,
   type PosDeliveryApp,
@@ -34,12 +45,19 @@ import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kit
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
+import { toDateStrBangkok } from '@/lib/attendance-utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import { receiptModalDataFromPosOrderReprint } from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
+import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import {
+  parsePaymentOtherBreakdown,
+  paymentOtherBreakdownSearchTokens,
+  type PosPaymentOtherBreakdown,
+} from '@/lib/pos-payment-other-breakdown'
 
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return '-'
@@ -107,6 +125,7 @@ function receiptSegmentSearchHaystack(o: PosOrder): string {
     o.deliveryAppCode,
     posDeliveryCodeToLabel(o.deliveryAppCode),
     getPosDeliveryPlatformName({ tableName: o.tableName, orderNo: o.orderNo, memo: o.memo }, undefined),
+    paymentOtherBreakdownSearchTokens(parsePaymentOtherBreakdown(o.paymentOtherBreakdown)),
   ]
     .map((x) => String(x ?? '').trim())
     .filter(Boolean)
@@ -161,10 +180,42 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [orders, setOrders] = React.useState<PosOrder[]>([])
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
+  const [payCorrectOrder, setPayCorrectOrder] = React.useState<PosOrder | null>(null)
+  const [payCorrectReason, setPayCorrectReason] = React.useState('')
+  const [pcCash, setPcCash] = React.useState('')
+  const [pcCard, setPcCard] = React.useState('')
+  const [pcQr, setPcQr] = React.useState('')
+  const [pcOther, setPcOther] = React.useState('')
+  const [pcDelApp, setPcDelApp] = React.useState('')
+  const [pcDelChannel, setPcDelChannel] = React.useState<'grab' | 'lineman' | 'shopee' | 'dine_in'>('grab')
+  const [pcActiveMethod, setPcActiveMethod] = React.useState<'cash' | 'card' | 'qr' | 'delivery_app' | 'other'>('cash')
+  const [pcMoveFromMethod, setPcMoveFromMethod] = React.useState<'cash' | 'card' | 'qr' | 'delivery_app' | 'other'>('cash')
+  const [pcOtherDetailKey, setPcOtherDetailKey] = React.useState('misc')
+  const [payCorrectSaving, setPayCorrectSaving] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [deliveryAppsCatalog, setDeliveryAppsCatalog] = React.useState<PosDeliveryApp[]>([])
 
   const canSearchAll = isOfficeRole(auth?.role || '')
+
+  const payCorrectOtherDetailOptions = React.useMemo(() => {
+    const base: { key: string; label: string }[] = [
+      { key: 'trueMoney', label: t('posPaymentTrueMoney') || 'TrueMoney' },
+      { key: 'weChat', label: t('posPaymentWeChat') || 'WeChat' },
+      { key: 'alipay', label: t('posPaymentAlipay') || 'Alipay' },
+      { key: 'linePay', label: t('posPaymentLinePay') || 'LINE Pay' },
+      { key: 'shopeePay', label: t('posPaymentShopeePay') || 'Shopee Pay' },
+      { key: 'misc', label: t('posPaymentOtherEtc') || '기타' },
+    ]
+    const row = payCorrectOrder
+    if (!row) return base
+    const br = parsePaymentOtherBreakdown(row.paymentOtherBreakdown)
+    if (!br?.admin || typeof br.admin !== 'object') return base
+    const adminRows = Object.keys(br.admin).map((id) => ({
+      key: `admin:${String(id)}`,
+      label: `Wallet (${String(id)})`,
+    }))
+    return [...base, ...adminRows]
+  }, [payCorrectOrder, t])
 
   const catalogStoreKey = React.useMemo(() => {
     const nf = storeFilter ? resolveStoreKey(storeFilter) : ''
@@ -255,6 +306,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           o.orderNo?.toLowerCase().includes(term) ||
           (o.tableName && o.tableName.toLowerCase().includes(term)) ||
           (o.memo && o.memo.toLowerCase().includes(term)) ||
+          receiptSegmentSearchHaystack(o).includes(term) ||
           o.items?.some(
             (it: { name?: string }) =>
               it.name && String(it.name).toLowerCase().includes(term)
@@ -368,7 +420,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         origin: typeof window !== 'undefined' ? window.location.origin : '',
         printedAt: paidAt,
         printerSettings: settings,
-        forceSimpleTextMode: /ekkamai/i.test(store),
+        forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(store),
       })
       printPosHtmlDocument(fullHtml, {
         title: t('posReceipt') || '영수증',
@@ -464,6 +516,197 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     } catch (e) {
       win.close()
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    }
+  }
+
+  const isPayCorrectableOrder = (o: PosOrder) => {
+    const st = String(o.status ?? '').toLowerCase()
+    if (!['paid', 'completed'].includes(st)) return false
+    if (!(Number(o.total) > 0.005)) return false
+    const d = toDateStrBangkok(o.createdAt ?? null)
+    const today = toDateStrBangkok(new Date())
+    return Boolean(d && today && d === today)
+  }
+
+  const openPayCorrect = (o: PosOrder) => {
+    if (!online) {
+      void appAlert(t('posReceiptPayCorrectOffline'))
+      return
+    }
+    setPayCorrectOrder(o)
+    setPayCorrectReason('')
+    setPcCash(String(Math.max(0, Number(o.paymentCash ?? 0) || 0)))
+    setPcCard(String(Math.max(0, Number(o.paymentCard ?? 0) || 0)))
+    setPcQr(String(Math.max(0, Number(o.paymentQr ?? 0) || 0)))
+    setPcOther(String(Math.max(0, Number(o.paymentOther ?? 0) || 0)))
+    setPcDelApp(String(Math.max(0, Number(o.paymentDeliveryApp ?? 0) || 0)))
+    const ch0 = String(o.deliveryPaymentChannel ?? '').trim().toLowerCase()
+    if (ch0 === 'lineman') setPcDelChannel('lineman')
+    else if (ch0 === 'shopee') setPcDelChannel('shopee')
+    else if (ch0 === 'dine_in') setPcDelChannel('dine_in')
+    else setPcDelChannel('grab')
+    const pcash = Math.max(0, Number(o.paymentCash ?? 0) || 0)
+    const pcard = Math.max(0, Number(o.paymentCard ?? 0) || 0)
+    const pqr = Math.max(0, Number(o.paymentQr ?? 0) || 0)
+    const pother = Math.max(0, Number(o.paymentOther ?? 0) || 0)
+    const pdel = Math.max(0, Number(o.paymentDeliveryApp ?? 0) || 0)
+    if (pcash > 0.005) setPcActiveMethod('cash')
+    else if (pcard > 0.005) setPcActiveMethod('card')
+    else if (pqr > 0.005) setPcActiveMethod('qr')
+    else if (pdel > 0.005) setPcActiveMethod('delivery_app')
+    else if (pother > 0.005) setPcActiveMethod('other')
+    else setPcActiveMethod('cash')
+    if (pcash > 0.005) setPcMoveFromMethod('cash')
+    else if (pcard > 0.005) setPcMoveFromMethod('card')
+    else if (pqr > 0.005) setPcMoveFromMethod('qr')
+    else if (pdel > 0.005) setPcMoveFromMethod('delivery_app')
+    else if (pother > 0.005) setPcMoveFromMethod('other')
+    else setPcMoveFromMethod('cash')
+    const br = parsePaymentOtherBreakdown(o.paymentOtherBreakdown)
+    if ((Number(br?.trueMoney) || 0) > 0.005) setPcOtherDetailKey('trueMoney')
+    else if ((Number(br?.weChat) || 0) > 0.005) setPcOtherDetailKey('weChat')
+    else if ((Number(br?.alipay) || 0) > 0.005) setPcOtherDetailKey('alipay')
+    else if ((Number(br?.linePay) || 0) > 0.005) setPcOtherDetailKey('linePay')
+    else if ((Number(br?.shopeePay) || 0) > 0.005) setPcOtherDetailKey('shopeePay')
+    else if ((Number(br?.misc) || 0) > 0.005) setPcOtherDetailKey('misc')
+    else if (br?.admin && typeof br.admin === 'object') {
+      const firstAdmin = Object.keys(br.admin)[0]
+      setPcOtherDetailKey(firstAdmin ? `admin:${firstAdmin}` : 'misc')
+    } else {
+      setPcOtherDetailKey('misc')
+    }
+  }
+
+  const resolvePayCorrectErrorMessage = (code: string) => {
+    const c = String(code || '').trim()
+    if (c === 'today_only') return t('posReceiptPayCorrectTodayOnly')
+    if (c === 'status_not_correctable') return t('posReceiptPayCorrectStatus')
+    if (c === 'payment_total_mismatch') return t('posReceiptPayCorrectMismatch')
+    if (c === 'payment_other_breakdown_mismatch') return t('posReceiptPayCorrectOtherBreakdownMismatch')
+    if (c === 'forbidden_store') return t('posReceiptPayCorrectForbidden')
+    if (c === 'reason_required') return t('posReceiptPayCorrectReasonShort')
+    if (c === 'Unauthorized') return t('posReceiptPayCorrectUnauthorized')
+    return c || t('processFail') || '실패'
+  }
+
+  const payCorrectOrderTotal = payCorrectOrder ? Number(payCorrectOrder.total ?? 0) : 0
+  const pcMethodAmount = React.useCallback(
+    (m: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'): number => {
+      if (m === 'cash') return Math.max(0, parseFloat(pcCash) || 0)
+      if (m === 'card') return Math.max(0, parseFloat(pcCard) || 0)
+      if (m === 'qr') return Math.max(0, parseFloat(pcQr) || 0)
+      if (m === 'delivery_app') return Math.max(0, parseFloat(pcDelApp) || 0)
+      return Math.max(0, parseFloat(pcOther) || 0)
+    },
+    [pcCash, pcCard, pcQr, pcDelApp, pcOther]
+  )
+  const setPcMethodAmount = React.useCallback(
+    (m: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other', amount: number) => {
+      const s = String(Math.round(Math.max(0, amount) * 100) / 100)
+      if (m === 'cash') setPcCash(s)
+      else if (m === 'card') setPcCard(s)
+      else if (m === 'qr') setPcQr(s)
+      else if (m === 'delivery_app') setPcDelApp(s)
+      else setPcOther(s)
+    },
+    []
+  )
+  const moveAmountToActiveMethod = React.useCallback(() => {
+    const from = pcMoveFromMethod
+    const to = pcActiveMethod
+    if (from === to) return
+    const amt = pcMethodAmount(from)
+    if (amt <= 0.005) return
+    setPcMethodAmount(from, 0)
+    setPcMethodAmount(to, pcMethodAmount(to) + amt)
+    if (to === 'other' && !pcOtherDetailKey) setPcOtherDetailKey('misc')
+    setPcMoveFromMethod(to)
+  }, [pcMoveFromMethod, pcActiveMethod, pcMethodAmount, setPcMethodAmount, pcOtherDetailKey])
+  const pcMoveFromCandidates = React.useMemo(
+    () =>
+      (['cash', 'card', 'qr', 'delivery_app', 'other'] as const).filter((m) => pcMethodAmount(m) > 0.005),
+    [pcMethodAmount]
+  )
+  const payCorrectSumVal =
+    (parseFloat(pcCash) || 0) +
+    (parseFloat(pcCard) || 0) +
+    (parseFloat(pcQr) || 0) +
+    (parseFloat(pcOther) || 0) +
+    (parseFloat(pcDelApp) || 0)
+  const payCorrectSumOk =
+    payCorrectOrderTotal <= 0.005 || Math.abs(payCorrectSumVal - payCorrectOrderTotal) < 0.02
+
+  const handleSavePayCorrect = async () => {
+    if (!payCorrectOrder) return
+    const reason = payCorrectReason.trim()
+    if (reason.length < 2) {
+      await appAlert(t('posReceiptPayCorrectReasonShort'))
+      return
+    }
+    const del = parseFloat(pcDelApp) || 0
+    const payDelChannel = del > 0.005 ? pcDelChannel : null
+    const otherAmt = parseFloat(pcOther) || 0
+    const roundedOther = Math.round(Math.max(0, otherAmt) * 100) / 100
+    let paymentOtherBreakdown: PosPaymentOtherBreakdown | undefined
+    if (roundedOther > 0.005) {
+      if (pcOtherDetailKey === 'trueMoney') paymentOtherBreakdown = { trueMoney: roundedOther }
+      else if (pcOtherDetailKey === 'weChat') paymentOtherBreakdown = { weChat: roundedOther }
+      else if (pcOtherDetailKey === 'alipay') paymentOtherBreakdown = { alipay: roundedOther }
+      else if (pcOtherDetailKey === 'linePay') paymentOtherBreakdown = { linePay: roundedOther }
+      else if (pcOtherDetailKey === 'shopeePay') paymentOtherBreakdown = { shopeePay: roundedOther }
+      else if (pcOtherDetailKey.startsWith('admin:')) {
+        const adminId = pcOtherDetailKey.slice(6).trim()
+        paymentOtherBreakdown = adminId ? { admin: { [adminId]: roundedOther } } : { misc: roundedOther }
+      } else paymentOtherBreakdown = { misc: roundedOther }
+    }
+    const payload = {
+      id: payCorrectOrder.id,
+      reason,
+      paymentCash: parseFloat(pcCash) || 0,
+      paymentCard: parseFloat(pcCard) || 0,
+      paymentQr: parseFloat(pcQr) || 0,
+      paymentOther: otherAmt,
+      ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
+      paymentDeliveryApp: del,
+      deliveryPaymentChannel: payDelChannel,
+    }
+    const targetTotal = Number(payCorrectOrder.total ?? 0)
+    const sum =
+      payload.paymentCash +
+      payload.paymentCard +
+      payload.paymentQr +
+      payload.paymentOther +
+      payload.paymentDeliveryApp
+    if (targetTotal > 0.005 && Math.abs(sum - targetTotal) > 0.02) {
+      await appAlert(t('posReceiptPayCorrectMismatch'))
+      return
+    }
+    const hasLinkpos = Boolean(
+      payCorrectOrder.linkposApprovalCode ||
+        payCorrectOrder.linkposTraceNo ||
+        payCorrectOrder.linkposResponseCode
+    )
+    if (hasLinkpos) {
+      const ok = await appConfirm(
+        `${t('posReceiptPayCorrectLinkposWarn')}\n\n${t('posReceiptPayCorrectConfirm')}`
+      )
+      if (!ok) return
+    }
+    setPayCorrectSaving(true)
+    try {
+      const res = await correctPosOrderPayment(payload)
+      if (!res.success) {
+        await appAlert(resolvePayCorrectErrorMessage(String(res.message ?? '')))
+        return
+      }
+      await appAlert(t('posReceiptPayCorrectSaved'))
+      setPayCorrectOrder(null)
+      setPayCorrectReason('')
+      void loadOrders()
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setPayCorrectSaving(false)
     }
   }
 
@@ -754,6 +997,20 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       <Printer className="h-3 w-3" />
                                       {t('posKitchenSlip') || '주방 주문서'}
                                     </Button>
+                                    {isPayCorrectableOrder(o) && (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="h-7 gap-1 px-2 text-xs"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          openPayCorrect(o)
+                                        }}
+                                      >
+                                        <PencilLine className="h-3 w-3" />
+                                        {t('posReceiptPayCorrect') || '결제 수단 정정'}
+                                      </Button>
+                                    )}
                                   </div>
                                 </>
                               ) : (
@@ -771,6 +1028,229 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={payCorrectOrder != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPayCorrectOrder(null)
+            setPayCorrectSaving(false)
+          }
+        }}
+      >
+        <DialogContent
+          className="max-h-[90vh] max-w-md overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('posReceiptPayCorrect')}</DialogTitle>
+            <DialogDescription className="text-left">
+              {payCorrectOrder ? (
+                <>
+                  <span className="font-mono text-foreground">{payCorrectOrder.orderNo}</span>
+                  {' · '}
+                  <span className="tabular-nums font-semibold text-foreground">
+                    {formatBahtNum(payCorrectOrderTotal)} ฿
+                  </span>
+                </>
+              ) : null}
+              <span className="mt-2 block text-xs text-muted-foreground">{t('posReceiptPayCorrectHint')}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-5 gap-1 rounded-xl border p-1">
+              {[
+                { key: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
+                { key: 'card', label: t('posPaymentCard') || '카드', icon: CreditCard },
+                { key: 'qr', label: t('posPaymentQrCode') || 'QR 코드', icon: QrCode },
+                { key: 'delivery_app', label: t('posPaymentDeliveryApp') || '배달앱', icon: Bike },
+                { key: 'other', label: t('posPaymentOther') || '기타', icon: Wallet },
+              ].map((m) => {
+                const Icon = m.icon
+                const active = pcActiveMethod === m.key
+                return (
+                  <Button
+                    key={m.key}
+                    type="button"
+                    variant={active ? 'default' : 'outline'}
+                    className={cn('h-14 flex-col gap-1 px-1 text-[11px]', active ? 'shadow-sm' : '')}
+                    onClick={() => setPcActiveMethod(m.key as typeof pcActiveMethod)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="truncate">{m.label}</span>
+                  </Button>
+                )
+              })}
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border border-border/60 bg-muted/20 p-2">
+              <Select
+                value={pcMoveFromMethod}
+                onValueChange={(v) =>
+                  setPcMoveFromMethod(v as 'cash' | 'card' | 'qr' | 'delivery_app' | 'other')
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pcMoveFromCandidates.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m === 'cash'
+                        ? t('posPaymentCash') || '현금'
+                        : m === 'card'
+                          ? t('posPaymentCard') || '카드'
+                          : m === 'qr'
+                            ? t('posPaymentQrCode') || 'QR 코드'
+                            : m === 'delivery_app'
+                              ? t('posPaymentDeliveryApp') || '배달앱'
+                              : t('posPaymentOther') || '기타'}{' '}
+                      · {formatBahtNum(pcMethodAmount(m))} ฿
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={moveAmountToActiveMethod}
+                disabled={pcMoveFromMethod === pcActiveMethod || pcMethodAmount(pcMoveFromMethod) <= 0.005}
+              >
+                {t('posMoveAmount') || '이동'}
+              </Button>
+            </div>
+
+            {pcActiveMethod === 'cash' && (
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posPaymentCash')}</Label>
+                <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('cash'))} ฿`} />
+              </div>
+            )}
+            {pcActiveMethod === 'card' && (
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posPaymentCard')}</Label>
+                <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('card'))} ฿`} />
+              </div>
+            )}
+            {pcActiveMethod === 'qr' && (
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posPaymentQr')}</Label>
+                <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('qr'))} ฿`} />
+              </div>
+            )}
+            {pcActiveMethod === 'delivery_app' && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('posPaymentDeliveryApp')}</Label>
+                  <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('delivery_app'))} ฿`} />
+                </div>
+                {(parseFloat(pcDelApp) || 0) > 0.005 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">{t('posDeliveryPaymentChannel')}</Label>
+                    <Select
+                      value={pcDelChannel}
+                      onValueChange={(v) =>
+                        setPcDelChannel(v as 'grab' | 'lineman' | 'shopee' | 'dine_in')
+                      }
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="grab">Grab</SelectItem>
+                        <SelectItem value="lineman">Line Man</SelectItem>
+                        <SelectItem value="shopee">Shopee</SelectItem>
+                        <SelectItem value="dine_in">{t('posDeliveryPayDineIn') || 'Dine in'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </>
+            )}
+            {pcActiveMethod === 'other' && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('posPaymentOther')}</Label>
+                  <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('other'))} ฿`} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{t('posPaymentOtherExpand') || '세부 수단'}</Label>
+                  <Select value={pcOtherDetailKey} onValueChange={setPcOtherDetailKey}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {payCorrectOtherDetailOptions.map((it) => (
+                        <SelectItem key={it.key} value={it.key}>
+                          {it.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            {(parseFloat(pcDelApp) || 0) > 0.005 && pcActiveMethod !== 'delivery_app' && (
+              <div className="space-y-1 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                <Label className="text-xs">{t('posDeliveryPaymentChannel')}</Label>
+                <div className="mt-1">{pcDelChannel}</div>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label className="text-xs">{t('posReceiptPayCorrectReason')}</Label>
+              <Textarea
+                value={payCorrectReason}
+                onChange={(e) => setPayCorrectReason(e.target.value)}
+                placeholder={t('posReceiptPayCorrectReasonPh')}
+                rows={3}
+                className="min-h-[72px] resize-y"
+              />
+            </div>
+            <div
+              className={cn(
+                'rounded-md border px-3 py-2 text-sm',
+                payCorrectSumOk
+                  ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+                  : 'border-amber-500/35 bg-amber-500/[0.08]'
+              )}
+            >
+              <div className="flex justify-between gap-2 tabular-nums">
+                <span className="text-muted-foreground">{t('posPaymentSum') || '입력 합계'}</span>
+                <span className="font-semibold">{formatBahtNum(payCorrectSumVal)} ฿</span>
+              </div>
+              <div className="mt-1 flex justify-between gap-2 tabular-nums text-muted-foreground">
+                <span>{t('posTotal') || '합계'}</span>
+                <span>{formatBahtNum(payCorrectOrderTotal)} ฿</span>
+              </div>
+              {!payCorrectSumOk && payCorrectOrderTotal > 0.005 && (
+                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                  {t('posReceiptPayCorrectMismatch')}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={payCorrectSaving}
+              onClick={() => setPayCorrectOrder(null)}
+            >
+              {t('posCancel') || '취소'}
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                payCorrectSaving ||
+                !payCorrectSumOk ||
+                payCorrectReason.trim().length < 2
+              }
+              onClick={() => void handleSavePayCorrect()}
+            >
+              {t('save') || '저장'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

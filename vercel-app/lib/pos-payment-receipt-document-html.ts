@@ -16,6 +16,8 @@ import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
+import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 
 function deliveryPaymentChannelLabel(
   raw: string | null | undefined,
@@ -45,7 +47,27 @@ function receiptPaymentBreakdownRows(
   push(tr('posPaymentCash', '현금'), cash)
   push(tr('posPaymentCard', '카드'), card)
   push(tr('posPaymentQr', 'QR'), qr)
-  push(tr('posPaymentOther', '기타'), other)
+  const ob = parsePaymentOtherBreakdown(receiptData.paymentOtherBreakdown)
+  const obOk =
+    other > 0.005 &&
+    ob != null &&
+    Math.abs(sumPaymentOtherBreakdown(ob) - other) <= 0.02
+  if (obOk && ob) {
+    if ((ob.trueMoney ?? 0) > 0.005) push(`· ${tr('posPaymentTrueMoney', 'TrueMoney')}`, Number(ob.trueMoney) || 0)
+    if ((ob.weChat ?? 0) > 0.005) push(`· ${tr('posPaymentWeChat', 'WeChat')}`, Number(ob.weChat) || 0)
+    if ((ob.alipay ?? 0) > 0.005) push(`· ${tr('posPaymentAlipay', 'Alipay')}`, Number(ob.alipay) || 0)
+    if ((ob.linePay ?? 0) > 0.005) push(`· ${tr('posPaymentLinePay', 'LINE Pay')}`, Number(ob.linePay) || 0)
+    if ((ob.shopeePay ?? 0) > 0.005) push(`· ${tr('posPaymentShopeePay', 'Shopee Pay')}`, Number(ob.shopeePay) || 0)
+    if ((ob.misc ?? 0) > 0.005) push(`· ${tr('posPaymentOtherEtc', '기타')}`, Number(ob.misc) || 0)
+    if (ob.admin && typeof ob.admin === 'object') {
+      for (const [wid, rawAmt] of Object.entries(ob.admin)) {
+        const label = String(wid || '').trim() || 'Wallet'
+        push(`· ${label}`, Number(rawAmt) || 0)
+      }
+    }
+  } else {
+    push(tr('posPaymentOther', '기타'), other)
+  }
   const ch = deliveryPaymentChannelLabel(receiptData.deliveryPaymentChannel, tr)
   const delLabel =
     del > 0.005 && ch
@@ -262,7 +284,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
-      : /ekkamai/i.test(String(receiptData.storeCode || ''))
+      : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
     const itemRows = (receiptData.items || [])
@@ -471,21 +493,25 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .tax-invoice-label { font-weight: 600; color: #000; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
         .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
-        /* 일부 하이브리드+드라이버 조합(CP-802 포함)에서 결제 영수증의 CSS grid/flex가 좌우 분리 인쇄되는 현상 완화 */
+        /* 일부 하이브리드+드라이버 조합(CP-802 등)에서 CSS grid/mm 폭 조합이 깨지는 경우 → 인쇄 시 float 2열로 고정 */
         @media print {
           .receipt-payment { position: static !important; left: 0 !important; width: 100% !important; max-width: 100% !important; }
+          .receipt-payment .receipt-row::after,
+          .receipt-payment .receipt-item-head::after,
+          .receipt-payment .receipt-meta-row::after,
+          .receipt-payment .tax-invoice-row::after { content: "" !important; display: table !important; clear: both !important; }
           .receipt-payment .receipt-row,
-          .receipt-payment .receipt-item-head { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
+          .receipt-payment .receipt-item-head { display: block !important; width: 100% !important; overflow: hidden !important; margin: 4px 0 !important; padding: 0 !important; column-gap: 0 !important; grid-template-columns: none !important; }
           .receipt-payment .receipt-row > span:first-child,
-          .receipt-payment .receipt-item-head > span:first-child { display: table-cell; width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm); padding-right: ${RECEIPT_GRID_COL_GAP_PX}px; vertical-align: top; }
+          .receipt-payment .receipt-item-head > span:first-child { float: left !important; max-width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm - ${RECEIPT_GRID_COL_GAP_PX}px) !important; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px !important; text-align: left !important; min-width: 0 !important; }
           .receipt-payment .receipt-row > span:last-child,
-          .receipt-payment .receipt-item-head > span:last-child { display: table-cell; width: ${RECEIPT_AMOUNT_COL_MM}mm; text-align: right; vertical-align: top; white-space: normal; }
-          .receipt-payment .receipt-meta-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
-          .receipt-payment .receipt-meta-label { display: table-cell; width: 22mm; vertical-align: top; white-space: nowrap; padding-right: 3mm; }
-          .receipt-payment .receipt-meta-value { display: table-cell; width: auto; vertical-align: top; }
-          .receipt-payment .tax-invoice-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
-          .receipt-payment .tax-invoice-row > .tax-invoice-label { display: table-cell; width: 22mm; vertical-align: top; padding-right: 4px; }
-          .receipt-payment .tax-invoice-row > span:last-child { display: table-cell; width: auto; vertical-align: top; }
+          .receipt-payment .receipt-item-head > span:last-child { float: right !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; white-space: normal !important; min-width: 0 !important; }
+          .receipt-payment .receipt-meta-row { display: block !important; width: 100% !important; overflow: hidden !important; margin: 3px 0 !important; padding: 0 !important; column-gap: 0 !important; grid-template-columns: none !important; }
+          .receipt-payment .receipt-meta-label { float: left !important; max-width: 46% !important; padding-right: 3mm !important; white-space: normal !important; min-width: 0 !important; }
+          .receipt-payment .receipt-meta-value { float: right !important; max-width: 52% !important; text-align: right !important; min-width: 0 !important; }
+          .receipt-payment .tax-invoice-row { display: block !important; width: 100% !important; overflow: hidden !important; margin: 4px 0 !important; grid-template-columns: none !important; }
+          .receipt-payment .tax-invoice-row > .tax-invoice-label { float: left !important; max-width: 34% !important; padding-right: 4px !important; min-width: 0 !important; }
+          .receipt-payment .tax-invoice-row > span:last-child { float: right !important; max-width: 64% !important; text-align: left !important; min-width: 0 !important; }
         }
       `,
   })

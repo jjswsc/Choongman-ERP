@@ -34,6 +34,7 @@ import { useT, tr as i18nTr } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
+import type { PosPaymentOtherBreakdown } from "@/lib/pos-payment-other-breakdown"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { Handshake, Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -253,6 +254,7 @@ export default function PosOrderPage() {
     paymentCard?: number
     paymentQr?: number
     paymentOther?: number
+    paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
     paymentDeliveryApp?: number
     deliveryPaymentChannel?: string | null
   } | null>(null)
@@ -1037,6 +1039,9 @@ export default function PosOrderPage() {
     }
     setSubmitting(true)
     try {
+      const miscOther = Math.max(0, Number(payment.other) || 0)
+      const paymentOtherBreakdown: PosPaymentOtherBreakdown | undefined =
+        miscOther > 0.005 ? { misc: Math.round(miscOther * 100) / 100 } : undefined
       const res = await savePosOrderWithOffline({
         storeCode: storeCode || "ST01",
         createdBy: auth?.user ?? "",
@@ -1051,6 +1056,7 @@ export default function PosOrderPage() {
         paymentCard: payment.card || undefined,
         paymentQr: payment.qr || undefined,
         paymentOther: payment.other || undefined,
+        ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
         paymentDeliveryApp: payment.deliveryApp || undefined,
         deliveryPaymentChannel:
           payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,
@@ -1098,6 +1104,7 @@ export default function PosOrderPage() {
           paymentCard: payment.card,
           paymentQr: payment.qr,
           paymentOther: payment.other,
+          ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
           paymentDeliveryApp: payment.deliveryApp,
           deliveryPaymentChannel:
             payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,

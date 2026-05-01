@@ -4,6 +4,7 @@ import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { fromHex, parseHypercomFrame } from '@/lib/payments/hypercom-v2'
+import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
       select:
-        'subtotal,vat,total,status,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+        'subtotal,vat,total,status,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
     })) as {
       subtotal?: number
       vat?: number
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
       payment_qr?: number
       payment_delivery_app?: number
       payment_other?: number
+      payment_other_breakdown?: unknown
       delivery_payment_channel?: string
       delivery_app_code?: string
       linkpos_response_code?: string
@@ -212,7 +214,26 @@ export async function GET(request: NextRequest) {
       }
       const otherAmt = Number(o.payment_other) || 0
       if (otherAmt > 0) {
-        autoOtherBreakdown.Other = (autoOtherBreakdown.Other || 0) + otherAmt
+        const bo = parsePaymentOtherBreakdown(o.payment_other_breakdown)
+        if (bo && Math.abs(sumPaymentOtherBreakdown(bo) - otherAmt) <= 0.02) {
+          const addO = (label: string, n: number) => {
+            if (n > 0.005) autoOtherBreakdown[label] = (autoOtherBreakdown[label] || 0) + n
+          }
+          addO('TrueMoney', Number(bo.trueMoney) || 0)
+          addO('WeChat', Number(bo.weChat) || 0)
+          addO('Alipay', Number(bo.alipay) || 0)
+          addO('Line Pay', Number(bo.linePay) || 0)
+          addO('Shopee Pay', Number(bo.shopeePay) || 0)
+          addO('Misc', Number(bo.misc) || 0)
+          if (bo.admin && typeof bo.admin === 'object') {
+            for (const [wid, rawAmt] of Object.entries(bo.admin)) {
+              const label = `Wallet ${String(wid || '').trim()}`.trim()
+              if (label.length > 3) addO(label, Number(rawAmt) || 0)
+            }
+          }
+        } else {
+          autoOtherBreakdown.Other = (autoOtherBreakdown.Other || 0) + otherAmt
+        }
       }
       const responseCode = String(o.linkpos_response_code ?? '').trim()
       const hasLinkpos = responseCode.length > 0

@@ -7,6 +7,7 @@ import {
   useMemo,
   useLayoutEffect,
   useRef,
+  useCallback,
   forwardRef,
   useImperativeHandle,
   type Dispatch,
@@ -86,6 +87,7 @@ import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { collabDiscountAmountForCart } from '@/lib/pos-collab-discount'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
 import { computePosPricing, type PosPricingAdjustments, type PosPricingResult } from '@/lib/pos-pricing'
+import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
@@ -191,6 +193,8 @@ export type CartPanelPaymentPayload = {
   paymentCard: number
   paymentQr: number
   paymentOther: number
+  /** payment_other 합과 일치하는 세부(저장·검색·결산용) */
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
 }
@@ -919,6 +923,53 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
 
+  const buildPaymentOtherBreakdownSnapshot = useCallback((): PosPaymentOtherBreakdown | undefined => {
+    const r2 = (n: number) => Math.round(Math.max(0, n) * 100) / 100
+    if (useAdminPaymentLines) {
+      const admin: Record<string, number> = {}
+      for (const line of adminPaymentLines) {
+        const v = r2(parseFloat(payAdminLineAmounts[line.id] || '0') || 0)
+        if (v > 0.005) admin[String(line.id)] = v
+      }
+      if (Object.keys(admin).length === 0) return undefined
+      return { admin }
+    }
+    const out: PosPaymentOtherBreakdown = {}
+    const tm = r2(parseFloat(payTrueMoney) || 0)
+    const wc = r2(parseFloat(payWeChat) || 0)
+    const ap = r2(parseFloat(payAlipay) || 0)
+    const lp = r2(parseFloat(payLinePay) || 0)
+    const sp = r2(parseFloat(payShopeePay) || 0)
+    const misc = r2(parseFloat(payOther) || 0)
+    if (tm > 0.005) out.trueMoney = tm
+    if (wc > 0.005) out.weChat = wc
+    if (ap > 0.005) out.alipay = ap
+    if (lp > 0.005) out.linePay = lp
+    if (sp > 0.005) out.shopeePay = sp
+    if (misc > 0.005) out.misc = misc
+    if (
+      !out.trueMoney &&
+      !out.weChat &&
+      !out.alipay &&
+      !out.linePay &&
+      !out.shopeePay &&
+      !out.misc
+    ) {
+      return undefined
+    }
+    return out
+  }, [
+    useAdminPaymentLines,
+    adminPaymentLines,
+    payAdminLineAmounts,
+    payTrueMoney,
+    payWeChat,
+    payAlipay,
+    payLinePay,
+    payShopeePay,
+    payOther,
+  ])
+
   const customerDisplayPaymentDraft = useMemo((): CartPanelPaymentPayload | null => {
     if (!showPaymentModal) return null
     const payDel = parseFloat(payDeliveryApp) || 0
@@ -927,11 +978,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         ? { paymentDeliveryApp: payDel, deliveryPaymentChannel }
         : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
     const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
+    const ob = buildPaymentOtherBreakdownSnapshot()
     return {
       paymentCash: parseFloat(payCash) || 0,
       paymentCard: parseFloat(payCard) || 0,
       paymentQr: parseFloat(payPromptPay) || 0,
       paymentOther: paymentOtherSum,
+      ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
     }
   }, [
@@ -944,6 +997,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     useAdminPaymentLines,
     adminConfiguredWalletSum,
     legacyWalletPaymentSum,
+    buildPaymentOtherBreakdownSnapshot,
   ])
 
   useEffect(() => {
@@ -1689,6 +1743,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         (parseFloat(payLinePay) || 0) +
         (parseFloat(payShopeePay) || 0) +
         (parseFloat(payOther) || 0)
+    const payOtherBreakdown = buildPaymentOtherBreakdownSnapshot()
     const deliveryLabel = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
       .filter(Boolean)
       .join(' ')
@@ -1713,6 +1768,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           }
         : {
@@ -1741,6 +1797,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         (parseFloat(payLinePay) || 0) +
         (parseFloat(payShopeePay) || 0) +
         (parseFloat(payOther) || 0)
+    const payOtherBreakdown = buildPaymentOtherBreakdownSnapshot()
     if (needTaxInvoice && !taxInvoiceInvalid) {
       const profile: TaxInvoiceProfile = {
         type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
@@ -1792,6 +1849,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           },
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
@@ -1822,6 +1880,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           },
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
@@ -1850,6 +1909,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           },
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,

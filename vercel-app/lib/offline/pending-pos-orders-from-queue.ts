@@ -8,6 +8,7 @@ import type { PosOrder, PosOrderItem } from '@/lib/api-client'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { parsePaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { getAllPending, type PendingRequest } from './queue'
 
 function syntheticOrderId(queueItemId: string, createdAt: number): number {
@@ -64,7 +65,11 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
   const paymentCard = Math.max(0, Number(body.paymentCard ?? 0))
   const paymentQr = Math.max(0, Number(body.paymentQr ?? 0))
   const paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
-  const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? 0))
+  const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
+  const deliveryPaymentChannelRaw = body.deliveryPaymentChannel ?? body.delivery_payment_channel
+  const paymentOtherBreakdown = parsePaymentOtherBreakdown(
+    body.paymentOtherBreakdown ?? body.payment_other_breakdown
+  )
   const pricingAdjustments: PosPricingAdjustments | undefined =
     body.pricingAdjustments && typeof body.pricingAdjustments === 'object'
       ? (body.pricingAdjustments as PosPricingAdjustments)
@@ -114,7 +119,13 @@ function pendingRequestToPosOrder(item: PendingRequest): PosOrder | null {
     paymentCard: paymentCard || undefined,
     paymentQr: paymentQr || undefined,
     paymentOther: paymentOther || undefined,
+    ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
     paymentDeliveryApp: paymentDeliveryApp || undefined,
+    ...(paymentDeliveryApp > 0.005 && deliveryPaymentChannelRaw
+      ? {
+          deliveryPaymentChannel: String(deliveryPaymentChannelRaw).trim().toLowerCase() || undefined,
+        }
+      : {}),
     guestCount,
     items,
     subtotal,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { extractPgrstMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -21,6 +22,17 @@ export interface TillItem {
   memo: string
   user_name: string
   /** 매출액 출금일 때만: 해당 현금 매출의 영업일 */
+  sales_date?: string | null
+}
+
+type TillRowDb = {
+  id: number
+  store_code?: string
+  trans_date?: string
+  trans_type?: string
+  amount?: number
+  memo?: string
+  user_name?: string
   sales_date?: string | null
 }
 
@@ -67,11 +79,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'pos_till_transactions',
-      'store_code=eq.' + encodeURIComponent(effectiveStore),
-      { order: 'trans_date.asc,id.asc', limit: 20000, select: 'id,store_code,trans_date,trans_type,amount,memo,user_name,sales_date' }
-    )) as { id: number; store_code?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; user_name?: string; sales_date?: string | null }[] | null
+    const baseSelect = 'id,store_code,trans_date,trans_type,amount,memo,user_name,sales_date'
+    let select = baseSelect
+    let rows: TillRowDb[] | null = null
+    let lastErr: unknown = null
+    for (let i = 0; i < 4; i++) {
+      try {
+        rows = (await supabaseSelectFilter('pos_till_transactions', 'store_code=eq.' + encodeURIComponent(effectiveStore), {
+          order: 'trans_date.asc,id.asc',
+          limit: 20000,
+          select,
+        })) as TillRowDb[] | null
+        lastErr = null
+        break
+      } catch (e) {
+        lastErr = e
+        const missing = extractPgrstMissingColumn(e)
+        if (missing === 'sales_date' && select.includes('sales_date')) {
+          select = 'id,store_code,trans_date,trans_type,amount,memo,user_name'
+          continue
+        }
+        throw e
+      }
+    }
+    if (lastErr) {
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
+    }
 
     const startD = startStr ? new Date(startStr + 'T00:00:00') : null
     const endD = endStr ? new Date(endStr + 'T23:59:59') : null

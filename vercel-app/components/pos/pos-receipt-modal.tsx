@@ -24,7 +24,9 @@ import {
   type PrintPosHtmlDocumentOptions,
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import { Button } from '@/components/ui/button'
+import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import {
   Dialog,
   DialogContent,
@@ -68,6 +70,7 @@ export type ReceiptModalData = {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
   /** 모달 자동 영수증 인쇄 시 어떤 설정을 따를지 (주문/추가주문/결제) */
@@ -194,7 +197,7 @@ export function PosReceiptModal({
       lang,
       origin: typeof window !== 'undefined' ? window.location.origin : '',
       printedAt: new Date(),
-      forceSimpleTextMode: /ekkamai/i.test(String(receiptData.storeCode || '')),
+      forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(receiptData.storeCode),
       designOverride: {
         receiptBizName,
         receiptBizTaxId,

@@ -1,14 +1,45 @@
 # Vercel 배포 전 빌드 검증 (TypeScript, 컴파일 등)
-# - push/PR 시 로컬과 동일한 빌드 실행
-# - 실패 시 GitHub에서 확인 가능, Vercel 불필요 배포 감소
+# - 실패 시 GitHub에서 확인 가능, 불필요한 머지 방지
+# - paths-ignore: Next 번들과 무관한 변경만 있는 커밋/PR은 워크플로 생략 → Actions 분·요금 절감
+#   (vercel-app/scripts/vercel-ignored-build-step.sh 의 메타 전용 경로와 맞춤)
+# - 필요 시 Actions 탭에서 "Run workflow"로 수동 실행(workflow_dispatch)
 
 name: Build Vercel App
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "vercel-app/docs/**"
+      - "README.md"
+      - "vercel-app/README.md"
+      - "windows-pos/**"
+      - "vercel-app/windows-pos/**"
+      - "sql/**"
+      - "vercel-app/sql/**"
+      - "landing/**"
+      - ".cursor/**"
+      - "chungman-erp/**"
+      - "old_files_backup/**"
+      - "backup_before_680/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "vercel-app/docs/**"
+      - "README.md"
+      - "vercel-app/README.md"
+      - "windows-pos/**"
+      - "vercel-app/windows-pos/**"
+      - "sql/**"
+      - "vercel-app/sql/**"
+      - "landing/**"
+      - ".cursor/**"
+      - "chungman-erp/**"
+      - "old_files_backup/**"
+      - "backup_before_680/**"
 
 jobs:
   build:

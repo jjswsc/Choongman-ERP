@@ -3318,6 +3318,7 @@ export default function PosTerminalPage() {
                     paymentCard: payload.payment.paymentCard,
                     paymentQr: payload.payment.paymentQr,
                     paymentOther: payload.payment.paymentOther,
+                    paymentOtherBreakdown: payload.payment.paymentOtherBreakdown ?? null,
                     paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                     deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
                     linkposPayment: linkpos.linkposPayment,
@@ -3361,6 +3362,9 @@ export default function PosTerminalPage() {
                         paymentCard: payload.payment.paymentCard,
                         paymentQr: payload.payment.paymentQr,
                         paymentOther: payload.payment.paymentOther,
+                        ...(payload.payment.paymentOtherBreakdown
+                          ? { paymentOtherBreakdown: payload.payment.paymentOtherBreakdown }
+                          : {}),
                         paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                         deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
                       }
@@ -3410,6 +3414,7 @@ export default function PosTerminalPage() {
                     paymentCard: payload.payment.paymentCard,
                     paymentQr: payload.payment.paymentQr,
                     paymentOther: payload.payment.paymentOther,
+                    paymentOtherBreakdown: payload.payment.paymentOtherBreakdown ?? null,
                     paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                     deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
                     linkposPayment: linkpos.linkposPayment,
@@ -3453,6 +3458,9 @@ export default function PosTerminalPage() {
                         paymentCard: payload.payment.paymentCard,
                         paymentQr: payload.payment.paymentQr,
                         paymentOther: payload.payment.paymentOther,
+                        ...(payload.payment.paymentOtherBreakdown
+                          ? { paymentOtherBreakdown: payload.payment.paymentOtherBreakdown }
+                          : {}),
                         paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                         deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
                       }
@@ -3913,6 +3921,7 @@ export default function PosTerminalPage() {
                     paymentCard: pay.paymentCard,
                     paymentQr: pay.paymentQr,
                     paymentOther: pay.paymentOther,
+                    paymentOtherBreakdown: pay.paymentOtherBreakdown ?? null,
                     paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                     deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
                     linkposPayment: linkpos.linkposPayment,
@@ -3948,6 +3957,7 @@ export default function PosTerminalPage() {
                       paymentCard: pay.paymentCard,
                       paymentQr: pay.paymentQr,
                       paymentOther: pay.paymentOther,
+                      paymentOtherBreakdown: pay.paymentOtherBreakdown ?? null,
                       paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                       deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
                       linkposPayment: linkpos.linkposPayment,
@@ -3979,6 +3989,7 @@ export default function PosTerminalPage() {
                       paymentCard: pay.paymentCard,
                       paymentQr: pay.paymentQr,
                       paymentOther: pay.paymentOther,
+                      paymentOtherBreakdown: pay.paymentOtherBreakdown ?? null,
                       paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                       deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
                       linkposPayment: linkpos.linkposPayment,
@@ -4037,6 +4048,9 @@ export default function PosTerminalPage() {
                         paymentCard: pay.paymentCard,
                         paymentQr: pay.paymentQr,
                         paymentOther: pay.paymentOther,
+                        ...(pay.paymentOtherBreakdown
+                          ? { paymentOtherBreakdown: pay.paymentOtherBreakdown }
+                          : {}),
                         paymentDeliveryApp: pay.paymentDeliveryApp ?? 0,
                         deliveryPaymentChannel: pay.deliveryPaymentChannel ?? null,
                       }
@@ -4093,6 +4107,7 @@ export default function PosTerminalPage() {
                   paymentCard: payload.payment?.paymentCard ?? 0,
                   paymentQr: payload.payment?.paymentQr ?? 0,
                   paymentOther: payload.payment?.paymentOther ?? 0,
+                  paymentOtherBreakdown: payload.payment?.paymentOtherBreakdown ?? null,
                   paymentDeliveryApp: payload.payment?.paymentDeliveryApp ?? 0,
                   deliveryPaymentChannel: payload.payment?.deliveryPaymentChannel ?? null,
                   linkposPayment: linkpos.linkposPayment,
@@ -4151,6 +4166,9 @@ export default function PosTerminalPage() {
                         paymentCard: payload.payment.paymentCard,
                         paymentQr: payload.payment.paymentQr,
                         paymentOther: payload.payment.paymentOther,
+                        ...(payload.payment.paymentOtherBreakdown
+                          ? { paymentOtherBreakdown: payload.payment.paymentOtherBreakdown }
+                          : {}),
                         paymentDeliveryApp: payload.payment.paymentDeliveryApp ?? 0,
                         deliveryPaymentChannel: payload.payment.deliveryPaymentChannel ?? null,
                       }
