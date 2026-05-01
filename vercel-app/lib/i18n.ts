@@ -26745,6 +26745,8 @@ orderItemQty: 'အရေအတွက်',
     posMoveAmount: 'ရွှေ့ရန်',
     posSettlementTillNetLine: 'Till net (transactions dated close day)',
     posTillDayNetMovement: 'Net till movement today',
+    posTillDayNetMovementHint:
+      "Sum for entries dated today—not the cumulative ledger from older history, nor the drawer count from POS close.",
     posSettlementInputTotalsScopeHint:
       '"Input total" reconciles tenders vs POS sales. For physical drawer, use Drawer variance below.',
     posDrawerVarianceFocusTitle: 'Drawer variance (actual − expected)',
@@ -32639,6 +32641,8 @@ orderItemQty: 'ຈຳນວນ',
     posMoveAmount: 'ຍ້າຍ',
     posSettlementTillNetLine: 'Till net (transactions dated close day)',
     posTillDayNetMovement: 'Net till movement today',
+    posTillDayNetMovementHint:
+      "Sum for entries dated today—not the cumulative ledger from older history, nor the drawer count from POS close.",
     posSettlementInputTotalsScopeHint:
       '"Input total" reconciles tenders vs POS sales. For physical drawer, use Drawer variance below.',
     posDrawerVarianceFocusTitle: 'Drawer variance (actual − expected)',
@@ -35924,6 +35928,8 @@ orderItemQty: 'ຈຳນວນ',
     posMoveAmount: 'ផ្លាស់ទី',
     posSettlementTillNetLine: 'Till net (transactions dated close day)',
     posTillDayNetMovement: 'Net till movement today',
+    posTillDayNetMovementHint:
+      "Sum for entries dated today—not the cumulative ledger from older history, nor the drawer count from POS close.",
     posSettlementInputTotalsScopeHint:
       '"Input total" reconciles tenders vs POS sales. For physical drawer, use Drawer variance below.',
     posDrawerVarianceFocusTitle: 'Drawer variance (actual − expected)',
@@ -39215,6 +39221,8 @@ orderItemQty: 'ຈຳນວນ',
     posMoveAmount: 'Chuyển',
     posSettlementTillNetLine: 'Till net (transactions dated close day)',
     posTillDayNetMovement: 'Net till movement today',
+    posTillDayNetMovementHint:
+      "Sum for entries dated today—not the cumulative ledger from older history, nor the drawer count from POS close.",
     posSettlementInputTotalsScopeHint:
       '"Input total" reconciles tenders vs POS sales. For physical drawer, use Drawer variance below.',
     posDrawerVarianceFocusTitle: 'Drawer variance (actual − expected)',
@@ -42521,6 +42529,8 @@ orderItemQty: 'ຈຳນວນ',
     posMoveAmount: 'Pindah',
     posSettlementTillNetLine: 'Till net (transactions dated close day)',
     posTillDayNetMovement: 'Net till movement today',
+    posTillDayNetMovementHint:
+      "Sum for entries dated today—not the cumulative ledger from older history, nor the drawer count from POS close.",
     posSettlementInputTotalsScopeHint:
       '"Input total" reconciles tenders vs POS sales. For physical drawer, use Drawer variance below.',
     posDrawerVarianceFocusTitle: 'Drawer variance (actual − expected)',
