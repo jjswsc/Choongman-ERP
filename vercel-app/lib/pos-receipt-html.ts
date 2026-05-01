@@ -36,7 +36,7 @@ export function buildReceiptDocumentHtml(params: {
       : ''
   const styles =
     posThermalReceiptPageSizeRule() +
-    ' html, body { margin: 0; padding: 0; } html { height: auto; } body { width: 80mm; max-width: 80mm; min-height: auto; height: auto; box-sizing: border-box; font-family: \'Noto Sans Thai\', \'Leelawadee UI\', Tahoma, \'Sukhumvit Set\', \'Inter\', \'Pretendard\', \'Noto Sans KR\', \'Malgun Gothic\', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.48; letter-spacing: 0; padding-top: 0; padding-left: ' +
+    ' html, body { margin: 0; padding: 0; } html { height: auto; overflow-x: hidden; } body { width: 80mm; max-width: 80mm; min-height: auto; height: auto; box-sizing: border-box; overflow-x: hidden; font-family: \'Noto Sans Thai\', \'Leelawadee UI\', Tahoma, \'Sukhumvit Set\', \'Inter\', \'Pretendard\', \'Noto Sans KR\', \'Malgun Gothic\', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.48; letter-spacing: 0; padding-top: 0; padding-left: ' +
     String(RECEIPT_INNER_INSET_LEFT_MM) +
     'mm; padding-right: ' +
     String(RECEIPT_INNER_INSET_RIGHT_MM) +
@@ -50,7 +50,7 @@ export function buildReceiptDocumentHtml(params: {
     String(amt) +
     'mm; column-gap: ' +
     String(gap) +
-    'px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; color: #000; } .receipt-row > span:first-child { min-width: 0; overflow-wrap: break-word; word-break: normal; } .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: break-word; word-break: normal; font-size: 10px; line-height: 1.2; } .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; } .receipt-meta-row { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; color: #000; } .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: normal; color: #000; } .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: break-word; word-break: normal; color: #000; font-weight: 600; } .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ' +
+    'px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; color: #000; } .receipt-row > span:first-child { min-width: 0; overflow-wrap: break-word; word-break: normal; } .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: break-word; word-break: normal; font-size: 10px; line-height: 1.2; } .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; } .receipt-meta-row { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); column-gap: 3mm; align-items: start; margin: 3px 0; padding-right: 0.4mm; color: #000; } .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: break-word; word-break: normal; color: #000; } .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: break-word; word-break: normal; color: #000; font-weight: 600; } .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ' +
     String(amt) +
     'mm; column-gap: ' +
     String(gap) +

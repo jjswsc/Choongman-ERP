@@ -18,6 +18,21 @@ function normalizeToken(s: string): string {
   return String(s || '').toLowerCase().replace(/\s+/g, '')
 }
 
+const CASH_ACTUAL_DENOM_KEYS = ['1000', '500', '100', '50', '20', '10', '5', '2', '1'] as const
+
+function mapCashActualDenomsFromDb(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const out: Record<string, number> = {}
+  let anyNonZero = false
+  for (const k of CASH_ACTUAL_DENOM_KEYS) {
+    const n = Math.max(0, Math.floor(Number(o[k]) || 0))
+    out[k] = n
+    if (n > 0) anyNonZero = true
+  }
+  return anyNonZero ? out : undefined
+}
+
 function buildTenderHaystack(responseText: string, responseRawHex: string, bankId: string): string {
   let parsedText = ''
   if (responseRawHex) {
@@ -276,6 +291,7 @@ export async function GET(request: NextRequest) {
       other_breakdown?: Record<string, number>
       memo?: string
       closed?: boolean
+      cash_actual_denoms?: Record<string, unknown> | null
     }[] | null
 
     const list = (settlements || []).map((s) => ({
@@ -300,6 +316,7 @@ export async function GET(request: NextRequest) {
         s.other_breakdown && typeof s.other_breakdown === 'object' ? s.other_breakdown : {},
       memo: String(s.memo ?? ''),
       closed: !!s.closed,
+      cashActualDenoms: mapCashActualDenomsFromDb(s.cash_actual_denoms),
     }))
 
     return NextResponse.json(

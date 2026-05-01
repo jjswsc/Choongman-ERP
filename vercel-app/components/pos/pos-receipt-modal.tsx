@@ -348,7 +348,7 @@ export function PosReceiptModal({
         .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; }
         .tax-invoice-premium { border: 2px solid #000; padding: 8px 10px; margin-top: 8px; background: #fff; color: #000; }
         .tax-invoice-header { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #000; text-align: center; color: #000; }
-        .tax-invoice-row { display: grid; grid-template-columns: 22mm 1fr; gap: 4px; margin: 4px 0; font-size: 11px; color: #000; }
+        .tax-invoice-row { display: grid; grid-template-columns: 22mm minmax(0, 1fr); gap: 4px; margin: 4px 0; font-size: 11px; color: #000; }
         .tax-invoice-row.tax-invoice-addr { grid-template-columns: 22mm minmax(0,1fr); word-break: break-word; }
         .tax-invoice-label { font-weight: 600; color: #000; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }

@@ -3,6 +3,11 @@
  * 별도 브라우저 창/탭 없이 OS 인쇄 대화상자만 띄울 때 사용 (영수증·주방 주문서 등).
  */
 
+/** 80mm 용지 폭(CSS px @96dpi). 뷰포트를 1px로 두면 body(80mm)·CSS 그리드가 뷰포트와 불일치해 손님 영수증만 열이 갈라지는 Chromium 이슈가 있음 → windows-pos 숨김 창과 동일 폭 유지 */
+const PRINT_IFRAME_VIEWPORT_WIDTH_PX = Math.round((80 / 25.4) * 96)
+/** 세로 1px는 일부 레이아웃에서 비정상; 인쇄 전 레이아웃·폰트 안정용(화면 밖) */
+const PRINT_IFRAME_VIEWPORT_HEIGHT_PX = 4096
+
 export type PrintHtmlInHiddenIframeOptions = {
   /** iframe title (접근성) */
   title?: string
@@ -49,11 +54,15 @@ export function printHtmlInHiddenIframe(
   iframe.setAttribute('title', opts?.title || 'Print')
   iframe.setAttribute('aria-hidden', 'true')
   /**
-   * 일부 Chromium 환경에서 0x0 + visibility:hidden iframe 의 print() 호출이 무시되는 케이스가 있어
-   * 1x1 투명 프레임을 화면 밖으로 보냅니다.
+   * 0×0 은 print() 무시 사례가 있어 비영(비 0) 크기 유지.
+   * 폭은 80mm 열전사와 맞춰 그리드 영수증이 1px 뷰포트에서 깨지지 않게 함.
    */
   iframe.style.cssText =
-    'position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none'
+    'position:fixed;left:-10000px;top:0;width:' +
+    String(PRINT_IFRAME_VIEWPORT_WIDTH_PX) +
+    'px;height:' +
+    String(PRINT_IFRAME_VIEWPORT_HEIGHT_PX) +
+    'px;border:0;opacity:0;pointer-events:none'
   document.body.appendChild(iframe)
   const cw = iframe.contentWindow
   if (!cw) {

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS pos_settlements (
   store_code TEXT NOT NULL DEFAULT '',
   settle_date DATE NOT NULL,
   cash_actual NUMERIC(12,2) DEFAULT NULL,
+  cash_actual_denoms JSONB DEFAULT NULL,
   cash_amt NUMERIC(12,2) DEFAULT 0,
   card_amt NUMERIC(12,2) DEFAULT 0,
   card_breakdown JSONB DEFAULT '{}'::jsonb,

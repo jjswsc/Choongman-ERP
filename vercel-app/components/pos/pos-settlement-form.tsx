@@ -47,6 +47,14 @@ import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
 import { OfflineBanner } from '@/components/offline-banner'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
+import {
+  RECEIPT_AMOUNT_COL_MM,
+  RECEIPT_GRID_COL_GAP_PX,
+  RECEIPT_INNER_INSET_LEFT_MM,
+  RECEIPT_INNER_INSET_RIGHT_MM,
+  RECEIPT_TRAILING_BOTTOM_MM,
+} from '@/lib/pos-receipt-layout'
+import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { drawerOpenOptionFromPrinterSettings, openPosCashDrawer } from '@/lib/pos-cash-drawer'
@@ -146,6 +154,60 @@ const CASH_DENOMINATIONS = [
   { value: 2, label: '2' },
   { value: 1, label: '1' },
 ] as const
+
+function emptyDenomCountRecord(): Record<number, string> {
+  return Object.fromEntries(CASH_DENOMINATIONS.map((d) => [d.value, '' as string]))
+}
+
+/**
+ * DB에 저장된 cash_actual(바트 합계, 정수로 반올림)만 있을 때 권종 입력란을 채운다.
+ * 권종별 장수는 DB에 없으므로 큰 단위 우선 분해(합계 일치) — 사용자가 예전에 넣은 장수와 다를 수 있음.
+ */
+function denomStringsFromCashActualBaht(total: number): Record<number, string> {
+  const out = emptyDenomCountRecord()
+  let remaining = Math.max(0, Math.round(Number(total) || 0))
+  for (const d of CASH_DENOMINATIONS) {
+    const v = d.value
+    const cnt = Math.floor(remaining / v)
+    if (cnt > 0) out[v] = String(cnt)
+    remaining -= cnt * v
+  }
+  return out
+}
+
+/** 저장된 권종 JSON → 입력란 (DB에 있을 때만) */
+function denomCountsFromSavedDenoms(saved: Record<string, number>): Record<number, string> | null {
+  const out = emptyDenomCountRecord()
+  let has = false
+  for (const d of CASH_DENOMINATIONS) {
+    const k = String(d.value)
+    const n = Math.max(0, Math.floor(Number(saved[k]) || 0))
+    if (n > 0) {
+      out[d.value] = String(n)
+      has = true
+    }
+  }
+  return has ? out : null
+}
+
+/** 저장 시 권종 JSON (전부 0이면 null → DB에서 컬럼 비움) */
+function denomCountsToSavePayload(counts: Record<number, string>): Record<string, number> | null {
+  const out: Record<string, number> = {}
+  let any = false
+  for (const d of CASH_DENOMINATIONS) {
+    const n = Math.max(0, parseInt(toIntegerInput(counts[d.value] || '0'), 10) || 0)
+    out[String(d.value)] = n
+    if (n > 0) any = true
+  }
+  return any ? out : null
+}
+
+function sumDenomCountsRecord(counts: Record<number, string>): number {
+  return CASH_DENOMINATIONS.reduce(
+    (s, d) => s + d.value * (parseInt(toIntegerInput(counts[d.value] || '0'), 10) || 0),
+    0
+  )
+}
 
 export type PosSettlementFormProps = {
   t: (key: string) => string
@@ -422,6 +484,24 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             delivery: deliveryAutoApplied || (dineInBreakdownEmpty && autoDineInTotal > 0),
             other: otherAutoApplied,
           })
+          const savedDenoms =
+            single.cashActualDenoms && typeof single.cashActualDenoms === 'object'
+              ? denomCountsFromSavedDenoms(single.cashActualDenoms as Record<string, number>)
+              : null
+          const cashActNum = single.cashActual != null ? Number(single.cashActual) : NaN
+          const cashActOk = Number.isFinite(cashActNum)
+          if (savedDenoms && cashActOk) {
+            const sumSaved = sumDenomCountsRecord(savedDenoms)
+            if (Math.abs(sumSaved - cashActNum) > 0.5) {
+              setDenomCounts(denomStringsFromCashActualBaht(cashActNum))
+            } else {
+              setDenomCounts(savedDenoms)
+            }
+          } else if (cashActOk && cashActNum > 0) {
+            setDenomCounts(denomStringsFromCashActualBaht(cashActNum))
+          } else {
+            setDenomCounts(emptyDenomCountRecord())
+          }
         } else {
           setSettlement(null)
           setSystemSubtotal(0)
@@ -450,6 +530,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
             delivery: autoDeliveryTotal > 0 || autoDineInTotal > 0,
             other: autoOtherTotal > 0,
           })
+          setDenomCounts(emptyDenomCountRecord())
         }
         if (openMode && prev) {
           const prevS = Array.isArray(prev.settlement) ? prev.settlement[0] : prev.settlement
@@ -468,6 +549,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setDineInDeliveryBreakdown({})
         setOpeningCashActual(null)
         setAutoFilledFlags({ card: false, qr: false, delivery: false, other: false })
+        setDenomCounts(emptyDenomCountRecord())
       })
       .finally(() => setLoading(false))
   }, [
@@ -616,6 +698,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         storeCode: effectiveStore,
         settleDate,
         cashActual: cashActualNum,
+        cashActualDenoms: denomCountsToSavePayload(denomCounts),
         cashAmt: cashAmtNum,
         cardAmt: cardNum,
         cardBreakdown: Object.fromEntries(
@@ -664,8 +747,25 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       : t('posSettlementReport') || 'POS 결산 리포트'
     const dateLabel =
       openMode ? t('posOpenReportDate') || t('posSettleDate') || '결산일' : t('posSettleDate') || '결산일'
-    /** 80mm 열전사: 태국어는 overflow-wrap:anywhere 금지(모음·자모 분리). OS 폰트 폴백 포함 */
-    const printCss = `@page{size:80mm auto;margin:0}html,body{margin:0;padding:0}body{font-family:'Noto Sans Thai','Leelawadee UI',Tahoma,'Sarabun','Inter','Noto Sans KR',Arial,sans-serif;box-sizing:border-box;max-width:80mm;width:100%;padding:2mm 5mm 3mm 3mm;font-size:11px;line-height:1.48;-webkit-print-color-adjust:exact;print-color-adjust:exact}h2{font-size:13px;margin:0 0 6px;word-break:normal;overflow-wrap:break-word}p{margin:2px 0;word-break:normal;overflow-wrap:break-word}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}td{padding:2px 0;vertical-align:top;word-break:normal;overflow-wrap:break-word}td.r{text-align:right;white-space:nowrap;word-break:normal;overflow-wrap:normal;padding-left:4px;width:26%}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:6px;margin-top:6px}`
+    /** 80mm 열전사: 일반 영수증(pos-receipt-html)과 동일 @page·안쪽 여백·금액 열 — 오른쪽 비인쇄영역 큰 기기에서 잘림 방지 */
+    const amt = RECEIPT_AMOUNT_COL_MM
+    const gap = RECEIPT_GRID_COL_GAP_PX
+    const printCss =
+      posThermalReceiptPageSizeRule() +
+      'html,body{margin:0;padding:0}' +
+      '*,*::before,*::after{box-sizing:border-box}' +
+      `body{font-family:'Noto Sans Thai','Leelawadee UI',Tahoma,'Sarabun','Inter','Noto Sans KR',Arial,sans-serif;width:${POS_THERMAL_RECEIPT_WIDTH_MM}mm;max-width:${POS_THERMAL_RECEIPT_WIDTH_MM}mm;` +
+      `padding:2mm ${RECEIPT_INNER_INSET_RIGHT_MM}mm ${RECEIPT_TRAILING_BOTTOM_MM}mm ${RECEIPT_INNER_INSET_LEFT_MM}mm;` +
+      'font-size:11px;line-height:1.48;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow-x:hidden}' +
+      '@media print{body{zoom:1}}' +
+      'h2{font-size:13px;margin:0 0 6px;word-break:normal;overflow-wrap:break-word}' +
+      'p{margin:2px 0;word-break:normal;overflow-wrap:break-word}' +
+      `.sr{display:grid;grid-template-columns:minmax(0,1fr) ${amt}mm;column-gap:${gap}px;align-items:start;font-size:10px;margin:3px 0}` +
+      '.sr-l{min-width:0;overflow-wrap:break-word;word-break:normal}' +
+      '.sr-r{min-width:0;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}' +
+      '.sr-l.sr-ind{padding-left:3mm}' +
+      '.sr.b .sr-l,.sr.b .sr-r{font-weight:700}' +
+      '.sr.t{margin-top:6px;padding-top:6px;border-top:1px solid #333}'
     const htmlLangAttr =
       typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim())
         ? ` lang="${lang.trim().replace(/"/g, '')}"`
@@ -678,20 +778,18 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       <h2>${reportTitle}</h2>
       <p><strong>${t('store') || '매장'}</strong>: ${storeLabel}</p>
       <p><strong>${dateLabel}</strong>: ${settleDate}</p>
-      <table>
-      <tr><td>${t('posSystemSubtotal') || '공급가액'}</td><td class="r">${systemSubtotal.toLocaleString()}</td></tr>
-      <tr><td>${t('posSystemVat') || 'VAT (7%)'}</td><td class="r">${systemVat.toLocaleString()}</td></tr>
-      <tr class="t"><td class="b">${t('posSystemTotal') || '시스템 매출'}</td><td class="r b">${systemTotal.toLocaleString()}</td></tr>
-      <tr><td>${t('posCashActual') || '돈통 시제'}</td><td class="r">${cashActualNum.toLocaleString()}</td></tr>
-      <tr><td>${t('posCard') || '카드'}</td><td class="r">${cardNum.toLocaleString()}</td></tr>
-      <tr><td>${t('posPaymentQrCode') || 'QR 코드'}</td><td class="r">${qrNum.toLocaleString()}</td></tr>
-      <tr class="t"><td class="b">${t('posPaymentDeliveryApp') || '배달앱'}</td><td class="r b">${deliveryAppTotalNum.toLocaleString()}</td></tr>
-      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}</td><td class="r">${deliveryNum.toLocaleString()}</td></tr>
-      <tr><td style="padding-left:12px;font-size:13px">${t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}</td><td class="r">${dineInNum.toLocaleString()}</td></tr>
-      <tr><td>${t('posPaymentOther') || '기타'}</td><td class="r">${otherNum.toLocaleString()}</td></tr>
-      <tr class="t"><td class="b">${t('posInputTotal') || '입력 합계'}</td><td class="r b">${totalInput.toLocaleString()}</td></tr>
-      <tr class="t"><td class="b">${t('posDifference') || '차액'}</td><td class="r b">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</td></tr>
-      </table>
+      <div class="sr"><span class="sr-l">${t('posSystemSubtotal') || '공급가액'}</span><span class="sr-r">${systemSubtotal.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${t('posSystemVat') || 'VAT (7%)'}</span><span class="sr-r">${systemVat.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${t('posSystemTotal') || '시스템 매출'}</span><span class="sr-r">${systemTotal.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${t('posCashActual') || '돈통 시제'}</span><span class="sr-r">${cashActualNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${t('posCard') || '카드'}</span><span class="sr-r">${cardNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${t('posPaymentQrCode') || 'QR 코드'}</span><span class="sr-r">${qrNum.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${t('posPaymentDeliveryApp') || '배달앱'}</span><span class="sr-r">${deliveryAppTotalNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l sr-ind">${t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)'}</span><span class="sr-r">${deliveryNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l sr-ind">${t('posSettlementDeliverySubDineIn') || '홀 (Dine in)'}</span><span class="sr-r">${dineInNum.toLocaleString()}</span></div>
+      <div class="sr"><span class="sr-l">${t('posPaymentOther') || '기타'}</span><span class="sr-r">${otherNum.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${t('posInputTotal') || '입력 합계'}</span><span class="sr-r">${totalInput.toLocaleString()}</span></div>
+      <div class="sr t b"><span class="sr-l">${t('posDifference') || '차액'}</span><span class="sr-r">${diff >= 0 ? '+' : ''}${diff.toLocaleString()}</span></div>
       ${memo ? `<p class="t"><strong>${t('posMemo') || '비고'}</strong>: ${memo}</p>` : ''}
       ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}
       <p class="t" style="font-size:12px;color:#666">${formatPosDateTimeMedium(new Date(), lang)}</p>

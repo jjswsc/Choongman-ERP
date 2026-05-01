@@ -34,4 +34,7 @@ update public.pos_settlements set dine_in_delivery_amt = 0 where dine_in_deliver
 update public.pos_settlements set dine_in_delivery_breakdown = '{}'::jsonb where dine_in_delivery_breakdown is null;
 update public.pos_settlements set other_breakdown = '{}'::jsonb where other_breakdown is null;
 
+alter table public.pos_settlements
+  add column if not exists cash_actual_denoms jsonb default null;
+
 -- 스키마 캐시: 보통 수초~수분 내 반영. 계속 오류면 Supabase 프로젝트에서 API 재시작 또는 잠시 대기.

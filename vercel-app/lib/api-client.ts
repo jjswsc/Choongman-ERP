@@ -8420,6 +8420,8 @@ export interface PosSettlement {
   storeCode: string
   settleDate: string
   cashActual: number | null
+  /** 돈통 시제 권종별 장 수(키 1000,500,…). DB `cash_actual_denoms` */
+  cashActualDenoms?: Record<string, number> | null
   cashAmt?: number
   cardAmt: number
   cardBreakdown?: Record<string, number>
@@ -8563,6 +8565,7 @@ export async function savePosSettlement(params: {
   storeCode?: string
   settleDate: string
   cashActual?: number | null
+  cashActualDenoms?: Record<string, number> | null
   cashAmt?: number
   cardAmt?: number
   cardBreakdown?: Record<string, number>

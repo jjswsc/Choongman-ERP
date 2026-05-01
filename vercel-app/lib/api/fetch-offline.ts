@@ -286,7 +286,8 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
           '/api/updatePosOrder',
           '/api/updatePosOrderStatus',
           '/api/markPosOrderItemServed',
-          '/api/savePosSettlement',
+          // savePosSettlement: 200 + success:false 는 대개 스키마/검증 오류 → 큐에 넣어도 재성공하지 않음.
+          // 오프라인은 네트워크 예외·5xx 경로에서만 큐 적재한다.
           '/api/processPosStockDeduction',
         ])
         if (POS_RETRY_AFTER_QUEUE.has(path)) {
