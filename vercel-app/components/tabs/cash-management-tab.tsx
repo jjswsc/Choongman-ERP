@@ -1,12 +1,12 @@
 'use client'
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Wallet, Search, Plus } from 'lucide-react'
+import { Wallet, Search, Plus, Trash2 } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -19,7 +19,7 @@ import { getPosPrinterSettings, useStoreList } from '@/lib/api-client'
 import { getTillList, getPosTodaySales, translateTexts, type TillItem } from '@/lib/api-client'
 import { getPettyCashOptionsWithCache } from '@/lib/offline/cash-offline'
 import { getTillListWithCache } from '@/lib/offline/till-offline'
-import { addTillTransactionWithOffline } from '@/lib/offline/till-offline'
+import { addTillTransactionWithOffline, deleteTillTransactionWithOffline } from '@/lib/offline/till-offline'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useOnlineStatus } from '@/lib/offline'
@@ -81,6 +81,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
   const [salesWithdrawalSaving, setSalesWithdrawalSaving] = React.useState(false)
   const [salesWithdrawalList, setSalesWithdrawalList] = React.useState<TillItem[]>([])
   const [salesWithdrawalListLoading, setSalesWithdrawalListLoading] = React.useState(false)
+  const [tillDeleteId, setTillDeleteId] = React.useState<number | null>(null)
 
   const [addStore, setAddStore] = React.useState('')
   const [addType, setAddType] = React.useState<'deposit' | 'withdrawal'>('deposit')
@@ -346,6 +347,35 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
     }
   }
 
+  const handleDeleteSalesWithdrawal = async (r: TillItem) => {
+    const ok = await appConfirm(
+      t('posTillDeleteSalesWithdrawalConfirm') ||
+        'Delete this sales withdrawal? Till cash movement totals will be updated.'
+    )
+    if (!ok) return
+    setTillDeleteId(r.id)
+    try {
+      const res = await deleteTillTransactionWithOffline({ id: r.id })
+      if (res.success) {
+        void loadList()
+        void loadSalesWithdrawalList()
+        loadSalesWithdrawalCash()
+        const queued = Boolean(res.queued)
+        await appAlert(
+          queued || !online
+            ? t('offlineBannerAdminSaved')
+            : translateApiMessage(res.message, t) || t('pettyDeleted')
+        )
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
+      }
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setTillDeleteId(null)
+    }
+  }
+
   const fmt = (n: number) => (n ?? 0).toLocaleString()
 
   const singleDayRange = startStr === endStr
@@ -462,12 +492,13 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                       <th className="px-4 py-3 text-right font-semibold">{t('pettyColAmount') || '금액'}</th>
                       <th className="px-4 py-3 text-left font-semibold">{t('pettyColMemo') || '내용'}</th>
                       <th className="px-4 py-3 text-left font-semibold">{t('pettyColUser') || '등록자'}</th>
+                      <th className="w-px px-2 py-3 text-center font-semibold sr-only">{t('delete')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {salesWithdrawalList.length === 0 && !salesWithdrawalListLoading ? (
                       <tr>
-                        <td colSpan={canSearchAll ? 6 : 5} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={canSearchAll ? 7 : 6} className="px-4 py-12 text-center text-muted-foreground">
                           {t('pettyNoData') || '데이터가 없습니다.'}
                         </td>
                       </tr>
@@ -478,10 +509,29 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                           {canSearchAll && <td className="px-4 py-3 truncate">{r.store}</td>}
                           <td className="px-4 py-3">{r.sales_date || '-'}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-destructive">
-                            {r.amount < 0 ? '' : '-'}{fmt(Math.abs(r.amount))}
+                            {r.amount >= 0 ? '' : '-'}
+                            {fmt(Math.abs(r.amount))}
                           </td>
                           <td className="px-4 py-3 truncate max-w-[160px]">{getMemo(r.memo)}</td>
                           <td className="px-4 py-3 text-muted-foreground truncate">{r.user_name || '-'}</td>
+                          <td className="px-2 py-3 text-center">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              disabled={tillDeleteId != null || salesWithdrawalListLoading}
+                              title={t('delete')}
+                              aria-label={t('delete')}
+                              onClick={() => void handleDeleteSalesWithdrawal(r)}
+                            >
+                              {tillDeleteId === r.id ? (
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent inline-block" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -560,13 +610,14 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   <th className="px-4 py-3 text-right font-semibold">{t('pettyColAmount') || '금액'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColMemo') || '내용'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColUser') || '등록자'}</th>
+                  <th className="w-px px-2 py-3 text-center font-semibold sr-only">{t('delete')}</th>
                 </tr>
               </thead>
               <tbody>
                 {listData.length === 0 && !listLoading ? (
                   <tr>
                     <td
-                      colSpan={canSearchAll ? 6 : 5}
+                      colSpan={canSearchAll ? 7 : 6}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       {t('pettyNoData') || '데이터가 없습니다.'}
@@ -596,6 +647,26 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                       </td>
                       <td className="px-4 py-3 text-muted-foreground truncate">
                         {r.user_name || '-'}
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        {r.trans_type === 'sales_withdrawal' ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            disabled={tillDeleteId != null || listLoading}
+                            title={t('delete')}
+                            aria-label={t('delete')}
+                            onClick={() => void handleDeleteSalesWithdrawal(r)}
+                          >
+                            {tillDeleteId === r.id ? (
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent inline-block" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        ) : null}
                       </td>
                     </tr>
                   ))

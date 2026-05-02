@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useAuth } from "@/lib/auth-context"
-import { useLang } from "@/lib/lang-context"
+import { isLangCode, useLang, type LangCode } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosPrinterSettings } from "@/lib/api-client"
 import {
@@ -16,11 +16,12 @@ type DisplayTheme = "dark" | "light" | "brand"
 export default function PosCustomerDisplayPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
-  const t = useT(lang)
   const storeCode = String(auth?.store || "").trim()
 
   const [theme, setTheme] = React.useState<DisplayTheme>("dark")
-  const [state, setState] = React.useState<PosCustomerDisplayPayload | null>(null)
+  const [state, setState] = React.useState<PosCustomerDisplayPayload | null>(() =>
+    typeof window !== "undefined" && storeCode ? readPosCustomerDisplayState(storeCode) : null
+  )
   const [idleMessage, setIdleMessage] = React.useState("")
   const [paymentMessage, setPaymentMessage] = React.useState("")
   const [showOrderSummary, setShowOrderSummary] = React.useState(true)
@@ -64,6 +65,14 @@ export default function PosCustomerDisplayPage() {
       setState(payload)
     })
   }, [storeCode])
+
+  const effectiveLang: LangCode = React.useMemo(() => {
+    const from = state?.uiLang
+    if (from && isLangCode(from)) return from
+    return lang
+  }, [state?.uiLang, lang])
+
+  const t = useT(effectiveLang)
 
   const current = state?.kind || "idle"
   const resolvedIdleMedia = React.useMemo(() => {

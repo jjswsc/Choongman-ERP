@@ -80,6 +80,10 @@ import {
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import {
+  enrichPosOrderLikeItemsWithPromoSnapshot,
+  type PosOrderReceiptLineOptions,
+} from "@/lib/pos-payment-receipt-from-order"
+import {
   RECEIPT_AMOUNT_COL_MM,
   RECEIPT_CONTENT_NUDGE_LEFT_MM,
   RECEIPT_GRID_COL_GAP_PX,
@@ -462,6 +466,19 @@ export default function PosOrderPage() {
     }
     return m
   }, [allOptions, orderType])
+
+  const promoCatalogById = React.useMemo(() => {
+    const m = new Map<string, PosPromoWithItems>()
+    for (const p of promos) {
+      if (p?.id) m.set(String(p.id), p)
+    }
+    return m
+  }, [promos])
+
+  const posReceiptLineOptsKitchen: PosOrderReceiptLineOptions = React.useMemo(
+    () => ({ promoCatalogById, menus }),
+    [promoCatalogById, menus]
+  )
 
   const todayStr = getBangkokDateStr()
 
@@ -1246,8 +1263,12 @@ export default function PosOrderPage() {
         kitchen2: `${t("posKitchen2") || "주방 2"}`,
         kitchen3: `${t("posKitchen3") || "주방 3"}`,
       }
+      const itemsForKitchen = enrichPosOrderLikeItemsWithPromoSnapshot(
+        receiptData.items as unknown as Record<string, unknown>[],
+        posReceiptLineOptsKitchen
+      ) as unknown as typeof receiptData.items
       const slips = buildKitchenSlipGroups(
-        receiptData.items,
+        itemsForKitchen,
         { ...buildKitchenSlipGroupOpts(settings, menus, kLabels), splitPromoKitchenLines: true }
       )
       if (slips.length === 0) {

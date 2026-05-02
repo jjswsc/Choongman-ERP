@@ -59,10 +59,19 @@ import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { toDateStrBangkok } from '@/lib/attendance-utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
-import { receiptModalDataFromPosOrderReprint } from '@/lib/pos-payment-receipt-from-order'
+import {
+  enrichPosOrderLikeItemsWithPromoSnapshot,
+  receiptModalDataFromPosOrderReprint,
+  type PosOrderReceiptLineOptions,
+} from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
-import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import {
+  POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
+  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  printPosHtmlDocument,
+  type PrintPosHtmlDocumentOptions,
+} from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import {
   parsePaymentOtherBreakdown,
@@ -246,6 +255,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     return m
   }, [promosWithItems])
+
+  const posReceiptLineOptsKitchen: PosOrderReceiptLineOptions = React.useMemo(
+    () => ({ promoCatalogById, menus }),
+    [promoCatalogById, menus]
+  )
 
   const canSearchAll = isOfficeRole(auth?.role || '')
 
@@ -502,20 +516,40 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
   }
 
+  const printHtmlWithPosEngine = React.useCallback(
+    (
+      fullHtml: string,
+      title: string,
+      thermal?: Pick<
+        PrintPosHtmlDocumentOptions,
+        'printRole' | 'printReceiptKind' | 'kitchenStation' | 'escPosCutOverride'
+      >
+    ) =>
+      new Promise<void>((resolve, reject) => {
+        printPosHtmlDocument(fullHtml, {
+          title,
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
+          ...thermal,
+          onPrintUnavailable: () => reject(new Error(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE)),
+          onAfterCleanup: () => resolve(),
+        })
+      }),
+    [t]
+  )
+
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const store = (o.storeCode ?? '').trim()
     if (!store || !o.items?.length) {
       await appAlert(t('posPrintUnavailable'))
       return
     }
-    const win = window.open('', '_blank')
-    if (!win) {
-      await appAlert(t('posPrintBlockedBrowser'))
-      return
-    }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
-      const items = o.items as { id?: string; name?: string; price?: number; qty?: number }[]
+      const items = enrichPosOrderLikeItemsWithPromoSnapshot(
+        (o.items || []) as unknown as Record<string, unknown>[],
+        posReceiptLineOptsKitchen
+      ) as { id?: string; name?: string; price?: number; qty?: number }[]
       const kLabels = {
         unified: t('posKitchenOrder') || '주방 주문서',
         kitchen1: `${t('posKitchen1') || '주방 1'}`,
@@ -524,7 +558,6 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       }
       const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
       if (!slips.length) {
-        win.close()
         await appAlert(t('posKitchenNoItemsToPrint'))
         return
       }
@@ -536,11 +569,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const dateStr = o.createdAt
         ? formatPosDateTimeMedium(new Date(o.createdAt), lang)
         : '-'
-      const printOne = (idx: number) => {
+      const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
-        const w = idx === 0 ? win : window.open('', '_blank')
-        if (!w) return
         const segLabel =
           normalizePosOrderTypeKey(o.orderType) === 'dine_in'
             ? t('posTable') || '테이블'
@@ -566,16 +597,24 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           design: slipDesign,
           printColorAdjust: 'economy',
         })
-        w.document.write(html)
-        w.document.close()
-        w.focus()
-        setTimeout(() => w.print(), 250)
-        setTimeout(() => w.close(), 5000)
+        await printHtmlWithPosEngine(html, slip.label, {
+          printRole: 'kitchen',
+          kitchenStation: slip.station,
+          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+        })
+        if (idx + 1 < slips.length) {
+          await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+          await printOne(idx + 1)
+        }
       }
-      printOne(0)
+      await printOne(0)
     } catch (e) {
-      win.close()
-      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg === POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE) {
+        await appAlert(t('posPrintBlockedBrowser'))
+        return
+      }
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: msg }))
     }
   }
 

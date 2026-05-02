@@ -61,16 +61,30 @@ export function canonicalEmployeeFormRole(r: string): string {
   return hit || (String(r || "").trim() || "Staff")
 }
 
+/** JWT·직원 role에 한글/현지 표기가 섞여도 매장 관리자로 인식 */
+function roleTextMatchesManager(role: string): boolean {
+  const raw = String(role || "").trim()
+  const lo = raw.toLowerCase()
+  if (lo.includes(MANAGER_ROLE)) return true
+  return /매니저|점장|지점장|店長|store\s*manager/i.test(raw)
+}
+
+/** JWT·직원 role에 한글/현지 표기가 섞여도 가맹점주로 인식 */
+function roleTextMatchesFranchisee(role: string): boolean {
+  const raw = String(role || "").trim()
+  const lo = raw.toLowerCase()
+  if (lo.includes(FRANCHISEE_ROLE)) return true
+  return /가맹|프랜차이즈|점주|franchise/i.test(raw)
+}
+
 /** 매장 매니저인지 */
 export function isManagerRole(role: string): boolean {
-  const r = String(role || "").toLowerCase().trim()
-  return r.includes(MANAGER_ROLE)
+  return roleTextMatchesManager(role)
 }
 
 /** 가맹점주인지 */
 export function isFranchiseeRole(role: string): boolean {
-  const r = String(role || "").toLowerCase().trim()
-  return r.includes(FRANCHISEE_ROLE)
+  return roleTextMatchesFranchisee(role)
 }
 
 /** 모바일 「매출 통합(/store-sales)」 — 로그인한 모든 직원 허용 */
@@ -271,6 +285,21 @@ export function canAccessPosMenus(role: string): boolean {
 /** POS 프린터 설정 가능 (관리자) */
 export function canAccessPosPrinters(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
+}
+
+/**
+ * POS 프린터 설정 조회 — 터미널·듀얼 모니터에서 로드용.
+ * (프린터 전체 편집은 `canAccessPosPrinters`, 주문/결산 직원은 조회만)
+ */
+export function canReadPosPrinterSettings(role: string): boolean {
+  return canAccessPosPrinters(role) || canAccessPosOrder(role) || canAccessPosSettlement(role)
+}
+
+/**
+ * 고객 화면·듀얼 모니터 관련 컬럼만 저장 가능한지 (POS 주문/결산 직원 포함)
+ */
+export function canSavePosCustomerDisplayFields(role: string): boolean {
+  return canReadPosPrinterSettings(role)
 }
 
 /** POS 쿠폰 관리 가능 (관리자) */

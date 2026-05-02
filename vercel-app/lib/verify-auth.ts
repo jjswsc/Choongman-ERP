@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, type JwtPayload } from './jwt-auth'
-import { isAccountingRole } from '@/lib/permissions'
+import { isAccountingRole, isManagerOrFranchiseeRole, isOfficeRole } from '@/lib/permissions'
 
 /** API Route의 Request/NextRequest에서 Bearer JWT만 검증 (선택) */
 export async function tryVerifyBearerFromRequest(req: Request | NextRequest): Promise<JwtPayload | null> {
@@ -83,9 +83,10 @@ export async function requireAuth(
   }
 
   const r = (auth.role || '').toLowerCase()
+  const roleRaw = String(auth.role || '')
   const isDirector = ['director', 'ceo', 'hr'].some((x) => r.includes(x))
-  const isOffice = isDirector || r.includes('officer')
-  const isManager = r.includes('manager') || r.includes('franchisee')
+  const isOffice = isOfficeRole(roleRaw)
+  const isManager = isManagerOrFranchiseeRole(roleRaw)
 
   if (requiredLevel === 'director' && !isDirector) {
     return {

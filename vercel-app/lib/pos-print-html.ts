@@ -20,6 +20,12 @@ export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID = 2000
 export const POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS = 1200
 
 /**
+ * 숨김 iframe 인쇄 가드(`onPrintUnavailable`)를 Promise로 감쌀 때 `reject`에 쓰는 고정 메시지.
+ * 번역 문자열을 `Error.message`에 넣으면 locale마다 catch 분기가 깨짐.
+ */
+export const POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE = '__CM_POS_PRINT_DOCUMENT_UNAVAILABLE__'
+
+/**
  * 주방 자동 인쇄 직후 고객용 영수증 자동 인쇄 전(모달 경로). 주방 컷·스풀 안정화.
  */
 export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS = 1000

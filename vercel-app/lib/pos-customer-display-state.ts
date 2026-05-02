@@ -1,9 +1,14 @@
+/** POS UI 언어 코드 — `lib/lang-context` LangCode 와 동일 집합 */
+export type PosCustomerDisplayUiLang = "ko" | "en" | "th" | "mm" | "la" | "kh" | "vi" | "ms"
+
 export type PosCustomerDisplayStateKind = "idle" | "ordering" | "payment" | "qr"
 
 export type PosCustomerDisplayPayload = {
   storeCode: string
   kind: PosCustomerDisplayStateKind
   updatedAt: string
+  /** POS 터미널에서 선택한 UI 언어(고객 창은 별도 세션이라 sessionStorage와 무관) */
+  uiLang?: PosCustomerDisplayUiLang
   title?: string
   message?: string
   qrPayload?: string

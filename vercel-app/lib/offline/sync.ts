@@ -124,6 +124,7 @@ function syncOrder(item: { api: string; createdAt: number }): number {
     item.api === '/api/updateBankTransaction' ||
     item.api === '/api/addPettyCashTransaction' ||
     item.api === '/api/addTillTransaction' ||
+    item.api === '/api/deleteTillTransaction' ||
     item.api === '/api/saveCardTransaction'
   ) {
     return 7

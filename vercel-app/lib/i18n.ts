@@ -5093,6 +5093,8 @@ export const i18n = {
     posSalesWithdrawal: '매출액 출금',
     posSalesWithdrawalList: '매출액 출금 내역',
     posSalesWithdrawalHint: '날짜를 선택하면 해당일 현금 매출액이 표시됩니다. 금액은 비워두면 표시된 현금 매출 전액으로 출금됩니다. 일부만 출금하려면 금액을 입력하세요.',
+    posTillDeleteSalesWithdrawalConfirm:
+      '이 매출 출금 기록을 삭제할까요? 시재(입출금) 잔액에 다시 반영됩니다.',
     posSalesDateLabel: '매출 대상일',
     posCashDrawer: '돈통',
     posRefresh: '새로고침',
@@ -12355,6 +12357,8 @@ orderItemQty: 'Qty',
     posSalesWithdrawal: 'Sales withdrawal',
     posSalesWithdrawalList: 'Sales withdrawal list',
     posSalesWithdrawalHint: "Select a date to see that day's cash sales. Leave amount empty to withdraw the full displayed cash sales, or enter a partial amount. Memo is optional.",
+    posTillDeleteSalesWithdrawalConfirm:
+      'Delete this sales withdrawal? Till cash movement totals will be updated.',
     posSalesDateLabel: 'Sales date',
     posCashDrawer: 'Cash drawer',
     posRefresh: 'Refresh',
@@ -20828,6 +20832,7 @@ orderItemQty: 'จำนวน',
     posPaymentShopeePay: 'Shopee Pay',
     posPaymentTrueMoney: 'TrueMoney',
     posPaymentWeChat: 'WeChat Pay',
+    posTillDeleteSalesWithdrawalConfirm: 'Delete this sales withdrawal? Till cash movement totals will be updated.',
   },
   mm: {
     all: 'အားလုံး',
@@ -26837,6 +26842,7 @@ orderItemQty: 'အရေအတွက်',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posCancelReasonPrompt: 'Enter a cancel reason (at least 2 characters; saved on the order memo)',
+    posTillDeleteSalesWithdrawalConfirm: 'Delete this sales withdrawal? Till cash movement totals will be updated.',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -32746,6 +32752,7 @@ orderItemQty: 'ຈຳນວນ',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posCancelReasonPrompt: 'Enter a cancel reason (at least 2 characters; saved on the order memo)',
+    posTillDeleteSalesWithdrawalConfirm: 'Delete this sales withdrawal? Till cash movement totals will be updated.',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -36049,6 +36056,7 @@ orderItemQty: 'ຈຳນວນ',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posCancelReasonPrompt: 'Enter a cancel reason (at least 2 characters; saved on the order memo)',
+    posTillDeleteSalesWithdrawalConfirm: 'Delete this sales withdrawal? Till cash movement totals will be updated.',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -39358,6 +39366,7 @@ orderItemQty: 'ຈຳນວນ',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posCancelReasonPrompt: 'Enter a cancel reason (at least 2 characters; saved on the order memo)',
+    posTillDeleteSalesWithdrawalConfirm: 'Delete this sales withdrawal? Till cash movement totals will be updated.',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -42682,6 +42691,7 @@ orderItemQty: 'ຈຳນວນ',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posCancelReasonPrompt: 'Enter a cancel reason (at least 2 characters; saved on the order memo)',
+    posTillDeleteSalesWithdrawalConfirm: 'Delete this sales withdrawal? Till cash movement totals will be updated.',
   } as Record<string, string>,
 } as const
 

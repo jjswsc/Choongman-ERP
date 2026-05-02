@@ -16,6 +16,10 @@ import {
 } from '@/lib/pos-kitchen-slip-html'
 import { resolvePosReceiptOrderNoRaw } from '@/lib/pos-delivery-platform'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
+import {
+  enrichPosOrderLikeItemsWithPromoSnapshot,
+  type PosOrderReceiptLineOptions,
+} from '@/lib/pos-payment-receipt-from-order'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import {
   printPosHtmlDocument,
@@ -123,6 +127,8 @@ interface PosReceiptModalProps {
    * 사용자 제스처가 만료되어 print()가 무시되는 것을 완화합니다.
    */
   printerSettingsRef?: RefObject<PosPrinterSettings | null>
+  /** 주방 인쇄 시 프로모 세트 구성 스냅샷 보강(카탈로그·메뉴) — POS 터미널 등에서 전달 */
+  kitchenPromoLineEnrich?: PosOrderReceiptLineOptions
 }
 
 export function PosReceiptModal({
@@ -160,6 +166,7 @@ export function PosReceiptModal({
   receiptBarcode = false,
   itemBarcode = false,
   printerSettingsRef,
+  kitchenPromoLineEnrich,
 }: PosReceiptModalProps) {
   const { lang } = useLang()
   const autoPrintedKeyRef = useRef<string>('')
@@ -260,8 +267,12 @@ export function PosReceiptModal({
         kitchen2: `${t('posKitchen2') || '주방 2'}`,
         kitchen3: `${t('posKitchen3') || '주방 3'}`,
       }
+      const itemsForKitchen = enrichPosOrderLikeItemsWithPromoSnapshot(
+        receiptData.items as unknown as Record<string, unknown>[],
+        kitchenPromoLineEnrich
+      ) as ReceiptModalData['items']
       const slips = buildKitchenSlipGroups(
-        receiptData.items,
+        itemsForKitchen,
         { ...buildKitchenSlipGroupOpts(settings, menus, slipLabels), splitPromoKitchenLines: true }
       )
       if (slips.length === 0) {

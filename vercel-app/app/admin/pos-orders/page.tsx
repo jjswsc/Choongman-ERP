@@ -64,6 +64,13 @@ import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kit
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
+import {
+  POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
+  POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
+  printPosHtmlDocument,
+  type PrintPosHtmlDocumentOptions,
+} from "@/lib/pos-print-html"
+import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
@@ -549,15 +556,32 @@ export default function PosOrdersPage() {
     }
   }
 
+  const printHtmlWithPosEngine = React.useCallback(
+    (
+      fullHtml: string,
+      title: string,
+      thermal?: Pick<
+        PrintPosHtmlDocumentOptions,
+        "printRole" | "printReceiptKind" | "kitchenStation" | "escPosCutOverride"
+      >
+    ) =>
+      new Promise<void>((resolve, reject) => {
+        printPosHtmlDocument(fullHtml, {
+          title,
+          printDelayMs: 0,
+          fallbackCleanupMs: 120_000,
+          ...thermal,
+          onPrintUnavailable: () => reject(new Error(POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE)),
+          onAfterCleanup: () => resolve(),
+        })
+      }),
+    [t]
+  )
+
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const storeCode = (o.storeCode ?? "").trim()
     if (!storeCode || !o.items?.length) {
       await appAlert(t("posPrintUnavailable"))
-      return
-    }
-    const win = window.open("", "_blank")
-    if (!win) {
-      await appAlert(t("posPrintBlockedBrowser"))
       return
     }
     try {
@@ -571,7 +595,6 @@ export default function PosOrdersPage() {
       }
       const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
       if (!slips.length) {
-        win.close()
         await appAlert(t("posKitchenNoItemsToPrint"))
         return
       }
@@ -582,11 +605,9 @@ export default function PosOrdersPage() {
         : ""
       const dateStr =
         o.createdAt ? formatBangkokDateTime(o.createdAt, bangkokDisplayLocale(lang)) : "-"
-      const printOne = (idx: number) => {
+      const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
-        const w = idx === 0 ? win : window.open("", "_blank")
-        if (!w) return
         const tablePart =
           o.tableName && o.orderType !== "delivery"
             ? ` · ${t("posTable") || "테이블"}: ${o.tableName}`
@@ -611,24 +632,24 @@ export default function PosOrdersPage() {
           design: slipDesign,
           printColorAdjust: "economy",
         })
-        w.document.write(html)
-        w.document.close()
-        w.focus()
-        let done = false
-        const afterPrint = () => {
-          if (done) return
-          done = true
-          w.close()
-          if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+        await printHtmlWithPosEngine(html, slip.label, {
+          printRole: "kitchen",
+          kitchenStation: slip.station,
+          escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: "kitchen" }),
+        })
+        if (idx + 1 < slips.length) {
+          await new Promise((resolve) => setTimeout(resolve, POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS))
+          await printOne(idx + 1)
         }
-        w.onafterprint = afterPrint
-        setTimeout(() => w.print(), 250)
-        setTimeout(afterPrint, 30000)
       }
-      printOne(0)
+      await printOne(0)
     } catch (e) {
-      win.close()
-      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: String(e) }))
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg === POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE) {
+        await appAlert(t("posPrintBlockedBrowser"))
+        return
+      }
+      await appAlert(i18nTr(t, "posUnexpectedErrorDetail", { detail: msg }))
     }
   }
 

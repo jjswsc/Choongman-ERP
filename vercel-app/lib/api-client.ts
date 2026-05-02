@@ -1963,6 +1963,24 @@ export async function addTillTransaction(params: {
   }
 }
 
+/** 시재 매출 출금(sales_withdrawal) 한 건 삭제 */
+export async function deleteTillTransaction(params: {
+  id: number
+}): Promise<{ success: boolean; message?: string; queued?: boolean }> {
+  const res = await apiFetchWithOffline('/api/deleteTillTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: params.id }),
+  })
+  const data = (await res.json()) as { success?: boolean; message?: string; queued?: boolean }
+  const queued = res.headers.get('X-Offline-Queued') === '1' || data.queued === true
+  return {
+    success: Boolean(data.success),
+    message: typeof data.message === 'string' ? data.message : undefined,
+    queued,
+  }
+}
+
 /** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
 export async function updatePettyCashTransaction(params: {
   id: number

@@ -6,7 +6,7 @@
 import { isOnline } from './network'
 import { getFromCache, setCache } from './cache'
 import { addToQueue } from './queue'
-import { getTillList, addTillTransaction, type TillItem } from '@/lib/api-client'
+import { getTillList, addTillTransaction, deleteTillTransaction, type TillItem } from '@/lib/api-client'
 
 function cacheKeyTillList(params: { startStr: string; endStr: string; storeFilter?: string; typeFilter?: string }): string {
   const { startStr, endStr, storeFilter = '', typeFilter = '' } = params
@@ -62,6 +62,23 @@ export async function addTillTransactionWithOffline(
       api: '/api/addTillTransaction',
       method: 'POST',
       body: JSON.stringify(params),
+    })
+    return { success: true, queued: true }
+  }
+}
+
+/** 매출 출금 삭제 — 온라인 시 API, 오프라인 시 큐 */
+export async function deleteTillTransactionWithOffline(params: {
+  id: number
+}): Promise<AddTillResult> {
+  try {
+    return await deleteTillTransaction(params)
+  } catch (e) {
+    if (!isNetworkError(e)) throw e
+    await addToQueue({
+      api: '/api/deleteTillTransaction',
+      method: 'POST',
+      body: JSON.stringify({ id: params.id }),
     })
     return { success: true, queued: true }
   }

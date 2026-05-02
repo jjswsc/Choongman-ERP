@@ -5,6 +5,7 @@ import {
   canPosStaffAccessPath,
   canUpdateReceivableReceiveCheck,
   canAccessPosCostAnalysis,
+  canAccessPosPrinters,
 } from "@/lib/permissions"
 import { attendanceStoreNamePostgrestFilter } from "@/lib/attendance-utils"
 
@@ -29,6 +30,12 @@ describe("RLS/권한 스코프 harness", () => {
     const opts = { allowedStores: ["CM Rama9", "CM Ladprao"] }
     expect(userCanAccessEmployeeStore("franchisee", "CM Any", "CM Rama9", opts)).toBe(true)
     expect(userCanAccessEmployeeStore("franchisee", "CM Any", "CM Silom", opts)).toBe(false)
+  })
+
+  it("한글 매장 관리자 표기도 POS 프린터 설정 권한으로 인식된다", () => {
+    expect(canAccessPosPrinters("매니저")).toBe(true)
+    expect(canAccessPosPrinters("점장")).toBe(true)
+    expect(canAccessPosPrinters("가맹점주")).toBe(true)
   })
 
   it("POS 주문전용 역할은 원가분석 경로 접근이 차단된다", () => {

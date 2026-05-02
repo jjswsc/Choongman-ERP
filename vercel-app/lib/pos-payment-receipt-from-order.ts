@@ -194,6 +194,26 @@ function resolvePromoItemsForReceiptLine(
   )
 }
 
+/**
+ * 주방 슬립 등: 줄에 `promoItems`/`promo_items` 스냅샷이 없으면 카탈로그·메뉴로 세트 구성을 채운다.
+ * 이미 스냅샷이 있으면 유지한다(저장된 선택·수량).
+ */
+export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string, unknown>>(
+  items: T[],
+  opts?: PosOrderReceiptLineOptions
+): T[] {
+  const catalog = opts?.promoCatalogById
+  const menus = opts?.menus
+  if (!items?.length || (!catalog?.size && !menus?.length)) return items
+  return items.map((it) => {
+    const direct = pickPromoItemsFromOrderLine(it)
+    if (direct && direct.length > 0) return it
+    const promo = resolvePromoItemsForReceiptLine(it, catalog, menus)
+    if (!promo || promo.length === 0) return it
+    return { ...it, promoItems: promo } as T
+  })
+}
+
 function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLineOptions) {
   const catalog = opts?.promoCatalogById
   const menus = opts?.menus
@@ -221,17 +241,10 @@ export function enrichReceiptModalItemsForPromoDisplay(
   items: ReceiptModalData['items'],
   opts?: PosOrderReceiptLineOptions
 ): ReceiptModalData['items'] {
-  const catalog = opts?.promoCatalogById
-  const menus = opts?.menus
-  if (!items?.length || (!catalog?.size && !menus?.length)) return items
-  return items.map((it) => {
-    const existing = it.promoItems
-    if (Array.isArray(existing) && existing.length > 0) return it
-    const row = it as unknown as Record<string, unknown>
-    const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
-    if (!promo || promo.length === 0) return it
-    return { ...it, promoItems: promo }
-  })
+  return enrichPosOrderLikeItemsWithPromoSnapshot(
+    items as unknown as Record<string, unknown>[],
+    opts
+  ) as ReceiptModalData['items']
 }
 
 /** 영수증 관리 등: DB에 저장된 합계·부가세로 재인쇄 (당시 요금 재계산 없음) */

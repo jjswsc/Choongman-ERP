@@ -9,7 +9,24 @@ import {
 import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { requireAuth } from '@/lib/verify-auth'
-import { canAccessPosPrinters, isOfficeRole } from '@/lib/permissions'
+import { canAccessPosPrinters, canSavePosCustomerDisplayFields, isOfficeRole } from '@/lib/permissions'
+
+/** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
+const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
+  'dual_monitor_enabled',
+  'customer_display_auto_open',
+  'customer_display_monitor_preference',
+  'customer_display_theme',
+  'customer_display_default_state',
+  'customer_display_idle_message',
+  'customer_display_payment_message',
+  'customer_display_qr_payload',
+  'customer_display_show_order_summary',
+  'customer_display_show_order_total',
+  'customer_display_idle_media_type',
+  'customer_display_idle_media_url',
+  'updated_at',
+])
 
 /** JSON 본문에서 true/false 문자열 등도 안전하게 해석 (지연 배지 등) */
 function parseBoolParam(v: unknown, defaultVal: boolean): boolean {
@@ -115,11 +132,14 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const authResult = await requireAuth(req, 'manager')
+    const authResult = await requireAuth(req, 'any')
     if (!authResult.auth) {
       return NextResponse.json({ success: false, message: '인증이 필요합니다.' }, { status: 401, headers })
     }
-    if (!canAccessPosPrinters(authResult.auth.role || '')) {
+    const actorRole = String(authResult.auth.role || '')
+    const allowFullPrinterSave = canAccessPosPrinters(actorRole)
+    const allowCustomerDisplayOnly = !allowFullPrinterSave && canSavePosCustomerDisplayFields(actorRole)
+    if (!allowFullPrinterSave && !allowCustomerDisplayOnly) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
     }
     const body = await req.json()
@@ -270,7 +290,21 @@ export async function POST(req: NextRequest) {
     )) as Record<string, unknown>[] | null
     const previous = previousRows?.[0] || {}
 
-    if (routeMenuPatch !== undefined || routeCatPatch !== undefined || routeMainPatch !== undefined) {
+    if (allowCustomerDisplayOnly && !previousRows?.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '매장 프린터 기본 설정이 없습니다. 관리자 화면(/admin/pos-printers)에서 한 번 저장한 뒤 듀얼 모니터를 설정할 수 있습니다.',
+        },
+        { status: 403, headers }
+      )
+    }
+
+    if (
+      allowFullPrinterSave &&
+      (routeMenuPatch !== undefined || routeCatPatch !== undefined || routeMainPatch !== undefined)
+    ) {
       try {
         await materializeKitchenPrintersToMenus({
           routeByMenu: routeMenuPatch || {},
@@ -379,6 +413,15 @@ export async function POST(req: NextRequest) {
       ...(routeMenuPatch !== undefined ? { kitchen_route_by_menu: routeMenuPatch } : {}),
       ...(routeCatPatch !== undefined ? { kitchen_route_by_category: routeCatPatch } : {}),
       ...(routeMainPatch !== undefined ? { kitchen_route_by_category_main: routeMainPatch } : {}),
+    }
+
+    if (allowCustomerDisplayOnly) {
+      for (const key of Object.keys(patch)) {
+        if (CUSTOMER_DISPLAY_ONLY_DB_KEYS.has(key)) continue
+        if (Object.prototype.hasOwnProperty.call(previous, key)) {
+          ;(patch as Record<string, unknown>)[key] = previous[key]
+        }
+      }
     }
 
     await upsertWithMissingColumnFallback(storeCode, patch)

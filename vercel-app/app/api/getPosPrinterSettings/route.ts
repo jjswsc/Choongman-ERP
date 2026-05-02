@@ -3,7 +3,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
 import { requireAuth } from '@/lib/verify-auth'
-import { canAccessPosPrinters, isOfficeRole } from '@/lib/permissions'
+import { isOfficeRole } from '@/lib/permissions'
 
 type VendorBizInfo = {
   name?: string
@@ -74,12 +74,9 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
-  const authResult = await requireAuth(request, 'manager')
+  const authResult = await requireAuth(request, 'any')
   if (!authResult.auth) {
     return NextResponse.json({ success: false, message: '인증이 필요합니다.' }, { status: 401, headers })
-  }
-  if (!canAccessPosPrinters(authResult.auth.role || '')) {
-    return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
   }
   const requestedStoreCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
   const authStore = String(authResult.auth.store || '').trim()

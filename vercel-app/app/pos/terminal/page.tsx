@@ -111,6 +111,7 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
+  enrichPosOrderLikeItemsWithPromoSnapshot,
   isPosOrderPaidLikeStatus,
   posOrderPaymentSum,
   posOrderRowPaymentSum,
@@ -175,6 +176,55 @@ function isSessionNewOrder(createdAtRaw: unknown, sessionStartedAtMs: number, gr
   const ms = new Date(s).getTime()
   if (!Number.isFinite(ms)) return false
   return ms >= sessionStartedAtMs - graceMs
+}
+
+const MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX = 'pos_main_last_seen_order_id:'
+const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
+const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
+const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
+
+function readMainPosLastSeenOrderId(storeCodeRaw: unknown): number {
+  if (typeof window === 'undefined') return 0
+  const storeCode = String(storeCodeRaw ?? '').trim()
+  if (!storeCode) return 0
+  try {
+    const raw = localStorage.getItem(`${MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX}${storeCode}`)
+    const n = Number(raw ?? 0)
+    if (!Number.isFinite(n) || n <= 0) return 0
+    return Math.trunc(n)
+  } catch {
+    return 0
+  }
+}
+
+function writeMainPosLastSeenOrderId(storeCodeRaw: unknown, orderIdRaw: unknown): void {
+  if (typeof window === 'undefined') return
+  const storeCode = String(storeCodeRaw ?? '').trim()
+  const orderId = Number(orderIdRaw)
+  if (!storeCode || !Number.isFinite(orderId) || orderId <= 0) return
+  try {
+    localStorage.setItem(
+      `${MAIN_POS_LAST_SEEN_ORDER_ID_KEY_PREFIX}${storeCode}`,
+      String(Math.trunc(orderId))
+    )
+  } catch {
+    /* ignore localStorage failures */
+  }
+}
+
+function isPosPrintDebugEnabledInBrowser(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const byQuery = new URLSearchParams(window.location.search).get('printDebug')
+    if (byQuery === '1' || byQuery === 'true') return true
+  } catch {
+    /* ignore */
+  }
+  try {
+    return localStorage.getItem(POS_PRINT_DEBUG_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 function extractGrabOrderIdFromMemoText(memo: string): string {
@@ -606,6 +656,19 @@ export default function PosTerminalPage() {
         ...(p.optionId && optionNameById.get(String(p.optionId)) ? { optionName: optionNameById.get(String(p.optionId)) } : {}),
       })),
     [optionNameById]
+  )
+  /** 주방 인쇄: DB에 promoItems 없을 때 카탈로그로 세트 구성 펼침 + 옵션명 보강 */
+  const kitchenItemsWithResolvedPromo = useCallback(
+    <T extends Record<string, unknown>>(rows: T[]): T[] => {
+      if (!rows.length) return rows
+      const expanded = enrichPosOrderLikeItemsWithPromoSnapshot(rows, posReceiptLineOpts)
+      return expanded.map((it) => {
+        const list = (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
+        if (!Array.isArray(list) || list.length === 0) return it
+        return { ...it, promoItems: enrichPromoItemsWithOptionName(list) } as T
+      })
+    },
+    [posReceiptLineOpts, enrichPromoItemsWithOptionName]
   )
   usePosMenusCatalogLiveRefresh(applyPosMenusList)
   const drawerOpenWarnedRef = useRef(false)
@@ -1298,6 +1361,14 @@ export default function PosTerminalPage() {
                   name: String(it.name ?? ''),
                   menuId,
                 }, menus)
+                const pit = it as {
+                  promoId?: string
+                  promo_id?: string
+                  promoCode?: string
+                  promo_code?: string
+                }
+                const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
+                const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
                 return {
                   id: String(it.id ?? ''),
                   name: displayName,
@@ -1305,6 +1376,8 @@ export default function PosTerminalPage() {
                   qty: Number(it.qty ?? 1),
                   ...(menuId ? { menuId } : {}),
                   ...(note ? { note } : {}),
+                  ...(promoId ? { promoId } : {}),
+                  ...(promoCode ? { promoCode } : {}),
                   ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
                     ? {
                         promoItems: enrichPromoItemsWithOptionName(
@@ -1329,7 +1402,10 @@ export default function PosTerminalPage() {
                       kitchen2: `${t('posKitchen2') || '주방 2'}`,
                       kitchen3: `${t('posKitchen3') || '주방 3'}`,
                     }
-                    const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+                    const slips = buildKitchenSlipGroups(
+                      kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
+                      buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                    )
                     if (!slips.length) return
                     const slipDesign = resolveKitchenSlipDesign(settings)
                     const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
@@ -1572,6 +1648,7 @@ export default function PosTerminalPage() {
       storeCode: currentStoreId,
       kind: 'idle',
       updatedAt: new Date().toISOString(),
+      uiLang: lang,
       showOrderSummary: customerDisplayShowOrderSummary,
       showOrderTotal: customerDisplayShowOrderTotal,
       idleMediaType: customerDisplayIdleMediaType,
@@ -1647,6 +1724,7 @@ export default function PosTerminalPage() {
     postPaymentQrUntil,
     customerDisplayPaymentDraft,
     t,
+    lang,
   ])
 
   useEffect(() => {
@@ -1657,7 +1735,57 @@ export default function PosTerminalPage() {
 
   const hasInitializedMainPosPollRef = useRef(false)
   const lastSeenOrderIdRef = useRef<number>(0)
+  const lastSeenOrderIdPersistedRef = useRef<number>(0)
+  const startupCatchupUntilRef = useRef<number>(Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS)
   const prevStoreForPollRef = useRef<string | null>(null)
+
+  const bumpLastSeenOrderId = useCallback(
+    (orderIdRaw: unknown) => {
+      const orderId = Number(orderIdRaw)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      const next = Math.trunc(orderId)
+      if (next > lastSeenOrderIdRef.current) {
+        lastSeenOrderIdRef.current = next
+      }
+      if (next > lastSeenOrderIdPersistedRef.current) {
+        lastSeenOrderIdPersistedRef.current = next
+      }
+      if (currentStoreId) {
+        writeMainPosLastSeenOrderId(currentStoreId, next)
+      }
+    },
+    [currentStoreId]
+  )
+
+  const shouldTreatAsIncomingOrder = useCallback(
+    (orderIdRaw: unknown, createdAtRaw: unknown) => {
+      const orderId = Number(orderIdRaw)
+      if (!Number.isFinite(orderId) || orderId <= 0) return false
+      if (isSessionNewOrder(createdAtRaw, posSessionStartedAtRef.current)) return true
+      if (Date.now() > startupCatchupUntilRef.current) return false
+      if (orderId <= lastSeenOrderIdPersistedRef.current) return false
+      const createdAtMs = new Date(String(createdAtRaw ?? '').trim()).getTime()
+      if (!Number.isFinite(createdAtMs)) return true
+      return createdAtMs >= posSessionStartedAtRef.current - MAIN_POS_STARTUP_CATCHUP_WINDOW_MS
+    },
+    []
+  )
+
+  const logPosPrintDebug = useCallback(
+    (event: string, detail?: Record<string, unknown>) => {
+      if (!isPosPrintDebugEnabledInBrowser()) return
+      try {
+        console.info('[POS_PRINT_DEBUG]', event, {
+          storeCode: String(currentStoreId ?? ''),
+          isMainPosDevice,
+          ...(detail || {}),
+        })
+      } catch {
+        /* ignore console errors */
+      }
+    },
+    [currentStoreId, isMainPosDevice]
+  )
 
   const resolveOrderItemDisplayName = useCallback(
     (item: { id?: string; name?: string; menuId?: string }) =>
@@ -1916,7 +2044,10 @@ export default function PosTerminalPage() {
             kitchen2: `${t('posKitchen2') || '주방 2'}`,
             kitchen3: `${t('posKitchen3') || '주방 3'}`,
           }
-          const slips = buildKitchenSlipGroups(lines, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+          const slips = buildKitchenSlipGroups(
+            kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as typeof lines,
+            buildKitchenSlipGroupOpts(settings, menus, kLabels)
+          )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
           const kitchenMemo = parsePosOrderMemo(memo).plainMemo
@@ -2098,8 +2229,16 @@ export default function PosTerminalPage() {
           }
           const groupOpts = buildKitchenSlipGroupOpts(settings, menus, kLabels)
           const removedLines = kitchenDetail?.removedKitchenLines ?? []
-          const cancelledSlips = removedLines.length ? buildKitchenSlipGroups(removedLines, groupOpts) : []
-          const activeSlips = buildKitchenSlipGroups(itemsForKitchen, groupOpts)
+          const cancelledSlips = removedLines.length
+            ? buildKitchenSlipGroups(
+                kitchenItemsWithResolvedPromo(removedLines as Record<string, unknown>[]) as typeof removedLines,
+                groupOpts
+              )
+            : []
+          const activeSlips = buildKitchenSlipGroups(
+            kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
+            groupOpts
+          )
           const slips = mergeKitchenSlipGroupsCancelledFirst(cancelledSlips, activeSlips)
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
@@ -2186,17 +2325,33 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
-      if (!isSessionNewOrder(row.created_at, posSessionStartedAtRef.current)) return
-      const rowStore = String(row.store_code ?? '').trim()
-      const variants = [currentStoreId, currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(), currentStoreId.replace(/^CM\s+/i, '')].filter(Boolean)
-      if (!rowStore) return
-      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
-      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
-        seenOrderIdsRef.current.add(orderId)
-        if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
+      if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) {
+        logPosPrintDebug('realtime_insert_skip_not_incoming', {
+          orderId,
+          createdAt: String(row.created_at ?? ''),
+        })
         return
       }
-      if (seenOrderIdsRef.current.has(orderId)) return
+      const rowStore = String(row.store_code ?? '').trim()
+      const variants = [currentStoreId, currentStoreId.startsWith('CM ') ? currentStoreId.slice(3).trim() : `CM ${currentStoreId}`.trim(), currentStoreId.replace(/^CM\s+/i, '')].filter(Boolean)
+      if (!rowStore) {
+        logPosPrintDebug('realtime_insert_skip_no_store', { orderId })
+        return
+      }
+      if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) {
+        logPosPrintDebug('realtime_insert_skip_store_mismatch', { orderId, rowStore, variants })
+        return
+      }
+      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
+        seenOrderIdsRef.current.add(orderId)
+        bumpLastSeenOrderId(orderId)
+        logPosPrintDebug('realtime_insert_suppress_queued_sync', { orderId })
+        return
+      }
+      if (seenOrderIdsRef.current.has(orderId)) {
+        logPosPrintDebug('realtime_insert_skip_seen', { orderId })
+        return
+      }
       let items: {
         id: string
         name: string
@@ -2240,12 +2395,16 @@ export default function PosTerminalPage() {
           }
         )
       } catch {
+        logPosPrintDebug('realtime_insert_skip_items_parse_error', { orderId })
         return
       }
       /* items_json이 Realtime에 비어 있으면 폴링이 다시 잡도록 seen에 넣지 않음 */
-      if (items.length === 0) return
+      if (items.length === 0) {
+        logPosPrintDebug('realtime_insert_skip_empty_items', { orderId })
+        return
+      }
       seenOrderIdsRef.current.add(orderId)
-      if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
+      bumpLastSeenOrderId(orderId)
       autoFocusIncomingDeliveryOrder({
         orderId,
         orderType: String(row.order_type ?? ''),
@@ -2291,7 +2450,10 @@ export default function PosTerminalPage() {
               kitchen2: `${t('posKitchen2') || '주방 2'}`,
               kitchen3: `${t('posKitchen3') || '주방 3'}`,
             }
-            const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+            const slips = buildKitchenSlipGroups(
+              kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
+              buildKitchenSlipGroupOpts(settings, menus, kLabels)
+            )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
             const kitchenMemo = parsePosOrderMemo(memo).plainMemo
@@ -2345,6 +2507,12 @@ export default function PosTerminalPage() {
         String(orderType).trim().toLowerCase() === 'delivery' &&
         String(row.status ?? '').trim().toLowerCase() === 'pending'
       if (!isPendingDelivery) {
+        logPosPrintDebug('realtime_insert_autoprint_start', {
+          orderId,
+          autoPrintReceiptOnOrder,
+          autoPrintKitchenSlipOnOrder,
+          itemCount: items.length,
+        })
         if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
           printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
         } else if (autoPrintReceiptOnOrder) {
@@ -2352,6 +2520,11 @@ export default function PosTerminalPage() {
         } else if (autoPrintKitchenSlipOnOrder) {
           setTimeout(runKitchenFromRealtimeOrderInsert, 180)
         }
+      } else {
+        logPosPrintDebug('realtime_insert_pending_delivery_wait_accept', {
+          orderId,
+          status: String(row.status ?? ''),
+        })
       }
       if (autoPrintReceiptOnPayment) {
         const st = String(row.status ?? '').toLowerCase()
@@ -2388,6 +2561,9 @@ export default function PosTerminalPage() {
     t,
     lang,
     refetchCurrentStore,
+    logPosPrintDebug,
+    bumpLastSeenOrderId,
+    shouldTreatAsIncomingOrder,
   ])
 
   useEffect(() => {
@@ -2397,7 +2573,7 @@ export default function PosTerminalPage() {
       if (!row) return
       const orderId = coercePosOrderIdFromRealtime(row.id)
       if (orderId == null) return
-      if (!isSessionNewOrder(row.created_at, posSessionStartedAtRef.current)) return
+      if (!shouldTreatAsIncomingOrder(orderId, row.created_at)) return
       const rowStore = String(row.store_code ?? '').trim()
       const variants = [
         currentStoreId,
@@ -2408,7 +2584,7 @@ export default function PosTerminalPage() {
       if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
-      if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
+      bumpLastSeenOrderId(orderId)
       autoFocusIncomingDeliveryOrder({
         orderId,
         orderType: String(row.order_type ?? ''),
@@ -2423,7 +2599,14 @@ export default function PosTerminalPage() {
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [isMainPosDevice, currentStoreId, autoFocusIncomingDeliveryOrder, refetchCurrentStore])
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    autoFocusIncomingDeliveryOrder,
+    refetchCurrentStore,
+    bumpLastSeenOrderId,
+    shouldTreatAsIncomingOrder,
+  ])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId || !autoPrintReceiptOnPayment) return
@@ -2467,13 +2650,18 @@ export default function PosTerminalPage() {
       if (!isMainPosDevice) {
         hasInitializedMainPosPollRef.current = false
         lastSeenOrderIdRef.current = 0
+        lastSeenOrderIdPersistedRef.current = 0
+        startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
         prevStoreForPollRef.current = null
       }
       return
     }
     if (prevStoreForPollRef.current !== currentStoreId) {
+      const persistedLastSeen = readMainPosLastSeenOrderId(currentStoreId)
       hasInitializedMainPosPollRef.current = false
-      lastSeenOrderIdRef.current = 0
+      lastSeenOrderIdRef.current = persistedLastSeen
+      lastSeenOrderIdPersistedRef.current = persistedLastSeen
+      startupCatchupUntilRef.current = Date.now() + MAIN_POS_STARTUP_CATCHUP_DURATION_MS
       prevStoreForPollRef.current = currentStoreId
     }
     const today = getPosBusinessDateStr()
@@ -2545,7 +2733,8 @@ export default function PosTerminalPage() {
             const oid = Number(o.id)
             if (Number.isFinite(oid) && oid > 0) seenOrderIdsRef.current.add(oid)
           }
-          lastSeenOrderIdRef.current = maxId
+          const seededMax = Math.max(lastSeenOrderIdRef.current, maxId)
+          bumpLastSeenOrderId(seededMax)
           hasInitializedMainPosPollRef.current = true
           await runPaymentReceiptScan()
           return
@@ -2555,18 +2744,30 @@ export default function PosTerminalPage() {
         for (const order of newOrders) {
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
-          if (!isCurrentStoreOrder(order.storeCode ?? '')) continue
-          if (!isSessionNewOrder(order.createdAt, posSessionStartedAtRef.current)) {
-            lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+          if (!isCurrentStoreOrder(order.storeCode ?? '')) {
+            logPosPrintDebug('poll_skip_store_mismatch', {
+              orderId: oid,
+              rowStore: String(order.storeCode ?? ''),
+            })
+            continue
+          }
+          if (!shouldTreatAsIncomingOrder(oid, order.createdAt)) {
+            bumpLastSeenOrderId(oid)
+            logPosPrintDebug('poll_skip_not_incoming', {
+              orderId: oid,
+              createdAt: String(order.createdAt ?? ''),
+            })
             continue
           }
           if (seenOrderIdsRef.current.has(oid)) {
-            lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+            bumpLastSeenOrderId(oid)
+            logPosPrintDebug('poll_skip_seen', { orderId: oid })
             continue
           }
           if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
             seenOrderIdsRef.current.add(oid)
-            lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+            bumpLastSeenOrderId(oid)
+            logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
             continue
           }
           const items = (order.items || []).map(
@@ -2601,9 +2802,12 @@ export default function PosTerminalPage() {
             }
           )
           /* 품목이 아직 비어 있으면 seen/워터마크에 넣지 않음 → 다음 폴링에서 다시 조회 */
-          if (items.length === 0) continue
+          if (items.length === 0) {
+            logPosPrintDebug('poll_skip_empty_items', { orderId: oid })
+            continue
+          }
           seenOrderIdsRef.current.add(oid)
-          lastSeenOrderIdRef.current = Math.max(lastSeenOrderIdRef.current, oid)
+          bumpLastSeenOrderId(oid)
           const inferredDeliveryCode =
             String((order as unknown as { deliveryAppCode?: string }).deliveryAppCode ?? '').trim() ||
             String(
@@ -2646,7 +2850,10 @@ export default function PosTerminalPage() {
                   kitchen2: `${t('posKitchen2') || '주방 2'}`,
                   kitchen3: `${t('posKitchen3') || '주방 3'}`,
                 }
-                const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+                const slips = buildKitchenSlipGroups(
+                  kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
+                  buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                )
                 if (!slips.length) return
                 const slipDesign = resolveKitchenSlipDesign(settings)
                 const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
@@ -2703,6 +2910,12 @@ export default function PosTerminalPage() {
             String(order.orderType ?? '').trim().toLowerCase() === 'delivery' &&
             String(order.status ?? '').trim().toLowerCase() === 'pending'
           if (!isPendingDelivery) {
+            logPosPrintDebug('poll_autoprint_start', {
+              orderId: oid,
+              autoPrintReceiptOnOrder,
+              autoPrintKitchenSlipOnOrder,
+              itemCount: items.length,
+            })
             if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
               printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
             } else if (autoPrintReceiptOnOrder) {
@@ -2710,6 +2923,11 @@ export default function PosTerminalPage() {
             } else if (autoPrintKitchenSlipOnOrder) {
               setTimeout(runKitchenForPolledOrder, 180)
             }
+          } else {
+            logPosPrintDebug('poll_pending_delivery_wait_accept', {
+              orderId: oid,
+              status: String(order.status ?? ''),
+            })
           }
         }
         if (shouldRefreshCurrentStore) {
@@ -2740,6 +2958,9 @@ export default function PosTerminalPage() {
     lang,
     refetchCurrentStore,
     isCurrentStoreOrder,
+    logPosPrintDebug,
+    bumpLastSeenOrderId,
+    shouldTreatAsIncomingOrder,
   ])
 
   useEffect(() => {
@@ -3912,9 +4133,7 @@ export default function PosTerminalPage() {
                     skipLocalAutoPrint = seenOrderIdsRef.current.has(savedOrderId)
                   }
                   seenOrderIdsRef.current.add(savedOrderId)
-                  if (savedOrderId > lastSeenOrderIdRef.current) {
-                    lastSeenOrderIdRef.current = savedOrderId
-                  }
+                  bumpLastSeenOrderId(savedOrderId)
                 }
 
                 type ReceiptPrintLine = {
@@ -4017,12 +4236,16 @@ export default function PosTerminalPage() {
                       menu_id1?: string
                       menuId2?: string
                       note?: string
+                      promoId?: string
+                      promoCode?: string
                       promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
                     }
                     const menuId = String(
                       line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
                     ).trim()
                     const note = String(line.note ?? '').trim()
+                    const promoId = String(line.promoId ?? '').trim()
+                    const promoCode = String(line.promoCode ?? '').trim()
                     return {
                       id: i.id,
                       name: i.name,
@@ -4030,6 +4253,8 @@ export default function PosTerminalPage() {
                       qty: i.quantity || 1,
                       ...(menuId ? { menuId } : {}),
                       ...(note ? { note } : {}),
+                      ...(promoId ? { promoId } : {}),
+                      ...(promoCode ? { promoCode } : {}),
                       ...(Array.isArray(line.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) } : {}),
                     }
                   })
@@ -4047,7 +4272,7 @@ export default function PosTerminalPage() {
                         kitchen3: `${t('posKitchen3') || '주방 3'}`,
                       }
                       const slips = buildKitchenSlipGroups(
-                        itemsForKitchen,
+                        kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
                         buildKitchenSlipGroupOpts(settings, menus, kLabels)
                       )
                       if (!slips.length) return
@@ -4420,9 +4645,7 @@ export default function PosTerminalPage() {
                 if (newOrderId != null && newOrderId > 0) {
                   if (seenOrderIdsRef.current.has(newOrderId)) suppressReceiptModalAutoPrint = true
                   seenOrderIdsRef.current.add(newOrderId)
-                  if (newOrderId > lastSeenOrderIdRef.current) {
-                    lastSeenOrderIdRef.current = newOrderId
-                  }
+                  bumpLastSeenOrderId(newOrderId)
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
@@ -4484,12 +4707,16 @@ export default function PosTerminalPage() {
                       menu_id1?: string
                       menuId2?: string
                       note?: string
+                      promoId?: string
+                      promoCode?: string
                       promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
                     }
                     const menuId = String(
                       line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
                     ).trim()
                     const note = String(line.note ?? '').trim()
+                    const promoId = String(line.promoId ?? '').trim()
+                    const promoCode = String(line.promoCode ?? '').trim()
                     return {
                       id: i.id,
                       name: i.name,
@@ -4497,6 +4724,8 @@ export default function PosTerminalPage() {
                       qty: i.quantity || 1,
                       ...(menuId ? { menuId } : {}),
                       ...(note ? { note } : {}),
+                      ...(promoId ? { promoId } : {}),
+                      ...(promoCode ? { promoCode } : {}),
                       ...(Array.isArray(line.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) } : {}),
                     }
                   })
@@ -4514,7 +4743,7 @@ export default function PosTerminalPage() {
                         kitchen3: `${t('posKitchen3') || '주방 3'}`,
                       }
                       const slips = buildKitchenSlipGroups(
-                        itemsForKitchen,
+                        kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
                         buildKitchenSlipGroupOpts(settings, menus, kLabels)
                       )
                       if (!slips.length) return
@@ -5568,6 +5797,7 @@ export default function PosTerminalPage() {
           itemBarcode && receiptData?.receiptAutoPrintContext !== 'payment'
         }
         printerSettingsRef={posPrinterSettingsRef}
+        kitchenPromoLineEnrich={posReceiptLineOpts}
       />
       <DeliveryEditOrderNoDialog
         open={deliveryEditOrderNoOpen}
