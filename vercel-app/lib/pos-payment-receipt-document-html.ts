@@ -300,9 +300,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const tightSimpleInset = shouldUseTightSimpleReceiptInsetForStore(receiptData.storeCode)
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
-    /** CP-802 대응: grid/table 없이 flex 1행 정렬(품목/금액 같은 줄) */
+    const useLegacySimpleTable = tightSimpleInset
     const simpleStack = (nameHtml: string, amtHtml: string) =>
-      `<div class="simple-row"><div class="simple-row-name">${nameHtml}</div><div class="simple-row-amt">${amtHtml}</div></div>`
+      useLegacySimpleTable
+        ? `<tr><td class="simple-item-name">${nameHtml}</td><td class="simple-item-amt">${amtHtml}</td></tr>`
+        : `<div class="simple-row"><div class="simple-row-name">${nameHtml}</div><div class="simple-row-amt">${amtHtml}</div></div>`
     const itemRows = (itemsForPrint || [])
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
@@ -320,18 +322,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             : []
         const promoMore =
           Array.isArray(promoItems) && promoItems.length > 16 ? promoItems.length - 16 : 0
+        const promoBody =
+          promoComposeLines
+            .map(
+              (line) =>
+                `<div class="simple-promo-line">· ${esc(translatePosMenuLineForReceipt(line, t))}</div>`
+            )
+            .join('') +
+          (promoMore > 0 ? `<div class="simple-promo-line simple-promo-more">+${promoMore}</div>` : '')
         const promoBlock =
           promoComposeLines.length > 0
-            ? `<div class="simple-promo-lines">${promoComposeLines
-                .map(
-                  (line) =>
-                    `<div class="simple-promo-line">· ${esc(translatePosMenuLineForReceipt(line, t))}</div>`
-                )
-                .join('')}${
-                promoMore > 0
-                  ? `<div class="simple-promo-line simple-promo-more">+${promoMore}</div>`
-                  : ''
-              }</div>`
+            ? useLegacySimpleTable
+              ? `<tr><td class="simple-promo-cell" colspan="2">${promoBody}</td></tr>`
+              : `<div class="simple-promo-lines">${promoBody}</div>`
             : ''
         return main + promoBlock
       })
@@ -370,9 +373,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         <div class="simple-divider"></div>
-        <div class="simple-stack-block">${itemRows}</div>
+        ${
+          useLegacySimpleTable
+            ? `<table class="simple-table"><tbody>${itemRows}</tbody></table>`
+            : `<div class="simple-stack-block">${itemRows}</div>`
+        }
         <div class="simple-divider"></div>
-        <div class="simple-stack-block">${summaryRows}</div>
+        ${
+          useLegacySimpleTable
+            ? `<table class="simple-table simple-summary-table"><tbody>${summaryRows}</tbody></table>`
+            : `<div class="simple-stack-block">${summaryRows}</div>`
+        }
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
         ${paymentBreakdownSimpleHtml}
         ${d.receiptShowPaidStamp ? `<div class="simple-paid">${esc(tr('posReceiptPaid', '결제완료'))}</div>` : ''}
@@ -400,9 +411,15 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
         .simple-stack-block { width: 100%; box-sizing: border-box; }
-        .simple-row { margin: 6px 0; direction: ltr; unicode-bidi: isolate; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-        .simple-row-name { min-width: 0; flex: 1 1 auto; font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; color: #000; }
-        .simple-row-amt { flex: 0 0 auto; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; color: #000; font-variant-numeric: tabular-nums; }
+        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .simple-table td { padding: 2px 0; vertical-align: top; }
+        .simple-item-name { font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; }
+        .simple-item-amt { width: 20mm; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .simple-promo-cell { padding: 0 0 4px 2mm !important; }
+        /* 일부 드라이버에서 flex/grid 깨짐: 금액 칼럼을 절대 위치로 고정 */
+        .simple-row { margin: 6px 0; direction: ltr; unicode-bidi: isolate; width: 100%; box-sizing: border-box; position: relative; padding-right: 22mm; min-height: 1.25em; }
+        .simple-row-name { min-width: 0; display: block; font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; color: #000; }
+        .simple-row-amt { position: absolute; top: 0; right: 0; width: 20mm; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; color: #000; font-variant-numeric: tabular-nums; }
         .simple-promo-lines { margin: -2px 0 6px 0; padding: 0 0 0 2mm; }
         .simple-promo-line { font-size: 10px; line-height: 1.32; color: #222; text-align: left; font-weight: 500; }
         .simple-promo-more { font-size: 9px; color: #444; }
@@ -411,7 +428,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-paid { display: inline-block; border: 1px solid #000; padding: 1px 10px; font-size: 10px; font-weight: 700; margin-top: 8px; }
         .simple-footer { margin-top: 6px; text-align: center; font-size: 10px; }
         .simple-footer-strong { font-weight: 700; }
-        ${tightSimpleInset ? 'body { padding-left: 2mm !important; padding-right: 2mm !important; } @media print { body { padding-left: 2mm !important; padding-right: 2mm !important; } }' : ''}
+        ${tightSimpleInset ? 'body { padding-left: 1mm !important; padding-right: 1mm !important; } @media print { body { padding-left: 1mm !important; padding-right: 1mm !important; } } .receipt-payment-simple.receipt-content { left: -0.5mm !important; }' : ''}
         @media print {
           .receipt-payment-simple.receipt-content { left: 0 !important; }
         }
