@@ -93,10 +93,10 @@ function receiptPaymentBreakdownHtml(
     const body = rows
       .map(
         (r) =>
-          `<div class="simple-split"><span class="simple-split-l">${esc(r.label)}</span><span class="simple-split-r">${esc(r.amountStr)}</span></div>`
+          `<div class="simple-stack"><div class="simple-stack-name">${esc(r.label)}</div><div class="simple-stack-amt">${esc(r.amountStr)}</div></div>`
       )
       .join('')
-    return `<div class="simple-divider"></div><div class="simple-line simple-pay-title"><b>${title}</b></div><div class="simple-split-block">${body}</div>`
+    return `<div class="simple-divider"></div><div class="simple-line simple-pay-title"><b>${title}</b></div><div class="simple-stack-block">${body}</div>`
   }
   const body = rows
     .map((r) => `<div class="receipt-row"><span>${esc(r.label)}</span><span>${esc(r.amountStr)}</span></div>`)
@@ -287,28 +287,29 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
-    const simpleSplit = (left: string, right: string) =>
-      `<div class="simple-split"><span class="simple-split-l">${left}</span><span class="simple-split-r">${right}</span></div>`
+    /** CP-802 등: 가로 2열(table/float/grid) 모두 드라이버에서 찢김 → 품명 위·금액 아래 1열 */
+    const simpleStack = (nameHtml: string, amtHtml: string) =>
+      `<div class="simple-stack"><div class="simple-stack-name">${nameHtml}</div><div class="simple-stack-amt">${amtHtml}</div></div>`
     const itemRows = (receiptData.items || [])
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        return simpleSplit(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
+        return simpleStack(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
       })
       .join('')
     const summaryRows = [
-      simpleSplit(esc(t('posSubtotal') || '소계'), formatBahtNum(receiptData.subtotal)),
+      simpleStack(esc(t('posSubtotal') || '소계'), formatBahtNum(receiptData.subtotal)),
       receiptData.discountAmt > 0
-        ? simpleSplit(esc(t('posDiscount') || '할인'), `-${formatBahtNum(receiptData.discountAmt)}`)
+        ? simpleStack(esc(t('posDiscount') || '할인'), `-${formatBahtNum(receiptData.discountAmt)}`)
         : '',
       (receiptData.deliveryFee ?? 0) > 0
-        ? simpleSplit(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`)
+        ? simpleStack(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`)
         : '',
       (receiptData.packagingFee ?? 0) > 0
-        ? simpleSplit(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`)
+        ? simpleStack(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`)
         : '',
       (receiptData.vatFeeAmt ?? 0) > 0
-        ? simpleSplit(
+        ? simpleStack(
             esc(t('posVatLabel') || '부가세'),
             `${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`
           )
@@ -330,9 +331,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         <div class="simple-divider"></div>
-        <div class="simple-split-block">${itemRows}</div>
+        <div class="simple-stack-block">${itemRows}</div>
         <div class="simple-divider"></div>
-        <div class="simple-split-block">${summaryRows}</div>
+        <div class="simple-stack-block">${summaryRows}</div>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
         ${paymentBreakdownSimpleHtml}
         ${d.receiptShowPaidStamp ? `<div class="simple-paid">${esc(tr('posReceiptPaid', '결제완료'))}</div>` : ''}
@@ -347,28 +348,29 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       htmlLang: lang,
       bodyContent: simpleHtml,
       extraStyles: `
-        /* CP-802 등: table 2열이 bidi/드라이버에서 열 순서가 뒤집히거나 좌우로 찢어짐 → table 미사용 + LTR 고정 */
-        .receipt-payment-simple { color: #000; direction: ltr; unicode-bidi: isolate; }
+        /* 손님 결제 간단 영수증: 전역 .receipt-content 좌 nudge·bidi가 CP-802에서 본문을 오른쪽으로 밀거나 2열처럼 보이게 함 → 전부 제거·1열 스택만 */
+        html, body { direction: ltr; unicode-bidi: isolate; }
+        .receipt-payment-simple.receipt-content { left: 0 !important; margin-left: 0 !important; margin-right: 0 !important; position: relative !important; width: 100% !important; max-width: 100% !important; }
+        .receipt-payment-simple { color: #000; direction: ltr; unicode-bidi: isolate; text-align: left; }
         .simple-logo-wrap { text-align: center; margin-bottom: 2px; }
         .simple-logo { width: 82px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.1); }
         .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 1px; }
         .simple-subtitle { text-align: center; font-size: 10px; margin-bottom: 3px; }
         .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
+        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; text-align: left; }
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
-        .simple-split-block { width: 100%; box-sizing: border-box; }
-        .simple-split { overflow: hidden; width: 100%; margin: 3px 0; font-size: 11px; line-height: 1.35; direction: ltr; unicode-bidi: isolate; box-sizing: border-box; color: #000; }
-        .simple-split::after { content: ""; display: table; clear: both; }
-        .simple-split-l { float: left; max-width: 72%; text-align: left; word-break: break-word; padding-right: 4px; box-sizing: border-box; min-width: 0; }
-        .simple-split-r { float: right; max-width: 28%; text-align: right; white-space: nowrap; box-sizing: border-box; min-width: 0; font-variant-numeric: tabular-nums; }
-        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; clear: both; direction: ltr; }
-        .simple-pay-title { font-size: 11px; margin-top: 4px; }
+        .simple-stack-block { width: 100%; box-sizing: border-box; }
+        .simple-stack { margin: 6px 0; direction: ltr; unicode-bidi: isolate; width: 100%; box-sizing: border-box; }
+        .simple-stack-name { font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; color: #000; }
+        .simple-stack-amt { font-size: 11px; line-height: 1.25; text-align: right; font-weight: 700; margin-top: 2px; color: #000; font-variant-numeric: tabular-nums; }
+        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; clear: both; direction: ltr; text-align: left; }
+        .simple-pay-title { font-size: 11px; margin-top: 4px; text-align: left; }
         .simple-paid { display: inline-block; border: 1px solid #000; padding: 1px 10px; font-size: 10px; font-weight: 700; margin-top: 8px; }
         .simple-footer { margin-top: 6px; text-align: center; font-size: 10px; }
         .simple-footer-strong { font-weight: 700; }
         @media print {
-          .receipt-payment-simple, .receipt-payment-simple .simple-split { direction: ltr !important; unicode-bidi: isolate !important; }
+          .receipt-payment-simple.receipt-content { left: 0 !important; }
         }
       `,
     })
@@ -501,12 +503,16 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .tax-invoice-label { font-weight: 600; color: #000; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
         .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
-        /* 일부 하이브리드+드라이버 조합(CP-802 등)에서 CSS grid/mm 폭 조합이 깨지는 경우 → 인쇄 시 float 2열로 고정 */
+        /* 메타(주문번호·테이블·일시): 화면 미리보기·인쇄 공통 — 값 우측 정렬은 긴 배달 문자열이 잘림 → flex + 좌측 정렬 */
+        .receipt-payment .receipt-meta-row { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; width: 100%; max-width: 100%; overflow: visible; margin: 3px 0; padding: 0; column-gap: 3mm; box-sizing: border-box; }
+        .receipt-payment .receipt-meta-row::after { content: none; display: none; }
+        .receipt-payment .receipt-meta-label { float: none; flex: 0 0 auto; max-width: 42%; min-width: 0; padding-right: 0; white-space: normal; }
+        .receipt-payment .receipt-meta-value { float: none; flex: 1 1 0; min-width: 0; max-width: none; text-align: left; width: auto; box-sizing: border-box; }
+        /* 일부 하이브리드+드라이버 조합(CP-802 등)에서 CSS grid/mm 폭 조합이 깨지는 경우 → 인쇄 시 금액 행만 float 2열로 고정 */
         @media print {
           .receipt-payment { position: static !important; left: 0 !important; width: 100% !important; max-width: 100% !important; }
           .receipt-payment .receipt-row::after,
           .receipt-payment .receipt-item-head::after,
-          .receipt-payment .receipt-meta-row::after,
           .receipt-payment .tax-invoice-row::after { content: "" !important; display: table !important; clear: both !important; }
           .receipt-payment .receipt-row,
           .receipt-payment .receipt-item-head { display: block !important; width: 100% !important; overflow: hidden !important; margin: 4px 0 !important; padding: 0 !important; column-gap: 0 !important; grid-template-columns: none !important; }
@@ -514,9 +520,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           .receipt-payment .receipt-item-head > span:first-child { float: left !important; max-width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm - ${RECEIPT_GRID_COL_GAP_PX}px) !important; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px !important; text-align: left !important; min-width: 0 !important; }
           .receipt-payment .receipt-row > span:last-child,
           .receipt-payment .receipt-item-head > span:last-child { float: right !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; white-space: normal !important; min-width: 0 !important; }
-          .receipt-payment .receipt-meta-row { display: block !important; width: 100% !important; overflow: hidden !important; margin: 3px 0 !important; padding: 0 !important; column-gap: 0 !important; grid-template-columns: none !important; }
-          .receipt-payment .receipt-meta-label { float: left !important; max-width: 46% !important; padding-right: 3mm !important; white-space: normal !important; min-width: 0 !important; }
-          .receipt-payment .receipt-meta-value { float: right !important; max-width: 52% !important; text-align: right !important; min-width: 0 !important; }
+          .receipt-payment .receipt-meta-row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: flex-start !important; justify-content: flex-start !important; width: 100% !important; max-width: 100% !important; overflow: visible !important; margin: 3px 0 !important; padding: 0 !important; column-gap: 3mm !important; grid-template-columns: none !important; box-sizing: border-box !important; }
+          .receipt-payment .receipt-meta-row::after { content: none !important; display: none !important; }
+          .receipt-payment .receipt-meta-label { float: none !important; flex: 0 0 auto !important; max-width: 42% !important; padding-right: 0 !important; white-space: normal !important; min-width: 0 !important; }
+          .receipt-payment .receipt-meta-value { float: none !important; flex: 1 1 0 !important; min-width: 0 !important; max-width: none !important; text-align: left !important; width: auto !important; box-sizing: border-box !important; }
           .receipt-payment .tax-invoice-row { display: block !important; width: 100% !important; overflow: hidden !important; margin: 4px 0 !important; grid-template-columns: none !important; }
           .receipt-payment .tax-invoice-row > .tax-invoice-label { float: left !important; max-width: 34% !important; padding-right: 4px !important; min-width: 0 !important; }
           .receipt-payment .tax-invoice-row > span:last-child { float: right !important; max-width: 64% !important; text-align: left !important; min-width: 0 !important; }

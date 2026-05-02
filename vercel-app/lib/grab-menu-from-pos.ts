@@ -1,5 +1,8 @@
 import { supabaseSelect, supabaseSelectAllPages } from '@/lib/supabase-server'
 import { grabStubMenuJson } from '@/lib/grab-webhook'
+import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
+import { fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { normStoreKey } from '@/lib/store-list-keys'
 import {
   buildCategoryOrderMap,
   buildMenuPolicyMap,
@@ -272,35 +275,62 @@ async function loadMenus(): Promise<MenuRow[]> {
   return []
 }
 
-function parseGrabStoreMap(): Record<string, string> {
-  const raw = process.env.GRAB_STORE_MAP_JSON?.trim()
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(parsed)) {
-      const key = String(k || '').trim()
-      const val = String(v || '').trim()
-      if (key && val) out[key] = val
-    }
-    return out
-  } catch {
-    return {}
-  }
+function looksLikeGrabMerchantId(raw: string): boolean {
+  const s = String(raw || '').trim().toUpperCase()
+  return s.startsWith('GF') || s.includes('GFSB') || s.includes('GFSBPOS')
+}
+
+/** Grab 파트너 스토어 ID(숫자)만 추출. merchantID(GFSBPOS-204-253)에는 적용하지 않음 → 204 오탐 방지 */
+function extractPartnerStoreDigits(raw: string): string {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  const noPrefix = s.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
+  if (/^\d{3,6}$/.test(noPrefix)) return noPrefix
+  const digits = noPrefix.match(/\b(\d{3,6})\b/)
+  return digits?.[1] || ''
 }
 
 function resolveStoreCodeFromGrabMerchant(merchantID: string, partnerMerchantID: string): string {
   const map = parseGrabStoreMap()
   const m1 = String(merchantID || '').trim()
   const m2 = String(partnerMerchantID || '').trim()
-  const normalize = (raw: string) => {
-    const s = String(raw || '').trim()
-    if (!s) return ''
-    const noPrefix = s.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
-    const digits = noPrefix.match(/\b(\d{3,6})\b/)
-    return digits?.[1] || noPrefix
+  const fromMap = String(map[m1] || map[m2] || '').trim()
+  if (fromMap) {
+    const d = extractPartnerStoreDigits(fromMap)
+    return d || fromMap
   }
-  return normalize(map[m1] || map[m2] || '') || normalize(m2) || normalize(m1)
+  const fromPartner = extractPartnerStoreDigits(m2)
+  if (fromPartner) return fromPartner
+  if (m1 && !looksLikeGrabMerchantId(m1)) {
+    const d = extractPartnerStoreDigits(m1)
+    if (d) return d
+  }
+  return m2 || m1
+}
+
+/** 배달 정책이 ERP store_code 기준이면, 파트너 숫자·별칭과 맞춰 canonical store_code로 */
+async function resolvePolicyStoreCodeForGrabMenu(storeCodeGuess: string): Promise<string> {
+  const guess = String(storeCodeGuess || '').trim()
+  if (!guess) return ''
+  try {
+    const masters = await fetchErpStoresMaster()
+    if (!masters.length) return guess
+    const gk = normStoreKey(guess)
+    for (const row of masters) {
+      const sc = String(row.store_code || '').trim()
+      const keys = [
+        sc,
+        String(row.display_name || '').trim(),
+        ...((row.aliases || []).map((a) => String(a || '').trim())),
+      ]
+      for (const k of keys) {
+        if (normStoreKey(k) === gk) return sc || guess
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return guess
 }
 
 async function loadOptions(): Promise<OptionRow[]> {
@@ -330,7 +360,8 @@ export async function buildGrabMenuFromPos(params: {
   const menus = await loadMenus()
   if (!menus.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 
-  const storeCode = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
+  const storeGuess = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
+  const storeCode = await resolvePolicyStoreCodeForGrabMenu(storeGuess)
   const policyBundle = storeCode
     ? await getPosDeliveryPolicyBundle({ storeCode, appCode: 'grab' }).catch(() => null)
     : null
