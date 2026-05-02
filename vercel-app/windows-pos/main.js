@@ -1078,6 +1078,13 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
   try {
     const warnings = [];
     let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
+    if (!resolvedDevice) {
+      try {
+        resolvedDevice = await getWindowsDefaultPrinterName();
+      } catch {
+        /* ignore */
+      }
+    }
     if (resolvedDevice && mainWindow && !mainWindow.isDestroyed()) {
       try {
         const printers = await mainWindow.webContents.getPrintersAsync();
@@ -1690,6 +1697,10 @@ function createWindow() {
     }
   });
 
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
   void mainWindow.loadURL(POS_URL);
   schedulePosMainLoadWatchdog();
 
@@ -1714,9 +1725,22 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (mainWindow) {
+    try {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow();
+        return;
+      }
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+    } catch (e) {
+      console.warn("[cm-pos] second-instance focus failed; recreating window", e && e.message ? e.message : e);
+      try {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          createWindow();
+        }
+      } catch {
+        /* ignore */
+      }
     }
   });
 

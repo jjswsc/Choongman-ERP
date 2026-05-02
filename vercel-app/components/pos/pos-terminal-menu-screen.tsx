@@ -408,6 +408,11 @@ export function PosTerminalMenuScreen({
             menuId: String(r.menuId ?? ''),
             optionId: r.optionId ? String(r.optionId) : null,
             quantity: Math.max(1, Number(r.quantity) || 1),
+            choiceGroup: String(r.choiceGroup ?? '').trim() || null,
+            choicePickCount:
+              r.choicePickCount != null && Number.isFinite(Number(r.choicePickCount))
+                ? Math.max(1, Math.floor(Number(r.choicePickCount)))
+                : null,
           })),
         }
         void addPromo(fallbackPromo)

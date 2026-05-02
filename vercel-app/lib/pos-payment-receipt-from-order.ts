@@ -13,6 +13,7 @@ export type PosOrderReceiptLineOptions = {
 }
 
 type ReceiptPromoLine = { menuId: string; optionId: string | null; quantity: number }
+type CatalogPromoLine = ReceiptPromoLine & { choiceGroup: string | null }
 
 export function posOrderRowPaymentSum(row: Record<string, unknown>): number {
   return (
@@ -164,11 +165,40 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
   const p = catalog.get(promoId)
   const items = p?.items
   if (!Array.isArray(items) || items.length === 0) return null
-  return items.map((x) => ({
+  const rows: CatalogPromoLine[] = items.map((x) => ({
     menuId: String(x.menuId ?? ''),
     optionId: x.optionId != null && String(x.optionId).trim() ? String(x.optionId) : null,
     quantity: Math.max(1, Number(x.quantity) || 1),
+    choiceGroup: String(x.choiceGroup ?? '').trim() || null,
   }))
+
+  // 선택형 그룹 항목(명시 choice_group + 레거시 암묵 그룹)은 카탈로그만으로 선택값 복원이 불가하므로 제외.
+  // 스냅샷(promoItems)이 있는 최신 주문은 이 분기까지 오지 않아 기존 선택값을 그대로 사용한다.
+  const implicitChoiceKeys = new Set<string>()
+  const optionIdsByMenuQty = new Map<string, Set<string>>()
+  for (const row of rows) {
+    if (row.choiceGroup) continue
+    const key = `${row.menuId}::${row.quantity}`
+    const bucket = optionIdsByMenuQty.get(key) ?? new Set<string>()
+    if (row.optionId) bucket.add(row.optionId)
+    optionIdsByMenuQty.set(key, bucket)
+  }
+  for (const [key, optionIds] of optionIdsByMenuQty.entries()) {
+    if (optionIds.size > 1) implicitChoiceKeys.add(key)
+  }
+
+  return rows
+    .filter((row) => {
+      if (row.choiceGroup) return false
+      const implicitKey = `${row.menuId}::${row.quantity}`
+      if (implicitChoiceKeys.has(implicitKey)) return false
+      return true
+    })
+    .map((row) => ({
+      menuId: row.menuId,
+      optionId: row.optionId,
+      quantity: row.quantity,
+    }))
 }
 
 function resolvePromoItemsForReceiptLine(

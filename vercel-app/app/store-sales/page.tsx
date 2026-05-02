@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import Link from "next/link"
-import { ArrowLeft, RefreshCw, Radio } from "lucide-react"
+import { ArrowLeft, Radio, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -13,7 +13,6 @@ import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-b
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SalesManagementTab } from "@/components/tabs/sales-management-tab"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -123,20 +122,21 @@ function StoreSalesBody() {
         <Button
           type="button"
           variant="outline"
-          size="icon"
-          className="shrink-0"
+          size="sm"
+          className="shrink-0 gap-1.5"
           onClick={handleHeaderRefresh}
           disabled={loadingTables}
-          title={t("mobileStoreSalesRefresh")}
+          title={t("search")}
         >
-          <RefreshCw className={cn("h-4 w-4", loadingTables && "animate-spin")} />
+          <Search className="h-4 w-4" />
+          {t("search")}
         </Button>
       </header>
 
       {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
       <main className="space-y-4 p-4 pb-10">
-        {/* 실시간 패널은 forceMount — 비활성 탭에서도 마운트 유지(헤더 새로고침·Realtime 구독이 동작). */}
+        {/* 실시간 패널은 forceMount — 비활성 탭에서도 마운트 유지(헤더 조회 버튼이 동작). */}
         <Tabs defaultValue="realtime" className="space-y-4">
           <TabsList className="grid h-10 w-full grid-cols-2">
             <TabsTrigger value="realtime">{t("mobileStoreSalesMenuRealtime")}</TabsTrigger>

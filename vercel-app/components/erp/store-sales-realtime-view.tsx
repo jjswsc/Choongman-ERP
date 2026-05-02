@@ -1,11 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { RefreshCw, Radio } from "lucide-react"
+import { Radio, Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosTodaySales } from "@/lib/api-client"
-import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from "@/lib/supabase-client"
 import type { Store } from "@/lib/pos-types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,17 +26,6 @@ function formatBahtInt(n: number | null | undefined): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })
-}
-
-function rowMatchesPosStore(row: Record<string, unknown>, storeId: string): boolean {
-  const rowStore = String(row.store_code ?? "").trim()
-  if (!rowStore) return false
-  const variants = [
-    storeId,
-    storeId.startsWith("CM ") ? storeId.slice(3).trim() : `CM ${storeId}`.trim(),
-    storeId.replace(/^CM\s+/i, ""),
-  ].filter(Boolean)
-  return variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))
 }
 
 export type StoreSalesRefetchOptions = { scope?: "all" | "current"; storeCode?: string }
@@ -141,41 +129,7 @@ export function StoreSalesRealtimeView({
   useEffect(() => {
     if (!effectiveStoreCode) return
     refreshRealtimeSection()
-    const id = window.setInterval(refreshRealtimeSection, 15000)
-    return () => window.clearInterval(id)
   }, [effectiveStoreCode, refreshRealtimeSection])
-
-  useEffect(() => {
-    if (!effectiveStoreCode) return
-    const onInsert = (payload: { new?: Record<string, unknown> }) => {
-      const row = payload?.new
-      if (!row) return
-      if (!isAllStoresSelected && !rowMatchesPosStore(row, effectiveStoreCode)) return
-      if (isAllStoresSelected) {
-        void refetchStores({ scope: "all" })
-      } else {
-        void refetchStores({ storeCode: effectiveStoreCode })
-      }
-      loadTodaySales()
-    }
-    const onUpdate = (payload: { new?: Record<string, unknown> }) => {
-      const row = payload?.new
-      if (!row) return
-      if (!isAllStoresSelected && !rowMatchesPosStore(row, effectiveStoreCode)) return
-      if (isAllStoresSelected) {
-        void refetchStores({ scope: "all" })
-      } else {
-        void refetchStores({ storeCode: effectiveStoreCode })
-      }
-      loadTodaySales()
-    }
-    const ch1 = subscribePosOrdersInsert(onInsert)
-    const ch2 = subscribePosOrdersUpdate(onUpdate)
-    return () => {
-      ch1?.unsubscribe()
-      ch2?.unsubscribe()
-    }
-  }, [effectiveStoreCode, refetchStores, loadTodaySales, isAllStoresSelected])
 
   const sortedTables = useMemo(() => {
     const tables = currentStore?.tables || []
@@ -262,8 +216,8 @@ export function StoreSalesRealtimeView({
               disabled={loadingTables}
               title={t("mobileStoreSalesRefresh")}
             >
-              <RefreshCw className={cn("h-4 w-4", loadingTables && "animate-spin")} />
-              {t("mobileStoreSalesRefresh")}
+              <Search className="h-4 w-4" />
+              {t("search")}
             </Button>
           </div>
         ) : (
@@ -277,7 +231,7 @@ export function StoreSalesRealtimeView({
               disabled={loadingTables}
               title={t("mobileStoreSalesRefresh")}
             >
-              <RefreshCw className={cn("h-4 w-4", loadingTables && "animate-spin")} />
+              <Search className="h-4 w-4" />
             </Button>
           </div>
         )
