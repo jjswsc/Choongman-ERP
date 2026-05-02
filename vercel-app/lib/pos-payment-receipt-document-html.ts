@@ -2,8 +2,7 @@
  * 결제(손님) 영수증 전체 HTML — PosReceiptModal·영수증 관리 재인쇄 공통
  */
 
-import type { PosMenu, PosPrinterSettings, PosPromoWithItems } from '@/lib/api-client'
-import { enrichReceiptModalItemsForPromoDisplay } from '@/lib/pos-payment-receipt-from-order'
+import type { PosMenu, PosPrinterSettings } from '@/lib/api-client'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
@@ -17,96 +16,6 @@ import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
-import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
-import {
-  shouldForceSimplePaymentReceiptForStore,
-  shouldUseTightSimpleReceiptInsetForStore,
-} from '@/lib/pos-receipt-store-flags'
-
-function deliveryPaymentChannelLabel(
-  raw: string | null | undefined,
-  tr: (key: string, fallback: string) => string
-): string {
-  const c = String(raw || '').trim().toLowerCase()
-  if (c === 'grab') return tr('posDeliveryPayGrab', 'Grab')
-  if (c === 'lineman') return tr('posDeliveryPayLineman', 'Line Man')
-  if (c === 'shopee') return tr('posDeliveryPayShopeeFood', 'Shopee Food')
-  if (c === 'dine_in') return tr('posDeliveryPayDineIn', 'Dine in')
-  return String(raw || '').trim()
-}
-
-function receiptPaymentBreakdownRows(
-  receiptData: ReceiptModalData,
-  tr: (key: string, fallback: string) => string
-): { label: string; amountStr: string }[] {
-  const cash = Math.max(0, Number(receiptData.paymentCash ?? 0) || 0)
-  const card = Math.max(0, Number(receiptData.paymentCard ?? 0) || 0)
-  const qr = Math.max(0, Number(receiptData.paymentQr ?? 0) || 0)
-  const other = Math.max(0, Number(receiptData.paymentOther ?? 0) || 0)
-  const del = Math.max(0, Number(receiptData.paymentDeliveryApp ?? 0) || 0)
-  const rows: { label: string; amountStr: string }[] = []
-  const push = (label: string, n: number) => {
-    if (n > 0.005) rows.push({ label, amountStr: formatBahtNum(n) })
-  }
-  push(tr('posPaymentCash', '현금'), cash)
-  push(tr('posPaymentCard', '카드'), card)
-  push(tr('posPaymentQr', 'QR'), qr)
-  const ob = parsePaymentOtherBreakdown(receiptData.paymentOtherBreakdown)
-  const obOk =
-    other > 0.005 &&
-    ob != null &&
-    Math.abs(sumPaymentOtherBreakdown(ob) - other) <= 0.02
-  if (obOk && ob) {
-    if ((ob.trueMoney ?? 0) > 0.005) push(`· ${tr('posPaymentTrueMoney', 'TrueMoney')}`, Number(ob.trueMoney) || 0)
-    if ((ob.weChat ?? 0) > 0.005) push(`· ${tr('posPaymentWeChat', 'WeChat')}`, Number(ob.weChat) || 0)
-    if ((ob.alipay ?? 0) > 0.005) push(`· ${tr('posPaymentAlipay', 'Alipay')}`, Number(ob.alipay) || 0)
-    if ((ob.linePay ?? 0) > 0.005) push(`· ${tr('posPaymentLinePay', 'LINE Pay')}`, Number(ob.linePay) || 0)
-    if ((ob.shopeePay ?? 0) > 0.005) push(`· ${tr('posPaymentShopeePay', 'Shopee Pay')}`, Number(ob.shopeePay) || 0)
-    if ((ob.misc ?? 0) > 0.005) push(`· ${tr('posPaymentOtherEtc', '기타')}`, Number(ob.misc) || 0)
-    if (ob.admin && typeof ob.admin === 'object') {
-      for (const [wid, rawAmt] of Object.entries(ob.admin)) {
-        const label = String(wid || '').trim() || 'Wallet'
-        push(`· ${label}`, Number(rawAmt) || 0)
-      }
-    }
-  } else {
-    push(tr('posPaymentOther', '기타'), other)
-  }
-  const ch = deliveryPaymentChannelLabel(receiptData.deliveryPaymentChannel, tr)
-  const delLabel =
-    del > 0.005 && ch
-      ? `${tr('posPaymentDeliveryApp', '배달앱')} (${ch})`
-      : tr('posPaymentDeliveryApp', '배달앱')
-  push(delLabel, del)
-  return rows
-}
-
-function receiptPaymentBreakdownHtml(
-  receiptData: ReceiptModalData,
-  tr: (key: string, fallback: string) => string,
-  esc: (value: string) => string,
-  mode: 'simple' | 'grid'
-): string {
-  const isPaymentReceipt =
-    !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
-  if (!isPaymentReceipt) return ''
-  const rows = receiptPaymentBreakdownRows(receiptData, tr)
-  if (!rows.length) return ''
-  const title = esc(tr('posReceiptPaymentMethods', '결제 수단'))
-  if (mode === 'simple') {
-    const body = rows
-      .map(
-        (r) =>
-          `<div class="simple-stack"><div class="simple-stack-name">${esc(r.label)}</div><div class="simple-stack-amt">${esc(r.amountStr)}</div></div>`
-      )
-      .join('')
-    return `<div class="simple-divider"></div><div class="simple-line simple-pay-title"><b>${title}</b></div><div class="simple-stack-block">${body}</div>`
-  }
-  const body = rows
-    .map((r) => `<div class="receipt-row"><span>${esc(r.label)}</span><span>${esc(r.amountStr)}</span></div>`)
-    .join('')
-  return `<div class="receipt-section-title receipt-pay-title">${title}</div>${body}<div class="receipt-divider"></div>`
-}
 
 export function buildCode128BarcodeUrl(raw: string): string {
   const text = String(raw || '').trim()
@@ -212,8 +121,6 @@ export function resolvePaymentReceiptDesign(
 export type BuildPosPaymentReceiptDocumentHtmlParams = {
   receiptData: ReceiptModalData
   menus: PosMenu[]
-  /** 세트 구성 보강(주방 주문서와 동일한 카탈로그·미러 메뉴 역추적). 없으면 items_json 에 promoItems 가 있을 때만 표시 */
-  promoCatalogById?: Map<string, PosPromoWithItems>
   orderTypeLabels: Record<string, string>
   t: (k: string) => string
   lang: string
@@ -231,7 +138,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const {
     receiptData,
     menus,
-    promoCatalogById,
     orderTypeLabels,
     t,
     lang,
@@ -273,11 +179,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     tableName: receiptData.tableName,
     memo: receiptData.memo,
   })
-  /** 품목열 전용: 주방·홀 주문서와 같이 promoItems 를 카탈로그로 보강 */
-  const itemsForPrint = enrichReceiptModalItemsForPromoDisplay(receiptData.items || [], {
-    promoCatalogById,
-    menus,
-  })
   const receiptBarcodeUrl = d.receiptBarcode ? buildCode128BarcodeUrl(receiptOrderNoRaw) : ''
   const at = printedAt && !Number.isNaN(printedAt.getTime()) ? printedAt : new Date()
   const printedAtStr = new Intl.DateTimeFormat('en-GB', {
@@ -291,92 +192,39 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     hour12: false,
   }).format(at)
   const isTaxInvoice = !!taxInvoice
-  const paymentBreakdownSimpleHtml = receiptPaymentBreakdownHtml(receiptData, tr, esc, 'simple')
-  const paymentBreakdownGridHtml = receiptPaymentBreakdownHtml(receiptData, tr, esc, 'grid')
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
-      : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
-  const tightSimpleInset = shouldUseTightSimpleReceiptInsetForStore(receiptData.storeCode)
+      : /ekkamai/i.test(String(receiptData.storeCode || ''))
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
-    const useLegacySimpleTable = false
-    const useUltraPlainSimpleRows = tightSimpleInset
-    const simpleStack = (nameHtml: string, amtHtml: string) =>
-      useLegacySimpleTable
-        ? `<tr><td class="simple-item-name">${nameHtml}</td><td class="simple-item-amt">${amtHtml}</td></tr>`
-        : `<div class="simple-row"><div class="simple-row-name">${nameHtml}</div><div class="simple-row-amt">${amtHtml}</div></div>`
-    const itemRows = (itemsForPrint || [])
+    const itemRows = (receiptData.items || [])
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        const main = useUltraPlainSimpleRows
-          ? `<div class="simple-plain-row">${esc(`${Number(it.qty) || 1}x ${name}  ${amt}`)}</div>`
-          : simpleStack(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
-        const promoItems = it.promoItems
-        const promoComposeLines =
-          Array.isArray(promoItems) && promoItems.length > 0
-            ? promoItems.slice(0, 16).map((pi) => {
-                const menuName =
-                  menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
-                  `#${String(pi.menuId)}`
-                return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
-              })
-            : []
-        const promoMore =
-          Array.isArray(promoItems) && promoItems.length > 16 ? promoItems.length - 16 : 0
-        const promoBody =
-          promoComposeLines
-            .map(
-              (line) =>
-                `<div class="simple-promo-line">· ${esc(translatePosMenuLineForReceipt(line, t))}</div>`
-            )
-            .join('') +
-          (promoMore > 0 ? `<div class="simple-promo-line simple-promo-more">+${promoMore}</div>` : '')
-        const promoBlock =
-          promoComposeLines.length > 0
-            ? useLegacySimpleTable
-              ? `<tr><td class="simple-promo-cell" colspan="2">${promoBody}</td></tr>`
-              : `<div class="simple-promo-lines">${promoBody}</div>`
-            : ''
-        return main + promoBlock
+        return `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(name)}</td><td class="simple-item-amt">${amt}</td></tr>`
       })
       .join('')
     const summaryRows = [
-      useUltraPlainSimpleRows
-        ? `<div class="simple-plain-row">${esc(`${t('posSubtotal') || '소계'}  ${formatBahtNum(receiptData.subtotal)}`)}</div>`
-        : simpleStack(esc(t('posSubtotal') || '소계'), formatBahtNum(receiptData.subtotal)),
+      `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(receiptData.subtotal)}</td></tr>`,
       receiptData.discountAmt > 0
-        ? useUltraPlainSimpleRows
-          ? `<div class="simple-plain-row">${esc(`${t('posDiscount') || '할인'}  -${formatBahtNum(receiptData.discountAmt)}`)}</div>`
-          : simpleStack(esc(t('posDiscount') || '할인'), `-${formatBahtNum(receiptData.discountAmt)}`)
+        ? `<tr><td class="simple-k">${esc(t('posDiscount') || '할인')}</td><td class="simple-v">-${formatBahtNum(receiptData.discountAmt)}</td></tr>`
         : '',
       (receiptData.deliveryFee ?? 0) > 0
-        ? useUltraPlainSimpleRows
-          ? `<div class="simple-plain-row">${esc(`${t('posDeliveryFee') || '배달 수수료'}  +${formatBahtNum(receiptData.deliveryFee)}`)}</div>`
-          : simpleStack(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`)
+        ? `<tr><td class="simple-k">${esc(t('posDeliveryFee') || '배달 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.deliveryFee)}</td></tr>`
         : '',
       (receiptData.packagingFee ?? 0) > 0
-        ? useUltraPlainSimpleRows
-          ? `<div class="simple-plain-row">${esc(`${t('posPackagingFee') || '포장 수수료'}  +${formatBahtNum(receiptData.packagingFee)}`)}</div>`
-          : simpleStack(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`)
+        ? `<tr><td class="simple-k">${esc(t('posPackagingFee') || '포장 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.packagingFee)}</td></tr>`
         : '',
       (receiptData.vatFeeAmt ?? 0) > 0
-        ? useUltraPlainSimpleRows
-          ? `<div class="simple-plain-row">${esc(`${t('posVatLabel') || '부가세'}  ${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`)}</div>`
-          : simpleStack(
-              esc(t('posVatLabel') || '부가세'),
-              `${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`
-            )
+        ? `<tr><td class="simple-k">${esc(t('posVatLabel') || '부가세')}</td><td class="simple-v">${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</td></tr>`
         : '',
     ]
       .filter(Boolean)
       .join('')
     const simpleHtml = `
-      <div class="receipt-content receipt-payment-simple" dir="ltr">
-        ${showLogo ? `<div class="simple-logo-wrap"><img src="${esc(logoUrl)}" alt="Company logo" class="simple-logo" /></div>` : ''}
+      <div class="receipt-content receipt-payment-simple">
         <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
-        <div class="simple-subtitle">${esc(tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div>
         <div class="simple-store">${esc(receiptData.storeCode)}</div>
         <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
         <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
@@ -386,24 +234,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         <div class="simple-divider"></div>
-        ${
-          useLegacySimpleTable
-            ? `<table class="simple-table" dir="ltr"><tbody>${itemRows}</tbody></table>`
-            : `<div class="simple-stack-block${useUltraPlainSimpleRows ? ' simple-plain-block' : ''}">${itemRows}</div>`
-        }
+        <table class="simple-table">${itemRows}</table>
         <div class="simple-divider"></div>
-        ${
-          useLegacySimpleTable
-            ? `<table class="simple-table simple-summary-table" dir="ltr"><tbody>${summaryRows}</tbody></table>`
-            : `<div class="simple-stack-block${useUltraPlainSimpleRows ? ' simple-plain-block' : ''}">${summaryRows}</div>`
-        }
+        <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
-        ${paymentBreakdownSimpleHtml}
-        ${d.receiptShowPaidStamp ? `<div class="simple-paid">${esc(tr('posReceiptPaid', '결제완료'))}</div>` : ''}
-        ${footerPrimaryText || footerSecondaryText ? '<div class="simple-footer">' : ''}
-        ${footerPrimaryText ? `<div class="simple-footer-strong">${esc(footerPrimaryText)}</div>` : ''}
-        ${footerSecondaryText ? `<div>${esc(footerSecondaryText)}</div>` : ''}
-        ${footerPrimaryText || footerSecondaryText ? '</div>' : ''}
       </div>
     `
     return buildReceiptDocumentHtml({
@@ -411,43 +245,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       htmlLang: lang,
       bodyContent: simpleHtml,
       extraStyles: `
-        /* 손님 결제 간단 영수증: 전역 .receipt-content 좌 nudge·bidi가 CP-802에서 본문을 오른쪽으로 밀거나 2열처럼 보이게 함 → 전부 제거·1열 스택만 */
-        html, body { direction: ltr; unicode-bidi: isolate; }
-        .receipt-payment-simple.receipt-content { left: 0 !important; margin-left: 0 !important; margin-right: 0 !important; position: relative !important; width: 100% !important; max-width: 100% !important; }
-        .receipt-payment-simple { color: #000; direction: ltr; unicode-bidi: isolate; text-align: left; }
-        .simple-logo-wrap { text-align: center; margin-bottom: 2px; }
-        .simple-logo { width: 82px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.1); }
-        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 1px; }
-        .simple-subtitle { text-align: center; font-size: 10px; margin-bottom: 3px; }
+        .receipt-payment-simple { color: #000; }
+        .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
         .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; text-align: left; }
+        .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
-        .simple-stack-block { width: 100%; box-sizing: border-box; }
-        .simple-plain-block { letter-spacing: 0; }
-        .simple-plain-row { font-size: 11px; line-height: 1.38; text-align: left; color: #000; white-space: pre-wrap; word-break: break-word; margin: 3px 0; }
-        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; direction: ltr !important; unicode-bidi: isolate !important; }
-        .simple-table tr { direction: ltr !important; unicode-bidi: isolate !important; }
-        .simple-table td { padding: 2px 0; vertical-align: top; }
-        .simple-item-name { font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; }
-        .simple-item-amt { width: 20mm; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
-        .simple-promo-cell { padding: 0 0 4px 2mm !important; }
-        /* 일부 드라이버에서 flex/grid 깨짐: 금액 칼럼을 절대 위치로 고정 */
-        .simple-row { margin: 6px 0; direction: ltr; unicode-bidi: isolate; width: 100%; box-sizing: border-box; position: relative; padding-right: 22mm; min-height: 1.25em; }
-        .simple-row-name { min-width: 0; display: block; font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; color: #000; }
-        .simple-row-amt { position: absolute; top: 0; right: 0; width: 20mm; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; color: #000; font-variant-numeric: tabular-nums; }
-        .simple-promo-lines { margin: -2px 0 6px 0; padding: 0 0 0 2mm; }
-        .simple-promo-line { font-size: 10px; line-height: 1.32; color: #222; text-align: left; font-weight: 500; }
-        .simple-promo-more { font-size: 9px; color: #444; }
-        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; clear: both; direction: ltr; text-align: left; }
-        .simple-pay-title { font-size: 11px; margin-top: 4px; text-align: left; }
-        .simple-paid { display: inline-block; border: 1px solid #000; padding: 1px 10px; font-size: 10px; font-weight: 700; margin-top: 8px; }
-        .simple-footer { margin-top: 6px; text-align: center; font-size: 10px; }
-        .simple-footer-strong { font-weight: 700; }
-        ${tightSimpleInset ? 'body { padding-left: 1mm !important; padding-right: 1mm !important; } @media print { body { padding-left: 1mm !important; padding-right: 1mm !important; } } .receipt-payment-simple.receipt-content { left: -0.5mm !important; }' : ''}
-        @media print {
-          .receipt-payment-simple.receipt-content { left: 0 !important; }
-        }
+        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .simple-table td { font-size: 11px; line-height: 1.4; padding: 1px 0; vertical-align: top; }
+        .simple-item-name { width: 72%; word-break: break-word; }
+        .simple-item-amt { width: 28%; text-align: right; white-space: nowrap; }
+        .simple-k { width: 72%; }
+        .simple-v { width: 28%; text-align: right; white-space: nowrap; }
+        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; }
       `,
     })
   }
@@ -503,32 +313,28 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${itemsForPrint
+        ${receiptData.items
           .map((it) => {
             const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const promoComposeLines =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
-                ? it.promoItems.slice(0, 16).map((pi) => {
+                ? it.promoItems.slice(0, 4).map((pi) => {
                     const menuName =
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
                       `#${String(pi.menuId)}`
                     return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
                   })
                 : []
-            const promoComposeMoreCount =
-              Array.isArray(it.promoItems) && it.promoItems.length > 16
-                ? Math.max(0, it.promoItems.length - 16)
-                : 0
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
             const promoComposeHtml =
               promoComposeLines.length > 0
                 ? `<div class="receipt-line-note">${promoComposeLines
-                    .map((line) => `- ${esc(translatePosMenuLineForReceipt(line, t))}`)
-                    .join('<br/>')}${promoComposeMoreCount > 0 ? `<br/>+${promoComposeMoreCount}</div>` : '</div>'}`
+                    .map((line) => `- ${esc(line)}`)
+                    .join('<br/>')}</div>`
                 : ''
             const barcodeHtml = itemBarcodeUrl
               ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${esc(itemBarcodeUrl)}" alt="Item barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>`
@@ -549,7 +355,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="receipt-divider-strong"></div>
         <div class="receipt-row receipt-total"><span>${esc(tr('posTotal', '합계'))}</span><span>${formatBahtNum(receiptData.total)}</span></div>
         <div class="receipt-divider"></div>
-        ${paymentBreakdownGridHtml}
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}
         ${d.receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
@@ -571,7 +376,6 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-brand-logo.sm { width: 84px; }
         .receipt-brand-logo.md { width: 108px; }
         .receipt-brand-logo.lg { width: 132px; }
-        .receipt-pay-title { font-size: 11px; font-weight: 700; margin: 4px 0 2px; color: #000; }
         .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 700; }
         .receipt-order-no-print { color: #000 !important; font-weight: 700 !important; }
         .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }
@@ -583,30 +387,21 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .tax-invoice-label { font-weight: 600; color: #000; }
         .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
         .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
-        /* 메타(주문번호·테이블·일시): 화면 미리보기·인쇄 공통 — 값 우측 정렬은 긴 배달 문자열이 잘림 → flex + 좌측 정렬 */
-        .receipt-payment .receipt-meta-row { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; width: 100%; max-width: 100%; overflow: visible; margin: 3px 0; padding: 0; column-gap: 3mm; box-sizing: border-box; }
-        .receipt-payment .receipt-meta-row::after { content: none; display: none; }
-        .receipt-payment .receipt-meta-label { float: none; flex: 0 0 auto; max-width: 42%; min-width: 0; padding-right: 0; white-space: normal; }
-        .receipt-payment .receipt-meta-value { float: none; flex: 1 1 0; min-width: 0; max-width: none; text-align: left; width: auto; box-sizing: border-box; }
-        /* 일부 하이브리드+드라이버 조합(CP-802 등)에서 CSS grid/mm 폭 조합이 깨지는 경우 → 인쇄 시 금액 행만 float 2열로 고정 */
+        /* 일부 하이브리드+드라이버 조합(CP-802 포함)에서 결제 영수증의 CSS grid/flex가 좌우 분리 인쇄되는 현상 완화 */
         @media print {
           .receipt-payment { position: static !important; left: 0 !important; width: 100% !important; max-width: 100% !important; }
-          .receipt-payment .receipt-row::after,
-          .receipt-payment .receipt-item-head::after,
-          .receipt-payment .tax-invoice-row::after { content: "" !important; display: table !important; clear: both !important; }
           .receipt-payment .receipt-row,
-          .receipt-payment .receipt-item-head { display: block !important; width: 100% !important; overflow: hidden !important; margin: 4px 0 !important; padding: 0 !important; column-gap: 0 !important; grid-template-columns: none !important; }
+          .receipt-payment .receipt-item-head { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
           .receipt-payment .receipt-row > span:first-child,
-          .receipt-payment .receipt-item-head > span:first-child { float: left !important; max-width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm - ${RECEIPT_GRID_COL_GAP_PX}px) !important; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px !important; text-align: left !important; min-width: 0 !important; }
+          .receipt-payment .receipt-item-head > span:first-child { display: table-cell; width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm); padding-right: ${RECEIPT_GRID_COL_GAP_PX}px; vertical-align: top; }
           .receipt-payment .receipt-row > span:last-child,
-          .receipt-payment .receipt-item-head > span:last-child { float: right !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; white-space: normal !important; min-width: 0 !important; }
-          .receipt-payment .receipt-meta-row { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: flex-start !important; justify-content: flex-start !important; width: 100% !important; max-width: 100% !important; overflow: visible !important; margin: 3px 0 !important; padding: 0 !important; column-gap: 3mm !important; grid-template-columns: none !important; box-sizing: border-box !important; }
-          .receipt-payment .receipt-meta-row::after { content: none !important; display: none !important; }
-          .receipt-payment .receipt-meta-label { float: none !important; flex: 0 0 auto !important; max-width: 42% !important; padding-right: 0 !important; white-space: normal !important; min-width: 0 !important; }
-          .receipt-payment .receipt-meta-value { float: none !important; flex: 1 1 0 !important; min-width: 0 !important; max-width: none !important; text-align: left !important; width: auto !important; box-sizing: border-box !important; }
-          .receipt-payment .tax-invoice-row { display: block !important; width: 100% !important; overflow: hidden !important; margin: 4px 0 !important; grid-template-columns: none !important; }
-          .receipt-payment .tax-invoice-row > .tax-invoice-label { float: left !important; max-width: 34% !important; padding-right: 4px !important; min-width: 0 !important; }
-          .receipt-payment .tax-invoice-row > span:last-child { float: right !important; max-width: 64% !important; text-align: left !important; min-width: 0 !important; }
+          .receipt-payment .receipt-item-head > span:last-child { display: table-cell; width: ${RECEIPT_AMOUNT_COL_MM}mm; text-align: right; vertical-align: top; white-space: normal; }
+          .receipt-payment .receipt-meta-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
+          .receipt-payment .receipt-meta-label { display: table-cell; width: 22mm; vertical-align: top; white-space: nowrap; padding-right: 3mm; }
+          .receipt-payment .receipt-meta-value { display: table-cell; width: auto; vertical-align: top; }
+          .receipt-payment .tax-invoice-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
+          .receipt-payment .tax-invoice-row > .tax-invoice-label { display: table-cell; width: 22mm; vertical-align: top; padding-right: 4px; }
+          .receipt-payment .tax-invoice-row > span:last-child { display: table-cell; width: auto; vertical-align: top; }
         }
       `,
   })
