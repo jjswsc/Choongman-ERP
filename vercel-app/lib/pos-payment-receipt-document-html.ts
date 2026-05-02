@@ -375,13 +375,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-divider"></div>
         ${
           useLegacySimpleTable
-            ? `<table class="simple-table"><tbody>${itemRows}</tbody></table>`
+            ? `<table class="simple-table" dir="ltr"><tbody>${itemRows}</tbody></table>`
             : `<div class="simple-stack-block">${itemRows}</div>`
         }
         <div class="simple-divider"></div>
         ${
           useLegacySimpleTable
-            ? `<table class="simple-table simple-summary-table"><tbody>${summaryRows}</tbody></table>`
+            ? `<table class="simple-table simple-summary-table" dir="ltr"><tbody>${summaryRows}</tbody></table>`
             : `<div class="simple-stack-block">${summaryRows}</div>`
         }
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
@@ -411,7 +411,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
         .simple-stack-block { width: 100%; box-sizing: border-box; }
-        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; direction: ltr !important; unicode-bidi: isolate !important; }
+        .simple-table tr { direction: ltr !important; unicode-bidi: isolate !important; }
         .simple-table td { padding: 2px 0; vertical-align: top; }
         .simple-item-name { font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; }
         .simple-item-amt { width: 20mm; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
