@@ -28,12 +28,14 @@ import { useStoreList } from '@/lib/api-client'
 import {
   getPosOrders,
   getPosMenus,
+  getPosPromosWithItems,
   getPosPrinterSettings,
   getPosDeliveryApps,
   correctPosOrderPayment,
   updatePosOrderStatus,
   type PosOrder,
   type PosMenu,
+  type PosPromoWithItems,
   type PosDeliveryApp,
 } from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
@@ -197,7 +199,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [pcOrderTotal, setPcOrderTotal] = React.useState('')
   const [payCorrectSaving, setPayCorrectSaving] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [promosWithItems, setPromosWithItems] = React.useState<PosPromoWithItems[]>([])
   const [deliveryAppsCatalog, setDeliveryAppsCatalog] = React.useState<PosDeliveryApp[]>([])
+
+  const promoCatalogById = React.useMemo(() => {
+    const m = new Map<string, PosPromoWithItems>()
+    for (const p of promosWithItems) {
+      if (p?.id) m.set(String(p.id), p)
+    }
+    return m
+  }, [promosWithItems])
 
   const canSearchAll = isOfficeRole(auth?.role || '')
 
@@ -366,7 +377,15 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   }, [loadOrders])
 
   React.useEffect(() => {
-    getPosMenus().then(setMenus).catch(() => setMenus([]))
+    void Promise.all([getPosMenus(), getPosPromosWithItems({ includeInactive: true })])
+      .then(([menuRows, promoRows]) => {
+        setMenus(menuRows)
+        setPromosWithItems(Array.isArray(promoRows) ? promoRows : [])
+      })
+      .catch(() => {
+        setMenus([])
+        setPromosWithItems([])
+      })
   }, [])
 
   const prevOnlineRef = React.useRef(online)
@@ -409,7 +428,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
-      const receiptData = receiptModalDataFromPosOrderReprint(o)
+      const receiptData = receiptModalDataFromPosOrderReprint(o, { promoCatalogById, menus })
       const paidAt = o.linkposRespondedAt
         ? new Date(o.linkposRespondedAt)
         : o.createdAt
@@ -418,6 +437,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const fullHtml = buildPosPaymentReceiptDocumentHtml({
         receiptData,
         menus,
+        promoCatalogById,
         orderTypeLabels,
         t,
         lang,

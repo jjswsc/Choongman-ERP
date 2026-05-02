@@ -2,7 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useRef, type RefObject } from 'react'
-import { getPosPrinterSettings, type PosPrinterSettings } from '@/lib/api-client'
+import { getPosPrinterSettings, type PosPrinterSettings, type PosPromoWithItems } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -83,6 +83,8 @@ interface PosReceiptModalProps {
   onOpenChange: (open: boolean) => void
   receiptData: ReceiptModalData | null
   menus: PosMenu[]
+  /** 결제 영수증 품목: 세트 구성을 카탈로그로 보강(주방·홀 주문서와 동일 데이터 기준) */
+  promoCatalogById?: Map<string, PosPromoWithItems>
   orderTypeLabels: Record<string, string>
   t: (k: string) => string
   autoPrintReceiptOnOrder?: boolean
@@ -125,6 +127,7 @@ export function PosReceiptModal({
   onOpenChange,
   receiptData,
   menus,
+  promoCatalogById,
   orderTypeLabels,
   t,
   autoPrintReceiptOnOrder = false,
@@ -192,6 +195,7 @@ export function PosReceiptModal({
     const fullHtml = buildPosPaymentReceiptDocumentHtml({
       receiptData,
       menus,
+      promoCatalogById,
       orderTypeLabels,
       t,
       lang,

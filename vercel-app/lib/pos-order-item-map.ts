@@ -23,8 +23,12 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
     ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
     ...(i.orderType ? { orderType: i.orderType } : {}),
     ...(i.deliveryAppCode ? { deliveryAppCode: i.deliveryAppCode } : {}),
-    ...(i.promoId && i.promoItems
-      ? { promoId: i.promoId, promoCode: i.promoCode, promoItems: i.promoItems }
+    ...(i.promoId
+      ? {
+          promoId: i.promoId,
+          ...(i.promoCode ? { promoCode: i.promoCode } : {}),
+          ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+        }
       : {}),
   }))
 }

@@ -31,6 +31,7 @@ import {
   getMembers,
   getPosMenus,
   getPosMenuOptions,
+  getPosPromosWithItems,
   getPosOrders,
   getPosPrinterSettings,
   getPosTodaySales,
@@ -48,9 +49,13 @@ import {
   type PosOrderItem,
   type PosTableItem,
   type PosPrinterSettings,
+  type PosPromoWithItems,
 } from '@/lib/api-client'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
-import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
+import {
+  consumeSuppressMainPosAutoPrintForQueuedSync,
+  registerLocallyPrintedQueuedOrderNo,
+} from '@/lib/offline/pos-queued-sync-print-suppress'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -99,6 +104,7 @@ import {
   posOrderPaymentSum,
   posOrderRowPaymentSum,
   receiptModalDataFromPosOrderForPayment,
+  type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
@@ -423,6 +429,7 @@ export default function PosTerminalPage() {
   const [tableListMode, setTableListMode] = useState<'in_progress' | 'completed' | 'all'>('all')
   const [deliveryAppsFromApi, setDeliveryAppsFromApi] = useState<PosDeliveryApp[]>([])
   const [menus, setMenus] = useState<PosMenu[]>([])
+  const [promosWithItems, setPromosWithItems] = useState<PosPromoWithItems[]>([])
   const [menuOptions, setMenuOptions] = useState<PosMenuOption[]>([])
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
@@ -541,6 +548,17 @@ export default function PosTerminalPage() {
     }
     return out
   }, [menuOptions])
+  const promoCatalogById = useMemo(() => {
+    const m = new Map<string, PosPromoWithItems>()
+    for (const p of promosWithItems) {
+      if (p?.id) m.set(String(p.id), p)
+    }
+    return m
+  }, [promosWithItems])
+  const posReceiptLineOpts: PosOrderReceiptLineOptions = useMemo(
+    () => ({ promoCatalogById, menus }),
+    [promoCatalogById, menus]
+  )
   const enrichPromoItemsWithOptionName = useCallback(
     (list: { menuId: string; optionId: string | null; quantity: number }[]) =>
       list.map((p) => ({
@@ -812,6 +830,15 @@ export default function PosTerminalPage() {
       .catch(() => {
         if (seq !== storeSettingsLoadSeqRef.current) return
         setMenuOptions([])
+      })
+    getPosPromosWithItems({ includeInactive: true })
+      .then((rows) => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
+        setPromosWithItems(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (seq !== storeSettingsLoadSeqRef.current) return
+        setPromosWithItems([])
       })
   }, [currentStoreId, applyPosMenusList, getPrinterSettingsForStore])
 
@@ -2301,7 +2328,7 @@ export default function PosTerminalPage() {
               printedPaymentReceiptIdsRef.current.delete(orderId)
               return
             }
-            setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments))
+            setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
           })
         }
       }
@@ -2316,6 +2343,7 @@ export default function PosTerminalPage() {
     autoPrintKitchenSlipOnOrder,
     autoPrintReceiptOnPayment,
     pricingAdjustments,
+    posReceiptLineOpts,
     menus,
     t,
     lang,
@@ -2386,13 +2414,13 @@ export default function PosTerminalPage() {
           printedPaymentReceiptIdsRef.current.delete(orderId)
           return
         }
-        setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments))
+        setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
       })
     }, { store: currentStoreId })
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnPayment, pricingAdjustments])
+  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnPayment, pricingAdjustments, posReceiptLineOpts])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) {
@@ -2453,7 +2481,7 @@ export default function PosTerminalPage() {
               const snap = order
               const adj = pricingAdjustments
               setTimeout(() => {
-                setReceiptData(receiptModalDataFromPosOrderForPayment(snap, adj))
+                setReceiptData(receiptModalDataFromPosOrderForPayment(snap, adj, posReceiptLineOpts))
               }, staggerMs)
               staggerMs += 900
             }
@@ -2665,6 +2693,7 @@ export default function PosTerminalPage() {
     autoPrintKitchenSlipOnOrder,
     autoPrintReceiptOnPayment,
     pricingAdjustments,
+    posReceiptLineOpts,
     menus,
     autoFocusIncomingDeliveryOrder,
     t,
@@ -3540,6 +3569,7 @@ export default function PosTerminalPage() {
                 const incomingItems = cartLinesToPosOrderItems(payload.items)
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
+                let queuedLocalOrderNo: string | null = null
                 if (isAddOrder && existingOrder) {
                   const mergedItems = [
                     ...existingOrder.items.map((it) => ({
@@ -3548,11 +3578,18 @@ export default function PosTerminalPage() {
                       price: it.price,
                       qty: it.quantity || 1,
                       ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-                      ...(it.promoId && Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
+                      ...(it.promoId
                         ? {
                             promoId: it.promoId,
-                            promoCode: it.promoCode,
-                            promoItems: (it as { promoItems: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems,
+                            ...(it.promoCode ? { promoCode: it.promoCode } : {}),
+                            ...(Array.isArray((it as { promoItems?: unknown }).promoItems) &&
+                            ((it as { promoItems: unknown[] }).promoItems?.length ?? 0) > 0
+                              ? {
+                                  promoItems: (it as {
+                                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
+                                  }).promoItems,
+                                }
+                              : {}),
                           }
                         : {}),
                       ...(it.servedAt ? { servedAt: it.servedAt } : {}),
@@ -3619,7 +3656,14 @@ export default function PosTerminalPage() {
                   }
                   savedOrderId = res.orderId ?? null
                   savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
-                  await notifyQueuedSave(savedOrderNo, (res as { queued?: boolean }).queued)
+                  const queued = Boolean((res as { queued?: boolean }).queued)
+                  await notifyQueuedSave(savedOrderNo, queued)
+                  if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
+                }
+                const markQueuedLocalPrintedIfNeeded = () => {
+                  if (!queuedLocalOrderNo) return
+                  registerLocallyPrintedQueuedOrderNo(queuedLocalOrderNo)
+                  queuedLocalOrderNo = null
                 }
                 let skipLocalAutoPrint = false
                 if (savedOrderId != null) {
@@ -3824,6 +3868,7 @@ export default function PosTerminalPage() {
                     .catch((e) => console.error('Kitchen slip print:', e))
                 }
                 if (isMainPosDevice && shouldAutoPrintReceipt && !skipLocalAutoPrint) {
+                  markQueuedLocalPrintedIfNeeded()
                   if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
                     void printReceiptNow(
                       receiptPayloadSubmit,
@@ -3843,6 +3888,7 @@ export default function PosTerminalPage() {
                   payload.items.length > 0 &&
                   kitchenCartLines.length > 0
                 ) {
+                  markQueuedLocalPrintedIfNeeded()
                   setTimeout(runKitchenAfterDineInSubmit, 180)
                 } else if (
                   isMainPosDevice &&
@@ -4121,7 +4167,15 @@ export default function PosTerminalPage() {
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const newOrderId = (res as { orderId?: number }).orderId ?? null
-                await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
+                const queued = Boolean((res as { queued?: boolean }).queued)
+                await notifyQueuedSave(orderNo, queued)
+                let queuedLocalOrderNo: string | null =
+                  queued && orderNo.startsWith('LOCAL-') ? orderNo : null
+                const markQueuedLocalPrintedIfNeeded = () => {
+                  if (!queuedLocalOrderNo) return
+                  registerLocallyPrintedQueuedOrderNo(queuedLocalOrderNo)
+                  queuedLocalOrderNo = null
+                }
                 let suppressReceiptModalAutoPrint = !isMainPosDevice
                 if (newOrderId != null && newOrderId > 0) {
                   if (seenOrderIdsRef.current.has(newOrderId)) suppressReceiptModalAutoPrint = true
@@ -4274,10 +4328,13 @@ export default function PosTerminalPage() {
 
                 if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
                   if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                    markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)
                   } else if (autoPrintReceiptOnOrder) {
+                    markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                   } else if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                    markQueuedLocalPrintedIfNeeded()
                     setTimeout(runKitchenAfterNonDineSubmit, 180)
                   } else {
                     setReceiptData({
@@ -5067,6 +5124,7 @@ export default function PosTerminalPage() {
         onOpenChange={(open) => !open && setReceiptData(null)}
         receiptData={receiptData}
         menus={menus}
+        promoCatalogById={promoCatalogById}
         orderTypeLabels={{
           dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
           takeout: tPrint('posOrderTypeTakeout') ?? '포장',

@@ -2,7 +2,8 @@
  * 결제(손님) 영수증 전체 HTML — PosReceiptModal·영수증 관리 재인쇄 공통
  */
 
-import type { PosMenu, PosPrinterSettings } from '@/lib/api-client'
+import type { PosMenu, PosPrinterSettings, PosPromoWithItems } from '@/lib/api-client'
+import { enrichReceiptModalItemsForPromoDisplay } from '@/lib/pos-payment-receipt-from-order'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
@@ -17,7 +18,10 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
-import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
+import {
+  shouldForceSimplePaymentReceiptForStore,
+  shouldUseTightSimpleReceiptInsetForStore,
+} from '@/lib/pos-receipt-store-flags'
 
 function deliveryPaymentChannelLabel(
   raw: string | null | undefined,
@@ -208,6 +212,8 @@ export function resolvePaymentReceiptDesign(
 export type BuildPosPaymentReceiptDocumentHtmlParams = {
   receiptData: ReceiptModalData
   menus: PosMenu[]
+  /** 세트 구성 보강(주방 주문서와 동일한 카탈로그·미러 메뉴 역추적). 없으면 items_json 에 promoItems 가 있을 때만 표시 */
+  promoCatalogById?: Map<string, PosPromoWithItems>
   orderTypeLabels: Record<string, string>
   t: (k: string) => string
   lang: string
@@ -225,6 +231,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const {
     receiptData,
     menus,
+    promoCatalogById,
     orderTypeLabels,
     t,
     lang,
@@ -266,6 +273,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     tableName: receiptData.tableName,
     memo: receiptData.memo,
   })
+  /** 품목열 전용: 주방·홀 주문서와 같이 promoItems 를 카탈로그로 보강 */
+  const itemsForPrint = enrichReceiptModalItemsForPromoDisplay(receiptData.items || [], {
+    promoCatalogById,
+    menus,
+  })
   const receiptBarcodeUrl = d.receiptBarcode ? buildCode128BarcodeUrl(receiptOrderNoRaw) : ''
   const at = printedAt && !Number.isNaN(printedAt.getTime()) ? printedAt : new Date()
   const printedAtStr = new Intl.DateTimeFormat('en-GB', {
@@ -285,16 +297,43 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
       : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
+  const tightSimpleInset = shouldUseTightSimpleReceiptInsetForStore(receiptData.storeCode)
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
-    /** CP-802 등: 가로 2열(table/float/grid) 모두 드라이버에서 찢김 → 품명 위·금액 아래 1열 */
+    /** CP-802 대응: grid/table 없이 flex 1행 정렬(품목/금액 같은 줄) */
     const simpleStack = (nameHtml: string, amtHtml: string) =>
-      `<div class="simple-stack"><div class="simple-stack-name">${nameHtml}</div><div class="simple-stack-amt">${amtHtml}</div></div>`
-    const itemRows = (receiptData.items || [])
+      `<div class="simple-row"><div class="simple-row-name">${nameHtml}</div><div class="simple-row-amt">${amtHtml}</div></div>`
+    const itemRows = (itemsForPrint || [])
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        return simpleStack(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
+        const main = simpleStack(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
+        const promoItems = it.promoItems
+        const promoComposeLines =
+          Array.isArray(promoItems) && promoItems.length > 0
+            ? promoItems.slice(0, 16).map((pi) => {
+                const menuName =
+                  menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
+                  `#${String(pi.menuId)}`
+                return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
+              })
+            : []
+        const promoMore =
+          Array.isArray(promoItems) && promoItems.length > 16 ? promoItems.length - 16 : 0
+        const promoBlock =
+          promoComposeLines.length > 0
+            ? `<div class="simple-promo-lines">${promoComposeLines
+                .map(
+                  (line) =>
+                    `<div class="simple-promo-line">· ${esc(translatePosMenuLineForReceipt(line, t))}</div>`
+                )
+                .join('')}${
+                promoMore > 0
+                  ? `<div class="simple-promo-line simple-promo-more">+${promoMore}</div>`
+                  : ''
+              }</div>`
+            : ''
+        return main + promoBlock
       })
       .join('')
     const summaryRows = [
@@ -361,14 +400,18 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
         .simple-stack-block { width: 100%; box-sizing: border-box; }
-        .simple-stack { margin: 6px 0; direction: ltr; unicode-bidi: isolate; width: 100%; box-sizing: border-box; }
-        .simple-stack-name { font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; color: #000; }
-        .simple-stack-amt { font-size: 11px; line-height: 1.25; text-align: right; font-weight: 700; margin-top: 2px; color: #000; font-variant-numeric: tabular-nums; }
+        .simple-row { margin: 6px 0; direction: ltr; unicode-bidi: isolate; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+        .simple-row-name { min-width: 0; flex: 1 1 auto; font-size: 11px; line-height: 1.35; text-align: left; word-break: break-word; color: #000; }
+        .simple-row-amt { flex: 0 0 auto; font-size: 11px; line-height: 1.25; text-align: right; white-space: nowrap; font-weight: 700; color: #000; font-variant-numeric: tabular-nums; }
+        .simple-promo-lines { margin: -2px 0 6px 0; padding: 0 0 0 2mm; }
+        .simple-promo-line { font-size: 10px; line-height: 1.32; color: #222; text-align: left; font-weight: 500; }
+        .simple-promo-more { font-size: 9px; color: #444; }
         .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; clear: both; direction: ltr; text-align: left; }
         .simple-pay-title { font-size: 11px; margin-top: 4px; text-align: left; }
         .simple-paid { display: inline-block; border: 1px solid #000; padding: 1px 10px; font-size: 10px; font-weight: 700; margin-top: 8px; }
         .simple-footer { margin-top: 6px; text-align: center; font-size: 10px; }
         .simple-footer-strong { font-weight: 700; }
+        ${tightSimpleInset ? 'body { padding-left: 2mm !important; padding-right: 2mm !important; } @media print { body { padding-left: 2mm !important; padding-right: 2mm !important; } }' : ''}
         @media print {
           .receipt-payment-simple.receipt-content { left: 0 !important; }
         }
@@ -427,28 +470,32 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${receiptData.items
+        ${itemsForPrint
           .map((it) => {
             const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const promoComposeLines =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
-                ? it.promoItems.slice(0, 4).map((pi) => {
+                ? it.promoItems.slice(0, 16).map((pi) => {
                     const menuName =
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
                       `#${String(pi.menuId)}`
                     return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
                   })
                 : []
+            const promoComposeMoreCount =
+              Array.isArray(it.promoItems) && it.promoItems.length > 16
+                ? Math.max(0, it.promoItems.length - 16)
+                : 0
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
             const promoComposeHtml =
               promoComposeLines.length > 0
                 ? `<div class="receipt-line-note">${promoComposeLines
-                    .map((line) => `- ${esc(line)}`)
-                    .join('<br/>')}</div>`
+                    .map((line) => `- ${esc(translatePosMenuLineForReceipt(line, t))}`)
+                    .join('<br/>')}${promoComposeMoreCount > 0 ? `<br/>+${promoComposeMoreCount}</div>` : '</div>'}`
                 : ''
             const barcodeHtml = itemBarcodeUrl
               ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${esc(itemBarcodeUrl)}" alt="Item barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>`

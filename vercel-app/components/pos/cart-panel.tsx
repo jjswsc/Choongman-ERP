@@ -606,8 +606,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       orderType: orderTypeNorm,
       ...(lineNote ? { note: lineNote } : {}),
       ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
-      ...(i.promoId && i.promoItems
-        ? { promoId: i.promoId, promoCode: i.promoCode, promoItems: i.promoItems }
+      ...(i.promoId
+        ? {
+            promoId: i.promoId,
+            ...(i.promoCode ? { promoCode: i.promoCode } : {}),
+            ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
+          }
         : {}),
     }
   }

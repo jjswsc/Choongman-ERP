@@ -35,13 +35,39 @@ function mapItems(raw: unknown): PosOrderItem[] {
   if (!Array.isArray(raw)) return []
   return raw.map((it) => {
     const x = it as Record<string, unknown>
-    return {
+    const qtyRaw = x.qty ?? x.quantity
+    const base: PosOrderItem = {
       id: String(x.id ?? ''),
       name: String(x.name ?? ''),
       price: Number(x.price ?? 0),
-      qty: Math.max(1, Number(x.qty ?? 1) || 1),
+      qty: Math.max(1, Number(qtyRaw ?? 1) || 1),
       ...(typeof x.note === 'string' && String(x.note).trim() ? { note: String(x.note).trim() } : {}),
     }
+    const promoIdRaw = x.promoId ?? x.promo_id
+    const promoCodeRaw = x.promoCode ?? x.promo_code
+    const promoItemsRaw = x.promoItems ?? x.promo_items
+    const pid =
+      promoIdRaw != null && String(promoIdRaw).trim() ? String(promoIdRaw).trim() : ''
+    if (pid) {
+      base.promoId = pid
+      const pc =
+        promoCodeRaw != null && String(promoCodeRaw).trim()
+          ? String(promoCodeRaw).trim()
+          : ''
+      if (pc) base.promoCode = pc
+    }
+    if (Array.isArray(promoItemsRaw) && promoItemsRaw.length > 0) {
+      base.promoItems = promoItemsRaw as PosOrderItem['promoItems']
+    }
+    const menuId1Raw = x.menuId1 ?? x.menu_id1
+    const optId1Raw = x.optionId1 ?? x.option_id1
+    const menuId2Raw = x.menuId2 ?? x.menu_id2
+    const optId2Raw = x.optionId2 ?? x.option_id2
+    if (menuId1Raw != null && String(menuId1Raw).trim()) base.menuId1 = String(menuId1Raw).trim()
+    if (optId1Raw != null && String(optId1Raw).trim()) base.optionId1 = String(optId1Raw).trim()
+    if (menuId2Raw != null && String(menuId2Raw).trim()) base.menuId2 = String(menuId2Raw).trim()
+    if (optId2Raw != null && String(optId2Raw).trim()) base.optionId2 = String(optId2Raw).trim()
+    return base
   })
 }
 

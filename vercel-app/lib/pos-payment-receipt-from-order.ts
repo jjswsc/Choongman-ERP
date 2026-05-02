@@ -1,6 +1,18 @@
-import type { PosOrder } from '@/lib/api-client'
+import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
+
+export type PosOrderReceiptLineOptions = {
+  /**
+   * 주문 JSON에 promoItems 스냅샷이 없고 promoId만 있을 때(구버전·일부 저장 경로),
+   * 현재 프로모 카탈로그로 구성 줄을 채운다. 선택지가 있는 세트는 DB 구성 전체가 나올 수 있다.
+   */
+  promoCatalogById?: Map<string, PosPromoWithItems>
+  /** 미러 메뉴(id만 저장·promoId 누락) 등: pos_menus.promoId 로 프로모를 역추적 */
+  menus?: PosMenu[]
+}
+
+type ReceiptPromoLine = { menuId: string; optionId: string | null; quantity: number }
 
 export function posOrderRowPaymentSum(row: Record<string, unknown>): number {
   return (
@@ -27,23 +39,205 @@ export function isPosOrderPaidLikeStatus(status: string): boolean {
   return s === 'paid' || s === 'completed'
 }
 
-function posOrderItemsToReceiptLines(order: PosOrder) {
-  return (order.items || []).map((it) => ({
-    id: String(it.id ?? ''),
-    name: String(it.name ?? ''),
-    price: Number(it.price ?? 0),
-    qty: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
-    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-    ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
+function pickPromoItemsFromOrderLine(it: Record<string, unknown>): unknown[] | null {
+  const camel = it.promoItems
+  const snake = it.promo_items
+  if (Array.isArray(camel) && camel.length > 0) return camel
+  if (Array.isArray(snake) && snake.length > 0) return snake
+  return null
+}
+
+function coerceNonEmptyId(v: unknown): string | null {
+  if (v == null) return null
+  const s = String(v).trim()
+  return s || null
+}
+
+/** DB/JSON에서 숫자·문자 혼재 가능 */
+function pickPromoIdFromOrderLine(it: Record<string, unknown>): string | null {
+  return coerceNonEmptyId(it.promoId) ?? coerceNonEmptyId(it.promo_id)
+}
+
+/** 카트 id 규칙: `promo-${promoId}-${구성시그니처}` (프로모 id에 하이픈 포함 가능 → 카탈로그 키 최장 일치) */
+function pickPromoIdFromCartLineId(lineId: string, catalog: Map<string, PosPromoWithItems> | undefined): string | null {
+  if (!catalog?.size) return null
+  const id = String(lineId ?? '').trim()
+  if (!id.startsWith('promo-')) return null
+  const rest = id.slice('promo-'.length)
+  let best: string | null = null
+  for (const key of catalog.keys()) {
+    if (!key) continue
+    if (rest === key || rest.startsWith(`${key}-`)) {
+      if (!best || key.length > best.length) best = key
+    }
+  }
+  return best
+}
+
+function pickPromoIdFromPromoCode(it: Record<string, unknown>, catalog: Map<string, PosPromoWithItems> | undefined): string | null {
+  if (!catalog?.size) return null
+  const code = coerceNonEmptyId(it.promoCode) ?? coerceNonEmptyId(it.promo_code)
+  if (!code) return null
+  const u = code.toUpperCase()
+  for (const p of catalog.values()) {
+    const c = String(p.code ?? '').trim().toUpperCase()
+    if (c && c === u) return String(p.id)
+  }
+  return null
+}
+
+function pickPromoIdFromLinkedMenu(it: Record<string, unknown>, menus: PosMenu[] | undefined): string | null {
+  if (!menus?.length) return null
+  const lineId = coerceNonEmptyId(it.id)
+  if (!lineId) return null
+  const exact = menus.find((m) => String(m.id) === lineId)
+  const fromExact = coerceNonEmptyId(exact?.promoId)
+  if (fromExact) return fromExact
+  const dash = lineId.indexOf('-')
+  if (dash > 0) {
+    const head = lineId.slice(0, dash)
+    const m2 = menus.find((m) => String(m.id) === head)
+    const fromHead = coerceNonEmptyId(m2?.promoId)
+    if (fromHead) return fromHead
+  }
+  return null
+}
+
+function normalizePromoLookupText(v: unknown): string {
+  return String(v ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[\[\]()]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s\-_/]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * 일부 구형/특수 주문은 promoId 없이 이름만 남는다.
+ * 이름·코드로 카탈로그를 역매칭해 구성 줄을 최대한 복원한다.
+ */
+function pickPromoIdFromItemName(it: Record<string, unknown>, catalog: Map<string, PosPromoWithItems> | undefined): string | null {
+  if (!catalog?.size) return null
+  const nameRaw = String(it.name ?? '').trim()
+  if (!nameRaw) return null
+  const key = normalizePromoLookupText(nameRaw)
+  if (!key) return null
+
+  const candidates: { id: string; score: number }[] = []
+  for (const p of catalog.values()) {
+    const pid = String(p.id ?? '').trim()
+    if (!pid) continue
+    const pname = normalizePromoLookupText(p.name)
+    const pcode = normalizePromoLookupText(p.code)
+    if (!pname && !pcode) continue
+    let score = 0
+    if (pname && key === pname) score = Math.max(score, 100)
+    if (pcode && key === pcode) score = Math.max(score, 95)
+    if (pname && key.includes(pname)) score = Math.max(score, 80)
+    if (pcode && key.includes(pcode)) score = Math.max(score, 75)
+    if (score > 0) candidates.push({ id: pid, score })
+  }
+  if (candidates.length === 0) return null
+  candidates.sort((a, b) => b.score - a.score || b.id.length - a.id.length)
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score && candidates[0].id !== candidates[1].id) {
+    return null
+  }
+  return candidates[0].id
+}
+
+function normalizeReceiptPromoLines(raw: unknown[]): ReceiptPromoLine[] {
+  return raw.map((x) => {
+    const o = x as Record<string, unknown>
+    const opt = o.optionId ?? o.option_id
+    const optStr = opt != null && String(opt).trim() ? String(opt).trim() : null
+    return {
+      menuId: String(o.menuId ?? o.menu_id ?? ''),
+      optionId: optStr,
+      quantity: Math.max(1, Number(o.quantity ?? o.qty ?? 1) || 1),
+    }
+  })
+}
+
+function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWithItems> | undefined): ReceiptPromoLine[] | null {
+  if (!catalog?.size) return null
+  const p = catalog.get(promoId)
+  const items = p?.items
+  if (!Array.isArray(items) || items.length === 0) return null
+  return items.map((x) => ({
+    menuId: String(x.menuId ?? ''),
+    optionId: x.optionId != null && String(x.optionId).trim() ? String(x.optionId) : null,
+    quantity: Math.max(1, Number(x.quantity) || 1),
   }))
 }
 
+function resolvePromoItemsForReceiptLine(
+  row: Record<string, unknown>,
+  catalog: Map<string, PosPromoWithItems> | undefined,
+  menus: PosMenu[] | undefined
+): ReceiptPromoLine[] | null {
+  const direct = pickPromoItemsFromOrderLine(row)
+  if (direct && direct.length > 0) return normalizeReceiptPromoLines(direct)
+  if (!catalog?.size && !menus?.length) return null
+
+  const tryPid = (pid: string | null): ReceiptPromoLine[] | null => {
+    if (!pid || !catalog?.size) return null
+    return promoLinesFromCatalog(pid, catalog)
+  }
+
+  return (
+    tryPid(pickPromoIdFromOrderLine(row)) ??
+    tryPid(pickPromoIdFromCartLineId(String(row.id ?? ''), catalog)) ??
+    tryPid(pickPromoIdFromPromoCode(row, catalog)) ??
+    tryPid(pickPromoIdFromLinkedMenu(row, menus)) ??
+    tryPid(pickPromoIdFromItemName(row, catalog))
+  )
+}
+
+function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLineOptions) {
+  const catalog = opts?.promoCatalogById
+  const menus = opts?.menus
+  return (order.items || []).map((it) => {
+    const row = it as unknown as Record<string, unknown>
+    const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
+    return {
+      id: String(it.id ?? ''),
+      name: String(it.name ?? ''),
+      price: Number(it.price ?? 0),
+      qty: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
+      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...(promo && promo.length > 0 ? { promoItems: promo } : {}),
+    }
+  })
+}
+
+/**
+ * 결제 영수증 HTML 등: 이미 만들어진 `ReceiptModalData.items`에 대해
+ * 주방 슬립과 동일한 기준으로 promoItems 를 보강한다(DB 스냅샷 누락·재조회용).
+ */
+export function enrichReceiptModalItemsForPromoDisplay(
+  items: ReceiptModalData['items'],
+  opts?: PosOrderReceiptLineOptions
+): ReceiptModalData['items'] {
+  const catalog = opts?.promoCatalogById
+  const menus = opts?.menus
+  if (!items?.length || (!catalog?.size && !menus?.length)) return items
+  return items.map((it) => {
+    const existing = it.promoItems
+    if (Array.isArray(existing) && existing.length > 0) return it
+    const row = it as unknown as Record<string, unknown>
+    const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
+    if (!promo || promo.length === 0) return it
+    return { ...it, promoItems: promo }
+  })
+}
+
 /** 영수증 관리 등: DB에 저장된 합계·부가세로 재인쇄 (당시 요금 재계산 없음) */
-export function receiptModalDataFromPosOrderReprint(order: PosOrder): ReceiptModalData {
+export function receiptModalDataFromPosOrderReprint(order: PosOrder, opts?: PosOrderReceiptLineOptions): ReceiptModalData {
   const v = Number(order.vat ?? 0) || 0
   return {
     orderNo: order.orderNo ?? '',
-    items: posOrderItemsToReceiptLines(order),
+    items: posOrderItemsToReceiptLines(order, opts),
     subtotal: order.subtotal ?? 0,
     discountAmt: order.discountAmt ?? 0,
     deliveryFee: order.deliveryFee,
@@ -70,7 +264,8 @@ export function receiptModalDataFromPosOrderReprint(order: PosOrder): ReceiptMod
 /** 결제 완료 영수증 모달용 데이터 (메인 포스 Realtime·폴링에서 인쇄) */
 export function receiptModalDataFromPosOrderForPayment(
   order: PosOrder,
-  adjustments: PosPricingAdjustments
+  adjustments: PosPricingAdjustments,
+  opts?: PosOrderReceiptLineOptions
 ): ReceiptModalData {
   const pricing = computePosPricing({
     subtotal: order.subtotal ?? 0,
@@ -82,7 +277,7 @@ export function receiptModalDataFromPosOrderForPayment(
   })
   return {
     orderNo: order.orderNo ?? '',
-    items: posOrderItemsToReceiptLines(order),
+    items: posOrderItemsToReceiptLines(order, opts),
     subtotal: order.subtotal ?? 0,
     discountAmt: order.discountAmt ?? 0,
     deliveryFee: order.deliveryFee,

@@ -28,3 +28,16 @@ export function shouldForceSimplePaymentReceiptForStore(storeCode: string | null
   if (s.includes('เอกมัย')) return true
   return false
 }
+
+/**
+ * 에까마이: 일부 드라이버에서 simple 모드가 오른쪽으로 쏠려 보이는 케이스 보정.
+ * (기본 레이아웃은 유지하고 simple 경로에서만 좌우 인셋을 타이트하게 재지정)
+ */
+export function shouldUseTightSimpleReceiptInsetForStore(storeCode: string | null | undefined): boolean {
+  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
+  if (!s0) return false
+  const s = s0.toLowerCase()
+  if (s.includes('ekkamai') || s.includes('ekamai') || s.includes('eakkamai')) return true
+  if (s.includes('เอกมัย')) return true
+  return false
+}

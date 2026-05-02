@@ -1039,8 +1039,23 @@ export default function PosPrintersPage() {
   }
 
   const previewData = React.useMemo(() => {
-    const items = [
+    const items: {
+      name: string
+      qty: number
+      price: number
+      /** 손님 영수증: 프로모션 세트 구성 줄(미리보기 전용; 실제 POS는 주문의 promoItems) */
+      promoLines?: string[]
+    }[] = [
       { name: tr("posPrinterPreviewSampleMenu1", "예시: 후라이드 치킨"), qty: 1, price: 199 },
+      {
+        name: tr("posPrinterPreviewSamplePromoSet", "예시: 프로모션 세트 (MEGA 1)"),
+        qty: 1,
+        price: 306,
+        promoLines: [
+          tr("posPrinterPreviewSamplePromoSub1", "예시: 구성 메뉴 A x1"),
+          tr("posPrinterPreviewSamplePromoSub2", "예시: 구성 메뉴 B x1"),
+        ],
+      },
       { name: tr("posPrinterPreviewSampleMenu2", "예시: 콜라 1.25L"), qty: 1, price: 45 },
     ]
     const subtotal = items.reduce((sum, it) => sum + it.qty * it.price, 0)
@@ -1142,18 +1157,20 @@ export default function PosPrintersPage() {
       : receiptMembershipQrImageUrl
     const receiptBarcodeUrl = receiptBarcode ? buildCode128BarcodeUrl(previewData.orderNo) : ""
     const lines = previewData.items
-      .map(
-        (it, idx) => {
-          const itemBarcodeUrl = itemBarcode ? buildCode128BarcodeUrl(`pv${idx}`) : ""
-          return `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${(
-            it.qty * it.price
-          ).toLocaleString()}</span></div>${
-            itemBarcodeUrl
-              ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${escapeHtml(itemBarcodeUrl)}" alt="Item barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>`
-              : ""
-          }`
-        }
-      )
+      .map((it, idx) => {
+        const itemBarcodeUrl = itemBarcode ? buildCode128BarcodeUrl(`pv${idx}`) : ""
+        const promoHtml =
+          Array.isArray(it.promoLines) && it.promoLines.length > 0
+            ? `<div class="receipt-line-note">${it.promoLines.map((l) => `- ${escapeHtml(l)}`).join("<br/>")}</div>`
+            : ""
+        return `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${(
+          it.qty * it.price
+        ).toLocaleString()}</span></div>${promoHtml}${
+          itemBarcodeUrl
+            ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${escapeHtml(itemBarcodeUrl)}" alt="Item barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>`
+            : ""
+        }`
+      })
       .join("")
     return `
       <!DOCTYPE html>
@@ -1183,6 +1200,7 @@ export default function PosPrintersPage() {
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; font-size: 11px; font-weight: 700; padding: 0 0 4px 0; border-bottom: 1px solid #111; box-sizing: border-box; }
             .receipt-item-head > span:last-child { font-size: 10px; }
+            .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 1.5mm; margin: -2px 0 4px 0; line-height: 1.35; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
             .receipt-muted { color: #000; }
             .paid-stamp-wrap { text-align: center; margin: 10px 0; }
@@ -2268,16 +2286,26 @@ export default function PosPrintersPage() {
                     <span>{tr("posMenuName", "품목")}</span>
                     <span>{tr("amount", "금액")}</span>
                   </div>
-                  {previewData.items.map((it) => (
-                    <div key={it.name} className="my-1">
+                  {previewData.items.map((it, idx) => (
+                    <div key={`pv-receipt-${idx}`} className="my-1">
                       <div className="flex items-center justify-between">
                         <span>{it.qty}x {it.name}</span>
                         <span>{(it.qty * it.price).toLocaleString()}</span>
                       </div>
+                      {Array.isArray(it.promoLines) && it.promoLines.length > 0
+                        ? it.promoLines.map((line, li) => (
+                            <div
+                              key={`pv-receipt-${idx}-promo-${li}`}
+                              className="ml-2 mt-0.5 text-[10px] font-semibold leading-snug text-neutral-700"
+                            >
+                              · {line}
+                            </div>
+                          ))
+                        : null}
                       {itemBarcode ? (
                         <div className="text-center mt-1">
                           <img
-                            src={buildCode128BarcodeUrl(`pv-${it.name}`)}
+                            src={buildCode128BarcodeUrl(`pv-${idx}`)}
                             alt="Item barcode"
                             className="mx-auto h-auto max-w-full"
                             style={{ width: "66mm" }}

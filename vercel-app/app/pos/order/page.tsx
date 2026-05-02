@@ -911,7 +911,20 @@ export default function PosOrderPage() {
         const note = String(it.note ?? "").trim()
         if (!id) continue
         const i = next.findIndex((x) => x.id === id)
-        const item = { id, name, price, qty, ...(note && { note }), ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }), ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }) }
+        const item = {
+          id,
+          name,
+          price,
+          qty,
+          ...(note && { note }),
+          ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
+          ...(it.promoId
+            ? {
+                promoId: it.promoId,
+                ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
+              }
+            : {}),
+        }
         if (i >= 0) {
           next[i] = { ...next[i], qty: next[i].qty + qty }
         } else {
@@ -1061,12 +1074,13 @@ export default function PosOrderPage() {
           note: it.note,
           orderType,
           ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
-          ...(it.promoId &&
-            it.promoItems && {
-              promoId: it.promoId,
-              promoCode: it.promoCode,
-              promoItems: it.promoItems,
-            }),
+          ...(it.promoId
+            ? {
+                promoId: it.promoId,
+                ...(it.promoCode ? { promoCode: it.promoCode } : {}),
+                ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
+              }
+            : {}),
         })),
       })
       if (res.success) {

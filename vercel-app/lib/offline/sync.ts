@@ -243,7 +243,10 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
         try {
           const oid = Number(parsedBody?.orderId)
           if (Number.isFinite(oid) && oid > 0) {
-            registerQueuedSavePosOrderSyncedServerId(oid)
+            registerQueuedSavePosOrderSyncedServerId(
+              oid,
+              String(item.metadata?.localOrderNo ?? '')
+            )
           }
         } catch {
           /* ignore */
