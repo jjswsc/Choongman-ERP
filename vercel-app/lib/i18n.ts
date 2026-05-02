@@ -20970,8 +20970,10 @@ orderItemQty: 'จำนวน',
     posLineItemSelectFirst:
       'แตะชื่อเมนูเพื่อเลือก แล้วแตะ "ยกเลิกบางส่วน" แตะส่วนอื่นของแถวเพื่อยกเลิกการเลือก',
     posOrderLineExpandHint: 'ชื่อเต็มและรายละเอียด',
-    posKitchenPartialReprintBanner: 'อัปเดตหลังยกเลิกบางรายการ (ออเดอร์ปัจจุบัน)',
-    posKitchenFullCancelBanner: 'ยกเลิกออเดอร์ทั้งหมด — แจ้งครัว',
+    posKitchenPartialReprintBanner:
+      'อัปเดตหลังยกเลิกบางรายการ (ออเดอร์ปัจจุบัน)\nORDER UPDATED — CANCELLED LINES ABOVE; DO NOT PREPARE',
+    posKitchenFullCancelBanner:
+      'ยกเลิกออเดอร์ทั้งหมด — แจ้งครัว\nCANCEL ALL ORDERS — NOTIFY KITCHEN (DO NOT COOK)',
     posPaymentAlipay: 'Alipay',
     posPaymentLinePay: 'LINE Pay',
     posPaymentOtherEtc: 'Other (enter amount)',

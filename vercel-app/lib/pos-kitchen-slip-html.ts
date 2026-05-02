@@ -93,6 +93,20 @@ function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
 `
 }
 
+const KITCHEN_SLIP_CHICKEN_PART_TRANSLATIONS: ReadonlyArray<[RegExp, string]> = [
+  [/(ไม่มี\s*กระดูก|ไม่มีกระดูก|ไร้กระดูก)/g, 'Boneless'],
+  [/(โดบา|ปีกบน)/g, 'Drumette'],
+  [/(joint\s*wing|จอยท์วิง|ปีกกลาง|ปีกล่าง|ปีกปลาย|ปีก)/gi, 'Joint wing'],
+]
+
+export function localizeKitchenSlipLineNote(rawNote: string): string {
+  let note = String(rawNote ?? '')
+  for (const [pattern, english] of KITCHEN_SLIP_CHICKEN_PART_TRANSLATIONS) {
+    note = note.replace(pattern, english)
+  }
+  return note
+}
+
 /** 주방전표 한 줄: 수량 × 메뉴명 + (선택) 줄 메모. `cancelled`면 수량 앞에 `-`로 취소 표기 */
 export function formatKitchenSlipItemRowHtml(
   it: { name: string; qty: number; note?: string | null | undefined; cancelled?: boolean },
@@ -103,7 +117,9 @@ export function formatKitchenSlipItemRowHtml(
   const showLineNotes = opts?.showLineNotes !== false
   const cancelled = Boolean(it.cancelled)
   const note = showLineNotes
-    ? normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+    ? localizeKitchenSlipLineNote(
+        normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
+      )
     : ''
   const rowOpen = cancelled ? '<div class="k-row k-row-cancelled">' : '<div class="k-row">'
   const main =

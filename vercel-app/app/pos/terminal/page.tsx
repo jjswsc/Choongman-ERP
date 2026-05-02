@@ -2258,7 +2258,7 @@ export default function PosTerminalPage() {
             'Order fully cancelled'
           ).trim()
           const fullHead =
-            '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000">' +
+            '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000;white-space:pre-line">' +
             escapeHtml(fullBannerText) +
             '</div>'
           const printOne = (idx: number) => {
@@ -2451,7 +2451,7 @@ export default function PosTerminalPage() {
             'Order updated (partial cancel)'
           ).trim()
           const partialHead =
-            '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000">' +
+            '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000;white-space:pre-line">' +
             escapeHtml(partialBannerText) +
             '</div>'
           const printOne = (idx: number) => {
