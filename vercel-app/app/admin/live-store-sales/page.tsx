@@ -30,7 +30,6 @@ export default function AdminLiveStoreSalesPage() {
     if (isOfficeSelector && viewStore) return viewStore.trim()
     return (auth?.store || "").trim()
   }, [isOfficeSelector, viewStore, auth?.store])
-
   const {
     stores,
     currentStore,
@@ -39,6 +38,10 @@ export default function AdminLiveStoreSalesPage() {
     loadingTables,
     refetchStores,
   } = usePosStore()
+  const selectedStoreLabel = useMemo(() => {
+    if (effectiveStoreCode === "All") return t("store_all_stores")
+    return currentStoreId || effectiveStoreCode || "—"
+  }, [effectiveStoreCode, currentStoreId, t])
 
   useEffect(() => {
     if (!effectiveStoreCode) return
@@ -58,7 +61,7 @@ export default function AdminLiveStoreSalesPage() {
               <h1 className="text-xl font-bold tracking-tight">{t("adminLiveStoreSalesTitle")}</h1>
             </div>
             <p className="text-xs text-muted-foreground">
-              {currentStoreId || effectiveStoreCode || "—"}
+              {selectedStoreLabel}
             </p>
             <HelpSumHowBlocks helpSumKey={LIVE_STORE_SALES_HELP_SUM} className="mt-2 max-w-xl" compact />
           </div>
@@ -71,6 +74,7 @@ export default function AdminLiveStoreSalesPage() {
 
         <StoreSalesRealtimeView
           effectiveStoreCode={effectiveStoreCode}
+          stores={stores}
           loadingTables={loadingTables}
           refetchStores={refetchStores}
           currentStore={currentStore}

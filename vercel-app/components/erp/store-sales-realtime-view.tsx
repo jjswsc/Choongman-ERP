@@ -9,7 +9,25 @@ import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from "@/lib/supaba
 import type { Store } from "@/lib/pos-types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn, formatBahtNum } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+
+const ALL_STORE_VALUE = "All"
+
+type TodaySalesSummary = {
+  completedCount: number
+  completedTotal: number
+  completedCash: number
+  pendingCount: number
+}
+
+function formatBahtInt(n: number | null | undefined): string {
+  const v = Number(n ?? 0)
+  if (!Number.isFinite(v)) return "0"
+  return Math.round(v).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+}
 
 function rowMatchesPosStore(row: Record<string, unknown>, storeId: string): boolean {
   const rowStore = String(row.store_code ?? "").trim()
@@ -26,6 +44,7 @@ export type StoreSalesRefetchOptions = { scope?: "all" | "current"; storeCode?: 
 
 export type StoreSalesRealtimeViewProps = {
   effectiveStoreCode: string
+  stores: Store[]
   loadingTables: boolean
   refetchStores: (options?: StoreSalesRefetchOptions) => void
   currentStore: Store | undefined
@@ -43,6 +62,7 @@ export type StoreSalesRealtimeViewProps = {
  */
 export function StoreSalesRealtimeView({
   effectiveStoreCode,
+  stores,
   loadingTables,
   refetchStores,
   currentStore,
@@ -53,28 +73,70 @@ export function StoreSalesRealtimeView({
 }: StoreSalesRealtimeViewProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const isAllStoresSelected = effectiveStoreCode === ALL_STORE_VALUE
 
-  const [todaySales, setTodaySales] = useState<{
-    completedCount: number
-    completedTotal: number
-    completedCash: number
-    pendingCount: number
-  } | null>(null)
+  const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
+  const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
 
   const loadTodaySales = useCallback(() => {
     if (!effectiveStoreCode) return
-    getPosTodaySales({ storeCode: effectiveStoreCode })
-      .then(setTodaySales)
-      .catch(() => setTodaySales(null))
-  }, [effectiveStoreCode])
+    if (!isAllStoresSelected) {
+      getPosTodaySales({ storeCode: effectiveStoreCode })
+        .then((data) => {
+          setTodaySales(data)
+          setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
+        })
+        .catch(() => setTodaySales(null))
+      return
+    }
+    const storeCodes = stores
+      .map((store) => String(store.id || "").trim())
+      .filter(Boolean)
+    if (!storeCodes.length) {
+      setTodaySales({ completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 })
+      setStoreSalesMap({})
+      return
+    }
+    Promise.all(
+      storeCodes.map((code) =>
+        getPosTodaySales({ storeCode: code }).then(
+          (data) => [code, data] as const,
+          () =>
+            [
+              code,
+              { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 },
+            ] as const
+        )
+      )
+    )
+      .then((rows) => {
+        const nextMap: Record<string, TodaySalesSummary> = {}
+        const total = { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 }
+        for (const [code, data] of rows) {
+          nextMap[code] = data
+          total.completedCount += Number(data.completedCount ?? 0)
+          total.completedTotal += Number(data.completedTotal ?? 0)
+          total.completedCash += Number(data.completedCash ?? 0)
+          total.pendingCount += Number(data.pendingCount ?? 0)
+        }
+        setStoreSalesMap(nextMap)
+        setTodaySales(total)
+      })
+      .catch(() => {
+        setStoreSalesMap({})
+        setTodaySales(null)
+      })
+  }, [effectiveStoreCode, isAllStoresSelected, stores])
 
   const refreshRealtimeSection = useCallback(() => {
     loadTodaySales()
-    if (effectiveStoreCode) {
+    if (effectiveStoreCode && !isAllStoresSelected) {
       void refetchStores({ storeCode: effectiveStoreCode })
+      return
     }
-  }, [loadTodaySales, refetchStores, effectiveStoreCode])
+    void refetchStores({ scope: "all" })
+  }, [loadTodaySales, refetchStores, effectiveStoreCode, isAllStoresSelected])
 
   useEffect(() => {
     if (!effectiveStoreCode) return
@@ -87,14 +149,24 @@ export function StoreSalesRealtimeView({
     if (!effectiveStoreCode) return
     const onInsert = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new
-      if (!row || !rowMatchesPosStore(row, effectiveStoreCode)) return
-      void refetchStores({ storeCode: effectiveStoreCode })
+      if (!row) return
+      if (!isAllStoresSelected && !rowMatchesPosStore(row, effectiveStoreCode)) return
+      if (isAllStoresSelected) {
+        void refetchStores({ scope: "all" })
+      } else {
+        void refetchStores({ storeCode: effectiveStoreCode })
+      }
       loadTodaySales()
     }
     const onUpdate = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new
-      if (!row || !rowMatchesPosStore(row, effectiveStoreCode)) return
-      void refetchStores({ storeCode: effectiveStoreCode })
+      if (!row) return
+      if (!isAllStoresSelected && !rowMatchesPosStore(row, effectiveStoreCode)) return
+      if (isAllStoresSelected) {
+        void refetchStores({ scope: "all" })
+      } else {
+        void refetchStores({ storeCode: effectiveStoreCode })
+      }
       loadTodaySales()
     }
     const ch1 = subscribePosOrdersInsert(onInsert)
@@ -103,7 +175,7 @@ export function StoreSalesRealtimeView({
       ch1?.unsubscribe()
       ch2?.unsubscribe()
     }
-  }, [effectiveStoreCode, refetchStores, loadTodaySales])
+  }, [effectiveStoreCode, refetchStores, loadTodaySales, isAllStoresSelected])
 
   const sortedTables = useMemo(() => {
     const tables = currentStore?.tables || []
@@ -122,6 +194,37 @@ export function StoreSalesRealtimeView({
       return String(a.name || "").localeCompare(String(b.name || ""), "ko")
     })
   }, [currentStore?.tables, tableSortMode])
+  const byStoreRows = useMemo(() => {
+    return stores
+      .map((store) => {
+        const paid = Number(storeSalesMap[store.id]?.completedTotal ?? 0)
+        const tableTotal = Number(
+          (store.tables || []).reduce((acc, tbl) => acc + Number(tbl.order?.total ?? 0), 0)
+        )
+        return {
+          storeId: store.id,
+          paid,
+          tableTotal,
+        }
+      })
+      .sort((a, b) => {
+        if (b.paid !== a.paid) return b.paid - a.paid
+        if (b.tableTotal !== a.tableTotal) return b.tableTotal - a.tableTotal
+        return String(a.storeId || "").localeCompare(String(b.storeId || ""), "ko")
+      })
+  }, [stores, storeSalesMap])
+  const byStoreTotal = useMemo(
+    () =>
+      byStoreRows.reduce(
+        (acc, row) => {
+          acc.paid += row.paid
+          acc.tableTotal += row.tableTotal
+          return acc
+        },
+        { paid: 0, tableTotal: 0 }
+      ),
+    [byStoreRows]
+  )
 
   const handleManualRefresh = useCallback(() => {
     refreshRealtimeSection()
@@ -185,7 +288,7 @@ export function StoreSalesRealtimeView({
       <section className="rounded-xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
         <p className="text-xs font-medium text-muted-foreground">{t("mobileStoreSalesTodayTotal")}</p>
         <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
-          {todaySales != null ? `${formatBahtNum(todaySales.completedTotal)} ฿` : "—"}
+          {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
         </p>
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-background/60 px-2 py-2">
@@ -199,77 +302,121 @@ export function StoreSalesRealtimeView({
           <div className="rounded-lg bg-background/60 px-2 py-2">
             <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCashTotal")}</p>
             <p className="text-sm font-semibold tabular-nums leading-snug">
-              {todaySales != null ? `${formatBahtNum(todaySales.completedCash)} ฿` : "—"}
+              {todaySales != null ? formatBahtInt(todaySales.completedCash) : "—"}
             </p>
           </div>
         </div>
       </section>
 
-      <section>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            {t("mobileStoreSalesTableHeading")}
-            {loadingTables ? (
-              <span className="text-xs font-normal text-muted-foreground">{t("loading")}</span>
-            ) : null}
-          </h2>
-          <div className="flex items-center gap-1 rounded-md border border-border bg-card p-1">
-            <button
-              type="button"
-              onClick={() => setTableSortMode("amount")}
-              className={cn(
-                "rounded px-2 py-1 text-[11px] font-medium",
-                tableSortMode === "amount"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {t("mobileStoreSalesSortByAmount")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTableSortMode("guests")}
-              className={cn(
-                "rounded px-2 py-1 text-[11px] font-medium",
-                tableSortMode === "guests"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {t("mobileStoreSalesSortByGuests")}
-            </button>
+      {isAllStoresSelected ? (
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              {t("mobileStoreSalesByStoreHeading")}
+              {loadingTables ? (
+                <span className="text-xs font-normal text-muted-foreground">{t("loading")}</span>
+              ) : null}
+            </h2>
           </div>
-        </div>
-        {sortedTables.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-            {t("mobileStoreSalesTableEmpty")}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {sortedTables.map((tbl) => {
-              const guests = Number(tbl.order?.guestCount ?? 0)
-              const amount = Number(tbl.order?.total ?? 0)
-              return (
-                <li
-                  key={tbl.id || tbl.name}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-foreground">{tbl.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("mobileStoreSalesGuests")}: {guests}
+          {byStoreRows.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+              {t("mobileStoreSalesByStoreEmpty")}
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+              <div className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
+                <p>{t("mobileStoreSalesStoreName")}</p>
+                <p className="text-right">{t("mobileStoreSalesPaidAmount")}</p>
+                <p className="text-right">{t("mobileStoreSalesTableTotalAmount")}</p>
+              </div>
+              <div className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 border-b border-border/60 bg-primary/5 px-3 py-2 text-xs font-semibold">
+                <p>{t("mobileStoreSalesSummaryTotal")}</p>
+                <p className="text-right tabular-nums text-orange-600 dark:text-orange-400">
+                  {formatBahtInt(byStoreTotal.paid)}
+                </p>
+                <p className="text-right tabular-nums text-foreground">{formatBahtInt(byStoreTotal.tableTotal)}</p>
+              </div>
+              <ul className="max-h-[52vh] divide-y divide-border/60 overflow-auto">
+                {byStoreRows.map((row) => (
+                  <li key={row.storeId} className="grid grid-cols-[1.5fr_1fr_1fr] gap-2 px-3 py-2 text-sm">
+                    <p className="truncate font-medium text-foreground">{row.storeId}</p>
+                    <p className="text-right tabular-nums font-semibold text-orange-600 dark:text-orange-400">
+                      {formatBahtInt(row.paid)}
                     </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesOrderAmt")}</p>
-                    <p className="text-sm font-bold tabular-nums text-foreground">{formatBahtNum(amount)} ฿</p>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+                    <p className="text-right tabular-nums font-medium text-foreground">{formatBahtInt(row.tableTotal)}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              {t("mobileStoreSalesTableHeading")}
+              {loadingTables ? (
+                <span className="text-xs font-normal text-muted-foreground">{t("loading")}</span>
+              ) : null}
+            </h2>
+            <div className="flex items-center gap-1 rounded-md border border-border bg-card p-1">
+              <button
+                type="button"
+                onClick={() => setTableSortMode("amount")}
+                className={cn(
+                  "rounded px-2 py-1 text-[11px] font-medium",
+                  tableSortMode === "amount"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t("mobileStoreSalesSortByAmount")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableSortMode("guests")}
+                className={cn(
+                  "rounded px-2 py-1 text-[11px] font-medium",
+                  tableSortMode === "guests"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t("mobileStoreSalesSortByGuests")}
+              </button>
+            </div>
+          </div>
+          {sortedTables.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+              {t("mobileStoreSalesTableEmpty")}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {sortedTables.map((tbl) => {
+                const guests = Number(tbl.order?.guestCount ?? 0)
+                const amount = Number(tbl.order?.total ?? 0)
+                return (
+                  <li
+                    key={tbl.id || tbl.name}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground">{tbl.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t("mobileStoreSalesGuests")}: {guests}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesOrderAmt")}</p>
+                      <p className="text-sm font-bold tabular-nums text-foreground">{formatBahtInt(amount)}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   )
 }

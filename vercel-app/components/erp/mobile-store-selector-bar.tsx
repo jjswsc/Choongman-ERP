@@ -16,6 +16,8 @@ import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 
+const ALL_STORE_VALUE = "All"
+
 /**
  * 오피스 직원(관리자 포함)에게 상단 매장 선택 바 표시.
  * 매장 직원은 이 컴포넌트가 아무것도 렌더링하지 않음.
@@ -37,15 +39,15 @@ export function MobileStoreSelectorBar() {
     const loggedStore = (auth?.store || "").trim()
     const isOfficeStoreLogged = loggedStore && (loggedStore === "CM Office" || loggedStore === "Office" || loggedStore === "본사" || loggedStore.toLowerCase().includes("office"))
     if (isOfficeStoreLogged && loggedStore && !branches.includes(loggedStore)) {
-      return [loggedStore, ...branches]
+      return [ALL_STORE_VALUE, loggedStore, ...branches]
     }
-    return branches
+    return [ALL_STORE_VALUE, ...branches]
   }, [stores, auth?.store])
 
-  // 목록 있으면 선택 없을 때 첫 매장을 기본값으로
+  // 목록 있으면 선택 없을 때 "전체 매장"을 기본값으로
   React.useEffect(() => {
     if (storeOptions.length > 0 && !viewStore) {
-      setViewStore(storeOptions[0])
+      setViewStore(ALL_STORE_VALUE)
     }
   }, [storeOptions, viewStore, setViewStore])
 
@@ -56,7 +58,7 @@ export function MobileStoreSelectorBar() {
     <div className="sticky top-0 z-40 flex items-center gap-2 border-b bg-muted/50 px-4 py-2.5">
       <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
       <Select
-        value={viewStore ?? storeOptions[0]}
+        value={viewStore ?? ALL_STORE_VALUE}
         onValueChange={setViewStore}
       >
         <SelectTrigger className="h-9 flex-1 min-w-0 max-w-[200px] text-sm">
@@ -65,7 +67,7 @@ export function MobileStoreSelectorBar() {
         <SelectContent>
           {storeOptions.map((s) => (
             <SelectItem key={s} value={s}>
-              {s}
+              {s === ALL_STORE_VALUE ? t("store_all_stores") : s}
             </SelectItem>
           ))}
         </SelectContent>

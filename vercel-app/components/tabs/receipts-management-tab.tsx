@@ -1054,20 +1054,22 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4">
-          <div className="mb-4 flex min-w-0 flex-wrap items-center gap-2">
-            <Input
-              type="date"
-              value={startStr}
-              onChange={(e) => setStartStr(e.target.value)}
-              className="h-9 w-[140px]"
-            />
-            <span className="text-slate-500">~</span>
-            <Input
-              type="date"
-              value={endStr}
-              onChange={(e) => setEndStr(e.target.value)}
-              className="h-9 w-[140px]"
-            />
+          <div className="mb-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => setStartStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-slate-500 sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => setEndStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <Button
               variant={isToday ? 'secondary' : 'outline'}
               size="sm"

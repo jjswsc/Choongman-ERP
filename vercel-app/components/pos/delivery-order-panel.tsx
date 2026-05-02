@@ -48,6 +48,13 @@ export interface DeliveryOrderPanelProps {
   menus?: PosMenu[]
   deliveryApps?: PosDeliveryApp[]
   onPackaged?: () => void
+  /** pending 주문 수락(รับออเดอร์) 직후 상위에서 후속 처리(예: 자동 인쇄) */
+  onAccepted?: (params: {
+    orderId: number
+    storeCode?: string
+    memo?: string
+    deliveryAppCode?: string
+  }) => void | Promise<void>
   onPay?: () => void
   onOpenTaxInvoice?: () => void
   /** 주문 취소 시 */
@@ -67,6 +74,7 @@ export function DeliveryOrderPanel({
   menus: menusFromProps = [],
   deliveryApps: _deliveryApps = [],
   onPackaged,
+  onAccepted,
   onPay,
   onOpenTaxInvoice,
   onCancel,
@@ -340,6 +348,12 @@ export function DeliveryOrderPanel({
         if (!res.success) {
           throw new Error(res.message || (t('processFail') || '처리 실패'))
         }
+        await onAccepted?.({
+          orderId: id,
+          storeCode,
+          memo: order.memo,
+          deliveryAppCode: order.deliveryAppCode,
+        })
       }
       onPackaged?.()
     } catch (e) {

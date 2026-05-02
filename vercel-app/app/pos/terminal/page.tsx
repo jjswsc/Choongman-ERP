@@ -1296,6 +1296,216 @@ export default function PosTerminalPage() {
     playFallbackWithWebAudio()
   }, [])
 
+  const logPosPrintDebug = useCallback(
+    (event: string, detail?: Record<string, unknown>) => {
+      if (!isPosPrintDebugEnabledInBrowser()) return
+      try {
+        console.info('[POS_PRINT_DEBUG]', event, {
+          storeCode: String(currentStoreId ?? ''),
+          isMainPosDevice,
+          ...(detail || {}),
+        })
+      } catch {
+        /* ignore console errors */
+      }
+    },
+    [currentStoreId, isMainPosDevice]
+  )
+
+  const runAutoPrintForAcceptedDeliveryOrder = useCallback(
+    async (params: {
+      orderId: number
+      storeCode?: string
+      memo?: string
+      deliveryAppCode?: string
+    }) => {
+      const orderId = Number(params.orderId)
+      if (!Number.isFinite(orderId) || orderId <= 0) return
+      if (!isMainPosDevice || (!autoPrintReceiptOnOrder && !autoPrintKitchenSlipOnOrder)) {
+        logPosPrintDebug('accept_flow_skip_not_main_or_autoprint_off', {
+          orderId,
+          autoPrintReceiptOnOrder,
+          autoPrintKitchenSlipOnOrder,
+        })
+        return
+      }
+      let list = await getPosOrders({
+        orderId,
+        storeCode: String(params.storeCode || currentStoreId || '').trim() || undefined,
+        strictStore: true,
+      })
+      if (!list.length) {
+        list = await getPosOrders({
+          orderId,
+          storeCode: String(currentStoreId || '').trim() || undefined,
+          strictStore: true,
+        })
+      }
+      const order = list[0]
+      if (!order?.items?.length) {
+        logPosPrintDebug('accept_flow_skip_empty_items', { orderId })
+        return
+      }
+      const items = (order.items || []).map((it) => {
+        const note = String(it.note ?? '').trim()
+        const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+        const displayName = resolvePosOrderItemMenuDisplayName(
+          {
+            id: String(it.id ?? ''),
+            name: String(it.name ?? ''),
+            menuId,
+          },
+          menus
+        )
+        const pit = it as {
+          promoId?: string
+          promo_id?: string
+          promoCode?: string
+          promo_code?: string
+        }
+        const promoId = String(pit.promoId ?? pit.promo_id ?? '').trim()
+        const promoCode = String(pit.promoCode ?? pit.promo_code ?? '').trim()
+        return {
+          id: String(it.id ?? ''),
+          name: displayName,
+          price: Number(it.price ?? 0),
+          qty: Number(it.qty ?? 1),
+          ...(menuId ? { menuId } : {}),
+          ...(note ? { note } : {}),
+          ...(promoId ? { promoId } : {}),
+          ...(promoCode ? { promoCode } : {}),
+          ...(Array.isArray(
+            (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] })
+              .promoItems
+          )
+            ? {
+                promoItems: enrichPromoItemsWithOptionName(
+                  (it as {
+                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
+                  }).promoItems
+                ),
+              }
+            : {}),
+        }
+      })
+      const runKitchenForAcceptedOrder = () => {
+        if (!autoPrintKitchenSlipOnOrder) return
+        if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
+        void (async () => {
+          try {
+            const effectiveStoreCode = order.storeCode ?? currentStoreId
+            const settings = await getPrinterSettingsForStore(effectiveStoreCode)
+            const kLabels = {
+              unified: t('posKitchenOrder') || '주방 주문서',
+              kitchen1: `${t('posKitchen1') || '주방 1'}`,
+              kitchen2: `${t('posKitchen2') || '주방 2'}`,
+              kitchen3: `${t('posKitchen3') || '주방 3'}`,
+            }
+            const slips = buildKitchenSlipGroups(
+              kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
+              buildKitchenSlipGroupOpts(settings, menus, kLabels)
+            )
+            if (!slips.length) return
+            const slipDesign = resolveKitchenSlipDesign(settings)
+            const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
+            const memoLine = kitchenMemo.trim()
+              ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+              : ''
+            const orderTypeLabels: Record<string, string> = {
+              dine_in: t('posOrderTypeDineIn') ?? '매장',
+              takeout: t('posOrderTypeTakeout') ?? '포장',
+              delivery: t('posOrderTypeDelivery') ?? '배달',
+            }
+            const printOne = (idx: number) => {
+              if (idx >= slips.length) return
+              const slip = slips[idx]
+              const tablePart = order.tableName
+                ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+                : ''
+              const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+              const html = buildKitchenSlipDocumentHtml({
+                label: slip.label,
+                orderNo: order.orderNo ?? '',
+                storeCode: effectiveStoreCode,
+                orderTypeLabel,
+                tablePart,
+                dateStr: formatPosDateTimeMedium(new Date(), lang),
+                items: slip.items.map((it) => ({
+                  name: translatePosMenuLineForReceipt(it.name, t),
+                  qty: it.qty,
+                  note: it.note,
+                })),
+                memoLine: memoLine || null,
+                escapeHtml,
+                design: slipDesign,
+                printColorAdjust: 'exact',
+              })
+              printPosHtmlDocument(html, {
+                title: slip.label,
+                printDelayMs: 0,
+                focusIframeBeforePrint: false,
+                printRole: 'kitchen',
+                kitchenStation: slip.station,
+                escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                onPrintUnavailable: () => {
+                  void appAlert(t('posPrintUnavailable'))
+                },
+                onAfterCleanup: () => {
+                  if (idx + 1 < slips.length) {
+                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                  }
+                },
+              })
+            }
+            setTimeout(() => printOne(0), 0)
+          } catch (e) {
+            console.error('Kitchen slip print (accept flow):', e)
+          }
+        })()
+      }
+      if (autoPrintReceiptOnOrder) {
+        await printReceiptNow(
+          {
+            orderNo: order.orderNo ?? '',
+            storeCode: order.storeCode ?? currentStoreId,
+            orderType: order.orderType ?? 'delivery',
+            tableName: order.tableName,
+            memo: order.memo,
+            items,
+            subtotal: order.subtotal ?? 0,
+            discountAmt: order.discountAmt ?? 0,
+            total: order.total ?? 0,
+          },
+          undefined,
+          false,
+          undefined,
+          true,
+          autoPrintKitchenSlipOnOrder ? runKitchenForAcceptedOrder : undefined
+        )
+      } else if (autoPrintKitchenSlipOnOrder) {
+        setTimeout(runKitchenForAcceptedOrder, 180)
+      }
+      logPosPrintDebug('accept_flow_autoprint_done', {
+        orderId,
+        autoPrintReceiptOnOrder,
+        autoPrintKitchenSlipOnOrder,
+      })
+    },
+    [
+      isMainPosDevice,
+      autoPrintReceiptOnOrder,
+      autoPrintKitchenSlipOnOrder,
+      currentStoreId,
+      menus,
+      t,
+      lang,
+      kitchenItemsWithResolvedPromo,
+      logPosPrintDebug,
+      enrichPromoItemsWithOptionName,
+      reserveKitchenAutoPrintKey,
+    ]
+  )
+
   const decideIncomingPendingDeliveryOrder = useCallback(
     async (params: {
       orderId: number
@@ -1769,22 +1979,6 @@ export default function PosTerminalPage() {
       return createdAtMs >= posSessionStartedAtRef.current - MAIN_POS_STARTUP_CATCHUP_WINDOW_MS
     },
     []
-  )
-
-  const logPosPrintDebug = useCallback(
-    (event: string, detail?: Record<string, unknown>) => {
-      if (!isPosPrintDebugEnabledInBrowser()) return
-      try {
-        console.info('[POS_PRINT_DEBUG]', event, {
-          storeCode: String(currentStoreId ?? ''),
-          isMainPosDevice,
-          ...(detail || {}),
-        })
-      } catch {
-        /* ignore console errors */
-      }
-    },
-    [currentStoreId, isMainPosDevice]
   )
 
   const resolveOrderItemDisplayName = useCallback(
@@ -2506,12 +2700,16 @@ export default function PosTerminalPage() {
       const isPendingDelivery =
         String(orderType).trim().toLowerCase() === 'delivery' &&
         String(row.status ?? '').trim().toLowerCase() === 'pending'
-      if (!isPendingDelivery) {
+      const shouldWaitForDeliveryAccept =
+        isPendingDelivery && isApiInboundDeliveryOrderMemo(String(memo ?? ''))
+      if (!shouldWaitForDeliveryAccept) {
         logPosPrintDebug('realtime_insert_autoprint_start', {
           orderId,
           autoPrintReceiptOnOrder,
           autoPrintKitchenSlipOnOrder,
           itemCount: items.length,
+          isPendingDelivery,
+          shouldWaitForDeliveryAccept,
         })
         if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
           printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
@@ -2524,6 +2722,7 @@ export default function PosTerminalPage() {
         logPosPrintDebug('realtime_insert_pending_delivery_wait_accept', {
           orderId,
           status: String(row.status ?? ''),
+          isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(memo ?? '')),
         })
       }
       if (autoPrintReceiptOnPayment) {
@@ -2909,12 +3108,16 @@ export default function PosTerminalPage() {
           const isPendingDelivery =
             String(order.orderType ?? '').trim().toLowerCase() === 'delivery' &&
             String(order.status ?? '').trim().toLowerCase() === 'pending'
-          if (!isPendingDelivery) {
+          const shouldWaitForDeliveryAccept =
+            isPendingDelivery && isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))
+          if (!shouldWaitForDeliveryAccept) {
             logPosPrintDebug('poll_autoprint_start', {
               orderId: oid,
               autoPrintReceiptOnOrder,
               autoPrintKitchenSlipOnOrder,
               itemCount: items.length,
+              isPendingDelivery,
+              shouldWaitForDeliveryAccept,
             })
             if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
               printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
@@ -2927,6 +3130,7 @@ export default function PosTerminalPage() {
             logPosPrintDebug('poll_pending_delivery_wait_accept', {
               orderId: oid,
               status: String(order.status ?? ''),
+              isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(order.memo ?? '')),
             })
           }
         }
@@ -5413,6 +5617,9 @@ export default function PosTerminalPage() {
               deliveryApps={deliveryAppsFromApi}
               order={selectedDeliveryOrder}
               onPackaged={() => refetchStores({ scope: 'all' })}
+              onAccepted={async (params) => {
+                await runAutoPrintForAcceptedDeliveryOrder(params)
+              }}
               onAfterPartialLineRemoved={
                 isPosDemo
                   ? undefined

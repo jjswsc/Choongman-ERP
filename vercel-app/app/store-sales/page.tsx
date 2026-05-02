@@ -42,7 +42,6 @@ function StoreSalesBody() {
     if (isOfficeSelector && viewStore) return viewStore.trim()
     return (auth?.store || "").trim()
   }, [isOfficeSelector, viewStore, auth?.store])
-
   const {
     stores,
     currentStore,
@@ -51,6 +50,10 @@ function StoreSalesBody() {
     loadingTables,
     refetchStores,
   } = usePosStore()
+  const selectedStoreLabel = useMemo(() => {
+    if (effectiveStoreCode === "All") return t("store_all_stores")
+    return effectiveStoreCode || currentStoreId || t("store")
+  }, [effectiveStoreCode, currentStoreId, t])
 
   const allowed = Boolean(auth) && canViewMobileStoreSales(auth?.role || "")
 
@@ -115,7 +118,7 @@ function StoreSalesBody() {
               {t("mobileStoreSalesRealtimeBadge")}
             </Badge>
           </div>
-          <p className="truncate text-xs text-muted-foreground">{currentStoreId || effectiveStoreCode}</p>
+          <p className="truncate text-xs text-muted-foreground">{selectedStoreLabel}</p>
         </div>
         <Button
           type="button"
@@ -143,6 +146,7 @@ function StoreSalesBody() {
           <TabsContent value="realtime" forceMount className="space-y-4 data-[state=inactive]:hidden">
             <StoreSalesRealtimeView
               effectiveStoreCode={effectiveStoreCode}
+              stores={stores}
               loadingTables={loadingTables}
               refetchStores={refetchStores}
               currentStore={currentStore}

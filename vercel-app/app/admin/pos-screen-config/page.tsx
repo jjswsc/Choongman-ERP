@@ -271,7 +271,7 @@ export default function PosScreenConfigPage() {
                       }}
                     >
                       <Save className="h-4 w-4" />
-                      {customerToolbarSaving ? "..." : t("itemsBtnSave") || "저장"}
+                      {customerToolbarSaving ? t("posPrinterSaving") : t("itemsBtnSave") || "저장"}
                     </PosScreenConfigEmeraldSaveButton>
                   }
                 />

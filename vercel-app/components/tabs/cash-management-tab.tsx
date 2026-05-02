@@ -541,20 +541,22 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </>
           ) : (
             <>
-          <div className="mb-4 flex flex-wrap items-center gap-3" data-tour="pos-tour-cash-filters">
-            <Input
-              type="date"
-              value={startStr}
-              onChange={(e) => setStartStr(e.target.value)}
-              className="h-9 w-[140px]"
-            />
-            <span className="text-muted-foreground">~</span>
-            <Input
-              type="date"
-              value={endStr}
-              onChange={(e) => setEndStr(e.target.value)}
-              className="h-9 w-[140px]"
-            />
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" data-tour="pos-tour-cash-filters">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => setStartStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-muted-foreground sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => setEndStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <Button
               variant="outline"
               size="sm"

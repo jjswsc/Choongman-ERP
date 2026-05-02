@@ -338,7 +338,7 @@ export function CardManagementTab() {
 
       <Card>
         <CardContent className="pt-4">
-          <div className="flex flex-wrap items-end gap-2 mb-4">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <div>
               <label className="text-xs text-muted-foreground block mb-0.5">{tt("store", "Store")}</label>
               <Select value={filterStore} onValueChange={setFilterStore} disabled={storesLoading}>
@@ -367,9 +367,21 @@ export function CardManagementTab() {
                 </SelectContent>
               </Select>
             </div>
-            <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
-            <span className="text-xs">~</span>
-            <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => setStartStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-xs sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => setEndStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <Button size="sm" onClick={loadTransactions} disabled={loading} className="h-9">
               <Search className="h-4 w-4 mr-1" />
               {tt("btn_query", "Query")}

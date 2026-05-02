@@ -76,7 +76,9 @@ type PeriodGroupValue = (typeof PERIOD_GROUP)[number]["value"]
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
 
 function formatSalesAmount(n: number) {
-  return (n ?? 0).toLocaleString()
+  const v = Number(n ?? 0)
+  if (!Number.isFinite(v)) return "0"
+  return Math.round(v).toLocaleString()
 }
 
 /** API·캐시 행에 집계 필드가 일부 누락될 수 있음 — 본문에서 ?? 로 보정 */
@@ -251,8 +253,6 @@ const SALES_IA: SalesSubMenuConfig[] = [
 type SalesFilterPreset = {
   id: string
   name: string
-  startStr: string
-  endStr: string
   stores: string[]
   periodGroup: PeriodGroupValue
   orderTypesKey: string
@@ -925,8 +925,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const preset: SalesFilterPreset = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: trimmed,
-      startStr,
-      endStr,
       stores: selectedStores,
       periodGroup,
       orderTypesKey,
@@ -954,20 +952,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   ])
 
   const applyPreset = React.useCallback((preset: SalesFilterPreset) => {
+    const normalizedStores = normalizeStoreCodes(preset.stores || [])
+    const normalizedPeriodGroup = PERIOD_GROUP_VALUES.has(preset.periodGroup) ? preset.periodGroup : periodGroup
+    const normalizedOrderTypesKey = normalizeOrderTypesQueryString(preset.orderTypesKey)
     userSelectedRef.current = {
       subMenu: preset.activeSubMenuId,
       topic: preset.selectedTopicId,
-      storesKey: normalizeStoreCodes(preset.stores).join(","),
-      periodGroup: preset.periodGroup,
-      dateRange: `${preset.startStr}~${preset.endStr}`,
-      orderTypesKey: preset.orderTypesKey,
+      storesKey: normalizedStores.join(","),
+      periodGroup: normalizedPeriodGroup,
+      orderTypesKey: normalizedOrderTypesKey,
       compare: preset.compareStores,
     }
-    setStartStr(preset.startStr)
-    setEndStr(preset.endStr)
-    setSelectedStores(normalizeStoreCodes(preset.stores))
-    setPeriodGroup(preset.periodGroup)
-    setOrderTypesKey(normalizeOrderTypesQueryString(preset.orderTypesKey))
+    setSelectedStores(normalizedStores)
+    setPeriodGroup(normalizedPeriodGroup)
+    setOrderTypesKey(normalizedOrderTypesKey)
     setMenuSearch(preset.menuSearch || "")
     setMenuSearchAnd(Boolean(preset.menuSearchAnd))
     setCompareStores(Boolean(preset.compareStores))
@@ -978,7 +976,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         [preset.activeSubMenuId]: preset.selectedTopicId,
       }))
     }
-  }, [])
+  }, [periodGroup])
 
   const removePreset = React.useCallback((id: string) => {
     persistPresets(savedPresets.filter((p) => p.id !== id))
@@ -1404,28 +1402,30 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </Button>
           </div>
           {!isHoursPanel ? (
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <Input
-              type="date"
-              value={startStr}
-              onChange={(e) => {
-                const v = e.target.value
-                userSelectedRef.current.dateRange = `${v}~${endStr}`
-                setStartStr(v)
-              }}
-              className="h-9 w-[140px]"
-            />
-            <span className="text-slate-500">~</span>
-            <Input
-              type="date"
-              value={endStr}
-              onChange={(e) => {
-                const v = e.target.value
-                userSelectedRef.current.dateRange = `${startStr}~${v}`
-                setEndStr(v)
-              }}
-              className="h-9 w-[140px]"
-            />
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => {
+                  const v = e.target.value
+                  userSelectedRef.current.dateRange = `${v}~${endStr}`
+                  setStartStr(v)
+                }}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-slate-500 sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => {
+                  const v = e.target.value
+                  userSelectedRef.current.dateRange = `${startStr}~${v}`
+                  setEndStr(v)
+                }}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               {canSearchAll ? (
                 <div className="relative" ref={storePickerRef}>

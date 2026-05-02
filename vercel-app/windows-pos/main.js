@@ -838,7 +838,8 @@ async function checkForUpdateIfAvailable() {
       payload.notes || "A new version is available. Download the installer to update.";
     const message = `Current ${currentVersion} → Latest ${latestVersion}`;
 
-    const result = await dialog.showMessageBox(mainWindow, {
+    const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    const result = await dialog.showMessageBox(dialogTarget, {
       type: "info",
       buttons: ["Download", "Later"],
       defaultId: 0,
@@ -864,7 +865,8 @@ async function checkForUpdateIfAvailable() {
  */
 async function checkForUpdateManual() {
   if (!AUTO_UPDATE_ENABLED) {
-    await dialog.showMessageBox(mainWindow, {
+    const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    await dialog.showMessageBox(dialogTarget, {
       type: "info",
       buttons: ["OK"],
       title: "POS update",
@@ -873,7 +875,8 @@ async function checkForUpdateManual() {
     return { ok: false, reason: "disabled" };
   }
   if (!updateManifestUrl) {
-    await dialog.showMessageBox(mainWindow, {
+    const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    await dialog.showMessageBox(dialogTarget, {
       type: "warning",
       buttons: ["OK"],
       title: "POS update",
@@ -891,7 +894,8 @@ async function checkForUpdateManual() {
     const latestVersion = normalizeVersion(payload.version);
     const currentVersion = normalizeVersion(app.getVersion());
     if (!latestVersion || !currentVersion) {
-      await dialog.showMessageBox(mainWindow, {
+      const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+      await dialog.showMessageBox(dialogTarget, {
         type: "warning",
         buttons: ["OK"],
         title: "POS update",
@@ -901,7 +905,8 @@ async function checkForUpdateManual() {
     }
 
     if (semverLte(latestVersion, currentVersion)) {
-      await dialog.showMessageBox(mainWindow, {
+      const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+      await dialog.showMessageBox(dialogTarget, {
         type: "info",
         buttons: ["OK"],
         title: "POS update",
@@ -915,7 +920,8 @@ async function checkForUpdateManual() {
       payload.notes || "Download the installer, close POS, run the installer, then open POS again.";
     const message = `Current ${currentVersion} → Latest ${latestVersion}`;
 
-    const result = await dialog.showMessageBox(mainWindow, {
+    const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    const result = await dialog.showMessageBox(dialogTarget, {
       type: "info",
       buttons: ["Download", "Close"],
       defaultId: 0,
@@ -936,7 +942,8 @@ async function checkForUpdateManual() {
       openedDownload: result.response === 0 && Boolean(installerUrl),
     };
   } catch (e) {
-    await dialog.showMessageBox(mainWindow, {
+    const dialogTarget = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    await dialog.showMessageBox(dialogTarget, {
       type: "error",
       buttons: ["OK"],
       title: "POS update",

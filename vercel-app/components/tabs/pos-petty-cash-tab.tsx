@@ -277,20 +277,22 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
             </div>
           )}
 
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <Input
-              type="date"
-              value={startStr}
-              onChange={(e) => setStartStr(e.target.value)}
-              className="h-9 w-[140px]"
-            />
-            <span className="text-muted-foreground">~</span>
-            <Input
-              type="date"
-              value={endStr}
-              onChange={(e) => setEndStr(e.target.value)}
-              className="h-9 w-[140px]"
-            />
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => setStartStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-muted-foreground sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => setEndStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <Button
               variant="outline"
               size="sm"

@@ -92,6 +92,7 @@ import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
+import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
 import { usePosTour } from '@/lib/pos-tour'
 import { Separator } from '@/components/ui/separator'
 
@@ -851,6 +852,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!posMenuOptions.length) return new Map<string, PosMenuOption>()
     return new Map(posMenuOptions.map((o) => [String(o.id), o]))
   }, [posMenuOptions])
+  const optionsByMenuIdForOrder = useMemo(() => {
+    const sellKey: keyof PosMenuOption =
+      orderType === 'dine-in' ? 'sellHall' : orderType === 'delivery' ? 'sellDelivery' : 'sellPackaging'
+    const m = new Map<string, PosMenuOption[]>()
+    for (const o of posMenuOptions) {
+      if (o[sellKey] === false) continue
+      const mid = String(o.menuId)
+      if (!m.has(mid)) m.set(mid, [])
+      m.get(mid)!.push(o)
+    }
+    return m
+  }, [posMenuOptions, orderType])
   const appliedCollab = useMemo(
     () => collabOptions.find((c) => c.id === appliedCollabId) ?? null,
     [collabOptions, appliedCollabId]
@@ -2431,7 +2444,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     Array.isArray(item.promoItems) && item.promoItems.length > 0
                       ? item.promoItems.slice(0, 4).map((p) => {
                           const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
-                          const optionName = p.optionId ? optionById.get(String(p.optionId))?.name?.trim() : ''
+                          const optionName = resolvePromoSublineOptionDisplayName({
+                            optionId: p.optionId,
+                            optionById,
+                            menuOptions: optionsByMenuIdForOrder.get(String(p.menuId)),
+                            orderChannel: orderType,
+                          })
                           const optionLabel = optionName ? ` (${trMenuLine(optionName)})` : ''
                           return `${trMenuLine(menuName)}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
                         })
@@ -2440,7 +2458,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     Array.isArray(item.promoItems) && item.promoItems.length > 0
                       ? item.promoItems.map((p) => {
                           const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
-                          const optionName = p.optionId ? optionById.get(String(p.optionId))?.name?.trim() : ''
+                          const optionName = resolvePromoSublineOptionDisplayName({
+                            optionId: p.optionId,
+                            optionById,
+                            menuOptions: optionsByMenuIdForOrder.get(String(p.menuId)),
+                            orderChannel: orderType,
+                          })
                           const optionLabel = optionName ? ` (${trMenuLine(optionName)})` : ''
                           return `${trMenuLine(menuName)}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
                         })

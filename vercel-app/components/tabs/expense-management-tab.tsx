@@ -561,10 +561,22 @@ export function ExpenseManagementTab() {
           </AdminTabsBarWithHelp>
 
         <TabsContent value="plan" className={cn(adminTabsContentCn, "space-y-4")}>
-          <div className="flex flex-wrap items-end gap-2">
-            <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
-            <span className="text-xs">~</span>
-            <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => setStartStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-xs sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => setEndStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <Select value={planTypeFilter} onValueChange={setPlanTypeFilter}>
               <SelectTrigger className="w-[200px] h-9">
                 <SelectValue placeholder={tt("bankCategoryLabel", "Category")} />

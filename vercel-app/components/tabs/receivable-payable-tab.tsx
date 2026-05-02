@@ -1101,8 +1101,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         </SelectContent>
                       </Select>
                     </div>
-                    <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
-                    <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
+                    <Input
+                      type="date"
+                      value={startStr}
+                      onChange={(e) => setStartStr(e.target.value)}
+                      className="h-9 w-[172px] max-w-full text-[13px]"
+                    />
+                    <Input
+                      type="date"
+                      value={endStr}
+                      onChange={(e) => setEndStr(e.target.value)}
+                      className="h-9 w-[172px] max-w-full text-[13px]"
+                    />
                     <label className="flex items-center gap-2 cursor-pointer text-sm shrink-0 h-9">
                       <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
                       {t("recFilterUnpaidOnly") || "Unpaid Only"}
@@ -1644,8 +1654,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         {t("inv_account_no") || "계좌"}: {vendors.find((v) => v.code === vendorFilter)?.bankAccountNo || "—"}
                       </div>
                     )}
-                    <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
-                    <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
+                    <Input
+                      type="date"
+                      value={startStr}
+                      onChange={(e) => setStartStr(e.target.value)}
+                      className="h-9 w-[172px] max-w-full text-[13px]"
+                    />
+                    <Input
+                      type="date"
+                      value={endStr}
+                      onChange={(e) => setEndStr(e.target.value)}
+                      className="h-9 w-[172px] max-w-full text-[13px]"
+                    />
                     <label className="flex items-center gap-2 cursor-pointer text-sm shrink-0 h-9">
                       <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
                       {t("payFilterUnpaidOnly") || "미지급만"}

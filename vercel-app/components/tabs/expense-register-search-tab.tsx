@@ -239,7 +239,7 @@ export function ExpenseRegisterSearchTab() {
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-4">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger className="w-[200px] h-9">
                 <SelectValue placeholder={tt("wm_searchAllAccounts", "All Accounts")} />
@@ -253,9 +253,21 @@ export function ExpenseRegisterSearchTab() {
                 ))}
               </SelectContent>
             </Select>
-            <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
-            <span className="text-xs">~</span>
-            <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => setStartStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+              <span className="hidden text-xs sm:inline">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => setEndStr(e.target.value)}
+                className="h-9 w-full text-[13px] sm:w-[172px]"
+              />
+            </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[180px] h-9">
                 <SelectValue placeholder={tt("bankCategoryLabel", "Category")} />

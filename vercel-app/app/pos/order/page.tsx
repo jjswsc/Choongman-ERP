@@ -99,6 +99,7 @@ import {
   resolvePosMenuDescriptionForChannel,
   resolvePosMenuOptionDescriptionForChannel,
 } from "@/lib/pos-menu-display-description"
+import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -467,6 +468,11 @@ export default function PosOrderPage() {
     return m
   }, [allOptions, orderType])
 
+  const optionByIdForCartNote = React.useMemo(
+    () => new Map<string, PosMenuOption>(allOptions.map((o) => [String(o.id), o])),
+    [allOptions]
+  )
+
   const promoCatalogById = React.useMemo(() => {
     const m = new Map<string, PosPromoWithItems>()
     for (const p of promos) {
@@ -612,19 +618,24 @@ export default function PosOrderPage() {
       const raw = String(item.note ?? "").trim()
       if (raw) return raw
       if (!Array.isArray(item.promoItems) || item.promoItems.length === 0) return ""
+      const orderChannel =
+        orderType === "dine_in" ? "dine-in" : orderType === "delivery" ? "delivery" : ("takeout" as const)
       const lines = item.promoItems.slice(0, 4).map((line) => {
         const menu = menus.find((m) => String(m.id) === String(line.menuId))
         const menuName = (menu?.name ?? "").trim() || `#${String(line.menuId)}`
-        const option = line.optionId
-          ? allOptions.find((o) => String(o.id) === String(line.optionId))
-          : null
-        const optionLabel = option?.name?.trim() ? ` (${option.name.trim()})` : ""
+        const optName = resolvePromoSublineOptionDisplayName({
+          optionId: line.optionId,
+          optionById: optionByIdForCartNote,
+          menuOptions: optionsByMenuId[String(line.menuId)],
+          orderChannel,
+        })
+        const optionLabel = optName ? ` (${optName})` : ""
         return `${menuName}${optionLabel} x${Math.max(1, Number(line.quantity) || 1)}`
       })
       const hiddenCount = Math.max(0, item.promoItems.length - lines.length)
       return hiddenCount > 0 ? `${lines.join(", ")}, +${hiddenCount}` : lines.join(", ")
     },
-    [menus, allOptions]
+    [menus, optionByIdForCartNote, optionsByMenuId, orderType]
   )
 
   React.useEffect(() => {

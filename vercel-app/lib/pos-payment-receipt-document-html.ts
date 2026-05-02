@@ -23,6 +23,34 @@ export function buildCode128BarcodeUrl(raw: string): string {
   return `https://quickchart.io/barcode?type=code128&text=${encodeURIComponent(text)}&scale=2&height=38&includetext=true`
 }
 
+/** 결제 완료 영수증: 수단별 금액 행 (0 초과만) */
+function collectReceiptPaymentLines(
+  receiptData: ReceiptModalData,
+  tr: (key: string, fallback: string) => string
+): { label: string; amount: number }[] {
+  const lines: { label: string; amount: number }[] = []
+  const cash = Math.max(0, Number(receiptData.paymentCash ?? 0) || 0)
+  const card = Math.max(0, Number(receiptData.paymentCard ?? 0) || 0)
+  const qr = Math.max(0, Number(receiptData.paymentQr ?? 0) || 0)
+  const other = Math.max(0, Number(receiptData.paymentOther ?? 0) || 0)
+  const del = Math.max(0, Number(receiptData.paymentDeliveryApp ?? 0) || 0)
+  const eps = 0.005
+  if (cash > eps) lines.push({ label: tr('posPaymentCash', 'Cash'), amount: cash })
+  if (card > eps) lines.push({ label: tr('posPaymentCard', 'Card'), amount: card })
+  if (qr > eps) lines.push({ label: tr('posPaymentQrCode', 'QR'), amount: qr })
+  if (other > eps) lines.push({ label: tr('posPaymentOther', 'Other'), amount: other })
+  if (del > eps) {
+    const ch = String(receiptData.deliveryPaymentChannel ?? '').trim()
+    lines.push({
+      label: ch
+        ? `${tr('posPaymentDeliveryApp', 'Delivery app')} (${ch})`
+        : tr('posPaymentDeliveryApp', 'Delivery app'),
+      amount: del,
+    })
+  }
+  return lines
+}
+
 export type PosPaymentReceiptDesignResolved = {
   receiptBizName: string
   receiptBizTaxId: string
@@ -161,6 +189,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const logoUrl = d.receiptLogoImageUrl || `${origin}/company-stamp.png`
   const isPaymentReceipt =
     !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
+  const payLines = isPaymentReceipt ? collectReceiptPaymentLines(receiptData, tr) : []
+  const paymentRowsHtml =
+    payLines.length > 0
+      ? `
+        <div class="receipt-divider"></div>
+        <div class="text-xs" style="font-weight:700;margin:4px 0 2px 0;color:#000">${esc(tr('posReceiptPaymentMethods', 'Payment'))}</div>
+        ${payLines.map((p) => `<div class="receipt-row"><span>${esc(p.label)}</span><span>${formatBahtNum(p.amount)}</span></div>`).join('')}
+      `
+      : ''
+  const paymentSimpleRows =
+    payLines.length > 0
+      ? `${payLines.map((p) => `<tr><td class="simple-k">${esc(p.label)}</td><td class="simple-v">${formatBahtNum(p.amount)}</td></tr>`).join('')}`
+      : ''
   const showLogo = isPaymentReceipt && d.receiptShowLogo
   const footerPrimaryText =
     String(d.receiptFooterPrimaryText || '').trim() ||
@@ -238,6 +279,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-divider"></div>
         <table class="simple-table simple-summary">${summaryRows}</table>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
+        ${
+          paymentSimpleRows
+            ? `<div class="simple-divider"></div><div class="simple-line" style="font-weight:700">${esc(tr('posReceiptPaymentMethods', 'Payment'))}</div><table class="simple-table simple-summary">${paymentSimpleRows}</table>`
+            : ''
+        }
       </div>
     `
     return buildReceiptDocumentHtml({
@@ -354,6 +400,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${parsedMemo.plainMemo ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(parsedMemo.plainMemo)}</div>` : ''}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-row receipt-total"><span>${esc(tr('posTotal', '합계'))}</span><span>${formatBahtNum(receiptData.total)}</span></div>
+        ${paymentRowsHtml}
         <div class="receipt-divider"></div>
         ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${esc(receiptBarcodeUrl)}" alt="Receipt barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>` : ''}
         ${d.signatureLine && isPaymentReceipt && isTaxInvoice ? `<div style="margin-top: 8px; margin-bottom: 8px; font-size: 11px; color:#000;"><div>${esc(tr('posSignature', '서명'))}: ____________________</div></div>` : ''}
