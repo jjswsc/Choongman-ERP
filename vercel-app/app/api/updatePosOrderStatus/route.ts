@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
     const id = body.id != null ? Number(body.id) : NaN
     const status = String(body.status ?? '').trim()
     const grabStateRaw = String(body.grabState ?? '').trim()
+    const memoAppend = String(body.memoAppend ?? body.memo_append ?? '').trim()
 
     if (!id || isNaN(id)) {
       return NextResponse.json({ success: false, message: '주문 ID가 필요합니다.' }, { headers })
@@ -229,6 +230,11 @@ export async function POST(req: NextRequest) {
         const mergedMemo = mergeGrabStateIntoFullMemo(prevMemo, grabOrderId, grabStateRaw)
         if (mergedMemo && mergedMemo !== prevMemo) patch.memo = mergedMemo
       }
+    }
+    if (memoAppend && isPosReversalStatus(nextStatus)) {
+      const stamp = `[ORDER_${nextStatus.toUpperCase()} ${new Date().toISOString()}] ${memoAppend.slice(0, 240)}`
+      const baseMemo = String(patch.memo ?? prev?.memo ?? '').trim()
+      patch.memo = baseMemo ? `${baseMemo}\n${stamp}` : stamp
     }
 
     await supabaseUpdate('pos_orders', id, patch)

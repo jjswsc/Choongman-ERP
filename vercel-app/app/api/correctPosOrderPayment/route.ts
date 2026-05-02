@@ -40,10 +40,16 @@ function callerMayAccessStore(orderStore: string, caller: JwtPayload): boolean {
   return false
 }
 
-const CORRECTABLE = new Set(['paid', 'completed'])
+/** 배달뿐 아니라 홀(준비완료·조리중 등)도 동일 규칙으로 당일 정정 */
+const CORRECTABLE = new Set(['paid', 'completed', 'ready', 'cooking', 'preparing'])
+
+function round2(n: number): number {
+  return Math.round(Math.max(0, n) * 100) / 100
+}
 
 /**
- * POS 영수증 관리: 당일(방콕) 완료·결제완료 주문의 결제 수단 분해만 정정 (합계 불변).
+ * POS 영수증 관리: 당일(방콕) 결제가 반영된 주문(완료·결제완료·준비완료·조리중 등)의 결제 수단 분해 정정.
+ * 기본은 합계 유지; `total`을 주면 주문 합계·과세 스냅샷(비율 조정)까지 함께 갱신할 수 있음.
  * 분개 역처리는 하지 않음(회계는 별도 조정 또는 동일 총액 전제).
  */
 export async function POST(req: NextRequest) {
@@ -81,14 +87,20 @@ export async function POST(req: NextRequest) {
     const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
       limit: 1,
       select:
-        'id,store_code,total,status,created_at,memo,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
+        'id,store_code,total,subtotal,vat,status,created_at,memo,discount_amt,coupon_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
     })) as {
       id?: number
       store_code?: string
       total?: number
+      subtotal?: number
+      vat?: number
       status?: string
       created_at?: string
       memo?: string
+      discount_amt?: number
+      coupon_discount_amt?: number
+      delivery_fee?: number
+      packaging_fee?: number
       payment_cash?: number
       payment_card?: number
       payment_qr?: number
@@ -115,14 +127,55 @@ export async function POST(req: NextRequest) {
     if (!createdDay || createdDay !== todayBangkok) {
       return NextResponse.json({ success: false, message: 'today_only' }, { status: 400, headers })
     }
-    const total = Number(row.total ?? 0)
+    const prevTotal = Number(row.total ?? 0)
+    const bodyHasTotal =
+      Object.prototype.hasOwnProperty.call(body, 'total') || Object.prototype.hasOwnProperty.call(body, 'orderTotal')
+    const requestedTotalRaw = bodyHasTotal ? Number(body?.total ?? body?.orderTotal ?? NaN) : NaN
+    const effectiveTotal = bodyHasTotal && Number.isFinite(requestedTotalRaw) ? round2(requestedTotalRaw) : prevTotal
+
+    if (effectiveTotal <= 0.005) {
+      return NextResponse.json({ success: false, message: 'total_invalid' }, { status: 400, headers })
+    }
+
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
-    if (total > 0.005 && Math.abs(paymentSum - total) > 0.02) {
+    if (Math.abs(paymentSum - effectiveTotal) > 0.02) {
       return NextResponse.json({ success: false, message: 'payment_total_mismatch' }, { status: 400, headers })
     }
 
+    const totalDelta = Math.abs(effectiveTotal - prevTotal) > 0.02
+    let patchSubtotal: number | undefined
+    let patchVat: number | undefined
+    let patchDiscount: number | undefined
+    let patchCoupon: number | undefined
+    let patchDeliv: number | undefined
+    let patchPack: number | undefined
+
+    if (totalDelta) {
+      if (prevTotal <= 0.005) {
+        return NextResponse.json({ success: false, message: 'total_fix_requires_positive_prev' }, { status: 400, headers })
+      }
+      const r = effectiveTotal / prevTotal
+      const newSubtotal = round2(Number(row.subtotal ?? 0) * r)
+      const newDiscount = round2(Number(row.discount_amt ?? 0) * r)
+      const newCoupon = round2(Number(row.coupon_discount_amt ?? 0) * r)
+      const newDeliv = round2(Number(row.delivery_fee ?? 0) * r)
+      const newPack = round2(Number(row.packaging_fee ?? 0) * r)
+      const basePart = round2(Math.max(0, newSubtotal - newDiscount + newDeliv + newPack - newCoupon))
+      const newVat = round2(Math.max(0, effectiveTotal - basePart))
+      patchSubtotal = newSubtotal
+      patchVat = newVat
+      patchDiscount = newDiscount
+      patchCoupon = newCoupon
+      patchDeliv = newDeliv
+      patchPack = newPack
+    }
+
     const who = [caller.name, caller.employeeCode].filter(Boolean).join(' ')
-    const stamp = `[PAY_CORRECT ${new Date().toISOString()} ${who}] ${reason.slice(0, 240)}`
+    const reasonLine =
+      totalDelta && prevTotal > 0.005
+        ? `${reason.slice(0, 180)} | total ${round2(prevTotal)}→${effectiveTotal}`
+        : reason.slice(0, 240)
+    const stamp = `[PAY_CORRECT ${new Date().toISOString()} ${who}] ${reasonLine}`
     const prevMemo = String(row.memo ?? '').trim()
     const nextMemo = prevMemo ? `${prevMemo}\n${stamp}` : stamp
 
@@ -155,6 +208,17 @@ export async function POST(req: NextRequest) {
     }
 
     await supabaseUpdateByFilter(`pos_orders`, `id=eq.${id}`, {
+      ...(totalDelta
+        ? {
+            total: effectiveTotal,
+            subtotal: patchSubtotal ?? round2(Number(row.subtotal ?? 0)),
+            vat: patchVat ?? round2(Number(row.vat ?? 0)),
+            discount_amt: patchDiscount ?? round2(Number(row.discount_amt ?? 0)),
+            coupon_discount_amt: patchCoupon ?? round2(Number(row.coupon_discount_amt ?? 0)),
+            delivery_fee: patchDeliv ?? round2(Number(row.delivery_fee ?? 0)),
+            packaging_fee: patchPack ?? round2(Number(row.packaging_fee ?? 0)),
+          }
+        : {}),
       payment_cash: paymentCash,
       payment_card: paymentCard,
       payment_qr: paymentQr,

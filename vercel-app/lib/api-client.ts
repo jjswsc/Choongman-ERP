@@ -8647,10 +8647,12 @@ export async function updatePosOrder(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-/** 영수증 관리: 당일(방콕) 결제완료·완료 주문의 결제 수단 분해만 정정 (오프라인 시 큐 동기화 필요) */
+/** 영수증 관리: 당일(방콕) 결제 반영 주문의 결제 수단 분해 정정(필요 시 total·과세 스냅샷 비율 조정). 오프라인 시 큐 동기화 필요 */
 export async function correctPosOrderPayment(params: {
   id: number
   reason: string
+  /** 생략 시 기존 주문 total 유지(결제 분할만 정정) */
+  total?: number
   paymentCash: number
   paymentCard: number
   paymentQr: number
@@ -8711,6 +8713,8 @@ export async function updatePosOrderStatus(params: {
   id: number
   status: string
   grabState?: string
+  /** 취소·환불 시 pos_orders.memo 에 감사 로그 한 줄 추가 */
+  memoAppend?: string
   retrySideEffects?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {

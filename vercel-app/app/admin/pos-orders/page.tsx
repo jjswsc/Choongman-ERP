@@ -1,7 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
 import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2, Printer } from "lucide-react"
@@ -517,12 +517,24 @@ export default function PosOrdersPage() {
   }
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
+    let memoAppend: string | undefined
     if (newStatus === "cancelled") {
-      if (!await appConfirm(t("posCancelConfirm"))) return
+      if (!(await appConfirm(t("posCancelConfirm")))) return
+      const reasonRaw = await appPrompt(t("posCancelReasonPrompt"))
+      const reason = String(reasonRaw ?? "").trim()
+      if (reason.length < 2) {
+        await appAlert(t("posReceiptPayCorrectReasonShort"))
+        return
+      }
+      memoAppend = reason
     }
     setUpdatingId(orderId)
     try {
-      const res = await updatePosOrderStatus({ id: orderId, status: newStatus })
+      const res = await updatePosOrderStatus({
+        id: orderId,
+        status: newStatus,
+        ...(memoAppend ? { memoAppend } : {}),
+      })
       if (res.success) {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))

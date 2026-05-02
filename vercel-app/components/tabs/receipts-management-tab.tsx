@@ -31,6 +31,7 @@ import {
   getPosPrinterSettings,
   getPosDeliveryApps,
   correctPosOrderPayment,
+  updatePosOrderStatus,
   type PosOrder,
   type PosMenu,
   type PosDeliveryApp,
@@ -158,6 +159,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const statusLabels = React.useMemo<Record<string, string>>(
     () => ({
       pending: t('posPending') || '대기',
+      preparing: t('posOrderStatusPreparing') || '준비중',
       paid: t('posStatusPaid') || '결제완료',
       cooking: t('posStatusCooking') || '조리중',
       ready: t('posStatusReady') || '준비완료',
@@ -191,6 +193,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [pcActiveMethod, setPcActiveMethod] = React.useState<'cash' | 'card' | 'qr' | 'delivery_app' | 'other'>('cash')
   const [pcMoveFromMethod, setPcMoveFromMethod] = React.useState<'cash' | 'card' | 'qr' | 'delivery_app' | 'other'>('cash')
   const [pcOtherDetailKey, setPcOtherDetailKey] = React.useState('misc')
+  /** 주문 합계(정정 시 결제 분할 합과 일치) */
+  const [pcOrderTotal, setPcOrderTotal] = React.useState('')
   const [payCorrectSaving, setPayCorrectSaving] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [deliveryAppsCatalog, setDeliveryAppsCatalog] = React.useState<PosDeliveryApp[]>([])
@@ -521,7 +525,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
 
   const isPayCorrectableOrder = (o: PosOrder) => {
     const st = String(o.status ?? '').toLowerCase()
-    if (!['paid', 'completed'].includes(st)) return false
+    if (!['paid', 'completed', 'ready', 'cooking', 'preparing'].includes(st)) return false
     if (!(Number(o.total) > 0.005)) return false
     const d = toDateStrBangkok(o.createdAt ?? null)
     const today = toDateStrBangkok(new Date())
@@ -535,6 +539,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     setPayCorrectOrder(o)
     setPayCorrectReason('')
+    setPcOrderTotal(String(Math.round(Math.max(0, Number(o.total ?? 0) || 0) * 100) / 100))
     setPcCash(String(Math.max(0, Number(o.paymentCash ?? 0) || 0)))
     setPcCard(String(Math.max(0, Number(o.paymentCard ?? 0) || 0)))
     setPcQr(String(Math.max(0, Number(o.paymentQr ?? 0) || 0)))
@@ -582,6 +587,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     if (c === 'today_only') return t('posReceiptPayCorrectTodayOnly')
     if (c === 'status_not_correctable') return t('posReceiptPayCorrectStatus')
     if (c === 'payment_total_mismatch') return t('posReceiptPayCorrectMismatch')
+    if (c === 'total_invalid') return t('posReceiptPayCorrectTotalInvalid')
+    if (c === 'total_fix_requires_positive_prev') return t('posReceiptPayCorrectTotalFixBlocked')
     if (c === 'payment_other_breakdown_mismatch') return t('posReceiptPayCorrectOtherBreakdownMismatch')
     if (c === 'forbidden_store') return t('posReceiptPayCorrectForbidden')
     if (c === 'reason_required') return t('posReceiptPayCorrectReasonShort')
@@ -589,7 +596,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     return c || t('processFail') || '실패'
   }
 
-  const payCorrectOrderTotal = payCorrectOrder ? Number(payCorrectOrder.total ?? 0) : 0
+  const payCorrectOrderTotal = React.useMemo(() => {
+    if (!payCorrectOrder) return 0
+    const raw = parseFloat(String(pcOrderTotal).replace(/,/g, '').trim())
+    if (!Number.isFinite(raw)) return 0
+    return Math.round(Math.max(0, raw) * 100) / 100
+  }, [payCorrectOrder, pcOrderTotal])
   const pcMethodAmount = React.useCallback(
     (m: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'): number => {
       if (m === 'cash') return Math.max(0, parseFloat(pcCash) || 0)
@@ -634,7 +646,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     (parseFloat(pcOther) || 0) +
     (parseFloat(pcDelApp) || 0)
   const payCorrectSumOk =
-    payCorrectOrderTotal <= 0.005 || Math.abs(payCorrectSumVal - payCorrectOrderTotal) < 0.02
+    payCorrectOrderTotal > 0.005 && Math.abs(payCorrectSumVal - payCorrectOrderTotal) < 0.02
 
   const handleSavePayCorrect = async () => {
     if (!payCorrectOrder) return
@@ -662,6 +674,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     const payload = {
       id: payCorrectOrder.id,
       reason,
+      total: payCorrectOrderTotal,
       paymentCash: parseFloat(pcCash) || 0,
       paymentCard: parseFloat(pcCard) || 0,
       paymentQr: parseFloat(pcQr) || 0,
@@ -670,7 +683,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       paymentDeliveryApp: del,
       deliveryPaymentChannel: payDelChannel,
     }
-    const targetTotal = Number(payCorrectOrder.total ?? 0)
+    const targetTotal = payCorrectOrderTotal
     const sum =
       payload.paymentCash +
       payload.paymentCard +
@@ -702,6 +715,54 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       await appAlert(t('posReceiptPayCorrectSaved'))
       setPayCorrectOrder(null)
       setPayCorrectReason('')
+      setPcOrderTotal('')
+      void loadOrders()
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setPayCorrectSaving(false)
+    }
+  }
+
+  const handleCancelOrderFromPayCorrect = async () => {
+    if (!payCorrectOrder) return
+    const reason = payCorrectReason.trim()
+    if (reason.length < 2) {
+      await appAlert(t('posReceiptPayCorrectReasonShort'))
+      return
+    }
+    if (!online) {
+      await appAlert(t('posReceiptPayCorrectOffline'))
+      return
+    }
+    const ok = await appConfirm(t('posReceiptPayCorrectCancelConfirm'))
+    if (!ok) return
+    const hasLinkpos = Boolean(
+      payCorrectOrder.linkposApprovalCode ||
+        payCorrectOrder.linkposTraceNo ||
+        payCorrectOrder.linkposResponseCode
+    )
+    if (hasLinkpos) {
+      const w = await appConfirm(
+        `${t('posReceiptPayCorrectLinkposWarn')}\n\n${t('posReceiptPayCorrectCancelConfirm')}`
+      )
+      if (!w) return
+    }
+    setPayCorrectSaving(true)
+    try {
+      const res = await updatePosOrderStatus({
+        id: payCorrectOrder.id,
+        status: 'cancelled',
+        memoAppend: reason,
+      })
+      if (!res.success) {
+        await appAlert(String(res.message ?? '').trim() || t('processFail') || '실패')
+        return
+      }
+      await appAlert(t('posReceiptPayCorrectCanceled'))
+      setPayCorrectOrder(null)
+      setPayCorrectReason('')
+      setPcOrderTotal('')
       void loadOrders()
     } catch (e) {
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
@@ -1035,6 +1096,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           if (!open) {
             setPayCorrectOrder(null)
             setPayCorrectSaving(false)
+            setPcOrderTotal('')
           }
         }}
       >
@@ -1058,6 +1120,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs">{t('posReceiptPayCorrectOrderTotal')}</Label>
+              <Input
+                className="h-10 text-right tabular-nums"
+                inputMode="decimal"
+                value={pcOrderTotal}
+                onChange={(e) => setPcOrderTotal(e.target.value)}
+                disabled={payCorrectSaving}
+              />
+            </div>
             <div className="grid grid-cols-5 gap-1 rounded-xl border p-1">
               {[
                 { key: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
@@ -1122,26 +1194,50 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             {pcActiveMethod === 'cash' && (
               <div className="space-y-1">
                 <Label className="text-xs">{t('posPaymentCash')}</Label>
-                <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('cash'))} ฿`} />
+                <Input
+                  className="h-10 text-right tabular-nums"
+                  inputMode="decimal"
+                  value={pcCash}
+                  onChange={(e) => setPcCash(e.target.value)}
+                  disabled={payCorrectSaving}
+                />
               </div>
             )}
             {pcActiveMethod === 'card' && (
               <div className="space-y-1">
                 <Label className="text-xs">{t('posPaymentCard')}</Label>
-                <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('card'))} ฿`} />
+                <Input
+                  className="h-10 text-right tabular-nums"
+                  inputMode="decimal"
+                  value={pcCard}
+                  onChange={(e) => setPcCard(e.target.value)}
+                  disabled={payCorrectSaving}
+                />
               </div>
             )}
             {pcActiveMethod === 'qr' && (
               <div className="space-y-1">
                 <Label className="text-xs">{t('posPaymentQr')}</Label>
-                <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('qr'))} ฿`} />
+                <Input
+                  className="h-10 text-right tabular-nums"
+                  inputMode="decimal"
+                  value={pcQr}
+                  onChange={(e) => setPcQr(e.target.value)}
+                  disabled={payCorrectSaving}
+                />
               </div>
             )}
             {pcActiveMethod === 'delivery_app' && (
               <>
                 <div className="space-y-1">
                   <Label className="text-xs">{t('posPaymentDeliveryApp')}</Label>
-                  <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('delivery_app'))} ฿`} />
+                  <Input
+                    className="h-10 text-right tabular-nums"
+                    inputMode="decimal"
+                    value={pcDelApp}
+                    onChange={(e) => setPcDelApp(e.target.value)}
+                    disabled={payCorrectSaving}
+                  />
                 </div>
                 {(parseFloat(pcDelApp) || 0) > 0.005 && (
                   <div className="space-y-1">
@@ -1170,7 +1266,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               <>
                 <div className="space-y-1">
                   <Label className="text-xs">{t('posPaymentOther')}</Label>
-                  <Input readOnly className="h-10 bg-muted/20 text-right" value={`${formatBahtNum(pcMethodAmount('other'))} ฿`} />
+                  <Input
+                    className="h-10 text-right tabular-nums"
+                    inputMode="decimal"
+                    value={pcOther}
+                    onChange={(e) => setPcOther(e.target.value)}
+                    disabled={payCorrectSaving}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">{t('posPaymentOtherExpand') || '세부 수단'}</Label>
@@ -1221,33 +1323,44 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 <span>{t('posTotal') || '합계'}</span>
                 <span>{formatBahtNum(payCorrectOrderTotal)} ฿</span>
               </div>
-              {!payCorrectSumOk && payCorrectOrderTotal > 0.005 && (
+              {!payCorrectSumOk && (
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
                   {t('posReceiptPayCorrectMismatch')}
                 </p>
               )}
             </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:gap-2">
             <Button
               type="button"
-              variant="outline"
-              disabled={payCorrectSaving}
-              onClick={() => setPayCorrectOrder(null)}
+              variant="destructive"
+              className="w-full sm:w-auto"
+              disabled={payCorrectSaving || payCorrectReason.trim().length < 2}
+              onClick={() => void handleCancelOrderFromPayCorrect()}
             >
-              {t('posCancel') || '취소'}
+              {t('posReceiptPayCorrectCancelOrder')}
             </Button>
-            <Button
-              type="button"
-              disabled={
-                payCorrectSaving ||
-                !payCorrectSumOk ||
-                payCorrectReason.trim().length < 2
-              }
-              onClick={() => void handleSavePayCorrect()}
-            >
-              {t('save') || '저장'}
-            </Button>
+            <div className="flex w-full justify-end gap-2 sm:w-auto">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={payCorrectSaving}
+                onClick={() => setPayCorrectOrder(null)}
+              >
+                {t('btnClose') || '닫기'}
+              </Button>
+              <Button
+                type="button"
+                disabled={
+                  payCorrectSaving ||
+                  !payCorrectSumOk ||
+                  payCorrectReason.trim().length < 2
+                }
+                onClick={() => void handleSavePayCorrect()}
+              >
+                {t('save') || '저장'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

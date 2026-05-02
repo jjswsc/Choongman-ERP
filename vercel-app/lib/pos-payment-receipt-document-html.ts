@@ -93,10 +93,10 @@ function receiptPaymentBreakdownHtml(
     const body = rows
       .map(
         (r) =>
-          `<tr><td class="simple-k">${esc(r.label)}</td><td class="simple-v">${esc(r.amountStr)}</td></tr>`
+          `<div class="simple-split"><span class="simple-split-l">${esc(r.label)}</span><span class="simple-split-r">${esc(r.amountStr)}</span></div>`
       )
       .join('')
-    return `<div class="simple-divider"></div><div class="simple-line simple-pay-title"><b>${title}</b></div><table class="simple-table simple-summary">${body}</table>`
+    return `<div class="simple-divider"></div><div class="simple-line simple-pay-title"><b>${title}</b></div><div class="simple-split-block">${body}</div>`
   }
   const body = rows
     .map((r) => `<div class="receipt-row"><span>${esc(r.label)}</span><span>${esc(r.amountStr)}</span></div>`)
@@ -287,32 +287,37 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
+    const simpleSplit = (left: string, right: string) =>
+      `<div class="simple-split"><span class="simple-split-l">${left}</span><span class="simple-split-r">${right}</span></div>`
     const itemRows = (receiptData.items || [])
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        return `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(name)}</td><td class="simple-item-amt">${amt}</td></tr>`
+        return simpleSplit(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
       })
       .join('')
     const summaryRows = [
-      `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(receiptData.subtotal)}</td></tr>`,
+      simpleSplit(esc(t('posSubtotal') || '소계'), formatBahtNum(receiptData.subtotal)),
       receiptData.discountAmt > 0
-        ? `<tr><td class="simple-k">${esc(t('posDiscount') || '할인')}</td><td class="simple-v">-${formatBahtNum(receiptData.discountAmt)}</td></tr>`
+        ? simpleSplit(esc(t('posDiscount') || '할인'), `-${formatBahtNum(receiptData.discountAmt)}`)
         : '',
       (receiptData.deliveryFee ?? 0) > 0
-        ? `<tr><td class="simple-k">${esc(t('posDeliveryFee') || '배달 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.deliveryFee)}</td></tr>`
+        ? simpleSplit(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`)
         : '',
       (receiptData.packagingFee ?? 0) > 0
-        ? `<tr><td class="simple-k">${esc(t('posPackagingFee') || '포장 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.packagingFee)}</td></tr>`
+        ? simpleSplit(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`)
         : '',
       (receiptData.vatFeeAmt ?? 0) > 0
-        ? `<tr><td class="simple-k">${esc(t('posVatLabel') || '부가세')}</td><td class="simple-v">${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</td></tr>`
+        ? simpleSplit(
+            esc(t('posVatLabel') || '부가세'),
+            `${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`
+          )
         : '',
     ]
       .filter(Boolean)
       .join('')
     const simpleHtml = `
-      <div class="receipt-content receipt-payment-simple">
+      <div class="receipt-content receipt-payment-simple" dir="ltr">
         ${showLogo ? `<div class="simple-logo-wrap"><img src="${esc(logoUrl)}" alt="Company logo" class="simple-logo" /></div>` : ''}
         <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
         <div class="simple-subtitle">${esc(tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div>
@@ -325,9 +330,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
         <div class="simple-divider"></div>
-        <table class="simple-table">${itemRows}</table>
+        <div class="simple-split-block">${itemRows}</div>
         <div class="simple-divider"></div>
-        <table class="simple-table simple-summary">${summaryRows}</table>
+        <div class="simple-split-block">${summaryRows}</div>
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
         ${paymentBreakdownSimpleHtml}
         ${d.receiptShowPaidStamp ? `<div class="simple-paid">${esc(tr('posReceiptPaid', '결제완료'))}</div>` : ''}
@@ -342,7 +347,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       htmlLang: lang,
       bodyContent: simpleHtml,
       extraStyles: `
-        .receipt-payment-simple { color: #000; }
+        /* CP-802 등: table 2열이 bidi/드라이버에서 열 순서가 뒤집히거나 좌우로 찢어짐 → table 미사용 + LTR 고정 */
+        .receipt-payment-simple { color: #000; direction: ltr; unicode-bidi: isolate; }
         .simple-logo-wrap { text-align: center; margin-bottom: 2px; }
         .simple-logo { width: 82px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.1); }
         .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 1px; }
@@ -351,17 +357,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
-        .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .simple-table td { font-size: 11px; line-height: 1.4; padding: 1px 0; vertical-align: top; }
-        .simple-item-name { width: 72%; word-break: break-word; }
-        .simple-item-amt { width: 28%; text-align: right; white-space: nowrap; }
-        .simple-k { width: 72%; }
-        .simple-v { width: 28%; text-align: right; white-space: nowrap; }
-        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; }
+        .simple-split-block { width: 100%; box-sizing: border-box; }
+        .simple-split { overflow: hidden; width: 100%; margin: 3px 0; font-size: 11px; line-height: 1.35; direction: ltr; unicode-bidi: isolate; box-sizing: border-box; color: #000; }
+        .simple-split::after { content: ""; display: table; clear: both; }
+        .simple-split-l { float: left; max-width: 72%; text-align: left; word-break: break-word; padding-right: 4px; box-sizing: border-box; min-width: 0; }
+        .simple-split-r { float: right; max-width: 28%; text-align: right; white-space: nowrap; box-sizing: border-box; min-width: 0; font-variant-numeric: tabular-nums; }
+        .simple-total { font-size: 12px; font-weight: 700; margin-top: 4px; border-top: 2px solid #000; padding-top: 4px; clear: both; direction: ltr; }
         .simple-pay-title { font-size: 11px; margin-top: 4px; }
         .simple-paid { display: inline-block; border: 1px solid #000; padding: 1px 10px; font-size: 10px; font-weight: 700; margin-top: 8px; }
         .simple-footer { margin-top: 6px; text-align: center; font-size: 10px; }
         .simple-footer-strong { font-weight: 700; }
+        @media print {
+          .receipt-payment-simple, .receipt-payment-simple .simple-split { direction: ltr !important; unicode-bidi: isolate !important; }
+        }
       `,
     })
   }

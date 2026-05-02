@@ -7,7 +7,7 @@ export type PosBusinessClock = { hour: number; minute: number }
  * 영업 구간: 방콕 달력일 D의 「하루 매출」은 [ D@start , boundary ) (끝 미포함).
  * - end 시각이 start와 같으면: 기존과 동일하게 24시간 창 [D@start, (D+1)@start)
  * - end 분이 start 분보다 작거나 같으면(자정 넘김): [D@start, (D+1)@end) — 예: 10:00~익일 02:00
- * - end 분이 start 분보다 크면(같은 달력일): [D@start, D@end)
+ * - end 분이 start 분보다 크면(같은 달력일): [D@start, D@end) + 마감~익일 오픈 전(자정 넘김)은 전날 영업일로 묶음(아래 getPosBusinessDateStrFromConfig)
  */
 export type PosBusinessHoursConfig = { start: PosBusinessClock; end: PosBusinessClock }
 
@@ -207,14 +207,34 @@ export function posBusinessDateYmdToUtcRange(
 
 export function getPosBusinessDateStrFromConfig(base: Date, hours: PosBusinessHoursConfig): string {
   const cfg = normalizeHours(hours)
+  const sm = clockToMinutes(cfg.start.hour, cfg.start.minute)
+  const em = clockToMinutes(cfg.end.hour, cfg.end.minute)
   const cal = getBangkokDateStr(base)
+  const t = base.getTime()
   for (const delta of [-1, 0, 1] as const) {
     const d = addDaysYmd(cal, delta)
     const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(d, cfg)
-    const t = base.getTime()
     const a = Date.parse(startISO)
     const b = Date.parse(endISOExclusive)
     if (Number.isFinite(a) && Number.isFinite(b) && t >= a && t < b) return d
+  }
+  // em > sm: [D@start,D@end)만 있으면 '전날 마감~자정~익일 오픈 전'이 어느 창에도 안 들어가 달력일로 떨어지던 문제 보정
+  if (em > sm) {
+    const prev = addDaysYmd(cal, -1)
+    const gapStartMs = bangkokWallToUtcMs(prev, cfg.end)
+    const dayBoundaryMs = bangkokWallToUtcMs(cal, { hour: 0, minute: 0 })
+    const dayOpenMs = bangkokWallToUtcMs(cal, cfg.start)
+    if (
+      Number.isFinite(gapStartMs) &&
+      Number.isFinite(dayBoundaryMs) &&
+      Number.isFinite(dayOpenMs) &&
+      dayOpenMs > dayBoundaryMs &&
+      gapStartMs < dayBoundaryMs &&
+      t >= dayBoundaryMs &&
+      t < dayOpenMs
+    ) {
+      return prev
+    }
   }
   return cal
 }

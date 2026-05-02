@@ -910,6 +910,25 @@ function IncomePlDetailTableContent({
   )
 }
 
+function mapIncomeStatementOverrideSaveError(err: string | undefined, t: (k: string) => string): string {
+  const c = String(err || "").trim()
+  if (!c) return t("pL_overrideSharedErr")
+  if (c.includes("STORE_SCOPE_FORBIDDEN")) return t("pL_overrideErrStoreScope")
+  if (c === "FORBIDDEN" || c.includes("ACCOUNTING_FORBIDDEN")) return t("pL_overrideErrForbidden")
+  return c
+}
+
+function formatOverrideSavedClockBangkok(ms: number, lang: string): string {
+  const loc = lang === "ko" ? "ko-KR" : "en-GB"
+  return new Date(ms).toLocaleTimeString(loc, {
+    timeZone: "Asia/Bangkok",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+}
+
 function incomeMetricsForCompare(d: IncomeStatementData | undefined) {
   if (!d || d.error) return null
   const sales = Number(d.sales) || 0
@@ -981,6 +1000,25 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const [sharedLoading, setSharedLoading] = React.useState(false)
   const [sharedReady, setSharedReady] = React.useState(false)
   const [sharedSaveError, setSharedSaveError] = React.useState<string | null>(null)
+  const [overridePersistAt, setOverridePersistAt] = React.useState<number | null>(null)
+  const [overrideSaveBusy, setOverrideSaveBusy] = React.useState(false)
+  const [overrideButtonHint, setOverrideButtonHint] = React.useState<string | null>(null)
+  const overridePersistBumpTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleOverridePersistBump = React.useCallback(() => {
+    if (overridePersistBumpTimer.current) clearTimeout(overridePersistBumpTimer.current)
+    overridePersistBumpTimer.current = setTimeout(() => {
+      overridePersistBumpTimer.current = null
+      setOverridePersistAt(Date.now())
+    }, 450)
+  }, [])
+
+  React.useEffect(
+    () => () => {
+      if (overridePersistBumpTimer.current) clearTimeout(overridePersistBumpTimer.current)
+    },
+    []
+  )
 
   const printRef = React.useRef<HTMLDivElement | null>(null)
 
@@ -1086,23 +1124,27 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     if (overrideSource !== "local") return
     if (!manualEnabled) {
       writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, false, 0)
+      scheduleOverridePersistBump()
       return
     }
     const p = parseSalesOverrideInput(manualAmountStr)
     if (p == null) return
     writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, true, p)
-  }, [overrideSource, yearMonthEnd, storeFilter, manualEnabled, manualAmountStr])
+    scheduleOverridePersistBump()
+  }, [overrideSource, yearMonthEnd, storeFilter, manualEnabled, manualAmountStr, scheduleOverridePersistBump])
 
   React.useEffect(() => {
     if (overrideSource !== "local") return
     if (!begInvManualEnabled) {
       writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, false, 0)
+      scheduleOverridePersistBump()
       return
     }
     const p = parseSalesOverrideInput(begInvAmountStr)
     if (p == null) return
     writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, true, p)
-  }, [overrideSource, yearMonthEnd, storeFilter, begInvManualEnabled, begInvAmountStr])
+    scheduleOverridePersistBump()
+  }, [overrideSource, yearMonthEnd, storeFilter, begInvManualEnabled, begInvAmountStr, scheduleOverridePersistBump])
 
   React.useEffect(() => {
     if (overrideSource !== "shared" || !sharedReady || sharedLoading) return
@@ -1127,7 +1169,10 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         beginningInvOverrideAmount: begOn ? begAmt : 0,
       }).then((r) => {
         if (!r.success) setSharedSaveError(r.error || "SAVE_FAILED")
-        else setSharedSaveError(null)
+        else {
+          setSharedSaveError(null)
+          scheduleOverridePersistBump()
+        }
       })
     }, 750)
     return () => clearTimeout(h)
@@ -1144,6 +1189,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     auth?.store,
     auth?.role,
     auth?.user,
+    scheduleOverridePersistBump,
   ])
 
   const periodMonthsFull = React.useMemo(
@@ -1586,6 +1632,91 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       setManualAmountStr("")
     }
   }
+
+  const handlePlOverridesSaveNow = React.useCallback(async () => {
+    setOverrideButtonHint(null)
+    if (manualEnabled) {
+      if (!manualAmountStr.trim()) {
+        setOverrideButtonHint(t("pL_overrideAmountRequiredWhenChecked"))
+        return
+      }
+      if (parseSalesOverrideInput(manualAmountStr) == null) {
+        setOverrideButtonHint(t("pL_overrideInvalidAmount"))
+        return
+      }
+    }
+    if (begInvManualEnabled) {
+      if (!begInvAmountStr.trim()) {
+        setOverrideButtonHint(t("pL_overrideAmountRequiredWhenChecked"))
+        return
+      }
+      if (parseSalesOverrideInput(begInvAmountStr) == null) {
+        setOverrideButtonHint(t("pL_overrideInvalidAmount"))
+        return
+      }
+    }
+
+    if (overrideSource === "local") {
+      if (!manualEnabled) {
+        writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, false, 0)
+      } else {
+        const p = parseSalesOverrideInput(manualAmountStr)!
+        writeIncomeStatementSalesOverride(yearMonthEnd, storeFilter, true, p)
+      }
+      if (!begInvManualEnabled) {
+        writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, false, 0)
+      } else {
+        const p = parseSalesOverrideInput(begInvAmountStr)!
+        writeIncomeStatementBeginningInvOverride(yearMonthEnd, storeFilter, true, p)
+      }
+      setOverridePersistAt(Date.now())
+      return
+    }
+
+    if (sharedLoading || !sharedReady) return
+    const salesAmt = parseSalesOverrideInput(manualAmountStr) ?? 0
+    const begAmt = parseSalesOverrideInput(begInvAmountStr) ?? 0
+    const salesOn = manualEnabled && parseSalesOverrideInput(manualAmountStr) != null
+    const begOn = begInvManualEnabled && parseSalesOverrideInput(begInvAmountStr) != null
+
+    setOverrideSaveBusy(true)
+    try {
+      const r = await saveIncomeStatementOverrides({
+        yearMonth: yearMonthEnd,
+        storeFilter,
+        userStore: auth?.store,
+        userRole: auth?.role,
+        updatedBy: auth?.user,
+        salesOverrideEnabled: salesOn,
+        salesOverrideAmount: salesOn ? salesAmt : 0,
+        beginningInvOverrideEnabled: begOn,
+        beginningInvOverrideAmount: begOn ? begAmt : 0,
+      })
+      if (!r.success) {
+        setSharedSaveError(r.error || "SAVE_FAILED")
+        setOverrideButtonHint(mapIncomeStatementOverrideSaveError(r.error, t))
+      } else {
+        setSharedSaveError(null)
+        setOverridePersistAt(Date.now())
+      }
+    } finally {
+      setOverrideSaveBusy(false)
+    }
+  }, [
+    overrideSource,
+    yearMonthEnd,
+    storeFilter,
+    manualEnabled,
+    manualAmountStr,
+    begInvManualEnabled,
+    begInvAmountStr,
+    sharedLoading,
+    sharedReady,
+    auth?.store,
+    auth?.role,
+    auth?.user,
+    t,
+  ])
 
   return (
     <div className="space-y-4">
@@ -2537,10 +2668,38 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                       <span className="text-xs text-muted-foreground">{t("pL_overrideSharedLoading")}</span>
                     )}
                     {overrideSource === "shared" && sharedSaveError && !sharedLoading && (
-                      <span className="text-xs text-destructive">{t("pL_overrideSharedErr")}: {sharedSaveError}</span>
+                      <span className="text-xs text-destructive">
+                        {mapIncomeStatementOverrideSaveError(sharedSaveError, t)}
+                      </span>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground max-w-3xl">{t("pL_overrideStorageNote")}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-9"
+                      disabled={
+                        overrideSaveBusy ||
+                        (overrideSource === "shared" && (sharedLoading || !sharedReady))
+                      }
+                      onClick={() => void handlePlOverridesSaveNow()}
+                    >
+                      {overrideSaveBusy ? t("pL_overrideSavingShort") : t("pL_overrideSaveNow")}
+                    </Button>
+                    {overridePersistAt != null && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("pL_overrideLastSavedBangkok").replace(
+                          "{time}",
+                          formatOverrideSavedClockBangkok(overridePersistAt, lang)
+                        )}
+                      </span>
+                    )}
+                    {overrideButtonHint ? (
+                      <span className="text-xs text-destructive">{overrideButtonHint}</span>
+                    ) : null}
+                  </div>
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex items-center gap-2">
                       <Checkbox
@@ -2560,6 +2719,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                         placeholder={t("pL_manualSalesPlaceholder")}
                         value={manualAmountStr}
                         onChange={(e) => setManualAmountStr(e.target.value)}
+                        onFocus={() => setOverrideButtonHint(null)}
                         aria-label={t("pL_manualSalesPlaceholder")}
                         disabled={overrideSource === "shared" && (sharedLoading || !sharedReady)}
                       />
@@ -2603,6 +2763,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                         placeholder={t("pL_manualBegInvPlaceholder")}
                         value={begInvAmountStr}
                         onChange={(e) => setBegInvAmountStr(e.target.value)}
+                        onFocus={() => setOverrideButtonHint(null)}
                         aria-label={t("pL_manualBegInvPlaceholder")}
                         disabled={overrideSource === "shared" && (sharedLoading || !sharedReady)}
                       />

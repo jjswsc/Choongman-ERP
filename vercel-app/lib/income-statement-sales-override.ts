@@ -46,8 +46,19 @@ export function writeIncomeStatementSalesOverride(
   }
 }
 
+/**
+ * 손익 수동 매출·기초재고 입력란용. ฿·THB·공백·전각 숫자 등을 허용한다.
+ */
 export function parseSalesOverrideInput(text: string): number | null {
-  const s = text.replace(/,/g, '').trim()
+  let s = String(text ?? '')
+    .normalize('NFKC')
+    .replace(/,/g, '')
+    .trim()
+  if (s === '') return null
+  s = s.replace(/\u00a0/g, ' ').trim()
+  s = s.replace(/^(?:THB|thb)\s*/i, '').replace(/\s*(?:THB|thb)$/i, '')
+  s = s.replace(/^฿\s*/, '').replace(/\s*฿$/, '')
+  s = s.replace(/\s+/g, '').trim()
   if (s === '') return null
   const n = Number(s)
   if (!Number.isFinite(n) || n < 0) return null
