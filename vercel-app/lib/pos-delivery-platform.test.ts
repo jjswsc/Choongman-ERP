@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { isApiInboundDeliveryOrderMemo, pickPosChannelOrderNo } from '@/lib/pos-delivery-platform'
+import {
+  isApiInboundDeliveryOrderMemo,
+  pickPosChannelOrderNo,
+  resolveReceiptDeliveryPaymentChannelCode,
+} from '@/lib/pos-delivery-platform'
 
 describe('isApiInboundDeliveryOrderMemo', () => {
   it('is true for Grab/ShopeeFood/LineMan webhook memo anchors', () => {
@@ -25,5 +29,50 @@ describe('pickPosChannelOrderNo (sf_order anchor)', () => {
     })
     expect(pick.kind).toBe('memo_anchor')
     expect(pick.text).toBe('778899')
+  })
+})
+
+describe('resolveReceiptDeliveryPaymentChannelCode', () => {
+  it('prefers order delivery_app_code over mismatched payment channel', () => {
+    expect(
+      resolveReceiptDeliveryPaymentChannelCode({
+        deliveryAppCode: 'shopee',
+        deliveryPaymentChannel: 'grab',
+        tableName: 'Shopee #392',
+        memo: '',
+        orderNo: 'X-20250502-001',
+      })
+    ).toBe('shopee')
+  })
+  it('infers Shopee from table/memo when payment channel is wrong', () => {
+    expect(
+      resolveReceiptDeliveryPaymentChannelCode({
+        deliveryAppCode: '',
+        deliveryPaymentChannel: 'grab',
+        tableName: 'Shopee #392',
+        memo: '',
+        orderNo: '',
+      })
+    ).toBe('shopee')
+  })
+  it('uses memo webhook anchors before payment channel', () => {
+    expect(
+      resolveReceiptDeliveryPaymentChannelCode({
+        deliveryPaymentChannel: 'grab',
+        memo: 'sf_order:778899',
+        tableName: '',
+        orderNo: '',
+      })
+    ).toBe('shopee')
+  })
+  it('falls back to delivery_payment_channel when order hints are absent', () => {
+    expect(
+      resolveReceiptDeliveryPaymentChannelCode({
+        deliveryPaymentChannel: 'grab',
+        tableName: '',
+        memo: '',
+        orderNo: 'CM01-20250502-042',
+      })
+    ).toBe('grab')
   })
 })

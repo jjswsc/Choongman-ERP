@@ -200,12 +200,14 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
   return (order.items || []).map((it) => {
     const row = it as unknown as Record<string, unknown>
     const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
+    const rowDelivery = String(row.deliveryAppCode ?? row.delivery_app_code ?? '').trim()
     return {
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
       price: Number(it.price ?? 0),
       qty: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...(rowDelivery ? { deliveryAppCode: rowDelivery } : {}),
       ...(promo && promo.length > 0 ? { promoItems: promo } : {}),
     }
   })
@@ -255,6 +257,9 @@ export function receiptModalDataFromPosOrderReprint(order: PosOrder, opts?: PosO
     ...(order.paymentOtherBreakdown ? { paymentOtherBreakdown: order.paymentOtherBreakdown } : {}),
     paymentDeliveryApp: order.paymentDeliveryApp,
     deliveryPaymentChannel: order.deliveryPaymentChannel ?? null,
+    ...(String(order.deliveryAppCode ?? '').trim()
+      ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
+      : {}),
     ...(v > 0.001 ? { vatFeeAmt: v, vatFeeMode: 'separate' as const } : {}),
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: true,
@@ -295,6 +300,9 @@ export function receiptModalDataFromPosOrderForPayment(
     ...(order.paymentOtherBreakdown ? { paymentOtherBreakdown: order.paymentOtherBreakdown } : {}),
     paymentDeliveryApp: order.paymentDeliveryApp,
     deliveryPaymentChannel: order.deliveryPaymentChannel ?? null,
+    ...(String(order.deliveryAppCode ?? '').trim()
+      ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
+      : {}),
     vatFeeAmt: pricing.vatFeeAmt,
     vatFeeMode: pricing.vatFeeMode,
     serviceFeeAmt: pricing.serviceFeeAmt,

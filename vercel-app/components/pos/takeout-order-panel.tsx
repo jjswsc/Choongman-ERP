@@ -14,13 +14,14 @@ import {
 } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
-import { Check, CheckCircle, ChevronDown, ChevronUp, Clock, XCircle } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-dialog'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
+import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import {
   buildUpdatePosOrderParamsFromOrder,
   canRemovePosOrderLine,
@@ -37,6 +38,7 @@ export interface TakeoutOrderPanelProps {
   order: Order | null
   onPackaged?: () => void
   onPay?: () => void
+  onOpenTaxInvoice?: () => void
   /** 주문 취소 시 */
   onCancel?: () => void
   /** 일부 취소 직후 홀·주방 재인쇄(터미널) */
@@ -52,6 +54,7 @@ export function TakeoutOrderPanel({
   order,
   onPackaged,
   onPay,
+  onOpenTaxInvoice,
   onCancel,
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
@@ -61,6 +64,7 @@ export function TakeoutOrderPanel({
   const { lang } = useLang()
   const ti = useT(lang)
   const isCompleted = order?.status === 'completed'
+  const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
@@ -265,6 +269,27 @@ export function TakeoutOrderPanel({
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{t('posPaymentComplete') || '결제 완료'}</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenTaxInvoice?.()}
+                  disabled={!onOpenTaxInvoice}
+                  className={cn(
+                    'ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]',
+                    hasTaxInvoice
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/35 dark:text-amber-200',
+                    onOpenTaxInvoice ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
+                  )}
+                >
+                  {hasTaxInvoice ? (
+                    <CheckCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5" />
+                  )}
+                  {hasTaxInvoice
+                    ? (t('posReceiptTaxInvoiceIssued') || '세금계산서 발행')
+                    : (t('posReceiptTaxInvoiceNotIssued') || '세금계산서 미발행')}
+                </button>
               </div>
             </>
           ) : order.status === 'ready' ? (
@@ -459,3 +484,4 @@ export function TakeoutOrderPanel({
     </>
   )
 }
+

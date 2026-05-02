@@ -141,3 +141,44 @@ export function escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableLine: strin
     '</span>'
   )
 }
+
+/** `pos_orders.delivery_payment_channel` 등에 쓰는 소문자 코드 */
+const CANON_RECEIPT_DELIVERY_CODES = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+
+export type ReceiptDeliveryChannelContext = {
+  deliveryAppCode?: string | null | undefined
+  /** 결제 탭에서 저장된 채널 — 주문·메모·코드가 없을 때만 신뢰 */
+  deliveryPaymentChannel?: string | null | undefined
+  tableName?: string | null | undefined
+  memo?: string | null | undefined
+  orderNo?: string | null | undefined
+  itemDeliveryAppCodes?: Array<string | null | undefined>
+}
+
+function normalizeReceiptDeliveryCode(raw: string | null | undefined): string {
+  const v = String(raw ?? '').trim().toLowerCase()
+  return CANON_RECEIPT_DELIVERY_CODES.has(v) ? v : ''
+}
+
+/**
+ * 손님 영수증「배달앱 (채널)」표시용: **주문** 기준 채널을 우선하고,
+ * `delivery_payment_channel`은 주문에서 유추할 수 없을 때만 사용한다.
+ */
+export function resolveReceiptDeliveryPaymentChannelCode(ctx: ReceiptDeliveryChannelContext): string {
+  const fromOrder = normalizeReceiptDeliveryCode(ctx.deliveryAppCode)
+  if (fromOrder) return fromOrder
+  for (const it of ctx.itemDeliveryAppCodes ?? []) {
+    const v = normalizeReceiptDeliveryCode(it)
+    if (v) return v
+  }
+  const memo = String(ctx.memo ?? '')
+  if (/grab_order:/i.test(memo)) return 'grab'
+  if (/lineman_order:/i.test(memo)) return 'lineman'
+  if (/shopee_order:/i.test(memo)) return 'shopee'
+  if (/sf_order:/i.test(memo)) return 'shopee'
+  const blob = [ctx.tableName, ctx.memo, ctx.orderNo].filter(Boolean).join(' ').toLowerCase()
+  if (blob.includes('shopee') || blob.includes('쇼피')) return 'shopee'
+  if (blob.includes('line man') || blob.includes('lineman') || blob.includes('라인맨')) return 'lineman'
+  if (blob.includes('grab') || blob.includes('그랩')) return 'grab'
+  return normalizeReceiptDeliveryCode(ctx.deliveryPaymentChannel)
+}

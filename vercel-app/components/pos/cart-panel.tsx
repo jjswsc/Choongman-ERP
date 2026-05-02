@@ -1335,6 +1335,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPayAdminLineAmounts(Object.fromEntries(lines.map((i) => [i.id, '0'])))
   }
 
+  /** 결제 세션마다 초기화: 이전 주문·취소 건의 세금계산서 ON/필드가 다음 주문 memo·버튼 활성에 남지 않도록 */
+  const resetTaxInvoiceUiState = () => {
+    setNeedTaxInvoice(false)
+    setShowTaxInvoiceDetails(true)
+    setInvoiceCustomerType('person')
+    setTaxSearchField('memberNo')
+    setTaxSearchKeyword('')
+    setTaxSearchMessage('')
+    setTaxMemberNo('')
+    setTaxName('')
+    setTaxId('')
+    setTaxBranchNo('')
+    setTaxPhone('')
+    setTaxEmail('')
+    setTaxAddress('')
+  }
+
   const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay') => {
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const amount = Math.max(0, st - discount - pointUsedNum)
@@ -1622,8 +1639,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     resetPaymentInputs()
   }, [showPaymentModal])
 
-  const buildOrderMemo = (baseMemo: string) => {
-    if (!needTaxInvoice) return baseMemo
+  const buildOrderMemo = (
+    baseMemo: string,
+    /** 모달 직후 동기 콜백에서는 setState 반영 전이라, 명시적으로 세금 블록을 빼야 함 */
+    opts?: { includeTaxInvoice?: boolean }
+  ) => {
+    const includeTax = opts?.includeTaxInvoice !== false && needTaxInvoice
+    if (!includeTax) return baseMemo
     const lines = [
       '[TAX_INVOICE]',
       `memberNo=${encodeTaxInvoiceMemoValue(taxMemberNo.trim())}`,
@@ -1651,6 +1673,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   ) => {
     if (amount <= 0) return
+    resetTaxInvoiceUiState()
     if (onBeforeOpenPayment) {
       const deliveryLabelForPrint = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
         .filter(Boolean)
@@ -1674,7 +1697,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       } else {
         tableNameForPrint = (takeoutLabelProp?.trim() || takeoutSlot || '').trim() || undefined
       }
-      const memoStr = buildOrderMemo(customerMemo)
+      const memoStr = buildOrderMemo(customerMemo, { includeTaxInvoice: false })
       const linesForReceipt = receiptOpts?.receiptLines ?? cartItems
       const receiptSubtotal =
         receiptOpts?.receiptSubtotal ??
@@ -2089,6 +2112,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const handleClearCart = () => {
+    resetTaxInvoiceUiState()
     setCartItems([])
     setGuestCount(0)
     setCustomerMemo('')

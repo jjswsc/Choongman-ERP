@@ -136,3 +136,41 @@ export function parsePosOrderMemo(memo: string | undefined | null): ParsedPosOrd
   )
   return { plainMemo, taxInvoice: hasMeaningfulData ? taxInvoice : null }
 }
+
+function stripTaxInvoiceSectionFromMemoRaw(memo: string | undefined | null): string {
+  const raw = String(memo || '')
+  if (!raw.trim()) return ''
+  const markerIndex = raw.indexOf(TAX_INVOICE_MARKER)
+  if (markerIndex < 0) return raw.trim()
+  return raw.slice(0, markerIndex).trim()
+}
+
+/** 기존 memo의 `[TAX_INVOICE]` 블록을 교체(또는 신규 추가)한다. */
+export function upsertPosOrderTaxInvoiceMemo(
+  memo: string | undefined | null,
+  taxInvoice: PosTaxInvoiceData
+): string {
+  const baseMemo = stripTaxInvoiceSectionFromMemoRaw(memo)
+  const normalizedTaxId = String(taxInvoice.taxId || '').replace(/\D/g, '').slice(0, 13)
+  const normalizedBranchNo = String(taxInvoice.branchNo || '').replace(/\D/g, '').slice(0, 5)
+  const normalizedPhone = String(taxInvoice.phone || '').trim()
+  const normalizedEmail = String(taxInvoice.email || '').trim()
+  const normalizedAddress = String(taxInvoice.address || '').trim()
+  const normalizedName = String(taxInvoice.name || '').trim()
+  const normalizedMemberNo = String(taxInvoice.memberNo || '').trim()
+  const customerType: PosTaxInvoiceCustomerType =
+    taxInvoice.customerType === 'company' ? 'company' : 'person'
+  const branchNoForMemo = customerType === 'company' ? normalizedBranchNo : (normalizedBranchNo || '00000')
+  const tokens = [
+    `memberNo=${encodeTaxInvoiceMemoValue(normalizedMemberNo)}`,
+    `member=${taxInvoice.member ? 'Y' : 'N'}`,
+    `customerType=${customerType}`,
+    `name=${encodeTaxInvoiceMemoValue(normalizedName)}`,
+    `taxId=${encodeTaxInvoiceMemoValue(normalizedTaxId)}`,
+    `branchNo=${encodeTaxInvoiceMemoValue(branchNoForMemo)}`,
+    `phone=${encodeTaxInvoiceMemoValue(normalizedPhone)}`,
+    `email=${encodeTaxInvoiceMemoValue(normalizedEmail)}`,
+    `address=${encodeTaxInvoiceMemoValue(normalizedAddress)}`,
+  ].join('|')
+  return [baseMemo, `${TAX_INVOICE_MARKER} ${tokens}`].filter(Boolean).join(' ').trim()
+}

@@ -122,6 +122,10 @@ type PartnerOauthBody = {
   scope?: string
 }
 
+export type GrabInboundOauthVerifyResult =
+  | { ok: true }
+  | { ok: false; reason: 'missing_inbound_oauth_env' | 'client_credentials_mismatch' }
+
 /**
  * POST /oauth/token (Grab → 파트너)
  * Grab 답변 기준: Developer Portal OAuth client와 별도의 "partner /oauth/token credentials"를 사용한다.
@@ -132,18 +136,24 @@ type PartnerOauthBody = {
  *
  * 로컬에서만 미설정 시 스텁 허용; 운영에서는 클라이언트 자격 증명 필수.
  */
-export function grabVerifyPartnerOauthBody(body: PartnerOauthBody): boolean {
+export function verifyGrabInboundOauthBody(body: PartnerOauthBody): GrabInboundOauthVerifyResult {
   const id =
     process.env.GRAB_INBOUND_OAUTH_CLIENT_ID?.trim() || process.env.GRAB_OAUTH_CLIENT_ID?.trim()
   const secret =
     process.env.GRAB_INBOUND_OAUTH_CLIENT_SECRET?.trim() || process.env.GRAB_OAUTH_CLIENT_SECRET?.trim()
   if (id && secret) {
-    return body.client_id === id && body.client_secret === secret
+    const ok = String(body.client_id || '') === id && String(body.client_secret || '') === secret
+    return ok ? { ok: true } : { ok: false, reason: 'client_credentials_mismatch' }
   }
   if (isGrabProductionDeployment()) {
-    return false
+    return { ok: false, reason: 'missing_inbound_oauth_env' }
   }
-  return true
+  return { ok: true }
+}
+
+/** @deprecated 호환용 — `verifyGrabInboundOauthBody` 사용 권장 */
+export function grabVerifyPartnerOauthBody(body: PartnerOauthBody): boolean {
+  return verifyGrabInboundOauthBody(body).ok
 }
 
 export async function grabPartnerOauthTokenResponse(): Promise<Response> {

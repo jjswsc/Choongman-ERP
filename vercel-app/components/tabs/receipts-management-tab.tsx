@@ -31,12 +31,16 @@ import {
   getPosPromosWithItems,
   getPosPrinterSettings,
   getPosDeliveryApps,
+  getPosTaxInvoiceRecipients,
+  upsertPosTaxInvoiceRecipient,
   correctPosOrderPayment,
+  updatePosOrder,
   updatePosOrderStatus,
   type PosOrder,
   type PosMenu,
   type PosPromoWithItems,
   type PosDeliveryApp,
+  type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
@@ -46,7 +50,11 @@ import { isOfficeRole } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
-import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import {
+  parsePosOrderMemo,
+  upsertPosOrderTaxInvoiceMemo,
+  type PosTaxInvoiceData,
+} from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { toDateStrBangkok } from '@/lib/attendance-utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
@@ -136,6 +144,20 @@ function receiptSegmentSearchHaystack(o: PosOrder): string {
     .toLowerCase()
 }
 
+function taxInvoiceFromRecipientRow(row: PosTaxInvoiceRecipientRow): PosTaxInvoiceData {
+  return {
+    memberNo: String(row.member_no || '').trim(),
+    customerType: row.customer_type === 'company' ? 'company' : 'person',
+    name: String(row.name || '').trim(),
+    taxId: String(row.tax_id || '').replace(/\D/g, '').slice(0, 13),
+    branchNo: String(row.branch_no || '').replace(/\D/g, '').slice(0, 5),
+    phone: String(row.phone || '').trim(),
+    email: String(row.email || '').trim(),
+    address: String(row.address || '').trim(),
+    member: Boolean(row.member_no),
+  }
+}
+
 export interface ReceiptsManagementTabProps {
   /** POS용: 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
   offlineAware?: boolean
@@ -201,6 +223,21 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promosWithItems, setPromosWithItems] = React.useState<PosPromoWithItems[]>([])
   const [deliveryAppsCatalog, setDeliveryAppsCatalog] = React.useState<PosDeliveryApp[]>([])
+  const [taxInvoiceOrder, setTaxInvoiceOrder] = React.useState<PosOrder | null>(null)
+  const [taxInvoiceSaving, setTaxInvoiceSaving] = React.useState(false)
+  const [taxSearchLoading, setTaxSearchLoading] = React.useState(false)
+  const [taxSearchField, setTaxSearchField] = React.useState<'taxId' | 'name' | 'phone'>('taxId')
+  const [taxSearchKeyword, setTaxSearchKeyword] = React.useState('')
+  const [taxSearchRows, setTaxSearchRows] = React.useState<PosTaxInvoiceRecipientRow[]>([])
+  const [taxSearchMessage, setTaxSearchMessage] = React.useState('')
+  const [tiCustomerType, setTiCustomerType] = React.useState<'person' | 'company'>('person')
+  const [tiMemberNo, setTiMemberNo] = React.useState('')
+  const [tiName, setTiName] = React.useState('')
+  const [tiTaxId, setTiTaxId] = React.useState('')
+  const [tiBranchNo, setTiBranchNo] = React.useState('')
+  const [tiPhone, setTiPhone] = React.useState('')
+  const [tiEmail, setTiEmail] = React.useState('')
+  const [tiAddress, setTiAddress] = React.useState('')
 
   const promoCatalogById = React.useMemo(() => {
     const m = new Map<string, PosPromoWithItems>()
@@ -437,7 +474,6 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const fullHtml = buildPosPaymentReceiptDocumentHtml({
         receiptData,
         menus,
-        promoCatalogById,
         orderTypeLabels,
         t,
         lang,
@@ -599,6 +635,190 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       setPcOtherDetailKey(firstAdmin ? `admin:${firstAdmin}` : 'misc')
     } else {
       setPcOtherDetailKey('misc')
+    }
+  }
+
+  const applyTaxInvoiceProfile = React.useCallback((profile: PosTaxInvoiceData) => {
+    setTiCustomerType(profile.customerType === 'company' ? 'company' : 'person')
+    setTiMemberNo(String(profile.memberNo || '').trim())
+    setTiName(String(profile.name || '').trim())
+    setTiTaxId(String(profile.taxId || '').replace(/\D/g, '').slice(0, 13))
+    setTiBranchNo(String(profile.branchNo || '').replace(/\D/g, '').slice(0, 5))
+    setTiPhone(String(profile.phone || '').trim())
+    setTiEmail(String(profile.email || '').trim())
+    setTiAddress(String(profile.address || '').trim())
+  }, [])
+
+  const openTaxInvoiceEditor = React.useCallback((order: PosOrder) => {
+    const parsed = parsePosOrderMemo(order.memo)
+    setTaxInvoiceOrder(order)
+    setTaxSearchField('taxId')
+    setTaxSearchKeyword('')
+    setTaxSearchRows([])
+    setTaxSearchMessage('')
+    if (parsed.taxInvoice) {
+      applyTaxInvoiceProfile(parsed.taxInvoice)
+      return
+    }
+    setTiCustomerType('person')
+    setTiMemberNo('')
+    setTiName('')
+    setTiTaxId('')
+    setTiBranchNo('')
+    setTiPhone('')
+    setTiEmail('')
+    setTiAddress('')
+  }, [applyTaxInvoiceProfile])
+
+  const normalizedTiTaxId = tiTaxId.replace(/\D/g, '').slice(0, 13)
+  const normalizedTiBranchNo = tiBranchNo.replace(/\D/g, '').slice(0, 5)
+  const normalizedTiPhone = tiPhone.replace(/\D/g, '').slice(0, 10)
+  const normalizedTiEmail = tiEmail.trim()
+  const normalizedTiAddress = tiAddress.trim()
+  const normalizedTiName = tiName.trim()
+  const normalizedTiMemberNo = tiMemberNo.trim()
+  const taxBranchRequired = tiCustomerType === 'company'
+  const effectiveTiBranchNo = taxBranchRequired ? normalizedTiBranchNo : (normalizedTiBranchNo || '00000')
+  const taxEmailValid =
+    normalizedTiEmail.length === 0 || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedTiEmail)
+  const taxFormErrors: string[] = []
+  if (!normalizedTiName) taxFormErrors.push('name')
+  if (normalizedTiTaxId.length !== 13) taxFormErrors.push('taxId')
+  if (taxBranchRequired && effectiveTiBranchNo.length !== 5) taxFormErrors.push('branch')
+  if (!taxBranchRequired && normalizedTiBranchNo && normalizedTiBranchNo.length !== 5) taxFormErrors.push('branch')
+  if (normalizedTiPhone.length < 9 || normalizedTiPhone.length > 10) taxFormErrors.push('phone')
+  if (!normalizedTiAddress) taxFormErrors.push('address')
+  if (!taxEmailValid) taxFormErrors.push('email')
+
+  const handleTaxRecipientSearch = async () => {
+    if (!auth?.store || !auth?.role) {
+      await appAlert(t('posReceiptPayCorrectUnauthorized') || '권한 정보가 없습니다.')
+      return
+    }
+    const keyword = taxSearchKeyword.trim()
+    if (!keyword) {
+      setTaxSearchMessage(t('posTaxSearchNeedKeyword') || '검색어를 입력해 주세요.')
+      return
+    }
+    const qForApi =
+      taxSearchField === 'taxId' || taxSearchField === 'phone'
+        ? keyword.replace(/\D/g, '')
+        : keyword
+    if (!qForApi) {
+      setTaxSearchMessage(t('posTaxSearchNeedKeyword') || '검색어를 입력해 주세요.')
+      return
+    }
+    setTaxSearchLoading(true)
+    setTaxSearchMessage('')
+    try {
+      const res = await getPosTaxInvoiceRecipients({
+        userStore: auth.store,
+        userRole: auth.role,
+        storeCode: taxInvoiceOrder?.storeCode || storeCode || undefined,
+        q: qForApi,
+        by: taxSearchField,
+        limit: 20,
+      })
+      if (!res.success) {
+        setTaxSearchRows([])
+        setTaxSearchMessage(String(res.message || t('itemsNoResults') || '검색 결과가 없습니다.'))
+        return
+      }
+      const rows = Array.isArray(res.rows) ? res.rows.filter((r) => r.is_active) : []
+      setTaxSearchRows(rows)
+      if (rows.length === 0) {
+        setTaxSearchMessage(t('posTaxSearchNoSavedProfile') || '저장된 수취인 정보가 없습니다.')
+      }
+    } catch (e) {
+      setTaxSearchRows([])
+      setTaxSearchMessage(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setTaxSearchLoading(false)
+    }
+  }
+
+  const handleSaveTaxInvoice = async () => {
+    if (!taxInvoiceOrder) return
+    if (!online) {
+      await appAlert(t('posReceiptPayCorrectOffline'))
+      return
+    }
+    if (taxFormErrors.length > 0) {
+      await appAlert(t('posTaxInvoiceInvalid') || '세금계산서 정보를 확인해 주세요.')
+      return
+    }
+    const nextTaxInvoice: PosTaxInvoiceData = {
+      memberNo: normalizedTiMemberNo,
+      customerType: tiCustomerType,
+      name: normalizedTiName,
+      taxId: normalizedTiTaxId,
+      branchNo: effectiveTiBranchNo,
+      phone: normalizedTiPhone,
+      email: normalizedTiEmail,
+      address: normalizedTiAddress,
+      member: Boolean(normalizedTiMemberNo),
+    }
+    const nextMemo = upsertPosOrderTaxInvoiceMemo(taxInvoiceOrder.memo, nextTaxInvoice)
+    if (!taxInvoiceOrder.items?.length) {
+      await appAlert(t('posPrintUnavailable'))
+      return
+    }
+    setTaxInvoiceSaving(true)
+    try {
+      const res = await updatePosOrder({
+        id: taxInvoiceOrder.id,
+        items: taxInvoiceOrder.items,
+        tableName: taxInvoiceOrder.tableName || '',
+        memo: nextMemo,
+        discountAmt: Number(taxInvoiceOrder.discountAmt || 0),
+        discountReason: String(taxInvoiceOrder.discountReason || ''),
+        paymentCash: Number(taxInvoiceOrder.paymentCash || 0),
+        paymentCard: Number(taxInvoiceOrder.paymentCard || 0),
+        paymentQr: Number(taxInvoiceOrder.paymentQr || 0),
+        paymentOther: Number(taxInvoiceOrder.paymentOther || 0),
+        paymentOtherBreakdown: taxInvoiceOrder.paymentOtherBreakdown ?? null,
+        paymentDeliveryApp: Number(taxInvoiceOrder.paymentDeliveryApp || 0),
+        deliveryPaymentChannel:
+          Number(taxInvoiceOrder.paymentDeliveryApp || 0) > 0.005
+            ? String(taxInvoiceOrder.deliveryPaymentChannel || 'grab')
+            : null,
+        memberId: Number(taxInvoiceOrder.memberId || 0) || undefined,
+        memberNo: String(taxInvoiceOrder.memberNo || ''),
+        couponCode: String(taxInvoiceOrder.couponCode || ''),
+        couponDiscountAmt: Number(taxInvoiceOrder.couponDiscountAmt || 0),
+        pointUsed: Number(taxInvoiceOrder.pointUsed || 0),
+        pointEarned: Number(taxInvoiceOrder.pointEarned || 0),
+        guestCount: Number(taxInvoiceOrder.guestCount || 0),
+      })
+      if (!res.success) {
+        await appAlert(String(res.message || t('processFail') || '실패'))
+        return
+      }
+      if (auth?.store && auth?.role) {
+        await upsertPosTaxInvoiceRecipient({
+          userStore: auth.store,
+          userRole: auth.role,
+          storeCode: taxInvoiceOrder.storeCode || storeCode,
+          memberNo: normalizedTiMemberNo || null,
+          customerType: tiCustomerType,
+          name: normalizedTiName,
+          taxId: normalizedTiTaxId,
+          branchNo: effectiveTiBranchNo,
+          phone: normalizedTiPhone,
+          email: normalizedTiEmail,
+          address: normalizedTiAddress,
+          source: 'receipt_management_after_payment',
+        })
+      }
+      await appAlert(t('saveDone') || '저장했습니다.')
+      setTaxInvoiceOrder(null)
+      setTaxSearchRows([])
+      setTaxSearchMessage('')
+      void loadOrders()
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setTaxInvoiceSaving(false)
     }
   }
 
@@ -1078,6 +1298,18 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       <Printer className="h-3 w-3" />
                                       {t('posKitchenSlip') || '주방 주문서'}
                                     </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 gap-1 px-2 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        openTaxInvoiceEditor(o)
+                                      }}
+                                    >
+                                      <PencilLine className="h-3 w-3" />
+                                      {t('posReceiptTaxInvoice') || '세금계산서'}
+                                    </Button>
                                     {isPayCorrectableOrder(o) && (
                                       <Button
                                         size="sm"
@@ -1109,6 +1341,165 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={taxInvoiceOrder != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTaxInvoiceOrder(null)
+            setTaxInvoiceSaving(false)
+            setTaxSearchLoading(false)
+            setTaxSearchRows([])
+            setTaxSearchMessage('')
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>{t('posReceiptTaxInvoice') || '세금계산서'}</DialogTitle>
+            <DialogDescription className="text-left">
+              <span className="font-mono text-foreground">{taxInvoiceOrder?.orderNo}</span>
+              <span className="mt-2 block text-xs text-muted-foreground">
+                {t('posTaxInvoiceAfterPaymentHint') || '결제 완료 후에도 세금계산서 정보를 저장할 수 있습니다.'}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-[120px_minmax(0,1fr)_auto] gap-2">
+              <Select
+                value={taxSearchField}
+                onValueChange={(v) => setTaxSearchField(v as 'taxId' | 'name' | 'phone')}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="taxId">{t('posTaxIdLabel') || 'Tax ID'}</SelectItem>
+                  <SelectItem value="name">{t('company_name') || t('posName') || '이름'}</SelectItem>
+                  <SelectItem value="phone">{t('posPhone') || '전화번호'}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                className="h-9"
+                value={taxSearchKeyword}
+                onChange={(e) => setTaxSearchKeyword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleTaxRecipientSearch()
+                  }
+                }}
+                placeholder={t('search') || '검색'}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                onClick={() => void handleTaxRecipientSearch()}
+                disabled={taxSearchLoading}
+              >
+                {t('search') || '검색'}
+              </Button>
+            </div>
+            {taxSearchRows.length > 0 && (
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+                {taxSearchRows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className="w-full rounded border border-transparent px-2 py-1 text-left text-xs hover:border-border hover:bg-muted/40"
+                    onClick={() => applyTaxInvoiceProfile(taxInvoiceFromRecipientRow(row))}
+                  >
+                    <div className="font-medium">{row.name || '-'}</div>
+                    <div className="text-muted-foreground">
+                      {row.tax_id || '-'} · {row.phone || '-'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {taxSearchMessage && <p className="text-xs text-muted-foreground">{taxSearchMessage}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posTaxCustomerTypeLabel') || '구분'}</Label>
+                <Select
+                  value={tiCustomerType}
+                  onValueChange={(v) => setTiCustomerType(v === 'company' ? 'company' : 'person')}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="person">{t('posTaxCustomerIndividual') || '개인'}</SelectItem>
+                    <SelectItem value="company">{t('posTaxCustomerCorporate') || '법인'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{t('member_no') || '회원번호'}</Label>
+                <Input className="h-9" value={tiMemberNo} onChange={(e) => setTiMemberNo(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t('posName') || '이름'}</Label>
+              <Input className="h-9" value={tiName} onChange={(e) => setTiName(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posTaxIdLabel') || 'Tax ID'}</Label>
+                <Input
+                  className="h-9"
+                  inputMode="numeric"
+                  value={tiTaxId}
+                  onChange={(e) => setTiTaxId(e.target.value.replace(/\D/g, '').slice(0, 13))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posBranchLabel') || '지점'}</Label>
+                <Input
+                  className="h-9"
+                  inputMode="numeric"
+                  value={tiBranchNo}
+                  onChange={(e) => setTiBranchNo(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  placeholder={tiCustomerType === 'company' ? '00000' : '00000'}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posPhone') || '전화번호'}</Label>
+                <Input
+                  className="h-9"
+                  inputMode="tel"
+                  value={tiPhone}
+                  onChange={(e) => setTiPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{t('posTaxEmailLabel') || 'E-mail'}</Label>
+                <Input className="h-9" value={tiEmail} onChange={(e) => setTiEmail(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t('settings_address') || '주소'}</Label>
+              <Textarea value={tiAddress} onChange={(e) => setTiAddress(e.target.value)} rows={3} />
+            </div>
+            {taxFormErrors.length > 0 && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                {t('posTaxInvoiceInvalid') || '세금계산서 정보를 확인해 주세요.'}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTaxInvoiceOrder(null)} disabled={taxInvoiceSaving}>
+              {t('btnClose') || '닫기'}
+            </Button>
+            <Button type="button" onClick={() => void handleSaveTaxInvoice()} disabled={taxInvoiceSaving || taxFormErrors.length > 0}>
+              {t('save') || '저장'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={payCorrectOrder != null}

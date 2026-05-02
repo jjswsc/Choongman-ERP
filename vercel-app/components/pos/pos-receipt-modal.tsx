@@ -2,7 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useRef, type RefObject } from 'react'
-import { getPosPrinterSettings, type PosPrinterSettings, type PosPromoWithItems } from '@/lib/api-client'
+import { getPosPrinterSettings, type PosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -46,6 +46,8 @@ export type ReceiptModalData = {
     note?: string
     promoId?: string
     promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+    /** 줄 단위 배달 플랫폼(있으면 영수증 채널 유추에 사용) */
+    deliveryAppCode?: string
   }[]
   subtotal: number
   discountAmt: number
@@ -73,6 +75,8 @@ export type ReceiptModalData = {
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
+  /** 주문의 `delivery_app_code` — 영수증 배달 채널 표시 시 결제 필드보다 우선 */
+  deliveryAppCode?: string | null
   /** 모달 자동 영수증 인쇄 시 어떤 설정을 따를지 (주문/추가주문/결제) */
   receiptAutoPrintContext?: 'order' | 'add_order' | 'payment'
   /** 실시간/폴링 등에서 이미 자동 인쇄된 주문이면 모달 자동 인쇄 생략 */
@@ -83,8 +87,6 @@ interface PosReceiptModalProps {
   onOpenChange: (open: boolean) => void
   receiptData: ReceiptModalData | null
   menus: PosMenu[]
-  /** 결제 영수증 품목: 세트 구성을 카탈로그로 보강(주방·홀 주문서와 동일 데이터 기준) */
-  promoCatalogById?: Map<string, PosPromoWithItems>
   orderTypeLabels: Record<string, string>
   t: (k: string) => string
   autoPrintReceiptOnOrder?: boolean
@@ -127,7 +129,6 @@ export function PosReceiptModal({
   onOpenChange,
   receiptData,
   menus,
-  promoCatalogById,
   orderTypeLabels,
   t,
   autoPrintReceiptOnOrder = false,
@@ -195,7 +196,6 @@ export function PosReceiptModal({
     const fullHtml = buildPosPaymentReceiptDocumentHtml({
       receiptData,
       menus,
-      promoCatalogById,
       orderTypeLabels,
       t,
       lang,

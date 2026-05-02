@@ -29,6 +29,7 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
+  FileText,
   Users,
   XCircle,
   ArrowRightLeft,
@@ -41,6 +42,7 @@ import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
+import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import {
   buildUpdatePosOrderParamsFromOrder,
   canRemovePosOrderLine,
@@ -60,6 +62,7 @@ export interface TableOrderPanelProps {
   onServed?: () => void
   onAddOrder?: () => void
   onPay?: () => void
+  onOpenTaxInvoice?: () => void
   /** 선불 결제 후 손님 퇴장 시 (테이블 초기화) */
   onLeaveTable?: () => void | Promise<void>
   /** 주문 취소 시 */
@@ -82,6 +85,7 @@ export function TableOrderPanel({
   onServed,
   onAddOrder,
   onPay,
+  onOpenTaxInvoice,
   onLeaveTable,
   onCancel,
   onAfterPartialLineRemoved,
@@ -96,6 +100,7 @@ export function TableOrderPanel({
   const t = tProp ?? tDefault
   const serveActionLabel = t('posServeAction') || '서빙'
   const isPaidPrepaid = order?.status === 'paid'
+  const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const mergeDisabledByPayment = isPaidPrepaid
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
@@ -537,6 +542,27 @@ export function TableOrderPanel({
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-5 h-5 shrink-0" />
                 <span>{t('posPrepaidPaid') || '선불 결제 완료'}</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenTaxInvoice?.()}
+                  disabled={!onOpenTaxInvoice}
+                  className={cn(
+                    'ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]',
+                    hasTaxInvoice
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/35 dark:text-amber-200',
+                    onOpenTaxInvoice ? 'cursor-pointer hover:opacity-90' : 'cursor-default'
+                  )}
+                >
+                  {hasTaxInvoice ? (
+                    <CheckCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5" />
+                  )}
+                  {hasTaxInvoice
+                    ? (t('posReceiptTaxInvoiceIssued') || '세금계산서 발행')
+                    : (t('posReceiptTaxInvoiceNotIssued') || '세금계산서 미발행')}
+                </button>
               </div>
               <Button
                 className="w-full h-11 text-base font-semibold"
@@ -878,3 +904,4 @@ export function TableOrderPanel({
     </div>
   )
 }
+
