@@ -1464,10 +1464,6 @@ function sendEscPosCutForPrinter(printerName) {
 function sendEscPosDrawerKickForPrinter(printerName) {
   return new Promise((resolve) => {
     const name = String(printerName || "").trim();
-    if (!name) {
-      resolve({ ok: false, reason: "no_printer" });
-      return;
-    }
     const script = getEscPosDrawerScriptPath();
     if (!fs.existsSync(script)) {
       console.warn("[cm-pos] ESC/POS drawer script missing:", script);
@@ -1847,12 +1843,9 @@ if (!gotLock) {
       if (!device) {
         device = String((await resolvePrintDeviceNameForJob()) || "").trim();
       }
-      if (!device) {
-        return { ok: false, reason: "no_printer" };
-      }
       const r = await sendEscPosDrawerKickForPrinter(device);
       return r.ok
-        ? { ok: true, usedDevice: device }
+        ? { ok: true, usedDevice: device || "default" }
         : { ok: false, reason: String(r.reason || "drawer_kick_failed") };
     });
 

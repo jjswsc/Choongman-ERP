@@ -1,10 +1,38 @@
 # ESC/POS: WinSpool RAW로 캐시드로어(솔레노이드) 펄스. 제조사·케이블 연결(핀0/1)에 따라 시퀀스를 순서대로 시도.
 param(
-  [Parameter(Mandatory = $true)]
-  [string] $PrinterName
+  [Parameter(Mandatory = $false)]
+  [string] $PrinterName = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+function Resolve-DefaultPrinterName {
+  try {
+    $p = Get-CimInstance Win32_Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+    if ($null -ne $p -and $p.Name) {
+      return [string]$p.Name
+    }
+  } catch {
+    # ignore
+  }
+  try {
+    $p2 = Get-Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+    if ($null -ne $p2 -and $p2.Name) {
+      return [string]$p2.Name
+    }
+  } catch {
+    # ignore
+  }
+  return ""
+}
+
+$resolvedPrinterName = [string]$PrinterName
+if ([string]::IsNullOrWhiteSpace($resolvedPrinterName)) {
+  $resolvedPrinterName = Resolve-DefaultPrinterName
+}
+if ([string]::IsNullOrWhiteSpace($resolvedPrinterName)) {
+  throw "ESC/POS drawer: printer name missing and default printer not found"
+}
 
 $variants = @(
   [byte[]]@(0x1B, 0x70, 0x00, 0x19, 0xFA),
@@ -88,7 +116,7 @@ $idx = 0
 foreach ($bytes in $variants) {
   $idx++
   try {
-    [EscPosRawDrawer]::Send($PrinterName, $bytes)
+    [EscPosRawDrawer]::Send($resolvedPrinterName, $bytes)
     exit 0
   } catch {
     $lastEx = $_

@@ -84,6 +84,7 @@ export async function openPosCashDrawer(
     at: new Date().toISOString(),
   }
 
+  let shellFailReason = ''
   if (typeof window !== 'undefined') {
     const shell = window.cmPosShell
     if (typeof shell?.openCashDrawer === 'function') {
@@ -92,8 +93,10 @@ export async function openPosCashDrawer(
         if (r && r.ok) {
           return { success: true, endpoint: 'cm-pos-shell' }
         }
+        shellFailReason = String(r?.reason || '').trim()
         // no_printer 등: 로컬 브리지(별도 키트) 폴백
       } catch {
+        shellFailReason = 'shell_exception'
         // 로컬 HTTP 폴백
       }
     }
@@ -102,6 +105,9 @@ export async function openPosCashDrawer(
   for (const endpoint of LOCAL_DRAWER_ENDPOINTS) {
     const r = await postJsonWithTimeout(endpoint, payload)
     if (r.ok) return { success: true, endpoint }
+  }
+  if (shellFailReason) {
+    return { success: false, error: `shell:${shellFailReason}` }
   }
   return { success: false, error: 'all_local_bridge_endpoints_failed' }
 }
