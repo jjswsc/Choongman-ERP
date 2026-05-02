@@ -21,7 +21,13 @@ import {
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-context"
-import { isLangCode, useLang, normalizeAdminUiLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
+import {
+  isLangCode,
+  useLang,
+  normalizeAdminUiLang,
+  ADMIN_UI_LANG_OPTIONS,
+  type LangCode,
+} from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
@@ -79,6 +85,18 @@ function isLoginCheckBackendFailureMessage(msg: string): boolean {
     s.includes("Cannot reach the server right now") ||
     s.includes("Cannot reach the login server")
   )
+}
+
+/** 로그인 언어 셀렉트 표시용 국기 이모지 */
+const LOGIN_LANG_FLAG_EMOJI: Record<LangCode, string> = {
+  ko: "🇰🇷",
+  en: "🇬🇧",
+  th: "🇹🇭",
+  mm: "🇲🇲",
+  la: "🇱🇦",
+  kh: "🇰🇭",
+  vi: "🇻🇳",
+  ms: "🇲🇾",
 }
 
 type LoginApp = "erp" | "pos" | "mobile"
@@ -898,14 +916,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </div>
           ) : (
           <form onSubmit={handleSubmit}>
-            <div className="mb-3 w-full max-w-sm space-y-1.5" data-login-step="language">
-              <p className="text-center text-xs font-medium tracking-wide text-white/90" id="login-form-lang-hint">
-                {tMsg("posLanguage")}
-              </p>
+            <div className="mb-3 w-full max-w-sm" data-login-step="language">
               <Select
                 value={lang}
                 onValueChange={handleLangChange}
-                aria-labelledby="login-form-lang-hint"
+                aria-label={tMsg("posLanguage")}
               >
                 <SelectTrigger type="button" className="login-select-trigger ring-1 ring-white/20" style={{ color: "white" }}>
                   <SelectValue />
@@ -913,7 +928,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 <SelectContent className="login-select-content">
                   {ADMIN_UI_LANG_OPTIONS.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
-                      {o.label}
+                      {`${LOGIN_LANG_FLAG_EMOJI[o.value]} ${o.label}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
