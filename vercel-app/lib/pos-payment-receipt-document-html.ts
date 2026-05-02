@@ -300,7 +300,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const tightSimpleInset = shouldUseTightSimpleReceiptInsetForStore(receiptData.storeCode)
   if (forceSimple) {
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
-    const useLegacySimpleTable = tightSimpleInset
+    const useLegacySimpleTable = false
+    const useUltraPlainSimpleRows = tightSimpleInset
     const simpleStack = (nameHtml: string, amtHtml: string) =>
       useLegacySimpleTable
         ? `<tr><td class="simple-item-name">${nameHtml}</td><td class="simple-item-amt">${amtHtml}</td></tr>`
@@ -309,7 +310,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       .map((it) => {
         const name = translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        const main = simpleStack(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
+        const main = useUltraPlainSimpleRows
+          ? `<div class="simple-plain-row">${esc(`${Number(it.qty) || 1}x ${name}  ${amt}`)}</div>`
+          : simpleStack(`${Number(it.qty) || 1}x ${esc(name)}`, amt)
         const promoItems = it.promoItems
         const promoComposeLines =
           Array.isArray(promoItems) && promoItems.length > 0
@@ -340,21 +343,31 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       })
       .join('')
     const summaryRows = [
-      simpleStack(esc(t('posSubtotal') || '소계'), formatBahtNum(receiptData.subtotal)),
+      useUltraPlainSimpleRows
+        ? `<div class="simple-plain-row">${esc(`${t('posSubtotal') || '소계'}  ${formatBahtNum(receiptData.subtotal)}`)}</div>`
+        : simpleStack(esc(t('posSubtotal') || '소계'), formatBahtNum(receiptData.subtotal)),
       receiptData.discountAmt > 0
-        ? simpleStack(esc(t('posDiscount') || '할인'), `-${formatBahtNum(receiptData.discountAmt)}`)
+        ? useUltraPlainSimpleRows
+          ? `<div class="simple-plain-row">${esc(`${t('posDiscount') || '할인'}  -${formatBahtNum(receiptData.discountAmt)}`)}</div>`
+          : simpleStack(esc(t('posDiscount') || '할인'), `-${formatBahtNum(receiptData.discountAmt)}`)
         : '',
       (receiptData.deliveryFee ?? 0) > 0
-        ? simpleStack(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`)
+        ? useUltraPlainSimpleRows
+          ? `<div class="simple-plain-row">${esc(`${t('posDeliveryFee') || '배달 수수료'}  +${formatBahtNum(receiptData.deliveryFee)}`)}</div>`
+          : simpleStack(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`)
         : '',
       (receiptData.packagingFee ?? 0) > 0
-        ? simpleStack(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`)
+        ? useUltraPlainSimpleRows
+          ? `<div class="simple-plain-row">${esc(`${t('posPackagingFee') || '포장 수수료'}  +${formatBahtNum(receiptData.packagingFee)}`)}</div>`
+          : simpleStack(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`)
         : '',
       (receiptData.vatFeeAmt ?? 0) > 0
-        ? simpleStack(
-            esc(t('posVatLabel') || '부가세'),
-            `${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`
-          )
+        ? useUltraPlainSimpleRows
+          ? `<div class="simple-plain-row">${esc(`${t('posVatLabel') || '부가세'}  ${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`)}</div>`
+          : simpleStack(
+              esc(t('posVatLabel') || '부가세'),
+              `${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}`
+            )
         : '',
     ]
       .filter(Boolean)
@@ -376,13 +389,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${
           useLegacySimpleTable
             ? `<table class="simple-table" dir="ltr"><tbody>${itemRows}</tbody></table>`
-            : `<div class="simple-stack-block">${itemRows}</div>`
+            : `<div class="simple-stack-block${useUltraPlainSimpleRows ? ' simple-plain-block' : ''}">${itemRows}</div>`
         }
         <div class="simple-divider"></div>
         ${
           useLegacySimpleTable
             ? `<table class="simple-table simple-summary-table" dir="ltr"><tbody>${summaryRows}</tbody></table>`
-            : `<div class="simple-stack-block">${summaryRows}</div>`
+            : `<div class="simple-stack-block${useUltraPlainSimpleRows ? ' simple-plain-block' : ''}">${summaryRows}</div>`
         }
         <div class="simple-total">${esc(tr('posTotal', '합계'))}: ${formatBahtNum(receiptData.total)}</div>
         ${paymentBreakdownSimpleHtml}
@@ -411,6 +424,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .simple-biz { color: #111; }
         .simple-divider { border-top: 1px dashed #000; margin: 6px 0; }
         .simple-stack-block { width: 100%; box-sizing: border-box; }
+        .simple-plain-block { letter-spacing: 0; }
+        .simple-plain-row { font-size: 11px; line-height: 1.38; text-align: left; color: #000; white-space: pre-wrap; word-break: break-word; margin: 3px 0; }
         .simple-table { width: 100%; border-collapse: collapse; table-layout: fixed; direction: ltr !important; unicode-bidi: isolate !important; }
         .simple-table tr { direction: ltr !important; unicode-bidi: isolate !important; }
         .simple-table td { padding: 2px 0; vertical-align: top; }
