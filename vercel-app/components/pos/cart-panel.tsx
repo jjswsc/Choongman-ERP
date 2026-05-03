@@ -253,6 +253,7 @@ export interface CartPanelHandle {
   clearCart: () => void
   openDineInPaymentFromOrder: (payload: {
     tableName: string
+    orderNo?: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
@@ -1683,6 +1684,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       receiptSubtotal?: number
       /** 미입력 시 현재 할인+포인트(상태) */
       receiptDiscountTotal?: number
+      /** setState 반영 전 결제 진입 시 영수증 테이블명 고정 */
+      receiptTableName?: string
+      /** setState 반영 전 결제 진입 시 영수증 주문번호 고정 */
+      receiptOrderNo?: string
     }
   ) => {
     if (amount <= 0) return
@@ -1691,7 +1696,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       const deliveryLabelForPrint = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
         .filter(Boolean)
         .join(' ')
-      const dineInTableName = selectedTable?.name || paymentTableNameOverride || ''
+      const dineInTableName = (
+        receiptOpts?.receiptTableName ||
+        selectedTable?.name ||
+        paymentTableNameOverride ||
+        ''
+      ).trim()
       const orderTypeLabel =
         orderType === 'dine-in'
           ? t('posOrderTypeDineIn') || '매장'
@@ -1699,8 +1709,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             ? t('posOrderTypeDelivery') || '배달'
             : t('posOrderTypeTakeout') || '포장'
       const orderNo =
-        orderType === 'dine-in' && selectedTable?.order?.orderNo?.trim()
-          ? String(selectedTable.order.orderNo).trim()
+        orderType === 'dine-in'
+          ? String(
+              receiptOpts?.receiptOrderNo ||
+              selectedTable?.order?.orderNo ||
+              ''
+            ).trim()
           : ''
       let tableNameForPrint: string | undefined
       if (orderType === 'dine-in') {
@@ -1743,7 +1757,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           tableName: tableNameForPrint,
           memo: memoStr || undefined,
           items: receiptItems,
-          subtotal,
+          subtotal: receiptSubtotal,
           discountAmt: discountTotal,
           total: pricingSnapshot.finalTotal,
           vatFeeAmt: pricingSnapshot.vatFeeAmt,
@@ -2001,6 +2015,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openDineInPaymentFromOrder = (payload: {
     tableName: string
+    orderNo?: string
     items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => {
     checkoutExistingPosOrderIdRef.current = null
@@ -2022,6 +2037,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       receiptLines: normalized,
       receiptSubtotal: amount,
       receiptDiscountTotal: pointUsedNum,
+      receiptTableName: payload.tableName,
+      receiptOrderNo: payload.orderNo,
     })
   }
 

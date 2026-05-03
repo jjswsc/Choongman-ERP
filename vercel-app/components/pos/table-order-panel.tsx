@@ -610,6 +610,50 @@ export function TableOrderPanel({
                 <CheckCircle className="w-5 h-5 shrink-0" />
                 <span>{t('posTableStatusServed') || '서빙 완료'}</span>
               </div>
+              <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
+                <ul className="p-1.5 space-y-1">
+                  {order.items.map((item) => {
+                    const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+                    const mainName = optMatch ? optMatch[1].trim() : item.name
+                    const optionPart = optMatch ? optMatch[2].trim() : null
+                    const noteTrim = (item.note ?? '').trim()
+                    const mainNameT = translatePosMenuLineForReceipt(mainName, t)
+                    const optionPartT = optionPart ? translatePosMenuLineForReceipt(optionPart, t) : undefined
+                    return (
+                      <li
+                        key={item.id}
+                        className="flex items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800"
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-base font-medium leading-snug break-words">{mainNameT}</p>
+                          {optionPart && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 break-words pl-0 leading-snug" title={optionPartT}>
+                              {optionPartT}
+                            </p>
+                          )}
+                          {noteTrim && (
+                            <p className="text-sm text-blue-700 dark:text-blue-300/90 line-clamp-1 break-words leading-snug" title={noteTrim}>
+                              {noteTrim}
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end justify-start gap-0.5 self-start pt-0.5 text-right">
+                          <span className="text-base font-bold tabular-nums text-foreground leading-tight whitespace-nowrap">
+                            ×{item.quantity}
+                          </span>
+                          <span className="text-sm text-muted-foreground tabular-nums leading-tight whitespace-nowrap">
+                            {(item.price * item.quantity).toLocaleString()} ฿
+                          </span>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </ScrollArea>
+              <div className="flex justify-between text-base font-medium">
+                <span>{t('posInputTotal') || '합계'}</span>
+                <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"

@@ -1,4 +1,8 @@
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
+import {
+  collectGrabPartnerStoreIds,
+  isGrabFoodMerchantMapKey,
+} from '@/lib/grab-resolve-menu-notification-merchants'
 import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -11,30 +15,6 @@ type IntegrationRow = {
   grab_merchant_id?: string
   partner_merchant_id?: string
   integration_status?: string
-}
-
-/** Grab merchantID 키만 (GFSBPOS-…). JSON에 넣은 파트너 숫자·ERP 코드 키는 제외 */
-function isGrabFoodMerchantMapKey(k: string): boolean {
-  const s = String(k || '').trim()
-  if (!s) return false
-  if (/^\d{1,6}$/.test(s)) return false
-  return /GF/i.test(s)
-}
-
-/** Grab 파트너 스토어 ID(숫자 문자열) 후보 — ERP store_code·표시명도 입력될 수 있음 */
-function collectGrabPartnerStoreIds(partnerParam: string, map: Record<string, string>): Set<string> {
-  const raw = String(partnerParam || '').trim()
-  const ids = new Set<string>()
-  if (!raw) return ids
-  if (/^\d{1,6}$/.test(raw)) ids.add(raw)
-  for (const [k, v] of Object.entries(map)) {
-    const kk = String(k || '').trim()
-    const vv = String(v || '').trim()
-    if (!kk || !vv) continue
-    // "000":"HQ" → ERP 코드 HQ 일 때 파트너 000
-    if (/^\d{1,6}$/.test(kk) && vv === raw) ids.add(kk)
-  }
-  return ids
 }
 
 async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promise<string[]> {
