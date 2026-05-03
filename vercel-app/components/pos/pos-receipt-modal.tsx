@@ -67,6 +67,11 @@ export type ReceiptModalData = {
   discountReason?: string
   vatFeeAmt?: number
   vatFeeMode?: 'included' | 'separate'
+  /** VAT 포함 시 영수증 소계 행(공급가액). `subtotal`≈`receiptTaxableGrossForDisplay`일 때만 인쇄에 사용 */
+  receiptExclusiveSubtotalDisplay?: number
+  receiptVatDisplayAmt?: number
+  /** 부가세 분해 기준 과세표준(보통 `computePosPricing`의 baseTotal) */
+  receiptTaxableGrossForDisplay?: number
   serviceFeeAmt?: number
   serviceFeeMode?: 'included' | 'separate'
   cardFeeAmt?: number

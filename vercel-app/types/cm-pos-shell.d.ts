@@ -95,6 +95,9 @@ declare global {
           subtotal: number
           discountAmt: number
           vatFeeAmt: number
+          receiptExclusiveSubtotalDisplay?: number
+          receiptVatDisplayAmt?: number
+          receiptTaxableGrossForDisplay?: number
           vatRate?: number
           vatMode?: "included" | "separate"
           serviceFeeAmt: number
@@ -127,6 +130,9 @@ declare global {
             subtotal: number
             discountAmt: number
             vatFeeAmt: number
+            receiptExclusiveSubtotalDisplay?: number
+            receiptVatDisplayAmt?: number
+            receiptTaxableGrossForDisplay?: number
             vatRate?: number
             vatMode?: "included" | "separate"
             serviceFeeAmt: number

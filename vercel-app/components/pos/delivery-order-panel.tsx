@@ -10,6 +10,7 @@ import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display
 import {
   getPosPackagingChecklistByOrder,
   grabCancelOrderByStoreApi,
+  grabMarkOrderReadyApi,
   markPosOrderItemServed,
   updatePosOrder,
   updatePosOrderStatus,
@@ -306,6 +307,16 @@ export function DeliveryOrderPanel({
     const completeReady = async () => {
       try {
         await updatePosOrderStatus({ id, status: 'ready' })
+        if (grabOrderId) {
+          try {
+            const markRes = await grabMarkOrderReadyApi({ orderID: grabOrderId, markStatus: 1 })
+            if (!markRes.success) {
+              console.error('grabMarkOrderReadyApi:', markRes.message || 'failed')
+            }
+          } catch (e) {
+            console.error('grabMarkOrderReadyApi:', e)
+          }
+        }
         onPackaged?.()
       } catch (e) {
         console.error('updatePosOrderStatus:', e)

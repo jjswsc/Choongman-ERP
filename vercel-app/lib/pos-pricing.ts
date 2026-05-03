@@ -19,6 +19,13 @@ export interface PosPricingResult {
   deliveryFee: number
   packagingFee: number
   baseTotal: number
+  /**
+   * VAT 포함(included)일 때 영수증 소계 행에 쓸 공급가액(바트 정수).
+   * 품목 합·할인 등으로 `subtotal !== baseTotal`이면 영수증에서는 원시 subtotal을 유지하고 이 값은 참고용만 채움.
+   */
+  receiptExclusiveSubtotalDisplay?: number
+  /** VAT 포함일 때 영수증 부가세 행(바트 정수). 미포함·세율 0이면 미설정. */
+  receiptVatDisplayAmt?: number
   vatFeeAmt: number
   vatFeeMode: PosFeeMode
   serviceFeeAmt: number
@@ -55,6 +62,56 @@ function calcFeeAmount(baseTotal: number, rate: number, mode: PosFeeMode): numbe
   if (rate <= 0 || baseTotal <= 0) return 0
   if (mode === 'included') return round2(baseTotal * (rate / (100 + rate)))
   return round2(baseTotal * (rate / 100))
+}
+
+/** VAT 포함 합계(정수 바트 앵커)를 공급가액·세액 정수로 나눔 — 합계 = 앵커 */
+export function splitVatInclusiveBahtForReceipt(anchorBaht: number, vatRatePercent: number): { exclusive: number; vat: number } | null {
+  const rate = Number(vatRatePercent)
+  if (!Number.isFinite(rate) || rate <= 0) return null
+  const t = Math.round(round2(Math.max(0, anchorBaht)))
+  if (t <= 0) return null
+  const rawVat = (t * rate) / (100 + rate)
+  const vat = Math.round(rawVat)
+  const exclusive = t - vat
+  return { exclusive, vat }
+}
+
+/** 결제 영수증: 소계 금액(첫 행) */
+export function resolveReceiptSubtotalPrintAmount(r: {
+  subtotal: number
+  vatFeeMode?: PosFeeMode
+  receiptExclusiveSubtotalDisplay?: number
+  receiptTaxableGrossForDisplay?: number
+}): number {
+  if (
+    r.vatFeeMode === 'included' &&
+    typeof r.receiptExclusiveSubtotalDisplay === 'number' &&
+    typeof r.receiptTaxableGrossForDisplay === 'number' &&
+    Math.abs(r.subtotal - r.receiptTaxableGrossForDisplay) < 0.02
+  ) {
+    return r.receiptExclusiveSubtotalDisplay
+  }
+  return r.subtotal
+}
+
+/** 결제 영수증: 부가세 금액 */
+export function resolveReceiptVatPrintAmount(r: { vatFeeAmt?: number; receiptVatDisplayAmt?: number }): number {
+  return typeof r.receiptVatDisplayAmt === 'number' ? r.receiptVatDisplayAmt : Math.max(0, Number(r.vatFeeAmt ?? 0) || 0)
+}
+
+/** `ReceiptModalData` 등에 그대로 펼쳐 넣을 VAT 표시용 필드 */
+export function receiptTaxDisplayFieldsFromPricing(pricing: PosPricingResult): {
+  receiptExclusiveSubtotalDisplay?: number
+  receiptVatDisplayAmt?: number
+  receiptTaxableGrossForDisplay: number
+} {
+  return {
+    ...(typeof pricing.receiptExclusiveSubtotalDisplay === 'number'
+      ? { receiptExclusiveSubtotalDisplay: pricing.receiptExclusiveSubtotalDisplay }
+      : {}),
+    ...(typeof pricing.receiptVatDisplayAmt === 'number' ? { receiptVatDisplayAmt: pricing.receiptVatDisplayAmt } : {}),
+    receiptTaxableGrossForDisplay: pricing.baseTotal,
+  }
 }
 
 export function computePosPricing(params: {
@@ -111,12 +168,24 @@ export function computePosPricing(params: {
   )
   const finalTotal = round2(baseTotal + separateTotal)
 
+  let receiptExclusiveSubtotalDisplay: number | undefined
+  let receiptVatDisplayAmt: number | undefined
+  if (vatMode === 'included' && vatRate > 0) {
+    const split = splitVatInclusiveBahtForReceipt(baseTotal, vatRate)
+    if (split) {
+      receiptExclusiveSubtotalDisplay = split.exclusive
+      receiptVatDisplayAmt = split.vat
+    }
+  }
+
   return {
     subtotal,
     discountAmt,
     deliveryFee,
     packagingFee,
     baseTotal,
+    receiptExclusiveSubtotalDisplay,
+    receiptVatDisplayAmt,
     vatFeeAmt,
     vatFeeMode: vatMode,
     serviceFeeAmt,

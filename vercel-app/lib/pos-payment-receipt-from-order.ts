@@ -1,5 +1,9 @@
 import type { PosOrder, PosMenu, PosPromoWithItems } from '@/lib/api-client'
-import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import {
+  computePosPricing,
+  receiptTaxDisplayFieldsFromPricing,
+  type PosPricingAdjustments,
+} from '@/lib/pos-pricing'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 
 export type PosOrderReceiptLineOptions = {
@@ -348,6 +352,7 @@ export function receiptModalDataFromPosOrderForPayment(
       : {}),
     vatFeeAmt: pricing.vatFeeAmt,
     vatFeeMode: pricing.vatFeeMode,
+    ...receiptTaxDisplayFieldsFromPricing(pricing),
     serviceFeeAmt: pricing.serviceFeeAmt,
     serviceFeeMode: pricing.serviceFeeMode,
     cardFeeAmt: pricing.cardFeeAmt,

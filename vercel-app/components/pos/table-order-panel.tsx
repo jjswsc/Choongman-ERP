@@ -59,6 +59,8 @@ export interface TableOrderPanelProps {
   order: Order | null
   /** 테이블 이동·합석용 (매장 전체 테이블 목록) */
   allTables?: Table[]
+  /** 합석 대상에 넣을 포장 주문(가상 테이블 행). absorb는 항상 “현재 테이블 청구서”로만 허용. */
+  takeoutMergePeers?: Table[]
   onServed?: () => void
   onAddOrder?: () => void
   onPay?: () => void
@@ -94,6 +96,7 @@ export function TableOrderPanel({
   t: tProp,
   isDemo,
   onDemoOrderReplace,
+  takeoutMergePeers = [],
 }: TableOrderPanelProps) {
   const { lang } = useLang()
   const tDefault = useT(lang)
@@ -174,7 +177,7 @@ export function TableOrderPanel({
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
   const [moveTargetName, setMoveTargetName] = useState('')
-  const [mergeTargetName, setMergeTargetName] = useState('')
+  const [mergeTargetId, setMergeTargetId] = useState('')
   const [mergeDirection, setMergeDirection] = useState<'into_selected' | 'into_current'>('into_selected')
   const [transferSubmitting, setTransferSubmitting] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
@@ -191,18 +194,44 @@ export function TableOrderPanel({
       }),
     [allTables, currentNameNorm]
   )
-  const mergePeerOptions = useMemo(
+  const dineInMergePeers = useMemo(
     () =>
       allTables.filter((t) => {
         const n = String(t.name ?? '').trim()
         if (!n || n === currentNameNorm) return false
         const o = t.order
-        if (!t.isOccupied || !o || String(o.id) === String(order?.id ?? '')) return false
+        if (!t.isOccupied || !o || o.type !== 'dine-in') return false
+        if (String(o.id) === String(order?.id ?? '')) return false
         if (o.status === 'paid') return false
         return true
       }),
     [allTables, currentNameNorm, order?.id]
   )
+
+  const takeoutMergePeersResolved = useMemo(
+    () =>
+      takeoutMergePeers.filter((t) => {
+        const o = t.order
+        if (!o || o.type !== 'takeout') return false
+        if (String(o.id) === String(order?.id ?? '')) return false
+        if (o.status === 'paid') return false
+        if (!o.items?.length) return false
+        if (orderPaymentsSum(o) > 0.005) return false
+        return true
+      }),
+    [takeoutMergePeers, order?.id]
+  )
+
+  const mergePeerOptions = useMemo(
+    () => [...dineInMergePeers, ...takeoutMergePeersResolved],
+    [dineInMergePeers, takeoutMergePeersResolved]
+  )
+
+  const mergeTargetPeer = useMemo(
+    () => mergePeerOptions.find((p) => String(p.id) === String(mergeTargetId)),
+    [mergePeerOptions, mergeTargetId]
+  )
+  const mergePeerIsTakeout = mergeTargetPeer?.order?.type === 'takeout'
 
   useEffect(() => {
     if (moveOpen) {
@@ -213,11 +242,19 @@ export function TableOrderPanel({
 
   useEffect(() => {
     if (mergeOpen) {
-      const first = mergePeerOptions[0]?.name
-      setMergeTargetName(first ? String(first) : '')
-      setMergeDirection('into_selected')
+      const first = mergePeerOptions[0]
+      setMergeTargetId(first?.id ? String(first.id) : '')
+      setMergeDirection(first?.order?.type === 'takeout' ? 'into_current' : 'into_selected')
     }
   }, [mergeOpen, mergePeerOptions])
+
+  useEffect(() => {
+    if (!mergeOpen || !mergeTargetId) return
+    const peer = mergePeerOptions.find((p) => String(p.id) === String(mergeTargetId))
+    if (peer?.order?.type === 'takeout' && mergeDirection === 'into_selected') {
+      setMergeDirection('into_current')
+    }
+  }, [mergeOpen, mergeTargetId, mergePeerOptions, mergeDirection])
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -400,9 +437,13 @@ export function TableOrderPanel({
   }
 
   const handleTableMerge = async () => {
-    if (!order || order.type !== 'dine-in' || !mergeTargetName.trim()) return
-    const peer = allTables.find((x) => String(x.name ?? '').trim() === mergeTargetName.trim())
+    if (!order || order.type !== 'dine-in' || !mergeTargetId.trim()) return
+    const peer = mergePeerOptions.find((x) => String(x.id) === String(mergeTargetId.trim()))
     if (!peer?.order) return
+    if (peer.order.type === 'takeout' && mergeDirection === 'into_selected') {
+      await appAlert(t('posTableMergeTakeoutIntoCurrentOnly') || tDefault('posTableMergeTakeoutIntoCurrentOnly'))
+      return
+    }
     const peerLabel = translateReceiptTableDisplayName(peer.name, t)
     const hereLabel = translateReceiptTableDisplayName(tableName, t)
     const detail =
@@ -494,7 +535,7 @@ export function TableOrderPanel({
       ) : (
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
           {order.type === 'dine-in' &&
-            ((order.guestCount ?? 0) > 0 || allTables.length > 0) && (
+            ((order.guestCount ?? 0) > 0 || allTables.length > 0 || mergePeerOptions.length > 0) && (
               <div className="flex flex-wrap items-center gap-2">
                 {(order.guestCount ?? 0) > 0 && (
                   <div
@@ -904,19 +945,24 @@ export function TableOrderPanel({
             <div className="space-y-3 py-2">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">{t('posTableMergePickTable') || ''}</Label>
-                <Select value={mergeTargetName} onValueChange={setMergeTargetName}>
+                <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
                   <SelectTrigger className="h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {mergePeerOptions.map((tab) => (
-                      <SelectItem key={tab.id} value={String(tab.name ?? '').trim()}>
+                      <SelectItem key={tab.id} value={String(tab.id)}>
                         {translateReceiptTableDisplayName(String(tab.name ?? ''), t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+              {mergePeerIsTakeout ? (
+                <p className="text-xs text-muted-foreground border-l-2 border-muted pl-2">
+                  {t('posTableMergeTakeoutIntoCurrentOnly') || tDefault('posTableMergeTakeoutIntoCurrentOnly')}
+                </p>
+              ) : null}
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">{t('posTableMergeDirection') || ''}</Label>
                 <Select
@@ -929,14 +975,16 @@ export function TableOrderPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="into_selected">{t('posTableMergeIntoSelected') || ''}</SelectItem>
+                    {!mergePeerIsTakeout ? (
+                      <SelectItem value="into_selected">{t('posTableMergeIntoSelected') || ''}</SelectItem>
+                    ) : null}
                     <SelectItem value="into_current">{t('posTableMergeIntoCurrent') || ''}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <Button
                 className="w-full"
-                disabled={!mergeTargetName || transferSubmitting}
+                disabled={!mergeTargetId || transferSubmitting}
                 onClick={() => { void handleTableMerge() }}
               >
                 {transferSubmitting ? '…' : (t('posTableMergeConfirm') || '합석')}

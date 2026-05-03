@@ -73,7 +73,12 @@ import { useT } from '@/lib/i18n'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import type { Order, OrderItem, Table } from '@/lib/pos-types'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
-import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import {
+  computePosPricing,
+  receiptTaxDisplayFieldsFromPricing,
+  type PosPricingAdjustments,
+} from '@/lib/pos-pricing'
+import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import {
   buildPosTaxInvoiceThermalHtml,
@@ -119,6 +124,7 @@ import {
   receiptModalDataFromPosOrderForPayment,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import {
@@ -396,6 +402,8 @@ export default function PosTerminalPage() {
   const bindCartImperative = useCallback((api: CartPanelHandle | null) => {
     cartRef.current = api
   }, [])
+  const posCartBackendBusyRef = useRef(false)
+  const [posCartBackendBusy, setPosCartBackendBusy] = useState(false)
 
   const clearCartFromTerminal = useCallback(() => {
     setTerminalCartLines([])
@@ -1192,6 +1200,7 @@ export default function PosTerminalPage() {
       subtotal,
       discountAmt,
       vatFeeAmt: pricing.vatFeeAmt,
+      ...receiptTaxDisplayFieldsFromPricing(pricing),
       vatRate: pricingAdjustments.vatRate,
       vatMode: pricingAdjustments.vatMode,
       serviceFeeAmt: pricing.serviceFeeAmt,
@@ -2057,6 +2066,9 @@ export default function PosTerminalPage() {
       total: number
       vatFeeAmt?: number
       vatFeeMode?: 'included' | 'separate'
+      receiptExclusiveSubtotalDisplay?: number
+      receiptVatDisplayAmt?: number
+      receiptTaxableGrossForDisplay?: number
       serviceFeeAmt?: number
       serviceFeeMode?: 'included' | 'separate'
       cardFeeAmt?: number
@@ -2417,6 +2429,7 @@ export default function PosTerminalPage() {
       total: pricing.finalTotal,
       vatFeeAmt: pricing.vatFeeAmt,
       vatFeeMode: pricing.vatFeeMode,
+      ...receiptTaxDisplayFieldsFromPricing(pricing),
       serviceFeeAmt: pricing.serviceFeeAmt,
       serviceFeeMode: pricing.serviceFeeMode,
       cardFeeAmt: pricing.cardFeeAmt,
@@ -2926,6 +2939,7 @@ export default function PosTerminalPage() {
         total: pricing.finalTotal,
         vatFeeAmt: pricing.vatFeeAmt,
         vatFeeMode: pricing.vatFeeMode,
+        ...receiptTaxDisplayFieldsFromPricing(pricing),
         serviceFeeAmt: pricing.serviceFeeAmt,
         serviceFeeMode: pricing.serviceFeeMode,
         cardFeeAmt: pricing.cardFeeAmt,
@@ -3692,6 +3706,38 @@ export default function PosTerminalPage() {
     ? (takeoutMemberName.trim() || (t('posTakeoutMemberName') || '회원 이름'))
     : formatTakeoutSlotLabel(takeoutSlot)
   const takeoutLabel = selectedTakeoutTargetLabel || baseTakeoutLabel
+
+  const takeoutMergePeerTables = useMemo((): Table[] => {
+    const takeoutFallback = t('posOrderTypeTakeout') || 'Takeout'
+    const rows = [...takeoutOrders, ...packagedTakeoutOrders]
+    return rows
+      .filter((o) => {
+        if (o.status === 'paid' || o.status === 'cancelled' || o.status === 'completed') return false
+        if (!o.items?.length) return false
+        if (orderPaymentsSum(o) > 0.005) return false
+        return true
+      })
+      .map((o) => {
+        const nameRaw =
+          String(o.tableName ?? '').trim() ||
+          String(o.customerName ?? '').trim() ||
+          `${takeoutFallback} #${o.id}`
+        return {
+          id: `merge-takeout-${o.id}`,
+          name: nameRaw,
+          seats: 0,
+          x: 0,
+          y: 0,
+          width: 80,
+          height: 60,
+          shape: 'square' as const,
+          rotation: 0,
+          isOccupied: true,
+          order: o,
+        }
+      })
+  }, [takeoutOrders, packagedTakeoutOrders, t])
+
   const filteredTakeoutMembers = takeoutMemberName.trim()
     ? takeoutMemberNames.filter((name) => name.toLowerCase().includes(takeoutMemberName.trim().toLowerCase())).slice(0, 6)
     : takeoutMemberNames.slice(0, 6)
@@ -4200,6 +4246,7 @@ export default function PosTerminalPage() {
             takeoutLabel={takeoutLabel}
             pricingAdjustments={pricingAdjustments}
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
+            posBackendActionInFlight={posCartBackendBusy}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
             onBeforeOpenPayment={async (payload: CartPanelBeforePaymentReceiptPayload) => {
               if (!autoPrintFinalOrderBeforePayment || !isMainPosDevice) return
@@ -4269,6 +4316,7 @@ export default function PosTerminalPage() {
                   discountReason: payload.discountReason,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
                   serviceFeeAmt: pricing.serviceFeeAmt,
                   serviceFeeMode: pricing.serviceFeeMode,
                   cardFeeAmt: pricing.cardFeeAmt,
@@ -4368,6 +4416,7 @@ export default function PosTerminalPage() {
                   discountReason: payload.discountReason,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
                   serviceFeeAmt: pricing.serviceFeeAmt,
                   serviceFeeMode: pricing.serviceFeeMode,
                   cardFeeAmt: pricing.cardFeeAmt,
@@ -4401,6 +4450,10 @@ export default function PosTerminalPage() {
               }
             }}
             onOrderSubmit={async (payload) => {
+              if (posCartBackendBusyRef.current) return
+              posCartBackendBusyRef.current = true
+              setPosCartBackendBusy(true)
+              const posSaveClientKey = newPosOrderClientRequestId()
               const existingOrder = selectedTable?.order ?? null
               const existingOrderId = Number(existingOrder?.id ?? 0)
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
@@ -4536,6 +4589,7 @@ export default function PosTerminalPage() {
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
+                    localOrderNo: posSaveClientKey,
                     paymentCash: 0,
                     paymentCard: 0,
                     paymentQr: 0,
@@ -4554,7 +4608,11 @@ export default function PosTerminalPage() {
                   savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
                   const queued = Boolean((res as { queued?: boolean }).queued)
                   await notifyQueuedSave(savedOrderNo, queued)
-                  if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
+                  if (
+                    queued &&
+                    (savedOrderNo.startsWith('LOCAL-') || savedOrderNo.startsWith('pos-'))
+                  )
+                    queuedLocalOrderNo = savedOrderNo
                 }
                 const markQueuedLocalPrintedIfNeeded = () => {
                   if (!queuedLocalOrderNo) return
@@ -4648,6 +4706,7 @@ export default function PosTerminalPage() {
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
                   serviceFeeAmt: pricing.serviceFeeAmt,
                   serviceFeeMode: pricing.serviceFeeMode,
                   cardFeeAmt: pricing.cardFeeAmt,
@@ -4802,6 +4861,7 @@ export default function PosTerminalPage() {
                     discountReason: payload.discountReason,
                     vatFeeAmt: pricing.vatFeeAmt,
                     vatFeeMode: pricing.vatFeeMode,
+                    ...receiptTaxDisplayFieldsFromPricing(pricing),
                     serviceFeeAmt: pricing.serviceFeeAmt,
                     serviceFeeMode: pricing.serviceFeeMode,
                     cardFeeAmt: pricing.cardFeeAmt,
@@ -4823,9 +4883,16 @@ export default function PosTerminalPage() {
                 await refetchCurrentStore()
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
+              } finally {
+                posCartBackendBusyRef.current = false
+                setPosCartBackendBusy(false)
               }
             }}
             onDineInOrderComplete={async (payload, existingOrderId) => {
+              if (posCartBackendBusyRef.current) return
+              posCartBackendBusyRef.current = true
+              setPosCartBackendBusy(true)
+              const posSaveClientKey = newPosOrderClientRequestId()
               try {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
@@ -4873,11 +4940,15 @@ export default function PosTerminalPage() {
                   orderNo = pendingReceiptOrderNo ?? ''
                 } else if (pay != null) {
                   const localNoCandidate =
-                    (pendingReceiptOrderNo?.startsWith('LOCAL-') ? pendingReceiptOrderNo : null) ??
-                    (servingTable?.order?.orderNo?.startsWith('LOCAL-')
+                    (pendingReceiptOrderNo?.startsWith('LOCAL-') || pendingReceiptOrderNo?.startsWith('pos-')
+                      ? pendingReceiptOrderNo
+                      : null) ??
+                    (servingTable?.order?.orderNo?.startsWith('LOCAL-') ||
+                    servingTable?.order?.orderNo?.startsWith('pos-')
                       ? servingTable.order.orderNo
                       : null) ??
-                    (selectedTable?.order?.orderNo?.startsWith('LOCAL-')
+                    (selectedTable?.order?.orderNo?.startsWith('LOCAL-') ||
+                    selectedTable?.order?.orderNo?.startsWith('pos-')
                       ? selectedTable.order.orderNo
                       : null)
                   let mergedLocal = false
@@ -4926,6 +4997,7 @@ export default function PosTerminalPage() {
                       couponDiscountAmt: payload.couponDiscountAmt,
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
+                      localOrderNo: posSaveClientKey,
                       items: cartLinesToPosOrderItems(payload.items),
                       paymentCash: pay.paymentCash,
                       paymentCard: pay.paymentCard,
@@ -4978,6 +5050,7 @@ export default function PosTerminalPage() {
                   discountReason: payload.discountReason,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
                   serviceFeeAmt: pricing.serviceFeeAmt,
                   serviceFeeMode: pricing.serviceFeeMode,
                   cardFeeAmt: pricing.cardFeeAmt,
@@ -5008,9 +5081,16 @@ export default function PosTerminalPage() {
                 if (pay) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
+              } finally {
+                posCartBackendBusyRef.current = false
+                setPosCartBackendBusy(false)
               }
             }}
             onNonDineOrderComplete={async (payload) => {
+              if (posCartBackendBusyRef.current) return
+              posCartBackendBusyRef.current = true
+              setPosCartBackendBusy(true)
+              const posSaveClientKey = newPosOrderClientRequestId()
               try {
                 if (isPosDemo) {
                   if (payload.orderType === 'delivery') {
@@ -5041,6 +5121,7 @@ export default function PosTerminalPage() {
                   couponCode: payload.couponCode,
                   couponDiscountAmt: payload.couponDiscountAmt,
                   pointUsed: payload.pointUsed,
+                  localOrderNo: posSaveClientKey,
                   items: cartLinesToPosOrderItems(payload.items),
                   ...(payload.orderType === 'delivery' && deliveryApp
                     ? { deliveryAppCode: String(deliveryApp) }
@@ -5066,7 +5147,7 @@ export default function PosTerminalPage() {
                 const queued = Boolean((res as { queued?: boolean }).queued)
                 await notifyQueuedSave(orderNo, queued)
                 let queuedLocalOrderNo: string | null =
-                  queued && orderNo.startsWith('LOCAL-') ? orderNo : null
+                  queued && (orderNo.startsWith('LOCAL-') || orderNo.startsWith('pos-')) ? orderNo : null
                 const markQueuedLocalPrintedIfNeeded = () => {
                   if (!queuedLocalOrderNo) return
                   registerLocallyPrintedQueuedOrderNo(queuedLocalOrderNo)
@@ -5102,6 +5183,7 @@ export default function PosTerminalPage() {
                   total: pricing.finalTotal,
                   vatFeeAmt: pricing.vatFeeAmt,
                   vatFeeMode: pricing.vatFeeMode,
+                  ...receiptTaxDisplayFieldsFromPricing(pricing),
                   serviceFeeAmt: pricing.serviceFeeAmt,
                   serviceFeeMode: pricing.serviceFeeMode,
                   cardFeeAmt: pricing.cardFeeAmt,
@@ -5256,6 +5338,9 @@ export default function PosTerminalPage() {
                 if (hasPayment) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)
+              } finally {
+                posCartBackendBusyRef.current = false
+                setPosCartBackendBusy(false)
               }
             }}
           />
@@ -5891,6 +5976,7 @@ export default function PosTerminalPage() {
               tableName={servingTable.name}
               order={servingTable.order}
               allTables={currentStore?.tables ?? []}
+              takeoutMergePeers={takeoutMergePeerTables}
               isDemo={isPosDemo}
               onDemoOrderReplace={
                 isPosDemo && demoDineInOrder?.tableId === servingTableId && servingTableId

@@ -54,11 +54,11 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
     const res = await savePosOrder(params)
     if (res.success) return { ...res, queued: false }
     if (looksLikeInfraFailureMessage(res.message)) {
-      const localOrderNo = `LOCAL-${Date.now()}`
+      const localOrderNo = String(params.localOrderNo ?? '').trim() || `LOCAL-${Date.now()}`
       await addToQueue({
         api: '/api/savePosOrder',
         method: 'POST',
-        body: JSON.stringify(params),
+        body: JSON.stringify({ ...params, localOrderNo }),
         metadata: { localOrderNo },
       })
       return { success: true, orderNo: localOrderNo, queued: true }
@@ -69,11 +69,11 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
       throw e
     }
     // 네트워크 오류 → 큐에 적재
-    const localOrderNo = `LOCAL-${Date.now()}`
+    const localOrderNo = String(params.localOrderNo ?? '').trim() || `LOCAL-${Date.now()}`
     await addToQueue({
       api: '/api/savePosOrder',
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({ ...params, localOrderNo }),
       metadata: { localOrderNo },
     })
     return {

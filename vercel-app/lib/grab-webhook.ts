@@ -214,6 +214,30 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
     merchantID,
     partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
+    sellingTimes: serviceHours,
+    categories: [
+      {
+        id: 'grab-stub-category',
+        name: 'Stub',
+        nameTranslation: {} as Record<string, string>,
+        sequence: 1,
+        availableStatus: 'AVAILABLE' as const,
+        items: [
+          {
+            id: 'grab-stub-item',
+            name: 'POS 연동 전 스텁 메뉴',
+            nameTranslation: {} as Record<string, string>,
+            sequence: 1,
+            availableStatus: 'UNAVAILABLE' as const,
+            price: 100,
+            campaignInfo: null,
+            description: 'Replace with real menu from POS.',
+            photos: [] as string[],
+            modifierGroups: [] as unknown[],
+          },
+        ],
+      },
+    ],
     sections: [
       {
         id: 'SECTION-01',

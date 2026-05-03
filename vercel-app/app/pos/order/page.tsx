@@ -26,6 +26,7 @@ import {
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { collabDiscountAmountForCart } from "@/lib/pos-collab-discount"
 import { savePosOrderWithOffline } from "@/lib/offline"
+import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
 import { getBangkokDateStr, getPosBusinessDateStr, setPosBusinessHoursClient } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
@@ -33,7 +34,12 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
-import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
+import {
+  computePosPricing,
+  resolveReceiptSubtotalPrintAmount,
+  resolveReceiptVatPrintAmount,
+  type PosPricingAdjustments,
+} from "@/lib/pos-pricing"
 import type { PosPaymentOtherBreakdown } from "@/lib/pos-payment-other-breakdown"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { Handshake, Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
@@ -242,6 +248,9 @@ export default function PosOrderPage() {
     discountReason: string
     vatFeeAmt?: number
     vatFeeMode?: 'included' | 'separate'
+    receiptExclusiveSubtotalDisplay?: number
+    receiptVatDisplayAmt?: number
+    receiptTaxableGrossForDisplay?: number
     serviceFeeAmt?: number
     serviceFeeMode?: 'included' | 'separate'
     cardFeeAmt?: number
@@ -1012,6 +1021,16 @@ export default function PosOrderPage() {
     adjustments: pricingAdjustments,
   })
   const paymentPreviewTotal = paymentPreview.finalTotal
+  const paySubtotalPrint = resolveReceiptSubtotalPrintAmount({
+    subtotal,
+    vatFeeMode: paymentPreview.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: paymentPreview.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: paymentPreview.baseTotal,
+  })
+  const payVatPrint = resolveReceiptVatPrintAmount({
+    vatFeeAmt: paymentPreview.vatFeeAmt,
+    receiptVatDisplayAmt: paymentPreview.receiptVatDisplayAmt,
+  })
   const paymentInputSum =
     (Number(payCash) || 0) +
     (Number(payCard) || 0) +
@@ -1078,6 +1097,7 @@ export default function PosOrderPage() {
     }
     setSubmitting(true)
     try {
+      const clientOrderKey = newPosOrderClientRequestId()
       const miscOther = Math.max(0, Number(payment.other) || 0)
       const paymentOtherBreakdown: PosPaymentOtherBreakdown | undefined =
         miscOther > 0.005 ? { misc: Math.round(miscOther * 100) / 100 } : undefined
@@ -1085,6 +1105,7 @@ export default function PosOrderPage() {
         storeCode: storeCode || "ST01",
         createdBy: auth?.user ?? "",
         orderType,
+        localOrderNo: clientOrderKey,
         tableName: orderType === "dine_in" ? tableName : "",
         memo: memo.trim() || undefined,
         discountAmt: discountAmt || undefined,
@@ -1846,7 +1867,7 @@ export default function PosOrderPage() {
             <div className="min-w-0 flex-1 space-y-0 text-xs leading-tight text-slate-600">
               <div className="flex justify-between gap-2 py-0.5">
                 <span className="min-w-0 pl-0.5">{t("posSubtotal") || "소계"}</span>
-                <span className="shrink-0 tabular-nums text-slate-800">{formatBahtNum(subtotal)} ฿</span>
+                <span className="shrink-0 tabular-nums text-slate-800">{formatBahtNum(paySubtotalPrint)} ฿</span>
               </div>
               {discountAmt > 0 && (
                 <div className="flex justify-between gap-2 py-0.5 text-emerald-600">
@@ -1866,10 +1887,10 @@ export default function PosOrderPage() {
                   <span className="shrink-0 tabular-nums text-slate-800">+{formatBahtNum(packagingFeeAmt)} ฿</span>
                 </div>
               )}
-              {pricing.vatFeeAmt > 0 && (
+              {payVatPrint > 0 && (
                 <div className="flex justify-between gap-2 py-0.5">
                   <span className="min-w-0 pl-0.5">{t("posVatLabel") || "부가세"}</span>
-                  <span className="shrink-0 tabular-nums text-slate-800">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
+                  <span className="shrink-0 tabular-nums text-slate-800">{paymentPreview.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(payVatPrint)} ฿</span>
                 </div>
               )}
               {pricing.serviceFeeAmt > 0 && (
@@ -2358,7 +2379,16 @@ export default function PosOrderPage() {
                 </div>
                 <div className="receipt-row flex justify-between text-xs border-t pt-2 mt-2">
                   <span>{t("posSubtotal") || "소계"}</span>
-                  <span className="tabular-nums">{formatBahtNum(receiptData.subtotal)}</span>
+                  <span className="tabular-nums">
+                    {formatBahtNum(
+                      resolveReceiptSubtotalPrintAmount({
+                        subtotal: receiptData.subtotal,
+                        vatFeeMode: receiptData.vatFeeMode,
+                        receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
+                        receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
+                      })
+                    )}
+                  </span>
                 </div>
                 {receiptData.discountAmt > 0 && (
                   <div className="receipt-row flex justify-between text-xs text-green-600">
@@ -2378,10 +2408,21 @@ export default function PosOrderPage() {
                     <span className="tabular-nums">+{formatBahtNum(receiptData.packagingFee)}</span>
                   </div>
                 )}
-                {(receiptData.vatFeeAmt ?? 0) > 0 && (
+                {resolveReceiptVatPrintAmount({
+                  vatFeeAmt: receiptData.vatFeeAmt,
+                  receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
+                }) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posVatLabel") || "부가세"}</span>
-                    <span className="tabular-nums">{receiptData.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.vatFeeAmt)}</span>
+                    <span className="tabular-nums">
+                      {receiptData.vatFeeMode === 'separate' ? '+' : ''}
+                      {formatBahtNum(
+                        resolveReceiptVatPrintAmount({
+                          vatFeeAmt: receiptData.vatFeeAmt,
+                          receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
+                        })
+                      )}
+                    </span>
                   </div>
                 )}
                 {(receiptData.serviceFeeAmt ?? 0) > 0 && (

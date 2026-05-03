@@ -465,9 +465,10 @@ export async function buildGrabMenuFromPos(params: {
             if (ao !== bo) return ao - bo
             return String(a.name ?? '').localeCompare(String(b.name ?? ''))
           })
+          const groupName = String(bucket.sourceGroupName || '').trim() || 'Options'
           return {
             id: gidx === 0 ? `${itemId}-mods` : `${itemId}-mods-${gidx + 1}`,
-            name: 'Options',
+            name: groupName.slice(0, 60),
             sequence: gidx + 1,
             availableStatus: 'AVAILABLE' as const,
             selectionRangeMin: 0,
@@ -586,17 +587,34 @@ export async function buildGrabMenuFromPos(params: {
       categories: section.categories,
     }))
 
-  // Grab 메뉴 검증/온보딩 안정성을 위해 섹션을 항상 단일 Menu 섹션으로 평탄화한다.
-  // (다중 섹션 + 시간/카테고리 조합에서 매장별 Validation 편차가 발생할 수 있음)
-  sections = flattenSectionsToSingle(sections)
+  // 기본은 섹션 분리(Breakfast/Regular 등)를 유지한다.
+  // 특정 온보딩/검증에서 필요할 때만 단일 섹션 강제 평탄화.
+  if (process.env.GRAB_FORCE_SINGLE_SECTION === '1') {
+    sections = flattenSectionsToSingle(sections)
+  }
 
   if (!sections.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
+
+  const mergedCategories: unknown[] = []
+  for (const sec of sections) {
+    for (const cat of (sec.categories as unknown[]) || []) mergedCategories.push(cat)
+  }
+  const categories = mergedCategories.map((cat, idx) => ({
+    ...(cat as Record<string, unknown>),
+    sequence: idx + 1,
+  }))
+  const sellingTimes =
+    sections[0]?.serviceHours && typeof sections[0].serviceHours === 'object'
+      ? sections[0].serviceHours
+      : serviceHoursFromRanges([])
 
   /** Grab Menu Simulator / Partner 샘플과 동일: 최상위 `sections` (루트 `sellingTimes`+`categories` 대신) */
   return {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
+    sellingTimes,
+    categories,
     sections,
   }
 }

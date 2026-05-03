@@ -163,6 +163,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const [shellQuitAvailable, setShellQuitAvailable] = useState(false)
   const [topBarHidden, setTopBarHidden] = useState(false)
   const [topBarHydrated, setTopBarHydrated] = useState(false)
+  const [isTouchViewport, setIsTouchViewport] = useState(false)
 
   useEffect(() => {
     setShellUpdateAvailable(typeof window.cmPosShell?.checkForUpdates === "function")
@@ -171,6 +172,30 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     )
     setShellMinimizeAvailable(typeof window.cmPosShell?.minimizeWindow === "function")
     setShellQuitAvailable(typeof window.cmPosShell?.quitApp === "function")
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
+    const coarseQuery = window.matchMedia("(pointer: coarse)")
+    const narrowQuery = window.matchMedia("(max-width: 1200px)")
+    const apply = () => {
+      setIsTouchViewport(coarseQuery.matches || narrowQuery.matches)
+    }
+    apply()
+    const add = (mq: MediaQueryList, handler: () => void) => {
+      if (typeof mq.addEventListener === "function") {
+        mq.addEventListener("change", handler)
+        return () => mq.removeEventListener("change", handler)
+      }
+      mq.addListener(handler)
+      return () => mq.removeListener(handler)
+    }
+    const offCoarse = add(coarseQuery, apply)
+    const offNarrow = add(narrowQuery, apply)
+    return () => {
+      offCoarse()
+      offNarrow()
+    }
   }, [])
 
   /**
@@ -253,6 +278,8 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   }, [auth, initialized, isPosLoginPage, pathname, router])
 
   const showTopChrome = (bar: boolean) => shellChrome && bar && !topBarHidden
+  const touchMainButtonClass = isTouchViewport ? "min-h-10 px-3" : "px-2 py-1.5"
+  const touchThinButtonClass = isTouchViewport ? "min-h-9 px-3" : "px-2 py-1"
 
   const topBarToggleButton = (variant: "header" | "thin") => (
     <button
@@ -260,8 +287,8 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       title={t("posTopBarHide")}
       className={
         variant === "header"
-          ? "flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-          : "mr-auto flex shrink-0 items-center gap-0.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          ? `flex shrink-0 items-center gap-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 ${touchMainButtonClass}`
+          : `mr-auto flex shrink-0 items-center gap-0.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 ${touchThinButtonClass}`
       }
       onClick={() => setTopBarHidden(true)}
     >
@@ -289,7 +316,9 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen flex-col bg-slate-50">
         {topBarRevealStrip}
         {showTopChrome(showShellThinBar) ? (
-          <div className="flex h-9 shrink-0 items-center justify-end border-b border-slate-200 bg-white px-2 shadow-sm sm:px-3">
+          <div
+            className={`flex shrink-0 items-center justify-end border-b border-slate-200 bg-white px-2 shadow-sm sm:px-3 ${isTouchViewport ? "h-10" : "h-9"}`}
+          >
             {topBarToggleButton("thin")}
             <PosShellHeaderRightCluster
               shellUpdateAvailable={shellUpdateAvailable}
@@ -326,20 +355,22 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       <PosBusinessDayHydrate />
       {topBarRevealStrip}
       {showTopChrome(effectiveShowPosHeader) ? (
-        <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:px-4">
+        <header
+          className={`flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-2 shadow-sm sm:px-4 ${isTouchViewport ? "h-11" : "h-12"}`}
+        >
           <div className="flex min-w-0 flex-1 items-center gap-1">
             {topBarToggleButton("header")}
             <button
               type="button"
               onClick={() => router.back()}
-              className="flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              className={`flex shrink-0 items-center gap-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 ${touchMainButtonClass}`}
             >
               <ArrowLeft className="h-4 w-4" />
               {t("posBack")}
             </button>
             <button
               type="button"
-              className="flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              className={`flex shrink-0 items-center gap-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 ${touchMainButtonClass}`}
               onClick={() => navigatePosOfflineAware("/pos", (p) => router.push(p))}
             >
               <Home className="h-4 w-4" />
@@ -358,7 +389,9 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         </header>
       ) : null}
       {showTopChrome(showThinMain && !hideChromeForCustomerDisplay) ? (
-        <div className="flex h-9 shrink-0 items-center justify-end border-b border-slate-200 bg-white px-2 shadow-sm sm:px-3">
+        <div
+          className={`flex shrink-0 items-center justify-end border-b border-slate-200 bg-white px-2 shadow-sm sm:px-3 ${isTouchViewport ? "h-10" : "h-9"}`}
+        >
           {topBarToggleButton("thin")}
           <PosShellHeaderRightCluster
             shellUpdateAvailable={shellUpdateAvailable}
@@ -375,10 +408,16 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         items-start였을 때 높이=콘텐츠만큼만 잡혀 스크롤이 생기지 않고 overflow-hidden에 잘림.
       */}
       <main
-        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 md:p-4 ${padForRevealStrip ? "pt-12" : ""}`}
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${isTouchViewport ? "p-0" : "p-2 md:p-4"} ${padForRevealStrip ? "pt-12" : ""}`}
       >
         {useViewport ? (
-          <div className="mx-auto flex h-full min-h-0 w-full max-w-[1024px] max-h-[768px] min-[1024px]:min-h-[600px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl">
+          <div
+            className={
+              isTouchViewport
+                ? "mx-auto flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
+                : "mx-auto flex h-full min-h-0 w-full max-w-[1024px] max-h-[768px] min-[1024px]:min-h-[600px] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
+            }
+          >
             {children}
           </div>
         ) : (

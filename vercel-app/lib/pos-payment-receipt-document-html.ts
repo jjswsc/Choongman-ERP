@@ -5,6 +5,7 @@
 import type { PosMenu, PosPrinterSettings } from '@/lib/api-client'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
@@ -16,6 +17,20 @@ import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+
+function receiptSubtotalAndVatForPrint(receiptData: ReceiptModalData): { subtotalPrint: number; vatPrint: number } {
+  const subtotalPrint = resolveReceiptSubtotalPrintAmount({
+    subtotal: receiptData.subtotal,
+    vatFeeMode: receiptData.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
+  })
+  const vatPrint = resolveReceiptVatPrintAmount({
+    vatFeeAmt: receiptData.vatFeeAmt,
+    receiptVatDisplayAmt: receiptData.receiptVatDisplayAmt,
+  })
+  return { subtotalPrint, vatPrint }
+}
 
 export function buildCode128BarcodeUrl(raw: string): string {
   const text = String(raw || '').trim()
@@ -233,6 +248,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     hour12: false,
   }).format(at)
   const isTaxInvoice = !!taxInvoice
+  const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(receiptData)
+  const showVatRow = vatPrint > 0.0001
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
@@ -247,7 +264,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       })
       .join('')
     const summaryRows = [
-      `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(receiptData.subtotal)}</td></tr>`,
+      `<tr><td class="simple-k">${esc(t('posSubtotal') || '소계')}</td><td class="simple-v">${formatBahtNum(subtotalPrint)}</td></tr>`,
       receiptData.discountAmt > 0
         ? `<tr><td class="simple-k">${esc(t('posDiscount') || '할인')}</td><td class="simple-v">-${formatBahtNum(receiptData.discountAmt)}</td></tr>`
         : '',
@@ -257,8 +274,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       (receiptData.packagingFee ?? 0) > 0
         ? `<tr><td class="simple-k">${esc(t('posPackagingFee') || '포장 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.packagingFee)}</td></tr>`
         : '',
-      (receiptData.vatFeeAmt ?? 0) > 0
-        ? `<tr><td class="simple-k">${esc(t('posVatLabel') || '부가세')}</td><td class="simple-v">${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</td></tr>`
+      showVatRow
+        ? `<tr><td class="simple-k">${esc(t('posVatLabel') || '부가세')}</td><td class="simple-v">${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatPrint)}</td></tr>`
         : '',
     ]
       .filter(Boolean)
@@ -389,11 +406,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           })
           .join('')}
         <div class="receipt-divider"></div>
-        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${formatBahtNum(receiptData.subtotal)}</span></div>
+        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${formatBahtNum(subtotalPrint)}</span></div>
         ${receiptData.discountAmt > 0 ? `<div class="receipt-row"><span>${esc(t('posDiscount') || '할인')}</span><span>-${formatBahtNum(receiptData.discountAmt)}</span></div>` : ''}
         ${(receiptData.deliveryFee ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posDeliveryFee') || '배달 수수료')}</span><span>+${formatBahtNum(receiptData.deliveryFee)}</span></div>` : ''}
         ${(receiptData.packagingFee ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${formatBahtNum(receiptData.packagingFee)}</span></div>` : ''}
-        ${(receiptData.vatFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)}</span></div>` : ''}
+        ${showVatRow ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatPrint)}</span></div>` : ''}
         ${(receiptData.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${receiptData.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.serviceFeeAmt)}</span></div>` : ''}
         ${(receiptData.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}</span></div>` : ''}
         ${(receiptData.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}</span></div>` : ''}

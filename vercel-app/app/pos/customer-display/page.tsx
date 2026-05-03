@@ -10,6 +10,7 @@ import {
   subscribePosCustomerDisplayState,
   type PosCustomerDisplayPayload,
 } from "@/lib/pos-customer-display-state"
+import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from "@/lib/pos-pricing"
 
 type DisplayTheme = "dark" | "light" | "brand"
 
@@ -224,7 +225,10 @@ export default function PosCustomerDisplayPage() {
                 {state?.breakdown ? (
                   (
                     Number(state.breakdown.discountAmt || 0) > 0 ||
-                    Number(state.breakdown.vatFeeAmt || 0) > 0 ||
+                    resolveReceiptVatPrintAmount({
+                      vatFeeAmt: state.breakdown.vatFeeAmt,
+                      receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
+                    }) > 0 ||
                     Number(state.breakdown.serviceFeeAmt || 0) > 0 ||
                     Number(state.breakdown.cardFeeAmt || 0) > 0 ||
                     Number(state.breakdown.otherFeeAmt || 0) > 0
@@ -232,7 +236,16 @@ export default function PosCustomerDisplayPage() {
                     <div className="mt-4 rounded-xl border border-white/20 p-4 text-lg">
                       <div className="flex items-center justify-between">
                         <span>{t("posSubtotal") || "소계"}</span>
-                        <span>{Number(state.breakdown.subtotal || 0).toLocaleString()}</span>
+                        <span>
+                          {Number(
+                            resolveReceiptSubtotalPrintAmount({
+                              subtotal: state.breakdown.subtotal,
+                              vatFeeMode: state.breakdown.vatMode,
+                              receiptExclusiveSubtotalDisplay: state.breakdown.receiptExclusiveSubtotalDisplay,
+                              receiptTaxableGrossForDisplay: state.breakdown.receiptTaxableGrossForDisplay,
+                            }) || 0
+                          ).toLocaleString()}
+                        </span>
                       </div>
                       {Number(state.breakdown.discountAmt || 0) > 0 ? (
                         <div className="mt-1 flex items-center justify-between">
@@ -240,10 +253,21 @@ export default function PosCustomerDisplayPage() {
                           <span>-{Number(state.breakdown.discountAmt || 0).toLocaleString()}</span>
                         </div>
                       ) : null}
-                      {Number(state.breakdown.vatFeeAmt || 0) > 0 ? (
+                      {resolveReceiptVatPrintAmount({
+                        vatFeeAmt: state.breakdown.vatFeeAmt,
+                        receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
+                      }) > 0 ? (
                         <div className="mt-1 flex items-center justify-between">
                           <span>{formatFeeLabel(t("vatFee") || "부가세", state.breakdown.vatRate, state.breakdown.vatMode)}</span>
-                          <span>+{Number(state.breakdown.vatFeeAmt || 0).toLocaleString()}</span>
+                          <span>
+                            +
+                            {Number(
+                              resolveReceiptVatPrintAmount({
+                                vatFeeAmt: state.breakdown.vatFeeAmt,
+                                receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
+                              }) || 0
+                            ).toLocaleString()}
+                          </span>
                         </div>
                       ) : null}
                       {Number(state.breakdown.serviceFeeAmt || 0) > 0 ? (

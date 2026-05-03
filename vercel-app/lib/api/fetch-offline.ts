@@ -243,7 +243,18 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
     const body = getSerializableBody(init)
     if (body === undefined) throw new Error('Body not serializable')
     const method = (init?.method || 'POST').toUpperCase()
-    const localOrderNo = path === '/api/savePosOrder' ? `LOCAL-${Date.now()}` : undefined
+    let localOrderNo: string | undefined
+    if (path === '/api/savePosOrder') {
+      try {
+        const parsed = JSON.parse(body) as { localOrderNo?: unknown; local_order_no?: unknown }
+        const fromBody =
+          String(parsed?.localOrderNo ?? parsed?.local_order_no ?? '')
+            .trim() || ''
+        localOrderNo = fromBody || `LOCAL-${Date.now()}`
+      } catch {
+        localOrderNo = `LOCAL-${Date.now()}`
+      }
+    }
     await addToQueue({
       api: path.startsWith('/') ? path : `/${path}`,
       method,

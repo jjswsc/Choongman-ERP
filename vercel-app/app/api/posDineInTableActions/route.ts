@@ -199,11 +199,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
       }
 
-      if (
-        coercePosOrderTypeForDb(keep.order_type) !== 'dine_in' ||
-        coercePosOrderTypeForDb(absorb.order_type) !== 'dine_in'
-      ) {
-        return NextResponse.json({ success: false, message: '매장(홀) 주문만 합석할 수 있습니다.' }, { headers })
+      const keepType = coercePosOrderTypeForDb(keep.order_type)
+      const absorbType = coercePosOrderTypeForDb(absorb.order_type)
+      if (keepType !== 'dine_in') {
+        return NextResponse.json(
+          { success: false, message: '합석 기준은 매장(홀) 테이블 주문만 가능합니다.' },
+          { headers }
+        )
+      }
+      if (absorbType !== 'dine_in' && absorbType !== 'takeout') {
+        return NextResponse.json(
+          { success: false, message: '합석할 수 있는 유형은 매장(홀) 또는 포장(takeout) 주문입니다.' },
+          { headers }
+        )
       }
 
       if (isClosedStatus(String(keep.status ?? '')) || isClosedStatus(String(absorb.status ?? ''))) {

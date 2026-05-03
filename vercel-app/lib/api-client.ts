@@ -8707,8 +8707,8 @@ export async function posDineInTableMove(params: { orderId: number; targetTableN
 }
 
 /**
- * 홀 주문 합석: keep 주문에 absorb 주문 품목·인원 등을 합치고 absorb는 cancelled.
- * 결제 금액이 있는 주문은 합석 불가(API에서 거절).
+ * 홀 주문 합석: keep는 매장(dine_in)만. absorb는 매장 또는 포장(takeout) — 포장은 이 테이블 청구서로만 합침.
+ * keep에 absorb 품목·인원 등을 합치고 absorb는 cancelled. 결제 반영된 주문은 합석 불가(API).
  */
 export async function posDineInTableMerge(params: { keepOrderId: number; absorbOrderId: number }) {
   const res = await apiFetchWithOffline('/api/posDineInTableActions', {
@@ -8975,6 +8975,10 @@ export async function savePosOrder(params: {
   /** 배달 주문 시 pos_orders.delivery_app_code (예: grab, lineman) */
   deliveryAppCode?: string
   /**
+   * 클라이언트 멱등 키(선택). 있으면 `X-Idempotency-Key`·바디 `localOrderNo`로 전달되어 동일 제출 중복 저장을 막는다.
+   */
+  localOrderNo?: string
+  /**
    * 결제 합계가 total 에 도달할 때 저장 직후 주문 상태 (오프라인 동기화 시 updatePosOrderStatus 생략용).
    * 서버에서 payment 합계·total 로 검증 후 적용.
    */
@@ -8994,9 +8998,13 @@ export async function savePosOrder(params: {
   }
   items: PosOrderItem[]
 }) {
+  const idem = String(params.localOrderNo ?? '').trim()
   const res = await apiFetchWithOffline('/api/savePosOrder', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(idem ? { 'X-Idempotency-Key': idem } : {}),
+    },
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; orderId?: number; orderNo?: string; message?: string }>

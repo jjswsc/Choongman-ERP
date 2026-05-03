@@ -86,7 +86,14 @@ import {
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import { collabDiscountAmountForCart } from '@/lib/pos-collab-discount'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
-import { computePosPricing, type PosPricingAdjustments, type PosPricingResult } from '@/lib/pos-pricing'
+import {
+  computePosPricing,
+  receiptTaxDisplayFieldsFromPricing,
+  resolveReceiptSubtotalPrintAmount,
+  resolveReceiptVatPrintAmount,
+  type PosPricingAdjustments,
+  type PosPricingResult,
+} from '@/lib/pos-pricing'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
@@ -181,6 +188,9 @@ export type CartPanelBeforePaymentReceiptPayload = {
   total: number
   vatFeeAmt?: number
   vatFeeMode?: 'included' | 'separate'
+  receiptExclusiveSubtotalDisplay?: number
+  receiptVatDisplayAmt?: number
+  receiptTaxableGrossForDisplay?: number
   serviceFeeAmt?: number
   serviceFeeMode?: 'included' | 'separate'
   cardFeeAmt?: number
@@ -300,6 +310,8 @@ interface CartPanelProps {
   cartSessionTableId?: string | null
   /** 홀(테이블) 주문 시 플로어로 돌아가기 — 터미널에서 메뉴 상단과 중복 방지용 */
   onBackToTableSelection?: () => void
+  /** 부모에서 POS 저장 API 처리 중(중복 탭·이중 요청 방지) */
+  posBackendActionInFlight?: boolean
   /** 홀 주문 전송 (주방 전달) - 부모에서 savePosOrder 호출 후 pendingOrderId 전달 */
   onOrderSubmit?: (payload: {
     items: {
@@ -446,9 +458,19 @@ function PosPaymentModalAmountCard({
   t: (key: string) => string
 }) {
   const totalLineLabel = totalLabelKey ? t(totalLabelKey) : (t('posPaymentTotalLabel') || '결제 금액')
+  const subtotalDisplay = resolveReceiptSubtotalPrintAmount({
+    subtotal,
+    vatFeeMode: pricing.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: pricing.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: pricing.baseTotal,
+  })
+  const vatDisplay = resolveReceiptVatPrintAmount({
+    vatFeeAmt: pricing.vatFeeAmt,
+    receiptVatDisplayAmt: pricing.receiptVatDisplayAmt,
+  })
   const feeRows: { show: boolean; label: ReactNode; value: string; valueClass?: string }[] = [
     {
-      show: pricing.vatFeeAmt > 0,
+      show: vatDisplay > 0,
       label: (
         <span className="text-muted-foreground">
           {t('posVatLabel') || '부가세'}{' '}
@@ -457,7 +479,7 @@ function PosPaymentModalAmountCard({
           </span>
         </span>
       ),
-      value: `${pricing.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(pricing.vatFeeAmt)} ฿`,
+      value: `${pricing.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatDisplay)} ฿`,
     },
     {
       show: pricing.serviceFeeAmt > 0,
@@ -508,7 +530,7 @@ function PosPaymentModalAmountCard({
         <div className="min-w-0 flex-1 space-y-0">
           <div className="flex items-baseline justify-between gap-2 border-b border-border/50 pb-1 text-sm leading-tight">
             <span className="text-muted-foreground">{t('posSubtotal')}</span>
-            <span className="shrink-0 tabular-nums font-semibold text-foreground">{formatBahtNum(subtotal)} ฿</span>
+            <span className="shrink-0 tabular-nums font-semibold text-foreground">{formatBahtNum(subtotalDisplay)} ฿</span>
           </div>
           {discount > 0 && (
             <div className="flex items-baseline justify-between gap-2 py-1 text-[13px] leading-tight">
@@ -564,6 +586,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   takeoutLabel: takeoutLabelProp,
   cartSessionTableId: cartSessionTableIdProp,
   onBackToTableSelection,
+  posBackendActionInFlight = false,
   onOrderSubmit,
   onTakeoutOrderComplete,
   onDeliveryOrderComplete,
@@ -890,6 +913,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
+  const receiptSubtotalForUi = resolveReceiptSubtotalPrintAmount({
+    subtotal,
+    vatFeeMode: pricing.vatFeeMode,
+    receiptExclusiveSubtotalDisplay: pricing.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: pricing.baseTotal,
+  })
+  const receiptVatForUi = resolveReceiptVatPrintAmount({
+    vatFeeAmt: pricing.vatFeeAmt,
+    receiptVatDisplayAmt: pricing.receiptVatDisplayAmt,
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -1762,6 +1795,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           total: pricingSnapshot.finalTotal,
           vatFeeAmt: pricingSnapshot.vatFeeAmt,
           vatFeeMode: pricingSnapshot.vatFeeMode,
+          ...receiptTaxDisplayFieldsFromPricing(pricingSnapshot),
           serviceFeeAmt: pricingSnapshot.serviceFeeAmt,
           serviceFeeMode: pricingSnapshot.serviceFeeMode,
           cardFeeAmt: pricingSnapshot.cardFeeAmt,
@@ -2875,7 +2909,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           <div className="min-w-0 flex-1 space-y-0 text-xs leading-tight">
             <div className="flex justify-between gap-2 py-0.5 text-sm">
               <span className="min-w-0 pl-0.5 text-muted-foreground">{t('posSubtotal')}</span>
-              <span className="shrink-0 tabular-nums">{formatBahtNum(subtotal)} ฿</span>
+              <span className="shrink-0 tabular-nums">{formatBahtNum(receiptSubtotalForUi)} ฿</span>
             </div>
             {discount > 0 && (
               <div className="flex justify-between gap-2 py-0.5 text-destructive">
@@ -2883,12 +2917,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 <span className="shrink-0 tabular-nums">-{formatBahtNum(discount)} ฿</span>
               </div>
             )}
-            {pricing.vatFeeAmt > 0 && (
+            {receiptVatForUi > 0 && (
               <div className="flex justify-between gap-2 py-0.5 text-muted-foreground">
                 <span className="min-w-0 pl-0.5">
                   {t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})
                 </span>
-                <span className="shrink-0 tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
+                <span className="shrink-0 tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptVatForUi)} ฿</span>
               </div>
             )}
             {pricing.serviceFeeAmt > 0 && (
@@ -2932,9 +2966,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <Button
               data-tour="pos-tour-cart-order"
               className="w-full h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
-              disabled={cartItems.length === 0 || guestCount <= 0}
+              disabled={cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight}
               onClick={() => {
-                if (!selectedTable || cartItems.length === 0 || guestCount <= 0) return
+                if (!selectedTable || cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight) return
                 onOrderSubmit?.({
                   items: cartItems.map(mapCartItemToOrderPayload),
                   tableName: selectedTable.name,
@@ -2957,8 +2991,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <div className="w-full grid grid-cols-2 gap-2">
               <Button
                 className="h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
-                disabled={!canSubmit || cartItems.length === 0}
+                disabled={!canSubmit || cartItems.length === 0 || posBackendActionInFlight}
                 onClick={() => {
+                  if (posBackendActionInFlight) return
                   submitNonDineOrder(false)
                   handleClearCart()
                 }}
@@ -2968,8 +3003,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <Button
                 className="h-12 text-lg font-semibold bg-primary hover:bg-primary/90"
                 data-tour="pos-tour-cart-pay"
-                disabled={total <= 0 || !canSubmit}
-                onClick={openPaymentModal}
+                disabled={total <= 0 || !canSubmit || posBackendActionInFlight}
+                onClick={() => {
+                  if (posBackendActionInFlight) return
+                  openPaymentModal()
+                }}
               >
                 {t('posPayButton')}
               </Button>

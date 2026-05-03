@@ -10,7 +10,8 @@ export async function mergeQueuedSavePosOrderByLocalOrderNo(
   merge: (body: Record<string, unknown>) => Record<string, unknown>
 ): Promise<boolean> {
   const want = String(localOrderNo ?? '').trim()
-  if (!want.startsWith('LOCAL-')) return false
+  /** 큐 메타는 `LOCAL-*`(전통) 또는 `pos-*`(클라이언트 멱등 키) */
+  if (!want.startsWith('LOCAL-') && !want.startsWith('pos-')) return false
   const list = await getAllPending()
   for (const item of list) {
     if (item.api !== '/api/savePosOrder') continue
