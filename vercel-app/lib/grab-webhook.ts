@@ -211,8 +211,8 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
     sun: openAllDay,
   }
   const stubCategoryId = 'SECTION-01__grab-stub-category'
-  const sellingWindowStart = '2020-01-01T00:00:00.000Z'
-  const sellingWindowEnd = '2039-12-31T23:59:59.999Z'
+  const sellingWindowStart = '2020-01-01 00:00:00'
+  const sellingWindowEnd = '2039-12-31 23:59:59'
   return {
     merchantID,
     partnerMerchantID,

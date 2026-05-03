@@ -829,6 +829,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         await appAlert(String(res.message || t('processFail') || '실패'))
         return
       }
+      await handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo })
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
           userStore: auth.store,

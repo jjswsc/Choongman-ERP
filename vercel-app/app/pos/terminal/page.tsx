@@ -3662,6 +3662,67 @@ export default function PosTerminalPage() {
         await appAlert(String(res.message || t('processFail') || '실패'))
         return
       }
+      /** 결제 후 세금 정보 저장 시: DB 반영된 memo(세금 블록)로 홀 간이 영수증 재인쇄 — 저장만 하고 인쇄가 없던 동작 보완 */
+      if (isMainPosDevice) {
+        const o = taxInvoiceTargetOrder
+        const printItems = o.items.map((it) => {
+          const menuId = String(it.menuId ?? '').trim()
+          const name = resolveOrderItemDisplayName({
+            id: String(it.id ?? ''),
+            name: String(it.name ?? ''),
+            menuId,
+          })
+          const qty = Math.max(1, Number(it.quantity || 1) || 1)
+          return {
+            id: String(it.id ?? ''),
+            name,
+            price: Number(it.price || 0),
+            qty,
+            ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+            ...(menuId ? { menuId } : {}),
+            ...(Array.isArray(it.promoItems) && it.promoItems.length > 0
+              ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
+              : {}),
+          }
+        })
+        const mergeSubtotal = printItems.reduce((s, i) => s + i.price * i.qty, 0)
+        const discountAmt = Number(o.discountAmt || 0)
+        const pricing = computePosPricing({
+          subtotal: mergeSubtotal,
+          discountAmt,
+          cardPaymentAmount: Number(o.paymentCard || 0),
+          adjustments: pricingAdjustments,
+        })
+        const dbTotal = Number(o.total || 0)
+        const total = dbTotal > 0.005 ? dbTotal : pricing.finalTotal
+        const orderTypeLabel =
+          o.type === 'delivery'
+            ? t('posOrderTypeDelivery') || 'Delivery'
+            : o.type === 'takeout'
+              ? t('posOrderTypeTakeout') || 'Takeout'
+              : t('posOrderTypeDineIn') || '매장'
+        const receiptPayloadAfterTax = {
+          orderNo: String(o.orderNo || ''),
+          storeCode: currentStoreId,
+          orderType: orderTypeLabel,
+          tableName: o.tableName,
+          memo: nextMemo,
+          items: printItems,
+          subtotal: mergeSubtotal,
+          discountAmt,
+          total,
+          vatFeeAmt: pricing.vatFeeAmt,
+          vatFeeMode: pricing.vatFeeMode,
+          ...receiptTaxDisplayFieldsFromPricing(pricing),
+          serviceFeeAmt: pricing.serviceFeeAmt,
+          serviceFeeMode: pricing.serviceFeeMode,
+          cardFeeAmt: pricing.cardFeeAmt,
+          cardFeeMode: pricing.cardFeeMode,
+          otherFeeAmt: pricing.otherFeeAmt,
+          otherFeeMode: pricing.otherFeeMode,
+        }
+        void printReceiptNow(receiptPayloadAfterTax, null, false, undefined, true)
+      }
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
           userStore: auth.store,

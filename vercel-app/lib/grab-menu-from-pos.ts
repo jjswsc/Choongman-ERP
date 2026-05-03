@@ -234,9 +234,12 @@ type GrabMenuSectionOut = {
   categories: unknown[]
 }
 
-/** Grab 검증기: sellingTime 그룹의 유효 UTC 구간(필드가 있으면 빈 문자열 불가) */
-const GRAB_SELLING_TIME_WINDOW_START = '2020-01-01T00:00:00.000Z'
-const GRAB_SELLING_TIME_WINDOW_END = '2039-12-31T23:59:59.999Z'
+/**
+ * Grab GetMenu 문서: sellingTimes[].startTime / endTime 은 UTC이며
+ * `"2023-01-09 00:00:00"` 형식(공백 구분, T/Z 없음). ISO8601 문자열은 무효 처리될 수 있음.
+ */
+const GRAB_SELLING_TIME_WINDOW_START = '2020-01-01 00:00:00'
+const GRAB_SELLING_TIME_WINDOW_END = '2039-12-31 23:59:59'
 
 /** Grab Menu Validation / GetMenuNewResponse: 루트 `sellingTimes` + `categories` 필수 */
 function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
