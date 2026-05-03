@@ -265,6 +265,9 @@ export async function POST(req: NextRequest) {
     const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
     const receiptPrintLangRaw = String(body?.receiptPrintLang ?? '').trim()
     const receiptPrintLang = receiptPrintLangRaw && validPrintLangs.includes(receiptPrintLangRaw) ? receiptPrintLangRaw : ''
+    const kitchenSlipPrintLangRaw = String(body?.kitchenSlipPrintLang ?? '').trim()
+    const kitchenSlipPrintLang =
+      kitchenSlipPrintLangRaw && validPrintLangs.includes(kitchenSlipPrintLangRaw) ? kitchenSlipPrintLangRaw : ''
 
     const routeMenuPatch =
       body?.kitchenRouteByMenu !== undefined ? normalizeKitchenRouteMapInput(body.kitchenRouteByMenu) : undefined
@@ -388,6 +391,7 @@ export async function POST(req: NextRequest) {
       esc_pos_cut_after_hall_order_html: escPosCutAfterHallOrderHtml,
       esc_pos_cut_after_payment_receipt_html: escPosCutAfterPaymentReceiptHtml,
       receipt_print_lang: receiptPrintLang,
+      kitchen_slip_print_lang: kitchenSlipPrintLang,
       vat_rate: vatRate,
       vat_mode: vatMode,
       service_rate: serviceRate,

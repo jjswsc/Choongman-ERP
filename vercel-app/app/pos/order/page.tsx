@@ -68,6 +68,7 @@ import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup 
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
+import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
@@ -1273,19 +1274,14 @@ export default function PosOrderPage() {
     if (!receiptData || !receiptData.storeCode) return
     try {
       const settings = await getPrinterSettingsForStore(receiptData.storeCode)
-      const kLabels = {
-        unified: t("posKitchenOrder") || "주방 주문서",
-        kitchen1: `${t("posKitchen1") || "주방 1"}`,
-        kitchen2: `${t("posKitchen2") || "주방 2"}`,
-        kitchen3: `${t("posKitchen3") || "주방 3"}`,
-      }
+      const ki = kitchenSlipPrintI18n(settings, lang)
       const itemsForKitchen = enrichPosOrderLikeItemsWithPromoSnapshot(
         receiptData.items as unknown as Record<string, unknown>[],
         posReceiptLineOptsKitchen
       ) as unknown as typeof receiptData.items
       const slips = buildKitchenSlipGroups(
         itemsForKitchen,
-        { ...buildKitchenSlipGroupOpts(settings, menus, kLabels), splitPromoKitchenLines: true }
+        { ...buildKitchenSlipGroupOpts(settings, menus, ki.kLabels), splitPromoKitchenLines: true }
       )
       if (slips.length === 0) {
         await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 출력할 품목이 없습니다.")
@@ -1302,19 +1298,19 @@ export default function PosOrderPage() {
         const slip = slips[idx]
         const kitchenMemo = parsePosOrderMemo(receiptData.memo).plainMemo
         const tablePart = receiptData.tableName
-          ? ` · ${t("posTable") || "테이블"}: ${translateReceiptTableDisplayName(receiptData.tableName, t)}`
+          ? ` · ${ki.t("posTable") || "테이블"}: ${translateReceiptTableDisplayName(receiptData.tableName, ki.t)}`
           : ""
         const memoLine =
-          kitchenMemo.trim() ? `${t("posCustomerMemo") || "메모"}: ${kitchenMemo.trim()}` : ""
+          kitchenMemo.trim() ? `${ki.t("posCustomerMemo") || "메모"}: ${kitchenMemo.trim()}` : ""
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
           orderNo: kitchenOrderNoRaw,
           storeCode: receiptData.storeCode,
-          orderTypeLabel: orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType,
+          orderTypeLabel: ki.orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType,
           tablePart,
-          dateStr: formatPosDateTimeMedium(new Date(), lang),
+          dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
           items: slip.items.map((it) => ({
-            name: translatePosMenuLineForReceipt(it.name, t),
+            name: translatePosMenuLineForReceipt(it.name, ki.t),
             qty: it.qty,
             note: (it as { note?: string }).note,
           })),

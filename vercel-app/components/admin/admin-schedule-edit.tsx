@@ -23,8 +23,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
-import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
+import { getAdminEmployeeList, getWeeklySchedule, saveSchedule, type AdminEmployeeItem } from "@/lib/api-client"
+import { getMondayOfWeekBangkok, addDaysSchedule, todayStrBangkok } from "@/lib/attendance-utils"
 import { cn, displayLabelShort } from "@/lib/utils"
 import { findStaffForScheduleSlotName } from "@/lib/employee-display-name"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
@@ -45,6 +45,17 @@ function get30MinIntervals(start: string, end: string): string[] {
 }
 
 const DAY_LABELS = ["att_mon", "att_tue", "att_wed", "att_thu", "att_fri", "att_sat", "att_sun"] as const
+
+/** getAdminEmployeeList와 동일: 퇴사 예정일(미래)만 있는 직원은 시간표에 포함 */
+function isSchedulableEmployee(e: AdminEmployeeItem): boolean {
+  if (e.employmentStatus === "resigned") return false
+  if (e.employmentStatus === "active" || e.employmentStatus === "leave" || e.employmentStatus === "suspended")
+    return true
+  const r = String(e.resign || "").trim().slice(0, 10)
+  if (!r) return true
+  return r > todayStrBangkok()
+}
+
 interface StaffItem {
   name: string
   nameTitle?: string
@@ -99,7 +110,7 @@ export function AdminScheduleEdit({
   React.useEffect(() => {
     if (!store || !auth) return
     getAdminEmployeeList({ userStore: auth.store || "", userRole: auth.role || "" }).then((r) => {
-      const list = (r.list || []).filter((e) => String(e.store || "").trim() === store && (!e.resign || String(e.resign).trim() === ""))
+      const list = (r.list || []).filter((e) => String(e.store || "").trim() === store && isSchedulableEmployee(e))
       if (list.length > 0) {
         setStaffList(
           list.map((e) => ({

@@ -45,7 +45,9 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
 import { escapeHtmlReceiptEmphasizeChannelTokenAfterHash } from "@/lib/pos-delivery-platform"
+import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { cn, escapeHtml } from "@/lib/utils"
+import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import {
   alignKitchenCategoryRouteKeyMap,
@@ -354,6 +356,7 @@ export default function PosPrintersPage() {
   const [receiptMembershipQrText, setReceiptMembershipQrText] = React.useState("")
   const [receiptShowMembershipQr, setReceiptShowMembershipQr] = React.useState(false)
   const [receiptPrintLang, setReceiptPrintLang] = React.useState<string>("")
+  const [kitchenSlipPrintLang, setKitchenSlipPrintLang] = React.useState<string>("")
   const [kitchenSlipFontScale, setKitchenSlipFontScale] = React.useState<"sm" | "md" | "lg">("md")
   const [kitchenSlipShowLineNotes, setKitchenSlipShowLineNotes] = React.useState(true)
   const [kitchenSlipShowOrderMemo, setKitchenSlipShowOrderMemo] = React.useState(true)
@@ -527,6 +530,7 @@ export default function PosPrintersPage() {
     setReceiptMembershipQrText(String(settings.receiptMembershipQrText ?? "").trim())
     setReceiptShowMembershipQr(Boolean(settings.receiptShowMembershipQr))
     setReceiptPrintLang(String(settings.receiptPrintLang ?? "").trim())
+    setKitchenSlipPrintLang(String(settings.kitchenSlipPrintLang ?? "").trim())
     setKitchenSlipFontScale(
       settings.kitchenSlipFontScale === "sm"
         ? "sm"
@@ -732,6 +736,7 @@ export default function PosPrintersPage() {
         receiptMembershipQrText: receiptMembershipQrText.trim(),
         receiptShowMembershipQr,
         receiptPrintLang: receiptPrintLang || undefined,
+        kitchenSlipPrintLang: kitchenSlipPrintLang || undefined,
         kitchenSlipFontScale,
         kitchenSlipShowLineNotes,
         kitchenSlipShowOrderMemo,
@@ -940,6 +945,7 @@ export default function PosPrintersPage() {
           "autoPrintReceiptOnAddOrder",
           "autoPrintReceiptOnPayment",
           "receiptPrintLang",
+          "kitchenSlipPrintLang",
           "logoPrint",
           "receiptPrintTiming",
           "signatureLine",
@@ -968,6 +974,7 @@ export default function PosPrintersPage() {
           "receiptMembershipQrLinkUrl",
           "receiptMembershipQrText",
           "receiptShowMembershipQr",
+          "kitchenSlipPrintLang",
           "kitchenSlipFontScale",
           "kitchenSlipShowLineNotes",
           "kitchenSlipShowOrderMemo",
@@ -1091,6 +1098,7 @@ export default function PosPrintersPage() {
   ])
 
   const kitchenSlipsForPreview = React.useMemo(() => {
+    const ki = kitchenSlipPrintI18n({ kitchenSlipPrintLang }, lang)
     const cats = categories.length > 0 ? categories : ["A", "B"]
     const m1 = cats[0] || "A"
     const m2 = cats[1] || m1
@@ -1122,12 +1130,7 @@ export default function PosPrintersPage() {
     }
     return buildKitchenSlipGroups(
       items,
-      buildKitchenSlipGroupOpts(settingsPreview, previewMenus, {
-        unified: t("posKitchenOrder") || "주방 주문서",
-        kitchen1: `${t("posKitchen1") || "주방 1"}`,
-        kitchen2: `${t("posKitchen2") || "주방 2"}`,
-        kitchen3: `${t("posKitchen3") || "주방 3"}`,
-      })
+      buildKitchenSlipGroupOpts(settingsPreview, previewMenus, ki.kLabels)
     )
   }, [
     previewData.items,
@@ -1138,7 +1141,8 @@ export default function PosPrintersPage() {
     kitchenRouteByCategory,
     kitchenRouteByCategoryMain,
     categories,
-    t,
+    kitchenSlipPrintLang,
+    lang,
     tr,
   ])
 
@@ -1275,15 +1279,19 @@ export default function PosPrintersPage() {
         kitchenSlipShowLineNotes,
         kitchenSlipShowOrderMemo,
       })
-      const memoLine = `${t("posCustomerMemo") || "메모"}: ${previewData.memo}`
+      const ki = kitchenSlipPrintI18n({ kitchenSlipPrintLang }, lang)
+      const memoLine = `${ki.t("posCustomerMemo") || "메모"}: ${previewData.memo}`
       return buildKitchenSlipDocumentHtml({
         label: slip.label,
         orderNo: previewData.orderNo,
         storeCode: previewData.storeCode,
         orderTypeLabel: previewData.orderType,
-        tablePart: ` · ${t("posTable") || "테이블"}: ${previewData.tableName}`,
+        tablePart: ` · ${ki.t("posTable") || "테이블"}: ${previewData.tableName}`,
         dateStr: previewData.now,
-        items: slip.items,
+        items: slip.items.map((it) => ({
+          ...it,
+          name: translatePosMenuLineForReceipt(it.name, ki.t),
+        })),
         memoLine,
         escapeHtml,
         design,
@@ -1300,7 +1308,8 @@ export default function PosPrintersPage() {
       kitchenSlipFontScale,
       kitchenSlipShowLineNotes,
       kitchenSlipShowOrderMemo,
-      t,
+      kitchenSlipPrintLang,
+      lang,
     ]
   )
 
@@ -1714,6 +1723,34 @@ export default function PosPrintersPage() {
                   <label className="text-sm font-medium">{tr("posReceiptPrintLang", "주문·영수증·주방 인쇄 언어")}</label>
                   <p className="text-xs text-muted-foreground mt-0.5">{tr("posReceiptPrintLangHint", "설정 시 주문, 영수증, 주방 주문서에 적용됩니다. 미설정 시 화면 언어를 따릅니다.")}</p>
                   <Select value={receiptPrintLang || "__auto__"} onValueChange={(v) => setReceiptPrintLang(v === "__auto__" ? "" : v)}>
+                    <SelectTrigger className="mt-1 w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__auto__">{tr("posReceiptPrintLangAuto", "화면 언어 따름")}</SelectItem>
+                      <SelectItem value="ko">{tr("posLangKo", "한국어")}</SelectItem>
+                      <SelectItem value="en">{tr("posLangEn", "English")}</SelectItem>
+                      <SelectItem value="th">{tr("posLangTh", "ไทย")}</SelectItem>
+                      <SelectItem value="mm">{tr("posLangMm", "မြန်မာ")}</SelectItem>
+                      <SelectItem value="la">{tr("posLangLa", "ລາວ")}</SelectItem>
+                      <SelectItem value="kh">{tr("posLangKh", "ខ្មែរ")}</SelectItem>
+                      <SelectItem value="vi">{tr("posLangVi", "Tiếng Việt")}</SelectItem>
+                      <SelectItem value="ms">{tr("posLangMs", "Bahasa")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{tr("posKitchenSlipPrintLang", "주방 주문서 인쇄 언어")}</label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {tr(
+                      "posKitchenSlipPrintLangHint",
+                      "설정 시 주방 슬립의 제목·날짜·테이블/메모 눈금 등에 적용됩니다. 미설정 시 POS 화면 언어를 따릅니다."
+                    )}
+                  </p>
+                  <Select
+                    value={kitchenSlipPrintLang || "__auto__"}
+                    onValueChange={(v) => setKitchenSlipPrintLang(v === "__auto__" ? "" : v)}
+                  >
                     <SelectTrigger className="mt-1 w-48">
                       <SelectValue />
                     </SelectTrigger>

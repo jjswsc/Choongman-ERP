@@ -123,6 +123,7 @@ export function posPrinterSettingsToSaveParams(
     receiptMembershipQrText: String(s.receiptMembershipQrText ?? "").trim(),
     receiptShowMembershipQr: Boolean(s.receiptShowMembershipQr),
     receiptPrintLang: String(s.receiptPrintLang ?? "").trim() || undefined,
+    kitchenSlipPrintLang: String(s.kitchenSlipPrintLang ?? "").trim() || undefined,
     kitchenSlipFontScale: (String(s.kitchenSlipFontScale || "md").toLowerCase() === "sm"
       ? "sm"
       : String(s.kitchenSlipFontScale || "md").toLowerCase() === "lg"

@@ -84,6 +84,7 @@ import {
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
+import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import {
@@ -1220,11 +1221,17 @@ export default function PosTerminalPage() {
   const promptedPendingDeliveryOrderIdsRef = useRef<Set<number>>(new Set())
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
+  /** 메인 포스: dine_in 품목 id 스냅샷(다른 단말 UPDATE 시 추가분만 홀/주방 자동인쇄) */
+  const dineInRemoteItemIdsSnapshotRef = useRef<Map<number, Set<string>>>(new Map())
+  /** 메인 포스가 updatePosOrder(추가주문) 직후 수신하는 Realtime UPDATE로 이중 인쇄 방지 */
+  const mainPosSelfDineInUpdateSuppressUntilRef = useRef<Map<number, number>>(new Map())
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     paymentReceiptScanSeededRef.current = false
+    dineInRemoteItemIdsSnapshotRef.current = new Map()
+    mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
 
   const reserveKitchenAutoPrintKey = useCallback((rawKey: string, ttlMs = 20_000) => {
@@ -1395,43 +1402,33 @@ export default function PosTerminalPage() {
           try {
             const effectiveStoreCode = order.storeCode ?? currentStoreId
             const settings = await getPrinterSettingsForStore(effectiveStoreCode)
-            const kLabels = {
-              unified: t('posKitchenOrder') || '주방 주문서',
-              kitchen1: `${t('posKitchen1') || '주방 1'}`,
-              kitchen2: `${t('posKitchen2') || '주방 2'}`,
-              kitchen3: `${t('posKitchen3') || '주방 3'}`,
-            }
+            const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              buildKitchenSlipGroupOpts(settings, menus, kLabels)
+              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
             )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
             const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
             const memoLine = kitchenMemo.trim()
-              ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+              ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
               : ''
-            const orderTypeLabels: Record<string, string> = {
-              dine_in: t('posOrderTypeDineIn') ?? '매장',
-              takeout: t('posOrderTypeTakeout') ?? '포장',
-              delivery: t('posOrderTypeDelivery') ?? '배달',
-            }
             const printOne = (idx: number) => {
               if (idx >= slips.length) return
               const slip = slips[idx]
               const tablePart = order.tableName
-                ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+                ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                 : ''
-              const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+              const orderTypeLabel = ki.orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
               const html = buildKitchenSlipDocumentHtml({
                 label: slip.label,
                 orderNo: order.orderNo ?? '',
                 storeCode: effectiveStoreCode,
                 orderTypeLabel,
                 tablePart,
-                dateStr: formatPosDateTimeMedium(new Date(), lang),
+                dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                 items: slip.items.map((it) => ({
-                  name: translatePosMenuLineForReceipt(it.name, t),
+                  name: translatePosMenuLineForReceipt(it.name, ki.t),
                   qty: it.qty,
                   note: it.note,
                 })),
@@ -1606,43 +1603,33 @@ export default function PosTerminalPage() {
                   try {
                     const effectiveStoreCode = order.storeCode ?? currentStoreId
                     const settings = await getPrinterSettingsForStore(effectiveStoreCode)
-                    const kLabels = {
-                      unified: t('posKitchenOrder') || '주방 주문서',
-                      kitchen1: `${t('posKitchen1') || '주방 1'}`,
-                      kitchen2: `${t('posKitchen2') || '주방 2'}`,
-                      kitchen3: `${t('posKitchen3') || '주방 3'}`,
-                    }
+                    const ki = kitchenSlipPrintI18n(settings, lang)
                     const slips = buildKitchenSlipGroups(
                       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                      buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                      buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                     )
                     if (!slips.length) return
                     const slipDesign = resolveKitchenSlipDesign(settings)
                     const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
                     const memoLine = kitchenMemo.trim()
-                      ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                      ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
                       : ''
-                    const orderTypeLabels: Record<string, string> = {
-                      dine_in: t('posOrderTypeDineIn') ?? '매장',
-                      takeout: t('posOrderTypeTakeout') ?? '포장',
-                      delivery: t('posOrderTypeDelivery') ?? '배달',
-                    }
                     const printOne = (idx: number) => {
                       if (idx >= slips.length) return
                       const slip = slips[idx]
                       const tablePart = order.tableName
-                        ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+                        ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                         : ''
-                      const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                      const orderTypeLabel = ki.orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
                       const html = buildKitchenSlipDocumentHtml({
                         label: slip.label,
                         orderNo: order.orderNo ?? '',
                         storeCode: effectiveStoreCode,
                         orderTypeLabel,
                         tablePart,
-                        dateStr: formatPosDateTimeMedium(new Date(), lang),
+                        dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                         items: slip.items.map((it) => ({
-                          name: translatePosMenuLineForReceipt(it.name, t),
+                          name: translatePosMenuLineForReceipt(it.name, ki.t),
                           qty: it.qty,
                           note: it.note,
                         })),
@@ -1994,6 +1981,59 @@ export default function PosTerminalPage() {
     [menus]
   )
 
+  type RealtimeParsedPosOrderItem = {
+    id: string
+    name: string
+    price: number
+    qty: number
+    note?: string
+    menuId?: string
+    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  }
+
+  const parseRealtimePosOrderRowItemsJson = useCallback(
+    (row: Record<string, unknown>): { ok: true; items: RealtimeParsedPosOrderItem[] } | { ok: false } => {
+      try {
+        const raw = row.items_json
+        const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : []
+        const items = (Array.isArray(arr) ? arr : []).map(
+          (it: {
+            id?: string
+            name?: string
+            price?: number
+            qty?: number
+            quantity?: number
+            note?: string
+            menuId1?: string
+            menu_id1?: string
+            menuId?: string
+            promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+          }) => {
+            const note = String(it.note ?? '').trim()
+            const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+            const displayName = resolveOrderItemDisplayName({
+              id: String(it.id ?? ''),
+              name: String(it.name ?? ''),
+              menuId,
+            })
+            return {
+              id: String(it.id ?? ''),
+              name: displayName,
+              price: Number(it.price ?? 0),
+              qty: Number(it.qty ?? it.quantity ?? 1),
+              ...(menuId ? { menuId } : {}),
+              ...(note ? { note } : {}),
+              ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
+            }
+          }
+        )
+        return { ok: true, items }
+      } catch {
+        return { ok: false }
+      }
+    },
+    [enrichPromoItemsWithOptionName, resolveOrderItemDisplayName]
+  )
 
   async function printReceiptNow(
     payload: {
@@ -2215,46 +2255,30 @@ export default function PosTerminalPage() {
     const orderNoStr = String(detail.orderNoForPrint ?? orderId).trim()
     const tableName = String(detail.tableName ?? '').trim()
     const memo = String(detail.memo ?? '')
-    const orderTypeLabel =
-      channel === 'dine_in'
-        ? t('posOrderTypeDineIn') ?? '매장'
-        : channel === 'takeout'
-          ? t('posOrderTypeTakeout') ?? '포장'
-          : t('posOrderTypeDelivery') ?? '배달'
 
     const kitchenPrintKey = `order:${orderId}:kitchen:full:${Date.now()}`
     const runKitchenFullCancel = () => {
       if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
       void getPrinterSettingsForStore(currentStoreId)
         .then((settings) => {
-          const orderTypeLabels: Record<string, string> = {
-            dine_in: t('posOrderTypeDineIn') ?? '매장',
-            takeout: t('posOrderTypeTakeout') ?? '포장',
-            delivery: t('posOrderTypeDelivery') ?? '배달',
-          }
-          const kLabels = {
-            unified: t('posKitchenOrder') || '주방 주문서',
-            kitchen1: `${t('posKitchen1') || '주방 1'}`,
-            kitchen2: `${t('posKitchen2') || '주방 2'}`,
-            kitchen3: `${t('posKitchen3') || '주방 3'}`,
-          }
+          const ki = kitchenSlipPrintI18n(settings, lang)
           const slips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(lines as Record<string, unknown>[]) as typeof lines,
-            buildKitchenSlipGroupOpts(settings, menus, kLabels)
+            buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
           )
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
           const kitchenMemo = parsePosOrderMemo(memo).plainMemo
           const memoLine = kitchenMemo.trim()
-            ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+            ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
             : ''
-          const orderTypeLabelSlip = orderTypeLabels[channel] || orderTypeLabel
+          const orderTypeLabelSlip = ki.orderTypeLabels[channel] || channel
           const tablePartR = tableName
-            ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, t)
+            ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
             : ''
           const fullBannerText = (
             tPrint('posKitchenFullCancelBanner') ||
-            t('posKitchenFullCancelBanner') ||
+            ki.t('posKitchenFullCancelBanner') ||
             'Order fully cancelled'
           ).trim()
           const fullHead =
@@ -2270,9 +2294,9 @@ export default function PosTerminalPage() {
               storeCode: currentStoreId,
               orderTypeLabel: orderTypeLabelSlip,
               tablePart: tablePartR,
-              dateStr: formatPosDateTimeMedium(new Date(), lang),
+              dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
               items: slip.items.map((kit) => ({
-                name: translatePosMenuLineForReceipt(String(kit.name ?? ''), t),
+                name: translatePosMenuLineForReceipt(String(kit.name ?? ''), ki.t),
                 qty: Math.max(1, Number(kit.qty ?? 1) || 1),
                 ...(String(kit.note ?? '').trim() ? { note: String(kit.note).trim() } : {}),
                 cancelled: true,
@@ -2410,18 +2434,8 @@ export default function PosTerminalPage() {
       })
       void getPrinterSettingsForStore(currentStoreId)
         .then((settings) => {
-          const orderTypeLabels: Record<string, string> = {
-            dine_in: t('posOrderTypeDineIn') ?? '매장',
-            takeout: t('posOrderTypeTakeout') ?? '포장',
-            delivery: t('posOrderTypeDelivery') ?? '배달',
-          }
-          const kLabels = {
-            unified: t('posKitchenOrder') || '주방 주문서',
-            kitchen1: `${t('posKitchen1') || '주방 1'}`,
-            kitchen2: `${t('posKitchen2') || '주방 2'}`,
-            kitchen3: `${t('posKitchen3') || '주방 3'}`,
-          }
-          const groupOpts = buildKitchenSlipGroupOpts(settings, menus, kLabels)
+          const ki = kitchenSlipPrintI18n(settings, lang)
+          const groupOpts = buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
           const removedLines = kitchenDetail?.removedKitchenLines ?? []
           const cancelledSlips = removedLines.length
             ? buildKitchenSlipGroups(
@@ -2438,16 +2452,16 @@ export default function PosTerminalPage() {
           const slipDesign = resolveKitchenSlipDesign(settings)
           const kitchenMemo = parsePosOrderMemo(memo).plainMemo
           const memoLine = kitchenMemo.trim()
-            ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+            ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
             : ''
           const otKey = String(po.orderType ?? channel).trim().toLowerCase()
-          const orderTypeLabelSlip = orderTypeLabels[otKey] || orderTypeLabel
+          const orderTypeLabelSlip = ki.orderTypeLabels[otKey] || orderTypeLabel
           const tablePartR = tableName
-            ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, t)
+            ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
             : ''
           const partialBannerText = (
             tPrint('posKitchenPartialReprintBanner') ||
-            t('posKitchenPartialReprintBanner') ||
+            ki.t('posKitchenPartialReprintBanner') ||
             'Order updated (partial cancel)'
           ).trim()
           const partialHead =
@@ -2463,9 +2477,9 @@ export default function PosTerminalPage() {
               storeCode: currentStoreId,
               orderTypeLabel: orderTypeLabelSlip,
               tablePart: tablePartR,
-              dateStr: formatPosDateTimeMedium(new Date(), lang),
+              dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
               items: slip.items.map((kit) => ({
-                name: translatePosMenuLineForReceipt(String(kit.name ?? ''), t),
+                name: translatePosMenuLineForReceipt(String(kit.name ?? ''), ki.t),
                 qty: Math.max(1, Number(kit.qty ?? 1) || 1),
                 ...(String(kit.note ?? '').trim() ? { note: String(kit.note).trim() } : {}),
                 cancelled: Boolean(
@@ -2546,52 +2560,12 @@ export default function PosTerminalPage() {
         logPosPrintDebug('realtime_insert_skip_seen', { orderId })
         return
       }
-      let items: {
-        id: string
-        name: string
-        price: number
-        qty: number
-        note?: string
-        promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-      }[] = []
-      try {
-        const raw = row.items_json
-        const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : []
-        items = (Array.isArray(arr) ? arr : []).map(
-          (it: {
-            id?: string
-            name?: string
-            price?: number
-            qty?: number
-            quantity?: number
-            note?: string
-            menuId1?: string
-            menu_id1?: string
-            menuId?: string
-            promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-          }) => {
-            const note = String(it.note ?? '').trim()
-            const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
-            const displayName = resolveOrderItemDisplayName({
-              id: String(it.id ?? ''),
-              name: String(it.name ?? ''),
-              menuId,
-            })
-            return {
-              id: String(it.id ?? ''),
-              name: displayName,
-              price: Number(it.price ?? 0),
-              qty: Number(it.qty ?? it.quantity ?? 1),
-              ...(menuId ? { menuId } : {}),
-              ...(note ? { note } : {}),
-              ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
-            }
-          }
-        )
-      } catch {
+      const parsedItems = parseRealtimePosOrderRowItemsJson(row)
+      if (!parsedItems.ok) {
         logPosPrintDebug('realtime_insert_skip_items_parse_error', { orderId })
         return
       }
+      const items = parsedItems.items
       /* items_json이 Realtime에 비어 있으면 폴링이 다시 잡도록 seen에 넣지 않음 */
       if (items.length === 0) {
         logPosPrintDebug('realtime_insert_skip_empty_items', { orderId })
@@ -2613,6 +2587,10 @@ export default function PosTerminalPage() {
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNo = String(row.order_no ?? '')
       const orderType = String(row.order_type ?? 'dine_in')
+      if (orderType.trim().toLowerCase() === 'dine_in') {
+        const snap = new Set(items.map((it) => String(it.id).trim()).filter(Boolean))
+        if (snap.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(orderId, snap)
+      }
       const tableName = String(row.table_name ?? '')
       const memo = String(row.memo ?? '')
       const subtotal = Number(row.subtotal ?? 0)
@@ -2633,42 +2611,32 @@ export default function PosTerminalPage() {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
         getPrinterSettingsForStore(storeCode)
           .then((settings) => {
-            const orderTypeLabels: Record<string, string> = {
-              dine_in: t('posOrderTypeDineIn') ?? '매장',
-              takeout: t('posOrderTypeTakeout') ?? '포장',
-              delivery: t('posOrderTypeDelivery') ?? '배달',
-            }
-            const kLabels = {
-              unified: t('posKitchenOrder') || '주방 주문서',
-              kitchen1: `${t('posKitchen1') || '주방 1'}`,
-              kitchen2: `${t('posKitchen2') || '주방 2'}`,
-              kitchen3: `${t('posKitchen3') || '주방 3'}`,
-            }
+            const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
               kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-              buildKitchenSlipGroupOpts(settings, menus, kLabels)
+              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
             )
             if (!slips.length) return
             const slipDesign = resolveKitchenSlipDesign(settings)
             const kitchenMemo = parsePosOrderMemo(memo).plainMemo
             const memoLine = kitchenMemo.trim()
-              ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+              ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
               : ''
             const printOne = (idx: number) => {
               if (idx >= slips.length) return
               const slip = slips[idx]
               const tablePartR = tableName
-                ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, t)
+                ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
                 : ''
               const html = buildKitchenSlipDocumentHtml({
                 label: slip.label,
                 orderNo,
                 storeCode,
-                orderTypeLabel: orderTypeLabels[orderType] || orderType,
+                orderTypeLabel: ki.orderTypeLabels[orderType] || orderType,
                 tablePart: tablePartR,
-                dateStr: formatPosDateTimeMedium(new Date(), lang),
+                dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                 items: slip.items.map((it) => ({
-                  name: translatePosMenuLineForReceipt(it.name, t),
+                  name: translatePosMenuLineForReceipt(it.name, ki.t),
                   qty: it.qty,
                   note: it.note,
                 })),
@@ -2763,6 +2731,7 @@ export default function PosTerminalPage() {
     logPosPrintDebug,
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
+    parseRealtimePosOrderRowItemsJson,
   ])
 
   useEffect(() => {
@@ -2808,7 +2777,12 @@ export default function PosTerminalPage() {
   ])
 
   useEffect(() => {
-    if (!isMainPosDevice || !currentStoreId || !autoPrintReceiptOnPayment) return
+    if (!isMainPosDevice || !currentStoreId) return
+    const wantPayment = autoPrintReceiptOnPayment
+    const wantRemoteDineInAdd =
+      (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder) || autoPrintKitchenSlipOnOrder
+    if (!wantPayment && !wantRemoteDineInAdd) return
+
     const channel = subscribePosOrdersUpdate((payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row) return
@@ -2822,27 +2796,259 @@ export default function PosTerminalPage() {
       ].filter(Boolean)
       if (!rowStore) return
       if (!variants.some((v) => v && (rowStore === v || rowStore.toLowerCase() === v.toLowerCase()))) return
-      if (!isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
-      if (posOrderRowPaymentSum(row) <= 0) return
-      if (printedPaymentReceiptIdsRef.current.has(orderId)) return
-      printedPaymentReceiptIdsRef.current.add(orderId)
-      void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true }).then((list) => {
-        const order = list[0] as PosOrder | undefined
-        if (!order?.items?.length) {
-          printedPaymentReceiptIdsRef.current.delete(orderId)
+
+      if (
+        wantPayment &&
+        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
+        posOrderRowPaymentSum(row) > 0 &&
+        !printedPaymentReceiptIdsRef.current.has(orderId)
+      ) {
+        printedPaymentReceiptIdsRef.current.add(orderId)
+        void getPosOrders({ orderId, storeCode: currentStoreId, strictStore: true }).then((list) => {
+          const order = list[0] as PosOrder | undefined
+          if (!order?.items?.length) {
+            printedPaymentReceiptIdsRef.current.delete(orderId)
+            return
+          }
+          if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
+            printedPaymentReceiptIdsRef.current.delete(orderId)
+            return
+          }
+          setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
+        })
+      }
+
+      if (!wantRemoteDineInAdd) return
+      const ot = String(row.order_type ?? '').trim().toLowerCase()
+      if (ot !== 'dine_in') return
+      if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
+      const st = String(row.status ?? '').trim().toLowerCase()
+      if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
+
+      const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId)
+      if (suppressUntil != null) {
+        if (Date.now() < suppressUntil) {
+          mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
+          const parsedSelf = parseRealtimePosOrderRowItemsJson(row)
+          if (parsedSelf.ok && parsedSelf.items.length > 0) {
+            const sid = new Set(parsedSelf.items.map((it) => String(it.id).trim()).filter(Boolean))
+            if (sid.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(orderId, sid)
+          }
+          logPosPrintDebug('realtime_update_skip_self_dine_in_suppress', { orderId })
           return
         }
-        if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) {
-          printedPaymentReceiptIdsRef.current.delete(orderId)
-          return
-        }
-        setReceiptData(receiptModalDataFromPosOrderForPayment(order, pricingAdjustments, posReceiptLineOpts))
+        mainPosSelfDineInUpdateSuppressUntilRef.current.delete(orderId)
+      }
+
+      const parsed = parseRealtimePosOrderRowItemsJson(row)
+      if (!parsed.ok || parsed.items.length === 0) return
+
+      const items = parsed.items
+      const prevIds = dineInRemoteItemIdsSnapshotRef.current.get(orderId)
+      const newIdSet = new Set(items.map((it) => String(it.id).trim()).filter(Boolean))
+      if (newIdSet.size === 0) return
+
+      if (!prevIds) {
+        dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+        logPosPrintDebug('realtime_update_dine_in_snapshot_seeded', { orderId })
+        return
+      }
+
+      const addedIds = [...newIdSet].filter((id) => !prevIds.has(id))
+      if (addedIds.length === 0) {
+        dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+        return
+      }
+
+      const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
+      if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {
+        dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+        return
+      }
+
+      const addedSet = new Set(addedIds)
+      const previousStub = [...prevIds].map((id) => ({ id }))
+      const cartLikeNew = items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        price: it.price,
+        quantity: it.qty,
+        qty: it.qty,
+        ...(it.note ? { note: it.note } : {}),
+        ...(it.menuId ? { menuId: it.menuId } : {}),
+        ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+      }))
+      const kitchenCartLines = filterKitchenCartLinesForDineInAdd(cartLikeNew, previousStub)
+
+      const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
+      const discountAmt = Number(row.discount_amt ?? 0)
+      const pricing = computePosPricing({
+        subtotal: mergeSubtotal,
+        discountAmt,
+        cardPaymentAmount: 0,
+        adjustments: pricingAdjustments,
       })
+
+      const receiptPrintItemsRemote = items.map((it) => ({
+        ...it,
+        ...(addedSet.has(String(it.id).trim()) ? { isAddon: true as const } : {}),
+      }))
+
+      const storeCode = String(row.store_code ?? currentStoreId)
+      const orderNoStr = String(row.order_no ?? '')
+      const tableName = String(row.table_name ?? '')
+      const memo = String(row.memo ?? '')
+
+      const receiptPayloadRemote = {
+        orderNo: orderNoStr,
+        storeCode,
+        orderType: t('posOrderTypeDineIn') || '매장',
+        tableName,
+        memo,
+        items: receiptPrintItemsRemote,
+        subtotal: mergeSubtotal,
+        discountAmt,
+        total: pricing.finalTotal,
+        vatFeeAmt: pricing.vatFeeAmt,
+        vatFeeMode: pricing.vatFeeMode,
+        serviceFeeAmt: pricing.serviceFeeAmt,
+        serviceFeeMode: pricing.serviceFeeMode,
+        cardFeeAmt: pricing.cardFeeAmt,
+        cardFeeMode: pricing.cardFeeMode,
+        otherFeeAmt: pricing.otherFeeAmt,
+        otherFeeMode: pricing.otherFeeMode,
+      }
+
+      const kitchenDedupeKey = `order:${orderId}:kitchen:add-remote:${Array.from(addedSet).sort().join('|')}`
+      const runKitchenRemoteDineInAdd = () => {
+        if (kitchenCartLines.length === 0) return
+        if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+        void getPrinterSettingsForStore(storeCode)
+          .then((settings) => {
+            const ki = kitchenSlipPrintI18n(settings, lang)
+            const itemsForKitchen = kitchenCartLines.map((i) => {
+              const line = i as {
+                menuId?: string
+                menuId1?: string
+                menu_id1?: string
+                menuId2?: string
+                note?: string
+                promoId?: string
+                promoCode?: string
+                promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+              }
+              const menuId = String(
+                line.menuId ?? line.menuId1 ?? line.menu_id1 ?? line.menuId2 ?? ''
+              ).trim()
+              const note = String(line.note ?? '').trim()
+              const promoId = String(line.promoId ?? '').trim()
+              const promoCode = String(line.promoCode ?? '').trim()
+              return {
+                id: i.id,
+                name: i.name,
+                price: i.price,
+                qty: i.quantity || i.qty || 1,
+                ...(menuId ? { menuId } : {}),
+                ...(note ? { note } : {}),
+                ...(promoId ? { promoId } : {}),
+                ...(promoCode ? { promoCode } : {}),
+                ...(Array.isArray(line.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) } : {}),
+              }
+            })
+            const slips = buildKitchenSlipGroups(
+              kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
+              buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
+            )
+            if (!slips.length) return
+            const slipDesign = resolveKitchenSlipDesign(settings)
+            const kitchenMemo = parsePosOrderMemo(memo).plainMemo
+            const memoLine = kitchenMemo.trim()
+              ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+              : ''
+            const cR = (tag: string) => '\u003c/' + tag + '>'
+            const tablePartR = tableName
+              ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
+              : ''
+            const addonKitchenHead =
+              '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000">' +
+              escapeHtml(tPrint('posReceiptAddonSection') || '추가 주문') +
+              cR('div')
+            const printOne = (idx: number) => {
+              if (idx >= slips.length) return
+              const slip = slips[idx]
+              const html = buildKitchenSlipDocumentHtml({
+                label: slip.label,
+                orderNo: orderNoStr,
+                storeCode,
+                orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
+                tablePart: tablePartR,
+                dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
+                items: slip.items.map((it) => ({
+                  name: translatePosMenuLineForReceipt(it.name, ki.t),
+                  qty: it.qty,
+                  note: it.note,
+                })),
+                memoLine: memoLine || null,
+                escapeHtml,
+                design: slipDesign,
+                printColorAdjust: 'exact',
+                prependItemsHtml: idx === 0 ? addonKitchenHead : '',
+              })
+              printPosHtmlDocument(html, {
+                title: slip.label,
+                printDelayMs: 0,
+                focusIframeBeforePrint: false,
+                printRole: 'kitchen',
+                kitchenStation: slip.station,
+                escPosCutOverride: resolveEscPosCutOverride(settings, { printRole: 'kitchen' }),
+                onPrintUnavailable: () => {
+                  void appAlert(t('posPrintUnavailable'))
+                },
+                onAfterCleanup: () => {
+                  if (idx + 1 < slips.length)
+                    setTimeout(() => printOne(idx + 1), POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS)
+                },
+              })
+            }
+            setTimeout(() => printOne(0), 0)
+          })
+          .catch((e) => console.error('Kitchen slip print (remote dine-in add):', e))
+      }
+
+      dineInRemoteItemIdsSnapshotRef.current.set(orderId, newIdSet)
+      logPosPrintDebug('remote_dine_in_add_autoprint', { orderId, addedCount: addedIds.length })
+
+      if (shouldAutoPrintReceipt && autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
+        void printReceiptNow(receiptPayloadRemote, null, false, undefined, true, runKitchenRemoteDineInAdd)
+      } else if (shouldAutoPrintReceipt) {
+        void printReceiptNow(receiptPayloadRemote, null, false, undefined, true)
+      } else if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
+        setTimeout(runKitchenRemoteDineInAdd, 180)
+      }
     }, { store: currentStoreId })
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnPayment, pricingAdjustments, posReceiptLineOpts])
+  }, [
+    isMainPosDevice,
+    currentStoreId,
+    autoPrintReceiptOnPayment,
+    autoPrintReceiptOnAddOrder,
+    autoPrintReceiptOnOrder,
+    autoPrintKitchenSlipOnOrder,
+    pricingAdjustments,
+    posReceiptLineOpts,
+    parseRealtimePosOrderRowItemsJson,
+    enrichPromoItemsWithOptionName,
+    kitchenItemsWithResolvedPromo,
+    getPrinterSettingsForStore,
+    reserveKitchenAutoPrintKey,
+    menus,
+    lang,
+    t,
+    tPrint,
+    logPosPrintDebug,
+  ])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) {
@@ -2930,7 +3136,20 @@ export default function PosTerminalPage() {
           const maxId = orders.length ? Math.max(...orders.map((o) => o.id ?? 0)) : 0
           for (const o of orders) {
             const oid = Number(o.id)
-            if (Number.isFinite(oid) && oid > 0) seenOrderIdsRef.current.add(oid)
+            if (Number.isFinite(oid) && oid > 0) {
+              seenOrderIdsRef.current.add(oid)
+              if (
+                String(o.orderType ?? '').trim().toLowerCase() === 'dine_in' &&
+                (o.items || []).length > 0
+              ) {
+                const idset = new Set(
+                  (o.items || [])
+                    .map((it) => String((it as { id?: string }).id ?? '').trim())
+                    .filter(Boolean)
+                )
+                if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(oid, idset)
+              }
+            }
           }
           const seededMax = Math.max(lastSeenOrderIdRef.current, maxId)
           bumpLastSeenOrderId(seededMax)
@@ -3038,43 +3257,33 @@ export default function PosTerminalPage() {
             void (async () => {
               try {
                 const settings = await getPrinterSettingsForStore(order.storeCode ?? currentStoreId)
-                const orderTypeLabels: Record<string, string> = {
-                  dine_in: t('posOrderTypeDineIn') ?? '매장',
-                  takeout: t('posOrderTypeTakeout') ?? '포장',
-                  delivery: t('posOrderTypeDelivery') ?? '배달',
-                }
-                const kLabels = {
-                  unified: t('posKitchenOrder') || '주방 주문서',
-                  kitchen1: `${t('posKitchen1') || '주방 1'}`,
-                  kitchen2: `${t('posKitchen2') || '주방 2'}`,
-                  kitchen3: `${t('posKitchen3') || '주방 3'}`,
-                }
+                const ki = kitchenSlipPrintI18n(settings, lang)
                 const slips = buildKitchenSlipGroups(
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,
-                  buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                  buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                 )
                 if (!slips.length) return
                 const slipDesign = resolveKitchenSlipDesign(settings)
                 const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
                 const memoLine = kitchenMemo.trim()
-                  ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                  ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
                   : ''
                 const printOne = (idx: number) => {
                   if (idx >= slips.length) return
                   const slip = slips[idx]
                   const tablePart = order.tableName
-                    ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, t)
+                    ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                     : ''
-                  const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                  const orderTypeLabel = ki.orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
                   const html = buildKitchenSlipDocumentHtml({
                     label: slip.label,
                     orderNo: order.orderNo ?? '',
                     storeCode: order.storeCode ?? '',
                     orderTypeLabel,
                     tablePart,
-                    dateStr: formatPosDateTimeMedium(new Date(), lang),
+                    dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                     items: slip.items.map((it) => ({
-                      name: translatePosMenuLineForReceipt(it.name, t),
+                      name: translatePosMenuLineForReceipt(it.name, ki.t),
                       qty: it.qty,
                       note: it.note,
                     })),
@@ -3132,6 +3341,10 @@ export default function PosTerminalPage() {
               status: String(order.status ?? ''),
               isInboundDeliveryOrder: isApiInboundDeliveryOrderMemo(String(order.memo ?? '')),
             })
+          }
+          if (String(order.orderType ?? '').trim().toLowerCase() === 'dine_in' && items.length > 0) {
+            const idset = new Set(items.map((it) => String(it.id ?? '').trim()).filter(Boolean))
+            if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(oid, idset)
           }
         }
         if (shouldRefreshCurrentStore) {
@@ -4262,6 +4475,9 @@ export default function PosTerminalPage() {
                     })),
                     ...incomingItems,
                   ]
+                  if (isMainPosDevice) {
+                    mainPosSelfDineInUpdateSuppressUntilRef.current.set(existingOrderId, Date.now() + 12_000)
+                  }
                   const res = await updatePosOrder({
                     id: existingOrderId,
                     items: mergedItems,
@@ -4464,30 +4680,20 @@ export default function PosTerminalPage() {
                   })
                   getPrinterSettingsForStore(currentStoreId)
                     .then((settings) => {
-                      const orderTypeLabels: Record<string, string> = {
-                        dine_in: t('posOrderTypeDineIn') ?? '매장',
-                        takeout: t('posOrderTypeTakeout') ?? '포장',
-                        delivery: t('posOrderTypeDelivery') ?? '배달',
-                      }
-                      const kLabels = {
-                        unified: t('posKitchenOrder') || '주방 주문서',
-                        kitchen1: `${t('posKitchen1') || '주방 1'}`,
-                        kitchen2: `${t('posKitchen2') || '주방 2'}`,
-                        kitchen3: `${t('posKitchen3') || '주방 3'}`,
-                      }
+                      const ki = kitchenSlipPrintI18n(settings, lang)
                       const slips = buildKitchenSlipGroups(
                         kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                        buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                       )
                       if (!slips.length) return
                       const slipDesign = resolveKitchenSlipDesign(settings)
                       const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
                       const memoLine = kitchenMemo.trim()
-                        ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                        ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
                         : ''
                       const cR = (tag: string) => '\u003c/' + tag + '>'
                       const tablePartR = payload.tableName
-                        ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.tableName, t)
+                        ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.tableName, ki.t)
                         : ''
                       const addonKitchenHead =
                         isAddOrder
@@ -4502,11 +4708,11 @@ export default function PosTerminalPage() {
                           label: slip.label,
                           orderNo: orderNoStr,
                           storeCode: currentStoreId,
-                          orderTypeLabel: orderTypeLabels.dine_in || '매장',
+                          orderTypeLabel: ki.orderTypeLabels.dine_in || '매장',
                           tablePart: tablePartR,
-                          dateStr: formatPosDateTimeMedium(new Date(), lang),
+                          dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                           items: slip.items.map((it) => ({
-                            name: translatePosMenuLineForReceipt(it.name, t),
+                            name: translatePosMenuLineForReceipt(it.name, ki.t),
                             qty: it.qty,
                             note: it.note,
                           })),
@@ -4589,6 +4795,12 @@ export default function PosTerminalPage() {
                     otherFeeMode: pricing.otherFeeMode,
                     receiptAutoPrintContext: isAddOrder ? 'add_order' : 'order',
                   })
+                }
+                if (savedOrderId != null && savedOrderId > 0) {
+                  const idset = new Set(
+                    receiptPrintItems.map((it) => String(it.id ?? '').trim()).filter(Boolean)
+                  )
+                  if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(savedOrderId, idset)
                 }
                 if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
                 setServingTableId(null)
@@ -4935,31 +5147,21 @@ export default function PosTerminalPage() {
                   })
                   getPrinterSettingsForStore(currentStoreId)
                     .then((settings) => {
-                      const orderTypeLabels: Record<string, string> = {
-                        dine_in: t('posOrderTypeDineIn') ?? '매장',
-                        takeout: t('posOrderTypeTakeout') ?? '포장',
-                        delivery: t('posOrderTypeDelivery') ?? '배달',
-                      }
-                      const kLabels = {
-                        unified: t('posKitchenOrder') || '주방 주문서',
-                        kitchen1: `${t('posKitchen1') || '주방 1'}`,
-                        kitchen2: `${t('posKitchen2') || '주방 2'}`,
-                        kitchen3: `${t('posKitchen3') || '주방 3'}`,
-                      }
+                      const ki = kitchenSlipPrintI18n(settings, lang)
                       const slips = buildKitchenSlipGroups(
                         kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-                        buildKitchenSlipGroupOpts(settings, menus, kLabels)
+                        buildKitchenSlipGroupOpts(settings, menus, ki.kLabels)
                       )
                       if (!slips.length) return
                       const slipDesign = resolveKitchenSlipDesign(settings)
                       const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
                       const memoLine = kitchenMemo.trim()
-                        ? (t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
+                        ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
                         : ''
                       const tablePartR = payload.orderLabel
-                        ? ' · ' + (t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.orderLabel, t)
+                        ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.orderLabel, ki.t)
                         : ''
-                      const orderTypeLabel = orderTypeLabels[payload.orderType] || payload.orderType
+                      const orderTypeLabel = ki.orderTypeLabels[payload.orderType] || payload.orderType
                       const printOne = (idx: number) => {
                         if (idx >= slips.length) return
                         const slip = slips[idx]
@@ -4969,9 +5171,9 @@ export default function PosTerminalPage() {
                           storeCode: currentStoreId,
                           orderTypeLabel,
                           tablePart: tablePartR,
-                          dateStr: formatPosDateTimeMedium(new Date(), lang),
+                          dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                           items: slip.items.map((it) => ({
-                            name: translatePosMenuLineForReceipt(it.name, t),
+                            name: translatePosMenuLineForReceipt(it.name, ki.t),
                             qty: it.qty,
                             note: it.note,
                           })),

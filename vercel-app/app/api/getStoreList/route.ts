@@ -12,8 +12,16 @@ export async function GET() {
   try {
     const empList = (await supabaseSelect('employees', {
       order: 'id.asc',
-      select: 'store,name,nick,job,role,resign_date',
-    })) as { store?: string; name?: string; nick?: string; job?: string; role?: string; resign_date?: string | null }[] | null
+      select: 'store,name,nick,job,role,resign_date,employment_status',
+    })) as {
+      store?: string
+      name?: string
+      nick?: string
+      job?: string
+      role?: string
+      resign_date?: string | null
+      employment_status?: string | null
+    }[] | null
 
     const masters = await fetchErpStoresMaster()
     const built = buildStoreListFromEmployees(empList, masters)

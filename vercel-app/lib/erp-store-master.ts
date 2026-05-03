@@ -1,5 +1,34 @@
 import { supabaseSelect } from '@/lib/supabase-server'
+import { todayStrBangkok } from '@/lib/attendance-utils'
 import { normStoreKey } from '@/lib/store-list-keys'
+
+function resignDateStr(val: unknown): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val.slice(0, 10)
+  const d = new Date(val as string)
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+/**
+ * getAdminEmployeeList의 normalizedEmployeeStatus와 동일한 기준:
+ * 퇴사일이 방콕 기준 오늘보다 미래면 아직 재직으로 간주.
+ */
+export function isEffectivelyResignedForStaffRollup(
+  employmentStatus: unknown,
+  resignDate: unknown
+): boolean {
+  const today = todayStrBangkok()
+  const resignStr = resignDateStr(resignDate)
+  const raw = String(employmentStatus || '')
+    .trim()
+    .toLowerCase()
+  if (raw === 'active' || raw === 'leave' || raw === 'resigned' || raw === 'suspended') {
+    if (raw === 'resigned' && resignStr && resignStr > today) return false
+    return raw === 'resigned'
+  }
+  if (!resignStr) return false
+  return resignStr <= today
+}
 
 export type ErpStoreMasterRow = {
   store_code: string
@@ -98,6 +127,7 @@ type EmpRow = {
   job?: string
   role?: string
   resign_date?: string | null
+  employment_status?: string | null
 }
 
 /** 로그인·비밀번호 변경: 제출된 매장 키(보통 store_code)와 employees.store 매칭 */
@@ -170,10 +200,7 @@ export function buildStoreListFromEmployees(
 
   const includeResigned = options?.includeResignedInUserMap === true
   for (const r of empList || []) {
-    if (!includeResigned) {
-      const resignDate = String(r.resign_date ?? '').trim()
-      if (resignDate) continue
-    }
+    if (!includeResigned && isEffectivelyResignedForStaffRollup(r.employment_status, r.resign_date)) continue
     const rawStore = String(r.store || '').trim()
     const name = String(r.name || '').trim()
     const nick = String(r.nick || r.name || '').trim() || name

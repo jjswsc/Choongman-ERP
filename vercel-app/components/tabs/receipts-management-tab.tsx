@@ -56,6 +56,7 @@ import {
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
+import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
 import { toDateStrBangkok } from '@/lib/attendance-utils'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
@@ -546,17 +547,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
+      const ki = kitchenSlipPrintI18n(settings, lang)
       const items = enrichPosOrderLikeItemsWithPromoSnapshot(
         (o.items || []) as unknown as Record<string, unknown>[],
         posReceiptLineOptsKitchen
       ) as { id?: string; name?: string; price?: number; qty?: number }[]
-      const kLabels = {
-        unified: t('posKitchenOrder') || '주방 주문서',
-        kitchen1: `${t('posKitchen1') || '주방 1'}`,
-        kitchen2: `${t('posKitchen2') || '주방 2'}`,
-        kitchen3: `${t('posKitchen3') || '주방 3'}`,
-      }
-      const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+      const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, ki.kLabels))
       if (!slips.length) {
         await appAlert(t('posKitchenNoItemsToPrint'))
         return
@@ -564,30 +560,30 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       const slipDesign = resolveKitchenSlipDesign(settings)
       const kitchenMemo = parsePosOrderMemo(o.memo).plainMemo
       const memoLine = kitchenMemo.trim()
-        ? `${t('posCustomerMemo') || '메모'}: ${kitchenMemo.trim()}`
+        ? `${ki.t('posCustomerMemo') || '메모'}: ${kitchenMemo.trim()}`
         : ''
       const dateStr = o.createdAt
-        ? formatPosDateTimeMedium(new Date(o.createdAt), lang)
+        ? formatPosDateTimeMedium(new Date(o.createdAt), ki.lang)
         : '-'
       const printOne = async (idx: number): Promise<void> => {
         if (idx >= slips.length) return
         const slip = slips[idx]
         const segLabel =
           normalizePosOrderTypeKey(o.orderType) === 'dine_in'
-            ? t('posTable') || '테이블'
-            : t('posReceiptColSegment') || '구분'
+            ? ki.t('posTable') || '테이블'
+            : ki.t('posReceiptColSegment') || '구분'
         const tablePart = o.tableName ? ` · ${segLabel}: ${o.tableName}` : ''
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
           orderNo: String(o.orderNo ?? ''),
           storeCode: store,
-          orderTypeLabel: orderTypeLabels[o.orderType] || o.orderType,
+          orderTypeLabel: ki.orderTypeLabels[normalizePosOrderTypeKey(o.orderType)] || o.orderType,
           tablePart,
           dateStr,
           items: slip.items.map((it) => {
             const row = it as { name?: string; qty?: number; note?: string }
             return {
-              name: translatePosMenuLineForReceipt(String(row.name ?? '-'), t),
+              name: translatePosMenuLineForReceipt(String(row.name ?? '-'), ki.t),
               qty: Number(row.qty ?? 1),
               note: row.note,
             }

@@ -1,4 +1,5 @@
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
+import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 type TriggerParams = {
@@ -12,21 +13,28 @@ type IntegrationRow = {
   integration_status?: string
 }
 
-function parseGrabStoreMap(): Record<string, string> {
-  const raw = process.env.GRAB_STORE_MAP_JSON?.trim()
-  if (!raw) return {}
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(parsed)) {
-      const key = String(k || '').trim()
-      const val = String(v || '').trim()
-      if (key && val) out[key] = val
-    }
-    return out
-  } catch {
-    return {}
+/** Grab merchantID 키만 (GFSBPOS-…). JSON에 넣은 파트너 숫자·ERP 코드 키는 제외 */
+function isGrabFoodMerchantMapKey(k: string): boolean {
+  const s = String(k || '').trim()
+  if (!s) return false
+  if (/^\d{1,6}$/.test(s)) return false
+  return /GF/i.test(s)
+}
+
+/** Grab 파트너 스토어 ID(숫자 문자열) 후보 — ERP store_code·표시명도 입력될 수 있음 */
+function collectGrabPartnerStoreIds(partnerParam: string, map: Record<string, string>): Set<string> {
+  const raw = String(partnerParam || '').trim()
+  const ids = new Set<string>()
+  if (!raw) return ids
+  if (/^\d{1,6}$/.test(raw)) ids.add(raw)
+  for (const [k, v] of Object.entries(map)) {
+    const kk = String(k || '').trim()
+    const vv = String(v || '').trim()
+    if (!kk || !vv) continue
+    // "000":"HQ" → ERP 코드 HQ 일 때 파트너 000
+    if (/^\d{1,6}$/.test(kk) && vv === raw) ids.add(kk)
   }
+  return ids
 }
 
 async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promise<string[]> {
@@ -45,17 +53,26 @@ async function loadActiveGrabMerchants(partnerMerchantID?: string | null): Promi
     const status = String(row.integration_status ?? '').trim().toUpperCase()
     if (status !== 'ACTIVE' && status !== 'SYNCING') continue
     const merchantID = String(row.grab_merchant_id ?? '').trim()
-    if (merchantID) out.add(merchantID)
+    if (merchantID && isGrabFoodMerchantMapKey(merchantID)) out.add(merchantID)
   }
   if (out.size > 0) return Array.from(out)
 
   const map = parseGrabStoreMap()
-  if (partnerMerchantID) {
-    for (const [grabMerchantID, mappedStore] of Object.entries(map)) {
-      if (String(mappedStore).trim() === String(partnerMerchantID).trim()) out.add(grabMerchantID)
+  const partnerRaw = String(partnerMerchantID ?? '').trim()
+
+  if (partnerRaw) {
+    const partnerIds = collectGrabPartnerStoreIds(partnerRaw, map)
+    for (const pid of partnerIds) {
+      for (const [grabMerchantID, mappedStore] of Object.entries(map)) {
+        if (!isGrabFoodMerchantMapKey(grabMerchantID)) continue
+        if (String(mappedStore).trim() === pid) out.add(grabMerchantID)
+      }
     }
-  } else {
-    for (const grabMerchantID of Object.keys(map)) out.add(grabMerchantID)
+    return Array.from(out)
+  }
+
+  for (const grabMerchantID of Object.keys(map)) {
+    if (isGrabFoodMerchantMapKey(grabMerchantID)) out.add(grabMerchantID)
   }
   return Array.from(out)
 }

@@ -7618,6 +7618,8 @@ export interface PosPrinterSettings {
   receiptMembershipQrText?: string
   receiptShowMembershipQr?: boolean
   receiptPrintLang?: string
+  /** 주방 주문서 인쇄 언어(미설정 시 POS 화면 언어) */
+  kitchenSlipPrintLang?: string
   /** 주방 주문서 글자 크기 */
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
@@ -7759,6 +7761,8 @@ export async function savePosPrinterSettings(params: {
   receiptMembershipQrText?: string
   receiptShowMembershipQr?: boolean
   receiptPrintLang?: string
+  /** 주방 주문서 인쇄 언어(미설정 시 POS 화면 언어) */
+  kitchenSlipPrintLang?: string
   kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
   kitchenSlipShowLineNotes?: boolean
   kitchenSlipShowOrderMemo?: boolean

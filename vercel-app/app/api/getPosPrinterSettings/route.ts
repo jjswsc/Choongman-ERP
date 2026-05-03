@@ -162,6 +162,7 @@ export async function GET(request: NextRequest) {
     otherRate: 0,
     otherMode: 'separate' as const,
     receiptPrintLang: '' as string,
+    kitchenSlipPrintLang: '' as string,
     mainDeviceToken: null as string | null,
     mainDeviceTokens: [] as string[],
     kitchenRouteByMenu: {} as Record<string, 0 | 1 | 2 | 3>,
@@ -256,6 +257,7 @@ export async function GET(request: NextRequest) {
       esc_pos_cut_after_hall_order_html?: boolean
       esc_pos_cut_after_payment_receipt_html?: boolean
       receipt_print_lang?: string
+      kitchen_slip_print_lang?: string
       vat_rate?: number
       vat_mode?: string
       service_rate?: number
@@ -404,6 +406,7 @@ export async function GET(request: NextRequest) {
       escPosCutAfterHallOrderHtml: Boolean(raw?.esc_pos_cut_after_hall_order_html),
       escPosCutAfterPaymentReceiptHtml: Boolean(raw?.esc_pos_cut_after_payment_receipt_html),
       receiptPrintLang: String(raw?.receipt_print_lang ?? '').trim(),
+      kitchenSlipPrintLang: String(raw?.kitchen_slip_print_lang ?? '').trim(),
       vatRate: Math.max(0, Number(raw?.vat_rate ?? 7)),
       vatMode: String(raw?.vat_mode || 'included') === 'separate' ? 'separate' : 'included',
       serviceRate: Math.max(0, Number(raw?.service_rate ?? 0)),
