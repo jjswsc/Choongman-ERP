@@ -4608,11 +4608,7 @@ export default function PosTerminalPage() {
                   savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
                   const queued = Boolean((res as { queued?: boolean }).queued)
                   await notifyQueuedSave(savedOrderNo, queued)
-                  if (
-                    queued &&
-                    (savedOrderNo.startsWith('LOCAL-') || savedOrderNo.startsWith('pos-'))
-                  )
-                    queuedLocalOrderNo = savedOrderNo
+                  if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
                 }
                 const markQueuedLocalPrintedIfNeeded = () => {
                   if (!queuedLocalOrderNo) return
@@ -4940,15 +4936,11 @@ export default function PosTerminalPage() {
                   orderNo = pendingReceiptOrderNo ?? ''
                 } else if (pay != null) {
                   const localNoCandidate =
-                    (pendingReceiptOrderNo?.startsWith('LOCAL-') || pendingReceiptOrderNo?.startsWith('pos-')
-                      ? pendingReceiptOrderNo
-                      : null) ??
-                    (servingTable?.order?.orderNo?.startsWith('LOCAL-') ||
-                    servingTable?.order?.orderNo?.startsWith('pos-')
+                    (pendingReceiptOrderNo?.startsWith('LOCAL-') ? pendingReceiptOrderNo : null) ??
+                    (servingTable?.order?.orderNo?.startsWith('LOCAL-')
                       ? servingTable.order.orderNo
                       : null) ??
-                    (selectedTable?.order?.orderNo?.startsWith('LOCAL-') ||
-                    selectedTable?.order?.orderNo?.startsWith('pos-')
+                    (selectedTable?.order?.orderNo?.startsWith('LOCAL-')
                       ? selectedTable.order.orderNo
                       : null)
                   let mergedLocal = false
@@ -5147,7 +5139,7 @@ export default function PosTerminalPage() {
                 const queued = Boolean((res as { queued?: boolean }).queued)
                 await notifyQueuedSave(orderNo, queued)
                 let queuedLocalOrderNo: string | null =
-                  queued && (orderNo.startsWith('LOCAL-') || orderNo.startsWith('pos-')) ? orderNo : null
+                  queued && orderNo.startsWith('LOCAL-') ? orderNo : null
                 const markQueuedLocalPrintedIfNeeded = () => {
                   if (!queuedLocalOrderNo) return
                   registerLocallyPrintedQueuedOrderNo(queuedLocalOrderNo)

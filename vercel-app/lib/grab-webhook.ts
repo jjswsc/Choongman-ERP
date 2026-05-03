@@ -210,18 +210,20 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
     sat: openAllDay,
     sun: openAllDay,
   }
+  const stubCategoryId = 'SECTION-01__grab-stub-category'
   return {
     merchantID,
     partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
-    sellingTimes: serviceHours,
+    sellingTimes: [{ id: 'SECTION-01', name: 'Menu', serviceHours }],
     categories: [
       {
-        id: 'grab-stub-category',
+        id: stubCategoryId,
         name: 'Stub',
         nameTranslation: {} as Record<string, string>,
         sequence: 1,
         availableStatus: 'AVAILABLE' as const,
+        sellingTimeId: 'SECTION-01',
         items: [
           {
             id: 'grab-stub-item',
@@ -229,6 +231,7 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
             nameTranslation: {} as Record<string, string>,
             sequence: 1,
             availableStatus: 'UNAVAILABLE' as const,
+            maxStock: 0,
             price: 100,
             campaignInfo: null,
             description: 'Replace with real menu from POS.',
@@ -258,6 +261,7 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
                 nameTranslation: {} as Record<string, string>,
                 sequence: 1,
                 availableStatus: 'UNAVAILABLE' as const,
+                maxStock: 0,
                 price: 100,
                 campaignInfo: null,
                 description: 'Replace with real menu from POS.',

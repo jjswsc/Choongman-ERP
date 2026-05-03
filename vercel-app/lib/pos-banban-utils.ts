@@ -17,6 +17,19 @@ export function isKnownBanbanMenuCode(code: string | undefined | null): boolean 
   return KNOWN_BANBAN_CODE_KEYS.has(normalizePosMenuCodeKey(code))
 }
 
+/** 도시락/도시락 세트는 반반 맛 후보에서 제외 (Chicken 대분류에 두어도 목록에 안 나옴) */
+export function isExcludedFromBanbanFlavorPick(menu: {
+  name?: string | null
+  category?: string | null
+}): boolean {
+  const name = String(menu.name ?? '').toLowerCase()
+  const cat = String(menu.category ?? '').trim().toLowerCase()
+  if (cat.includes('dosirak')) return true
+  if (/\bdosirak\b/.test(name) || name.includes('dosirak')) return true
+  if (name.includes('도시락')) return true
+  return false
+}
+
 /**
  * 반반(반반 치킨) 메뉴 여부.
  * DB에 `is_banban` 컬럼이 없거나 getPosMenus 폴백으로 플래그가 안 내려올 때를 대비해 이름·코드로도 인식합니다.
@@ -64,9 +77,10 @@ export function isSameCategoryAsCodeChickenMenu(
 
 /** 반반 후보: 위 조건 중 하나라도 만족 */
 export function isEligibleChickenHalfForBanban(
-  menu: Pick<PosMenu, 'code' | 'categoryMain' | 'category'>,
+  menu: Pick<PosMenu, 'code' | 'categoryMain' | 'category' | 'name'>,
   allMenus: Pick<PosMenu, 'code' | 'category'>[]
 ): boolean {
+  if (isExcludedFromBanbanFlavorPick(menu)) return false
   return isChickenMenuForBanban(menu) || isSameCategoryAsCodeChickenMenu(menu, allMenus)
 }
 
@@ -84,7 +98,8 @@ export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu
       m.isActive !== false &&
       (!m.soldOutDate || m.soldOutDate !== todayStr) &&
       !isBanbanMenu(m) &&
-      String(m.id) !== String(banbanMenu.id)
+      String(m.id) !== String(banbanMenu.id) &&
+      !isExcludedFromBanbanFlavorPick(m)
   )
 
   const primary = base.filter((m) => isEligibleChickenHalfForBanban(m, allMenus))

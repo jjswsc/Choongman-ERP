@@ -226,6 +226,45 @@ function serviceHoursFromRanges(ranges: TimeRange[]) {
   }
 }
 
+type GrabMenuSectionOut = {
+  id: string
+  name: string
+  sequence: number
+  serviceHours: ReturnType<typeof serviceHoursFromRanges>
+  categories: unknown[]
+}
+
+/** Grab Menu Validation / GetMenuNewResponse: 루트 `sellingTimes` + `categories` 필수 */
+function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
+  sellingTimes: Array<{ id: string; name: string; serviceHours: GrabMenuSectionOut['serviceHours'] }>
+  categories: unknown[]
+} {
+  const capped = sections.slice(0, 20)
+  const sellingTimes = capped.map((sec) => ({
+    id: sec.id,
+    name: sec.name,
+    serviceHours: sec.serviceHours,
+  }))
+  const categories: unknown[] = []
+  for (const sec of capped) {
+    const stId = sec.id
+    const cats = Array.isArray(sec.categories) ? sec.categories : []
+    for (const raw of cats) {
+      if (categories.length >= 100) break
+      const cat = raw as Record<string, unknown>
+      const baseId = String(cat.id ?? '').trim()
+      const uniqueId = normalizeId(`${stId}__${baseId || 'cat'}`, `cat-${categories.length + 1}`)
+      categories.push({
+        ...cat,
+        id: uniqueId,
+        sellingTimeId: stId,
+      })
+    }
+    if (categories.length >= 100) break
+  }
+  return { sellingTimes, categories }
+}
+
 function flattenSectionsToSingle(
   sections: Array<{
     id: string
@@ -534,6 +573,7 @@ export async function buildGrabMenuFromPos(params: {
         nameTranslation: {},
         sequence: itemIndex + 1,
         availableStatus: available ? 'AVAILABLE' : 'UNAVAILABLE',
+        ...(available ? {} : { maxStock: 0 }),
         // Grab 메뉴 검증에서 item price=0 이 거절될 수 있어 최소 1 minor unit 보정
         price: Math.max(1, toMinorUnit(deliveryPrice ?? 0)),
         campaignInfo: null,
@@ -595,20 +635,9 @@ export async function buildGrabMenuFromPos(params: {
 
   if (!sections.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 
-  const mergedCategories: unknown[] = []
-  for (const sec of sections) {
-    for (const cat of (sec.categories as unknown[]) || []) mergedCategories.push(cat)
-  }
-  const categories = mergedCategories.map((cat, idx) => ({
-    ...(cat as Record<string, unknown>),
-    sequence: idx + 1,
-  }))
-  const sellingTimes =
-    sections[0]?.serviceHours && typeof sections[0].serviceHours === 'object'
-      ? sections[0].serviceHours
-      : serviceHoursFromRanges([])
+  const { sellingTimes, categories } = buildSellingTimesAndRootCategories(sections)
 
-  /** Grab Menu Simulator / Partner 샘플과 동일: 최상위 `sections` (루트 `sellingTimes`+`categories` 대신) */
+  /** `sections`는 시뮬레이터·구버전 호환, 루트 `sellingTimes`·`categories`는 Grab 검증(GetMenuNew) 필수 */
   return {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
