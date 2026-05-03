@@ -211,11 +211,21 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
     sun: openAllDay,
   }
   const stubCategoryId = 'SECTION-01__grab-stub-category'
+  const sellingWindowStart = '2020-01-01T00:00:00.000Z'
+  const sellingWindowEnd = '2039-12-31T23:59:59.999Z'
   return {
     merchantID,
     partnerMerchantID,
     currency: { code: 'THB', symbol: '฿', exponent: 2 },
-    sellingTimes: [{ id: 'SECTION-01', name: 'Menu', serviceHours }],
+    sellingTimes: [
+      {
+        id: 'SECTION-01',
+        name: 'Menu',
+        startTime: sellingWindowStart,
+        endTime: sellingWindowEnd,
+        serviceHours,
+      },
+    ],
     categories: [
       {
         id: stubCategoryId,
@@ -223,7 +233,7 @@ export function grabStubMenuJson(merchantID: string, partnerMerchantID: string):
         nameTranslation: {} as Record<string, string>,
         sequence: 1,
         availableStatus: 'AVAILABLE' as const,
-        sellingTimeId: 'SECTION-01',
+        sellingTimeID: 'SECTION-01',
         items: [
           {
             id: 'grab-stub-item',

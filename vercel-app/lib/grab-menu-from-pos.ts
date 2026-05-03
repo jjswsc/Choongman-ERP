@@ -234,15 +234,27 @@ type GrabMenuSectionOut = {
   categories: unknown[]
 }
 
+/** Grab 검증기: sellingTime 그룹의 유효 UTC 구간(필드가 있으면 빈 문자열 불가) */
+const GRAB_SELLING_TIME_WINDOW_START = '2020-01-01T00:00:00.000Z'
+const GRAB_SELLING_TIME_WINDOW_END = '2039-12-31T23:59:59.999Z'
+
 /** Grab Menu Validation / GetMenuNewResponse: 루트 `sellingTimes` + `categories` 필수 */
 function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
-  sellingTimes: Array<{ id: string; name: string; serviceHours: GrabMenuSectionOut['serviceHours'] }>
+  sellingTimes: Array<{
+    id: string
+    name: string
+    startTime: string
+    endTime: string
+    serviceHours: GrabMenuSectionOut['serviceHours']
+  }>
   categories: unknown[]
 } {
   const capped = sections.slice(0, 20)
   const sellingTimes = capped.map((sec) => ({
     id: sec.id,
     name: sec.name,
+    startTime: GRAB_SELLING_TIME_WINDOW_START,
+    endTime: GRAB_SELLING_TIME_WINDOW_END,
     serviceHours: sec.serviceHours,
   }))
   const categories: unknown[] = []
@@ -254,11 +266,9 @@ function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
       const cat = raw as Record<string, unknown>
       const baseId = String(cat.id ?? '').trim()
       const uniqueId = normalizeId(`${stId}__${baseId || 'cat'}`, `cat-${categories.length + 1}`)
-      categories.push({
-        ...cat,
-        id: uniqueId,
-        sellingTimeId: stId,
-      })
+      const row: Record<string, unknown> = { ...cat, id: uniqueId, sellingTimeID: stId }
+      delete row.sellingTimeId
+      categories.push(row)
     }
     if (categories.length >= 100) break
   }
