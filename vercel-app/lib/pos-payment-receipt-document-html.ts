@@ -4,7 +4,7 @@
 
 import type { PosMenu, PosPrinterSettings } from '@/lib/api-client'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
-import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -283,6 +283,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     const simpleHtml = `
       <div class="receipt-content receipt-payment-simple">
         <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
+        ${
+          taxInvoice
+            ? `<div class="simple-tax-subtitle">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>`
+            : ''
+        }
         <div class="simple-store">${esc(receiptData.storeCode)}</div>
         <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(formatPosReceiptOrderNoDisplay({ posOrderNo: receiptData.orderNo, tableName: receiptData.tableName, memo: receiptData.memo }))}</div>
         <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
@@ -291,6 +296,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${d.receiptBizName ? `<div class="simple-line simple-biz">${esc(d.receiptBizName)}</div>` : ''}
         ${d.receiptBizAddress ? `<div class="simple-line simple-biz">${esc(d.receiptBizAddress)}</div>` : ''}
         ${d.receiptBizPhone ? `<div class="simple-line simple-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(d.receiptBizPhone)}</div>` : ''}
+        ${taxInvoice ? buildPosTaxInvoiceThermalHtml({ taxInvoice, esc, tr }) : ''}
         <div class="simple-divider"></div>
         <table class="simple-table">${itemRows}</table>
         <div class="simple-divider"></div>
@@ -310,6 +316,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       extraStyles: `
         .receipt-payment-simple { color: #000; }
         .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+        .simple-tax-subtitle { text-align: center; font-size: 11px; font-weight: 700; margin: 0 0 4px 0; color: #000; }
         .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
         .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
         .simple-biz { color: #111; }

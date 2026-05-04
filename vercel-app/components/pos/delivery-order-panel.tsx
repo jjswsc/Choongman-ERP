@@ -87,7 +87,9 @@ export function DeliveryOrderPanel({
 }: DeliveryOrderPanelProps) {
   const { lang } = useLang()
   const ti = useT(lang)
-  const isCompleted = order?.status === 'completed'
+  const normalizedStatus = String(order?.status ?? '').trim().toLowerCase()
+  const isCompleted = normalizedStatus === 'completed'
+  const isPaid = normalizedStatus === 'paid' || (order ? orderPaymentsSum(order) > 0.005 : false)
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
@@ -176,7 +178,10 @@ export function DeliveryOrderPanel({
   const packagedCount = order?.items?.filter((it) => itemPackaged[it.id]).length ?? 0
   const allPackaged = order?.items?.length ? packagedCount >= order.items.length : false
 
-  const canCancel = order && !['completed', 'cancelled'].includes(order.status ?? '')
+  /** `paid`는 결제 완료·회계 반영 전 단계 — `completed`와 동일하게 취소 UI 비표시 */
+  const canCancel =
+    order &&
+    !['completed', 'cancelled', 'paid', 'refunded'].includes(normalizedStatus)
   const [cancelling, setCancelling] = useState(false)
   const [deciding, setDeciding] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
@@ -498,8 +503,10 @@ export function DeliveryOrderPanel({
                     : (t('posReceiptTaxInvoiceNotIssued') || '세금계산서 미발행')}
                 </button>
               </div>
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
-                {t('posTablePayInStore') || '매장 결제'}
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()} disabled={isPaid}>
+                {isPaid
+                  ? (t('posPaymentComplete') || '결제 완료')
+                  : (t('posTablePayInStore') || '매장 결제')}
               </Button>
               {canCancel && (
                 <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
@@ -644,8 +651,10 @@ export function DeliveryOrderPanel({
                 </div>
               )}
 
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
-                {t('posTablePayInStore') || '매장 결제'}
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()} disabled={isPaid}>
+                {isPaid
+                  ? (t('posPaymentComplete') || '결제 완료')
+                  : (t('posTablePayInStore') || '매장 결제')}
               </Button>
               {canCancel && (
                 <div className="space-y-1.5">

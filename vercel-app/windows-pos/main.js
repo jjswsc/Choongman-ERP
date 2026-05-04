@@ -534,6 +534,39 @@ let customerDisplayConfig = {
 };
 let customerDisplayLastState = null;
 
+/**
+ * Electron 메인에서 간헐적으로 발생하는 "Object has been destroyed" 레이스는
+ * 윈도우/웹콘텐츠가 이미 닫힌 뒤 비동기 콜백이 접근할 때 생긴다.
+ * 이 경우 프로세스를 죽이지 않고 경고 로그만 남겨 POS 연속 운영을 보장한다.
+ */
+function isDestroyedObjectRaceError(error) {
+  const msg = String(
+    (error && (error.message || error.toString && error.toString())) || ""
+  ).toLowerCase();
+  return msg.includes("object has been destroyed");
+}
+
+process.on("uncaughtException", (error) => {
+  if (isDestroyedObjectRaceError(error)) {
+    console.warn("[cm-pos] ignored destroyed-object race:", error && error.message ? error.message : error);
+    return;
+  }
+  console.error("[cm-pos] uncaughtException", error);
+  try {
+    process.exit(1);
+  } catch {
+    /* ignore */
+  }
+});
+
+process.on("unhandledRejection", (reason) => {
+  if (isDestroyedObjectRaceError(reason)) {
+    console.warn("[cm-pos] ignored destroyed-object rejection:", reason && reason.message ? reason.message : reason);
+    return;
+  }
+  console.error("[cm-pos] unhandledRejection", reason);
+});
+
 function getCustomerDisplayUrl() {
   try {
     const url = new URL(POS_URL);
@@ -1705,11 +1738,24 @@ function createWindow() {
   schedulePosMainLoadWatchdog();
 
   if (OPEN_DEVTOOLS_ON_START) {
-    mainWindow.webContents.once("did-finish-load", () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.openDevTools({ mode: "detach" });
+    try {
+      const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+      if (wc && (typeof wc.isDestroyed !== "function" || !wc.isDestroyed())) {
+        wc.once("did-finish-load", () => {
+          try {
+            const w = mainWindow;
+            if (!w || w.isDestroyed()) return;
+            const currentWc = w.webContents;
+            if (!currentWc || (typeof currentWc.isDestroyed === "function" && currentWc.isDestroyed())) return;
+            currentWc.openDevTools({ mode: "detach" });
+          } catch (e) {
+            console.warn("[cm-pos] openDevTools on start skipped:", e && e.message ? e.message : e);
+          }
+        });
       }
-    });
+    } catch (e) {
+      console.warn("[cm-pos] failed to register openDevTools listener:", e && e.message ? e.message : e);
+    }
   }
 
   setTimeout(() => {

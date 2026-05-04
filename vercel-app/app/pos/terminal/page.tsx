@@ -3739,7 +3739,7 @@ export default function PosTerminalPage() {
           source: 'terminal_after_payment',
         })
       }
-      await appAlert(t('saveDone') || '저장했습니다.')
+      await appAlert(t('msg_saved'))
       setTaxInvoiceTargetOrder(null)
       setTaxSearchRows([])
       setTaxSearchMessage('')
@@ -4353,7 +4353,7 @@ export default function PosTerminalPage() {
                   })
                   const completedOk = await applyOrderStatusWithRetry({
                     id: existingOrderId,
-                    status: 'completed',
+                    status: 'paid',
                   })
                   if (!completedOk) return
                 }
@@ -4453,7 +4453,7 @@ export default function PosTerminalPage() {
                   })
                   const completedOk = await applyOrderStatusWithRetry({
                     id: existingOrderId,
-                    status: 'completed',
+                    status: 'paid',
                   })
                   if (!completedOk) return
                 }
@@ -5188,7 +5188,7 @@ export default function PosTerminalPage() {
                   deliveryPaymentChannel: payload.payment?.deliveryPaymentChannel ?? null,
                   linkposPayment: linkpos.linkposPayment,
                   pricingAdjustments,
-                  closeStatus: 'completed',
+                  closeStatus: 'paid',
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
@@ -5378,16 +5378,42 @@ export default function PosTerminalPage() {
                     suppressReceiptModalAutoPrint,
                   })
                 }
-                if (payload.orderType === 'delivery') {
-                  setSelectedDeliveryTargetId(null)
-                  setSelectedDeliveryTargetLabel('')
-                  setDeliveryApp(null)
-                  setDeliveryOrderNo('')
-                } else if (payload.orderType === 'takeout') {
-                  setSelectedTakeoutTargetId(null)
-                  setSelectedTakeoutTargetLabel('')
-                }
                 await refetchCurrentStore()
+                /** 배달·포장「주문」만 저장 시: 목록에서 다시 누르지 않도록 방금 저장한 건 자동 선택 */
+                if (payload.orderType === 'delivery') {
+                  if (!hasPayment && newOrderId != null && newOrderId > 0) {
+                    if (deliveryListMode === 'completed') {
+                      setDeliveryListMode('in_progress')
+                    }
+                    setSelectedDeliveryTargetId(`delivery-order-${newOrderId}`)
+                    const lbl =
+                      String(payload.orderLabel || '').trim() ||
+                      (t('posOrderTypeDelivery') || '배달')
+                    setSelectedDeliveryTargetLabel(lbl)
+                    const app = detectDeliveryApp(lbl)
+                    if (app) setDeliveryApp(app.code)
+                    setDeliveryOrderNo(detectDeliveryOrderNo(lbl))
+                  } else {
+                    setSelectedDeliveryTargetId(null)
+                    setSelectedDeliveryTargetLabel('')
+                    setDeliveryApp(null)
+                    setDeliveryOrderNo('')
+                  }
+                } else if (payload.orderType === 'takeout') {
+                  if (!hasPayment && newOrderId != null && newOrderId > 0) {
+                    if (takeoutListMode === 'completed') {
+                      setTakeoutListMode('in_progress')
+                    }
+                    setSelectedTakeoutTargetId(`takeout-order-${newOrderId}`)
+                    setSelectedTakeoutTargetLabel(
+                      String(payload.orderLabel || '').trim() ||
+                        (t('posOrderTypeTakeout') || '포장')
+                    )
+                  } else {
+                    setSelectedTakeoutTargetId(null)
+                    setSelectedTakeoutTargetLabel('')
+                  }
+                }
                 if (hasPayment) schedulePostPaymentCustomerQr()
               } catch (e) {
                 console.error('savePosOrder(non-dine):', e)

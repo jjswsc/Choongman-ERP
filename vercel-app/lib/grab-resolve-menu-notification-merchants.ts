@@ -42,3 +42,13 @@ export function resolveGrabMenuNotificationMerchantIDs(rawInput: string): string
   }
   return Array.from(out)
 }
+
+/** `GRAB_STORE_MAP_JSON`에 등록된 Grab `GFSBPOS-…` 키 전부(일괄 menu notification용) */
+export function listAllGrabFoodMerchantIdsFromStoreMap(): string[] {
+  const map = parseGrabStoreMap()
+  return Object.keys(map)
+    .filter(isGrabFoodMerchantMapKey)
+    .map((k) => String(k || '').trim())
+    .filter(Boolean)
+    .sort()
+}

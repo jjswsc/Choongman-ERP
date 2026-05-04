@@ -846,7 +846,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           source: 'receipt_management_after_payment',
         })
       }
-      await appAlert(t('saveDone') || '저장했습니다.')
+      await appAlert(t('msg_saved'))
       setTaxInvoiceOrder(null)
       setTaxSearchRows([])
       setTaxSearchMessage('')

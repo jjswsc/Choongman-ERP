@@ -5,6 +5,7 @@ import * as React from 'react'
 import { ChevronDown, ChevronUp, Plus, RotateCw, Save, Truck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -25,6 +26,7 @@ import {
   type PosDeliveryApp,
 } from '@/lib/api-client'
 import { isOfficeRole } from '@/lib/permissions'
+import { parseGrabMenuNotificationMerchantBulkInput } from '@/lib/grab-menu-notification-input-parse'
 import { cn } from '@/lib/utils'
 import { PosScreenConfigActionBar, PosScreenConfigEmeraldSaveButton } from '@/components/pos/pos-screen-config-action-bar'
 import { PosScreenConfigCopyInline } from '@/components/pos/pos-screen-config-copy-blocks'
@@ -46,6 +48,8 @@ export function PosDeliveryAppsContent() {
   const [grabActionLoading, setGrabActionLoading] = React.useState(false)
   const [grabIntegrations, setGrabIntegrations] = React.useState<GrabStoreIntegrationSnapshot[]>([])
   const [selectedGrabMerchantID, setSelectedGrabMerchantID] = React.useState('')
+  /** 비우면 드롭다운 선택 매장만 메뉴 갱신; 채우면 쉼표·줄바꿈 등으로 여러 merchant ID 일괄 갱신 */
+  const [grabMenuNotificationBulk, setGrabMenuNotificationBulk] = React.useState('')
   const [grabLastActionLog, setGrabLastActionLog] = React.useState<{
     action: 'status' | 'menu_refresh'
     ok: boolean
@@ -256,8 +260,11 @@ export function PosDeliveryAppsContent() {
   }, [selectedGrabMerchantID, tr])
 
   const handleGrabMenuRefresh = React.useCallback(async () => {
-    const merchantID = String(selectedGrabMerchantID || '').trim()
-    if (!merchantID) {
+    const bulkIds = parseGrabMenuNotificationMerchantBulkInput(grabMenuNotificationBulk)
+    const fallbackId = String(selectedGrabMerchantID || '').trim()
+    const merchantIDs =
+      bulkIds.length > 0 ? bulkIds : fallbackId ? [fallbackId] : []
+    if (merchantIDs.length === 0) {
       await appAlert(tr('posDeliveryGrabMerchantRequired', 'Grab 매장을 먼저 선택해 주세요.'))
       return
     }
@@ -266,19 +273,34 @@ export function PosDeliveryAppsContent() {
       const res = await fetch('/api/grab/updateMenuNotification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchantID }),
+        body:
+          merchantIDs.length === 1
+            ? JSON.stringify({ merchantID: merchantIDs[0] })
+            : JSON.stringify({ merchantIDs }),
       })
-      const json = (await res.json()) as { success?: boolean; message?: string }
+      const json = (await res.json()) as {
+        success?: boolean
+        message?: string
+        notifiedMerchantIDs?: string[]
+      }
       if (!res.ok || !json?.success) {
         throw new Error(json?.message || `HTTP ${res.status}`)
       }
+      const n = Array.isArray(json.notifiedMerchantIDs) ? json.notifiedMerchantIDs.length : merchantIDs.length
+      const okMsg =
+        n > 1
+          ? (tr('posDeliveryGrabMenuRefreshRequestedMany', 'Grab 메뉴 갱신 요청 {{n}}건을 보냈습니다.').replace(
+              '{{n}}',
+              String(n)
+            ) || `Grab 메뉴 갱신 요청 ${n}건을 보냈습니다.`)
+          : tr('posDeliveryGrabMenuRefreshRequested', 'Grab 메뉴 갱신 요청을 보냈습니다.')
       setGrabLastActionLog({
         action: 'menu_refresh',
         ok: true,
-        message: tr('posDeliveryGrabMenuRefreshRequested', 'Grab 메뉴 갱신 요청을 보냈습니다.'),
+        message: okMsg,
         at: new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok', hour12: false }),
       })
-      await appAlert(tr('posDeliveryGrabMenuRefreshRequested', 'Grab 메뉴 갱신 요청을 보냈습니다.'))
+      await appAlert(okMsg)
     } catch (e) {
       setGrabLastActionLog({
         action: 'menu_refresh',
@@ -290,7 +312,7 @@ export function PosDeliveryAppsContent() {
     } finally {
       setGrabActionLoading(false)
     }
-  }, [selectedGrabMerchantID, tr])
+  }, [grabMenuNotificationBulk, selectedGrabMerchantID, tr])
 
   return (
     <div className="space-y-4">
@@ -410,10 +432,37 @@ export function PosDeliveryAppsContent() {
             size="sm"
             className="h-9"
             onClick={() => void handleGrabMenuRefresh()}
-            disabled={grabActionLoading || !selectedGrabMerchantID}
+            disabled={
+              grabActionLoading ||
+              (parseGrabMenuNotificationMerchantBulkInput(grabMenuNotificationBulk).length === 0 &&
+                !String(selectedGrabMerchantID || '').trim())
+            }
           >
             {tr('posDeliveryGrabMenuRefresh', '메뉴 갱신 요청')}
           </Button>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-foreground" htmlFor="grab-menu-notification-bulk">
+            {tr('posDeliveryGrabMenuRefreshBulkLabel', '메뉴 갱신 대상 (여러 개 붙여넣기)')}
+          </label>
+          <Textarea
+            id="grab-menu-notification-bulk"
+            value={grabMenuNotificationBulk}
+            onChange={(e) => setGrabMenuNotificationBulk(e.target.value)}
+            placeholder={tr(
+              'posDeliveryGrabMenuRefreshBulkPlaceholder',
+              'GFSBPOS-204-253, GFSBPOS-533-636, GFSBPOS-811-087'
+            )}
+            rows={3}
+            className="min-h-[4.5rem] resize-y font-mono text-xs"
+            disabled={grabActionLoading}
+          />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {tr(
+              'posDeliveryGrabMenuRefreshBulkHint',
+              '비우면 위에서 선택한 Grab 매장만 갱신합니다. 여러 개는 쉼표·줄바꿈·세미콜론으로 구분해 붙여 넣을 수 있습니다.'
+            )}
+          </p>
         </div>
         <p className="text-xs text-muted-foreground">
           {selectedGrabIntegration
