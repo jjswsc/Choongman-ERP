@@ -108,7 +108,8 @@ export function mergeCartPanelAddItem(prev: OrderItem[], item: MergeCartItemInpu
     ]
   }
 
-  const lineId = `cart-${Date.now()}-${item.id}`
+  /** 동일 ms에 연속 탭하면 `Date.now()`만으로 id가 겹쳐 수량이 다른 줄에 매칭될 수 있음 */
+  const lineId = `cart-${String(item.id ?? '').trim()}-${newUniqueLineSuffix()}`
   const existing = prev.find(
     (p) =>
       sameCartLineName(p.name, item.name) &&

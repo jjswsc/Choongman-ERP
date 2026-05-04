@@ -362,6 +362,25 @@ function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView>
   return <TableFloorView {...rest} layout={layout} timeTourSpotlights={timeTourSpotlights} />
 }
 
+/**
+ * `CartPanel`이 넘긴 `payload.items`와 실제 `terminalCartLines`가 한 틱 어긋나거나(0·qty 혼용),
+ * 카트 줄 id가 과거에 중복이면 `find`로 잘못 붙을 수 있어, **동일 id가 터미널에 있으면 터미널 수량을 단일 소스로** 쓴다.
+ */
+function reconcilePayloadItemsWithTerminalCart<
+  T extends { id?: unknown; quantity?: unknown; qty?: unknown },
+>(payloadItems: T[] | undefined | null, terminalLines: OrderItem[]): T[] {
+  return (payloadItems || []).map((it) => {
+    const hit = (terminalLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
+    if (hit) {
+      const q = resolveCartLineQuantityForSave(hit as { quantity?: unknown; qty?: unknown })
+      return { ...it, quantity: q }
+    }
+    const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
+    if (Number.isFinite(raw) && raw > 0) return it
+    return { ...it, quantity: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }) }
+  })
+}
+
 export default function PosTerminalPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -4425,12 +4444,13 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return
                   await updatePosOrder({
                     id: existingOrderId,
-                    items: cartLinesToPosOrderItems(payload.items),
+                    items: cartLinesToPosOrderItems(payloadItemsNormalized),
                     tableName: payload.orderLabel,
                     memo: payload.memo ?? '',
                     discountAmt: payload.discountAmt ?? 0,
@@ -4458,7 +4478,7 @@ export default function PosTerminalPage() {
                   })
                   if (!completedOk) return
                 }
-                const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
@@ -4467,7 +4487,7 @@ export default function PosTerminalPage() {
                 await tryOpenDrawerForPayment(payload.payment)
                 const receiptPayload: ReceiptModalData = {
                   orderNo: pendingReceiptOrderNo ?? '',
-                  items: cartLinesToPosOrderItems(payload.items),
+                  items: cartLinesToPosOrderItems(payloadItemsNormalized),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
@@ -4545,12 +4565,13 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 if (existingOrderId != null && payload.payment != null) {
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return
                   await updatePosOrder({
                     id: existingOrderId,
-                    items: cartLinesToPosOrderItems(payload.items),
+                    items: cartLinesToPosOrderItems(payloadItemsNormalized),
                     tableName: payload.orderLabel,
                     memo: payload.memo ?? '',
                     discountAmt: payload.discountAmt ?? 0,
@@ -4578,7 +4599,7 @@ export default function PosTerminalPage() {
                   })
                   if (!completedOk) return
                 }
-                const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 if (existingOrderId != null && existingOrderId > 0 && isMainPosDevice) {
@@ -4587,7 +4608,7 @@ export default function PosTerminalPage() {
                 await tryOpenDrawerForPayment(payload.payment)
                 const receiptPayload: ReceiptModalData = {
                   orderNo: pendingReceiptOrderNo ?? '',
-                  items: cartLinesToPosOrderItems(payload.items),
+                  items: cartLinesToPosOrderItems(payloadItemsNormalized),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
@@ -4654,6 +4675,8 @@ export default function PosTerminalPage() {
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
+              /** `await getPosOrders` 등으로 한참 뒤에 맞추면 카트가 비거나 바뀐 뒤라 수량이 엇갈릴 수 있음 → 제출 직후 스냅샷 */
+              const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
               let existingOrder = selectedTable?.order ?? null
               let existingOrderId = Number(existingOrder?.id ?? 0)
               const pendingExistingOrderId = Number(pendingDineInOrderId ?? 0)
@@ -4767,14 +4790,6 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
-                const payloadItemsNormalized = (payload.items || []).map((it) => {
-                  const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
-                  if (Number.isFinite(raw) && raw > 0) return it
-                  const hit = (terminalCartLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
-                  if (!hit) return it
-                  const q = resolveCartLineQuantityForSave(hit as { quantity?: unknown; qty?: unknown })
-                  return { ...it, quantity: q }
-                })
                 const incomingItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
@@ -4969,8 +4984,8 @@ export default function PosTerminalPage() {
                 const orderNoStr = savedOrderNo
                 const kitchenCartLines =
                   isAddOrder && existingOrder
-                    ? filterKitchenCartLinesForDineInAdd(payload.items, existingOrder.items)
-                    : payload.items
+                    ? filterKitchenCartLinesForDineInAdd(payloadItemsNormalized, existingOrder.items)
+                    : payloadItemsNormalized
                 const receiptPayloadSubmit = {
                   orderNo: savedOrderNo,
                   storeCode: currentStoreId,
@@ -5111,7 +5126,7 @@ export default function PosTerminalPage() {
                   isMainPosDevice &&
                   autoPrintKitchenSlipOnOrder &&
                   !skipLocalAutoPrint &&
-                  payload.items.length > 0 &&
+                  payloadItemsNormalized.length > 0 &&
                   kitchenCartLines.length > 0
                 ) {
                   markQueuedLocalPrintedIfNeeded()
@@ -5191,12 +5206,13 @@ export default function PosTerminalPage() {
                 const pay = payload.payment
                 const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
                 if (!linkpos.ok) return
+                const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
                   await updatePosOrder({
                     id: existingOrderId,
-                    items: cartLinesToPosOrderItems(payload.items),
+                    items: cartLinesToPosOrderItems(payloadItemsNormalized),
                     tableName: payload.tableName,
                     memo: payload.memo,
                     discountAmt: payload.discountAmt ?? 0,
@@ -5234,7 +5250,7 @@ export default function PosTerminalPage() {
                   if (localNoCandidate) {
                     mergedLocal = await mergeQueuedSavePosOrderByLocalOrderNo(localNoCandidate, (body) => ({
                       ...body,
-                      items: cartLinesToPosOrderItems(payload.items),
+                      items: cartLinesToPosOrderItems(payloadItemsNormalized),
                       tableName: payload.tableName,
                       memo: payload.memo,
                       discountAmt: payload.discountAmt ?? 0,
@@ -5281,7 +5297,7 @@ export default function PosTerminalPage() {
                       pointUsed: payload.pointUsed,
                       guestCount: payload.guestCount,
                       localOrderNo: posSaveClientKey,
-                      items: cartLinesToPosOrderItems(payload.items),
+                      items: cartLinesToPosOrderItems(payloadItemsNormalized),
                       paymentCash: pay.paymentCash,
                       paymentCard: pay.paymentCard,
                       paymentQr: pay.paymentQr,
@@ -5313,7 +5329,7 @@ export default function PosTerminalPage() {
                   /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                   clearTableOrder(currentStoreId, payload.tableName)
                 }
-                const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 if (orderIdToComplete != null && orderIdToComplete > 0 && isMainPosDevice) {
@@ -5322,7 +5338,7 @@ export default function PosTerminalPage() {
                 await tryOpenDrawerForPayment(payload.payment)
                 const receiptPayload: ReceiptModalData = {
                   orderNo,
-                  items: cartLinesToPosOrderItems(payload.items),
+                  items: cartLinesToPosOrderItems(payloadItemsNormalized),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
@@ -5408,6 +5424,8 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
+                /** `await` 사이에 카트가 비면 터미널 보정이 불가 → 링크포스/결제 대기 전에 스냅샷 */
+                const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
                 const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                 if (!linkpos.ok) return
                 const res = await savePosOrderWithOffline({
@@ -5426,7 +5444,7 @@ export default function PosTerminalPage() {
                   couponDiscountAmt: payload.couponDiscountAmt,
                   pointUsed: payload.pointUsed,
                   localOrderNo: posSaveClientKey,
-                  items: cartLinesToPosOrderItems(payload.items),
+                  items: cartLinesToPosOrderItems(payloadItemsNormalized),
                   ...(payload.orderType === 'delivery' && deliveryApp
                     ? { deliveryAppCode: String(deliveryApp) }
                     : {}),
@@ -5463,7 +5481,7 @@ export default function PosTerminalPage() {
                   seenOrderIdsRef.current.add(newOrderId)
                   bumpLastSeenOrderId(newOrderId)
                 }
-                const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                const subtotal = payloadItemsNormalized.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 const paymentSum =
@@ -5474,7 +5492,7 @@ export default function PosTerminalPage() {
                   Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
                 const hasPayment = paymentSum > 0.0001
                 await tryOpenDrawerForPayment(payload.payment)
-                const receiptItems = cartLinesToPosOrderItems(payload.items)
+                const receiptItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 const receiptPayloadSubmit = {
                   orderNo,
                   storeCode: currentStoreId,
@@ -5517,7 +5535,7 @@ export default function PosTerminalPage() {
                       ? `order:${newOrderId}:kitchen`
                       : `submit:${orderNo}:${payload.orderLabel || ''}:${payload.orderType}`
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
-                  const itemsForKitchen = payload.items.map((i) => {
+                  const itemsForKitchen = payloadItemsNormalized.map((i) => {
                     const line = i as {
                       menuId?: string
                       menuId1?: string
@@ -5606,13 +5624,13 @@ export default function PosTerminalPage() {
                 }
 
                 if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
-                  if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                  if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)
                   } else if (autoPrintReceiptOnOrder) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
-                  } else if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                  } else if (autoPrintKitchenSlipOnOrder && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     setTimeout(runKitchenAfterNonDineSubmit, 180)
                   } else {

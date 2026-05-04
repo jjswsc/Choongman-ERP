@@ -99,6 +99,7 @@ import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
+import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
 import { usePosTour } from '@/lib/pos-tour'
 import { Separator } from '@/components/ui/separator'
@@ -754,15 +755,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
     const lineNote = String(i.note ?? '').trim()
-    const rawQty =
-      quantityOverride ??
-      i.quantity ??
-      (i as { qty?: unknown }).qty ??
-      (i as { count?: unknown }).count ??
-      (i as { order_qty?: unknown }).order_qty ??
-      (i as { orderQty?: unknown }).orderQty
-    const parsed = Number(rawQty)
-    const quantity = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+    const quantity =
+      quantityOverride != null
+        ? resolveCartLineQuantityForSave({ quantity: quantityOverride })
+        : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
     return {
       id: i.id,
       name: i.name,
