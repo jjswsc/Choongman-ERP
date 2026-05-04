@@ -534,22 +534,22 @@ export function usePosStore() {
   }, [ordersByStoreId, currentStoreId, orders])
 
   const deliveryOrders = currentStoreOrders.filter(
-    (o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed'
+    (o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed' && o.status !== 'paid'
   )
   const packagedDeliveryOrders = currentStoreOrders.filter(
     (o) => o.type === 'delivery' && o.status === 'ready'
   )
   const completedDeliveryOrders = currentStoreOrders.filter(
-    (o) => o.type === 'delivery' && o.status === 'completed'
+    (o) => o.type === 'delivery' && (o.status === 'completed' || o.status === 'paid')
   )
   const takeoutOrders = currentStoreOrders.filter(
-    (o) => o.type === 'takeout' && o.status !== 'ready' && o.status !== 'completed'
+    (o) => o.type === 'takeout' && o.status !== 'ready' && o.status !== 'completed' && o.status !== 'paid'
   )
   const packagedTakeoutOrders = currentStoreOrders.filter(
     (o) => o.type === 'takeout' && o.status === 'ready'
   )
   const completedTakeoutOrders = currentStoreOrders.filter(
-    (o) => o.type === 'takeout' && o.status === 'completed'
+    (o) => o.type === 'takeout' && (o.status === 'completed' || o.status === 'paid')
   )
 
   const updateOrderStatus = useCallback((orderId: string, status: Order['status']) => {
