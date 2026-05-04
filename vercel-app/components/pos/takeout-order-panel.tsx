@@ -65,7 +65,7 @@ export function TakeoutOrderPanel({
   const ti = useT(lang)
   const normalizedStatus = String(order?.status ?? '').trim().toLowerCase()
   const isCompleted = normalizedStatus === 'completed'
-  const isPaid = normalizedStatus === 'paid' || (order ? orderPaymentsSum(order) > 0.005 : false)
+  const isPaid = normalizedStatus === 'paid' || normalizedStatus === 'completed'
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
