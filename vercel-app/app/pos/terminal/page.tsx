@@ -694,6 +694,13 @@ export default function PosTerminalPage() {
       posPrinterSettingsRef.current &&
       posPrinterSettingsStoreCodeRef.current === normalizedStoreCode
     ) {
+      if (isPosPrintDebugEnabledInBrowser()) {
+        console.info('[POS_PRINT_DEBUG] printer_settings_cache_hit', {
+          requestedStoreCode: normalizedStoreCode,
+          currentStoreId: String(currentStoreId ?? ''),
+          cachedStoreCode: posPrinterSettingsStoreCodeRef.current,
+        })
+      }
       return posPrinterSettingsRef.current
     }
     if (
@@ -706,6 +713,13 @@ export default function PosTerminalPage() {
       .then((settings) => {
         posPrinterSettingsRef.current = settings
         posPrinterSettingsStoreCodeRef.current = normalizedStoreCode
+        if (isPosPrintDebugEnabledInBrowser()) {
+          console.info('[POS_PRINT_DEBUG] printer_settings_loaded', {
+            requestedStoreCode: normalizedStoreCode,
+            currentStoreId: String(currentStoreId ?? ''),
+            responseStoreCode: String((settings as { storeCode?: string } | null)?.storeCode ?? ''),
+          })
+        }
         return settings
       })
       .finally(() => {
@@ -717,7 +731,7 @@ export default function PosTerminalPage() {
     posPrinterSettingsInFlightStoreCodeRef.current = normalizedStoreCode
     posPrinterSettingsInFlightRef.current = request
     return request
-  }, [])
+  }, [currentStoreId])
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -1409,7 +1423,7 @@ export default function PosTerminalPage() {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
         void (async () => {
           try {
-            const effectiveStoreCode = order.storeCode ?? currentStoreId
+            const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
             const settings = await getPrinterSettingsForStore(effectiveStoreCode)
             const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
@@ -1610,7 +1624,7 @@ export default function PosTerminalPage() {
                 if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
                 void (async () => {
                   try {
-                    const effectiveStoreCode = order.storeCode ?? currentStoreId
+                    const effectiveStoreCode = String(currentStoreId || order.storeCode || '').trim()
                     const settings = await getPrinterSettingsForStore(effectiveStoreCode)
                     const ki = kitchenSlipPrintI18n(settings, lang)
                     const slips = buildKitchenSlipGroups(
@@ -2637,7 +2651,8 @@ export default function PosTerminalPage() {
       }
       const runKitchenFromRealtimeOrderInsert = () => {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
-        getPrinterSettingsForStore(storeCode)
+        const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
+        getPrinterSettingsForStore(printSettingsStoreCode)
           .then((settings) => {
             const ki = kitchenSlipPrintI18n(settings, lang)
             const slips = buildKitchenSlipGroups(
@@ -2952,7 +2967,8 @@ export default function PosTerminalPage() {
       const runKitchenRemoteDineInAdd = () => {
         if (kitchenCartLines.length === 0) return
         if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
-        void getPrinterSettingsForStore(storeCode)
+        const printSettingsStoreCode = String(currentStoreId || storeCode || '').trim()
+        void getPrinterSettingsForStore(printSettingsStoreCode)
           .then((settings) => {
             const ki = kitchenSlipPrintI18n(settings, lang)
             const itemsForKitchen = kitchenCartLines.map((i) => {
@@ -3285,7 +3301,9 @@ export default function PosTerminalPage() {
             if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
             void (async () => {
               try {
-                const settings = await getPrinterSettingsForStore(order.storeCode ?? currentStoreId)
+                const settings = await getPrinterSettingsForStore(
+                  String(currentStoreId || order.storeCode || '').trim()
+                )
                 const ki = kitchenSlipPrintI18n(settings, lang)
                 const slips = buildKitchenSlipGroups(
                   kitchenItemsWithResolvedPromo(items as Record<string, unknown>[]) as typeof items,

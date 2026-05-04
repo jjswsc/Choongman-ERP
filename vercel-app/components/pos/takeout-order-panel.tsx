@@ -303,7 +303,7 @@ export function TakeoutOrderPanel({
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{t('posDeliveryPackagingComplete') || '포장 완료'}</span>
               </div>
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()} disabled={isPaid}>
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
                 {isPaid
                   ? (t('posPaymentComplete') || '결제 완료')
                   : (t('posTablePayInStore') || '매장 결제')}
@@ -415,7 +415,7 @@ export function TakeoutOrderPanel({
                     ? (t('posDeliveryPackagingComplete') || '포장 완료')
                     : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${order.items.length})`}
                 </Button>
-                <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()} disabled={isPaid}>
+                <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
                   {isPaid
                     ? (t('posPaymentComplete') || '결제 완료')
                     : (t('posTablePayInStore') || '매장 결제')}

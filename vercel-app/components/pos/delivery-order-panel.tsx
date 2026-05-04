@@ -503,7 +503,7 @@ export function DeliveryOrderPanel({
                     : (t('posReceiptTaxInvoiceNotIssued') || '세금계산서 미발행')}
                 </button>
               </div>
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()} disabled={isPaid}>
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
                 {isPaid
                   ? (t('posPaymentComplete') || '결제 완료')
                   : (t('posTablePayInStore') || '매장 결제')}
@@ -651,7 +651,7 @@ export function DeliveryOrderPanel({
                 </div>
               )}
 
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()} disabled={isPaid}>
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
                 {isPaid
                   ? (t('posPaymentComplete') || '결제 완료')
                   : (t('posTablePayInStore') || '매장 결제')}
