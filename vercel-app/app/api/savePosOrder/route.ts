@@ -61,6 +61,14 @@ function isIdempotencyUniqueViolation(e: unknown): boolean {
   )
 }
 
+function isMissingServiceColumnsError(e: unknown): boolean {
+  const msg = String(e ?? '').toLowerCase()
+  return (
+    (msg.includes('service_amt') || msg.includes('service_reason')) &&
+    (msg.includes('column') || msg.includes('schema cache'))
+  )
+}
+
 async function runCompletionSideEffects(params: {
   orderId: number
   orderNo: string
@@ -68,6 +76,7 @@ async function runCompletionSideEffects(params: {
   total: number
   subtotal: number
   vat: number
+  serviceAmount: number
   createdAtIso: string
   paymentCash: number
   paymentCard: number
@@ -76,7 +85,7 @@ async function runCompletionSideEffects(params: {
   paymentDeliveryApp: number
   createdBy?: string
 }): Promise<void> {
-  const { orderId, orderNo, storeCode, total, subtotal, vat, createdAtIso, createdBy } = params
+  const { orderId, orderNo, storeCode, total, subtotal, vat, serviceAmount, createdAtIso, createdBy } = params
   if (!storeCode) return
   const salesDate = resolveBangkokAccountingDate(createdAtIso)
   try {
@@ -100,6 +109,7 @@ async function runCompletionSideEffects(params: {
         salesDate,
         total: Number(total || 0),
         vatAmount: Number(vat || 0),
+        serviceAmount: Number(serviceAmount || 0),
         paymentCash: Number(params.paymentCash || 0),
         paymentCard: Number(params.paymentCard || 0),
         paymentQr: Number(params.paymentQr || 0),
@@ -178,6 +188,9 @@ export async function POST(req: NextRequest) {
     const memo = String(body.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body.discountAmt ?? 0))
     const discountReason = String(body.discountReason ?? '').trim()
+    const serviceAmt = Math.max(0, Number(body.serviceAmt ?? body.service_amt ?? 0))
+    const serviceReason = String(body.serviceReason ?? body.service_reason ?? '').trim()
+    const discountAmtNet = Math.max(0, discountAmt - serviceAmt)
     const deliveryFee = Math.max(0, Number(body.deliveryFee ?? 0))
     const packagingFee = Math.max(0, Number(body.packagingFee ?? 0))
     const paymentCash = Math.max(0, Number(body.paymentCash ?? 0))
@@ -273,8 +286,10 @@ export async function POST(req: NextRequest) {
       order_type: orderType,
       table_name: tableName,
       memo,
-      discount_amt: discountAmt,
+      discount_amt: discountAmtNet,
       discount_reason: discountReason,
+      service_amt: serviceAmt,
+      service_reason: serviceReason || null,
       delivery_fee: deliveryFee,
       packaging_fee: packagingFee,
       items_json: JSON.stringify(items),
@@ -319,7 +334,7 @@ export async function POST(req: NextRequest) {
       linkpos_responded_at: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
       idempotency_key_hash: idempotencyKeyHash,
     }
-    let inserted: { id?: number }[]
+    let inserted: { id?: number }[] = []
     try {
       inserted = (await supabaseInsertWithPgrst204Fallback(
         'pos_orders',
@@ -327,7 +342,22 @@ export async function POST(req: NextRequest) {
         'savePosOrder'
       )) as { id?: number }[]
     } catch (insertErr) {
-      if (idempotencyKeyHash && isIdempotencyUniqueViolation(insertErr)) {
+      if (isMissingServiceColumnsError(insertErr)) {
+        const legacyRow = { ...row } as Record<string, unknown>
+        delete legacyRow.service_amt
+        delete legacyRow.service_reason
+        legacyRow.discount_amt = discountAmt
+        if (serviceAmt > 0) {
+          const baseReason = String(legacyRow.discount_reason ?? '').trim()
+          const svcReason = serviceReason || `service:${serviceAmt}`
+          legacyRow.discount_reason = [baseReason, svcReason].filter(Boolean).join(' · ')
+        }
+        inserted = (await supabaseInsertWithPgrst204Fallback(
+          'pos_orders',
+          legacyRow,
+          'savePosOrder'
+        )) as { id?: number }[]
+      } else if (idempotencyKeyHash && isIdempotencyUniqueViolation(insertErr)) {
         const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash)
         if (dbHit) {
           return NextResponse.json(
@@ -335,10 +365,12 @@ export async function POST(req: NextRequest) {
             { headers }
           )
         }
+        throw insertErr
+      } else {
+        throw insertErr
       }
-      throw insertErr
     }
-    const created = Array.isArray(inserted) ? inserted[0] : inserted
+    const created = inserted[0]
     if (idempotencyKey && Number(created?.id) > 0) {
       writeIdempotencyHit(idempotencyKey, Number(created.id), orderNo)
     }
@@ -401,6 +433,7 @@ export async function POST(req: NextRequest) {
         total,
         subtotal,
         vat,
+        serviceAmount: serviceAmt,
         createdAtIso,
         paymentCash,
         paymentCard,

@@ -92,6 +92,8 @@ export type ReceiptModalData = {
   receiptAutoPrintContext?: 'order' | 'add_order' | 'payment'
   /** 실시간/폴링 등에서 이미 자동 인쇄된 주문이면 모달 자동 인쇄 생략 */
   suppressReceiptModalAutoPrint?: boolean
+  /** 동일 주문의 다중 인쇄(더치 분할 등) 구분용 키 */
+  printInstanceKey?: string
 }
 
 interface PosReceiptModalProps {
@@ -136,6 +138,8 @@ interface PosReceiptModalProps {
   printerSettingsRef?: RefObject<PosPrinterSettings | null>
   /** 주방 인쇄 시 프로모 세트 구성 스냅샷 보강(카탈로그·메뉴) — POS 터미널 등에서 전달 */
   kitchenPromoLineEnrich?: PosOrderReceiptLineOptions
+  /** 자동 인쇄 완료 후 호출 (분할 큐 다음 장 처리) */
+  onAutoPrintComplete?: () => void
 }
 
 export function PosReceiptModal({
@@ -174,6 +178,7 @@ export function PosReceiptModal({
   itemBarcode = false,
   printerSettingsRef,
   kitchenPromoLineEnrich,
+  onAutoPrintComplete,
 }: PosReceiptModalProps) {
   const { lang } = useLang()
   const autoPrintedKeyRef = useRef<string>('')
@@ -351,7 +356,13 @@ export function PosReceiptModal({
     const autoKitchenSlip =
       autoPrintKitchenSlipOnOrder && (ctx === 'order' || ctx === 'add_order')
     if (!autoReceipt && !autoKitchenSlip) return
-    const key = `${receiptData.orderNo}|${receiptData.storeCode}|${receiptData.total}|${receiptData.items.length}`
+    const key = [
+      receiptData.orderNo,
+      receiptData.storeCode,
+      receiptData.total,
+      receiptData.items.length,
+      receiptData.printInstanceKey || '',
+    ].join('|')
     if (autoPrintedKeyRef.current === key) return
     autoPrintedKeyRef.current = key
 
@@ -369,6 +380,8 @@ export function PosReceiptModal({
           }
         } catch {
           /* 인쇄 취소 등 */
+        } finally {
+          onAutoPrintComplete?.()
         }
       })()
     }, 180)
@@ -379,6 +392,7 @@ export function PosReceiptModal({
     autoPrintReceiptOnAddOrder,
     autoPrintReceiptOnPayment,
     autoPrintKitchenSlipOnOrder,
+    onAutoPrintComplete,
   ])
 
   /** 보조 POS 등 suppress 시 즉시 닫기 (수동 인쇄 UI 없음) */

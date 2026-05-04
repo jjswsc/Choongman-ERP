@@ -6,7 +6,8 @@
  * - 매장 0개(전체): 응답 행에 등장한 store_code 기준으로 분해
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
@@ -57,11 +58,21 @@ export async function GET(request: NextRequest) {
       usedRpc = false
     }
     if (!usedRpc) {
-      rows = (await supabaseSelectFilter('pos_orders', filter, {
+      rows = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
         limit: FETCH_LIMIT,
         select:
-          'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,guest_count,store_code,status,order_type',
-      })) as PeriodOrderRow[]
+          'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,service_amt,guest_count,store_code,status,order_type',
+      }, 'posSalesByPeriod')) as PeriodOrderRow[]
+    } else {
+      const hasServiceColumn = rows.some((r) => Object.prototype.hasOwnProperty.call(r, 'service_amt'))
+      if (!hasServiceColumn && rows.length > 0) {
+        rows = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
+          limit: FETCH_LIMIT,
+          select:
+            'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,service_amt,guest_count,store_code,status,order_type',
+        }, 'posSalesByPeriod')) as PeriodOrderRow[]
+        usedRpc = false
+      }
     }
 
     const truncated = rows.length >= FETCH_LIMIT

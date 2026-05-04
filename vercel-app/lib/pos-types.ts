@@ -41,6 +41,9 @@ export interface Order {
   /** `updatePosOrder` 시 기존 값 유지용 (pos_orders에서 채움) */
   discountAmt?: number
   discountReason?: string
+  /** 서비스처리(무료 제공) 금액/사유 — 할인과 분리 저장 */
+  serviceAmt?: number
+  serviceReason?: string
   paymentCash?: number
   paymentCard?: number
   paymentQr?: number
@@ -69,6 +72,9 @@ export interface OrderItem {
   options?: string[]
   servedAt?: string | null
   servedBy?: string | null
+  cancelledAt?: string | null
+  cancelledBy?: string | null
+  cancelReason?: string | null
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]

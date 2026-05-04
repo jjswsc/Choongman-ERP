@@ -32,11 +32,13 @@ import {
   getPosSalesByMenu,
   getPosSalesByPayment,
   getPosSalesByStore,
+  getPosCancelReasonSummary,
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
+import { displayPosCancelReasonKey } from "@/lib/pos-cancel-reason-key"
 import {
   getPosSalesFilterOptionsWithCache,
   getPosSalesByPeriodWithCache,
@@ -134,6 +136,7 @@ function mapPosSalesPeriodRowToChartRow(
     subtotal: r.subtotal ?? 0,
     vat: r.vat ?? 0,
     discount: r.discount ?? 0,
+    service: r.service ?? 0,
     total,
     guestSum,
     hallGuestSum,
@@ -377,6 +380,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       subtotal?: number
       vat?: number
       discount?: number
+      service?: number
       total?: number
       guestSum?: number
       dineInOrderCount?: number
@@ -406,6 +410,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       subtotal: number
       vat: number
       discount?: number
+      service?: number
       total: number
       guestSum?: number
       dineInOrderCount?: number
@@ -422,6 +427,23 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     prevRange: number
     prevWeek: number
   }>({ current: 0, prevRange: 0, prevWeek: 0 })
+  const [cancelReasonSummary, setCancelReasonSummary] = React.useState<{
+    lineRows: { reason: string; count: number; amount: number }[]
+    orderRows: { reason: string; count: number; amount: number }[]
+    lineTotalCount: number
+    lineTotalAmount: number
+    orderTotalCount: number
+    orderTotalAmount: number
+    truncated: boolean
+  }>({
+    lineRows: [],
+    orderRows: [],
+    lineTotalCount: 0,
+    lineTotalAmount: 0,
+    orderTotalCount: 0,
+    orderTotalAmount: 0,
+    truncated: false,
+  })
 
   const tr = React.useCallback(
     (key: string, fallback: string) => {
@@ -822,6 +844,18 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [orderTypesKey]
   )
 
+  const handleCancelReasonDrilldown = React.useCallback(
+    (reason: string, scope: "line" | "order") => {
+      const q = new URLSearchParams()
+      q.set("start", startStr)
+      q.set("end", endStr)
+      q.set("cancelScope", scope)
+      q.set("cancelReason", reason)
+      router.push(`/admin/pos-orders?${q.toString()}`)
+    },
+    [router, startStr, endStr]
+  )
+
   const analyticsParamKey = React.useMemo(
     () =>
       [
@@ -868,8 +902,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
     const vat = periodChartRows.reduce((a, x) => a + Number(x.vat ?? 0), 0)
     const discount = periodChartRows.reduce((a, x) => a + Number(x.discount ?? 0), 0)
+    const service = periodChartRows.reduce((a, x) => a + Number(x.service ?? 0), 0)
     const total = periodChartRows.reduce((a, x) => a + Number(x.total ?? x.sales ?? 0), 0)
-    return { subtotal, vat, discount, total, gross: subtotal + vat }
+    return { subtotal, vat, discount, service, total, gross: subtotal + vat }
   }, [periodChartRows])
 
   const insightTopMenus = React.useMemo(
@@ -1223,6 +1258,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gStore = guarded(setStoreData)
     const gMenu = guarded(setMenuData)
     const gSummary = guarded(setSummaryCards)
+    const gCancelReasonSummary = guarded(setCancelReasonSummary)
     setLoading(true)
     Promise.all([
       periodRun({
@@ -1324,6 +1360,34 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           })
         })
         .catch(() => gSummary({ current: 0, prevRange: 0, prevWeek: 0 })),
+      getPosCancelReasonSummary({
+        startStr,
+        endStr,
+        stores: selectedStoresParam,
+        orderTypes: orderTypesParam,
+      })
+        .then((res) =>
+          gCancelReasonSummary({
+            lineRows: res.lineRows,
+            orderRows: res.orderRows,
+            lineTotalCount: res.lineTotalCount,
+            lineTotalAmount: res.lineTotalAmount,
+            orderTotalCount: res.orderTotalCount,
+            orderTotalAmount: res.orderTotalAmount,
+            truncated: res.truncated === true,
+          })
+        )
+        .catch(() =>
+          gCancelReasonSummary({
+            lineRows: [],
+            orderRows: [],
+            lineTotalCount: 0,
+            lineTotalAmount: 0,
+            orderTotalCount: 0,
+            orderTotalAmount: 0,
+            truncated: false,
+          })
+        ),
     ]).finally(() => {
       if (loadIdRef.current === id) {
         setLoading(false)
@@ -1986,7 +2050,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
           {!isHoursPanel &&
           showSalesResults &&
-          (insightShowTotals || insightShowMenu || insightShowChannel) ? (
+          (insightShowTotals ||
+            insightShowMenu ||
+            insightShowChannel ||
+            cancelReasonSummary.lineRows.length > 0 ||
+            cancelReasonSummary.orderRows.length > 0) ? (
             <div className="mb-3 max-w-2xl">
               {insightShowTotals ? (
                 <div className="rounded-lg border bg-card p-3">
@@ -1994,6 +2062,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <p className="mt-1 text-sm font-semibold tabular-nums">{formatSalesAmount(totalsSummary.gross)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetDiscount", "할인")}</p>
                   <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.discount)}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{tr("salesServiceAmount", "서비스처리 금액")}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">-{formatSalesAmount(totalsSummary.service)}</p>
                   <p className="mt-2 text-xs text-muted-foreground">{tr("salesNetResult", "순매출")}</p>
                   <p className="mt-1 text-base font-bold tabular-nums">{formatSalesAmount(totalsSummary.total)}</p>
                 </div>
@@ -2043,6 +2113,80 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       ))}
                     </ul>
                   )}
+                </div>
+              ) : null}
+              {cancelReasonSummary.lineRows.length > 0 ? (
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {tr("salesCancelReasonTopLine", "품목 취소 사유 TOP")}
+                  </p>
+                  <ul className="space-y-1 text-sm">
+                    {cancelReasonSummary.lineRows.slice(0, 5).map((row) => (
+                      <li key={`line-${row.reason}`}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/50"
+                          onClick={() => handleCancelReasonDrilldown(row.reason, "line")}
+                          title={tr("salesCancelReasonDrilldownHint", "클릭 시 해당 사유 주문으로 이동")}
+                        >
+                          <span className="truncate">
+                            {displayPosCancelReasonKey(row.reason, tr("posCancelReasonNotSet", "사유 미입력"))} (
+                            {row.count}
+                            {tr("posCount", "건")})
+                          </span>
+                          <span className="shrink-0 tabular-nums font-medium">
+                            {formatSalesAmount(row.amount)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {tr("salesCancelReasonLineTotal", "품목 취소 합계")} {cancelReasonSummary.lineTotalCount}
+                    {tr("posCount", "건")} / {formatSalesAmount(cancelReasonSummary.lineTotalAmount)}
+                  </p>
+                  {cancelReasonSummary.truncated ? (
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      {tr("salesDataTruncatedWarning", "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요.")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {cancelReasonSummary.orderRows.length > 0 ? (
+                <div className="rounded-lg border bg-card p-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    {tr("salesCancelReasonTopOrder", "주문 전체 취소 사유 TOP")}
+                  </p>
+                  <ul className="space-y-1 text-sm">
+                    {cancelReasonSummary.orderRows.slice(0, 5).map((row) => (
+                      <li key={`order-${row.reason}`}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/50"
+                          onClick={() => handleCancelReasonDrilldown(row.reason, "order")}
+                          title={tr("salesCancelReasonDrilldownHint", "클릭 시 해당 사유 주문으로 이동")}
+                        >
+                          <span className="truncate">
+                            {displayPosCancelReasonKey(row.reason, tr("posCancelReasonNotSet", "사유 미입력"))} (
+                            {row.count}
+                            {tr("posCount", "건")})
+                          </span>
+                          <span className="shrink-0 tabular-nums font-medium">
+                            {formatSalesAmount(row.amount)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {tr("salesCancelReasonOrderTotal", "주문 전체 취소 합계")} {cancelReasonSummary.orderTotalCount}
+                    {tr("posCount", "건")} / {formatSalesAmount(cancelReasonSummary.orderTotalAmount)}
+                  </p>
+                  {cancelReasonSummary.truncated ? (
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      {tr("salesDataTruncatedWarning", "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요.")}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -2139,6 +2283,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         <th className="py-2 text-right">{tr("salesSupplyAmount", "공급가액")}</th>
                         <th className="py-2 text-right">{tr("salesTax", "세금")}</th>
                         <th className="py-2 text-right">{tr("salesDiscountAmount", "할인 금액")}</th>
+                        <th className="py-2 text-right">{tr("salesServiceAmount", "서비스처리 금액")}</th>
                         <th className="py-2 text-right">{tr("salesAmount", "매출액")}</th>
                       </tr>
                     </thead>
@@ -2160,6 +2305,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
                           <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
                           <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.discount)}</td>
+                          <td className="py-1.5 text-right font-mono">{formatSalesAmount(r.service ?? 0)}</td>
                           <td className="py-1.5 text-right font-mono font-medium">{formatSalesAmount(r.total)}</td>
                         </tr>
                       ))}
@@ -2209,6 +2355,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.discount, 0))}
                           </td>
                           <td className="py-2 text-right font-mono">
+                            {formatSalesAmount(periodChartRows.reduce((a, x) => a + (x.service ?? 0), 0))}
+                          </td>
+                          <td className="py-2 text-right font-mono">
                             {formatSalesAmount(periodChartRows.reduce((a, x) => a + x.total, 0))}
                           </td>
                         </tr>
@@ -2218,7 +2367,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                     {tr(
                       "salesAmountBreakdownFootnote",
-                      "공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합입니다."
+                      "공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합이며, 서비스처리 금액은 별도 집계됩니다."
                     )}{" "}
                     {tr(
                       "salesGuestMetricsFootnote",
@@ -2277,6 +2426,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             <th className="px-3 py-2 text-right">{tr("salesSupplyAmount", "공급가액")}</th>
                             <th className="px-3 py-2 text-right">{tr("salesTax", "세금")}</th>
                             <th className="px-3 py-2 text-right">{tr("salesDiscountAmount", "할인 금액")}</th>
+                            <th className="px-3 py-2 text-right">{tr("salesServiceAmount", "서비스처리 금액")}</th>
                             <th className="px-3 py-2 text-right">{tr("salesAmount", "매출액")}</th>
                           </tr>
                         </thead>
@@ -2299,6 +2449,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
                               <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
                               <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.discount)}</td>
+                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.service ?? 0)}</td>
                               <td className="px-3 py-1.5 text-right font-mono font-medium">
                                 {formatSalesAmount(r.total)}
                               </td>
@@ -2317,7 +2468,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
                     {tr(
                       "salesAmountBreakdownFootnote",
-                      "공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합입니다."
+                      "공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합이며, 서비스처리 금액은 별도 집계됩니다."
                     )}{" "}
                     {tr(
                       "salesGuestMetricsFootnote",
@@ -2652,6 +2803,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesSupplyAmount", "공급가액")}</th>
                           <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesTax", "세금")}</th>
                           <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesDiscountAmount", "할인 금액")}</th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesServiceAmount", "서비스처리 금액")}</th>
                           <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesAmount", "매출액")}</th>
                         </tr>
                       </thead>
@@ -2711,6 +2863,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
                             <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
                             <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.discount ?? 0)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.service ?? 0)}</td>
                             <td className="px-4 py-2.5 text-right font-mono font-semibold">{formatSalesAmount(r.total)}</td>
                           </tr>
                           )
@@ -2776,6 +2929,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               {formatSalesAmount(storeData.reduce((a, r) => a + (r.discount ?? 0), 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
+                              {formatSalesAmount(storeData.reduce((a, r) => a + (r.service ?? 0), 0))}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono">
                               {formatSalesAmount(storeData.reduce((a, r) => a + r.total, 0))}
                             </td>
                           </tr>
@@ -2786,7 +2942,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                     {tr(
                       "salesAmountBreakdownFootnote",
-                      "공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합입니다."
+                      "공급가액은 품목 합계(할인 전)입니다. 세금·매출액은 POS 요금·부가세 계산 규칙이 반영된 값입니다. 할인 금액은 수동 할인과 쿠폰 할인의 합이며, 서비스처리 금액은 별도 집계됩니다."
                     )}{" "}
                     {tr(
                       "salesGuestMetricsFootnote",

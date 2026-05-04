@@ -1,9 +1,9 @@
 /**
  * 매장별 매출 집계. pos_orders 기반.
- * 매장명, 주문건수, guestSum(홀 guest_count 합), dine_in 전용 건수·매출·손님수, 홀 건당·홀 1인당·건당, 공급가액·세금·할인·매출액
+ * 매장명, 주문건수, guestSum(홀 guest_count 합), dine_in 전용 건수·매출·손님수, 홀 건당·홀 1인당·건당, 공급가액·세금·할인·서비스처리·매출액
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import {
   normalizePosOrderTypeKey,
@@ -35,17 +35,18 @@ export async function GET(request: NextRequest) {
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
 
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+    const rows = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
       limit: FETCH_LIMIT,
       select:
-        'store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,guest_count,status,order_type',
-    })) as {
+        'store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type',
+    }, 'posSalesByStore')) as {
       store_code?: string
       subtotal?: number
       vat?: number
       total?: number
       discount_amt?: number
       coupon_discount_amt?: number
+      service_amt?: number
       guest_count?: number
       status?: string
       order_type?: string
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
         subtotal: number
         vat: number
         discount: number
+        service: number
         total: number
         guestSum: number
         dineInOrderCount: number
@@ -78,6 +80,7 @@ export async function GET(request: NextRequest) {
           subtotal: 0,
           vat: 0,
           discount: 0,
+          service: 0,
           total: 0,
           guestSum: 0,
           dineInOrderCount: 0,
@@ -88,6 +91,7 @@ export async function GET(request: NextRequest) {
       byStore[store].subtotal += Number(r.subtotal) || 0
       byStore[store].vat += Number(r.vat) || 0
       byStore[store].discount += (Number(r.discount_amt) || 0) + (Number(r.coupon_discount_amt) || 0)
+      byStore[store].service += Number(r.service_amt) || 0
       byStore[store].total += Number(r.total) || 0
       const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
       byStore[store].guestSum += gc
@@ -108,6 +112,7 @@ export async function GET(request: NextRequest) {
         subtotal: v.subtotal,
         vat: v.vat,
         discount: v.discount,
+        service: v.service,
         total: v.total,
         guestSum: v.guestSum,
         dineInOrderCount: v.dineInOrderCount,

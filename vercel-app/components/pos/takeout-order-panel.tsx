@@ -32,6 +32,7 @@ import {
   kitchenRoutingItemFromOrderItem,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
+import { PosItemCancelReasonDialog } from '@/components/pos/pos-item-cancel-reason-dialog'
 
 export interface TakeoutOrderPanelProps {
   orderLabel: string
@@ -68,6 +69,7 @@ export function TakeoutOrderPanel({
   const isPaid = normalizedStatus === 'paid' || normalizedStatus === 'completed'
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
+  const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
@@ -77,6 +79,7 @@ export function TakeoutOrderPanel({
   useEffect(() => {
     if (!order?.items?.length) {
       setItemPackaged({})
+      setItemCancelled({})
       setExpandedItemId(null)
     } else {
       setItemPackaged((prev) => {
@@ -86,11 +89,19 @@ export function TakeoutOrderPanel({
         })
         return next
       })
+      setItemCancelled((prev) => {
+        const next = { ...prev }
+        order.items.forEach((it) => {
+          next[it.id] = Boolean(it.cancelledAt)
+        })
+        return next
+      })
     }
   }, [order?.id, order?.items])
 
   const toggleItemPackaged = async (itemId: string) => {
     if (!order) return
+    if (itemCancelled[itemId]) return
     const id = Number(order.id)
     if (Number.isNaN(id)) return
     if (!posOrderHasServerId(order.id)) {
@@ -119,8 +130,48 @@ export function TakeoutOrderPanel({
     }
   }
 
-  const packagedCount = order?.items?.filter((it) => itemPackaged[it.id]).length ?? 0
-  const allPackaged = order?.items?.length ? packagedCount >= order.items.length : false
+  const toggleItemCancelled = async (itemId: string, reason?: string) => {
+    if (!order) return
+    const nextCancelled = !itemCancelled[itemId]
+    const resolvedReason = nextCancelled ? String(reason ?? '').trim() : ''
+    if (nextCancelled && resolvedReason.length < 2) return
+    const id = Number(order.id)
+    if (Number.isNaN(id)) return
+    if (!posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
+      return
+    }
+    setSavingItemId(itemId)
+    try {
+      const res = await markPosOrderItemServed({
+        id,
+        itemId,
+        served: false,
+        cancelled: nextCancelled,
+        cancelledBy: 'pos_staff',
+        cancelReason: resolvedReason,
+      })
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+        return
+      }
+      setItemCancelled((prev) => ({ ...prev, [itemId]: nextCancelled }))
+      if (nextCancelled) {
+        setItemPackaged((prev) => ({ ...prev, [itemId]: false }))
+        setSelectedLineItemId((prev) => (prev === itemId ? null : prev))
+      }
+      onPackaged?.()
+    } catch (e) {
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setSavingItemId(null)
+    }
+  }
+
+  const activeItems = order?.items?.filter((it) => !itemCancelled[it.id]) ?? []
+  const packagedCount = activeItems.filter((it) => itemPackaged[it.id]).length
+  const allPackaged = activeItems.length > 0 ? packagedCount >= activeItems.length : false
 
   /** `paid`는 결제 완료·회계 반영 전 단계 — `completed`와 동일하게 취소 UI 비표시 */
   const canCancel =
@@ -129,13 +180,14 @@ export function TakeoutOrderPanel({
   const [cancelling, setCancelling] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
+  const [cancelReasonItemId, setCancelReasonItemId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!order?.items?.length) {
       setSelectedLineItemId(null)
       return
     }
-    setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev) ? prev : null))
+    setSelectedLineItemId((prev) => (prev && order.items.some((i) => i.id === prev && !i.cancelledAt) ? prev : null))
   }, [order?.id, order?.items])
 
   const handleRemoveOrderLine = async (itemId: string) => {
@@ -303,6 +355,60 @@ export function TakeoutOrderPanel({
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{t('posDeliveryPackagingComplete') || '포장 완료'}</span>
               </div>
+              <ScrollArea className="flex-1 max-h-[260px] rounded-md border">
+                <ul className="p-2 space-y-2">
+                  {order.items.map((item) => {
+                    const cancelled = itemCancelled[item.id]
+                    const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+                    const mainName = optMatch ? optMatch[1].trim() : item.name
+                    const optionPart = optMatch ? optMatch[2].trim() : null
+                    const mainDisp = translatePosMenuLineForReceipt(mainName, ti)
+                    const optionDisp = optionPart ? translatePosMenuLineForReceipt(optionPart, ti) : null
+                    const fullDisp = translatePosMenuLineForReceipt(item.name, ti)
+                    return (
+                      <li
+                        key={item.id}
+                        className={cn(
+                          'grid grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50',
+                          cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
+                          !cancelled && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate" title={fullDisp}>{mainDisp}</p>
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {optionDisp && <span className="mr-1">{optionDisp}</span>}
+                            x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
+                          </p>
+                          {cancelled && (
+                            <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">
+                              {t('posLineCancelled') || '취소 처리됨'}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={cancelled ? 'destructive' : 'outline'}
+                          className="h-9 w-9 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (cancelled) {
+                              void toggleItemCancelled(item.id)
+                              return
+                            }
+                            setCancelReasonItemId(item.id)
+                          }}
+                          disabled={savingItemId === item.id || removingItemId !== null}
+                          aria-label={t('posCancel') || '취소'}
+                          title={t('posCancel') || '취소'}
+                        >
+                          <XCircle className="w-5 h-5" />
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </ScrollArea>
               <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
                 {isPaid
                   ? (t('posPaymentComplete') || '결제 완료')
@@ -321,6 +427,7 @@ export function TakeoutOrderPanel({
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
                     const packaged = itemPackaged[item.id]
+                    const cancelled = itemCancelled[item.id]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : item.name
                     const optionPart = optMatch ? optMatch[2].trim() : null
@@ -332,11 +439,15 @@ export function TakeoutOrderPanel({
                         key={item.id}
                         className={cn(
                           'grid cursor-default grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50 transition-shadow',
+                          cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
                           packaged && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
                           selectedLineItemId === item.id &&
                             'ring-2 ring-primary/45 border-primary/50 bg-primary/5 dark:bg-primary/10'
                         )}
-                        onClick={() => setSelectedLineItemId(null)}
+                        onClick={() => {
+                          if (cancelled) return
+                          setSelectedLineItemId(null)
+                        }}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-start gap-0.5">
@@ -345,6 +456,7 @@ export function TakeoutOrderPanel({
                               className="min-w-0 flex-1 truncate rounded-sm px-0.5 text-left text-sm font-medium hover:underline -mx-0.5"
                               onClick={(e) => {
                                 e.stopPropagation()
+                                if (cancelled) return
                                 setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
                               }}
                               title={fullDisp}
@@ -379,24 +491,49 @@ export function TakeoutOrderPanel({
                               {fullDisp}
                             </p>
                           )}
+                          {cancelled && (
+                            <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">
+                              {t('posLineCancelled') || '취소 처리됨'}
+                            </p>
+                          )}
                         </div>
-                        <Button
-                          size="sm"
-                          variant={packaged ? 'default' : 'outline'}
-                          className="shrink-0 h-9 w-9 p-0 self-start mt-0.5"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void toggleItemPackaged(item.id)
-                          }}
-                          disabled={savingItemId === item.id || removingItemId !== null}
-                          aria-label={
-                            packaged
-                              ? (t('cancel') || '취소')
-                              : (t('posDeliveryPackagingComplete') || '포장 완료')
-                          }
-                        >
-                          {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-                        </Button>
+                        <div className="shrink-0 self-start mt-0.5 flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant={packaged ? 'default' : 'outline'}
+                            className="h-9 w-9 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void toggleItemPackaged(item.id)
+                            }}
+                            disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                            aria-label={
+                              packaged
+                                ? (t('cancel') || '취소')
+                                : (t('posDeliveryPackagingComplete') || '포장 완료')
+                            }
+                          >
+                            {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={cancelled ? 'destructive' : 'outline'}
+                            className="h-9 w-9 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (cancelled) {
+                                void toggleItemCancelled(item.id)
+                                return
+                              }
+                              setCancelReasonItemId(item.id)
+                            }}
+                            disabled={savingItemId === item.id || removingItemId !== null}
+                            aria-label={t('posCancel') || '취소'}
+                            title={t('posCancel') || '취소'}
+                          >
+                            <XCircle className="w-5 h-5" />
+                          </Button>
+                        </div>
                       </li>
                     )
                   })}
@@ -413,7 +550,7 @@ export function TakeoutOrderPanel({
                   <CheckCircle className="w-4 h-4 mr-2" />
                   {allPackaged
                     ? (t('posDeliveryPackagingComplete') || '포장 완료')
-                    : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${order.items.length})`}
+                    : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeItems.length || order.items.length})`}
                 </Button>
                 <Button className="h-11 text-base font-semibold" onClick={() => onPay?.()}>
                   {isPaid
@@ -489,6 +626,20 @@ export function TakeoutOrderPanel({
             setChecklistSubmitting(false)
           }
         }}
+      />
+      <PosItemCancelReasonDialog
+        open={cancelReasonItemId != null}
+        onOpenChange={(v) => {
+          if (!v) setCancelReasonItemId(null)
+        }}
+        onConfirm={async (reason) => {
+          const itemId = cancelReasonItemId
+          if (!itemId) return
+          await toggleItemCancelled(itemId, reason)
+          setCancelReasonItemId(null)
+        }}
+        submitting={savingItemId != null}
+        t={t}
       />
     </>
   )

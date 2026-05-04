@@ -79,6 +79,10 @@ export function POSHeader({
   const sales = totalSales ?? totalAmount
   const showStoreSelect = canChangeStore && stores.length > 0 && currentStoreId && onStoreChange
 
+  /** POS 헤더 새로고침 — ghost보다 눈에 띄게 (테두리·포인트색·최소 터치 높이) */
+  const refreshButtonClassName =
+    "h-9 min-h-[44px] shrink-0 gap-1.5 border-2 border-primary/45 bg-primary/5 px-2.5 font-semibold text-primary shadow-sm hover:bg-primary/15 dark:border-primary/55 dark:bg-primary/15 dark:hover:bg-primary/25 sm:h-8 sm:min-h-0 sm:px-3"
+
   const langOptions: { value: typeof lang; labelKey: string }[] = [
     { value: 'ko', labelKey: 'posLangKo' },
     { value: 'en', labelKey: 'posLangEn' },
@@ -153,13 +157,16 @@ export function POSHeader({
               </SelectContent>
             </Select>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-8 shrink-0 px-2 sm:px-3"
+              type="button"
+              title={t('posRefresh')}
+              aria-label={t('posRefresh')}
+              className={refreshButtonClassName}
               onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
             >
-              <RefreshCw className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">{t('posRefresh')}</span>
+              <RefreshCw className="h-[1.125rem] w-[1.125rem] shrink-0 sm:mr-1" aria-hidden />
+              <span className="hidden min-[400px]:inline">{t('posRefresh')}</span>
             </Button>
           </div>
         )}
@@ -177,6 +184,23 @@ export function POSHeader({
             <span className="hidden text-xs sm:inline">
               {isMainPosDevice ? (t('posMainDevice') || '메인') : (t('posOrderTerminal') || '주문')}
             </span>
+          </Button>
+        )}
+
+        {/* 매장 선택기가 없을 때(단일 매장 등)에도 테이블·주문 데이터 새로고침 가능 */}
+        {!showStoreSelect && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={refreshButtonClassName}
+            type="button"
+            title={t('posRefresh')}
+            aria-label={t('posRefresh')}
+            data-tour={dataTour ? 'pos-tour-header-refresh' : undefined}
+            onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
+          >
+            <RefreshCw className="h-[1.125rem] w-[1.125rem] shrink-0 sm:mr-1" aria-hidden />
+            <span className="hidden min-[400px]:inline">{t('posRefresh')}</span>
           </Button>
         )}
       </div>

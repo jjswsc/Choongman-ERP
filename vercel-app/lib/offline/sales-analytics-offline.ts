@@ -244,6 +244,7 @@ export async function getPosSalesByStoreWithCache(params: {
           subtotal: number
           vat: number
           discount?: number
+          service?: number
           total: number
           guestSum?: number
           dineInOrderCount?: number
@@ -264,6 +265,7 @@ export async function getPosSalesByStoreWithCache(params: {
       subtotal: number
       vat: number
       discount?: number
+      service?: number
       total: number
       guestSum?: number
       dineInOrderCount?: number

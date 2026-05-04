@@ -251,7 +251,9 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
 function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLineOptions) {
   const catalog = opts?.promoCatalogById
   const menus = opts?.menus
-  return (order.items || []).map((it) => {
+  return (order.items || [])
+    .filter((it) => !String((it as { cancelledAt?: string | null }).cancelledAt || '').trim())
+    .map((it) => {
     const row = it as unknown as Record<string, unknown>
     const promo = resolvePromoItemsForReceiptLine(row, catalog, menus)
     const rowDelivery = String(row.deliveryAppCode ?? row.delivery_app_code ?? '').trim()

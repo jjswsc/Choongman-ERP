@@ -9,6 +9,7 @@ import {
   postStorePurchaseJournal,
 } from '@/lib/accounting-posting'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 
 function isPeriodClosedError(e: unknown): boolean {
   return e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
@@ -179,11 +180,12 @@ export async function POST(request: NextRequest) {
       cardCreated += 1
     }
 
-    const posRows = (await supabaseSelectFilter(
+    const posRows = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_orders',
       `created_at=gte.${startStr}T00:00:00.000Z&created_at=lte.${endStr}T23:59:59.999Z&status=in.(completed,paid,ready)`,
-      { select: 'id,total,store_code,created_at', limit: 50000 }
-    )) as { id?: number; total?: number; store_code?: string; created_at?: string }[] | null
+      { select: 'id,total,store_code,created_at,service_amt', limit: 50000 },
+      'accountingBackfillPosOrders'
+    )) as { id?: number; total?: number; store_code?: string; created_at?: string; service_amt?: number }[] | null
     for (const row of posRows || []) {
       const id = Number(row.id || 0)
       if (!id) continue
@@ -199,6 +201,7 @@ export async function POST(request: NextRequest) {
           posOrderId: id,
           salesDate,
           total: Number(row.total || 0),
+          serviceAmount: Number(row.service_amt || 0),
           storeName: String(row.store_code || ''),
           memo: 'POS 매출 백필 분개',
         })

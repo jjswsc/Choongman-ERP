@@ -10,6 +10,13 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+function isMissingServiceColumnsError(e: unknown): boolean {
+  const msg = String(e ?? '').toLowerCase()
+  return (
+    (msg.includes('service_amt') || msg.includes('service_reason')) &&
+    (msg.includes('column') || msg.includes('schema cache'))
+  )
+}
 
 function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
   if (paymentDeliveryApp <= 0.005) return null
@@ -39,6 +46,9 @@ export async function POST(req: NextRequest) {
     const memo = String(body?.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()
+    const serviceAmt = Math.max(0, Number(body?.serviceAmt ?? body?.service_amt ?? 0))
+    const serviceReason = String(body?.serviceReason ?? body?.service_reason ?? '').trim()
+    const discountAmtNet = Math.max(0, discountAmt - serviceAmt)
     const paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
     const paymentCard = Math.max(0, Number(body?.paymentCard ?? 0))
     const paymentQr = Math.max(0, Number(body?.paymentQr ?? 0))
@@ -119,8 +129,10 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, unknown> = {
       table_name: tableName,
       memo,
-      discount_amt: discountAmt,
+      discount_amt: discountAmtNet,
       discount_reason: discountReason,
+      service_amt: serviceAmt,
+      service_reason: serviceReason || null,
       payment_cash: paymentCash,
       payment_card: paymentCard,
       payment_qr: paymentQr,
@@ -169,7 +181,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'updatePosOrder')
+    try {
+      await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'updatePosOrder')
+    } catch (e) {
+      if (!isMissingServiceColumnsError(e)) throw e
+      const legacyPatch = { ...patch }
+      delete legacyPatch.service_amt
+      delete legacyPatch.service_reason
+      legacyPatch.discount_amt = discountAmt
+      if (serviceAmt > 0) {
+        const baseReason = String(legacyPatch.discount_reason ?? '').trim()
+        const svcReason = serviceReason || `service:${serviceAmt}`
+        legacyPatch.discount_reason = [baseReason, svcReason].filter(Boolean).join(' · ')
+      }
+      await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, legacyPatch, 'updatePosOrder')
+    }
 
     if (linkposPayment) {
       try {

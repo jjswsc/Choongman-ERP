@@ -32,6 +32,29 @@ function receiptSubtotalAndVatForPrint(receiptData: ReceiptModalData): { subtota
   return { subtotalPrint, vatPrint }
 }
 
+function extractDutchSplitBadgeFromMemo(rawMemo: string): {
+  plainMemo: string
+  splitBadgeLabel: string
+} {
+  const text = String(rawMemo || '')
+  if (!text) return { plainMemo: '', splitBadgeLabel: '' }
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => String(line || '').trim())
+    .filter(Boolean)
+  let splitBadgeLabel = ''
+  const kept: string[] = []
+  for (const line of lines) {
+    const m = line.match(/^\[DUTCH_SPLIT\]\s*(.+)$/i)
+    if (m && m[1]) {
+      splitBadgeLabel = m[1].trim()
+      continue
+    }
+    kept.push(line)
+  }
+  return { plainMemo: kept.join('\n'), splitBadgeLabel }
+}
+
 export function buildCode128BarcodeUrl(raw: string): string {
   const text = String(raw || '').trim()
   if (!text) return ''
@@ -199,6 +222,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     ? translateReceiptTableDisplayName(receiptData.tableName, t)
     : ''
   const parsedMemo = parsePosOrderMemo(receiptData.memo)
+  const { plainMemo: plainMemoForPrint, splitBadgeLabel } = extractDutchSplitBadgeFromMemo(parsedMemo.plainMemo)
   const taxInvoice = parsedMemo.taxInvoice
   const d = resolvePaymentReceiptDesign(printerSettings ?? null, designOverride)
   const logoUrl = d.receiptLogoImageUrl || `${origin}/company-stamp.png`
@@ -284,6 +308,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       <div class="receipt-content receipt-payment-simple">
         <div class="simple-title">${esc(tr('posReceipt', '영수증'))}</div>
         ${
+          splitBadgeLabel
+            ? `<div class="simple-split-badge">${esc(splitBadgeLabel)}</div>`
+            : ''
+        }
+        ${
           taxInvoice
             ? `<div class="simple-tax-subtitle">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>`
             : ''
@@ -317,6 +346,18 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment-simple { color: #000; }
         .simple-title { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
         .simple-tax-subtitle { text-align: center; font-size: 11px; font-weight: 700; margin: 0 0 4px 0; color: #000; }
+        .simple-split-badge {
+          margin: 0 auto 5px auto;
+          padding: 2px 8px;
+          width: fit-content;
+          border: 1px solid #000;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: .01em;
+          color: #000;
+          background: #fff;
+        }
         .simple-store { text-align: center; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
         .simple-line { font-size: 11px; line-height: 1.4; margin: 2px 0; word-break: break-word; }
         .simple-biz { color: #111; }
@@ -359,6 +400,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${
           d.receiptShowTitle
             ? `<div class="receipt-title-block"><div class="receipt-section-title">${esc(tr('posReceipt', '영수증'))}</div><div class="receipt-sub-title">${esc(taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div></div>`
+            : ''
+        }
+        ${
+          splitBadgeLabel
+            ? `<div class="receipt-split-badge-wrap"><span class="receipt-split-badge">${esc(splitBadgeLabel)}</span></div>`
             : ''
         }
         <div class="text-xs">
@@ -421,7 +467,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${(receiptData.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${receiptData.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.serviceFeeAmt)}</span></div>` : ''}
         ${(receiptData.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}</span></div>` : ''}
         ${(receiptData.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}</span></div>` : ''}
-        ${parsedMemo.plainMemo ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(parsedMemo.plainMemo)}</div>` : ''}
+        ${plainMemoForPrint ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(plainMemoForPrint)}</div>` : ''}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-row receipt-total"><span>${esc(tr('posTotal', '합계'))}</span><span>${formatBahtNum(receiptData.total)}</span></div>
         ${paymentRowsHtml}
@@ -448,6 +494,19 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-brand-logo.md { width: 108px; }
         .receipt-brand-logo.lg { width: 132px; }
         .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 700; }
+        .receipt-split-badge-wrap { text-align: center; margin: 2px 0 6px 0; }
+        .receipt-split-badge {
+          display: inline-block;
+          border: 1.6px solid #000;
+          border-radius: 999px;
+          padding: 2px 10px;
+          font-size: 13px;
+          font-weight: 800;
+          line-height: 1.2;
+          color: #000;
+          background: #fff;
+          letter-spacing: .02em;
+        }
         .receipt-order-no-print { color: #000 !important; font-weight: 700 !important; }
         .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }
         .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; }

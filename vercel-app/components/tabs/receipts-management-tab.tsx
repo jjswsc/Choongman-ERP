@@ -46,7 +46,7 @@ import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
-import { isOfficeRole } from '@/lib/permissions'
+import { isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
@@ -262,7 +262,54 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     [promoCatalogById, menus]
   )
 
-  const canSearchAll = isOfficeRole(auth?.role || '')
+  /** POS 홈 `selectableStoreCodes`와 동기: 본사(오피스) 좌표만 전 매장, 매장 소속 Officer 등은 소속 매장(·허용 매장)만 */
+  const receiptStoreChoices = React.useMemo(() => {
+    const list = stores
+    const role = String(auth?.role || '')
+    if (isOfficeRole(role)) {
+      const st = String(auth?.store || '').trim()
+      if (st && !isOfficeStore(st)) {
+        const out: string[] = [st]
+        for (const x of auth?.allowedStores || []) {
+          const s = String(x || '').trim()
+          if (s && !out.some((o) => resolveStoreKey(o) === resolveStoreKey(s))) out.push(s)
+        }
+        return out
+      }
+      if (list.length > 0) return list
+      return st ? [st] : []
+    }
+    if (isFranchiseeRole(role) && auth?.allowedStores && auth.allowedStores.length > 0) {
+      const allowed = auth.allowedStores.map((x) => String(x || '').trim()).filter(Boolean)
+      if (list.length > 0) {
+        const filtered = list.filter((code) =>
+          allowed.some((a) => resolveStoreKey(a) === resolveStoreKey(code))
+        )
+        if (filtered.length > 0) return filtered
+      }
+      return [...allowed].sort((a, b) => a.localeCompare(b))
+    }
+    if (auth?.store) return [auth.store]
+    return list
+  }, [stores, auth?.role, auth?.store, auth?.allowedStores, resolveStoreKey])
+
+  /** 본사(또는 JWT 매장 없음) + 본사 역할 → 영수증 API에서 매장 미지정 시 기간 전체(전 매장) */
+  const isHqWideAccess = React.useMemo(() => {
+    const role = String(auth?.role || '')
+    if (!isOfficeRole(role)) return false
+    const st = String(auth?.store || '').trim()
+    return !st || isOfficeStore(st)
+  }, [auth?.role, auth?.store])
+
+  React.useEffect(() => {
+    if (isHqWideAccess) return
+    if (receiptStoreChoices.length <= 1) return
+    if (storeFilter) return
+    const st = String(auth?.store || '').trim()
+    if (st && receiptStoreChoices.some((c) => resolveStoreKey(c) === resolveStoreKey(st))) {
+      setStoreFilter(st)
+    }
+  }, [isHqWideAccess, receiptStoreChoices, storeFilter, auth?.store, resolveStoreKey])
 
   const payCorrectOtherDetailOptions = React.useMemo(() => {
     const base: { key: string; label: string }[] = [
@@ -287,8 +334,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const catalogStoreKey = React.useMemo(() => {
     const nf = storeFilter ? resolveStoreKey(storeFilter) : ''
     const nu = storeCode ? resolveStoreKey(storeCode) : ''
-    return canSearchAll ? (nf || nu || '') : (nu || storeCode || '')
-  }, [canSearchAll, storeFilter, storeCode, resolveStoreKey])
+    if (isHqWideAccess) return nf || nu || ''
+    if (receiptStoreChoices.length === 1) {
+      const only = receiptStoreChoices[0]
+      return (only ? resolveStoreKey(only) : '') || only || nu || storeCode || ''
+    }
+    return nf || nu || storeCode || ''
+  }, [isHqWideAccess, storeFilter, storeCode, resolveStoreKey, receiptStoreChoices])
 
   React.useEffect(() => {
     getPosDeliveryApps({
@@ -403,7 +455,15 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     setLoading(true)
     const normalizedStoreFilter = storeFilter ? resolveStoreKey(storeFilter) : ''
     const normalizedUserStore = storeCode ? resolveStoreKey(storeCode) : ''
-    const store = canSearchAll ? (normalizedStoreFilter || undefined) : (normalizedUserStore || storeCode)
+    let store: string | undefined
+    if (isHqWideAccess) {
+      store = normalizedStoreFilter || undefined
+    } else if (receiptStoreChoices.length === 1) {
+      const only = receiptStoreChoices[0]
+      store = (resolveStoreKey(only) || only || normalizedUserStore || storeCode || '').trim() || undefined
+    } else {
+      store = normalizedStoreFilter || normalizedUserStore || storeCode || undefined
+    }
     const fetcher = offlineAware ? getPosOrdersWithCache : getPosOrders
     const params = {
       startStr,
@@ -415,7 +475,17 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       .then(setOrders)
       .catch(() => setOrders([]))
       .finally(() => setLoading(false))
-  }, [startStr, endStr, storeFilter, storeCode, statusFilter, canSearchAll, offlineAware, resolveStoreKey])
+  }, [
+    startStr,
+    endStr,
+    storeFilter,
+    storeCode,
+    statusFilter,
+    isHqWideAccess,
+    receiptStoreChoices,
+    offlineAware,
+    resolveStoreKey,
+  ])
 
   /** 날짜·매장·상태 조회 + 키워드·배달앱 클라이언트 필터를 한 번에 적용 */
   const runReceiptSearch = React.useCallback(() => {
@@ -1078,17 +1148,21 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             >
               {t('posToday') || '오늘'}
             </Button>
-            {canSearchAll && (
+            {receiptStoreChoices.length > 1 && (
               <Select
-                value={storeFilter || '__all__'}
+                value={
+                  isHqWideAccess ? storeFilter || '__all__' : storeFilter || receiptStoreChoices[0] || '__all__'
+                }
                 onValueChange={(v) => setStoreFilter(v === '__all__' ? '' : v)}
               >
                 <SelectTrigger className="h-9 w-[160px]">
                   <SelectValue placeholder={t('posStoreSelect') || '매장'} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">{t('posStatusAll') || '전체'}</SelectItem>
-                  {stores.map((s) => (
+                  {isHqWideAccess && (
+                    <SelectItem value="__all__">{t('posStatusAll') || '전체'}</SelectItem>
+                  )}
+                  {receiptStoreChoices.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
                     </SelectItem>

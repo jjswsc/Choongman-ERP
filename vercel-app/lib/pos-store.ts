@@ -100,6 +100,9 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
           : {}),
         servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
         servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
+        cancelledAt: typeof it.cancelledAt === 'string' ? it.cancelledAt : null,
+        cancelledBy: typeof it.cancelledBy === 'string' ? it.cancelledBy : null,
+        cancelReason: typeof it.cancelReason === 'string' ? it.cancelReason : null,
         ...(row.promoId && String(row.promoId).trim()
           ? {
               promoId: String(row.promoId).trim(),

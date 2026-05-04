@@ -23,7 +23,7 @@ function nowBangkokIso(): string {
   return `${y}-${m}-${d}T${hh}:${mm}:${ss}+07:00`
 }
 
-/** POS 주문 라인별 서빙 완료/취소 저장 (items_json servedAt/servedBy) */
+/** POS 주문 라인별 서빙/취소 상태 저장 (items_json servedAt/cancelledAt 등) */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -39,6 +39,9 @@ export async function POST(req: NextRequest) {
     const itemId = String(body?.itemId ?? '').trim()
     const served = body?.served === true
     const servedBy = String(body?.servedBy ?? '').trim()
+    const cancelled = body?.cancelled === true
+    const cancelledBy = String(body?.cancelledBy ?? '').trim()
+    const cancelReason = String(body?.cancelReason ?? '').trim()
 
     if (!id || Number.isNaN(id) || !itemId) {
       return NextResponse.json({ success: false, message: 'id, itemId required' }, { headers })
@@ -73,12 +76,26 @@ export async function POST(req: NextRequest) {
     }
 
     const target = { ...(items[idx] || {}) }
-    if (served) {
-      target.servedAt = String(target.servedAt || nowBangkokIso())
-      if (servedBy) target.servedBy = servedBy
-    } else {
+    if (cancelled) {
+      target.cancelledAt = String(target.cancelledAt || nowBangkokIso())
+      if (cancelledBy) target.cancelledBy = cancelledBy
+      if (cancelReason) target.cancelReason = cancelReason
+      // 취소 항목은 서빙/포장 완료 카운트에서 제외
       target.servedAt = null
       target.servedBy = null
+    } else {
+      if (body && Object.prototype.hasOwnProperty.call(body, 'cancelled')) {
+        target.cancelledAt = null
+        target.cancelledBy = null
+        target.cancelReason = null
+      }
+      if (served) {
+        target.servedAt = String(target.servedAt || nowBangkokIso())
+        if (servedBy) target.servedBy = servedBy
+      } else {
+        target.servedAt = null
+        target.servedBy = null
+      }
     }
     items[idx] = target
 
@@ -86,9 +103,11 @@ export async function POST(req: NextRequest) {
       items_json: JSON.stringify(items),
     })
 
-    const servedCount = items.filter((it) => Boolean(String(it?.servedAt ?? '').trim())).length
+    const activeItems = items.filter((it) => !String(it?.cancelledAt ?? '').trim())
+    const servedCount = activeItems.filter((it) => Boolean(String(it?.servedAt ?? '').trim())).length
+    const cancelledCount = items.length - activeItems.length
     return NextResponse.json(
-      { success: true, servedCount, totalCount: items.length },
+      { success: true, servedCount, totalCount: items.length, cancelledCount },
       { headers }
     )
   } catch (e) {

@@ -417,6 +417,8 @@ export async function postPosOrderJournal(params: {
   salesDate: string
   total: number
   vatAmount?: number
+  /** 할인과 분리한 서비스처리 금액(무료제공/서비스 비용) */
+  serviceAmount?: number
   paymentCash?: number
   paymentCard?: number
   paymentQr?: number
@@ -429,7 +431,10 @@ export async function postPosOrderJournal(params: {
   if (amount <= 0) return null
   const vatAmountRaw = Math.abs(Number(params.vatAmount) || 0)
   const vatAmount = Math.min(vatAmountRaw, amount)
-  const revenueAmount = Math.max(0, amount - vatAmount)
+  const netRevenueAmount = Math.max(0, amount - vatAmount)
+  const serviceAmountRaw = Math.max(0, Number(params.serviceAmount) || 0)
+  const serviceAmount = Math.min(serviceAmountRaw, netRevenueAmount)
+  const revenueAmount = netRevenueAmount + serviceAmount
   const paymentCash = Math.max(0, Number(params.paymentCash) || 0)
   const paymentCard = Math.max(0, Number(params.paymentCard) || 0)
   const paymentQr = Math.max(0, Number(params.paymentQr) || 0)
@@ -461,6 +466,14 @@ export async function postPosOrderJournal(params: {
 
   if (revenueAmount > 0) {
     lines.push({ ...GL.revenue(), side: 'credit', amount: revenueAmount })
+  }
+  if (serviceAmount > 0) {
+    lines.push({
+      ...accountLine('5520', { nameKo: '서비스처리비' }),
+      side: 'debit',
+      amount: serviceAmount,
+      memo: '서비스처리(무료 제공) 비용',
+    })
   }
   if (vatAmount > 0) {
     lines.push({ ...accountLine('2180'), side: 'credit', amount: vatAmount })

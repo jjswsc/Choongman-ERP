@@ -26,6 +26,7 @@ export type PeriodOrderRow = {
   vat?: number
   discount_amt?: number
   coupon_discount_amt?: number
+  service_amt?: number
   guest_count?: number
   status?: string
   order_type?: string
@@ -37,6 +38,7 @@ type Bucket = {
   subtotal: number
   vat: number
   discount: number
+  service: number
   total: number
   guestSum: number
   dineInOrderCount: number
@@ -52,6 +54,7 @@ export type PeriodAggRow = {
   subtotal: number
   vat: number
   discount: number
+  service: number
   total: number
   guestSum: number
   dineInOrderCount: number
@@ -79,6 +82,7 @@ function toRow(k: string, v: Bucket): PeriodAggRow {
     subtotal: v.subtotal,
     vat: v.vat,
     discount: v.discount,
+    service: v.service,
     total: v.total,
     guestSum: v.guestSum,
     dineInOrderCount: v.dineInOrderCount,
@@ -97,6 +101,7 @@ const emptyBucket = (): Bucket => ({
   subtotal: 0,
   vat: 0,
   discount: 0,
+  service: 0,
   total: 0,
   guestSum: 0,
   dineInOrderCount: 0,
@@ -125,6 +130,7 @@ export function aggregatePosSalesByPeriod(
     b.subtotal += Number(r.subtotal) || 0
     b.vat += Number(r.vat) || 0
     b.discount += (Number(r.discount_amt) || 0) + (Number(r.coupon_discount_amt) || 0)
+    b.service += Number(r.service_amt) || 0
     b.total += Number(r.total) || 0
     const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
     b.guestSum += gc
@@ -223,6 +229,7 @@ export function mergePeriodSeriesToAggregated(
       subtotal: 0,
       vat: 0,
       discount: 0,
+      service: 0,
       total: 0,
       guestSum: 0,
       dineInOrderCount: 0,
@@ -239,6 +246,7 @@ export function mergePeriodSeriesToAggregated(
       merged.subtotal += row.subtotal
       merged.vat += row.vat
       merged.discount += row.discount
+      merged.service += row.service
       merged.total += row.total
       merged.guestSum += row.guestSum
       merged.dineInOrderCount += row.dineInOrderCount

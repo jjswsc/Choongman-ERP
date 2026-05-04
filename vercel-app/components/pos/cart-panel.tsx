@@ -157,6 +157,7 @@ function deliveryAppBrandClasses(app: string | undefined) {
 }
 
 type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'
+type MenuLineDiscountMode = 'none' | 'discount' | 'service' | 'cancel'
 
 function paymentTabTourTarget(tab: PaymentMethodTab): string {
   switch (tab) {
@@ -208,6 +209,21 @@ export type CartPanelPaymentPayload = {
   paymentOtherBreakdown?: PosPaymentOtherBreakdown
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
+}
+export type CartPanelOrderLinePayload = {
+  id: string
+  name: string
+  price: number
+  quantity: number
+  note?: string
+}
+export type CartPanelSplitReceiptPayload = {
+  key: string
+  label: string
+  items: CartPanelOrderLinePayload[]
+  subtotal: number
+  discountAmt: number
+  total: number
 }
 type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 type TaxInvoiceProfile = {
@@ -330,6 +346,8 @@ interface CartPanelProps {
     memo?: string
     discountAmt: number
     discountReason: string
+    serviceAmt?: number
+    serviceReason?: string
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -340,12 +358,15 @@ interface CartPanelProps {
   }) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onDeliveryOrderComplete?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: CartPanelOrderLinePayload[]
     orderLabel: string
     memo?: string
     discountAmt?: number
     discountReason?: string
+    serviceAmt?: number
+    serviceReason?: string
     payment?: CartPanelPaymentPayload
+    splitReceipts?: CartPanelSplitReceiptPayload[]
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -354,12 +375,15 @@ interface CartPanelProps {
   }, existingOrderId?: number) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onTakeoutOrderComplete?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: CartPanelOrderLinePayload[]
     orderLabel: string
     memo?: string
     discountAmt?: number
     discountReason?: string
+    serviceAmt?: number
+    serviceReason?: string
     payment?: CartPanelPaymentPayload
+    splitReceipts?: CartPanelSplitReceiptPayload[]
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -368,12 +392,15 @@ interface CartPanelProps {
   }, existingOrderId?: number) => void
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
   onDineInOrderComplete?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: CartPanelOrderLinePayload[]
     tableName: string
     memo?: string
     discountAmt?: number
     discountReason?: string
+    serviceAmt?: number
+    serviceReason?: string
     payment?: CartPanelPaymentPayload
+    splitReceipts?: CartPanelSplitReceiptPayload[]
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -387,11 +414,14 @@ interface CartPanelProps {
   onNonDineOrderComplete?: (payload: {
     orderType: 'delivery' | 'takeout'
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: CartPanelOrderLinePayload[]
     memo?: string
     discountAmt?: number
     discountReason?: string
+    serviceAmt?: number
+    serviceReason?: string
     payment?: CartPanelPaymentPayload
+    splitReceipts?: CartPanelSplitReceiptPayload[]
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -447,6 +477,10 @@ function PosPaymentModalAmountCard({
   pricing,
   total,
   totalLabelKey,
+  cartItems,
+  lineDiscountModeByItemId,
+  onLineDiscountModeChange,
+  onDiscountLineSelected,
   t,
 }: {
   subtotal: number
@@ -455,9 +489,19 @@ function PosPaymentModalAmountCard({
   total: number
   /** i18n 키 (없으면 posPaymentTotalLabel) */
   totalLabelKey?: string
+  cartItems?: CartItem[]
+  lineDiscountModeByItemId?: Record<string, MenuLineDiscountMode>
+  onLineDiscountModeChange?: (itemId: string, nextMode: MenuLineDiscountMode) => void
+  onDiscountLineSelected?: () => void
   t: (key: string) => string
 }) {
+  const [showLineDiscountPicker, setShowLineDiscountPicker] = useState(false)
+  const tr = (key: string, fallback: string) => {
+    const v = t(key)
+    return !v || v === key ? fallback : v
+  }
   const totalLineLabel = totalLabelKey ? t(totalLabelKey) : (t('posPaymentTotalLabel') || '결제 금액')
+  const hasLineDiscountPicker = !!onLineDiscountModeChange && !!cartItems?.length
   const subtotalDisplay = resolveReceiptSubtotalPrintAmount({
     subtotal,
     vatFeeMode: pricing.vatFeeMode,
@@ -532,6 +576,93 @@ function PosPaymentModalAmountCard({
             <span className="text-muted-foreground">{t('posSubtotal')}</span>
             <span className="shrink-0 tabular-nums font-semibold text-foreground">{formatBahtNum(subtotalDisplay)} ฿</span>
           </div>
+          {hasLineDiscountPicker && (
+            <Collapsible open={showLineDiscountPicker} onOpenChange={setShowLineDiscountPicker}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 h-8 rounded-lg px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <span className="mr-1">{tr('posMenuLineDiscountToggle', '메뉴별 할인/서비스/취소')}</span>
+                  {showLineDiscountPicker ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-1">
+                <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                  {cartItems?.map((item) => {
+                    const mode = lineDiscountModeByItemId?.[item.id] ?? 'none'
+                    const lineTotal = Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+                    return (
+                      <div key={item.id} className="rounded-xl border border-border/60 bg-background/70 p-2">
+                        <div className="mb-1 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium">{item.name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {t('qty') || '수량'} {formatBahtNum(item.quantity)} · {formatBahtNum(lineTotal)} ฿
+                            </p>
+                          </div>
+                          {mode !== 'none' ? (
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {mode === 'service'
+                                ? tr('posServiceHandled', '서비스처리')
+                                : mode === 'cancel'
+                                  ? tr('posLineCancelledShort', '취소처리')
+                                  : tr('posDiscountApplied', '할인적용')}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={mode === 'discount' ? 'default' : 'outline'}
+                            className="h-7 rounded-lg text-[11px]"
+                            onClick={() => {
+                              const nextMode: MenuLineDiscountMode = mode === 'discount' ? 'none' : 'discount'
+                              onLineDiscountModeChange?.(item.id, nextMode)
+                              if (nextMode === 'discount') onDiscountLineSelected?.()
+                            }}
+                          >
+                            {tr('posDiscountApplied', '할인적용')}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={mode === 'service' ? 'default' : 'outline'}
+                            className={cn(
+                              'h-7 rounded-lg text-[11px]',
+                              mode === 'service'
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/30'
+                            )}
+                            onClick={() => onLineDiscountModeChange?.(item.id, mode === 'service' ? 'none' : 'service')}
+                          >
+                            {tr('posServiceHandled', '서비스처리')}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={mode === 'cancel' ? 'destructive' : 'outline'}
+                            className={cn(
+                              'h-7 rounded-lg text-[11px]',
+                              mode === 'cancel'
+                                ? ''
+                                : 'border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-950/30'
+                            )}
+                            onClick={() => onLineDiscountModeChange?.(item.id, mode === 'cancel' ? 'none' : 'cancel')}
+                          >
+                            {tr('posLineCancelledShort', '취소처리')}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
           {discount > 0 && (
             <div className="flex items-baseline justify-between gap-2 py-1 text-[13px] leading-tight">
               <span className="flex min-w-0 items-center gap-1 text-emerald-700 dark:text-emerald-400">
@@ -620,14 +751,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
   const trMenuLine = (s: string) => translatePosMenuLineForReceipt(s, t)
 
-  const mapCartItemToOrderPayload = (i: CartItem) => {
+  const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
     const lineNote = String(i.note ?? '').trim()
+    const quantity = Math.max(0, Number(quantityOverride ?? i.quantity) || 0)
     return {
       id: i.id,
       name: i.name,
       price: i.price,
-      quantity: i.quantity,
+      quantity,
       orderType: orderTypeNorm,
       ...(lineNote ? { note: lineNote } : {}),
       ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
@@ -693,6 +825,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
   const [discountValue, setDiscountValue] = useState(0)
   const [discountReason, setDiscountReason] = useState('')
+  const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
+  const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
+  const manualDiscountFlashTimerRef = useRef<number | null>(null)
+  const [manualDiscountFlash, setManualDiscountFlash] = useState(false)
   const [collabOptions, setCollabOptions] = useState<
     { id: string; topic: string; campaignNo?: string; collabDetail: MarketingCollabDetail }[]
   >([])
@@ -739,6 +875,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [splitMode, setSplitMode] = useState<'amount' | 'menu'>('amount')
   const [menuSplitTargetPerson, setMenuSplitTargetPerson] = useState(0)
   const [menuSplitAssigned, setMenuSplitAssigned] = useState<Record<string, number[]>>({})
+  const [menuSplitPaidByPerson, setMenuSplitPaidByPerson] = useState<number[]>([])
+  const menuSplitAutoAppliedKeyRef = useRef<string>('')
+  const splitDraftAssignedRef = useRef<{ target: MoveTarget; amount: number; personIdx: number | null } | null>(null)
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
   const [editingNoteItemId, setEditingNoteItemId] = useState<string | null>(null)
   const [editingCustomerMemo, setEditingCustomerMemo] = useState(false)
@@ -868,6 +1007,76 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [showPaymentModal, orderType, pendingOrderId])
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  useEffect(() => {
+    setLineDiscountModeByItemId((prev) => {
+      const validIds = new Set(cartItems.map((item) => item.id))
+      let changed = false
+      const next: Record<string, MenuLineDiscountMode> = {}
+      for (const [id, mode] of Object.entries(prev)) {
+        if (validIds.has(id)) next[id] = mode
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [cartItems])
+  const setLineDiscountModeForItem = useCallback((itemId: string, nextMode: MenuLineDiscountMode) => {
+    setLineDiscountModeByItemId((prev) => {
+      const current = prev[itemId] ?? 'none'
+      if (current === nextMode) return prev
+      if (nextMode === 'none') {
+        if (!(itemId in prev)) return prev
+        const { [itemId]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [itemId]: nextMode }
+    })
+  }, [])
+  const serviceDiscountAmt = useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      if ((lineDiscountModeByItemId[item.id] ?? 'none') !== 'service') return sum
+      return sum + Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+    }, 0)
+  }, [cartItems, lineDiscountModeByItemId])
+  const cancelledLineAmt = useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      if ((lineDiscountModeByItemId[item.id] ?? 'none') !== 'cancel') return sum
+      return sum + Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+    }, 0)
+  }, [cartItems, lineDiscountModeByItemId])
+  const selectedDiscountSubtotal = useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      if ((lineDiscountModeByItemId[item.id] ?? 'none') !== 'discount') return sum
+      return sum + Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+    }, 0)
+  }, [cartItems, lineDiscountModeByItemId])
+  const selectedDiscountLineCount = useMemo(() => {
+    return cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
+  }, [cartItems, lineDiscountModeByItemId])
+  const selectedServiceLineCount = useMemo(() => {
+    return cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'service').length
+  }, [cartItems, lineDiscountModeByItemId])
+  const selectedCancelledLineCount = useMemo(() => {
+    return cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'cancel').length
+  }, [cartItems, lineDiscountModeByItemId])
+  const hasSelectedDiscountScope = selectedDiscountLineCount > 0
+  const subtotalAfterCancel = Math.max(0, subtotal - cancelledLineAmt)
+  const clearLineDiscountSelection = useCallback(() => {
+    setLineDiscountModeByItemId((prev) => {
+      let changed = false
+      const next: Record<string, MenuLineDiscountMode> = {}
+      for (const [id, mode] of Object.entries(prev)) {
+        if (mode === 'discount') {
+          changed = true
+          continue
+        }
+        next[id] = mode
+      }
+      return changed ? next : prev
+    })
+  }, [])
+  const discountScopeSubtotal = hasSelectedDiscountScope
+    ? selectedDiscountSubtotal
+    : Math.max(0, subtotalAfterCancel - serviceDiscountAmt)
   const menuByIdForCollab = useMemo(() => {
     if (!posMenus?.length) return new Map<string, PosMenu>()
     return new Map(posMenus.map((m) => [String(m.id), m]))
@@ -894,17 +1103,38 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
   const collabDiscountAmt = useMemo(() => {
     if (!appliedCollab || menuByIdForCollab.size === 0) return 0
-    return collabDiscountAmountForCart(cartItems, menuByIdForCollab, appliedCollab.collabDetail)
-  }, [appliedCollab, cartItems, menuByIdForCollab])
-  const baseDiscount =
-    discountType === 'percent' ? Math.floor((subtotal * discountValue) / 100) : discountValue
+    const collabScopeItems = hasSelectedDiscountScope
+      ? cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount')
+      : cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') !== 'cancel')
+    if (!collabScopeItems.length) return 0
+    return collabDiscountAmountForCart(collabScopeItems, menuByIdForCollab, appliedCollab.collabDetail)
+  }, [appliedCollab, cartItems, hasSelectedDiscountScope, lineDiscountModeByItemId, menuByIdForCollab])
+  const manualDiscountInputAmt =
+    discountType === 'percent' ? Math.floor((discountScopeSubtotal * discountValue) / 100) : discountValue
+  const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
+  const baseDiscount = cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt
   const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
+  const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + collabDiscountAmt)
   const paymentDiscountReason = useMemo(() => {
     const base = discountReason.trim()
     const collabPart = appliedCollab ? `${t('posCollabDiscount')}: ${appliedCollab.topic}` : ''
-    if (base && collabPart) return `${base} · ${collabPart}`
-    return base || collabPart
-  }, [appliedCollab, discountReason, t])
+    const lineDiscountCount = cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
+    const linePart = [
+      lineDiscountCount > 0 ? `${tr('posDiscount', '할인')} ${lineDiscountCount}${tr('posMenuLineUnit', '건')}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ')
+    const cancelPart =
+      selectedCancelledLineCount > 0
+        ? `${tr('posLineCancelledShort', '취소처리')} ${selectedCancelledLineCount}${tr('posMenuLineUnit', '건')}`
+        : ''
+    const parts = [base, collabPart, linePart, cancelPart].filter(Boolean)
+    return parts.join(' · ')
+  }, [appliedCollab, cartItems, discountReason, lineDiscountModeByItemId, selectedCancelledLineCount, t])
+  const paymentServiceReason = useMemo(() => {
+    if (selectedServiceLineCount <= 0) return ''
+    return `${tr('posServiceHandled', '서비스처리')} ${selectedServiceLineCount}${tr('posMenuLineUnit', '건')}`
+  }, [selectedServiceLineCount, t])
   const pointUsedNum = Math.max(0, Math.trunc(Number(pointUsed || 0)))
   const pricing = computePosPricing({
     subtotal,
@@ -923,6 +1153,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     vatFeeAmt: pricing.vatFeeAmt,
     receiptVatDisplayAmt: pricing.receiptVatDisplayAmt,
   })
+  const focusManualDiscountCard = useCallback(() => {
+    const target = manualDiscountCardRef.current
+    if (!target) return
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setManualDiscountFlash(true)
+    if (manualDiscountFlashTimerRef.current != null) {
+      window.clearTimeout(manualDiscountFlashTimerRef.current)
+    }
+    manualDiscountFlashTimerRef.current = window.setTimeout(() => {
+      setManualDiscountFlash(false)
+      manualDiscountFlashTimerRef.current = null
+    }, 1200)
+  }, [])
+  useEffect(
+    () => () => {
+      if (manualDiscountFlashTimerRef.current != null) {
+        window.clearTimeout(manualDiscountFlashTimerRef.current)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -970,8 +1221,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseFloat(payDeliveryApp) || 0)
   const cashRequiredAmount = Math.max(0, total - nonCashPaymentSum)
   const cashTenderedNum = parseFloat(cashTendered) || 0
-  const cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
-  const cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
+  const _cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
+  const _cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
 
   const buildPaymentOtherBreakdownSnapshot = useCallback((): PosPaymentOtherBreakdown | undefined => {
@@ -1102,6 +1353,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     return dueByPerson
   }, [menuSplitBaseByPerson, splitCount, subtotal, total])
+  const menuSplitRemainingByPerson = useMemo(() => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    return Array.from({ length: count }, (_, i) =>
+      round2(Math.max(0, Number(menuSplitDueByPerson[i] || 0) - Number(menuSplitPaidByPerson[i] || 0)))
+    )
+  }, [menuSplitDueByPerson, menuSplitPaidByPerson, splitCount])
   const menuSplitUnassignedQty = useMemo(() => {
     let sum = 0
     for (const item of cartItems) {
@@ -1130,8 +1387,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
   const currentSplitTargetAmount =
     showSplit && splitMode === 'menu'
-      ? Math.max(0, Number(menuSplitDueByPerson[currentSplitPersonIndex] || 0))
+      ? Math.max(0, Number(menuSplitRemainingByPerson[menuSplitTargetPersonIndex] || 0))
       : dutchUnitAmount
+  const cashRequiredForTendered = splitFlowForInputs ? currentSplitTargetAmount : cashRequiredAmount
+  const cashChangeAmountForTendered = Math.max(0, cashTenderedNum - cashRequiredForTendered)
+  const cashShortAmountForTendered = Math.max(0, cashRequiredForTendered - cashTenderedNum)
+  const amountSplitDueByPerson = useMemo(() => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    const due = Array.from({ length: count }, () => 0)
+    if (total <= 0) return due
+    let acc = 0
+    for (let i = 0; i < count; i += 1) {
+      if (i === count - 1) {
+        due[i] = round2(Math.max(0, total - acc))
+      } else {
+        const one = round2(total / count)
+        due[i] = one
+        acc = round2(acc + one)
+      }
+    }
+    return due
+  }, [round2, splitCount, total])
   const dutchRemainingPeople = showSplit ? Math.max(0, splitCount - splitPaidSteps) : 0
   const partialPayDisabled = showSplit
     ? dutchRemainingPeople <= 0 ||
@@ -1216,6 +1492,71 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const handleMemberSearch = () => {
     loadMembers(memberKeyword)
+  }
+
+  const buildSplitReceiptPayloads = (): CartPanelSplitReceiptPayload[] | undefined => {
+    if (!showSplit) return undefined
+    const count = Math.max(1, Number(splitCount) || 1)
+    if (count <= 1) return undefined
+    const round2Local = (n: number) => Math.round(n * 100) / 100
+    if (splitMode === 'menu') {
+      const entries: CartPanelSplitReceiptPayload[] = []
+      for (let personIdx = 0; personIdx < count; personIdx += 1) {
+        const lines: CartPanelOrderLinePayload[] = []
+        let subtotalByPerson = 0
+        for (const item of cartItems) {
+          const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+          const qty = Math.max(0, Number(row[personIdx] || 0))
+          if (qty <= 0) continue
+          lines.push(mapCartItemToOrderPayload(item, qty))
+          subtotalByPerson += (Number(item.price) || 0) * qty
+        }
+        const subtotalRounded = round2Local(subtotalByPerson)
+        const due = round2Local(Math.max(0, Number(menuSplitDueByPerson[personIdx] || 0)))
+        const totalByPerson = due > 0 ? due : subtotalRounded
+        const discountByPerson = Math.max(0, round2Local(subtotalRounded - totalByPerson))
+        if (lines.length === 0 && totalByPerson <= 0) continue
+        entries.push({
+          key: `menu-${personIdx + 1}`,
+          label: `${tr('posCurrentPerson', '현재 인원')} ${personIdx + 1}/${count}`,
+          items: lines,
+          subtotal: subtotalRounded,
+          discountAmt: discountByPerson,
+          total: totalByPerson,
+        })
+      }
+      return entries.length > 0 ? entries : undefined
+    }
+    const dueByPerson = Array.from({ length: count }, () => 0)
+    let accum = 0
+    for (let i = 0; i < count; i += 1) {
+      if (i === count - 1) {
+        dueByPerson[i] = round2Local(Math.max(0, total - accum))
+      } else {
+        const raw = total / count
+        const rounded = round2Local(raw)
+        dueByPerson[i] = rounded
+        accum = round2Local(accum + rounded)
+      }
+    }
+    const entries: CartPanelSplitReceiptPayload[] = dueByPerson
+      .map((due, idx) => ({
+        key: `amount-${idx + 1}`,
+        label: `${tr('posCurrentPerson', '현재 인원')} ${idx + 1}/${count}`,
+        items: [
+          {
+            id: `dutch-amount-${idx + 1}`,
+            name: `${tr('posDutchPayHeader', '더치페이')} ${idx + 1}/${count}`,
+            price: due,
+            quantity: 1,
+          },
+        ],
+        subtotal: due,
+        discountAmt: 0,
+        total: due,
+      }))
+      .filter((entry) => entry.total > 0)
+    return entries.length > 0 ? entries : undefined
   }
 
   useEffect(() => {
@@ -1440,10 +1781,83 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     | 'linepay'
     | 'shopeepay'
 
-  /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 추가 (진행은 하단 「일부 결제」에서만 증가) */
-  const addDutchAmountOnly = (target: MoveTarget) => {
+  const isWalletMoveTarget = (target: MoveTarget) =>
+    target === 'other' ||
+    target === 'truemoney' ||
+    target === 'wechat' ||
+    target === 'alipay' ||
+    target === 'linepay' ||
+    target === 'shopeepay'
+
+  const splitDraftBadgeText = (() => {
+    const draft = splitDraftAssignedRef.current
+    if (!draft || draft.amount <= 0.0001) return ''
+    return `${tr('posDutchDraftAssigned', '임시 배정')} ${formatBahtNum(draft.amount)} ฿`
+  })()
+
+  const applyDeltaToTarget = (target: MoveTarget, delta: number) => {
+    if (!Number.isFinite(delta) || Math.abs(delta) < 0.0001) return
+    const lines = adminPaymentLinesRef.current
+    const walletTarget = isWalletMoveTarget(target)
+    if (lines.length > 0 && walletTarget) {
+      setShowOtherPayments(true)
+      const id0 = lines[0].id
+      setPayAdminLineAmounts((prev) => {
+        const next: Record<string, string> = {}
+        for (const li of lines) next[li.id] = String(Math.max(0, parseFloat(prev[li.id] || '0') || 0))
+        next[id0] = String(Math.max(0, (parseFloat(next[id0]) || 0) + delta))
+        return next
+      })
+      return
+    }
+    if (target === 'cash') setPayCash((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
+    if (target === 'card') setPayCard((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
+    if (target === 'qr') setPayPromptPay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
+    if (target === 'delivery_app') setPayDeliveryApp((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
+    if (target === 'other') {
+      setShowOtherPayments(true)
+      setPayOther((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta)))
+    }
+    if (target === 'truemoney') { setShowOtherPayments(true); setPayTrueMoney((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+    if (target === 'wechat') { setShowOtherPayments(true); setPayWeChat((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+    if (target === 'alipay') { setShowOtherPayments(true); setPayAlipay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+    if (target === 'linepay') { setShowOtherPayments(true); setPayLinePay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+    if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+  }
+
+  /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 반영 (replace 모드면 기존 임시 배정분을 이동) */
+  const addDutchAmountOnly = (target: MoveTarget, opts?: { replaceCurrentDraft?: boolean }) => {
+    const replaceCurrentDraft = opts?.replaceCurrentDraft === true
     const count = effectiveDutchCount
-    const perPerson = currentSplitTargetAmount
+    let perPerson = showSplit && splitMode === 'menu'
+      ? Math.max(0, Number(menuSplitRemainingByPerson[menuSplitTargetPersonIndex] || 0))
+      : currentSplitTargetAmount
+    if (replaceCurrentDraft) {
+      const prevDraft = splitDraftAssignedRef.current
+      if (prevDraft && prevDraft.amount > 0) {
+        applyDeltaToTarget(prevDraft.target, -prevDraft.amount)
+        if (showSplit && splitMode === 'menu' && prevDraft.personIdx != null) {
+          setMenuSplitPaidByPerson((prev) => {
+            const next = Array.from({ length: Math.max(1, Number(splitCount) || 1) }, (_, i) =>
+              Math.max(0, Number(prev[i] || 0))
+            )
+            const i = Math.max(0, Math.min(next.length - 1, prevDraft.personIdx || 0))
+            next[i] = round2(Math.max(0, next[i] - prevDraft.amount))
+            return next
+          })
+          const paidNow = Math.max(
+            0,
+            Number(menuSplitPaidByPerson[menuSplitTargetPersonIndex] || 0) -
+              (prevDraft.personIdx === menuSplitTargetPersonIndex ? prevDraft.amount : 0)
+          )
+          perPerson = Math.max(0, Number(menuSplitDueByPerson[menuSplitTargetPersonIndex] || 0) - paidNow)
+        }
+      }
+      if (!(showSplit && splitMode === 'menu')) {
+        const idx = Math.min(splitPaidSteps, Math.max(0, amountSplitDueByPerson.length - 1))
+        perPerson = Math.max(0, Number(amountSplitDueByPerson[idx] || currentSplitTargetAmount || 0))
+      }
+    }
     const adminLineSum = adminPaymentLines.reduce(
       (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
       0
@@ -1462,40 +1876,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       (useAdminPaymentLines ? adminLineSum : legacyWalletSum) +
       (parseFloat(payDeliveryApp) || 0)
     const remain = Math.max(0, total - currentSum)
-    const addAmount = splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain)
+    const addAmount =
+      showSplit && splitMode === 'menu'
+        ? Math.min(perPerson, remain)
+        : (splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain))
     if (addAmount <= 0) return
-    const lines = adminPaymentLinesRef.current
-    const walletTarget =
-      target === 'other' ||
-      target === 'truemoney' ||
-      target === 'wechat' ||
-      target === 'alipay' ||
-      target === 'linepay' ||
-      target === 'shopeepay'
-    if (lines.length > 0 && walletTarget) {
-      setShowOtherPayments(true)
-      const id0 = lines[0].id
-      setPayAdminLineAmounts((prev) => {
-        const next: Record<string, string> = {}
-        for (const li of lines) next[li.id] = String(parseFloat(prev[li.id] || '0') || 0)
-        next[id0] = String((parseFloat(next[id0]) || 0) + addAmount)
+    applyDeltaToTarget(target, addAmount)
+    if (showSplit && splitMode === 'menu') {
+      setMenuSplitPaidByPerson((prev) => {
+        const next = Array.from({ length: Math.max(1, Number(splitCount) || 1) }, (_, i) =>
+          Math.max(0, Number(prev[i] || 0))
+        )
+        next[menuSplitTargetPersonIndex] = round2(next[menuSplitTargetPersonIndex] + addAmount)
         return next
       })
-      return
     }
-    if (target === 'cash') setPayCash((p) => String((parseFloat(p || '0') || 0) + addAmount))
-    if (target === 'card') setPayCard((p) => String((parseFloat(p || '0') || 0) + addAmount))
-    if (target === 'qr') setPayPromptPay((p) => String((parseFloat(p || '0') || 0) + addAmount))
-    if (target === 'delivery_app') setPayDeliveryApp((p) => String((parseFloat(p || '0') || 0) + addAmount))
-    if (target === 'other') {
-      setShowOtherPayments(true)
-      setPayOther((p) => String((parseFloat(p || '0') || 0) + addAmount))
+    if (replaceCurrentDraft) {
+      splitDraftAssignedRef.current = {
+        target,
+        amount: addAmount,
+        personIdx: showSplit && splitMode === 'menu' ? menuSplitTargetPersonIndex : null,
+      }
     }
-    if (target === 'truemoney') { setShowOtherPayments(true); setPayTrueMoney((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
-    if (target === 'wechat') { setShowOtherPayments(true); setPayWeChat((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
-    if (target === 'alipay') { setShowOtherPayments(true); setPayAlipay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
-    if (target === 'linepay') { setShowOtherPayments(true); setPayLinePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
-    if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
   }
 
   const applyFullAmountToSingleAdminLine = (lineId: string) => {
@@ -1508,7 +1910,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const addDutchAmountToAdminLine = (lineId: string) => {
     const count = effectiveDutchCount
-    const perPerson = currentSplitTargetAmount
+    const perPerson = showSplit && splitMode === 'menu'
+      ? Math.max(0, Number(menuSplitRemainingByPerson[menuSplitTargetPersonIndex] || 0))
+      : currentSplitTargetAmount
     const adminLineSum = adminPaymentLines.reduce(
       (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
       0
@@ -1527,7 +1931,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       (useAdminPaymentLines ? adminLineSum : legacyWalletSum) +
       (parseFloat(payDeliveryApp) || 0)
     const remain = Math.max(0, total - currentSum)
-    const addAmount = splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain)
+    const addAmount =
+      showSplit && splitMode === 'menu'
+        ? Math.min(perPerson, remain)
+        : (splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain))
     if (addAmount <= 0) return
     setShowOtherPayments(true)
     setPayAdminLineAmounts((prev) => {
@@ -1537,7 +1944,42 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       next[lineId] = String((parseFloat(next[lineId]) || 0) + addAmount)
       return next
     })
+    if (showSplit && splitMode === 'menu') {
+      setMenuSplitPaidByPerson((prev) => {
+        const next = Array.from({ length: Math.max(1, Number(splitCount) || 1) }, (_, i) =>
+          Math.max(0, Number(prev[i] || 0))
+        )
+        next[menuSplitTargetPersonIndex] = round2(next[menuSplitTargetPersonIndex] + addAmount)
+        return next
+      })
+    }
   }
+
+  useEffect(() => {
+    if (!showPaymentModal || !showSplit || splitMode !== 'menu') {
+      menuSplitAutoAppliedKeyRef.current = ''
+      return
+    }
+    if (menuSplitUnassignedQty > 0.009) return
+    const targetAmount = Math.max(0, Number(menuSplitRemainingByPerson[menuSplitTargetPersonIndex] || 0))
+    if (targetAmount <= 0.009) {
+      menuSplitAutoAppliedKeyRef.current = ''
+      return
+    }
+    const activeTarget = activePaymentTab as MoveTarget
+    const key = `${menuSplitTargetPersonIndex}|${activeTarget}|${targetAmount.toFixed(2)}`
+    if (menuSplitAutoAppliedKeyRef.current === key) return
+    menuSplitAutoAppliedKeyRef.current = key
+    addDutchAmountOnly(activeTarget, { replaceCurrentDraft: true })
+  }, [
+    showPaymentModal,
+    showSplit,
+    splitMode,
+    menuSplitUnassignedQty,
+    menuSplitTargetPersonIndex,
+    menuSplitRemainingByPerson,
+    activePaymentTab,
+  ])
 
   const adjustMenuSplitQty = (itemId: string, delta: number) => {
     if (!showSplit || splitMode !== 'menu' || !Number.isFinite(delta) || delta === 0) return
@@ -1576,10 +2018,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (splitPaidSteps >= count) return
       if (splitMode === 'menu') {
         if (menuSplitUnassignedQty > 0) return
-        if (currentSplitTargetAmount <= 0) return
+        if (Math.max(0, Number(menuSplitRemainingByPerson[menuSplitTargetPersonIndex] || 0)) > 0.009) return
+        const nextPending = menuSplitRemainingByPerson.findIndex((amt) => Math.max(0, Number(amt || 0)) > 0.009)
+        if (nextPending >= 0) setMenuSplitTargetPerson(nextPending)
+        splitDraftAssignedRef.current = null
+        return
       }
+      splitDraftAssignedRef.current = null
       setSplitPaidSteps((prev) => Math.min(count, prev + 1))
     } else {
+      splitDraftAssignedRef.current = null
       setSplitPaidSteps((prev) => prev + 1)
     }
   }
@@ -1589,6 +2037,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setSplitPaidSteps(0)
   }, [showPaymentModal, splitCount, total])
 
+  useEffect(() => {
+    if (!showPaymentModal || !showSplit || splitMode !== 'menu') return
+    const count = Math.max(1, Number(splitCount) || 1)
+    const completed = Array.from({ length: count }, (_, i) =>
+      Math.max(0, Number(menuSplitRemainingByPerson[i] || 0)) <= 0.009
+    ).filter(Boolean).length
+    setSplitPaidSteps(Math.min(count, completed))
+  }, [showPaymentModal, showSplit, splitMode, splitCount, menuSplitRemainingByPerson])
+
   /** 모달을 닫을 때 더치페이·일부 결제 진행 초기화 (다음 결제 시 전액 자동 입력과 충돌 방지) */
   useEffect(() => {
     if (!showPaymentModal) {
@@ -1597,6 +2054,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setSplitPaidSteps(0)
       setSplitMode('amount')
       setMenuSplitAssigned({})
+      setMenuSplitPaidByPerson([])
+      splitDraftAssignedRef.current = null
     }
   }, [showPaymentModal])
 
@@ -1608,6 +2067,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!showPaymentModal || !showSplit) return
     resetPaymentInputs()
     setSplitPaidSteps(0)
+    setMenuSplitPaidByPerson([])
+    splitDraftAssignedRef.current = null
   }, [showPaymentModal, showSplit, splitCount])
 
   useEffect(() => {
@@ -1615,6 +2076,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     resetPaymentInputs()
     setSplitPaidSteps(0)
     setMenuSplitAssigned({})
+    setMenuSplitPaidByPerson([])
+    splitDraftAssignedRef.current = null
   }, [showPaymentModal, showSplit, splitMode, splitCount, cartItems])
 
   useEffect(() => {
@@ -1836,6 +2299,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       .filter(Boolean)
       .join(' ')
     const selectedMemberNo = memberMap[selectedMemberId]?.memberNo || ''
+    const splitReceipts = withPayment ? buildSplitReceiptPayloads() : undefined
     onNonDineOrderComplete({
       orderType,
       orderLabel: orderType === 'delivery'
@@ -1845,6 +2309,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       memo: buildOrderMemo(customerMemo),
       discountAmt: discount,
       discountReason: paymentDiscountReason,
+      serviceAmt: serviceDiscountAmt,
+      serviceReason: paymentServiceReason || undefined,
       memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
       memberNo: selectedMemberNo || undefined,
       couponCode: couponAppliedCode || undefined,
@@ -1867,6 +2333,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentDeliveryApp: 0,
             deliveryPaymentChannel: null,
           },
+      ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
     })
   }
 
@@ -1886,6 +2353,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         (parseFloat(payShopeePay) || 0) +
         (parseFloat(payOther) || 0)
     const payOtherBreakdown = buildPaymentOtherBreakdownSnapshot()
+    const splitReceipts = buildSplitReceiptPayloads()
     if (needTaxInvoice && !taxInvoiceInvalid) {
       const profile: TaxInvoiceProfile = {
         type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
@@ -1932,6 +2400,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
           discountReason: paymentDiscountReason,
+          serviceAmt: serviceDiscountAmt,
+          serviceReason: paymentServiceReason || undefined,
           payment: {
             paymentCash: parseFloat(payCash) || 0,
             paymentCard: parseFloat(payCard) || 0,
@@ -1940,6 +2410,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           },
+          ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
           couponCode: couponAppliedCode || undefined,
@@ -1963,6 +2434,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
           discountReason: paymentDiscountReason,
+          serviceAmt: serviceDiscountAmt,
+          serviceReason: paymentServiceReason || undefined,
           payment: {
             paymentCash: parseFloat(payCash) || 0,
             paymentCard: parseFloat(payCard) || 0,
@@ -1971,6 +2444,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           },
+          ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
           couponCode: couponAppliedCode || undefined,
@@ -1992,6 +2466,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
           discountReason: paymentDiscountReason,
+          serviceAmt: serviceDiscountAmt,
+          serviceReason: paymentServiceReason || undefined,
           payment: {
             paymentCash: parseFloat(payCash) || 0,
             paymentCard: parseFloat(payCard) || 0,
@@ -2000,6 +2476,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             ...(payOtherBreakdown ? { paymentOtherBreakdown: payOtherBreakdown } : {}),
             ...deliveryPayPart,
           },
+          ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
           couponCode: couponAppliedCode || undefined,
@@ -2178,6 +2655,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const handleClearCart = () => {
     resetTaxInvoiceUiState()
     setCartItems([])
+    setLineDiscountModeByItemId({})
     setGuestCount(0)
     setCustomerMemo('')
     setCouponCode('')
@@ -2482,6 +2960,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <TooltipProvider delayDuration={0}>
               <div className="space-y-1.5 w-full max-w-full min-w-0 overflow-hidden pr-2">
                 {cartItems.map(item => {
+                  const lineDiscountMode = lineDiscountModeByItemId[item.id] ?? 'none'
                   const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                   const mainName = optMatch ? optMatch[1].trim() : item.name
                   const optionPart = optMatch ? optMatch[2].trim() : null
@@ -2587,6 +3066,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                 </TooltipContent>
                               </Tooltip>
                             ) : null}
+                          </div>
+                        ) : null}
+                        {lineDiscountMode !== 'none' ? (
+                          <div className="mt-1">
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                'h-5 rounded-md px-1.5 text-[10px]',
+                                lineDiscountMode === 'service'
+                                  ? 'border-emerald-400/50 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200'
+                                  : lineDiscountMode === 'cancel'
+                                    ? 'border-rose-400/50 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200'
+                                    : 'border-amber-400/50 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                              )}
+                            >
+                              {lineDiscountMode === 'service'
+                                ? tr('posServiceHandled', '서비스처리')
+                                : lineDiscountMode === 'cancel'
+                                  ? tr('posLineCancelledShort', '취소처리')
+                                  : tr('posDiscountApplied', '할인적용')}
+                            </Badge>
                           </div>
                         ) : null}
                         <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
@@ -2975,6 +3475,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   memo: buildOrderMemo(customerMemo),
                   discountAmt: discount,
                   discountReason: paymentDiscountReason,
+                  serviceAmt: serviceDiscountAmt,
+                  serviceReason: paymentServiceReason || undefined,
                   memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
                   memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
                   couponCode: couponAppliedCode || undefined,
@@ -3072,6 +3574,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 pricing={pricing}
                 total={total}
                 totalLabelKey="posInputTotal"
+                cartItems={cartItems}
+                lineDiscountModeByItemId={lineDiscountModeByItemId}
+                onLineDiscountModeChange={setLineDiscountModeForItem}
+                onDiscountLineSelected={focusManualDiscountCard}
                 t={t}
               />
               <div className="flex gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3.5 text-sm leading-relaxed text-muted-foreground dark:bg-emerald-500/10">
@@ -3113,6 +3619,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 pricing={pricing}
                 total={total}
                 totalLabelKey="posInputTotal"
+                cartItems={cartItems}
+                lineDiscountModeByItemId={lineDiscountModeByItemId}
+                onLineDiscountModeChange={setLineDiscountModeForItem}
+                onDiscountLineSelected={focusManualDiscountCard}
                 t={t}
               />
               <div className="flex gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3.5 text-sm leading-relaxed text-muted-foreground dark:bg-emerald-500/10">
@@ -3121,7 +3631,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
                 <p>{t('posDeliveryPaymentNote') || '배달 주문은 플랫폼에서 결제 완료되며, 익일 통장으로 정산됩니다.'}</p>
               </div>
-              <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm dark:from-amber-950/25 dark:via-card dark:to-card">
+              <div
+                ref={manualDiscountCardRef}
+                className={cn(
+                  'rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm transition-shadow dark:from-amber-950/25 dark:via-card dark:to-card',
+                  manualDiscountFlash ? 'ring-2 ring-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]' : ''
+                )}
+              >
                 <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
                     <Sparkles className="h-4 w-4" />
@@ -3129,6 +3645,35 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
                 </div>
                 <div className="grid gap-3">
+                  <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0">
+                        {selectedDiscountLineCount > 0
+                          ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿`
+                          : `${tr('posManualDiscountScopeAll', '할인적용 메뉴 미선택: 서비스처리 제외 전체 메뉴에 적용')}`}
+                      </p>
+                      {selectedDiscountLineCount > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 shrink-0 rounded-md px-2 text-[11px] text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                          onClick={clearLineDiscountSelection}
+                        >
+                          {tr('posManualDiscountScopeClear', '할인 메뉴 해제')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                    <p>
+                      {tr('posManualDiscountExpected', '직접 할인 예상')}: {formatBahtNum(manualDiscountAmt)} ฿ ·{' '}
+                      {tr('posCollabDiscountExpected', '협업 할인 예상')}: {formatBahtNum(collabDiscountAmt)} ฿
+                    </p>
+                    <p className="mt-0.5">
+                      {tr('posTotalDiscountExpected', '총 할인 예상')}: {formatBahtNum(discountExpectedTotal)} ฿
+                    </p>
+                  </div>
                   <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
                     {DISCOUNT_PRESETS.map((pct) => (
                       <Button
@@ -3223,6 +3768,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               discount={discount}
               pricing={pricing}
               total={total}
+              cartItems={cartItems}
+              lineDiscountModeByItemId={lineDiscountModeByItemId}
+              onLineDiscountModeChange={setLineDiscountModeForItem}
+              onDiscountLineSelected={focusManualDiscountCard}
               t={t}
             />
 
@@ -3263,7 +3812,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
 
               {/* 직접 할인 */}
-              <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm dark:from-amber-950/25 dark:via-card dark:to-card">
+              <div
+                ref={manualDiscountCardRef}
+                className={cn(
+                  'rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/90 via-card to-card p-4 shadow-sm transition-shadow dark:from-amber-950/25 dark:via-card dark:to-card',
+                  manualDiscountFlash ? 'ring-2 ring-amber-400/70 shadow-[0_0_0_3px_rgba(251,191,36,0.25)]' : ''
+                )}
+              >
                 <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2.5">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-800 dark:text-amber-200">
                     <Sparkles className="h-4 w-4" />
@@ -3271,6 +3826,35 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
                 </div>
                 <div className="grid gap-3">
+                  <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0">
+                        {selectedDiscountLineCount > 0
+                          ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿`
+                          : `${tr('posManualDiscountScopeAll', '할인적용 메뉴 미선택: 서비스처리 제외 전체 메뉴에 적용')}`}
+                      </p>
+                      {selectedDiscountLineCount > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 shrink-0 rounded-md px-2 text-[11px] text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                          onClick={clearLineDiscountSelection}
+                        >
+                          {tr('posManualDiscountScopeClear', '할인 메뉴 해제')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                    <p>
+                      {tr('posManualDiscountExpected', '직접 할인 예상')}: {formatBahtNum(manualDiscountAmt)} ฿ ·{' '}
+                      {tr('posCollabDiscountExpected', '협업 할인 예상')}: {formatBahtNum(collabDiscountAmt)} ฿
+                    </p>
+                    <p className="mt-0.5">
+                      {tr('posTotalDiscountExpected', '총 할인 예상')}: {formatBahtNum(discountExpectedTotal)} ฿
+                    </p>
+                  </div>
                   <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1">
                     {DISCOUNT_PRESETS.map((pct) => (
                       <Button
@@ -3407,7 +3991,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     onClick={() => {
                       setActivePaymentTab(tab.id)
                       if (splitFlowForInputs) {
-                        addDutchAmountOnly(tab.id as MoveTarget)
+                        addDutchAmountOnly(tab.id as MoveTarget, { replaceCurrentDraft: true })
                         if (tab.id === 'other') setShowOtherPayments(true)
                       } else {
                         if (tab.id === 'cash') moveAllAmountTo('cash')
@@ -3424,6 +4008,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   >
                     <Icon className={cn('h-5 w-5 shrink-0', activePaymentTab === tab.id ? 'text-primary' : '')} />
                     <span className="text-[11px] font-medium leading-tight text-center">{tab.label}</span>
+                    {splitFlowForInputs &&
+                      splitDraftAssignedRef.current &&
+                      (tab.id === 'other'
+                        ? isWalletMoveTarget(splitDraftAssignedRef.current.target)
+                        : splitDraftAssignedRef.current.target === tab.id) && (
+                        <span className="rounded bg-primary/15 px-1 py-0.5 text-[9px] font-semibold text-primary">
+                          {tr('posDutchDraftShort', '임시')}
+                        </span>
+                      )}
                   </Button>
                 )
               })}
@@ -3450,12 +4043,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold leading-none">{label}</p>
+                        {splitFlowForInputs &&
+                          splitDraftAssignedRef.current?.target === (key as MoveTarget) &&
+                          splitDraftBadgeText && (
+                            <p className="mt-1 text-[11px] font-semibold text-primary">{splitDraftBadgeText}</p>
+                          )}
                         <button
                           type="button"
                           className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
                           onClick={() =>
                             splitFlowForInputs
-                              ? addDutchAmountOnly(key as MoveTarget)
+                              ? addDutchAmountOnly(key as MoveTarget, { replaceCurrentDraft: true })
                               : moveAllAmountTo(key as 'cash' | 'card' | 'qr')
                           }
                         >
@@ -3500,10 +4098,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         </div>
                         <div className="grid gap-1">
                           <Label className="text-[11px] text-violet-800 dark:text-violet-300">
-                            {tr('posCashRequiredAmount', '필요 현금')}
+                            {splitFlowForInputs
+                              ? tr('posCashRequiredAmountCurrentPerson', '필요 현금(현재 인원)')
+                              : tr('posCashRequiredAmount', '필요 현금')}
                           </Label>
                           <div className="h-10 rounded-lg border border-violet-300/60 bg-violet-50/70 px-3 text-right text-sm font-semibold leading-10 tabular-nums text-violet-800 dark:border-violet-500/40 dark:bg-violet-950/30 dark:text-violet-200">
-                            {formatBahtNum(cashRequiredAmount)} ฿
+                            {formatBahtNum(cashRequiredForTendered)} ฿
                           </div>
                         </div>
                         <div className="grid gap-1">
@@ -3511,7 +4111,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             {tr('posCashChangeAmount', '거슬러줄 금액')}
                           </Label>
                           <div className="h-10 rounded-lg border border-emerald-300/60 bg-emerald-50 px-3 text-right text-lg font-extrabold leading-10 tabular-nums text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-950/35 dark:text-emerald-300">
-                            {formatBahtNum(cashChangeAmount)} ฿
+                            {formatBahtNum(cashChangeAmountForTendered)} ฿
                           </div>
                         </div>
                       </div>
@@ -3530,9 +4130,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         ))}
                       </div>
                       <div className="mt-2 grid gap-1 text-xs">
-                        {cashShortAmount > 0.001 && (
+                        {cashShortAmountForTendered > 0.001 && (
                           <p className="font-medium text-amber-700 dark:text-amber-400">
-                            {tr('posCashShortAmount', '추가로 받아야 할 금액')}: {formatBahtNum(cashShortAmount)} ฿
+                            {tr('posCashShortAmount', '추가로 받아야 할 금액')}: {formatBahtNum(cashShortAmountForTendered)} ฿
                           </p>
                         )}
                       </div>
@@ -3550,11 +4150,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold leading-none">{t('posPaymentDeliveryApp') || '배달앱'}</p>
+                      {splitFlowForInputs &&
+                        splitDraftAssignedRef.current?.target === 'delivery_app' &&
+                        splitDraftBadgeText && (
+                          <p className="mt-1 text-[11px] font-semibold text-primary">{splitDraftBadgeText}</p>
+                        )}
                         <button
                           type="button"
                           className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
                           onClick={() =>
-                            splitFlowForInputs ? addDutchAmountOnly('delivery_app') : moveAllAmountTo('delivery_app')
+                            splitFlowForInputs ? addDutchAmountOnly('delivery_app', { replaceCurrentDraft: true }) : moveAllAmountTo('delivery_app')
                           }
                         >
                           {tr('posPayAllToThisMethod', '이 수단으로 전액')}
@@ -3607,11 +4212,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       <span className="flex items-center gap-2">
                         <Wallet className="h-4 w-4 text-primary" />
                         {t('posPaymentOther') || '기타'} · {tr('posPaymentOtherExpand', '세부 수단')}
+                        {splitFlowForInputs &&
+                          splitDraftAssignedRef.current &&
+                          isWalletMoveTarget(splitDraftAssignedRef.current.target) &&
+                          splitDraftBadgeText && (
+                            <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                              {splitDraftBadgeText}
+                            </span>
+                          )}
                       </span>
                       {showSplit ? <ChevronUp className="w-4 h-4" /> : (showOtherPayments ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="grid gap-2 border-l-2 border-primary/20 pl-3 pt-3">
+                    {splitFlowForInputs &&
+                      splitDraftAssignedRef.current &&
+                      isWalletMoveTarget(splitDraftAssignedRef.current.target) &&
+                      splitDraftBadgeText && (
+                        <p className="mb-1 text-[11px] font-semibold text-primary">
+                          {splitDraftBadgeText}
+                        </p>
+                      )}
                     {useAdminPaymentLines && (
                       <p className="text-[10px] leading-snug text-muted-foreground -mt-1 mb-1">
                         {tr(
@@ -3635,17 +4256,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             )}
                             <div className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center">
                               <div className="flex min-w-0 flex-1 items-start justify-between gap-2 sm:items-center">
-                                <button
-                                  type="button"
-                                  className="min-w-0 shrink text-left text-sm font-medium hover:underline"
-                                  onClick={() =>
-                                    splitFlowForInputs
-                                      ? addDutchAmountToAdminLine(item.id)
-                                      : applyFullAmountToSingleAdminLine(item.id)
-                                  }
-                                >
-                                  {item.name}
-                                </button>
+                                <div className="min-w-0 shrink">
+                                  <button
+                                    type="button"
+                                    className="min-w-0 shrink text-left text-sm font-medium hover:underline"
+                                    onClick={() =>
+                                      splitFlowForInputs
+                                        ? addDutchAmountToAdminLine(item.id)
+                                        : applyFullAmountToSingleAdminLine(item.id)
+                                    }
+                                  >
+                                    {item.name}
+                                  </button>
+                                </div>
                                 {splitFlowForInputs && (
                                   <Button
                                     type="button"
@@ -3689,15 +4312,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       ].map(({ value, set, labelKey, moveKey }) => (
                         <div key={labelKey} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center">
                           <div className="flex min-w-0 flex-1 items-start justify-between gap-2 sm:items-center">
-                            <button
-                              type="button"
-                              className="min-w-0 shrink text-left text-sm font-medium hover:underline"
-                              onClick={() =>
-                                splitFlowForInputs ? addDutchAmountOnly(moveKey) : moveAllAmountTo(moveKey)
-                              }
-                            >
-                              {t(labelKey)}
-                            </button>
+                            <div className="min-w-0 shrink">
+                              <button
+                                type="button"
+                                className="min-w-0 shrink text-left text-sm font-medium hover:underline"
+                                onClick={() =>
+                                  splitFlowForInputs ? addDutchAmountOnly(moveKey, { replaceCurrentDraft: true }) : moveAllAmountTo(moveKey)
+                                }
+                              >
+                                {t(labelKey)}
+                              </button>
+                              {splitFlowForInputs &&
+                                splitDraftAssignedRef.current?.target === moveKey &&
+                                splitDraftBadgeText && (
+                                  <p className="mt-1 text-[11px] font-semibold text-primary">{splitDraftBadgeText}</p>
+                                )}
+                            </div>
                             {splitFlowForInputs && (
                               <Button
                                 type="button"
@@ -4009,6 +4639,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             </div>
                             <div className="tabular-nums text-muted-foreground">
                               {tr('posAssignedAmount', '배정 금액')}: {formatBahtNum(menuSplitDueByPerson[idx] || 0)} ฿
+                            </div>
+                            <div className="tabular-nums text-muted-foreground">
+                              {tr('posPaidAmount', '결제됨')}: {formatBahtNum(menuSplitPaidByPerson[idx] || 0)} ฿
+                            </div>
+                            <div className="tabular-nums font-semibold text-violet-700 dark:text-violet-300">
+                              {tr('posRemainingAmount', '남음')}: {formatBahtNum(menuSplitRemainingByPerson[idx] || 0)} ฿
                             </div>
                             <Button
                               type="button"

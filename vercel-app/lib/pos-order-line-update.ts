@@ -54,6 +54,9 @@ export function orderItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
     if (lineApp) base.deliveryAppCode = lineApp
     if (typeof it.servedAt === 'string' && it.servedAt) base.servedAt = it.servedAt
     if (typeof it.servedBy === 'string' && it.servedBy) base.servedBy = it.servedBy
+    if (typeof it.cancelledAt === 'string' && it.cancelledAt) base.cancelledAt = it.cancelledAt
+    if (typeof it.cancelledBy === 'string' && it.cancelledBy) base.cancelledBy = it.cancelledBy
+    if (typeof it.cancelReason === 'string' && it.cancelReason) base.cancelReason = it.cancelReason
     return base
   })
 }

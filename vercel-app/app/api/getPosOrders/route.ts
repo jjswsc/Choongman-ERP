@@ -64,6 +64,33 @@ type GrabIntegrationRow = {
   integration_status?: string
 }
 
+type PosOrderServiceColumnsRow = {
+  id?: number
+  service_amt?: number
+  service_reason?: string
+}
+
+async function loadServiceColumnsByOrderId(orderIds: number[]): Promise<Map<number, PosOrderServiceColumnsRow>> {
+  const byId = new Map<number, PosOrderServiceColumnsRow>()
+  const ids = Array.from(new Set(orderIds.filter((id) => Number.isFinite(id) && id > 0)))
+  if (!ids.length) return byId
+  const CHUNK = 200
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const part = ids.slice(i, i + CHUNK)
+    if (!part.length) continue
+    const filter = `id=in.(${part.join(',')})`
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+      select: 'id,service_amt,service_reason',
+      limit: part.length,
+    })) as PosOrderServiceColumnsRow[] | null
+    for (const row of rows || []) {
+      const id = Number(row.id || 0)
+      if (id > 0) byId.set(id, row)
+    }
+  }
+  return byId
+}
+
 async function resolveStoreFilterCandidates(rawStore: string): Promise<string[]> {
   const base = String(rawStore || '').trim()
   if (!base || base.toLowerCase() === 'all') return []
@@ -449,6 +476,14 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    let serviceById = new Map<number, PosOrderServiceColumnsRow>()
+    try {
+      serviceById = await loadServiceColumnsByOrderId((rows || []).map((r) => Number(r.id || 0)))
+    } catch {
+      // DB에 service_amt/service_reason 컬럼이 아직 없으면 무시하고 진행
+      serviceById = new Map<number, PosOrderServiceColumnsRow>()
+    }
+
     const list = (rows || [])
       .filter((r) => {
         if (startDate && endDate) return true
@@ -459,6 +494,7 @@ export async function GET(request: NextRequest) {
         return true
       })
       .map((r) => {
+        const serviceRow = serviceById.get(Number(r.id || 0))
         const paymentOtherBreakdown = parsePaymentOtherBreakdown(r.payment_other_breakdown)
         const inferredOrderType = inferOrderTypeForResponse({
           order_type: r.order_type,
@@ -476,6 +512,8 @@ export async function GET(request: NextRequest) {
           memo: String(r.memo ?? ''),
           discountAmt: Number(r.discount_amt) ?? 0,
           discountReason: String(r.discount_reason ?? ''),
+          serviceAmt: Number(serviceRow?.service_amt) || 0,
+          serviceReason: String(serviceRow?.service_reason ?? ''),
           deliveryFee: Number(r.delivery_fee) ?? 0,
           packagingFee: Number(r.packaging_fee) ?? 0,
           paymentCash: Number(r.payment_cash) ?? 0,

@@ -16,6 +16,7 @@ import {
   type CartPanelAddItemPayload,
   type CartPanelPaymentPayload,
   type CartPanelBeforePaymentReceiptPayload,
+  type CartPanelSplitReceiptPayload,
 } from '@/components/pos/cart-panel'
 import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
 import { usePosStore } from '@/hooks/use-pos-store'
@@ -516,6 +517,7 @@ export default function PosTerminalPage() {
   const [promosWithItems, setPromosWithItems] = useState<PosPromoWithItems[]>([])
   const [menuOptions, setMenuOptions] = useState<PosMenuOption[]>([])
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
+  const receiptQueueRef = useRef<ReceiptModalData[]>([])
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
@@ -665,6 +667,77 @@ export default function PosTerminalPage() {
         ...(p.optionId && optionNameById.get(String(p.optionId)) ? { optionName: optionNameById.get(String(p.optionId)) } : {}),
       })),
     [optionNameById]
+  )
+  const pushReceiptQueue = useCallback((batch: ReceiptModalData[]) => {
+    if (!Array.isArray(batch) || batch.length === 0) return
+    if (!receiptData) {
+      const [first, ...rest] = batch
+      receiptQueueRef.current = rest
+      setReceiptData(first)
+      return
+    }
+    receiptQueueRef.current = [...receiptQueueRef.current, ...batch]
+  }, [receiptData])
+  const flushNextReceiptQueue = useCallback(() => {
+    const [next, ...rest] = receiptQueueRef.current
+    receiptQueueRef.current = rest
+    setReceiptData(next ?? null)
+  }, [])
+  const clearReceiptQueue = useCallback(() => {
+    receiptQueueRef.current = []
+    setReceiptData(null)
+  }, [])
+  const makeSplitPaymentReceiptBatch = useCallback(
+    (
+      base: {
+        orderNo: string
+        storeCode: string
+        orderType: string
+        tableName?: string
+        memo?: string
+        discountReason?: string
+        vatFeeMode?: 'included' | 'separate'
+      },
+      splitReceipts: CartPanelSplitReceiptPayload[] | undefined,
+      suppressReceiptModalAutoPrint: boolean
+    ): ReceiptModalData[] => {
+      if (!Array.isArray(splitReceipts) || splitReceipts.length === 0) return []
+      const out: ReceiptModalData[] = []
+      splitReceipts.forEach((split, idx) => {
+        const items = split.items
+          .map((it) => ({
+            id: String(it.id ?? ''),
+            name: String(it.name ?? '').trim(),
+            price: Number(it.price ?? 0),
+            qty: Math.max(0, Number(it.quantity ?? 0) || 0),
+            ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+          }))
+          .filter((it) => it.qty > 0 && it.name)
+        const subtotal = Math.max(0, Number(split.subtotal ?? 0) || 0)
+        const total = Math.max(0, Number(split.total ?? 0) || 0)
+        if (items.length === 0 && total <= 0.0001) return
+        const splitMemoTag = `[DUTCH_SPLIT] ${String(split.label || `${idx + 1}/${splitReceipts.length}`)}`
+        const memoCombined = [String(base.memo ?? '').trim(), splitMemoTag].filter(Boolean).join('\n')
+        out.push({
+          orderNo: base.orderNo,
+          storeCode: base.storeCode,
+          orderType: base.orderType,
+          tableName: base.tableName,
+          memo: memoCombined,
+          discountReason: base.discountReason,
+          items,
+          subtotal,
+          discountAmt: Math.max(0, Number(split.discountAmt ?? 0) || 0),
+          total: total > 0 ? total : subtotal,
+          vatFeeMode: base.vatFeeMode,
+          receiptAutoPrintContext: 'payment',
+          suppressReceiptModalAutoPrint,
+          printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
+        })
+      })
+      return out
+    },
+    []
   )
   /** 주방 인쇄: DB에 promoItems 없을 때 카탈로그로 세트 구성 펼침 + 옵션명 보강 */
   const kitchenItemsWithResolvedPromo = useCallback(
@@ -4354,6 +4427,8 @@ export default function PosTerminalPage() {
                     memo: payload.memo ?? '',
                     discountAmt: payload.discountAmt ?? 0,
                     discountReason: payload.discountReason ?? '',
+                    serviceAmt: payload.serviceAmt ?? 0,
+                    serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
@@ -4382,7 +4457,7 @@ export default function PosTerminalPage() {
                   printedPaymentReceiptIdsRef.current.add(existingOrderId)
                 }
                 await tryOpenDrawerForPayment(payload.payment)
-                setReceiptData({
+                const receiptPayload: ReceiptModalData = {
                   orderNo: pendingReceiptOrderNo ?? '',
                   items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
@@ -4420,7 +4495,25 @@ export default function PosTerminalPage() {
                     : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
-                })
+                }
+                const splitBatch = makeSplitPaymentReceiptBatch(
+                  {
+                    orderNo: receiptPayload.orderNo,
+                    storeCode: receiptPayload.storeCode,
+                    orderType: receiptPayload.orderType,
+                    tableName: receiptPayload.tableName,
+                    memo: receiptPayload.memo,
+                    discountReason: receiptPayload.discountReason,
+                    vatFeeMode: receiptPayload.vatFeeMode,
+                  },
+                  payload.splitReceipts,
+                  !isMainPosDevice
+                )
+                if (splitBatch.length > 0) {
+                  pushReceiptQueue(splitBatch)
+                } else {
+                  setReceiptData(receiptPayload)
+                }
                 setPendingReceiptOrderNo(null)
                 setPendingDeliveryOrderId(null)
                 setSelectedDeliveryTargetId(null)
@@ -4454,6 +4547,8 @@ export default function PosTerminalPage() {
                     memo: payload.memo ?? '',
                     discountAmt: payload.discountAmt ?? 0,
                     discountReason: payload.discountReason ?? '',
+                    serviceAmt: payload.serviceAmt ?? 0,
+                    serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
@@ -4482,7 +4577,7 @@ export default function PosTerminalPage() {
                   printedPaymentReceiptIdsRef.current.add(existingOrderId)
                 }
                 await tryOpenDrawerForPayment(payload.payment)
-                setReceiptData({
+                const receiptPayload: ReceiptModalData = {
                   orderNo: pendingReceiptOrderNo ?? '',
                   items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
@@ -4517,7 +4612,25 @@ export default function PosTerminalPage() {
                     : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
-                })
+                }
+                const splitBatch = makeSplitPaymentReceiptBatch(
+                  {
+                    orderNo: receiptPayload.orderNo,
+                    storeCode: receiptPayload.storeCode,
+                    orderType: receiptPayload.orderType,
+                    tableName: receiptPayload.tableName,
+                    memo: receiptPayload.memo,
+                    discountReason: receiptPayload.discountReason,
+                    vatFeeMode: receiptPayload.vatFeeMode,
+                  },
+                  payload.splitReceipts,
+                  !isMainPosDevice
+                )
+                if (splitBatch.length > 0) {
+                  pushReceiptQueue(splitBatch)
+                } else {
+                  setReceiptData(receiptPayload)
+                }
                 setPendingReceiptOrderNo(null)
                 setPendingTakeoutOrderId(null)
                 setSelectedTakeoutTargetId(null)
@@ -4619,6 +4732,9 @@ export default function PosTerminalPage() {
                         : {}),
                       ...(it.servedAt ? { servedAt: it.servedAt } : {}),
                       ...(it.servedBy ? { servedBy: it.servedBy } : {}),
+                      ...(it.cancelledAt ? { cancelledAt: it.cancelledAt } : {}),
+                      ...(it.cancelledBy ? { cancelledBy: it.cancelledBy } : {}),
+                      ...(it.cancelReason ? { cancelReason: it.cancelReason } : {}),
                     })),
                     ...incomingItems,
                   ]
@@ -4662,6 +4778,8 @@ export default function PosTerminalPage() {
                     memo: payload.memo,
                     discountAmt: payload.discountAmt,
                     discountReason: payload.discountReason,
+                    serviceAmt: payload.serviceAmt,
+                    serviceReason: payload.serviceReason,
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
@@ -4976,7 +5094,7 @@ export default function PosTerminalPage() {
                   setServingTableId(null)
                   setSelectedTableId(null)
                   clearCartFromTerminal()
-                  setReceiptData(null)
+                  clearReceiptQueue()
                   await refetchCurrentStore()
                   return
                 }
@@ -4995,6 +5113,8 @@ export default function PosTerminalPage() {
                     memo: payload.memo,
                     discountAmt: payload.discountAmt ?? 0,
                     discountReason: payload.discountReason ?? '',
+                    serviceAmt: payload.serviceAmt ?? 0,
+                    serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
@@ -5031,6 +5151,8 @@ export default function PosTerminalPage() {
                       memo: payload.memo,
                       discountAmt: payload.discountAmt ?? 0,
                       discountReason: payload.discountReason ?? '',
+                      serviceAmt: payload.serviceAmt ?? 0,
+                      serviceReason: payload.serviceReason ?? '',
                       memberId: payload.memberId,
                       memberNo: payload.memberNo,
                       couponCode: payload.couponCode,
@@ -5062,6 +5184,8 @@ export default function PosTerminalPage() {
                       memo: payload.memo,
                       discountAmt: payload.discountAmt ?? 0,
                       discountReason: payload.discountReason ?? '',
+                      serviceAmt: payload.serviceAmt ?? 0,
+                      serviceReason: payload.serviceReason ?? '',
                       memberId: payload.memberId,
                       memberNo: payload.memberNo,
                       couponCode: payload.couponCode,
@@ -5108,7 +5232,7 @@ export default function PosTerminalPage() {
                   printedPaymentReceiptIdsRef.current.add(orderIdToComplete)
                 }
                 await tryOpenDrawerForPayment(payload.payment)
-                setReceiptData({
+                const receiptPayload: ReceiptModalData = {
                   orderNo,
                   items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
@@ -5143,7 +5267,25 @@ export default function PosTerminalPage() {
                     : {}),
                   receiptAutoPrintContext: 'payment',
                   suppressReceiptModalAutoPrint: !isMainPosDevice,
-                })
+                }
+                const splitBatch = makeSplitPaymentReceiptBatch(
+                  {
+                    orderNo: receiptPayload.orderNo,
+                    storeCode: receiptPayload.storeCode,
+                    orderType: receiptPayload.orderType,
+                    tableName: receiptPayload.tableName,
+                    memo: receiptPayload.memo,
+                    discountReason: receiptPayload.discountReason,
+                    vatFeeMode: receiptPayload.vatFeeMode,
+                  },
+                  payload.splitReceipts,
+                  !isMainPosDevice
+                )
+                if (splitBatch.length > 0) {
+                  pushReceiptQueue(splitBatch)
+                } else {
+                  setReceiptData(receiptPayload)
+                }
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
                 setServingTableId(null)
@@ -5187,6 +5329,8 @@ export default function PosTerminalPage() {
                   memo: payload.memo,
                   discountAmt: payload.discountAmt ?? 0,
                   discountReason: payload.discountReason ?? '',
+                  serviceAmt: payload.serviceAmt ?? 0,
+                  serviceReason: payload.serviceReason ?? '',
                   memberId: payload.memberId,
                   memberNo: payload.memberNo,
                   couponCode: payload.couponCode,
@@ -5390,11 +5534,36 @@ export default function PosTerminalPage() {
                     })
                   }
                 } else {
-                  setReceiptData({
-                    ...receiptPayloadSubmit,
-                    receiptAutoPrintContext: hasPayment ? 'payment' : 'order',
-                    suppressReceiptModalAutoPrint,
-                  })
+                  if (hasPayment) {
+                    const splitBatch = makeSplitPaymentReceiptBatch(
+                      {
+                        orderNo: receiptPayloadSubmit.orderNo,
+                        storeCode: receiptPayloadSubmit.storeCode,
+                        orderType: receiptPayloadSubmit.orderType,
+                        tableName: receiptPayloadSubmit.tableName,
+                        memo: receiptPayloadSubmit.memo,
+                        discountReason: payload.discountReason,
+                        vatFeeMode: receiptPayloadSubmit.vatFeeMode,
+                      },
+                      payload.splitReceipts,
+                      suppressReceiptModalAutoPrint
+                    )
+                    if (splitBatch.length > 0) {
+                      pushReceiptQueue(splitBatch)
+                    } else {
+                      setReceiptData({
+                        ...receiptPayloadSubmit,
+                        receiptAutoPrintContext: 'payment',
+                        suppressReceiptModalAutoPrint,
+                      })
+                    }
+                  } else {
+                    setReceiptData({
+                      ...receiptPayloadSubmit,
+                      receiptAutoPrintContext: 'order',
+                      suppressReceiptModalAutoPrint,
+                    })
+                  }
                 }
                 await refetchCurrentStore()
                 /** 배달·포장「주문」만 저장 시: 목록에서 다시 누르지 않도록 방금 저장한 건 자동 선택 */
@@ -6361,7 +6530,11 @@ export default function PosTerminalPage() {
         onServedUpdated={refetchCurrentStore}
       />
       <PosReceiptModal
-        onOpenChange={(open) => !open && setReceiptData(null)}
+        onOpenChange={(open) => {
+          if (open) return
+          flushNextReceiptQueue()
+        }}
+        onAutoPrintComplete={flushNextReceiptQueue}
         receiptData={receiptData}
         menus={menus}
         orderTypeLabels={{

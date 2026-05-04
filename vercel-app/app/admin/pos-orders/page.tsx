@@ -65,6 +65,10 @@ import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
+import {
+  displayPosCancelReasonKey,
+  normalizePosCancelReasonKey,
+} from "@/lib/pos-cancel-reason-key"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import {
   POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE,
@@ -74,6 +78,7 @@ import {
 } from "@/lib/pos-print-html"
 import { resolveEscPosCutOverride } from "@/lib/pos-thermal-escpos-cut"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useSearchParams } from "next/navigation"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
 
@@ -118,6 +123,32 @@ function formatBangkokDateTime(value: string | null | undefined, locale = "en-GB
     second: "2-digit",
     hour12: false,
   }).format(dt)
+}
+
+function extractOrderCancelReasonFromMemo(memo: string): string {
+  const src = String(memo || "")
+  const lines = src.split(/\r?\n/)
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i].trim()
+    const m = /^\[ORDER_(?:CANCELLED|REFUNDED)\s+[^\]]+\]\s*(.+)$/.exec(line)
+    if (m?.[1]) return m[1].trim()
+  }
+  return ""
+}
+
+function lineCancelReasonKeys(o: PosOrder): string[] {
+  const out = new Set<string>()
+  for (const raw of o.items || []) {
+    const it = raw as { cancelledAt?: string | null; cancelReason?: string | null }
+    if (!String(it.cancelledAt || "").trim()) continue
+    out.add(normalizePosCancelReasonKey(String(it.cancelReason || "")))
+  }
+  return Array.from(out)
+}
+
+function orderCancelReasonKey(o: PosOrder): string | null {
+  if (o.status !== "cancelled" && o.status !== "refunded") return null
+  return normalizePosCancelReasonKey(extractOrderCancelReasonFromMemo(String(o.memo || "")))
 }
 
 function buildRetryReference1(original: string): string {
@@ -188,6 +219,7 @@ function getTargetCookingTimeMin(
 }
 
 export default function PosOrdersPage() {
+  const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -203,6 +235,8 @@ export default function PosOrdersPage() {
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [channelFilter, setChannelFilter] = React.useState("all")
+  const [cancelReasonFilter, setCancelReasonFilter] = React.useState("all")
+  const [cancelScopeFilter, setCancelScopeFilter] = React.useState<"all" | "line" | "order">("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime" | "linkposFailed" | "grabIntegration">("orders")
   const [attempts, setAttempts] = React.useState<PosPaymentAttempt[]>([])
@@ -239,6 +273,25 @@ export default function PosOrdersPage() {
   const [grabLoading, setGrabLoading] = React.useState(false)
   const [grabStatusFilter, setGrabStatusFilter] = React.useState("all")
   const [grabPartnerMerchantFilter, setGrabPartnerMerchantFilter] = React.useState("")
+
+  React.useEffect(() => {
+    const qStart = String(searchParams.get("start") || "").trim()
+    const qEnd = String(searchParams.get("end") || "").trim()
+    const qStatus = String(searchParams.get("status") || "").trim().toLowerCase()
+    const qCancelReason = String(searchParams.get("cancelReason") || "").trim()
+    const qScopeRaw = String(searchParams.get("cancelScope") || "")
+      .trim()
+      .toLowerCase()
+    const qCancelScope: "all" | "line" | "order" =
+      qScopeRaw === "line" || qScopeRaw === "order" ? qScopeRaw : "all"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(qStart)) setStartStr(qStart)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(qEnd)) setEndStr(qEnd)
+    if (qStatus && ["all", "pending", "cooking", "ready", "completed", "paid", "cancelled"].includes(qStatus)) {
+      setStatusFilter(qStatus)
+    }
+    setCancelScopeFilter(qCancelScope)
+    setCancelReasonFilter(qCancelReason || "all")
+  }, [searchParams])
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   /** 목록 API에 넘길 매장: 본사(오피스)는 선택값·「전체」는 미지정, 매니저/가맹점주 등은 로그인 매장 고정 */
@@ -306,8 +359,25 @@ export default function PosOrdersPage() {
     [deliveryAppsByStore, orderTypeLabels]
   )
 
+  const cancelReasonOptions = React.useMemo(() => {
+    const bucket = new Set<string>()
+    const notSetLabel = t("posCancelReasonNotSet") || "사유 미입력"
+    for (const o of orders) {
+      if (cancelScopeFilter === "all" || cancelScopeFilter === "line") {
+        lineCancelReasonKeys(o).forEach((r) => bucket.add(r))
+      }
+      if (cancelScopeFilter === "all" || cancelScopeFilter === "order") {
+        const k = orderCancelReasonKey(o)
+        if (k) bucket.add(k)
+      }
+    }
+    return Array.from(bucket).sort((a, b) =>
+      displayPosCancelReasonKey(a, notSetLabel).localeCompare(displayPosCancelReasonKey(b, notSetLabel))
+    )
+  }, [orders, cancelScopeFilter, t])
+
   const filteredOrders = React.useMemo(() => {
-    const source =
+    const byChannel =
       channelFilter === "all"
         ? orders
         : orders.filter((o) => {
@@ -315,9 +385,19 @@ export default function PosOrdersPage() {
             if (channelFilter === "delivery") return channel === "delivery" || o.orderType === "delivery"
             return channel === channelFilter
           })
-    if (!searchTerm.trim()) return source
+    const byCancelReason =
+      cancelReasonFilter === "all"
+        ? byChannel
+        : byChannel.filter((o) => {
+            const lineHit = lineCancelReasonKeys(o).includes(cancelReasonFilter)
+            const orderHit = orderCancelReasonKey(o) === cancelReasonFilter
+            if (cancelScopeFilter === "line") return lineHit
+            if (cancelScopeFilter === "order") return orderHit
+            return lineHit || orderHit
+          })
+    if (!searchTerm.trim()) return byCancelReason
     const term = searchTerm.trim().toLowerCase()
-    return source.filter(
+    return byCancelReason.filter(
       (o) =>
         o.orderNo.toLowerCase().includes(term) ||
         (o.tableName && o.tableName.toLowerCase().includes(term)) ||
@@ -327,7 +407,7 @@ export default function PosOrdersPage() {
             it.name && String(it.name).toLowerCase().includes(term)
         )
     )
-  }, [orders, searchTerm, channelFilter])
+  }, [orders, searchTerm, channelFilter, cancelReasonFilter, cancelScopeFilter, t])
 
   const filteredAttempts = React.useMemo(() => {
     if (!attemptSearchTerm.trim()) return attempts
@@ -994,6 +1074,44 @@ export default function PosOrdersPage() {
     }
   }, [isToday, orders, statusFilter])
 
+  const cancelledLineReasonSummary = React.useMemo(() => {
+    const bucket = new Map<string, { count: number; amount: number }>()
+    for (const o of filteredOrders) {
+      for (const raw of o.items || []) {
+        const it = raw as {
+          cancelledAt?: string | null
+          cancelReason?: string | null
+          price?: number
+          qty?: number
+        }
+        if (!String(it.cancelledAt || "").trim()) continue
+        const reason = normalizePosCancelReasonKey(String(it.cancelReason || ""))
+        const prev = bucket.get(reason) || { count: 0, amount: 0 }
+        prev.count += 1
+        prev.amount += (Number(it.price ?? 0) || 0) * (Number(it.qty ?? 1) || 1)
+        bucket.set(reason, prev)
+      }
+    }
+    return Array.from(bucket.entries())
+      .map(([reason, v]) => ({ reason, count: v.count, amount: v.amount }))
+      .sort((a, b) => b.count - a.count || b.amount - a.amount)
+  }, [filteredOrders])
+
+  const cancelledOrderReasonSummary = React.useMemo(() => {
+    const bucket = new Map<string, { count: number; amount: number }>()
+    for (const o of filteredOrders) {
+      if (o.status !== "cancelled" && o.status !== "refunded") continue
+      const reason = normalizePosCancelReasonKey(extractOrderCancelReasonFromMemo(String(o.memo || "")))
+      const prev = bucket.get(reason) || { count: 0, amount: 0 }
+      prev.count += 1
+      prev.amount += Number(o.total ?? 0) || 0
+      bucket.set(reason, prev)
+    }
+    return Array.from(bucket.entries())
+      .map(([reason, v]) => ({ reason, count: v.count, amount: v.amount }))
+      .sort((a, b) => b.count - a.count || b.amount - a.amount)
+  }, [filteredOrders])
+
   const cookingRows = React.useMemo(() => {
     const menuById = new Map(menus.map((m) => [String(m.id), m]))
     const menuByName = new Map(menus.map((m) => [String(m.name).trim(), m]))
@@ -1167,6 +1285,39 @@ export default function PosOrdersPage() {
               </SelectContent>
             </Select>
           )}
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+            <Select
+              value={cancelScopeFilter}
+              onValueChange={(v) => {
+                setCancelScopeFilter(v as "all" | "line" | "order")
+                setCancelReasonFilter("all")
+              }}
+            >
+              <SelectTrigger className="h-9 w-[min(10rem,40vw)] text-sm">
+                <SelectValue placeholder={t("posCancelReasonScopeLabel") || "취소 구분"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("posCancelReasonScopeAll") || "품목·전체 모두"}</SelectItem>
+                <SelectItem value="line">{t("posCancelReasonScopeLine") || "품목 취소만"}</SelectItem>
+                <SelectItem value="order">{t("posCancelReasonScopeOrder") || "주문 전체 취소만"}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && (
+            <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
+              <SelectTrigger className="h-9 w-[min(16rem,60vw)] text-sm">
+                <SelectValue placeholder={t("posCancelReasonSummaryTitle") || "취소 사유"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("posStatusAll") || "전체"}</SelectItem>
+                {cancelReasonOptions.map((reason) => (
+                  <SelectItem key={reason} value={reason}>
+                    {displayPosCancelReasonKey(reason, t("posCancelReasonNotSet") || "사유 미입력")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {activeTab === "linkposFailed" && (
             <Select
               value={attemptStatusFilter}
@@ -1279,6 +1430,36 @@ export default function PosOrdersPage() {
                 </span>
               </div>
             )}
+          </div>
+        )}
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && cancelledLineReasonSummary.length > 0 && (
+          <div className="mb-3 rounded-lg border border-rose-200/70 bg-rose-50/30 p-3">
+            <div className="mb-2 text-xs font-semibold text-rose-700">
+              {t("posCancelReasonLineSummaryTitle") || "품목 취소 사유 집계"}
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {cancelledLineReasonSummary.slice(0, 8).map((row) => (
+                <span key={row.reason} className="rounded border border-rose-300/70 bg-white/80 px-2 py-1 text-rose-700">
+                  {displayPosCancelReasonKey(row.reason, t("posCancelReasonNotSet") || "사유 미입력")}: {row.count}
+                  {t("posCount") || "건"} ({row.amount.toLocaleString()} ฿)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeTab !== "linkposFailed" && activeTab !== "grabIntegration" && cancelledOrderReasonSummary.length > 0 && (
+          <div className="mb-4 rounded-lg border border-rose-200/70 bg-rose-50/30 p-3">
+            <div className="mb-2 text-xs font-semibold text-rose-700">
+              {t("posCancelReasonOrderSummaryTitle") || "주문 전체 취소 사유 집계"}
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {cancelledOrderReasonSummary.slice(0, 8).map((row) => (
+                <span key={row.reason} className="rounded border border-rose-300/70 bg-white/80 px-2 py-1 text-rose-700">
+                  {displayPosCancelReasonKey(row.reason, t("posCancelReasonNotSet") || "사유 미입력")}: {row.count}
+                  {t("posCount") || "건"} ({row.amount.toLocaleString()} ฿)
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1466,6 +1647,23 @@ export default function PosOrdersPage() {
                                           {t("posCustomerMemo") || "메모"}: {o.memo}
                                         </div>
                                       )}
+                                      {(o.status === "cancelled" || o.status === "refunded") && (
+                                        <div
+                                          className={cn(
+                                            "mt-0.5 text-rose-700",
+                                            cancelReasonFilter !== "all" &&
+                                              (cancelScopeFilter === "all" || cancelScopeFilter === "order") &&
+                                              orderCancelReasonKey(o) === cancelReasonFilter &&
+                                              "rounded bg-rose-100/70 px-1.5 py-0.5 font-semibold dark:bg-rose-950/35"
+                                          )}
+                                        >
+                                          {t("posOrderCancelFull") || "전체 취소"}:{" "}
+                                          {displayPosCancelReasonKey(
+                                            orderCancelReasonKey(o) as string,
+                                            t("posCancelReasonNotSet") || "사유 미입력"
+                                          )}
+                                        </div>
+                                      )}
                                       {o.discountAmt && o.discountAmt > 0 && (
                                         <div className="text-green-600 mt-0.5">
                                           {t("posDiscount") || "할인"}: -{o.discountAmt.toLocaleString()} ฿
@@ -1550,20 +1748,47 @@ export default function PosOrdersPage() {
                                     <>
                                       <div className="mb-1 text-[11px] text-muted-foreground">
                                         {(() => {
-                                          const servedCount = o.items.filter((it: { servedAt?: string | null }) => Boolean(it.servedAt)).length
-                                          return `${t("posTableStatusServed") || "서빙 완료"}: ${servedCount}/${o.items.length}`
+                                          const activeItems = o.items.filter(
+                                            (it: { cancelledAt?: string | null }) => !String(it.cancelledAt || '').trim()
+                                          )
+                                          const servedCount = activeItems.filter(
+                                            (it: { servedAt?: string | null }) => Boolean(it.servedAt)
+                                          ).length
+                                          return `${t("posTableStatusServed") || "서빙 완료"}: ${servedCount}/${activeItems.length || o.items.length}`
                                         })()}
                                       </div>
-                                      {o.items.map((it: { name?: string; price?: number; qty?: number; servedAt?: string | null }, idx: number) => (
+                                      {o.items.map((it: {
+                                        name?: string
+                                        price?: number
+                                        qty?: number
+                                        servedAt?: string | null
+                                        cancelledAt?: string | null
+                                        cancelReason?: string | null
+                                      }, idx: number) => {
+                                        const itemReasonKey = normalizePosCancelReasonKey(String(it.cancelReason || ""))
+                                        const reasonMatched =
+                                          cancelReasonFilter !== "all" &&
+                                          (cancelScopeFilter === "all" || cancelScopeFilter === "line") &&
+                                          Boolean(String(it.cancelledAt || "").trim()) &&
+                                          itemReasonKey === cancelReasonFilter
+                                        return (
                                         <div
                                           key={idx}
-                                          className="flex items-center justify-between gap-2 text-muted-foreground"
+                                          className={cn(
+                                            "flex items-center justify-between gap-2 text-muted-foreground rounded px-1.5 py-0.5",
+                                            reasonMatched && "bg-rose-100/70 ring-1 ring-rose-300/70 dark:bg-rose-950/35 dark:ring-rose-700/60"
+                                          )}
                                         >
                                           <span className="min-w-0 truncate">
                                             {it.name} × {it.qty ?? 1}
                                           </span>
                                           <div className="flex items-center gap-2 shrink-0">
-                                            {it.servedAt ? (
+                                            {it.cancelledAt ? (
+                                              <span className="rounded bg-rose-50 px-2 py-0.5 text-[10px] text-rose-700">
+                                                {t('posCancel') || '취소'}
+                                                {` · ${formatBangkokDateTime(it.cancelledAt, bangkokDisplayLocale(lang))}`}
+                                              </span>
+                                            ) : it.servedAt ? (
                                               <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
                                                 {t("posTableStatusServed")}{" "}
                                                 {formatBangkokDateTime(it.servedAt, bangkokDisplayLocale(lang))}
@@ -1579,7 +1804,33 @@ export default function PosOrdersPage() {
                                             </span>
                                           </div>
                                         </div>
-                                      ))}
+                                      )})}
+                                      {o.items.some((it: { cancelledAt?: string | null }) => Boolean(String(it.cancelledAt || '').trim())) && (
+                                        <div className="mt-1 space-y-0.5 text-[11px] text-rose-700">
+                                          {o.items
+                                            .filter((it: { cancelledAt?: string | null }) => Boolean(String(it.cancelledAt || '').trim()))
+                                            .map((it: { name?: string; cancelReason?: string | null }, idx: number) => {
+                                              const itemReasonKey = normalizePosCancelReasonKey(String(it.cancelReason || ""))
+                                              const cancelReasonLabel = displayPosCancelReasonKey(
+                                                itemReasonKey,
+                                                t("posCancelReasonNotSet") || "사유 미입력"
+                                              )
+                                              const reasonMatched =
+                                                cancelReasonFilter !== "all" &&
+                                                (cancelScopeFilter === "all" || cancelScopeFilter === "line") &&
+                                                itemReasonKey === cancelReasonFilter
+                                              return (
+                                              <div
+                                                key={`cancel-reason-${idx}`}
+                                                className={cn(
+                                                  reasonMatched && "rounded bg-rose-100/80 px-1.5 py-0.5 font-semibold dark:bg-rose-950/40"
+                                                )}
+                                              >
+                                                {it.name || '-'}: {cancelReasonLabel}
+                                              </div>
+                                            )})}
+                                        </div>
+                                      )}
                                     </>
                                   ) : (
                                     <span className="text-muted-foreground">-</span>

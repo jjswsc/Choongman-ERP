@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo',
+          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt',
       },
       'updatePosOrderStatus'
     )) as {
@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
       payment_qr?: number
       payment_other?: number
       payment_delivery_app?: number
+      service_amt?: number
       created_by?: string
       memo?: string
     }[] | null
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
               salesDate,
               total,
               vatAmount: vat,
+              serviceAmount: Number(prev?.service_amt || 0),
               paymentCash: Number(prev?.payment_cash || 0),
               paymentCard: Number(prev?.payment_card || 0),
               paymentQr: Number(prev?.payment_qr || 0),
@@ -270,6 +272,7 @@ export async function POST(req: NextRequest) {
             salesDate,
             total,
             vatAmount: vat,
+            serviceAmount: Number(prev?.service_amt || 0),
             paymentCash: Number(prev?.payment_cash || 0),
             paymentCard: Number(prev?.payment_card || 0),
             paymentQr: Number(prev?.payment_qr || 0),
