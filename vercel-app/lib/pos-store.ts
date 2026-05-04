@@ -16,6 +16,7 @@ import {
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
+import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
 const GRID_SIZE = 24
@@ -72,51 +73,98 @@ function mapOrderStatus(status: string): Order['status'] {
   return 'preparing'
 }
 
+function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
+  const merged = new Map<
+    string,
+    {
+      id: string
+      name: string
+      quantity: number
+      price: number
+      menuId?: string
+      optionId?: string
+      note?: string
+      servedAt?: string | null
+      servedBy?: string | null
+      cancelledAt?: string | null
+      cancelledBy?: string | null
+      cancelReason?: string | null
+      promoId?: string
+      promoCode?: string
+      promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+      deliveryAppCode?: string
+    }
+  >()
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const it = rows[i] as PosOrderItem
+    const menuId1 = String(it.menuId1 ?? '').trim()
+    const menuId2 = String(it.menuId2 ?? '').trim()
+    const optionId1 = String(it.optionId1 ?? '').trim()
+    const optionId2 = String(it.optionId2 ?? '').trim()
+    const note = typeof it.note === 'string' && String(it.note).trim() ? String(it.note).trim() : ''
+    const promoId = String(it.promoId ?? '').trim()
+    const promoCode = String(it.promoCode ?? '').trim()
+    const deliveryAppCode = String(it.deliveryAppCode ?? '').trim()
+    const promoItems =
+      promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0 ? it.promoItems : undefined
+    const qty = resolveItemsJsonLineQty(it)
+    const price = Number(it.price ?? 0) || 0
+    const idRaw = String(it.id ?? '').trim()
+    const name = String(it.name ?? '')
+    const dedupeKey = JSON.stringify([
+      idRaw,
+      name,
+      price,
+      note,
+      menuId1 || menuId2,
+      optionId1 || optionId2,
+      promoId,
+      promoCode,
+      JSON.stringify(promoItems ?? []),
+      deliveryAppCode,
+      String(it.servedAt ?? ''),
+      String(it.cancelledAt ?? ''),
+    ])
+    const mergedPrev = merged.get(dedupeKey)
+    if (mergedPrev) {
+      mergedPrev.quantity += qty
+      continue
+    }
+    const safeId = idRaw || `line-${i}`
+    merged.set(dedupeKey, {
+      id: safeId,
+      name,
+      quantity: qty,
+      price,
+      ...(menuId1 || menuId2 ? { menuId: menuId1 || menuId2 } : {}),
+      ...(optionId1 || optionId2 ? { optionId: optionId1 || optionId2 } : {}),
+      ...(note ? { note } : {}),
+      servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
+      servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
+      cancelledAt: typeof it.cancelledAt === 'string' ? it.cancelledAt : null,
+      cancelledBy: typeof it.cancelledBy === 'string' ? it.cancelledBy : null,
+      cancelReason: typeof it.cancelReason === 'string' ? it.cancelReason : null,
+      ...(promoId
+        ? {
+            promoId,
+            ...(promoCode ? { promoCode } : {}),
+            ...(promoItems ? { promoItems } : {}),
+          }
+        : {}),
+      ...(deliveryAppCode ? { deliveryAppCode } : {}),
+    })
+  }
+  return Array.from(merged.values())
+}
+
 function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
   const inferredType = inferOrderType(po)
   return {
     id: String(po.id),
     tableId: undefined,
     type: inferredType,
-    items: (po.items || []).map((it) => {
-      const row = it as PosOrderItem
-      const menuId1 = String(row.menuId1 ?? '').trim()
-      const menuId2 = String(row.menuId2 ?? '').trim()
-      const optionId1 = String(row.optionId1 ?? '').trim()
-      const optionId2 = String(row.optionId2 ?? '').trim()
-      const promoItems =
-        row.promoId && Array.isArray(row.promoItems) && row.promoItems.length > 0
-          ? row.promoItems
-          : undefined
-      return {
-        id: String(it.id ?? ''),
-        name: String(it.name ?? ''),
-        quantity: Number(it.qty ?? 0) || 0,
-        price: Number(it.price ?? 0) || 0,
-        ...(menuId1 || menuId2 ? { menuId: menuId1 || menuId2 } : {}),
-        ...(optionId1 || optionId2 ? { optionId: optionId1 || optionId2 } : {}),
-        ...(typeof it.note === 'string' && String(it.note).trim()
-          ? { note: String(it.note).trim() }
-          : {}),
-        servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
-        servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
-        cancelledAt: typeof it.cancelledAt === 'string' ? it.cancelledAt : null,
-        cancelledBy: typeof it.cancelledBy === 'string' ? it.cancelledBy : null,
-        cancelReason: typeof it.cancelReason === 'string' ? it.cancelReason : null,
-        ...(row.promoId && String(row.promoId).trim()
-          ? {
-              promoId: String(row.promoId).trim(),
-              ...(row.promoCode && String(row.promoCode).trim()
-                ? { promoCode: String(row.promoCode).trim() }
-                : {}),
-              ...(promoItems ? { promoItems } : {}),
-            }
-          : {}),
-        ...(String(row.deliveryAppCode ?? '').trim()
-          ? { deliveryAppCode: String(row.deliveryAppCode).trim() }
-          : {}),
-      }
-    }),
+    items: normalizePosOrderItemsForUi(po.items || []),
     total: Number(po.total ?? 0) || 0,
     status: mapOrderStatus(po.status),
     createdAt: new Date(po.createdAt || Date.now()),

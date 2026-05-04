@@ -1,4 +1,5 @@
 import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
+import { resolveCartLineQuantityForSave } from "@/lib/pos-order-item-map"
 import type { OrderItem } from "@/lib/pos-types"
 
 /**
@@ -148,7 +149,7 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
   for (const it of items) {
     const pi = it.promoItems
     if (Array.isArray(pi) && pi.length > 0) {
-      const parentQty = Math.max(1, Number(it.qty ?? 1))
+      const parentQty = resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown })
       const parentName = String(it.name ?? '').trim()
       let n = 0
       for (const p of pi) {

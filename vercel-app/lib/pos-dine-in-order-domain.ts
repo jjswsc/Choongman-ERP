@@ -1,6 +1,10 @@
 import type { LinkposPaymentSummary, PosOrder, PosOrderItem } from '@/lib/api-client'
 import type { Order } from '@/lib/pos-types'
-import { cartLinesToPosOrderItems, type CartLineForPosOrder } from '@/lib/pos-order-item-map'
+import {
+  cartLinesToPosOrderItems,
+  resolveItemsJsonLineQty,
+  type CartLineForPosOrder,
+} from '@/lib/pos-order-item-map'
 
 export type DineInCloseStatus = 'paid' | 'completed'
 
@@ -22,18 +26,35 @@ function mapOrderStatus(status: string): Order['status'] {
 }
 
 export function mapPosOrderToDineInOrder(row: PosOrder): Order {
+  const mergedByKey = new Map<string, { id: string; name: string; quantity: number; price: number; note?: string; servedAt?: string | null; servedBy?: string | null }>()
+  const rows = row.items || []
+  for (let i = 0; i < rows.length; i += 1) {
+    const it = rows[i]
+    const name = String(it.name ?? '')
+    const price = Number(it.price ?? 0) || 0
+    const qty = Math.max(1, resolveItemsJsonLineQty(it) || 1)
+    const note = String(it.note ?? '').trim()
+    const key = JSON.stringify([String(it.id ?? ''), name, price, note, String(it.servedAt ?? ''), String(it.cancelledAt ?? '')])
+    const found = mergedByKey.get(key)
+    if (found) {
+      found.quantity += qty
+      continue
+    }
+    mergedByKey.set(key, {
+      id: String(it.id ?? '') || `line-${i}`,
+      name,
+      quantity: qty,
+      price,
+      ...(note ? { note } : {}),
+      servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
+      servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
+    })
+  }
+
   return {
     id: String(row.id),
     type: 'dine-in',
-    items: (row.items || []).map((it) => ({
-      id: String(it.id ?? ''),
-      name: String(it.name ?? ''),
-      quantity: Math.max(1, Number(it.qty ?? 1) || 1),
-      price: Number(it.price ?? 0) || 0,
-      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-      servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
-      servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
-    })),
+    items: Array.from(mergedByKey.values()),
     total: Number(row.total ?? 0) || 0,
     status: mapOrderStatus(String(row.status ?? '')),
     createdAt: new Date(row.createdAt || Date.now()),

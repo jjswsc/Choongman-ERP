@@ -8,6 +8,7 @@ import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
+import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -89,7 +90,8 @@ export async function POST(req: NextRequest) {
     }
     const tableName = sanitizePosOrderTableNameForDb(existing[0]?.order_type, body?.tableName)
 
-    const status = String(existing[0]?.status ?? '')
+    const statusRaw = String(existing[0]?.status ?? '').trim()
+    const status = statusRaw.toLowerCase()
     if (!EDITABLE_STATUSES.includes(status)) {
       if (fromOfflineQueueSync) {
         return NextResponse.json(
@@ -106,7 +108,7 @@ export async function POST(req: NextRequest) {
     let subtotal = 0
     for (const it of items) {
       const price = Number(it.price ?? 0)
-      const qty = Number(it.qty ?? 1)
+      const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
       subtotal += price * qty
     }
     const pricing = computePosPricing({

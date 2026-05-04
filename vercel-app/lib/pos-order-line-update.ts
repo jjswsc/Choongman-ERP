@@ -1,5 +1,6 @@
 import type { Order, OrderItem } from '@/lib/pos-types'
 import type { PosOrderItem } from '@/lib/api-client'
+import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 
@@ -35,11 +36,13 @@ export function orderItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
   return items.map((it) => {
     const menuId = String(it.menuId ?? '').trim()
     const optionId = String(it.optionId ?? '').trim()
+    const q = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
     const base: PosOrderItem = {
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
       price: Number(it.price ?? 0) || 0,
-      qty: Math.max(1, Math.trunc(Number(it.quantity) || 1)),
+      qty: q,
+      quantity: q,
     }
     const note = String(it.note ?? '').trim()
     if (note) base.note = note

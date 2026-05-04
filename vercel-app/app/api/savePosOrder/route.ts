@@ -16,6 +16,7 @@ import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
+import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -229,7 +230,7 @@ export async function POST(req: NextRequest) {
     let subtotal = 0
     for (const it of items) {
       const price = Number(it.price ?? 0)
-      const qty = Number(it.qty ?? 1)
+      const qty = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
       subtotal += price * qty
     }
     const pricing = computePosPricing({

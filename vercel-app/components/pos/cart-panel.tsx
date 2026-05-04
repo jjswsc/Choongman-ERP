@@ -754,7 +754,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
     const lineNote = String(i.note ?? '').trim()
-    const quantity = Math.max(0, Number(quantityOverride ?? i.quantity) || 0)
+    const rawQty =
+      quantityOverride ??
+      i.quantity ??
+      (i as { qty?: unknown }).qty ??
+      (i as { count?: unknown }).count ??
+      (i as { order_qty?: unknown }).order_qty ??
+      (i as { orderQty?: unknown }).orderQty
+    const parsed = Number(rawQty)
+    const quantity = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
     return {
       id: i.id,
       name: i.name,
@@ -3469,8 +3477,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               disabled={cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight}
               onClick={() => {
                 if (!selectedTable || cartItems.length === 0 || guestCount <= 0 || posBackendActionInFlight) return
+                const submitItems = cartItems.map(mapCartItemToOrderPayload)
                 onOrderSubmit?.({
-                  items: cartItems.map(mapCartItemToOrderPayload),
+                  items: submitItems,
                   tableName: selectedTable.name,
                   memo: buildOrderMemo(customerMemo),
                   discountAmt: discount,

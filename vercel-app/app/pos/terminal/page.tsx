@@ -64,7 +64,7 @@ import {
   registerLocallyPrintedQueuedOrderNo,
 } from '@/lib/offline/pos-queued-sync-print-suppress'
 import { usePosMenusCatalogLiveRefresh } from '@/lib/offline/use-pos-menus-catalog-live-refresh'
-import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
+import { cartLinesToPosOrderItems, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
@@ -116,7 +116,11 @@ import {
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
-import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
+import {
+  normalizePosTableNameForMatch,
+  translatePosMenuLineForReceipt,
+  translateReceiptTableDisplayName,
+} from '@/lib/pos-print-translate'
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
   isPosOrderPaidLikeStatus,
@@ -501,6 +505,8 @@ export default function PosTerminalPage() {
     orderType === 'delivery' ? 'delivery' : orderType === 'takeout' ? 'takeout' : 'tables'
   )
   const [pendingDineInOrderId, setPendingDineInOrderId] = useState<number | null>(null)
+  /** `pendingDineInOrderId`가 가리키는 주문의 테이블명 — 다른 테이블로 잘못 병합(updatePosOrder)되는 것을 막음 */
+  const pendingDineInOrderTableRef = useRef<string>('')
   const [pendingPayRequest, setPendingPayRequest] = useState<PendingPayRequest>(null)
   const [pendingTakeoutOrderId, setPendingTakeoutOrderId] = useState<number | null>(null)
   const [pendingTakeoutPayRequest, setPendingTakeoutPayRequest] = useState<PendingPayRequest>(null)
@@ -2541,7 +2547,7 @@ export default function PosTerminalPage() {
           id: String(it.id ?? ''),
           name: String(it.name ?? ''),
           price: Number(it.price ?? 0),
-          qty: Math.max(1, Number(it.qty ?? 1) || 1),
+          qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
           ...(menuId ? { menuId } : {}),
           ...(note ? { note } : {}),
           ...(Array.isArray(line.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(line.promoItems) } : {}),
@@ -3065,7 +3071,7 @@ export default function PosTerminalPage() {
                 id: i.id,
                 name: i.name,
                 price: i.price,
-                qty: i.quantity || i.qty || 1,
+                qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
                 ...(menuId ? { menuId } : {}),
                 ...(note ? { note } : {}),
                 ...(promoId ? { promoId } : {}),
@@ -4336,8 +4342,10 @@ export default function PosTerminalPage() {
   const currentTakeoutBarItems = takeoutListMode === 'all' ? allTakeoutBarItems : takeoutListMode === 'completed' ? completedTakeoutBarItems : inProgressOrPackagedTakeoutBarItems
 
   const handleTableSelect = (tableId: string) => {
-    if (selectedTableId !== tableId) {
+    if (selectedTableId != null && selectedTableId !== tableId) {
       clearCartFromTerminal()
+      setPendingDineInOrderId(null)
+      pendingDineInOrderTableRef.current = ''
     }
     const table = currentStore?.tables.find((t) => t.id === tableId)
     const order = demoDineInOrder?.tableId === tableId ? demoDineInOrder.order : table?.order
@@ -4646,8 +4654,61 @@ export default function PosTerminalPage() {
               posCartBackendBusyRef.current = true
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
-              const existingOrder = selectedTable?.order ?? null
-              const existingOrderId = Number(existingOrder?.id ?? 0)
+              let existingOrder = selectedTable?.order ?? null
+              let existingOrderId = Number(existingOrder?.id ?? 0)
+              const pendingExistingOrderId = Number(pendingDineInOrderId ?? 0)
+              const payloadTableKey = normalizePosTableNameForMatch(payload.tableName)
+              const pendingTableKey = normalizePosTableNameForMatch(pendingDineInOrderTableRef.current)
+              if (
+                !(Number.isFinite(existingOrderId) && existingOrderId > 0) &&
+                Number.isFinite(pendingExistingOrderId) &&
+                pendingExistingOrderId > 0 &&
+                payloadTableKey &&
+                pendingTableKey &&
+                pendingTableKey === payloadTableKey
+              ) {
+                existingOrderId = pendingExistingOrderId
+              }
+              if ((existingOrder == null || Number(existingOrder.id ?? 0) !== existingOrderId) && Number.isFinite(existingOrderId) && existingOrderId > 0) {
+                try {
+                  const rows = await getPosOrders({
+                    orderId: existingOrderId,
+                    storeCode: currentStoreId,
+                    limit: 1,
+                  })
+                  const hit = Array.isArray(rows) ? rows[0] : null
+                  if (hit) {
+                    const mappedItems: OrderItem[] = (hit.items || []).map((it, idx) => ({
+                      id: String(it.id ?? `line-${idx}`),
+                      name: String(it.name ?? ''),
+                      quantity: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
+                      price: Number(it.price ?? 0) || 0,
+                      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+                      ...(String(it.promoId ?? '').trim() ? { promoId: String(it.promoId).trim() } : {}),
+                      ...(String(it.promoCode ?? '').trim() ? { promoCode: String(it.promoCode).trim() } : {}),
+                      ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+                      ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
+                      ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
+                      ...(String(it.cancelledAt ?? '').trim() ? { cancelledAt: String(it.cancelledAt) } : {}),
+                      ...(String(it.cancelledBy ?? '').trim() ? { cancelledBy: String(it.cancelledBy) } : {}),
+                      ...(String(it.cancelReason ?? '').trim() ? { cancelReason: String(it.cancelReason) } : {}),
+                    }))
+                    existingOrder = {
+                      id: String(hit.id ?? existingOrderId),
+                      type: 'dine-in',
+                      items: mappedItems,
+                      total: Number(hit.total ?? 0) || 0,
+                      status: 'pending',
+                      createdAt: new Date(hit.createdAt || Date.now()),
+                      tableName: String(hit.tableName ?? payload.tableName ?? ''),
+                      orderNo: String(hit.orderNo ?? '').trim() || undefined,
+                      guestCount: Math.max(0, Math.trunc(Number(hit.guestCount ?? 0) || 0)),
+                    }
+                  }
+                } catch (e) {
+                  console.warn('lookup existing dine-in order failed:', e)
+                }
+              }
               const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
               const shouldAutoPrintReceipt = isAddOrder
                 ? (autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder)
@@ -4690,6 +4751,7 @@ export default function PosTerminalPage() {
                     }
                     setDemoDineInOrder({ tableId: tid, order })
                     setPendingDineInOrderId(null)
+                    pendingDineInOrderTableRef.current = ''
                     setServingTableId(tid)
                     setSelectedTableId(null)
                     clearCartFromTerminal()
@@ -4697,6 +4759,7 @@ export default function PosTerminalPage() {
                     return
                   }
                   setPendingDineInOrderId(null)
+                  pendingDineInOrderTableRef.current = ''
                   setDemoDineInOrder(null)
                   setServingTableId(null)
                   setSelectedTableId(null)
@@ -4704,55 +4767,74 @@ export default function PosTerminalPage() {
                   await refetchCurrentStore()
                   return
                 }
-                const incomingItems = cartLinesToPosOrderItems(payload.items)
+                const payloadItemsNormalized = (payload.items || []).map((it) => {
+                  const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
+                  if (Number.isFinite(raw) && raw > 0) return it
+                  const hit = (terminalCartLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
+                  if (!hit) return it
+                  const q = resolveCartLineQuantityForSave(hit as { quantity?: unknown; qty?: unknown })
+                  return { ...it, quantity: q }
+                })
+                const incomingItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                 let savedOrderNo = ''
                 let savedOrderId: number | null = null
                 let queuedLocalOrderNo: string | null = null
+                if (Number.isFinite(existingOrderId) && existingOrderId > 0 && !existingOrder) {
+                  await appAlert(t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
+                  return
+                }
                 if (isAddOrder && existingOrder) {
                   const mergedItems = [
-                    ...existingOrder.items.map((it) => ({
-                      id: it.id,
-                      name: it.name,
-                      price: it.price,
-                      qty: it.quantity || 1,
-                      ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-                      ...(it.promoId
-                        ? {
-                            promoId: it.promoId,
-                            ...(it.promoCode ? { promoCode: it.promoCode } : {}),
-                            ...(Array.isArray((it as { promoItems?: unknown }).promoItems) &&
-                            ((it as { promoItems: unknown[] }).promoItems?.length ?? 0) > 0
-                              ? {
-                                  promoItems: (it as {
-                                    promoItems: { menuId: string; optionId: string | null; quantity: number }[]
-                                  }).promoItems,
-                                }
-                              : {}),
-                          }
-                        : {}),
-                      ...(it.servedAt ? { servedAt: it.servedAt } : {}),
-                      ...(it.servedBy ? { servedBy: it.servedBy } : {}),
-                      ...(it.cancelledAt ? { cancelledAt: it.cancelledAt } : {}),
-                      ...(it.cancelledBy ? { cancelledBy: it.cancelledBy } : {}),
-                      ...(it.cancelReason ? { cancelReason: it.cancelReason } : {}),
-                    })),
+                    ...existingOrder.items.map((it) => {
+                      const q = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
+                      return {
+                        id: it.id,
+                        name: it.name,
+                        price: it.price,
+                        qty: q,
+                        quantity: q,
+                        ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+                        ...(it.promoId
+                          ? {
+                              promoId: it.promoId,
+                              ...(it.promoCode ? { promoCode: it.promoCode } : {}),
+                              ...(Array.isArray((it as { promoItems?: unknown }).promoItems) &&
+                              ((it as { promoItems: unknown[] }).promoItems?.length ?? 0) > 0
+                                ? {
+                                    promoItems: (it as {
+                                      promoItems: { menuId: string; optionId: string | null; quantity: number }[]
+                                    }).promoItems,
+                                  }
+                                : {}),
+                            }
+                          : {}),
+                        ...(it.servedAt ? { servedAt: it.servedAt } : {}),
+                        ...(it.servedBy ? { servedBy: it.servedBy } : {}),
+                        ...(it.cancelledAt ? { cancelledAt: it.cancelledAt } : {}),
+                        ...(it.cancelledBy ? { cancelledBy: it.cancelledBy } : {}),
+                        ...(it.cancelReason ? { cancelReason: it.cancelReason } : {}),
+                      }
+                    }),
                     ...incomingItems,
                   ]
                   if (isMainPosDevice) {
                     mainPosSelfDineInUpdateSuppressUntilRef.current.set(existingOrderId, Date.now() + 12_000)
                   }
-                  const res = await updatePosOrder({
+                  const updateReq = {
                     id: existingOrderId,
                     items: mergedItems,
                     tableName: payload.tableName,
                     memo: payload.memo,
                     discountAmt: payload.discountAmt ?? 0,
                     discountReason: payload.discountReason ?? '',
+                    serviceAmt: payload.serviceAmt ?? 0,
+                    serviceReason: payload.serviceReason ?? '',
                     memberId: payload.memberId,
                     memberNo: payload.memberNo,
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
+                    pointEarned: 0,
                     guestCount: payload.guestCount ?? existingOrder.guestCount,
                     paymentCash: 0,
                     paymentCard: 0,
@@ -4761,7 +4843,8 @@ export default function PosTerminalPage() {
                     paymentDeliveryApp: 0,
                     deliveryPaymentChannel: null,
                     pricingAdjustments,
-                  })
+                  }
+                  const res = await updatePosOrder(updateReq)
                   if (!res.success) {
                     const msg = localizeApiPopupMessage(res.message, t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
                     await appAlert(msg)
@@ -4770,7 +4853,7 @@ export default function PosTerminalPage() {
                   savedOrderId = existingOrderId
                   savedOrderNo = existingOrder.orderNo ?? ''
                 } else {
-                  const res = await savePosOrderWithOffline({
+                  const saveReq = {
                     storeCode: currentStoreId,
                     createdBy: auth?.user ?? '',
                     orderType: 'dine_in',
@@ -4795,7 +4878,8 @@ export default function PosTerminalPage() {
                     deliveryPaymentChannel: null,
                     pricingAdjustments,
                     items: incomingItems,
-                  })
+                  }
+                  const res = await savePosOrderWithOffline(saveReq)
                   if (!res.success) {
                     const msg = localizeApiPopupMessage((res as { message?: string }).message, t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
                     await appAlert(msg)
@@ -4838,7 +4922,7 @@ export default function PosTerminalPage() {
                   id: String(it.id ?? ''),
                   name: String(it.name ?? ''),
                   price: Number(it.price ?? 0),
-                  qty: Math.max(1, Number(it.qty ?? 1) || 1),
+                  qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
                   ...(String((it as { note?: string }).note ?? '').trim()
                     ? { note: String((it as { note?: string }).note).trim() }
                     : {}),
@@ -4858,7 +4942,7 @@ export default function PosTerminalPage() {
                           id: String(it.id),
                           name: it.name,
                           price: it.price,
-                          qty: Math.max(1, it.quantity || 1),
+                          qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
                           ...(it.note?.trim() ? { note: it.note.trim() } : {}),
                           ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
                             ? {
@@ -4937,7 +5021,7 @@ export default function PosTerminalPage() {
                       id: i.id,
                       name: i.name,
                       price: i.price,
-                      qty: i.quantity || 1,
+                      qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
                       ...(menuId ? { menuId } : {}),
                       ...(note ? { note } : {}),
                       ...(promoId ? { promoId } : {}),
@@ -5070,7 +5154,10 @@ export default function PosTerminalPage() {
                   )
                   if (idset.size > 0) dineInRemoteItemIdsSnapshotRef.current.set(savedOrderId, idset)
                 }
-                if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
+                if (savedOrderId != null) {
+                  setPendingDineInOrderId(savedOrderId)
+                  pendingDineInOrderTableRef.current = String(payload.tableName ?? '').trim()
+                }
                 setServingTableId(null)
                 setSelectedTableId(null)
                 await refetchCurrentStore()
@@ -5090,6 +5177,7 @@ export default function PosTerminalPage() {
                 if (isPosDemo) {
                   setPendingReceiptOrderNo(null)
                   setPendingDineInOrderId(null)
+                  pendingDineInOrderTableRef.current = ''
                   setDemoDineInOrder(null)
                   setServingTableId(null)
                   setSelectedTableId(null)
@@ -5288,6 +5376,7 @@ export default function PosTerminalPage() {
                 }
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
+                pendingDineInOrderTableRef.current = ''
                 setServingTableId(null)
                 setSelectedTableId(null)
                 await refetchCurrentStore()
@@ -5449,7 +5538,7 @@ export default function PosTerminalPage() {
                       id: i.id,
                       name: i.name,
                       price: i.price,
-                      qty: i.quantity || 1,
+                      qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
                       ...(menuId ? { menuId } : {}),
                       ...(note ? { note } : {}),
                       ...(promoId ? { promoId } : {}),
@@ -6266,6 +6355,13 @@ export default function PosTerminalPage() {
               }
               onAddOrder={() => {
                 if (!servingTableId) return
+                if (servingTable?.order?.id != null) {
+                  const sid = Number(servingTable.order.id)
+                  if (Number.isFinite(sid) && sid > 0) {
+                    setPendingDineInOrderId(sid)
+                    pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
+                  }
+                }
                 setServingTableId(null)
                 setSelectedTableId(servingTableId)
               }}
@@ -6276,6 +6372,7 @@ export default function PosTerminalPage() {
                 }
                 if (!servingTableId || !servingTable?.order) return
                 setPendingDineInOrderId(Number(servingTable.order.id))
+                pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
                 setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
                 setPendingPayRequest({
                   tableName: servingTable.name,

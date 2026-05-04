@@ -8259,6 +8259,8 @@ export interface PosOrderItem {
   name: string
   price: number
   qty: number
+  /** 일부 `items_json`·연동은 quantity 만 사용 (서버/클라이언트에서 qty 와 병용 해석) */
+  quantity?: number
   /** 줄 단위 메모 (주방·영수증) */
   note?: string
   servedAt?: string | null
