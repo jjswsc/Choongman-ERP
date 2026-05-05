@@ -429,6 +429,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setLinkposSummary(linkpos ?? null)
         const single = Array.isArray(s) ? s[0] : s
         if (single) {
+          const preferLiveAuto = !Boolean(single.closed)
           setSettlement(single)
           setCashActual(single.cashActual != null ? String(single.cashActual) : '')
           if (openMode) {
@@ -440,17 +441,37 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           } else {
             setCashAmt(formatBahtAmountForField(autoCashTotal))
           }
-          setCardAmt(formatBahtAmountForField(single.cardAmt ?? 0))
-          setQrAmt(formatBahtAmountForField(single.qrAmt ?? 0))
-          setDeliveryAppAmt(formatBahtAmountForField(single.deliveryAppAmt ?? 0))
-          setOtherAmt(formatBahtAmountForField(single.otherAmt ?? 0))
+          const nextCardAmt = preferLiveAuto
+            ? cardAmtFallbackFromPos > 0
+              ? cardAmtFallbackFromPos
+              : Number(single.cardAmt ?? 0)
+            : Number(single.cardAmt ?? 0)
+          const nextQrAmt = preferLiveAuto
+            ? autoQrTotal > 0
+              ? autoQrTotal
+              : Number(single.qrAmt ?? 0)
+            : Number(single.qrAmt ?? 0)
+          const nextDeliveryAmt = preferLiveAuto
+            ? autoDeliveryTotal > 0
+              ? autoDeliveryTotal
+              : Number(single.deliveryAppAmt ?? 0)
+            : Number(single.deliveryAppAmt ?? 0)
+          const nextOtherAmt = preferLiveAuto
+            ? autoOtherTotal > 0
+              ? autoOtherTotal
+              : Number(single.otherAmt ?? 0)
+            : Number(single.otherAmt ?? 0)
+          setCardAmt(formatBahtAmountForField(nextCardAmt))
+          setQrAmt(formatBahtAmountForField(nextQrAmt))
+          setDeliveryAppAmt(formatBahtAmountForField(nextDeliveryAmt))
+          setOtherAmt(formatBahtAmountForField(nextOtherAmt))
           const cb: Record<string, string> = {}
           CARD_KEYS.forEach((k) => {
             cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
           })
           const autoCb = buildAutoBreakdown(autoCardMap, CARD_KEYS, { allowExtra: false })
           const cardBreakdownEmpty = isBreakdownEmpty(cb)
-          const cardAutoApplied = cardBreakdownEmpty && autoCardTotal > 0
+          const cardAutoApplied = (preferLiveAuto || cardBreakdownEmpty) && autoCardTotal > 0
           setCardBreakdown(
             mapBreakdownStringsToBahtDisplay(cardAutoApplied ? autoCb : cb)
           )
@@ -462,7 +483,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const hydrated = hydrateSettlementQrOtherBreakdowns(single, qk, ok)
           const autoQb = buildAutoBreakdown(autoQrMap, qk, { allowExtra: true })
           const qrBreakdownEmpty = isBreakdownEmpty(hydrated.qrBreakdown)
-          const qrAutoApplied = qrBreakdownEmpty && autoQrTotal > 0
+          const qrAutoApplied = (preferLiveAuto || qrBreakdownEmpty) && autoQrTotal > 0
           setQrBreakdown(
             mapBreakdownStringsToBahtDisplay(qrAutoApplied ? autoQb : hydrated.qrBreakdown)
           )
@@ -472,7 +493,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setOtherBreakdown(mapBreakdownStringsToBahtDisplay(hydrated.otherBreakdown))
           const hydratedOtherEmpty = isBreakdownEmpty(hydrated.otherBreakdown)
           const autoOtherBreakdownNext = buildAutoBreakdown(autoOtherMap, ok, { allowExtra: true })
-          const otherAutoApplied = hydratedOtherEmpty && autoOtherTotal > 0
+          const otherAutoApplied = (preferLiveAuto || hydratedOtherEmpty) && autoOtherTotal > 0
           if (otherAutoApplied) {
             setOtherBreakdown(mapBreakdownStringsToBahtDisplay(autoOtherBreakdownNext))
           }
@@ -487,7 +508,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           })
           const autoDb = buildAutoBreakdown(autoDeliveryMap, platformKeys, { allowExtra: true })
           const deliveryBreakdownEmpty = isBreakdownEmpty(db)
-          const deliveryAutoApplied = deliveryBreakdownEmpty && autoDeliveryTotal > 0
+          const deliveryAutoApplied = (preferLiveAuto || deliveryBreakdownEmpty) && autoDeliveryTotal > 0
           setDeliveryAppBreakdown(
             mapBreakdownStringsToBahtDisplay(deliveryAutoApplied ? autoDb : db)
           )
@@ -522,7 +543,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           const dineInBreakdownEmpty = isBreakdownEmpty(di)
           setDineInDeliveryBreakdown(
             mapBreakdownStringsToBahtDisplay(
-              dineInBreakdownEmpty && autoDineInTotal > 0
+              (preferLiveAuto || dineInBreakdownEmpty) && autoDineInTotal > 0
                 ? buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: true })
                 : di
             )

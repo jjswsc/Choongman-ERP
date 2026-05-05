@@ -85,6 +85,7 @@ function classifyLinkposTender(
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const settleDate = String(searchParams.get('settleDate') || searchParams.get('date') || '').trim()
   const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()

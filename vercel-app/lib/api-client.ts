@@ -8605,7 +8605,7 @@ export async function getPosSettlement(params: {
   const q = new URLSearchParams()
   q.set('settleDate', params.settleDate)
   if (params.storeCode) q.set('storeCode', params.storeCode)
-  const res = await apiFetchWithOffline('/api/getPosSettlement?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosSettlement?' + q.toString(), { cache: 'no-store' })
   return res.json() as Promise<{
     systemTotal: number
     systemSubtotal?: number
