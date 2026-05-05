@@ -880,6 +880,11 @@ export const i18n = {
     inHistBulkPrint: '선택 인쇄',
     inHistBulkExcel: '선택 엑셀',
     inHistRowCheckbox: '이 입고 행 선택',
+    inInvoiceMenuView: '보기',
+    inTaxInvoicePreviewBtn: 'Tax Invoice 미리보기(확인용)',
+    inTaxInvoicePreviewHint:
+      '세무 신고용 인쇄·엑셀은 제공하지 않습니다. 화면에서만 확인할 수 있습니다(중복 신고 방지).',
+    inInvoicePreviewTitle: '입고 · PO / 인보이스',
     inPrintDocSubtitle: '입고 확인',
     inPrintRefLabel: '기준일',
     inPrintFooterLeft: '본 문서는 시스템에서 출력되었습니다.',
@@ -8438,6 +8443,11 @@ Only matters the employee must handle personally on a working day:
     inHistBulkPrint: 'Print selected',
     inHistBulkExcel: 'Excel (selected)',
     inHistRowCheckbox: 'Select this inbound row',
+    inInvoiceMenuView: 'View',
+    inTaxInvoicePreviewBtn: 'Tax Invoice preview (on-screen only)',
+    inTaxInvoicePreviewHint:
+      'Print and Excel are not available from here to reduce duplicate filing risk. On-screen preview only.',
+    inInvoicePreviewTitle: 'Inbound · PO / Invoice',
     inPrintDocSubtitle: 'Confirmation',
     inPrintRefLabel: 'Reference date',
     inPrintFooterLeft: 'This document was generated electronically.',

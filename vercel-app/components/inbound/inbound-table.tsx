@@ -7,7 +7,6 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-
 export interface InboundTableRow {
   id: string
   date: string
@@ -37,9 +36,20 @@ interface InboundTableProps {
   /** 선택한 여러 입고 건을 한 파일로 엑셀 저장 */
   onBulkExcel?: (rows: InboundTableRow[]) => void
   updatingInvoiceId?: number | null
+  /** 가맹점: Tax Invoice 화면 미리보기 전용(인쇄·파일 없음) */
+  franchiseTaxInvoicePreview?: (row: InboundTableRow) => void
 }
 
 type OfficeSortKey = "poDate" | "inboundDate" | "vendor" | "item" | "qty" | "amount" | "vat" | "total" | "poInvoice"
+
+function formatPoInvoiceDisplay(row: InboundTableRow): string {
+  const po = String(row.poNo || "").trim()
+  const inv = String(row.invoiceNo || "").trim()
+  if (po && inv) return `${po} / ${inv}`
+  if (po) return po
+  if (inv) return inv
+  return ""
+}
 
 export function InboundTable({
   rows,
@@ -52,6 +62,7 @@ export function InboundTable({
   onBulkPrint,
   onBulkExcel,
   updatingInvoiceId = null,
+  franchiseTaxInvoicePreview,
 }: InboundTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -121,7 +132,7 @@ export function InboundTable({
           diff = a.totalAmt + a.totalVat - (b.totalAmt + b.totalVat)
           break
         case "poInvoice":
-          diff = compareString(`${a.poNo || ""} / ${a.invoiceNo || ""}`, `${b.poNo || ""} / ${b.invoiceNo || ""}`)
+          diff = compareString(formatPoInvoiceDisplay(a), formatPoInvoiceDisplay(b))
           break
         default:
           diff = 0
@@ -320,6 +331,7 @@ export function InboundTable({
                   onPrint={onPrint}
                   onExcel={onExcel}
                   updatingInvoiceId={updatingInvoiceId}
+                  franchiseTaxInvoicePreview={franchiseTaxInvoicePreview}
                   t={t}
                 />
               ))
@@ -345,6 +357,7 @@ function TableRow({
   onPrint,
   onExcel,
   updatingInvoiceId,
+  franchiseTaxInvoicePreview,
   t,
 }: {
   row: InboundTableRow
@@ -360,6 +373,7 @@ function TableRow({
   onPrint?: (row: InboundTableRow) => void
   onExcel?: (row: InboundTableRow) => void
   updatingInvoiceId?: number | null
+  franchiseTaxInvoicePreview?: (row: InboundTableRow) => void
   t: (k: string) => string
 }) {
   const hasDetails = row.items.length > 1
@@ -406,8 +420,35 @@ function TableRow({
         <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{row.totalAmt.toLocaleString()}</td>
         <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{row.totalVat.toLocaleString()}</td>
         <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{(row.totalAmt + row.totalVat).toLocaleString()}</td>
-        <td className="px-2 py-2.5 text-center text-muted-foreground text-xs">
-          {row.invoiceNo ? <span className="text-card-foreground" title={row.invoiceNo}>{row.invoiceNo}</span> : "—"}
+        <td className="px-2 py-2.5 text-center text-muted-foreground text-xs max-w-[140px]" onClick={(e) => e.stopPropagation()}>
+          {franchiseTaxInvoicePreview ? (
+            <button
+              type="button"
+              onClick={() => franchiseTaxInvoicePreview(row)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-xs leading-none shadow-sm transition-colors hover:bg-accent"
+              title={`${t("inTaxInvoicePreviewBtn")}${formatPoInvoiceDisplay(row) ? ` — ${formatPoInvoiceDisplay(row)}` : ""}`}
+              aria-label={
+                formatPoInvoiceDisplay(row)
+                  ? `${t("posReceiptTaxInvoice")}: ${formatPoInvoiceDisplay(row)}`
+                  : t("posReceiptTaxInvoice")
+              }
+            >
+              <span aria-hidden className="inline-block scale-90 text-[13px] leading-none">
+                🧾
+              </span>
+            </button>
+          ) : (
+            (() => {
+              const s = formatPoInvoiceDisplay(row)
+              return s ? (
+                <span className="text-card-foreground truncate inline-block max-w-full align-middle" title={s}>
+                  {s}
+                </span>
+              ) : (
+                "—"
+              )
+            })()
+          )}
         </td>
         {(canEdit || canDelete || canInvoiceToggle || canPrint || canExcel) && (
           <td className="px-2 py-2.5 min-w-[10rem]">

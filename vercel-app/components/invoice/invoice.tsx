@@ -91,11 +91,14 @@ export function Invoice({
   onPrint,
   onDownloadPdf,
   printOnly = false,
+  /** ERP 다이얼로그 안 미리보기 — 전체 높이·여백 축소 */
+  embedded = false,
 }: {
   data: InvoiceData
   onPrint?: () => void
   onDownloadPdf?: () => void
   printOnly?: boolean
+  embedded?: boolean
 }) {
   const handlePrint = () => {
     if (onPrint) {
@@ -106,7 +109,14 @@ export function Invoice({
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-8 print:bg-white print:p-0 print:min-h-0">
+    <div
+      className={cn(
+        embedded
+          ? "min-h-0 bg-slate-100 p-2 sm:p-4"
+          : "min-h-screen bg-slate-100 p-4 md:p-8",
+        "print:bg-white print:p-0 print:min-h-0"
+      )}
+    >
         {!printOnly && (onPrint || onDownloadPdf) && (
         <div className="no-print max-w-4xl mx-auto mb-4 flex gap-2">
           <Button onClick={handlePrint} className="gap-2">

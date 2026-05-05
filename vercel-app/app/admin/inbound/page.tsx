@@ -27,9 +27,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Invoice, type InvoiceData } from "@/components/invoice"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -45,6 +47,8 @@ import {
   updateInboundBatch,
   deleteInboundBatch,
   getItemsByVendor,
+  getInvoiceData,
+  getInvoiceSettings,
   useStoreList,
   type AdminItem,
   type AdminVendor,
@@ -66,6 +70,8 @@ import {
   type InboundPrintBatchInput,
 } from "@/lib/inbound-print-html"
 import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/inbound-excel-html"
+import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
+import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -151,6 +157,8 @@ export default function InboundPage() {
   const [summaryItemSortBy, setSummaryItemSortBy] = React.useState<"qty" | "amount">("amount")
   const [summaryItemSortDir, setSummaryItemSortDir] = React.useState<"asc" | "desc">("desc")
   const [fromPoId, setFromPoId] = React.useState<number | null>(null)
+  const [taxInvoicePreviewOpen, setTaxInvoicePreviewOpen] = React.useState(false)
+  const [taxInvoicePreviewData, setTaxInvoicePreviewData] = React.useState<InvoiceData | null>(null)
 
   const searchParams = useSearchParams()
   const { stores: storeList } = useStoreList()
@@ -709,7 +717,26 @@ export default function InboundPage() {
       const bankId = i.bank_transaction_id
       const k = bankId ? `banktx-${bankId}` : batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
-        g[k] = { date: i.date, po_created_at: i.po_created_at, vendor: i.vendor, totalQty: 0, totalAmt: 0, totalVat: 0, items: [], inbound_batch_id: batchId, po_no: i.po_no, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
+        g[k] = {
+          date: i.date,
+          po_created_at: i.po_created_at ?? null,
+          vendor: i.vendor,
+          totalQty: 0,
+          totalAmt: 0,
+          totalVat: 0,
+          items: [],
+          inbound_batch_id: batchId ?? null,
+          po_no: i.po_no ?? null,
+          invoice_no: i.invoice_no ?? null,
+          invoice_received: Boolean(i.invoice_received),
+        }
+      } else {
+        const cur = g[k]
+        if (!cur.po_no?.trim() && (i.po_no || "").trim()) cur.po_no = i.po_no ?? null
+        if (!cur.invoice_no?.trim() && (i.invoice_no || "").trim()) cur.invoice_no = i.invoice_no ?? null
+        if (!cur.po_created_at && i.po_created_at) cur.po_created_at = i.po_created_at
+        cur.invoice_received = Boolean(cur.invoice_received) || Boolean(i.invoice_received)
+        if (cur.inbound_batch_id == null && batchId != null) cur.inbound_batch_id = batchId
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
@@ -945,7 +972,8 @@ export default function InboundPage() {
     [fetchHistory, t]
   )
 
-  const printInbound = React.useCallback(
+  /** 본사 단건 인쇄·가맹 🧾 보기 미리보기 — 동일 HTML (`buildInboundPrintHtmlSingle`) */
+  const getInboundPrintHtmlForRow = React.useCallback(
     (row: InboundTableRow) => {
       const locale = {
         ko: "ko-KR",
@@ -960,7 +988,7 @@ export default function InboundPage() {
       const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
       const vatLabel = t("posVatLabel") || "VAT"
       const totalLabel = t("inv_total") || t("total") || "Total"
-      const html = buildInboundPrintHtmlSingle(inboundTableRowToPrintBatch(row), {
+      return buildInboundPrintHtmlSingle(inboundTableRowToPrintBatch(row), {
         locale,
         lang,
         t,
@@ -968,6 +996,13 @@ export default function InboundPage() {
         vatLabel,
         totalLabel,
       })
+    },
+    [lang, t]
+  )
+
+  const printInbound = React.useCallback(
+    (row: InboundTableRow) => {
+      const html = getInboundPrintHtmlForRow(row)
       const w = window.open("", "_blank")
       if (w) {
         w.document.write(html)
@@ -979,10 +1014,11 @@ export default function InboundPage() {
         }, 300)
       }
     },
-    [lang, t]
+    [getInboundPrintHtmlForRow]
   )
 
-  const exportInboundExcel = React.useCallback(
+  /** 본사·가맹 단건 엑셀 — 동일 `buildInboundExcelHtmlSingle` (매장 컨텍스트는 역할에 따라 분기) */
+  const getInboundExcelHtmlForRow = React.useCallback(
     (row: InboundTableRow) => {
       const locale = {
         ko: "ko-KR",
@@ -1002,7 +1038,7 @@ export default function InboundPage() {
       const storeLabelRaw = isOffice
         ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
         : (auth?.store?.trim() || t("store") || "Store")
-      const html = buildInboundExcelHtmlSingle(inboundTableRowToPrintBatch(row), {
+      return buildInboundExcelHtmlSingle(inboundTableRowToPrintBatch(row), {
         locale,
         t,
         supplyLabel,
@@ -1012,6 +1048,16 @@ export default function InboundPage() {
         periodLabel,
         storeContext: storeLabelRaw,
       })
+    },
+    [t, lang, histStart, histEnd, isOffice, histStore, auth?.store]
+  )
+
+  const exportInboundExcel = React.useCallback(
+    (row: InboundTableRow) => {
+      const storeLabelRaw = isOffice
+        ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
+        : (auth?.store?.trim() || t("store") || "Store")
+      const html = getInboundExcelHtmlForRow(row)
       const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -1024,7 +1070,40 @@ export default function InboundPage() {
       a.click()
       URL.revokeObjectURL(url)
     },
-    [t, lang, histStart, histEnd, isOffice, histStore, auth?.store]
+    [getInboundExcelHtmlForRow, isOffice, histStore, t, auth?.store, histStart, histEnd]
+  )
+
+  /** 가맹점 🧾 — 출고·미수금과 동일 Tax Invoice (`/admin/invoice-print` + vendors 매출처 마스터) */
+  const prepareFranchiseTaxInvoiceData = React.useCallback(
+    async (row: InboundTableRow) => {
+      try {
+        const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
+        const company = invoiceDataRes?.company ?? null
+        const clients = invoiceDataRes?.clients ?? {}
+        const settings =
+          typeof invSettings === "object" && invSettings !== null ? (invSettings as Record<string, string>) : {}
+        const storeTarget = String(auth?.store || "").trim()
+        const client = resolveInvoiceClientForTarget(storeTarget, company, clients)
+        return buildInboundTaxInvoiceData({ row, company, client, invSettings: settings })
+      } catch (e) {
+        console.error(e)
+        return null
+      }
+    },
+    [auth?.store]
+  )
+
+  const openFranchiseTaxInvoicePreview = React.useCallback(
+    async (row: InboundTableRow) => {
+      const data = await prepareFranchiseTaxInvoiceData(row)
+      if (!data) {
+        await appAlert(t("invLoadFailed"))
+        return
+      }
+      setTaxInvoicePreviewData(data)
+      setTaxInvoicePreviewOpen(true)
+    },
+    [prepareFranchiseTaxInvoiceData, t]
   )
 
   const printInboundBulk = React.useCallback(
@@ -1403,8 +1482,30 @@ export default function InboundPage() {
                 onBulkPrint={printInboundBulk}
                 onBulkExcel={exportInboundExcelBulk}
                 updatingInvoiceId={updatingInvoiceId}
+                franchiseTaxInvoicePreview={!isOffice ? openFranchiseTaxInvoicePreview : undefined}
               />
             </div>
+            <Dialog
+              open={taxInvoicePreviewOpen}
+              onOpenChange={(open) => {
+                setTaxInvoicePreviewOpen(open)
+                if (!open) setTaxInvoicePreviewData(null)
+              }}
+            >
+              <DialogContent className="flex max-h-[92vh] max-w-5xl w-[95vw] flex-col gap-0 overflow-hidden p-0">
+                <DialogHeader className="shrink-0 border-b px-4 py-3 text-left">
+                  <DialogTitle>{t("posReceiptTaxInvoice")}</DialogTitle>
+                  <DialogDescription className="text-xs leading-relaxed">
+                    {t("inTaxInvoicePreviewHint")}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  {taxInvoicePreviewData ? (
+                    <Invoice data={taxInvoicePreviewData} printOnly embedded />
+                  ) : null}
+                </div>
+              </DialogContent>
+            </Dialog>
             <InboundEditDialog
               open={!!editingRow}
               onOpenChange={(open) => !open && setEditingRow(null)}

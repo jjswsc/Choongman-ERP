@@ -2,6 +2,8 @@
 
 import "./invoice-print.css"
 import * as React from "react"
+import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Invoice, type InvoiceData } from "@/components/invoice"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,7 +41,9 @@ function buildOverrideCode(refType: string, refId: number, docKind: "invoice" | 
   return `invoice_print_override:${docKind}:${String(refType || "").trim()}:${refId}`
 }
 
-export default function InvoicePrintPage() {
+function InvoicePrintPageInner() {
+  const searchParams = useSearchParams()
+  const embed = searchParams.get("embed") === "1"
   const [editDatas, setEditDatas] = React.useState<InvoiceData[]>([])
   const [loaded, setLoaded] = React.useState(false)
   const [updating, setUpdating] = React.useState(false)
@@ -173,6 +177,7 @@ export default function InvoicePrintPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 print:bg-white">
+      {!embed && (
       <div className="no-print fixed inset-x-0 bottom-0 z-[9999] border-t bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-6xl p-3 space-y-3">
           <div className="flex items-center gap-3">
@@ -242,7 +247,8 @@ export default function InvoicePrintPage() {
           </div>
         </div>
       </div>
-      <div className="invoice-print-wrapper pb-[40vh] print:pb-0 max-w-4xl mx-auto print:max-w-full print:mx-0 print:px-0">
+      )}
+      <div className={`invoice-print-wrapper ${embed ? "pb-4" : "pb-[40vh] print:pb-0"} max-w-4xl mx-auto print:max-w-full print:mx-0 print:px-0`}>
         {editDatas.map((data, i) => (
           <div key={data.documentNo + "-" + i} className={`${i > 0 ? "break-before-page" : ""} pt-4`}>
             <Invoice data={data} />
@@ -250,5 +256,19 @@ export default function InvoicePrintPage() {
         ))}
       </div>
     </div>
+  )
+}
+
+export default function InvoicePrintPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center p-8">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      }
+    >
+      <InvoicePrintPageInner />
+    </Suspense>
   )
 }
