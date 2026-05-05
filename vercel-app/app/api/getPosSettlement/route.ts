@@ -3,6 +3,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
+import { isPosPaidLikeStatus } from '@/lib/pos-order-policy'
 import { fromHex, parseHypercomFrame } from '@/lib/payments/hypercom-v2'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 
@@ -177,7 +178,6 @@ export async function GET(request: NextRequest) {
       linkpos_approved_amount?: number
     }[] | null
 
-    const completedStatuses = ['completed', 'paid', 'ready']
     let systemTotal = 0
     let systemSubtotal = 0
     let systemVat = 0
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
     }
 
     for (const o of orders || []) {
-      if (!completedStatuses.includes(o.status || '')) continue
+      if (!isPosPaidLikeStatus(String(o.status ?? ''))) continue
       systemTotal += Number(o.total) || 0
       systemSubtotal += Number(o.subtotal ?? o.total) || 0
       systemVat += Number(o.vat ?? 0) || 0
