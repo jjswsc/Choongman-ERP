@@ -52,7 +52,8 @@ interface WorklogMyProps {
 export function WorklogMy({ userName }: WorklogMyProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const [dateStr, setDateStr] = React.useState(() => getBangkokTodayDateString())
+  const [startStr, setStartStr] = React.useState(() => getBangkokTodayDateString())
+  const [endStr, setEndStr] = React.useState(() => getBangkokTodayDateString())
   const [selectedStaff, setSelectedStaff] = React.useState(userName)
   const [staffList, setStaffList] = React.useState<{ id: number; name: string; displayName: string }[]>([])
   const [_data, setData] = React.useState<WorkLogData | null>(null)
@@ -102,7 +103,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     if (!selectedStaff) return
     setLoading(true)
     try {
-      const res = await getWorkLogData({ dateStr, name: selectedStaff })
+      const res = await getWorkLogData({ dateStr: endStr, name: selectedStaff })
       setData(res)
       setLocalFinish(res.finish || [])
       setLocalContinue((res.continueItems || []).map((it) => ({ ...it, progress: 0 })))
@@ -115,7 +116,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     } finally {
       setLoading(false)
     }
-  }, [dateStr, selectedStaff])
+  }, [endStr, selectedStaff])
 
   const handleSearch = () => {
     setHasSearched(true)
@@ -287,7 +288,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         ...localToday.map((it) => ({ ...it, type: undefined })),
       ].filter((it) => it.content || it.id)
       const res = await saveWorkLogData({
-        date: dateStr,
+        date: endStr,
         name: selectedStaff,
         logs: allLogs,
       })
@@ -311,7 +312,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     try {
       const toClose = [...localContinue, ...localToday].filter((it) => it.content || it.id)
       const res = await submitDailyClose({
-        date: dateStr,
+        date: endStr,
         name: selectedStaff,
         logs: toClose,
       })
@@ -337,14 +338,23 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-              {t("workLogDate")}
+              {t("workLogPeriod")}
             </label>
-            <Input
-              type="date"
-              value={dateStr}
-              onChange={(e) => { setDateStr(e.target.value); setHasSearched(false) }}
-              className="h-9 w-40 text-xs"
-            />
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                value={startStr}
+                onChange={(e) => { setStartStr(e.target.value); setHasSearched(false) }}
+                className="h-9 w-32 text-xs shrink-0"
+              />
+              <span className="text-xs text-muted-foreground shrink-0">~</span>
+              <Input
+                type="date"
+                value={endStr}
+                onChange={(e) => { setEndStr(e.target.value); setHasSearched(false) }}
+                className="h-9 w-32 text-xs shrink-0"
+              />
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">

@@ -43,9 +43,9 @@ export async function GET(request: NextRequest) {
       payment_other_breakdown?: unknown
       payment_delivery_app?: number
       delivery_payment_channel?: string | null
+      order_type?: string | null
       total?: number
       status?: string
-      order_type?: string
       store_code?: string
     }[]
 
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     const byMethod: Record<string, number> = {}
     for (const r of rows) {
-      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
+      if (!rowMatchesOrderFilter(r.order_type ?? undefined, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
       const cash = Number(r.payment_cash) || 0
       const card = Number(r.payment_card) || 0
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
       const other = Number(r.payment_other) || 0
       const deliveryApp = Number(r.payment_delivery_app) || 0
       const deliveryCh = String(r.delivery_payment_channel ?? '').trim().toLowerCase()
+      const orderType = String(r.order_type ?? '').trim().toLowerCase()
       if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
       if (card > 0) byMethod.card = (byMethod.card || 0) + card
       if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
@@ -89,10 +90,11 @@ export async function GET(request: NextRequest) {
       }
       if (deliveryApp > 0) {
         byMethod.delivery_app = (byMethod.delivery_app || 0) + deliveryApp
-        if (deliveryCh === 'grab') byMethod.delivery_grab = (byMethod.delivery_grab || 0) + deliveryApp
+        if (orderType === 'dine_in' || deliveryCh === 'dine_in') {
+          byMethod.delivery_dine_in = (byMethod.delivery_dine_in || 0) + deliveryApp
+        } else if (deliveryCh === 'grab') byMethod.delivery_grab = (byMethod.delivery_grab || 0) + deliveryApp
         else if (deliveryCh === 'lineman') byMethod.delivery_lineman = (byMethod.delivery_lineman || 0) + deliveryApp
         else if (deliveryCh === 'shopee') byMethod.delivery_shopee = (byMethod.delivery_shopee || 0) + deliveryApp
-        else if (deliveryCh === 'dine_in') byMethod.delivery_dine_in = (byMethod.delivery_dine_in || 0) + deliveryApp
         else byMethod.delivery_unknown = (byMethod.delivery_unknown || 0) + deliveryApp
       }
     }

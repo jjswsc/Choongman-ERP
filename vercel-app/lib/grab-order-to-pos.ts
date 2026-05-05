@@ -186,6 +186,14 @@ function extractReadableOptionsFromItemText(item: Record<string, unknown>): stri
   return out
 }
 
+function buildModifierPriceSignature(mod: Record<string, unknown>): string {
+  const id = String(mod.id ?? mod.modifierID ?? mod.modifierId ?? mod.optionID ?? mod.optionId ?? '').trim()
+  const name = String(mod.name ?? mod.title ?? mod.label ?? '').trim().toLowerCase()
+  const price = Number(mod.price ?? mod.amount ?? mod.totalPrice ?? 0) || 0
+  const qty = Math.max(1, Math.trunc(Number(mod.quantity ?? mod.qty ?? 1) || 1))
+  return `${id}|${name}|${price}|${qty}`
+}
+
 function normalizeStoreCodeCandidate(raw: string): string {
   const s = String(raw || '').trim()
   if (!s) return ''
@@ -269,10 +277,113 @@ function resolveEcoCutlerySummary(order: Record<string, unknown>): string | null
   return found ? 'eco:plastic cutlery requested' : 'eco:no plastic cutlery requested'
 }
 
-function buildPosItems(order: Record<string, unknown>): PosItem[] {
+async function loadPosMenuNameById(): Promise<Map<number, string>> {
+  try {
+    const rows = (await supabaseSelectFilter('pos_menus', 'id=gt.0', {
+      limit: 20000,
+      select: 'id,name',
+      order: 'id.asc',
+    })) as { id?: number; name?: string }[] | null
+    const out = new Map<number, string>()
+    for (const row of rows || []) {
+      const id = Number(row.id ?? 0)
+      const name = String(row.name ?? '').trim()
+      if (id > 0 && name) out.set(id, name)
+    }
+    return out
+  } catch {
+    return new Map<number, string>()
+  }
+}
+
+function extractReadableNamesFromMachineIds(
+  item: Record<string, unknown>,
+  menuNameById: Map<number, string>
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const visited = new Set<unknown>()
+  const queue: Array<{ key: string; value: unknown; depth: number }> = [{ key: '', value: item, depth: 0 }]
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (!node) break
+    const { key, value, depth } = node
+    if (depth > 4 || value == null) continue
+    if (typeof value === 'object') {
+      if (visited.has(value)) continue
+      visited.add(value)
+      if (Array.isArray(value)) {
+        for (const x of value) queue.push({ key, value: x, depth: depth + 1 })
+        continue
+      }
+      const rec = asRecord(value)
+      for (const [kRaw, v] of Object.entries(rec)) {
+        const k = String(kRaw || '').trim().toLowerCase()
+        queue.push({ key: k, value: v, depth: depth + 1 })
+      }
+      continue
+    }
+    const keyLikeId =
+      key.includes('id') || key.includes('modifier') || key.includes('option') || key.includes('selection')
+    if (!keyLikeId) continue
+    const raw = String(value ?? '').trim()
+    if (!raw) continue
+    const matches = raw.match(/(?:^|[-_])f[-_](\d+)(?:$|[-_])/gi) || []
+    for (const token of matches) {
+      const m = /f[-_](\d+)/i.exec(token)
+      const id = Number(m?.[1] ?? 0)
+      if (!id) continue
+      const nm = String(menuNameById.get(id) || '').trim()
+      if (!nm) continue
+      const nk = nm.toLowerCase()
+      if (seen.has(nk)) continue
+      seen.add(nk)
+      out.push(nm)
+    }
+  }
+  return out
+}
+
+function extractBanbanSlotNumbersFromItem(item: Record<string, unknown>): string[] {
+  const found = new Set<number>()
+  const visited = new Set<unknown>()
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: item, depth: 0 }]
+  while (queue.length > 0) {
+    const node = queue.shift()
+    if (!node) break
+    const { value, depth } = node
+    if (depth > 4 || value == null) continue
+    if (typeof value === 'object') {
+      if (visited.has(value)) continue
+      visited.add(value)
+      if (Array.isArray(value)) {
+        for (const x of value) queue.push({ value: x, depth: depth + 1 })
+        continue
+      }
+      for (const v of Object.values(asRecord(value))) {
+        queue.push({ value: v, depth: depth + 1 })
+      }
+      continue
+    }
+    const raw = String(value ?? '').trim()
+    if (!raw) continue
+    const matches = raw.match(/banban[-_](\d+)/gi) || []
+    for (const token of matches) {
+      const m = /banban[-_](\d+)/i.exec(token)
+      const n = Number(m?.[1] ?? 0)
+      if (n > 0 && n <= 9) found.add(n)
+    }
+  }
+  return Array.from(found)
+    .sort((a, b) => a - b)
+    .map((n) => String(n))
+}
+
+async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]> {
   const exponent = currencyExponent(order)
   const rawItems = Array.isArray(order.items) ? order.items : []
   const ecoSummary = resolveEcoCutlerySummary(order)
+  const menuNameById = await loadPosMenuNameById()
   const out: PosItem[] = []
   let idx = 0
 
@@ -282,16 +393,28 @@ function buildPosItems(order: Record<string, unknown>): PosItem[] {
     const modifiers = Array.isArray(item.modifiers) ? item.modifiers : []
     let modifierMinor = 0
     const modifierNames: string[] = []
+    const pricedModifierSignatures = new Set<string>()
     for (const m of modifiers) {
       const mod = asRecord(m)
       const modQty = Math.max(1, Math.trunc(toNumber(mod.quantity) || 1))
       modifierMinor += toNumber(mod.price) * modQty
+      pricedModifierSignatures.add(buildModifierPriceSignature(mod))
       const names = extractReadableModifierNames(mod)
       for (const n of names) {
         if (!modifierNames.includes(n)) modifierNames.push(n)
       }
     }
     for (const mod of extractModifierCandidatesFromItem(item)) {
+      // item.modifiers 바깥(중첩 selection/addon)으로 온 가격도 합산
+      const sign = buildModifierPriceSignature(mod)
+      if (!pricedModifierSignatures.has(sign)) {
+        const p = toNumber(mod.price ?? mod.amount ?? mod.totalPrice ?? 0)
+        const q = Math.max(1, Math.trunc(toNumber(mod.quantity ?? mod.qty ?? 1) || 1))
+        if (p > 0) {
+          modifierMinor += p * q
+          pricedModifierSignatures.add(sign)
+        }
+      }
       const names = extractReadableModifierNames(mod)
       for (const n of names) {
         if (!modifierNames.includes(n)) modifierNames.push(n)
@@ -299,6 +422,15 @@ function buildPosItems(order: Record<string, unknown>): PosItem[] {
     }
     for (const n of extractReadableOptionsFromItemText(item)) {
       if (!modifierNames.includes(n)) modifierNames.push(n)
+    }
+    for (const n of extractReadableNamesFromMachineIds(item, menuNameById)) {
+      if (!modifierNames.includes(n)) modifierNames.push(n)
+    }
+    const banbanSlots = extractBanbanSlotNumbersFromItem(item)
+    if (banbanSlots.length > 0) {
+      // 반반치킨은 영수증 길이 절감을 위해 선택 맛 이름 대신 슬롯 번호(1,2)만 표기
+      modifierNames.length = 0
+      for (const s of banbanSlots) modifierNames.push(s)
     }
 
     const unitMinor = toNumber(item.price) + modifierMinor
@@ -418,7 +550,7 @@ export async function persistGrabOrderToPos(
     }
   }
 
-  const items = buildPosItems(order)
+  const items = await buildPosItems(order)
   if (!items.length) return { ok: false, message: 'no line items' }
 
   let subtotal = 0

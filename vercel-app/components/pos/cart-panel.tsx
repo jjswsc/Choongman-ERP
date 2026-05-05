@@ -853,7 +853,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')
   const [payDeliveryApp, setPayDeliveryApp] = useState('')
-  const [deliveryPaymentChannel, setDeliveryPaymentChannel] = useState<'grab' | 'lineman' | 'shopee' | 'dine_in'>('grab')
+  const [deliveryPaymentChannel, setDeliveryPaymentChannel] = useState<'grab' | 'lineman' | 'shopee'>('grab')
   const [showOtherPayments, setShowOtherPayments] = useState(false)
   /** 관리자 POS 설정 > 결제 관리(pos_payment_method_items)의 qr·other 분류 — POS 기타 세부와 연동 */
   const [posPaymentMethodItems, setPosPaymentMethodItems] = useState<PosPaymentMethodItem[]>([])
@@ -4176,7 +4176,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         <Label className="text-xs text-muted-foreground">{t('posDeliveryPaymentChannel') || '채널'}</Label>
                         <Select
                           value={deliveryPaymentChannel}
-                          onValueChange={(v) => setDeliveryPaymentChannel(v as 'grab' | 'lineman' | 'shopee' | 'dine_in')}
+                          onValueChange={(v) => setDeliveryPaymentChannel(v as 'grab' | 'lineman' | 'shopee')}
                         >
                           <SelectTrigger className="h-11 rounded-xl">
                             <SelectValue />
@@ -4185,9 +4185,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             <SelectItem value="grab">{t('posDeliveryPayGrab') || 'Grab'}</SelectItem>
                             <SelectItem value="lineman">{t('posDeliveryPayLineman') || 'Line Man'}</SelectItem>
                             <SelectItem value="shopee">{t('posDeliveryPayShopeeFood') || 'Shopee Food'}</SelectItem>
-                            <SelectItem value="dine_in">{t('posDeliveryPayDineIn') || 'Dine in'}</SelectItem>
                           </SelectContent>
                         </Select>
+                        {orderType === 'dine-in' && (
+                          <p className="text-[11px] leading-snug text-muted-foreground">
+                            {'테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab/Line Man/Shopee 중에서 선택하세요.'}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Input

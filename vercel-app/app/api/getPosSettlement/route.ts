@@ -156,12 +156,13 @@ export async function GET(request: NextRequest) {
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
       select:
-        'subtotal,vat,total,status,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+        'subtotal,vat,total,status,order_type,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
     })) as {
       subtotal?: number
       vat?: number
       total?: number
       status?: string
+      order_type?: string
       payment_cash?: number
       payment_card?: number
       payment_qr?: number
@@ -213,7 +214,9 @@ export async function GET(request: NextRequest) {
       const deliveryAmt = Number(o.payment_delivery_app) || 0
       if (deliveryAmt > 0) {
         const channel = String(o.delivery_payment_channel || '').trim().toLowerCase()
-        if (channel === 'dine_in') {
+        const orderType = String(o.order_type || '').trim().toLowerCase()
+        /** 테이블 결제에서 배달앱을 쓰면 채널(Grab/LineMan/Shopee)과 무관하게 홀(Dine in) 분류 */
+        if (orderType === 'dine_in' || channel === 'dine_in') {
           autoDineInDeliveryBreakdown.DineIn = (autoDineInDeliveryBreakdown.DineIn || 0) + deliveryAmt
         } else {
           const key = normalizeDeliveryCode(String(o.delivery_app_code || 'Other'))

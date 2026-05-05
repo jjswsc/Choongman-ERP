@@ -232,7 +232,7 @@ export default function PosOrderPage() {
   const [payQr, setPayQr] = React.useState("")
   const [payOther, setPayOther] = React.useState("")
   const [payDeliveryApp, setPayDeliveryApp] = React.useState("")
-  const [deliveryPaymentChannel, setDeliveryPaymentChannel] = React.useState<"grab" | "lineman" | "shopee" | "dine_in">("grab")
+  const [deliveryPaymentChannel, setDeliveryPaymentChannel] = React.useState<"grab" | "lineman" | "shopee">("grab")
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
     items: CartItem[]
@@ -1078,7 +1078,7 @@ export default function PosOrderPage() {
     qr: number
     other: number
     deliveryApp: number
-    deliveryChannel: "grab" | "lineman" | "shopee" | "dine_in" | null
+    deliveryChannel: "grab" | "lineman" | "shopee" | null
   }) => {
     if (cart.length === 0) return
     const checkoutPricing = computePosPricing({
@@ -1992,7 +1992,7 @@ export default function PosOrderPage() {
                     <Label className="text-[11px] text-muted-foreground">{t("posDeliveryPaymentChannel") || "채널"}</Label>
                     <Select
                       value={deliveryPaymentChannel}
-                      onValueChange={(v) => setDeliveryPaymentChannel(v as "grab" | "lineman" | "shopee" | "dine_in")}
+                      onValueChange={(v) => setDeliveryPaymentChannel(v as "grab" | "lineman" | "shopee")}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue />
@@ -2001,9 +2001,13 @@ export default function PosOrderPage() {
                         <SelectItem value="grab">{t("posDeliveryPayGrab") || "Grab"}</SelectItem>
                         <SelectItem value="lineman">{t("posDeliveryPayLineman") || "Line Man"}</SelectItem>
                         <SelectItem value="shopee">{t("posDeliveryPayShopeeFood") || "Shopee Food"}</SelectItem>
-                        <SelectItem value="dine_in">{t("posDeliveryPayDineIn") || "Dine in"}</SelectItem>
                       </SelectContent>
                     </Select>
+                    {orderType === "dine_in" && (
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        {"테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab/Line Man/Shopee 중에서 선택하세요."}
+                      </p>
+                    )}
                   </div>
                   <Input
                     type="number"
