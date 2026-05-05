@@ -527,7 +527,7 @@ export function DeliveryOrderPanel({
             </>
           ) : (
             <>
-              <ScrollArea className="flex-1 max-h-[320px] rounded-md border">
+              <ScrollArea className="flex-1 min-h-0 rounded-md border">
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
                     const displayNameRaw = resolvePosOrderItemMenuDisplayName(

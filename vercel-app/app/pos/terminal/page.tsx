@@ -1327,9 +1327,16 @@ export default function PosTerminalPage() {
       total: pricing.finalTotal,
     }
   }, [customerDisplayOrderTotal, pricingAdjustments])
-  const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
   /** 1023px 이하(세로 태블릿/모바일)에서만 하단 카트로 전환 */
   const isNarrowViewport = useMediaQuery('(max-width: 920px)')
+  const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
+  const shouldFullscreenOrderDetailOnNarrow =
+    isNarrowViewport &&
+    (
+      (activeTab === 'delivery' && Boolean(selectedDeliveryOrder)) ||
+      (activeTab === 'takeout' && Boolean(selectedTakeoutOrder)) ||
+      (activeTab === 'tables' && Boolean(servingTable?.order))
+    )
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const posSessionStartedAtRef = useRef<number>(Date.now())
@@ -5796,13 +5803,21 @@ export default function PosTerminalPage() {
       <div
         className={cn(
           'flex-1 flex min-h-0 min-w-0',
-          isNarrowViewport ? 'flex-col overflow-y-auto' : 'flex-row overflow-hidden'
+          isNarrowViewport
+            ? shouldFullscreenOrderDetailOnNarrow
+              ? 'flex-col overflow-hidden'
+              : 'flex-col overflow-y-auto'
+            : 'flex-row overflow-hidden'
         )}
       >
         <div
           className={cn(
             'min-w-0 flex flex-col',
-            isNarrowViewport ? 'min-h-0 shrink-0' : 'flex-1 min-h-0 overflow-hidden'
+            isNarrowViewport
+              ? shouldFullscreenOrderDetailOnNarrow
+                ? 'hidden'
+                : 'min-h-0 shrink-0'
+              : 'flex-1 min-h-0 overflow-hidden'
           )}
         >
           <Tabs
@@ -6472,7 +6487,9 @@ export default function PosTerminalPage() {
               className={cn(
                 'flex-shrink-0 overflow-hidden flex flex-col border-border bg-card',
                 isNarrowViewport
-                  ? 'border-t min-h-[180px] max-h-[50vh]'
+                  ? shouldFullscreenOrderDetailOnNarrow
+                    ? 'flex-1 min-h-0 border-t'
+                    : 'border-t min-h-[180px] max-h-[50vh]'
                   : 'w-72 border-l min-h-0'
               )}
             >

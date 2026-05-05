@@ -314,7 +314,7 @@ export function TakeoutOrderPanel({
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{t('posDeliveryPackagingComplete') || '포장 완료'}</span>
               </div>
-              <ScrollArea className="flex-1 max-h-[260px] rounded-md border">
+              <ScrollArea className="flex-1 min-h-0 rounded-md border">
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
                     const cancelled = itemCancelled[item.id]
@@ -412,7 +412,7 @@ export function TakeoutOrderPanel({
             </>
           ) : (
             <>
-              <ScrollArea className="flex-1 max-h-[320px] rounded-md border">
+              <ScrollArea className="flex-1 min-h-0 rounded-md border">
                 <ul className="p-2 space-y-2">
                   {order.items.map((item) => {
                     const packaged = itemPackaged[item.id]

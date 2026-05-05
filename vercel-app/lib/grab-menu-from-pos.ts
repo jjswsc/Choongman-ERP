@@ -156,6 +156,26 @@ function splitOptionGroupAndName(rawName: string): { groupName: string; optionNa
   return { groupName: 'Options', optionName: src.slice(0, 100) }
 }
 
+function localizeGrabOptionLabel(raw: string): string {
+  let s = String(raw || '').trim()
+  if (!s) return s
+  // Grab 앱에 한글 옵션이 노출되지 않도록 최소 치환
+  s = s
+    .replace(/순살/g, 'Boneless')
+    .replace(/봉/g, 'Bone-in')
+    .replace(/윙/g, 'Wing')
+  return s
+}
+
+function shouldForceSingleSelectGroup(groupName: string, rows: OptionRow[]): boolean {
+  const g = String(groupName || '').trim().toLowerCase()
+  // 사이즈/부위 단일 선택 그룹 (예: M/S/L)
+  if (/^(xxl|xl|l|m|s)$/.test(g)) return true
+  const names = rows.map((r) => String(r.name ?? '').toLowerCase())
+  const hasCutChoices = names.some((n) => n.includes('boneless') || n.includes('bone-in') || n.includes('wing'))
+  return hasCutChoices
+}
+
 function mergeTimeRanges(ranges: TimeRange[]): TimeRange[] {
   if (ranges.length <= 1) return ranges
   const sorted = [...ranges].sort((a, b) => a.start.localeCompare(b.start))
@@ -502,7 +522,7 @@ export async function buildGrabMenuFromPos(params: {
             : split.optionName
         bucket.rows.push({
           ...opt,
-          name: normalizedOptionName,
+          name: localizeGrabOptionLabel(normalizedOptionName),
         })
       }
       const modifierGroups = Array.from(modifierGroupBuckets.values())
@@ -518,13 +538,14 @@ export async function buildGrabMenuFromPos(params: {
             return String(a.name ?? '').localeCompare(String(b.name ?? ''))
           })
           const groupName = String(bucket.sourceGroupName || '').trim() || 'Options'
+          const forceSingleSelect = shouldForceSingleSelectGroup(groupName, rows)
           return {
             id: gidx === 0 ? `${itemId}-mods` : `${itemId}-mods-${gidx + 1}`,
             name: groupName.slice(0, 60),
             sequence: gidx + 1,
             availableStatus: 'AVAILABLE' as const,
             selectionRangeMin: 0,
-            selectionRangeMax: Math.max(1, Math.min(10, rows.length)),
+            selectionRangeMax: forceSingleSelect ? 1 : Math.max(1, Math.min(10, rows.length)),
             modifiers: rows.map((opt, idx) => {
                   const modId = normalizeId(
                     `mod-${String(opt.id ?? '')}-${itemId}-${idx + 1}`,
