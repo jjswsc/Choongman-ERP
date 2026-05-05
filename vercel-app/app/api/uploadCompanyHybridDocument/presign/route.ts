@@ -4,9 +4,10 @@ import {
   isAllowedCompanyDocContentType,
   maxBytesForCompanyDocMime,
   COMPANY_DOCUMENTS_BUCKET,
+  slugifyStoreForCompanyDocPath,
 } from '@/lib/company-hybrid-documents'
 import { canAccessStoreForCompanyHybridDocs } from '@/lib/company-hybrid-documents-access'
-import { slugifyStoreForCompanyDocPath } from '@/lib/company-hybrid-documents'
+import { STORAGE_FILENAME_SAFE } from '@/lib/storage-filename-safe'
 import {
   looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     const storeSlug = slugifyStoreForCompanyDocPath(store)
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-가-힣.]/g, '_').slice(0, 120) || 'file'
+    const safeName = fileName.replace(STORAGE_FILENAME_SAFE, '_').slice(0, 120) || 'file'
     const storagePath = `hybrid/${storeSlug}/${Date.now()}-${safeName}`
 
     const issue = async () => {

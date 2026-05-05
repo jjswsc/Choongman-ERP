@@ -4428,6 +4428,8 @@ export default function PosTerminalPage() {
             posBackendActionInFlight={posCartBackendBusy}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
             onBeforeOpenPayment={async (payload: CartPanelBeforePaymentReceiptPayload) => {
+              /** 홀 테이블에서만 사용. 배달/포장은 결제 확인 시 세금 계산 영수증이 나가므로 사전 출력은 이중 출력이 됨. */
+              if (cartOrderType !== 'dine-in') return
               if (!autoPrintFinalOrderBeforePayment || !isMainPosDevice) return
               await printReceiptNow(payload, undefined, false, undefined, true)
             }}

@@ -5,6 +5,7 @@ import {
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
 import { SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES } from '@/lib/supabase-storage-limits'
 
 const BUCKET = 'store-repair-photos'
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: msg }, { status: 400, headers })
     }
 
-    const storeSlug = store.replace(/[^a-zA-Z0-9._-가-힣]/g, '_').slice(0, 60)
+    const storeSlug = store.replace(STORAGE_SEGMENT_SAFE, '_').slice(0, 60)
     const safeName = String(body.fileName || 'photo.jpg')
       .replace(/[^a-zA-Z0-9._-]/g, '_')
       .slice(0, 80)

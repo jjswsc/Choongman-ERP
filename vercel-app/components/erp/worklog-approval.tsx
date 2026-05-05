@@ -34,6 +34,9 @@ import {
   type WorkLogManagerItem,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
+
+type WorkLogStaffOpt = { id: number; name: string; displayName: string }
 
 export function WorklogApproval() {
   const { lang } = useLang()
@@ -47,7 +50,7 @@ export function WorklogApproval() {
   const [workTypeFilter, setWorkTypeFilter] = React.useState<string>("all")
   const [contentSearch, setContentSearch] = React.useState("")
   const [depts, setDepts] = React.useState<string[]>([])
-  const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
+  const [staffList, setStaffList] = React.useState<WorkLogStaffOpt[]>([])
   const [list, setList] = React.useState<WorkLogManagerItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [updating, setUpdating] = React.useState<string | null>(null)
@@ -56,9 +59,14 @@ export function WorklogApproval() {
   React.useEffect(() => {
     getWorkLogOfficeOptions().then((r) => {
       setDepts(r.depts || [])
-      setStaffList(r.staff || [])
+      setStaffList((r.staff || []) as WorkLogStaffOpt[])
     })
   }, [])
+
+  const staffOptions = React.useMemo(
+    () => staffList.map((s) => ({ ...s, label: formatWorkLogStaffSelectLabel(s) })),
+    [staffList]
+  )
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
@@ -214,8 +222,9 @@ export function WorklogApproval() {
       const content = (it.content || "").toLowerCase()
       const name = (it.name || "").toLowerCase()
       const dept = (it.dept || "").toLowerCase()
-      const displayName = (staffList.find((s) => s.name === it.name || s.displayName === it.name)?.displayName || "").toLowerCase()
-      return content.includes(q) || name.includes(q) || dept.includes(q) || displayName.includes(q)
+      const row = staffList.find((s) => s.name === it.name || s.displayName === it.name)
+      const labelHay = (row ? formatWorkLogStaffSelectLabel(row) : "").toLowerCase()
+      return content.includes(q) || name.includes(q) || dept.includes(q) || labelHay.includes(q)
     })
   }, [list, contentSearch, staffList])
 
@@ -312,9 +321,9 @@ export function WorklogApproval() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
-                {staffList.map((s) => (
-                  <SelectItem key={s.name} value={s.displayName || s.name}>
-                    {s.displayName || s.name}
+                {staffOptions.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -402,7 +411,11 @@ export function WorklogApproval() {
                   {Object.entries(byName).map(([name, items]) => (
                     <div key={`${dept}-${name}`} className="border-b last:border-b-0">
                       <div className="bg-muted/20 px-5 py-2 text-xs font-bold text-muted-foreground">
-                        {(dept === "기타" ? t("workLogOther") : dept)} · {staffList.find((s) => s.name === name || s.displayName === name)?.displayName || name}
+                        {(dept === "기타" ? t("workLogOther") : dept)} ·{" "}
+                        {(() => {
+                          const row = staffList.find((s) => s.name === name || s.displayName === name)
+                          return row ? formatWorkLogStaffSelectLabel(row) : name
+                        })()}
                       </div>
                       <table className="w-full table-fixed text-left text-sm">
                         <colgroup>

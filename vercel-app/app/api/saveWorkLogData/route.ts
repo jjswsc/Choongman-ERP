@@ -5,6 +5,7 @@ import {
   supabaseInsert,
   supabaseUpdate,
 } from '@/lib/supabase-server'
+import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -29,10 +30,7 @@ export async function POST(req: NextRequest) {
       const fn = String(staffList[i].name || '').toLowerCase().replace(/\s+/g, '')
       const nn = String(staffList[i].nick || '').toLowerCase().replace(/\s+/g, '')
       if (sk === fn || (nn && sk === nn)) {
-        savedName =
-          staffList[i].nick && String(staffList[i].nick).trim()
-            ? staffList[i].nick!
-            : staffList[i].name!
+        savedName = workLogStoredNameFromEmployeeMaster(staffList[i].name)
         savedDept = staffList[i].job || 'Staff'
         break
       }
@@ -44,10 +42,7 @@ export async function POST(req: NextRequest) {
         const nn = String(staffList[i].nick || '').toLowerCase().replace(/\s+/g, '')
         const nickMatch = nn && nn.length >= 3 && sk.includes(nn)
         if (sk.includes(fn) || fn.includes(sk) || nickMatch) {
-          savedName =
-            staffList[i].nick && String(staffList[i].nick).trim()
-              ? staffList[i].nick!
-              : staffList[i].name!
+          savedName = workLogStoredNameFromEmployeeMaster(staffList[i].name)
           savedDept = staffList[i].job || 'Staff'
           break
         }

@@ -76,9 +76,20 @@ export async function POST(request: NextRequest) {
       user_employee_code: userEmployeeCode,
       ...(salesDate && transType === 'sales_withdrawal' ? { sales_date: salesDate } : {}),
     }
-    await supabaseInsertWithPgrst204Fallback('pos_till_transactions', row, 'addTillTransaction')
+    const inserted = await supabaseInsertWithPgrst204Fallback('pos_till_transactions', row, 'addTillTransaction')
+    const rows = Array.isArray(inserted) ? inserted : []
+    const rawId = rows[0] != null ? (rows[0] as { id?: unknown }).id : undefined
+    const transactionId =
+      typeof rawId === 'number' && Number.isFinite(rawId)
+        ? rawId
+        : typeof rawId === 'string' && /^\d+$/.test(rawId)
+          ? Number(rawId)
+          : undefined
 
-    return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
+    return NextResponse.json(
+      { success: true, message: '등록되었습니다.', ...(transactionId != null ? { transactionId } : {}) },
+      { headers }
+    )
   } catch (e) {
     console.error('addTillTransaction:', e)
     return NextResponse.json(

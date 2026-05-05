@@ -1279,7 +1279,8 @@ export default function PosOrderPage() {
       await appAlert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
       return
     }
-    if (autoPrintFinalOrderBeforePayment && receiptRef.current) {
+    /** 매장 테이블 전용. 배달/포장은 결제 완료 영수증만으로 충분해 사전 주문 slips를 찍지 않음(이중 출력 방지). */
+    if (orderType === "dine_in" && autoPrintFinalOrderBeforePayment && receiptRef.current) {
       await handlePrintReceipt()
     }
     setPayCash(String(total))

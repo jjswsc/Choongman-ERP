@@ -16,6 +16,9 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/lib/auth-context'
 import { getPosPrinterSettings, useStoreList } from '@/lib/api-client'
+import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
+import { buildPosTillSlipDocumentHtml } from '@/lib/pos-till-slip-html'
 import { getTillList, getPosTodaySales, translateTexts, type TillItem } from '@/lib/api-client'
 import { getPettyCashOptionsWithCache } from '@/lib/offline/cash-offline'
 import { getTillListWithCache } from '@/lib/offline/till-offline'
@@ -58,7 +61,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { stores } = useStoreList()
+  const { stores, formatStoreLabel } = useStoreList()
   const online = useOnlineStatus()
   const tillDepositDrawerWarnedRef = React.useRef(false)
   const canSearchAll = isOfficeRole(auth?.role || '')
@@ -168,6 +171,53 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
     loadList()
   }, [loadList])
 
+  const printTillReceipt = React.useCallback(
+    async (args: {
+      storeCode: string
+      transType: 'deposit' | 'withdrawal' | 'sales_withdrawal'
+      amountBaht: number
+      memo?: string
+      transDate: string
+      salesDate?: string
+      transactionId?: number
+      queued: boolean
+    }) => {
+      if (isPosDemo || typeof window === 'undefined') return
+      const storeLabel = formatStoreLabel(args.storeCode)
+      const typeKey = tillTypeKeys[args.transType]
+      const typeLabel =
+        typeKey && t(typeKey) !== typeKey ? t(typeKey) : args.transType
+      const fullHtml = buildPosTillSlipDocumentHtml({
+        t,
+        lang,
+        storeLabel,
+        typeLabel,
+        transType: args.transType,
+        amountBaht: args.amountBaht,
+        memo: args.memo,
+        staffName: auth?.user,
+        transDate: args.transDate,
+        salesDate: args.salesDate,
+        transactionId: args.transactionId,
+        queued: args.queued,
+        printedAt: new Date(),
+      })
+      const hw = await getPosPrinterSettings({ storeCode: args.storeCode }).catch(() => null)
+      printPosHtmlDocument(fullHtml, {
+        title: t('posTillSlipTitle'),
+        printDelayMs: 0,
+        focusIframeBeforePrint: false,
+        printRole: 'receipt',
+        printReceiptKind: 'payment',
+        escPosCutOverride: resolveEscPosCutOverride(hw, {
+          printRole: 'receipt',
+          printReceiptKind: 'payment',
+        }),
+      })
+    },
+    [isPosDemo, t, lang, formatStoreLabel, auth?.user]
+  )
+
   const prevOnlineRef = React.useRef(online)
   React.useEffect(() => {
     if (offlineAware && !prevOnlineRef.current && online) {
@@ -229,6 +279,15 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
           void loadList()
         }
         const queued = Boolean(res.queued)
+        void printTillReceipt({
+          storeCode: addStore,
+          transType: addType,
+          amountBaht: amt,
+          memo: addMemo.trim() || undefined,
+          transDate: addDate,
+          transactionId: res.transactionId,
+          queued: queued || !online,
+        })
         await appAlert(
           queued || !online
             ? t('offlineBannerAdminSaved')
@@ -332,6 +391,16 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
         await loadSalesWithdrawalList()
         loadSalesWithdrawalCash()
         const queued = Boolean(res.queued)
+        void printTillReceipt({
+          storeCode: addStore,
+          transType: 'sales_withdrawal',
+          amountBaht: amt,
+          memo: salesWithdrawalMemo.trim() || undefined,
+          transDate: transDay,
+          salesDate: salesDateForWithdrawal,
+          transactionId: res.transactionId,
+          queued: queued || !online,
+        })
         await appAlert(
           queued || !online
             ? t('offlineBannerAdminSaved')

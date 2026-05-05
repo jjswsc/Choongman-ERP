@@ -5,6 +5,7 @@ import {
   supabaseStorageCreateBucketIfNeeded,
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
+import { STORAGE_FILENAME_SAFE } from '@/lib/storage-filename-safe'
 import { requireAuth } from '@/lib/verify-auth'
 
 const BUCKET = 'po-quotation-files'
@@ -61,9 +62,9 @@ export async function POST(request: NextRequest) {
     const u =
       (auth.employeeId != null ? `e${auth.employeeId}` : '') ||
       `u_${String(auth.name || 'user')
-        .replace(/[^a-zA-Z0-9._-가-힣]/g, '_')
+        .replace(STORAGE_FILENAME_SAFE, '_')
         .slice(0, 40) || 'user'}`
-    const safeName = fileName.replace(/[^a-zA-Z0-9._-가-힣]/g, '_').slice(0, 90) || 'quotation'
+    const safeName = fileName.replace(STORAGE_FILENAME_SAFE, '_').slice(0, 90) || 'quotation'
     const storagePath = `${u}/${Date.now()}-${safeName}`
 
     const issue = async () => {

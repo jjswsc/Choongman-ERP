@@ -31,7 +31,6 @@ import {
   ChevronUp,
   FileText,
   Users,
-  XCircle,
   ArrowRightLeft,
   Combine,
   LayoutGrid,
@@ -651,7 +650,6 @@ export function TableOrderPanel({
               </Button>
               {canCancel && (
                 <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
-                  <XCircle className="w-4 h-4 mr-1" />
                   {t('posOrderCancelFull') || t('posOrderCancel') || '전체 취소'}
                 </Button>
               )}
@@ -780,7 +778,6 @@ export function TableOrderPanel({
                       disabled={cancelling || removingItemId !== null}
                       onClick={handleCancelOrder}
                     >
-                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
                       {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
                     </Button>
                   </div>
@@ -969,7 +966,6 @@ export function TableOrderPanel({
                       disabled={cancelling || removingItemId !== null}
                       onClick={handleCancelOrder}
                     >
-                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
                       {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
                     </Button>
                   </div>

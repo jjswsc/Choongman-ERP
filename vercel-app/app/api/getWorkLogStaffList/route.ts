@@ -13,10 +13,16 @@ export async function GET() {
     const list =
       (await supabaseSelect('employees', {
         order: 'name.asc',
-        select: 'name,nick,join_date,resign_date',
+        select: 'id,name,nick,join_date,resign_date',
         limit: 2000,
       })) || []
-    const staff = (list as { name?: string; nick?: string; join_date?: unknown; resign_date?: unknown }[])
+    const staff = (list as {
+      id?: number
+      name?: string
+      nick?: string
+      join_date?: unknown
+      resign_date?: unknown
+    }[])
       .filter((e) =>
         isEmployedAsOf(
           e.join_date != null ? String(e.join_date) : '',
@@ -25,14 +31,16 @@ export async function GET() {
         )
       )
       .map((e) => {
+        const id = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
         const n = String(e.name || '').trim()
         const nick = String(e.nick || '').trim()
         return {
+          id,
           name: n,
           displayName: nick || n,
         }
       })
-      .filter((e) => e.name)
+      .filter((e) => e.name && e.id > 0)
 
     return NextResponse.json({ staff }, { headers })
   } catch (e) {

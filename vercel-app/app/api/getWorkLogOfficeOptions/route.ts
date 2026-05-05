@@ -21,9 +21,10 @@ export async function GET() {
     const list =
       (await supabaseSelect('employees', {
         order: 'name.asc',
-        select: 'name,nick,job,store,join_date,resign_date',
+        select: 'id,name,nick,job,store,join_date,resign_date',
       })) || []
     const all = list as {
+      id?: number
       name?: string
       nick?: string
       job?: string
@@ -41,10 +42,11 @@ export async function GET() {
     })
     const useList = officeOnly
     const staff = useList.map((e) => {
+      const id = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
       const n = String(e.name || '').trim()
       const nick = String(e.nick || '').trim()
-      return { name: n, displayName: nick || n }
-    }).filter((e) => e.name)
+      return { id, name: n, displayName: nick || n }
+    }).filter((e) => e.name && e.id > 0)
 
     const deptSet = new Set<string>()
     for (const e of useList) {

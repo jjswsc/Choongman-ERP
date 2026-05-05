@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveWorkLogFilterNameFromEmployeeIdParam } from '@/lib/work-log-name'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -20,7 +21,9 @@ export async function GET(req: NextRequest) {
       filters.push(`dept=eq.${encodeURIComponent(dept)}`)
     }
     if (employee && employee !== 'all') {
-      filters.push(`name=eq.${encodeURIComponent(employee)}`)
+      const resolved =
+        (await resolveWorkLogFilterNameFromEmployeeIdParam(employee)) || String(employee).trim()
+      if (resolved) filters.push(`name=eq.${encodeURIComponent(resolved)}`)
     }
     if (status && status !== 'all') {
       filters.push(`manager_check=eq.${encodeURIComponent(status)}`)

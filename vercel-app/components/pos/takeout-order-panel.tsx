@@ -14,7 +14,7 @@ import {
 } from '@/lib/api-client'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
-import { Check, CheckCircle, ChevronDown, ChevronUp, Clock, FileText, XCircle } from 'lucide-react'
+import { Check, CheckCircle, ChevronDown, ChevronUp, Clock, FileText } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -404,7 +404,6 @@ export function TakeoutOrderPanel({
                       disabled={cancelling || removingItemId !== null}
                       onClick={handleCancelOrder}
                     >
-                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
                       {t('posOrderCancelFull') || ti('posOrderCancelFull')}
                     </Button>
                   </div>
@@ -558,7 +557,6 @@ export function TakeoutOrderPanel({
                       disabled={cancelling || removingItemId !== null}
                       onClick={handleCancelOrder}
                     >
-                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
                       {t('posOrderCancelFull') || ti('posOrderCancelFull')}
                     </Button>
                   </div>

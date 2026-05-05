@@ -23,6 +23,9 @@ import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getWorkLogWeekly, getWorkLogOfficeOptions, type WorkLogWeeklySummary } from "@/lib/api-client"
+import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
+
+type WorkLogStaffOpt = { id: number; name: string; displayName: string }
 
 function getWeekRange(date: Date): { start: string; end: string; label: string } {
   const d = new Date(date)
@@ -60,7 +63,7 @@ export function WorklogWeekly() {
   const [deptFilter, setDeptFilter] = React.useState("all")
   const [employeeFilter, setEmployeeFilter] = React.useState("all")
   const [depts, setDepts] = React.useState<string[]>([])
-  const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
+  const [staffList, setStaffList] = React.useState<WorkLogStaffOpt[]>([])
   const [data, setData] = React.useState<{
     summaries: WorkLogWeeklySummary[]
     totalTasks: number
@@ -70,6 +73,12 @@ export function WorklogWeekly() {
   } | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
+
+  /** Select value 는 employees.id, 표시는 닉 (풀네임) 우선 */
+  const staffOptions = React.useMemo(
+    () => staffList.map((s) => ({ ...s, label: formatWorkLogStaffSelectLabel(s) })),
+    [staffList]
+  )
 
   const dateRange = React.useMemo(() => {
     const d = new Date(today)
@@ -85,7 +94,7 @@ export function WorklogWeekly() {
   React.useEffect(() => {
     getWorkLogOfficeOptions().then((r) => {
       setDepts(r.depts || [])
-      setStaffList(r.staff || [])
+      setStaffList((r.staff || []) as WorkLogStaffOpt[])
     })
   }, [])
 
@@ -185,9 +194,9 @@ export function WorklogWeekly() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
-                {staffList.map((s) => (
-                  <SelectItem key={s.name} value={s.displayName || s.name}>
-                    {s.displayName || s.name}
+                {staffOptions.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -273,10 +282,15 @@ export function WorklogWeekly() {
                 </tr>
               </thead>
               <tbody>
-                {weeklyData.map((row) => (
+                {weeklyData.map((row) => {
+                  const staffRow = staffList.find(
+                    (s) => s.name === row.employee || s.displayName === row.employee
+                  )
+                  const empLabel = staffRow ? formatWorkLogStaffSelectLabel(staffRow) : row.employee
+                  return (
                   <tr key={row.employee} className="border-b last:border-b-0 hover:bg-muted/10 transition-colors">
                     <td className="px-5 py-3">
-                      <span className="text-sm font-bold text-foreground">{row.employee}</span>
+                      <span className="text-sm font-bold text-foreground">{empLabel}</span>
                     </td>
                     <td className="px-5 py-3">
                       <span className="text-xs text-muted-foreground">{row.role}</span>
@@ -327,7 +341,8 @@ export function WorklogWeekly() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           )}

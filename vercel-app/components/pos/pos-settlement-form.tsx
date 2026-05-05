@@ -795,6 +795,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       })
       if (res.success) {
         await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
+        /** 마감 확정 저장 직후: 다음 오픈 권 교차검증용 요약 영수증 자동 인쇄 (수동 인쇄 누락 방지) */
+        if (!openMode && closed) {
+          await handlePrint()
+        }
         loadData()
       } else {
         await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))

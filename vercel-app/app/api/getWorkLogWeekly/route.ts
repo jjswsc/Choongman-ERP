@@ -3,6 +3,7 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
+import { resolveWorkLogFilterNameFromEmployeeIdParam } from '@/lib/work-log-name'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -18,7 +19,11 @@ export async function GET(req: NextRequest) {
     let fullFilter =
       `log_date=gte.${encodeURIComponent(startStr)}&log_date=lte.${encodeURIComponent(endStr)}`
     if (dept && dept !== 'all') fullFilter += `&dept=eq.${encodeURIComponent(dept)}`
-    if (employee && employee !== 'all') fullFilter += `&name=eq.${encodeURIComponent(employee)}`
+    if (employee && employee !== 'all') {
+      const resolved =
+        (await resolveWorkLogFilterNameFromEmployeeIdParam(employee)) || String(employee).trim()
+      if (resolved) fullFilter += `&name=eq.${encodeURIComponent(resolved)}`
+    }
 
     const rows =
       (await supabaseSelectFilter('work_logs', fullFilter, {
@@ -31,8 +36,10 @@ export async function GET(req: NextRequest) {
 
     const nameToRole: Record<string, string> = {}
     for (const e of empList) {
-      const n = e.nick && String(e.nick).trim() ? e.nick : e.name || ''
-      if (n) nameToRole[n] = e.job || ''
+      const full = String(e.name || '').trim()
+      const nk = String(e.nick || '').trim()
+      if (full) nameToRole[full] = e.job || ''
+      if (nk && nk !== full) nameToRole[nk] = e.job || ''
     }
 
     const byEmployee: Record<

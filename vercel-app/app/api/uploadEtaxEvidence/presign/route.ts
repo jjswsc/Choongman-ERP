@@ -6,6 +6,7 @@ import {
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
+import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
 import { requireAuth } from '@/lib/verify-auth'
 
 const BUCKET = 'etax-evidence-files'
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     const store = String(body.storeFilter || 'all')
       .trim()
-      .replace(/[^a-zA-Z0-9._-가-힣]/g, '_')
+      .replace(STORAGE_SEGMENT_SAFE, '_')
       .slice(0, 60) || 'all'
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 90) || 'evidence'
     const storagePath = `${yearMonth}/${store}/${Date.now()}-${safeName}`

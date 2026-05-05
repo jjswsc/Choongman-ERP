@@ -6,6 +6,7 @@ import {
   MAX_NOTICE_NON_VIDEO_BYTES,
   MAX_NOTICE_VIDEO_BYTES,
 } from '@/lib/notice-attachments'
+import { randomStorageObjectBasename, STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
 import {
   looksLikeSupabaseStorageMissingBucketError,
   supabaseCreateSignedUploadUrl,
@@ -43,7 +44,7 @@ const ALL_ALLOWED_MIME: string[] = (() => {
 
 function slugifyStore(store: string) {
   return String(store || '')
-    .replace(/[^a-zA-Z0-9._-가-힣]/g, '_')
+    .replace(STORAGE_SEGMENT_SAFE, '_')
     .slice(0, 60)
 }
 
@@ -91,10 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     const storeSlug = slugifyStore(authResult.auth.store)
-    const safeName = fileName
-      .replace(/[^a-zA-Z0-9._-가-힣.]/g, '_')
-      .slice(0, 120)
-    const storagePath = `notices/${storeSlug}/${Date.now()}-${safeName}`
+    const storagePath = `notices/${storeSlug}/${randomStorageObjectBasename(fileName)}`
 
     const issue = async () => {
       const { signedUrl } = await supabaseCreateSignedUploadUrl(BUCKET, storagePath, { upsert: false })

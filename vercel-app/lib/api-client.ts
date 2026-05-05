@@ -1498,7 +1498,7 @@ export async function getWorkLogStaffList() {
   const raw: unknown = await res.json()
   const o = jsonAsPlainObject(raw)
   return {
-    staff: jsonAsArray<{ name: string; displayName: string }>(o.staff),
+    staff: jsonAsArray<{ id: number; name: string; displayName: string }>(o.staff),
   }
 }
 
@@ -1507,7 +1507,7 @@ export async function getWorkLogOfficeOptions() {
   const raw: unknown = await res.json()
   const o = jsonAsPlainObject(raw)
   return {
-    staff: jsonAsArray<{ name: string; displayName: string }>(o.staff),
+    staff: jsonAsArray<{ id: number; name: string; displayName: string }>(o.staff),
     depts: jsonAsStringArray(o.depts),
   }
 }
@@ -1948,18 +1948,31 @@ export async function addTillTransaction(params: {
   userRole?: string
   /** 매출액 출금 시 해당 현금 매출의 영업일 (YYYY-MM-DD) */
   salesDate?: string
-}): Promise<{ success: boolean; message?: string; queued?: boolean }> {
+}): Promise<{ success: boolean; message?: string; queued?: boolean; transactionId?: number }> {
   const res = await apiFetchWithOffline('/api/addTillTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  const data = (await res.json()) as { success?: boolean; message?: string; queued?: boolean }
+  const data = (await res.json()) as {
+    success?: boolean
+    message?: string
+    queued?: boolean
+    transactionId?: number
+  }
   const queued = res.headers.get('X-Offline-Queued') === '1' || data.queued === true
+  const rawTid = data.transactionId
+  const transactionId =
+    typeof rawTid === 'number' && Number.isFinite(rawTid)
+      ? rawTid
+      : typeof rawTid === 'string' && /^\d+$/.test(String(rawTid))
+        ? Number(rawTid)
+        : undefined
   return {
     success: Boolean(data.success),
     message: typeof data.message === 'string' ? data.message : undefined,
     queued,
+    ...(transactionId != null ? { transactionId } : {}),
   }
 }
 

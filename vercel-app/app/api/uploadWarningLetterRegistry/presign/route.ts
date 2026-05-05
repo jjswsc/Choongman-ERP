@@ -6,6 +6,7 @@ import {
   supabaseStoragePublicUrl,
 } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
 import { canCreateRegistryForStore } from '@/lib/warning-letter-registry-permissions'
 
 const BUCKET = 'employee-warning-letters'
@@ -21,7 +22,7 @@ const ALLOWED_TYPES = new Set([
 function slugStore(s: string): string {
   return String(s || '')
     .trim()
-    .replace(/[^a-zA-Z0-9._-가-힣]/g, '_')
+    .replace(STORAGE_SEGMENT_SAFE, '_')
     .slice(0, 80) || 'unknown'
 }
 

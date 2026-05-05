@@ -2,6 +2,8 @@
  * Google Drive + ERP 하이브리드 회사 문서 — 관련 엔터티/소스 상수
  */
 
+import { STORAGE_SEGMENT_SAFE } from '@/lib/storage-filename-safe'
+
 /** 목록 API: 모든 매장 문서를 한 번에 조회할 때 store 쿼리에 넣는 값 */
 export const COMPANY_HYBRID_DOCS_STORE_ALL = '__cm_all_stores__'
 
@@ -111,7 +113,7 @@ export const COMPANY_DOCUMENTS_BUCKET = 'company-documents'
 
 export function slugifyStoreForCompanyDocPath(store: string): string {
   return String(store || '')
-    .replace(/[^a-zA-Z0-9._-가-힣]/g, '_')
+    .replace(STORAGE_SEGMENT_SAFE, '_')
     .slice(0, 60)
 }
 

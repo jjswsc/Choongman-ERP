@@ -36,6 +36,7 @@ import {
   type WorkLogData,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
 
 const PRIORITIES = [
   { value: "긴급", key: "workLogPriorityUrgent" },
@@ -53,7 +54,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const t = useT(lang)
   const [dateStr, setDateStr] = React.useState(() => getBangkokTodayDateString())
   const [selectedStaff, setSelectedStaff] = React.useState(userName)
-  const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
+  const [staffList, setStaffList] = React.useState<{ id: number; name: string; displayName: string }[]>([])
   const [_data, setData] = React.useState<WorkLogData | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -351,7 +352,12 @@ export function WorklogMy({ userName }: WorklogMyProps) {
               {t("workLogEmployee")}
             </label>
             <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs font-medium">
-              {staffList.find((s) => s.name === selectedStaff || s.displayName === selectedStaff)?.displayName || selectedStaff || userName}
+              {(() => {
+                const row = staffList.find(
+                  (s) => s.name === selectedStaff || s.displayName === selectedStaff
+                )
+                return row ? formatWorkLogStaffSelectLabel(row) : selectedStaff || userName
+              })()}
             </div>
           </div>
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleSearch} disabled={loading}>
