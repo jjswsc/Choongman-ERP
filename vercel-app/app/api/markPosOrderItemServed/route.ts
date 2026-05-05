@@ -70,7 +70,15 @@ export async function POST(req: NextRequest) {
       items = []
     }
 
-    const idx = items.findIndex((it) => String(it?.id ?? '') === itemId)
+    let idx = items.findIndex((it) => String(it?.id ?? '') === itemId)
+    /** `pos-store` `normalizePosOrderItemsForUi`: DB에 id가 비어 있으면 UI는 `line-{배열순번}`을 씀 → id 매칭 실패 방지 */
+    if (idx < 0) {
+      const indexMatch = /^line-(\d+)$/.exec(itemId)
+      if (indexMatch) {
+        const n = Number(indexMatch[1])
+        if (Number.isInteger(n) && n >= 0 && n < items.length) idx = n
+      }
+    }
     if (idx < 0) {
       return NextResponse.json({ success: false, message: '주문 항목을 찾을 수 없습니다.' }, { headers })
     }

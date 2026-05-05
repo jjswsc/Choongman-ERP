@@ -188,8 +188,8 @@ $runtimeConfig = @{
     kitchen2DeviceName               = ""
     kitchen3DeviceName               = ""
     escPosCutAfterKitchenHtml        = $true
-    escPosCutAfterHallOrderHtml      = $false
-    escPosCutAfterPaymentReceiptHtml = $false
+    escPosCutAfterHallOrderHtml      = $true
+    escPosCutAfterPaymentReceiptHtml = $true
   }
 } | ConvertTo-Json -Depth 6
 # Windows PowerShell 5.1 의 Set-Content -Encoding UTF8 은 BOM 을 붙여 JSON.parse(Electron) 가 실패할 수 있음 → BOM 없이 저장

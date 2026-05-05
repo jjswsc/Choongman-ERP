@@ -9,6 +9,8 @@ import { getClientUiLang, getUiString } from '@/lib/i18n'
  * 주문 영수증(directPrint) 직후 주방전을 바로 호출하면, 일부 ESC/POS 드라이버가 스풀에서
  * 두 작업을 한 롤에 이어 붙임(Zywell Zy808 등). 영수증 파이프라인 정리 후 이 시간만큼
  * 지연한 뒤 주방전을 시작한다.
+ * (서로 다른 단말이 같은 프린터로 거의 동시에 찍는 경우도 유사하며, Windows 하이브리드에서는
+ *  홀·결제별 ESC/POS 절단을 켜 두는 것이 안전하다.)
  */
 export const POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS = 3000
 /** 하이브리드(Electron)에서는 스풀 연결 여유를 유지하되 지연을 소폭 단축 */

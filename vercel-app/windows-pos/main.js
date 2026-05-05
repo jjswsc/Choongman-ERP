@@ -143,8 +143,8 @@ function buildDefaultUserRuntimeConfigText() {
           kitchen3DeviceName: "",
           silent: true,
           escPosCutAfterKitchenHtml: true,
-          escPosCutAfterHallOrderHtml: false,
-          escPosCutAfterPaymentReceiptHtml: false,
+          escPosCutAfterHallOrderHtml: true,
+          escPosCutAfterPaymentReceiptHtml: true,
         },
       },
       null,
@@ -321,7 +321,7 @@ const LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML = readConfigBool(
     process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML !== ""
     ? process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML
     : runtimeConfig.printEscPosCutAfterReceiptHtml ?? runtimeConfig.print?.escPosCutAfterReceiptHtml,
-  false
+  true
 );
 
 function readEscPosCutKitchenResolved() {
@@ -340,29 +340,29 @@ function readEscPosCutKitchenResolved() {
 
 function readEscPosCutHallResolved() {
   if (process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML !== undefined && process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML !== "") {
-    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML, false);
+    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML, true);
   }
   const p = runtimeConfig.print || {};
   if (Object.prototype.hasOwnProperty.call(p, "escPosCutAfterHallOrderHtml")) {
-    return readConfigBool(p.escPosCutAfterHallOrderHtml, false);
+    return readConfigBool(p.escPosCutAfterHallOrderHtml, true);
   }
   if (runtimeConfig.printEscPosCutAfterHallOrderHtml !== undefined) {
-    return readConfigBool(runtimeConfig.printEscPosCutAfterHallOrderHtml, false);
+    return readConfigBool(runtimeConfig.printEscPosCutAfterHallOrderHtml, true);
   }
-  /** 홀 주문서는 기본 끔. 레거시 `printEscPosCutAfterReceiptHtml`에 폴백하면 결제용 절단만 켠 매장에서도 주문 직후 RAW 절단·돈통 오동작이 날 수 있음 */
-  return false;
+  /** 기본 켬: 다중 단말이 같은 열전사로 거의 동시에 찍을 때 컷 없이 한 롤로 이어붙는 사례 완화 */
+  return true;
 }
 
 function readEscPosCutPaymentResolved() {
   if (process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML !== undefined && process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML !== "") {
-    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML, false);
+    return readConfigBool(process.env.WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML, true);
   }
   const p = runtimeConfig.print || {};
   if (Object.prototype.hasOwnProperty.call(p, "escPosCutAfterPaymentReceiptHtml")) {
-    return readConfigBool(p.escPosCutAfterPaymentReceiptHtml, false);
+    return readConfigBool(p.escPosCutAfterPaymentReceiptHtml, true);
   }
   if (runtimeConfig.printEscPosCutAfterPaymentReceiptHtml !== undefined) {
-    return readConfigBool(runtimeConfig.printEscPosCutAfterPaymentReceiptHtml, false);
+    return readConfigBool(runtimeConfig.printEscPosCutAfterPaymentReceiptHtml, true);
   }
   return LEGACY_ESC_POS_CUT_AFTER_RECEIPT_HTML;
 }

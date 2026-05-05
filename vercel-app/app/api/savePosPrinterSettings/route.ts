@@ -228,8 +228,8 @@ export async function POST(req: NextRequest) {
     const kitchenSlipShowLineNotes = body?.kitchenSlipShowLineNotes !== false
     const kitchenSlipShowOrderMemo = body?.kitchenSlipShowOrderMemo !== false
     const escPosCutAfterKitchenHtml = parseBoolParam(body?.escPosCutAfterKitchenHtml, true)
-    const escPosCutAfterHallOrderHtml = parseBoolParam(body?.escPosCutAfterHallOrderHtml, false)
-    const escPosCutAfterPaymentReceiptHtml = parseBoolParam(body?.escPosCutAfterPaymentReceiptHtml, false)
+    const escPosCutAfterHallOrderHtml = parseBoolParam(body?.escPosCutAfterHallOrderHtml, true)
+    const escPosCutAfterPaymentReceiptHtml = parseBoolParam(body?.escPosCutAfterPaymentReceiptHtml, true)
     const vatRate = Math.max(0, Number(body?.vatRate ?? 7))
     const vatMode = String(body?.vatMode || 'included') === 'separate' ? 'separate' : 'included'
     const serviceRate = Math.max(0, Number(body?.serviceRate ?? 0))

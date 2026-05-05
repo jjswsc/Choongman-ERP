@@ -1,14 +1,14 @@
 {
     "print":  {
                   "receiptDeviceName":  "",
-                  "escPosCutAfterPaymentReceiptHtml":  false,
+                  "escPosCutAfterPaymentReceiptHtml":  true,
                   "escPosCutAfterKitchenHtml":  true,
                   "kitchen1DeviceName":  "",
                   "deviceName":  "",
                   "kitchen3DeviceName":  "",
                   "kitchenDeviceName":  "",
                   "silent":  true,
-                  "escPosCutAfterHallOrderHtml":  false,
+                  "escPosCutAfterHallOrderHtml":  true,
                   "kitchen2DeviceName":  ""
               },
     "allowedOrigin":  "https://choongman-erp.vercel.app",

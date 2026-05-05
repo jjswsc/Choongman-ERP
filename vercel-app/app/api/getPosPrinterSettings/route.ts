@@ -150,8 +150,9 @@ export async function GET(request: NextRequest) {
     kitchenSlipShowLineNotes: true,
     kitchenSlipShowOrderMemo: true,
     escPosCutAfterKitchenHtml: true,
-    escPosCutAfterHallOrderHtml: false,
-    escPosCutAfterPaymentReceiptHtml: false,
+    /** DB·런타임 미설정 시 true: 같은 프린터로 거의 동시에 두 기기가 찍으면 컷 없이 한 롤로 이어붙는 사례 방지 */
+    escPosCutAfterHallOrderHtml: true,
+    escPosCutAfterPaymentReceiptHtml: true,
     vatRate: 7,
     vatMode: 'included' as const,
     serviceRate: 0,
@@ -403,8 +404,18 @@ export async function GET(request: NextRequest) {
           : raw?.esc_pos_cut_after_kitchen_html === true
             ? true
             : true,
-      escPosCutAfterHallOrderHtml: Boolean(raw?.esc_pos_cut_after_hall_order_html),
-      escPosCutAfterPaymentReceiptHtml: Boolean(raw?.esc_pos_cut_after_payment_receipt_html),
+      escPosCutAfterHallOrderHtml:
+        raw?.esc_pos_cut_after_hall_order_html === false
+          ? false
+          : raw?.esc_pos_cut_after_hall_order_html === true
+            ? true
+            : true,
+      escPosCutAfterPaymentReceiptHtml:
+        raw?.esc_pos_cut_after_payment_receipt_html === false
+          ? false
+          : raw?.esc_pos_cut_after_payment_receipt_html === true
+            ? true
+            : true,
       receiptPrintLang: String(raw?.receipt_print_lang ?? '').trim(),
       kitchenSlipPrintLang: String(raw?.kitchen_slip_print_lang ?? '').trim(),
       vatRate: Math.max(0, Number(raw?.vat_rate ?? 7)),

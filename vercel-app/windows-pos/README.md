@@ -51,8 +51,8 @@ explorer $env:APPDATA\choongman-pos-windows
 - `print.deviceName`: 무인쇄·빠른 인쇄에 쓸 프린터 이름. Windows **정확한 표시 이름**과 일치해야 무인쇄 성공률이 높음 (비우면 Windows 기본 프린터).
 - **ESC/POS 절단(무인쇄 RAW)**: `WINDOWS_POS_PRINT_ESC_POS_CUT=0`이면 종류와 관계없이 절단 안 함. 그 외에는 종류별로 `print` 또는 환경 변수로 지정:
   - `print.escPosCutAfterKitchenHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_KITCHEN_HTML` (기본 `true`)
-  - `print.escPosCutAfterHallOrderHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML` (기본 `false`) — 터미널·주문 화면 **홀 주문서**
-  - `print.escPosCutAfterPaymentReceiptHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML` (기본 `false`) — **결제 영수증**
+  - `print.escPosCutAfterHallOrderHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_HALL_ORDER_HTML` (기본 `true`) — 터미널·주문 화면 **홀 주문서**
+  - `print.escPosCutAfterPaymentReceiptHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_PAYMENT_RECEIPT_HTML` (기본 `true`) — **결제 영수증**
   - (호환) 예전 단일 `printEscPosCutAfterReceiptHtml` / `WINDOWS_POS_ESC_POS_CUT_AFTER_RECEIPT_HTML` — 웹에서 `printReceiptKind`를 안 보낼 때만 적용.
 
 운영 시에는 `runtime-config.example.json`을 복사해 값을 채운 뒤 빌드합니다.
