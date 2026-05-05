@@ -60,8 +60,34 @@ import {
   type InboundTableRow,
 } from "@/components/inbound"
 import { parsePurchaseOrderCart } from "@/lib/purchase-order-cart"
+import {
+  buildInboundPrintHtmlBulk,
+  buildInboundPrintHtmlSingle,
+  type InboundPrintBatchInput,
+} from "@/lib/inbound-print-html"
+import { buildInboundExcelHtmlBulk, buildInboundExcelHtmlSingle } from "@/lib/inbound-excel-html"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
+
+function inboundTableRowToPrintBatch(row: InboundTableRow): InboundPrintBatchInput {
+  return {
+    date: row.date,
+    poDate: row.poDate ?? null,
+    vendor: row.vendor,
+    poNo: row.poNo,
+    invoiceNo: row.invoiceNo,
+    items: row.items.map((it) => ({
+      name: it.name,
+      spec: it.spec,
+      qty: it.qty,
+      amount: it.amount,
+      vatAmount: it.vatAmount,
+    })),
+    totalQty: row.totalQty,
+    totalAmt: row.totalAmt,
+    totalVat: row.totalVat,
+  }
+}
 
 function parsePoCart(json: string | undefined): { code?: string; name?: string; price?: number; qty?: number }[] {
   return parsePurchaseOrderCart(json).items
@@ -690,7 +716,7 @@ export default function InboundPage() {
       g[k].totalAmt += i.amount || 0
       g[k].totalVat += i.vatAmount || 0
     }
-    return Object.values(g)
+    return Object.entries(g).map(([groupKey, data]) => ({ groupKey, ...data }))
   }, [filteredHistoryList])
 
   const periodTotal = React.useMemo(() => {
@@ -702,8 +728,7 @@ export default function InboundPage() {
   }, [filteredHistoryList])
 
   const inboundTableRows = React.useMemo((): InboundTableRow[] => {
-    if (!isOffice) return []
-    return groupedHistory.map((g, i) => {
+    return groupedHistory.map((g) => {
       const first = g.items[0]
       const firstLine = formatInboundLineName(first)
       const itemsSummary =
@@ -711,7 +736,7 @@ export default function InboundPage() {
           ? `${firstLine}${first?.spec ? ` (${first.spec})` : ""}`
           : `${formatInboundLineName(g.items[0])} ${t("inEtcCount")} ${g.items.length - 1}`
       return {
-        id: `g-${i}-${g.date}-${g.vendor}`,
+        id: g.groupKey,
         date: g.date,
         poDate: g.po_created_at ?? undefined,
         vendor: g.vendor,
@@ -732,20 +757,7 @@ export default function InboundPage() {
         totalVat: g.totalVat,
       }
     })
-  }, [groupedHistory, isOffice, t, formatInboundLineName])
-
-  const storeRows = React.useMemo(
-    () =>
-      filteredHistoryList.map((i) => ({
-        date: i.date,
-        vendor: i.vendor,
-        item: `${formatInboundLineName(i)}${i.spec ? ` (${i.spec})` : ""}`.trim() || "-",
-        qty: i.qty,
-        amount: i.amount || 0,
-        vatAmount: i.vatAmount || 0,
-      })),
-    [filteredHistoryList, formatInboundLineName]
-  )
+  }, [groupedHistory, t, formatInboundLineName])
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "summary" | "guide">("new")
   const [editingRow, setEditingRow] = React.useState<InboundTableRow | null>(null)
@@ -945,29 +957,26 @@ export default function InboundPage() {
         vi: "vi-VN",
         ms: "ms-MY",
       }[lang] || "en-US"
-      const inboundDateStr = row.date ? new Date(row.date).toLocaleDateString(locale) : ""
-      const poDateStr = row.poDate ? new Date(row.poDate).toLocaleDateString(locale) : ""
       const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
       const vatLabel = t("posVatLabel") || "VAT"
       const totalLabel = t("inv_total") || t("total") || "Total"
-      const tbodyHtml = row.items
-        .map(
-          (it, i) =>
-            `<tr><td>${i + 1}</td><td>${(it.name || "-").replace(/</g, "&lt;")}</td><td>${(it.spec || "-").replace(/</g, "&lt;")}</td><td class="num">${it.qty}</td><td class="num">${it.amount.toLocaleString()}</td><td class="num">${it.vatAmount.toLocaleString()}</td><td class="num">${(it.amount + it.vatAmount).toLocaleString()}</td></tr>`
-        )
-        .join("")
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("adminInbound")} - ${row.date}</title>
-<style>body{font-family:'Inter','Pretendard','Noto Sans KR',Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style></head><body>
-<h1>${t("adminInbound")}</h1>${row.poDate ? `<p><strong>${t("inPoDate")}:</strong> ${poDateStr}</p>` : ""}<p><strong>${t("inInboundDate")}:</strong> ${inboundDateStr}</p><p><strong>${t("inVendor")}:</strong> ${(row.vendor || "-").replace(/</g, "&lt;")}</p>
-${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || "").replace(/</g, "&lt;")}</p>` : ""}${row.invoiceNo ? `<p><strong>${t("inInvoiceNo") || "인보이스"}:</strong> ${(row.invoiceNo || "").replace(/</g, "&lt;")}</p>` : ""}
-<hr/><table><thead><tr><th>No</th><th>${t("outColItem")}</th><th>${t("spec")}</th><th class="num">${t("outColQty")}</th><th class="num">${supplyLabel}</th><th class="num">${vatLabel}</th><th class="num">${totalLabel}</th></tr></thead>
-<tbody>${tbodyHtml}</tbody><tfoot><tr class="tot"><td colspan="3" class="num">${totalLabel}</td><td class="num">${row.totalQty.toLocaleString()}</td><td class="num">${row.totalAmt.toLocaleString()}</td><td class="num">${row.totalVat.toLocaleString()}</td><td class="num">${(row.totalAmt + row.totalVat).toLocaleString()}</td></tr></tfoot></table></body></html>`
+      const html = buildInboundPrintHtmlSingle(inboundTableRowToPrintBatch(row), {
+        locale,
+        lang,
+        t,
+        supplyLabel,
+        vatLabel,
+        totalLabel,
+      })
       const w = window.open("", "_blank")
       if (w) {
         w.document.write(html)
         w.document.close()
         w.focus()
-        setTimeout(() => { w.print(); w.close() }, 300)
+        setTimeout(() => {
+          w.print()
+          w.close()
+        }, 300)
       }
     },
     [lang, t]
@@ -975,43 +984,130 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
 
   const exportInboundExcel = React.useCallback(
     (row: InboundTableRow) => {
-      const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      const locale = {
+        ko: "ko-KR",
+        en: "en-US",
+        th: "th-TH",
+        mm: "my-MM",
+        la: "lo-LA",
+        kh: "km-KH",
+        vi: "vi-VN",
+        ms: "ms-MY",
+      }[lang] || "en-US"
       const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
       const vatLabel = t("posVatLabel") || "VAT"
       const totalLabel = t("inv_total") || t("total") || "Total"
-      const headers = ["No", t("outColItem"), t("spec"), t("outColQty"), supplyLabel, vatLabel, totalLabel]
-      const dataRows = row.items.map((it, i) => [i + 1, it.name || "-", it.spec || "-", it.qty, it.amount, it.vatAmount, it.amount + it.vatAmount])
-      const allRows = [
-        [t("adminInbound"), `${row.date} ${row.vendor}`],
-        ...(row.poDate ? [[t("inPoDate"), row.poDate]] : []),
-        [t("inInboundDate"), row.date],
-        ...(row.poNo ? [[t("inPoNo"), row.poNo]] : []),
-        ...(row.invoiceNo ? [[t("inInvoiceNo"), row.invoiceNo]] : []),
-        [],
-        headers,
-        ...dataRows.map((r) => r.map((v) => String(v))),
-        [],
-        [totalLabel, "", "", row.totalQty, row.totalAmt, row.totalVat, row.totalAmt + row.totalVat],
-      ].filter((r) => r.length > 0)
-      const colCount = 7
-      const pad = (r: (string | number)[], n: number) => [...r].concat(Array(Math.max(0, n - r.length)).fill("")).slice(0, n).map((v) => escapeXml(String(v)))
-      const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head><body><table>${allRows.map((r, ri) => `<tr${ri === 0 || (Array.isArray(r) && r[0] === "No") || ri === allRows.length - 1 ? ' class="head"' : ""}>${pad(r as (string|number)[], colCount).map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></body></html>`
+      const periodLabel =
+        histStart && histEnd ? `${histStart} ~ ${histEnd}` : row.date || "—"
+      const storeLabelRaw = isOffice
+        ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
+        : (auth?.store?.trim() || t("store") || "Store")
+      const html = buildInboundExcelHtmlSingle(inboundTableRowToPrintBatch(row), {
+        locale,
+        t,
+        supplyLabel,
+        vatLabel,
+        totalLabel,
+        generatedAt: new Date(),
+        periodLabel,
+        storeContext: storeLabelRaw,
+      })
       const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
       const startLabel = (histStart || row.date || "").replace(/-/g, "")
       const endLabel = (histEnd || row.date || "").replace(/-/g, "")
-      const periodLabel = startLabel && endLabel ? `${startLabel}-${endLabel}` : (row.date || "").replace(/-/g, "")
-      const storeLabelRaw = isOffice
-        ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
-        : (auth?.store?.trim() || t("store") || "Store")
+      const periodFile = startLabel && endLabel ? `${startLabel}-${endLabel}` : (row.date || "").replace(/-/g, "")
       const storeLabel = storeLabelRaw.replace(/[/\\?*:"|]/g, "_").slice(0, 20)
-      a.download = `Inbound_${storeLabel}_${periodLabel}_${(row.vendor || "").replace(/[/\\?*:"|]/g, "_").slice(0, 20)}.xls`
+      a.download = `Inbound_${storeLabel}_${periodFile}_${(row.vendor || "").replace(/[/\\?*:"|]/g, "_").slice(0, 20)}.xls`
       a.click()
       URL.revokeObjectURL(url)
     },
-    [t, histStart, histEnd, isOffice, histStore, auth?.store]
+    [t, lang, histStart, histEnd, isOffice, histStore, auth?.store]
+  )
+
+  const printInboundBulk = React.useCallback(
+    (rows: InboundTableRow[]) => {
+      if (!rows.length) return
+      const locale = {
+        ko: "ko-KR",
+        en: "en-US",
+        th: "th-TH",
+        mm: "my-MM",
+        la: "lo-LA",
+        kh: "km-KH",
+        vi: "vi-VN",
+        ms: "ms-MY",
+      }[lang] || "en-US"
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
+      const vatLabel = t("posVatLabel") || "VAT"
+      const totalLabel = t("inv_total") || t("total") || "Total"
+      const html = buildInboundPrintHtmlBulk(rows.map(inboundTableRowToPrintBatch), {
+        locale,
+        lang,
+        t,
+        supplyLabel,
+        vatLabel,
+        totalLabel,
+      })
+      const w = window.open("", "_blank")
+      if (w) {
+        w.document.write(html)
+        w.document.close()
+        w.focus()
+        setTimeout(() => {
+          w.print()
+          w.close()
+        }, 300)
+      }
+    },
+    [lang, t]
+  )
+
+  const exportInboundExcelBulk = React.useCallback(
+    (rows: InboundTableRow[]) => {
+      if (!rows.length) return
+      const locale = {
+        ko: "ko-KR",
+        en: "en-US",
+        th: "th-TH",
+        mm: "my-MM",
+        la: "lo-LA",
+        kh: "km-KH",
+        vi: "vi-VN",
+        ms: "ms-MY",
+      }[lang] || "en-US"
+      const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
+      const vatLabel = t("posVatLabel") || "VAT"
+      const totalLabel = t("inv_total") || t("total") || "Total"
+      const periodLabel = histStart && histEnd ? `${histStart} ~ ${histEnd}` : "—"
+      const storeLabelRaw = isOffice
+        ? (histStore?.trim() ? histStore : (t("store_all_stores") || "AllStores"))
+        : (auth?.store?.trim() || t("store") || "Store")
+      const html = buildInboundExcelHtmlBulk(rows.map(inboundTableRowToPrintBatch), {
+        locale,
+        t,
+        supplyLabel,
+        vatLabel,
+        totalLabel,
+        generatedAt: new Date(),
+        periodLabel,
+        storeContext: storeLabelRaw,
+      })
+      const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const startLabel = (histStart || "").replace(/-/g, "")
+      const endLabel = (histEnd || "").replace(/-/g, "")
+      const periodFile = startLabel && endLabel ? `${startLabel}-${endLabel}` : "period"
+      const storeLabel = storeLabelRaw.replace(/[/\\?*:"|]/g, "_").slice(0, 20)
+      a.download = `Inbound_bulk_${storeLabel}_${periodFile}.xls`
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    [t, lang, histStart, histEnd, isOffice, histStore, auth?.store]
   )
 
   const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
@@ -1258,9 +1354,13 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             </TabsContent>
 
           <TabsContent value="hist" className={adminTabsContentCn}>
-            {isOffice && (
+            {isOffice ? (
               <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
                 {t("inHistFilterHintOffice")}
+              </p>
+            ) : (
+              <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+                {t("inHistExpandHintStore")}
               </p>
             )}
             <InboundFilterBar
@@ -1293,15 +1393,15 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             />
             <div className="overflow-x-auto max-h-[500px]">
               <InboundTable
-                isOffice={isOffice}
                 rows={inboundTableRows}
                 loading={historyLoading}
-                storeRows={!isOffice ? storeRows : undefined}
-                onEdit={handleEditRow}
-                onDelete={handleDeleteRow}
-                onInvoiceReceivedToggle={handleInvoiceReceivedToggle}
-                onPrint={printInbound}
-                onExcel={exportInboundExcel}
+                onEdit={isOffice ? handleEditRow : undefined}
+                onDelete={isOffice ? handleDeleteRow : undefined}
+                onInvoiceReceivedToggle={isOffice ? handleInvoiceReceivedToggle : undefined}
+                onPrint={isOffice ? printInbound : undefined}
+                onExcel={isOffice ? exportInboundExcel : undefined}
+                onBulkPrint={printInboundBulk}
+                onBulkExcel={exportInboundExcelBulk}
                 updatingInvoiceId={updatingInvoiceId}
               />
             </div>

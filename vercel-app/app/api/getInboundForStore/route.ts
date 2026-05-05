@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { expandStoreVariantsForGrade, escapeForIlikeExact, storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { fetchInboundBankPurchaseSyntheticRows } from '@/lib/inbound-bank-purchase-synthetic'
 import { requireAuth } from '@/lib/verify-auth'
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
 
     const logs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
       order: 'log_date.desc',
-      select: 'log_date,log_type,location,vendor_target,item_code,item_name,qty,unit_cost',
+      select: 'log_date,log_type,location,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id',
       pageSize: 8000,
       maxRows: 80000,
     })) as {
@@ -154,6 +154,7 @@ export async function GET(request: NextRequest) {
       item_name?: string
       qty?: number
       unit_cost?: number | null
+      inbound_batch_id?: number | null
     }[]
 
     const list: {
@@ -164,7 +165,13 @@ export async function GET(request: NextRequest) {
       qty: number
       amount: number
       vatAmount?: number
+      code?: string
       purchaseSource?: 'hq' | 'store'
+      inbound_batch_id?: number | null
+      po_no?: string | null
+      invoice_no?: string | null
+      invoice_received?: boolean
+      po_created_at?: string | null
       bank_transaction_id?: number
       row_kind?: 'stock' | 'bank_purchase_payment'
     }[] = []
@@ -211,7 +218,9 @@ export async function GET(request: NextRequest) {
         qty,
         amount,
         vatAmount,
+        code: code || undefined,
         purchaseSource: info.purchaseSource,
+        inbound_batch_id: row.inbound_batch_id ?? undefined,
         row_kind: 'stock',
       })
     }
@@ -248,6 +257,7 @@ export async function GET(request: NextRequest) {
           amount: b.amount,
           vatAmount: b.vatAmount,
           purchaseSource: b.purchaseSource,
+          inbound_batch_id: null,
           bank_transaction_id: b.bank_transaction_id,
           row_kind: 'bank_purchase_payment',
         })
@@ -263,6 +273,41 @@ export async function GET(request: NextRequest) {
     }
 
     list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+
+    const batchIds = [...new Set(list.map((r) => r.inbound_batch_id).filter((id): id is number => typeof id === 'number' && id > 0))]
+    const batchMap: Record<number, { po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }> = {}
+    if (batchIds.length > 0) {
+      const batchFilter = `id=in.(${batchIds.join(',')})`
+      const batches = (await supabaseSelectFilter('inbound_batches', batchFilter, {
+        select: 'id,po_no,invoice_no,invoice_received,purchase_order_id',
+      })) as { id?: number; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; purchase_order_id?: number | null }[]
+      const poIds = [...new Set((batches || []).map((b) => b.purchase_order_id).filter((id): id is number => typeof id === 'number' && id > 0))]
+      const poCreatedMap: Record<number, string> = {}
+      if (poIds.length > 0) {
+        const poFilter = `id=in.(${poIds.join(',')})`
+        const pos = (await supabaseSelectFilter('purchase_orders', poFilter, {
+          select: 'id,created_at',
+        })) as { id?: number; created_at?: string }[]
+        for (const p of pos || []) {
+          if (p.id && p.created_at) poCreatedMap[p.id] = p.created_at.slice(0, 10)
+        }
+      }
+      for (const b of batches || []) {
+        if (b.id) {
+          const poDate = b.purchase_order_id ? (poCreatedMap[b.purchase_order_id] ?? null) : null
+          batchMap[b.id] = { po_no: b.po_no, invoice_no: b.invoice_no, invoice_received: Boolean(b.invoice_received), po_created_at: poDate }
+        }
+      }
+    }
+    for (const item of list) {
+      const batch = item.inbound_batch_id ? batchMap[item.inbound_batch_id] : null
+      if (batch) {
+        item.po_no = batch.po_no
+        item.invoice_no = batch.invoice_no
+        item.invoice_received = batch.invoice_received
+        item.po_created_at = batch.po_created_at
+      }
+    }
 
     return NextResponse.json(list, { headers })
   } catch (e) {

@@ -29,7 +29,7 @@ import {
 import { Landmark, ExternalLink, Save, Plus, Trash2, Download, CalendarClock } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr } from "@/lib/i18n"
 import {
   canApproveAccountingCompliance,
   canApproveAccountingPeriodUnlock,
@@ -2282,7 +2282,7 @@ export function AdminAccountingCompliance({
     const grouped = new Map<string, { name: string; count: number; net: number; vat: number; total: number }>()
     for (const row of vatOutputRowsFiltered) {
       if (isPosAutoVatOutputRow(row)) continue
-      const name = String(row.counterparty_name || "").trim() || "(미지정 거래처)"
+      const name = String(row.counterparty_name || "").trim() || t("accCompUnnamedVendor")
       const hit = grouped.get(name) || { name, count: 0, net: 0, vat: 0, total: 0 }
       hit.count += 1
       hit.net += Number(row.net_amount || 0)
@@ -2291,7 +2291,7 @@ export function AdminAccountingCompliance({
       grouped.set(name, hit)
     }
     return Array.from(grouped.values()).sort((a, b) => b.total - a.total)
-  }, [vatOutputRowsFiltered])
+  }, [vatOutputRowsFiltered, t])
   const vatOutputVendorTotals = React.useMemo(
     () =>
       vatOutputVendorSummaries.reduce(
@@ -2308,7 +2308,7 @@ export function AdminAccountingCompliance({
   const vatInputVendorSummaries = React.useMemo(() => {
     const grouped = new Map<string, { name: string; count: number; net: number; vat: number; total: number }>()
     for (const row of vatInputRowsFiltered) {
-      const name = String(row.counterparty_name || "").trim() || "(미지정 거래처)"
+      const name = String(row.counterparty_name || "").trim() || t("accCompUnnamedVendor")
       const hit = grouped.get(name) || { name, count: 0, net: 0, vat: 0, total: 0 }
       hit.count += 1
       hit.net += Number(row.net_amount || 0)
@@ -2317,7 +2317,7 @@ export function AdminAccountingCompliance({
       grouped.set(name, hit)
     }
     return Array.from(grouped.values()).sort((a, b) => b.total - a.total)
-  }, [vatInputRowsFiltered])
+  }, [vatInputRowsFiltered, t])
   const vatInputVendorTotals = React.useMemo(
     () =>
       vatInputVendorSummaries.reduce(
@@ -2357,21 +2357,21 @@ export function AdminAccountingCompliance({
   const vatSettlementHeadline = React.useMemo(() => {
     if (vatSettlement.payableVat > 0) {
       return {
-        tone: "납부 예정",
+        tone: t("accCompVatTonePayableDue"),
         className: "border-rose-300/50 bg-rose-50/85 dark:bg-rose-950/25",
       }
     }
     if (vatSettlement.payableVat < 0) {
       return {
-        tone: "환급(이월공제) 예정",
+        tone: t("accCompVatToneCreditRefund"),
         className: "border-violet-300/50 bg-violet-50/85 dark:bg-violet-950/25",
       }
     }
     return {
-      tone: "정산 0원",
+      tone: t("accCompVatToneZero"),
       className: "border-emerald-300/50 bg-emerald-50/85 dark:bg-emerald-950/25",
     }
-  }, [vatSettlement.payableVat])
+  }, [vatSettlement.payableVat, t])
   const outputSummaryNet = isHeadOfficeLedgerStore
     ? vatSettlement.outputNet
     : Number(taxSummary?.vat.outputNet || 0)
@@ -2398,13 +2398,13 @@ export function AdminAccountingCompliance({
     const msgs: string[] = []
     const elapsed = daysFromNow(etaxWorkflowMeta?.updatedAt || "")
     if (etaxApplySubmitted && !etaxEmailConfirmed && elapsed != null && elapsed >= 7) {
-      msgs.push(`RD 이메일 인증 미완료: 신청 후 ${elapsed}일 경과 (7일 내 인증 권장)`)
+      msgs.push(tr(t, "accCompEtaxReminderRdEmail", { days: String(elapsed) }))
     }
     if (etaxDocsUploaded && !etaxActivateCodeReceived && elapsed != null && elapsed >= 15) {
-      msgs.push(`Activate Code 미수령: 업로드 후 ${elapsed}일 경과 (약 15일 확인 필요)`)
+      msgs.push(tr(t, "accCompEtaxReminderActivate", { days: String(elapsed) }))
     }
     if (etaxSenderEmailRegistered && !etaxPilotIssued) {
-      msgs.push("발행 주소 등록 후 시험 발행/수신 확인이 아직 완료되지 않았습니다.")
+      msgs.push(t("accCompEtaxReminderPilot"))
     }
     return msgs
   }, [
@@ -2415,6 +2415,7 @@ export function AdminAccountingCompliance({
     etaxActivateCodeReceived,
     etaxSenderEmailRegistered,
     etaxPilotIssued,
+    t,
   ])
   const etaxStepStamp = React.useCallback(
     (key: EtaxStepKey) => {
@@ -2642,33 +2643,31 @@ export function AdminAccountingCompliance({
     [auth?.user]
   )
   const pnd1RdPrepBtnLabel =
-    lang === "th" ? "ส่งออก RD Prep ภ.ง.ด.1 TXT" : lang === "en" ? "Export RD Prep PND1 TXT" : "RD Prep PND1 TXT 다운로드"
+    lang === "th" ? "ส่งออก RD Prep ภ.ง.ด.1 TXT" : t("accCompPnd1ExportTxt")
   const pnd1RdPrepGuideTitle =
-    lang === "th" ? "แนวทางยื่น RD Prep (ภ.ง.ด.1 / ภ.ง.ด.1ก)" : lang === "en" ? "RD Prep guide (PND1 / PND1A)" : "RD Prep 제출 가이드 (PND1 / PND1A)"
+    lang === "th" ? "แนวทางยื่น RD Prep (ภ.ง.ด.1 / ภ.ง.ด.1ก)" : t("accCompPnd1GuideTitle")
   const pnd1RdPrepGuideNote =
     lang === "th"
       ? "ไฟล์นี้เป็นแบบคั่นด้วย | เพื่อนำเข้าใน RD Prep โดยแมปคอลัมน์ในขั้นตอนโอนย้ายข้อมูล"
-      : lang === "en"
-        ? "This export uses | delimiter for RD Prep transfer mapping."
-        : "이 파일은 RD Prep의 데이터 이관 단계에서 `|` 구분자로 컬럼 매핑하는 용도입니다."
+      : t("accCompPnd1GuideNotePipe")
   const pnd1ValidateBtnLabel =
-    lang === "th" ? "ตรวจสอบก่อนส่งออก" : lang === "en" ? "Validate before export" : "내보내기 전 검증"
+    lang === "th" ? "ตรวจสอบก่อนส่งออก" : t("accCompPnd1ValidateBeforeExport")
   const pnd1FormLabel =
-    lang === "th" ? "แบบยื่น" : lang === "en" ? "Filing form" : "신고서 유형"
+    lang === "th" ? "แบบยื่น" : t("accCompPnd1FilingForm")
   const pnd1PayerBoxTitle =
-    lang === "th" ? "ข้อมูลผู้จ่าย (ผู้หัก ณ ที่จ่าย)" : lang === "en" ? "Payer information" : "지급자(원천징수의무자) 정보"
+    lang === "th" ? "ข้อมูลผู้จ่าย (ผู้หัก ณ ที่จ่าย)" : t("accCompPnd1PayerInfoBox")
   const pnd1ValidationTableTitle =
-    lang === "th" ? "ผลตรวจสอบ RD Prep" : lang === "en" ? "RD Prep validation results" : "RD Prep 검증 결과"
+    lang === "th" ? "ผลตรวจสอบ RD Prep" : t("accCompPnd1ValidationResults")
   const pnd1GoLedgerBtnLabel =
-    lang === "th" ? "ไปที่รายการ" : lang === "en" ? "Go to ledger row" : "원장으로 이동"
+    lang === "th" ? "ไปที่รายการ" : t("accCompPnd1GoToLedgerRow")
   const pnd1ClearValidationLabel =
-    lang === "th" ? "ล้างผลตรวจสอบ" : lang === "en" ? "Clear result" : "검증결과 지우기"
+    lang === "th" ? "ล้างผลตรวจสอบ" : t("accCompPnd1ClearValidation")
   const pnd1IssueFilterLabel =
-    lang === "th" ? "ตัวกรองปัญหา" : lang === "en" ? "Issue filter" : "문제유형 필터"
+    lang === "th" ? "ตัวกรองปัญหา" : t("accCompPnd1IssueFilter")
   const pnd1IssueExportCsvLabel =
-    lang === "th" ? "ส่งออกผลตรวจสอบ CSV" : lang === "en" ? "Export validation CSV" : "검증결과 CSV 다운로드"
+    lang === "th" ? "ส่งออกผลตรวจสอบ CSV" : t("accCompPnd1ExportValidationCsv")
   const pnd1NoIssueTooltip =
-    lang === "th" ? "ไม่มีปัญหาประเภทนี้ในช่วงที่เลือก" : lang === "en" ? "No issues of this type in current filter" : "현재 조건에서 해당 이슈가 없습니다."
+    lang === "th" ? "ไม่มีปัญหาประเภทนี้ในช่วงที่เลือก" : t("accCompPnd1NoIssuesInFilter")
   const kt20kExportUrl = React.useMemo(() => {
     const y = Number(kt20kYear)
     if (!Number.isFinite(y) || y < 2000 || y > 2100) return "#"
@@ -2676,24 +2675,6 @@ export function AdminAccountingCompliance({
   }, [kt20kYear, role, storeTb])
   const pnd1IssueCodeLabel = React.useCallback(
     (code: string) => {
-      const ko: Record<string, string> = {
-        missing_payee_name: "지급받는자 이름 누락",
-        missing_payee_tax_id: "지급받는자 TIN 누락",
-        invalid_payee_tax_id_length: "지급받는자 TIN 13자리 아님",
-        missing_payment_date: "지급일 누락",
-        invalid_payment_date: "지급일 형식 오류",
-        missing_income_type: "소득유형 누락",
-        non_positive_withheld_amount: "원천세 금액 0 이하",
-      }
-      const en: Record<string, string> = {
-        missing_payee_name: "Missing payee name",
-        missing_payee_tax_id: "Missing payee tax ID",
-        invalid_payee_tax_id_length: "Payee tax ID not 13 digits",
-        missing_payment_date: "Missing payment date",
-        invalid_payment_date: "Invalid payment date format",
-        missing_income_type: "Missing income type",
-        non_positive_withheld_amount: "Withheld amount <= 0",
-      }
       const th: Record<string, string> = {
         missing_payee_name: "ไม่มีชื่อผู้รับเงิน",
         missing_payee_tax_id: "ไม่มีเลขผู้เสียภาษีผู้รับเงิน",
@@ -2704,10 +2685,11 @@ export function AdminAccountingCompliance({
         non_positive_withheld_amount: "ภาษีหัก ณ ที่จ่าย <= 0",
       }
       if (lang === "th") return th[code] || code
-      if (lang === "en") return en[code] || code
-      return ko[code] || code
+      const key = `accCompPnd1Issue_${code}`
+      const label = t(key)
+      return label === key ? code : label
     },
-    [lang]
+    [lang, t]
   )
   const pnd1IssueRowsFiltered = React.useMemo(() => {
     const issues = pnd1ValidationResult?.issues || []
@@ -2793,20 +2775,6 @@ export function AdminAccountingCompliance({
   }, [kt20kData?.reconciliation?.employeeTopDiff, kt20kDiffToleranceNum, kt20kReasonTagFilter])
   const kt20kReasonTagLabel = React.useCallback(
     (tag: string) => {
-      const ko: Record<string, string> = {
-        missing_in_pnd1a: "PND1A 미기록",
-        missing_in_kt20k: "KT20K 미기록",
-        amount_mismatch: "금액 불일치",
-        possible_store_mismatch: "매장 매칭 의심",
-        possible_name_mismatch: "이름 매칭 의심",
-      }
-      const en: Record<string, string> = {
-        missing_in_pnd1a: "Missing in PND1A",
-        missing_in_kt20k: "Missing in KT20K",
-        amount_mismatch: "Amount mismatch",
-        possible_store_mismatch: "Possible store mismatch",
-        possible_name_mismatch: "Possible name mismatch",
-      }
       const th: Record<string, string> = {
         missing_in_pnd1a: "ไม่มีใน PND1A",
         missing_in_kt20k: "ไม่มีใน KT20K",
@@ -2815,10 +2783,11 @@ export function AdminAccountingCompliance({
         possible_name_mismatch: "อาจแมปชื่อผิด",
       }
       if (lang === "th") return th[tag] || tag
-      if (lang === "en") return en[tag] || tag
-      return ko[tag] || tag
+      const key = `accCompKt20kTag_${tag}`
+      const label = t(key)
+      return label === key ? tag : label
     },
-    [lang]
+    [lang, t]
   )
   const kt20kReasonTagCountMap = React.useMemo(() => {
     const base: Record<Kt20kReasonTag, number> = {
@@ -3099,11 +3068,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th"
-                  ? "เทียบยอด KT20K vs PND1A"
-                  : lang === "en"
-                    ? "KT20K vs PND1A reconciliation"
-                    : "KT20K vs PND1A 대사"}
+                {lang === "th" ? "เทียบยอด KT20K vs PND1A" : t("accCompKt20kVsPnd1aTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -3111,7 +3076,7 @@ export function AdminAccountingCompliance({
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th" ? "เกณฑ์ส่วนต่าง (บาท)" : lang === "en" ? "Diff tolerance (THB)" : "허용 오차(THB)"}
+                      {lang === "th" ? "เกณฑ์ส่วนต่าง (บาท)" : t("accCompKt20kDiffToleranceLabel")}
                     </div>
                     <Input
                       type="number"
@@ -3173,7 +3138,7 @@ export function AdminAccountingCompliance({
                         {!kt20kMonthlyDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "ไม่พบส่วนต่างตามเกณฑ์" : lang === "en" ? "No monthly diff by tolerance" : "허용 오차 기준 월별 차이가 없습니다."}
+                              {lang === "th" ? "ไม่พบส่วนต่างตามเกณฑ์" : t("accCompKt20kNoMonthlyDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -3183,11 +3148,7 @@ export function AdminAccountingCompliance({
 
                   <div className="space-y-2">
                     <div className="text-xs text-muted-foreground">
-                      {lang === "th"
-                        ? "ตัวกรองแท็กสาเหตุ"
-                        : lang === "en"
-                          ? "Reason-tag quick filters"
-                          : "원인 태그 퀵필터"}
+                      {lang === "th" ? "ตัวกรองแท็กสาเหตุ" : t("accCompKt20kReasonTagQuickFilter")}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <Button
@@ -3196,7 +3157,7 @@ export function AdminAccountingCompliance({
                         variant={kt20kReasonTagFilter.length === 0 ? "default" : "outline"}
                         onClick={() => setKt20kReasonTagFilter([])}
                       >
-                        {lang === "th" ? "ทั้งหมด" : lang === "en" ? "All" : "전체"}
+                        {lang === "th" ? "ทั้งหมด" : t("all")}
                       </Button>
                       {KT20K_REASON_TAGS.map((tag) => {
                         const cnt = kt20kReasonTagCountMap[tag] || 0
@@ -3212,9 +3173,7 @@ export function AdminAccountingCompliance({
                               cnt === 0
                                 ? lang === "th"
                                   ? "ไม่พบรายการในเงื่อนไขปัจจุบัน"
-                                  : lang === "en"
-                                    ? "No rows in current filter"
-                                    : "현재 조건에서 해당 태그가 없습니다."
+                                  : t("accCompKt20kNoTagInFilter")
                                 : ""
                             }
                             className="justify-between"
@@ -3267,7 +3226,7 @@ export function AdminAccountingCompliance({
                         {!kt20kEmployeeDiffRows.length ? (
                           <tr>
                             <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {lang === "th" ? "ไม่พบส่วนต่างรายบุคคล" : lang === "en" ? "No employee-level diff" : "직원 단위 차이가 없습니다."}
+                              {lang === "th" ? "ไม่พบส่วนต่างรายบุคคล" : t("accCompKt20kNoEmployeeDiff")}
                             </td>
                           </tr>
                         ) : null}
@@ -3277,7 +3236,7 @@ export function AdminAccountingCompliance({
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  {lang === "th" ? "ยังไม่มีข้อมูลเทียบยอด" : lang === "en" ? "No reconciliation data" : "대사 데이터가 없습니다."}
+                  {lang === "th" ? "ยังไม่มีข้อมูลเทียบยอด" : t("accCompKt20kNoReconcileData")}
                 </div>
               )}
             </CardContent>
@@ -3366,7 +3325,7 @@ export function AdminAccountingCompliance({
 
         <TabsContent value="period" className={tabsContentClass}>
           <div className="text-[11px] text-muted-foreground mb-2">
-            권한: 잠금은 본사/회계, 잠금 해제 승인은 본사만 가능합니다.
+            {t("accCompPeriodLockRoleHint")}
           </div>
           <Card>
             <CardContent className="pt-6 overflow-x-auto">
@@ -3697,18 +3656,18 @@ export function AdminAccountingCompliance({
                         ))}
                       </div>
                     ) : (
-                      <div className="text-[11px] text-muted-foreground">이력이 없습니다.</div>
+                      <div className="text-[11px] text-muted-foreground">{t("accCompClosingDocHistoryEmpty")}</div>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">조회 버튼을 눌러 마감 미리보기를 확인하세요.</div>
+                <div className="text-xs text-muted-foreground">{t("accCompClosingRunSearchForPreview")}</div>
               )}
             </CardContent>
           </Card>
           <Card className="mt-3">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">권한/확정 감사로그</CardTitle>
+              <CardTitle className="text-base">{t("accCompComplianceAuditLogTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex flex-wrap gap-2 items-end">
@@ -3722,75 +3681,78 @@ export function AdminAccountingCompliance({
                   />
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">결정</div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompAuditFilterDecision")}</div>
                   <Select value={auditDecision} onValueChange={(v) => setAuditDecision(v as "all" | "allow" | "deny" | "error")}>
                     <SelectTrigger className="h-9 w-[140px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">전체</SelectItem>
-                      <SelectItem value="allow">허용</SelectItem>
-                      <SelectItem value="deny">거부</SelectItem>
-                      <SelectItem value="error">오류</SelectItem>
+                      <SelectItem value="all">{t("all")}</SelectItem>
+                      <SelectItem value="allow">{t("accCompDecisionAllow")}</SelectItem>
+                      <SelectItem value="deny">{t("accCompDecisionDeny")}</SelectItem>
+                      <SelectItem value="error">{t("accCompDecisionError")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-1">액션/사유 키워드</div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("accCompAuditActionKeywordLabel")}</div>
                   <Input
                     className="h-9 w-[220px]"
                     value={auditActionKeyword}
                     onChange={(e) => setAuditActionKeyword(e.target.value)}
-                    placeholder="예: FORBIDDEN, closing, workflow"
+                    placeholder={t("accCompAuditActionKeywordPh")}
                   />
                 </div>
                 <Button type="button" variant="secondary" onClick={() => void loadComplianceAuditLogs()} disabled={auditLoading}>
-                  {auditLoading ? t("loading") : "감사로그 조회"}
+                  {auditLoading ? t("loading") : t("accCompAuditQueryButton")}
                 </Button>
                 <a href={complianceAuditCsvUrl} target="_blank" rel="noreferrer" className="inline-flex">
                   <Button type="button" variant="outline" className="h-9">
-                    감사 CSV
+                    {t("accCompAuditCsv")}
                     <ExternalLink className="ml-1 h-3.5 w-3.5" />
                   </Button>
                 </a>
               </div>
               {auditFallbackUsed ? (
                 <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-                  감사로그 테이블이 없어 fallback 모드입니다. SQL 마이그레이션 적용 후 다시 조회해 주세요.
+                  {t("accCompAuditTableMissingFallback")}
                 </div>
               ) : null}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">총건수</div>
+                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiTotalCount")}</div>
                   <div className="text-sm font-semibold">{auditKpi.total.toLocaleString()}</div>
                 </div>
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">허용</div>
+                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiAllowShort")}</div>
                   <div className="text-sm font-semibold text-emerald-700">{auditKpi.allowCount.toLocaleString()}</div>
                 </div>
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">거부</div>
+                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiDenyShort")}</div>
                   <div className="text-sm font-semibold text-amber-700">{auditKpi.denyCount.toLocaleString()}</div>
                 </div>
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">오류</div>
+                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditKpiErrorShort")}</div>
                   <div className="text-sm font-semibold text-rose-700">{auditKpi.errorCount.toLocaleString()}</div>
                 </div>
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">거부율</div>
+                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditDenyRateShort")}</div>
                   <div className="text-sm font-semibold">{auditKpi.denyRate.toFixed(1)}%</div>
                 </div>
                 <div className="rounded border border-border/60 p-2">
-                  <div className="text-[10px] text-muted-foreground">오류율</div>
+                  <div className="text-[10px] text-muted-foreground">{t("accCompAuditErrorRateShort")}</div>
                   <div className="text-sm font-semibold">{auditKpi.errorRate.toFixed(1)}%</div>
                 </div>
               </div>
               <div className="rounded border border-border/60 p-2 text-[11px]">
                 <span className="text-muted-foreground">
-                  전월 비교 ({auditPrevMonthStats?.yearMonth || "-"}, 표본 {Number(auditPrevMonthStats?.total || 0).toLocaleString()}건):
+                  {tr(t, "accCompAuditMoMCompare", {
+                    month: auditPrevMonthStats?.yearMonth || "-",
+                    sampleCount: Number(auditPrevMonthStats?.total || 0).toLocaleString(),
+                  })}
                 </span>
                 {auditDenyRateDelta == null ? (
-                  <span className="ml-2 text-muted-foreground">비교 데이터 없음</span>
+                  <span className="ml-2 text-muted-foreground">{t("accCompAuditNoMoMData")}</span>
                 ) : (
                   <span
                     className={cn(
@@ -3802,36 +3764,39 @@ export function AdminAccountingCompliance({
                           : "text-muted-foreground"
                     )}
                   >
-                    거부율 {auditKpi.denyRate.toFixed(1)}% (전월 {Number(auditPrevMonthStats?.denyRate || 0).toFixed(1)}%) /{" "}
-                    {auditDenyRateDelta > 0.0001 ? "+" : ""}
-                    {auditDenyRateDelta.toFixed(1)}%p
+                    {tr(t, "accCompAuditDenyRateMoMLine", {
+                      current: auditKpi.denyRate.toFixed(1),
+                      prev: Number(auditPrevMonthStats?.denyRate || 0).toFixed(1),
+                      delta: `${auditDenyRateDelta > 0.0001 ? "+" : ""}${auditDenyRateDelta.toFixed(1)}`,
+                    })}
                   </span>
                 )}
               </div>
               <div className="rounded border border-border/60 p-2">
-                <div className="text-[11px] font-medium mb-1">상위 사유코드 TOP 5</div>
+                <div className="text-[11px] font-medium mb-1">{t("accCompAuditTopReasonCodes")}</div>
                 {auditKpi.topReasons.length ? (
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                     {auditKpi.topReasons.map(([reason, count]) => (
                       <span key={reason}>
-                        {reason}: {count.toLocaleString()}건
+                        {reason}: {count.toLocaleString()}
+                        {t("accCompAuditCaseSuffix")}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-[11px] text-muted-foreground">사유코드 데이터가 없습니다.</div>
+                  <div className="text-[11px] text-muted-foreground">{t("accCompAuditNoReasonStats")}</div>
                 )}
               </div>
               <div className="rounded border border-border/60 p-2">
-                <div className="text-[11px] font-medium mb-1">최근 3개월 추세 (거부율/오류율)</div>
+                <div className="text-[11px] font-medium mb-1">{t("accCompAuditLast3MonthsTrend")}</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="border-b bg-muted/30">
-                        <th className="text-left p-1.5">월</th>
-                        <th className="text-right p-1.5">건수</th>
-                        <th className="text-right p-1.5">거부율</th>
-                        <th className="text-right p-1.5">오류율</th>
+                        <th className="text-left p-1.5">{t("accCompAuditTableMonth")}</th>
+                        <th className="text-right p-1.5">{t("accCompAuditTableCount")}</th>
+                        <th className="text-right p-1.5">{t("accCompAuditTableDenyRate")}</th>
+                        <th className="text-right p-1.5">{t("accCompAuditTableErrorRate")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3847,7 +3812,7 @@ export function AdminAccountingCompliance({
                       ) : (
                         <tr>
                           <td className="p-1.5 text-muted-foreground" colSpan={4}>
-                            추세 데이터가 없습니다.
+                            {t("accCompAuditTrendEmpty")}
                           </td>
                         </tr>
                       )}
@@ -3856,20 +3821,24 @@ export function AdminAccountingCompliance({
                 </div>
               </div>
               <div className="text-xs text-muted-foreground">
-                최근 {auditRows.length.toLocaleString()}건 / 월 {auditYearMonth} / 매장 {storeTb}
+                {tr(t, "accCompAuditRecentMeta", {
+                  n: auditRows.length.toLocaleString(),
+                  ym: auditYearMonth,
+                  store: storeTb,
+                })}
               </div>
               <div className="overflow-x-auto rounded border border-border/60">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="text-left p-2">시각</th>
-                      <th className="text-left p-2">결정</th>
-                      <th className="text-left p-2">액션</th>
-                      <th className="text-left p-2">사유코드</th>
-                      <th className="text-left p-2">대상</th>
-                      <th className="text-left p-2">월/매장</th>
-                      <th className="text-left p-2">행위자</th>
-                      <th className="text-left p-2">상세</th>
+                      <th className="text-left p-2">{t("accCompAuditThTime")}</th>
+                      <th className="text-left p-2">{t("accCompAuditFilterDecision")}</th>
+                      <th className="text-left p-2">{t("accCompAuditThAction")}</th>
+                      <th className="text-left p-2">{t("accCompAuditThReasonCode")}</th>
+                      <th className="text-left p-2">{t("accCompAuditThTarget")}</th>
+                      <th className="text-left p-2">{t("accCompAuditThMonthStore")}</th>
+                      <th className="text-left p-2">{t("accCompAuditThActor")}</th>
+                      <th className="text-left p-2">{t("accCompAuditThDetail")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3888,7 +3857,13 @@ export function AdminAccountingCompliance({
                                     : "text-emerald-700"
                               )}
                             >
-                              {row.decision === "allow" ? "허용" : row.decision === "deny" ? "거부" : row.decision === "error" ? "오류" : "-"}
+                              {row.decision === "allow"
+                                ? t("accCompDecisionAllow")
+                                : row.decision === "deny"
+                                  ? t("accCompDecisionDeny")
+                                  : row.decision === "error"
+                                    ? t("accCompDecisionError")
+                                    : "-"}
                             </td>
                             <td className="p-2 font-mono whitespace-nowrap">{row.action_type || "-"}</td>
                             <td className="p-2 font-mono whitespace-nowrap">{row.reason_code || "-"}</td>
@@ -3914,7 +3889,7 @@ export function AdminAccountingCompliance({
                                   setAuditExpandedRowKey(auditExpandedRowKey === key ? null : key)
                                 }}
                               >
-                                {auditExpandedRowKey === `${row.id || "noid"}-${idx}` ? "접기" : "상세"}
+                                {auditExpandedRowKey === `${row.id || "noid"}-${idx}` ? t("collapse") : t("accCompDetailShort")}
                               </Button>
                             </td>
                           </tr>
@@ -3923,7 +3898,7 @@ export function AdminAccountingCompliance({
                               <td className="p-2" colSpan={8}>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
                                   <div className="rounded border border-border/50 p-2">
-                                    <div className="font-medium mb-1">메타</div>
+                                    <div className="font-medium mb-1">{t("accCompAuditMetaHeading")}</div>
                                     <div>period: {row.period_type || "-"} / {row.period_key || "-"}</div>
                                     <div>filing: {row.filing_type || "-"}</div>
                                     <div>target: {row.target_type || "-"} {row.target_id ? `#${row.target_id}` : ""}</div>
@@ -3949,7 +3924,7 @@ export function AdminAccountingCompliance({
                     ) : (
                       <tr>
                         <td className="p-3 text-muted-foreground" colSpan={8}>
-                          조회된 감사로그가 없습니다.
+                          {t("accCompAuditNoLogs")}
                         </td>
                       </tr>
                     )}
@@ -3960,51 +3935,51 @@ export function AdminAccountingCompliance({
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">E-Tax Invoice Time Stamp 등록 관리 (Flow 스타일)</CardTitle>
+              <CardTitle className="text-base">{t("accCompEtaxTimestampFlowTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="text-xs text-muted-foreground">
-                권장 가이드:
+                {t("accCompEtaxGuideRecommended")}
                 <a
                   href="https://flowaccount.com/help-center/category/platform/register-e-tax-invoice-by-time-stamp"
                   target="_blank"
                   rel="noreferrer"
                   className="ml-1 underline underline-offset-2"
                 >
-                  FlowAccount 단계 안내
+                  {t("accCompEtaxFlowaccountStepsLink")}
                 </a>
                 <a href={etaxAuditCsvUrl} target="_blank" rel="noreferrer" className="ml-3 underline underline-offset-2">
-                  감사 CSV 다운로드
+                  {t("accCompEtaxAuditCsvLink")}
                 </a>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                <Input value={etaxTaxId} onChange={(e) => setEtaxTaxId(e.target.value)} placeholder="Tax ID 13자리" />
+                <Input value={etaxTaxId} onChange={(e) => setEtaxTaxId(e.target.value)} placeholder={t("accCompPhCompanyTaxId13")} />
                 <Input
                   value={etaxBranchCode}
                   onChange={(e) => setEtaxBranchCode(e.target.value)}
-                  placeholder="지점코드(본점 00000)"
+                  placeholder={t("accCompPhBranch00000")}
                 />
                 <Input
                   value={etaxRdContactEmail}
                   onChange={(e) => setEtaxRdContactEmail(e.target.value)}
-                  placeholder="RD 연락용 이메일"
+                  placeholder={t("accCompPhRdEmail")}
                 />
                 <Input
                   value={etaxSenderGmail}
                   onChange={(e) => setEtaxSenderGmail(e.target.value)}
-                  placeholder="발행용 Gmail"
+                  placeholder={t("accCompPhIssuingGmail")}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <Input
                   value={etaxActivateCodeRef}
                   onChange={(e) => setEtaxActivateCodeRef(e.target.value)}
-                  placeholder="Activate Code / CM 계정 참조"
+                  placeholder={t("accCompPhActivateOrCmRef")}
                 />
                 <Input
                   value={etaxAttachmentInput}
                   onChange={(e) => setEtaxAttachmentInput(e.target.value)}
-                  placeholder="증빙 URL(여러 개면 줄바꿈)"
+                  placeholder={t("accCompPhEvidenceUrlsMultiline")}
                 />
               </div>
               <div className="flex items-center gap-2 text-xs">
@@ -4017,7 +3992,9 @@ export function AdminAccountingCompliance({
                   }}
                   disabled={etaxEvidenceUploading}
                 />
-                <span className="text-muted-foreground">{etaxEvidenceUploading ? "업로드 중..." : "PDF/이미지/엑셀/CSV, 20MB"}</span>
+                <span className="text-muted-foreground">
+                  {etaxEvidenceUploading ? t("accCompUploading") : t("accCompEtaxFileUploadHintIdle")}
+                </span>
               </div>
               {etaxReminderMessages.length ? (
                 <div className="rounded border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800 space-y-1">
@@ -4028,7 +4005,7 @@ export function AdminAccountingCompliance({
               ) : null}
               {etaxAttachmentUrls.length ? (
                 <div className="rounded border border-border/60 p-2 text-[11px] space-y-1">
-                  <div className="font-medium">증빙 링크</div>
+                  <div className="font-medium">{t("accCompEvidenceLinksHeading")}</div>
                   {etaxAttachmentUrls.map((u, idx) => (
                     <div key={`${u}-${idx}`} className="flex items-center gap-2">
                       <a href={u} target="_blank" rel="noreferrer" className="underline underline-offset-2 truncate">
@@ -4040,44 +4017,46 @@ export function AdminAccountingCompliance({
                         variant="outline"
                         className="h-6 px-2 text-[10px]"
                         onClick={async () => {
-                          if (!(await appConfirm("이 링크를 삭제할까요?"))) return
+                          if (!(await appConfirm(t("accCompConfirmDeleteThisLink")))) return
                           setEtaxAttachmentInput((prev) => parseAttachmentUrlsFromInput(prev).filter((x) => x !== u).join("\n"))
                         }}
                       >
-                        삭제
+                        {t("accCompDelete")}
                       </Button>
                     </div>
                   ))}
                 </div>
               ) : null}
               <div className="rounded border border-border/60 p-2">
-                <div className="text-xs font-medium mb-2">진행 체크리스트 ({etaxStepCountDone}/8)</div>
+                <div className="text-xs font-medium mb-2">
+                  {tr(t, "accCompEtaxChecklistProgress", { done: String(etaxStepCountDone) })}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-y-1 text-xs">
                   <div>
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={etaxApplySubmitted} onChange={(e) => toggleEtaxStep("applySubmitted", e.target.checked)} />
-                      1) RD 신청 제출 완료
+                      {t("accCompEtaxStep1RdApplyDone")}
                     </label>
                     {etaxStepAudit.applySubmitted ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("applySubmitted")}</div> : null}
                   </div>
                   <div>
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={etaxKo01Printed} onChange={(e) => toggleEtaxStep("ko01Printed", e.target.checked)} />
-                      2) ก.อ.01 출력·서명·날인
+                      {t("accCompEtaxStep2Ko01")}
                     </label>
                     {etaxStepAudit.ko01Printed ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("ko01Printed")}</div> : null}
                   </div>
                   <div>
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={etaxDocsUploaded} onChange={(e) => toggleEtaxStep("docsUploaded", e.target.checked)} />
-                      3) PDF 3종 업로드 완료
+                      {t("accCompEtaxStep3PdfThree")}
                     </label>
                     {etaxStepAudit.docsUploaded ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("docsUploaded")}</div> : null}
                   </div>
                   <div>
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={etaxEmailConfirmed} onChange={(e) => toggleEtaxStep("emailConfirmed", e.target.checked)} />
-                      4) RD 확인 이메일 인증
+                      {t("accCompEtaxStep4RdEmailVerify")}
                     </label>
                     {etaxStepAudit.emailConfirmed ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("emailConfirmed")}</div> : null}
                   </div>
@@ -4088,7 +4067,7 @@ export function AdminAccountingCompliance({
                         checked={etaxActivateCodeReceived}
                         onChange={(e) => toggleEtaxStep("activateCodeReceived", e.target.checked)}
                       />
-                      5) Activate Code 수령
+                      {t("accCompEtaxStep5ActivateCode")}
                     </label>
                     {etaxStepAudit.activateCodeReceived ? (
                       <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("activateCodeReceived")}</div>
@@ -4097,7 +4076,7 @@ export function AdminAccountingCompliance({
                   <div>
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={etaxPasswordSet} onChange={(e) => toggleEtaxStep("passwordSet", e.target.checked)} />
-                      6) RD 비밀번호 재설정
+                      {t("accCompEtaxStep6RdPassword")}
                     </label>
                     {etaxStepAudit.passwordSet ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("passwordSet")}</div> : null}
                   </div>
@@ -4108,7 +4087,7 @@ export function AdminAccountingCompliance({
                         checked={etaxSenderEmailRegistered}
                         onChange={(e) => toggleEtaxStep("senderEmailRegistered", e.target.checked)}
                       />
-                      7) 발송 e-mail Address 등록
+                      {t("accCompEtaxStep7SenderEmail")}
                     </label>
                     {etaxStepAudit.senderEmailRegistered ? (
                       <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("senderEmailRegistered")}</div>
@@ -4117,7 +4096,7 @@ export function AdminAccountingCompliance({
                   <div>
                     <label className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={etaxPilotIssued} onChange={(e) => toggleEtaxStep("pilotIssued", e.target.checked)} />
-                      8) 시험 발행/수신 확인
+                      {t("accCompEtaxStep8Pilot")}
                     </label>
                     {etaxStepAudit.pilotIssued ? <div className="pl-6 text-[10px] text-muted-foreground">{etaxStepStamp("pilotIssued")}</div> : null}
                   </div>
@@ -4127,14 +4106,15 @@ export function AdminAccountingCompliance({
                 value={etaxMemo}
                 onChange={(e) => setEtaxMemo(e.target.value)}
                 className="min-h-[72px]"
-                placeholder="운영 메모(예: 우편 수령일, 담당자 핫라인, 실패 이슈)"
+                placeholder={t("accCompEtaxOpsMemoPlaceholder")}
               />
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" onClick={() => void saveEtaxTimestampProgress()} disabled={etaxSaving || !canWriteCompliance}>
-                  {etaxSaving ? t("loading") : "E-Tax 진행 저장"}
+                  {etaxSaving ? t("loading") : t("accCompEtaxSaveProgressButton")}
                 </Button>
                 <span className="text-[11px] text-muted-foreground">
-                  현재 상태: {workflowStatusLabel((etaxWorkflowRow?.status as "todo" | "in_progress" | "review" | "done") || "todo")}
+                  {t("accCompEtaxStatusPrefix")}{" "}
+                  {workflowStatusLabel((etaxWorkflowRow?.status as "todo" | "in_progress" | "review" | "done") || "todo")}
                   {etaxWorkflowMeta?.updatedAt ? ` / ${formatBangkokDateTime(etaxWorkflowMeta.updatedAt)}` : ""}
                   {etaxWorkflowMeta?.updatedBy ? ` / ${etaxWorkflowMeta.updatedBy}` : ""}
                 </span>
@@ -4308,8 +4288,7 @@ export function AdminAccountingCompliance({
 
               {!pp30Queried ? (
                 <div className="rounded-md border border-dashed border-border/70 bg-muted/15 py-10 px-4 text-center text-sm text-muted-foreground">
-                  년·월·매장·신고 상태 등 조건을 맞춘 뒤 <span className="font-medium text-foreground">검색</span>을 누르면
-                  집계와 원장이 표시됩니다.
+                  {t("accCompPp30EmptySearchHint")}
                 </div>
               ) : (
                 <>
@@ -4341,7 +4320,7 @@ export function AdminAccountingCompliance({
                     variant={pp30SubView === "settlement" ? "default" : "outline"}
                     onClick={() => setPp30SubView("settlement")}
                   >
-                    납부 계산
+                    {t("accCompVatSettlementShort")}
                   </Button>
                 )}
                 {allowedPp30Views.includes("wht") && (
@@ -4366,7 +4345,7 @@ export function AdminAccountingCompliance({
               ) : null}
               {summaryLoading ? (
                 <div className="rounded-md border border-border/40 bg-background px-3 py-2 text-[11px] text-muted-foreground" aria-live="polite">
-                  요약 집계 계산 중...
+                  {t("accCompSummaryLoading")}
                 </div>
               ) : null}
 
@@ -4386,14 +4365,14 @@ export function AdminAccountingCompliance({
                     <div>
                       {t("accCompVatRowsSales")}: {nonPosOutputCount.toLocaleString()}
                       {posFilingOutputSummaries.length > 0
-                        ? ` · POS 자동(과세월 합계 ${posFilingOutputSummaries.length.toLocaleString()}줄)`
+                        ? ` · ${tr(t, "accCompPosAutoFilingLinesNote", { n: posFilingOutputSummaries.length.toLocaleString() })}`
                         : ""}{" "}
                       / {t("accCompVatTotalRows")}:{" "}
                       {(isHeadOfficeLedgerStore ? vatOutputRowsFiltered.length : Number(taxSummary?.vat.rowCount || 0)).toLocaleString()}
                     </div>
                     {isHeadOfficeLedgerStore ? (
                       <div className="md:col-span-2 text-[11px] text-muted-foreground">
-                        본사 조회에서는 POS 자동 매출을 제외한 값만 표시합니다.
+                        {t("accCompHqPosOutputExcludedNote")}
                       </div>
                     ) : null}
                     <div>
@@ -4455,7 +4434,7 @@ export function AdminAccountingCompliance({
                       size="sm"
                       onClick={() => setVatOutputViewMode("vendor")}
                     >
-                      거래처별 보기
+                      {t("accCompVatByVendor")}
                     </Button>
                     <Button
                       type="button"
@@ -4463,17 +4442,16 @@ export function AdminAccountingCompliance({
                       size="sm"
                       onClick={() => setVatOutputViewMode("detail")}
                     >
-                      건별 편집
+                      {t("accCompVatByLine")}
                     </Button>
                   </div>
                   <Card>
                     <CardContent className="p-2 overflow-x-auto space-y-3">
                       {posFilingOutputSummaries.length > 0 ? (
                         <div className="rounded-md border border-primary/25 bg-primary/5 p-3 space-y-2 text-xs">
-                          <div className="font-medium text-foreground">POS 매출 (자동 집계)</div>
+                          <div className="font-medium text-foreground">{t("accCompPosSalesAutoTitle")}</div>
                           <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            주문별 원장은 DB에 그대로 두고, 세무 신고·CSV 내보내기는 과세월별 합계 1줄로
-                            맞춥니다. 아래는 POS 외 수기·세금계산서 등 기타 매출만 편집합니다.
+                            {t("accCompPosSalesAutoDescription")}
                           </p>
                           <div className="space-y-2">
                             {posFilingOutputSummaries.map((row, sidx) => (
@@ -4481,13 +4459,13 @@ export function AdminAccountingCompliance({
                                 key={`pos-sum-${row.tax_month}-${sidx}`}
                                 className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 border rounded p-2 bg-background/80"
                               >
-                                <div className="text-muted-foreground">과세월</div>
+                                <div className="text-muted-foreground">{t("accCompLabelTaxMonth")}</div>
                                 <div>{String(row.tax_month || "")}</div>
-                                <div className="text-muted-foreground">공급가</div>
+                                <div className="text-muted-foreground">{t("accCompLabelNetAmount")}</div>
                                 <div className="text-right tabular-nums">{Number(row.net_amount || 0).toLocaleString()}</div>
                                 <div className="text-muted-foreground">VAT</div>
                                 <div className="text-right tabular-nums">{Number(row.vat_amount || 0).toLocaleString()}</div>
-                                <div className="text-muted-foreground">합계</div>
+                                <div className="text-muted-foreground">{t("accCompLabelGrandTotal")}</div>
                                 <div className="text-right tabular-nums font-medium">
                                   {Number(row.total_amount || 0).toLocaleString()}
                                 </div>
@@ -4500,18 +4478,18 @@ export function AdminAccountingCompliance({
                         </div>
                       ) : null}
                       {nonPosOutputCount > 0 ? (
-                        <div className="text-[11px] font-medium text-muted-foreground px-0.5">POS 외 매출 (편집)</div>
+                        <div className="text-[11px] font-medium text-muted-foreground px-0.5">{t("accCompNonPosSalesEdit")}</div>
                       ) : null}
                       {vatOutputViewMode === "vendor" ? (
                         <div className="rounded-md border border-border/70 overflow-x-auto">
                           <table className="w-full text-xs">
                             <thead className="bg-muted/30">
                               <tr className="border-b border-border/70">
-                                <th className="p-2 text-left">거래처</th>
-                                <th className="p-2 text-right">건수</th>
-                                <th className="p-2 text-right">공급가</th>
-                                <th className="p-2 text-right">VAT</th>
-                                <th className="p-2 text-right">합계</th>
+                                <th className="p-2 text-left">{t("accCompColVendorName")}</th>
+                                <th className="p-2 text-right">{t("accCompColCount")}</th>
+                                <th className="p-2 text-right">{t("accCompLabelNetAmount")}</th>
+                                <th className="p-2 text-right">{t("accCompPhVat")}</th>
+                                <th className="p-2 text-right">{t("accCompLabelGrandTotal")}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -4535,7 +4513,7 @@ export function AdminAccountingCompliance({
                             {vatOutputVendorSummaries.length ? (
                               <tfoot className="bg-muted/20">
                                 <tr className="border-t border-border/70 font-medium">
-                                  <td className="p-2">합계</td>
+                                  <td className="p-2">{t("accCompTotalsFooter")}</td>
                                   <td className="p-2 text-right tabular-nums">
                                     {vatOutputVendorTotals.count.toLocaleString()}
                                   </td>
@@ -4681,8 +4659,8 @@ export function AdminAccountingCompliance({
                             </Select>
                             {row.filing_status === "submitted" ? (
                               <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                                Submitted at: {formatBangkokDateTime(row.submitted_at)}
-                                {row.submitted_by ? ` · Submitted by: ${row.submitted_by}` : ""}
+                                {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
+                                {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
                               </div>
                             ) : null}
                             <div className="flex gap-2 md:col-span-4">
@@ -4725,11 +4703,7 @@ export function AdminAccountingCompliance({
                       {(taxSummary?.vat.rowCount || 0).toLocaleString()}
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    지출 발생에 부가세(VAT)를 입력한 건은 등록·수정·승인 시 매입 쪽에 자동 반영됩니다. 거래처
-                    마스터에 세금 ID가 있으면 TIN이 채워집니다. 과거 데이터는 아래 버튼으로 현재 신고월 기준
-                    백필할 수 있습니다.
-                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">{t("accCompInputVatFromExpenseHint")}</p>
                   {taxSummary && allowedPp30Views.includes("wht") ? (
                     <div className="rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-2">
                       <div className="font-medium text-foreground/90">{t("accCompPp30WhtSamePeriod")}</div>
@@ -4792,8 +4766,13 @@ export function AdminAccountingCompliance({
                             return
                           }
                           appAlert(
-                            `매입 부가세 백필: ${j.processed ?? 0}건 반영` +
-                              ((j.failed ?? 0) > 0 ? ` (실패 ${j.failed})` : "")
+                            tr(t, "accCompInputVatBackfillToast", {
+                              processed: String(j.processed ?? 0),
+                              failedPart:
+                                (j.failed ?? 0) > 0
+                                  ? tr(t, "accCompInputVatBackfillToastFailed", { failed: String(j.failed ?? 0) })
+                                  : "",
+                            })
                           )
                           setPp30Queried(true)
                         } catch {
@@ -4803,7 +4782,7 @@ export function AdminAccountingCompliance({
                         }
                       }}
                     >
-                      매입 백필 ({taxMonth})
+                      {tr(t, "accCompInputVatBackfillButton", { month: taxMonth })}
                     </Button>
                     <Button type="button" variant="outline" size="sm" asChild>
                       <a
@@ -4820,7 +4799,7 @@ export function AdminAccountingCompliance({
                       size="sm"
                       onClick={() => setVatInputViewMode("vendor")}
                     >
-                      거래처별 보기
+                      {t("accCompVatByVendor")}
                     </Button>
                     <Button
                       type="button"
@@ -4828,7 +4807,7 @@ export function AdminAccountingCompliance({
                       size="sm"
                       onClick={() => setVatInputViewMode("detail")}
                     >
-                      건별 편집
+                      {t("accCompVatByLine")}
                     </Button>
                   </div>
                   <Card>
@@ -4838,11 +4817,11 @@ export function AdminAccountingCompliance({
                           <table className="w-full text-xs">
                             <thead className="bg-muted/30">
                               <tr className="border-b border-border/70">
-                                <th className="p-2 text-left">거래처</th>
-                                <th className="p-2 text-right">건수</th>
-                                <th className="p-2 text-right">공급가</th>
-                                <th className="p-2 text-right">VAT</th>
-                                <th className="p-2 text-right">합계</th>
+                                <th className="p-2 text-left">{t("accCompColVendorName")}</th>
+                                <th className="p-2 text-right">{t("accCompColCount")}</th>
+                                <th className="p-2 text-right">{t("accCompLabelNetAmount")}</th>
+                                <th className="p-2 text-right">{t("accCompPhVat")}</th>
+                                <th className="p-2 text-right">{t("accCompLabelGrandTotal")}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -4859,7 +4838,7 @@ export function AdminAccountingCompliance({
                             {vatInputVendorSummaries.length ? (
                               <tfoot className="bg-muted/20">
                                 <tr className="border-t border-border/70 font-medium">
-                                  <td className="p-2">합계</td>
+                                  <td className="p-2">{t("accCompTotalsFooter")}</td>
                                   <td className="p-2 text-right tabular-nums">
                                     {vatInputVendorTotals.count.toLocaleString()}
                                   </td>
@@ -5004,8 +4983,8 @@ export function AdminAccountingCompliance({
                             </Select>
                             {row.filing_status === "submitted" ? (
                               <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                                Submitted at: {formatBangkokDateTime(row.submitted_at)}
-                                {row.submitted_by ? ` · Submitted by: ${row.submitted_by}` : ""}
+                                {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
+                                {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
                               </div>
                             ) : null}
                             <div className="flex gap-2 md:col-span-4">
@@ -5033,7 +5012,7 @@ export function AdminAccountingCompliance({
               {pp30SubView === "settlement" && (
                 <div className="space-y-3 text-sm">
                   <div className={cn("sticky top-0 z-10 rounded-md border p-4 backdrop-blur-sm", vatSettlementHeadline.className)}>
-                    <div className="text-xs text-muted-foreground">이번 신고월 예상 부가세</div>
+                    <div className="text-xs text-muted-foreground">{t("accCompVatExpectedForMonth")}</div>
                     <div className="mt-1 flex flex-wrap items-end gap-2">
                       <span className="text-3xl md:text-4xl font-bold tabular-nums">
                         {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
@@ -5041,23 +5020,29 @@ export function AdminAccountingCompliance({
                       <span className="text-sm font-medium text-muted-foreground pb-1">THB</span>
                     </div>
                     <div className="text-xs mt-1">
-                      {vatSettlementHeadline.tone} · 계산식: 매출 VAT - 매입 VAT
+                      {tr(t, "accCompVatSettlementFormulaLine", { tone: vatSettlementHeadline.tone })}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div className="rounded-md border border-emerald-300/40 bg-emerald-50/40 dark:bg-emerald-950/20 p-3">
-                      <div className="text-xs text-muted-foreground">매출 VAT 합계</div>
+                      <div className="text-xs text-muted-foreground">{t("accCompVatOutputVatSumLabel")}</div>
                       <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.outputVat).toLocaleString()}</div>
                       <div className="text-[11px] text-muted-foreground mt-1">
-                        공급가 {Math.round(vatSettlement.outputNet).toLocaleString()} / 건수 {vatSettlement.outputCount.toLocaleString()}
+                        {tr(t, "accCompVatNetAndRows", {
+                          net: Math.round(vatSettlement.outputNet).toLocaleString(),
+                          count: vatSettlement.outputCount.toLocaleString(),
+                        })}
                       </div>
                     </div>
                     <div className="rounded-md border border-sky-300/40 bg-sky-50/40 dark:bg-sky-950/20 p-3">
-                      <div className="text-xs text-muted-foreground">매입 VAT 합계</div>
+                      <div className="text-xs text-muted-foreground">{t("accCompVatInputVatSumLabel")}</div>
                       <div className="text-lg font-semibold tabular-nums">{Math.round(vatSettlement.inputVat).toLocaleString()}</div>
                       <div className="text-[11px] text-muted-foreground mt-1">
-                        공급가 {Math.round(vatSettlement.inputNet).toLocaleString()} / 건수 {vatSettlement.inputCount.toLocaleString()}
+                        {tr(t, "accCompVatNetAndRows", {
+                          net: Math.round(vatSettlement.inputNet).toLocaleString(),
+                          count: vatSettlement.inputCount.toLocaleString(),
+                        })}
                       </div>
                     </div>
                     <div
@@ -5068,30 +5053,31 @@ export function AdminAccountingCompliance({
                           : "border-violet-300/40 bg-violet-50/40 dark:bg-violet-950/20"
                       )}
                     >
-                      <div className="text-xs text-muted-foreground">예상 납부/환급 VAT</div>
+                      <div className="text-xs text-muted-foreground">{t("accCompVatExpectedPayableCreditLabel")}</div>
                       <div className="text-lg font-semibold tabular-nums">
                         {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-1">
-                        {vatSettlement.payableVat >= 0 ? "납부 예정" : "이월 공제(환급) 예정"}
+                        {vatSettlement.payableVat >= 0 ? t("accCompVatPayableDueShort") : t("accCompVatCreditCarryoverShort")}
                       </div>
                     </div>
                   </div>
 
                   <div className="rounded-md border border-border/70 bg-muted/10 p-3 text-xs space-y-2">
-                    <div className="font-medium text-foreground">계산식</div>
+                    <div className="font-medium text-foreground">{t("accCompVatCalcFormulaTitle")}</div>
                     <div className="tabular-nums">
-                      매출 VAT {Math.round(vatSettlement.outputVat).toLocaleString()} - 매입 VAT {Math.round(vatSettlement.inputVat).toLocaleString()} ={" "}
-                      {Math.round(vatSettlement.payableVat).toLocaleString()}
+                      {tr(t, "accCompVatCalcFormulaDetail", {
+                        out: Math.round(vatSettlement.outputVat).toLocaleString(),
+                        inp: Math.round(vatSettlement.inputVat).toLocaleString(),
+                        payable: Math.round(vatSettlement.payableVat).toLocaleString(),
+                      })}
                     </div>
-                    <div className="text-muted-foreground">
-                      합계 기준이며, 최종 신고 금액은 공제/가산 조정에 따라 달라질 수 있습니다.
-                    </div>
+                    <div className="text-muted-foreground">{t("accCompVatCalcDisclaimer")}</div>
                   </div>
 
                   {taxSummary ? (
                     <div className="rounded-md border border-dashed border-border/70 bg-background p-3 text-xs">
-                      <span className="text-muted-foreground">요약 API 계산값:</span>{" "}
+                      <span className="text-muted-foreground">{t("accCompVatSummaryApiNote")}</span>{" "}
                       <span className="font-medium tabular-nums">{Math.round(vatSettlement.summaryPayableVat).toLocaleString()}</span>
                     </div>
                   ) : null}
@@ -5132,7 +5118,7 @@ export function AdminAccountingCompliance({
                       />
                       <Input
                         className="lg:col-span-2"
-                        placeholder={lang === "th" ? "ชื่อนิติบุคคลผู้จ่าย" : lang === "en" ? "Payer legal name" : "지급자 법인명"}
+                        placeholder={lang === "th" ? "ชื่อนิติบุคคลผู้จ่าย" : t("accCompPnd1PayerLegalNamePlaceholder")}
                         value={pnd1PayerName}
                         onChange={(e) => setPnd1PayerName(e.target.value)}
                       />
@@ -5212,13 +5198,7 @@ export function AdminAccountingCompliance({
                       onClick={() => void runPayrollTinGapCheck()}
                       disabled={payrollTinGapLoading}
                     >
-                      {payrollTinGapLoading
-                        ? t("loading")
-                        : lang === "th"
-                          ? "ตรวจสอบ TIN พนักงาน"
-                          : lang === "en"
-                            ? "Check employee TIN gaps"
-                            : "직원 TIN 누락 점검"}
+                      {payrollTinGapLoading ? t("loading") : lang === "th" ? "ตรวจสอบ TIN พนักงาน" : t("accCompPayrollTinCheckBtn")}
                     </Button>
                   </div>
                   <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
@@ -5230,7 +5210,7 @@ export function AdminAccountingCompliance({
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-primary underline"
                     >
-                      FlowAccount RD Prep 예시 보기
+                      {t("accCompFlowRdPrepExample")}
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
@@ -5238,11 +5218,7 @@ export function AdminAccountingCompliance({
                     <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-xs font-medium">
-                          {lang === "th"
-                            ? "ผลตรวจ TIN พนักงาน (รายเดือน)"
-                            : lang === "en"
-                              ? "Employee TIN gap check (monthly)"
-                              : "직원 TIN 누락 점검 결과(월별)"}
+                          {lang === "th" ? "ผลตรวจ TIN พนักงาน (รายเดือน)" : t("accCompPayrollTinGapTitleMonthly")}
                         </div>
                         <Button
                           type="button"
@@ -5250,20 +5226,20 @@ export function AdminAccountingCompliance({
                           size="sm"
                           onClick={() => setPayrollTinGapResult(null)}
                         >
-                          {lang === "th" ? "ล้างผลลัพธ์" : lang === "en" ? "Clear result" : "결과 지우기"}
+                          {lang === "th" ? "ล้างผลลัพธ์" : t("accCompPayrollTinGapClearResult")}
                         </Button>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                         <div>
-                          {lang === "th" ? "แถวเงินเดือนรวม" : lang === "en" ? "Payroll WHT rows" : "급여 WHT 행"}:{" "}
+                          {lang === "th" ? "แถวเงินเดือนรวม" : t("accCompPayrollStatWhtRows")}:{" "}
                           {payrollTinGapResult.payrollRowCount.toLocaleString()}
                         </div>
                         <div>
-                          {lang === "th" ? "แถวที่ TIN หาย" : lang === "en" ? "Rows missing TIN" : "TIN 누락 행"}:{" "}
+                          {lang === "th" ? "แถวที่ TIN หาย" : t("accCompPayrollStatTinMissingRows")}:{" "}
                           {payrollTinGapResult.gapRowCount.toLocaleString()}
                         </div>
                         <div>
-                          {lang === "th" ? "พนักงานที่ได้รับผลกระทบ" : lang === "en" ? "Impacted employees" : "누락 직원 수"}:{" "}
+                          {lang === "th" ? "พนักงานที่ได้รับผลกระทบ" : t("accCompPayrollStatImpactedEmployees")}:{" "}
                           {payrollTinGapResult.uniqueEmployeeCount.toLocaleString()}
                         </div>
                       </div>
@@ -5271,13 +5247,13 @@ export function AdminAccountingCompliance({
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="border-b bg-muted/30">
-                              <th className="text-left p-2">월</th>
-                              <th className="text-left p-2">지급일</th>
-                              <th className="text-left p-2">매장</th>
-                              <th className="text-left p-2">직원명</th>
-                              <th className="text-right p-2">원천세</th>
-                              <th className="text-left p-2">증명서번호</th>
-                              <th className="text-right p-2">Action</th>
+                              <th className="text-left p-2">{t("month")}</th>
+                              <th className="text-left p-2">{t("accCompPayrollGapColPayDate")}</th>
+                              <th className="text-left p-2">{t("accCompPayrollGapColStore")}</th>
+                              <th className="text-left p-2">{t("accCompPayrollGapColEmployeeName")}</th>
+                              <th className="text-right p-2">{t("accCompPayrollGapColWht")}</th>
+                              <th className="text-left p-2">{t("accCompPayrollGapColCertNo")}</th>
+                              <th className="text-right p-2">{t("accCompColAction")}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -5305,11 +5281,7 @@ export function AdminAccountingCompliance({
                             {!payrollTinGapResult.gaps.length ? (
                               <tr>
                                 <td colSpan={7} className="p-4 text-center text-muted-foreground">
-                                  {lang === "th"
-                                    ? "ไม่พบพนักงานที่ TIN หาย"
-                                    : lang === "en"
-                                      ? "No employee TIN gaps."
-                                      : "TIN 누락 직원이 없습니다."}
+                                  {lang === "th" ? "ไม่พบพนักงานที่ TIN หาย" : t("accCompPayrollNoTinGaps")}
                                 </td>
                               </tr>
                             ) : null}
@@ -5357,7 +5329,7 @@ export function AdminAccountingCompliance({
                               onClick={() => setPnd1IssueFilterCodes([])}
                               className="justify-between"
                             >
-                              <span>{lang === "th" ? "ทั้งหมด" : lang === "en" ? "All" : "전체"}</span>
+                              <span>{lang === "th" ? "ทั้งหมด" : t("all")}</span>
                               <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px]">
                                 {(pnd1ValidationResult?.issues.length || 0).toLocaleString()}
                               </span>
@@ -5423,7 +5395,7 @@ export function AdminAccountingCompliance({
                             {!pnd1IssueRowsFiltered.length ? (
                               <tr>
                                 <td colSpan={4} className="p-4 text-center text-muted-foreground">
-                                  {lang === "th" ? "ไม่พบข้อมูล" : lang === "en" ? "No issues" : "표시할 이슈가 없습니다."}
+                                  {lang === "th" ? "ไม่พบข้อมูล" : t("accCompPnd1ValidationNoIssues")}
                                 </td>
                               </tr>
                             ) : null}
@@ -5565,8 +5537,8 @@ export function AdminAccountingCompliance({
                           </Select>
                           {row.filing_status === "submitted" ? (
                             <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                              Submitted at: {formatBangkokDateTime(row.submitted_at)}
-                              {row.submitted_by ? ` · Submitted by: ${row.submitted_by}` : ""}
+                              {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
+                              {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
                             </div>
                           ) : null}
                           <div className="flex gap-2 md:col-span-4">
@@ -5864,7 +5836,9 @@ export function AdminAccountingCompliance({
                 {ssoAttachmentUrls.length ? (
                   <div className="space-y-1">
                     <div className="text-xs text-muted-foreground">
-                      첨부 목록 ({ssoAttachmentUrls.length.toLocaleString()})
+                      {tr(t, "accCompSsoAttachmentListTitle", {
+                        count: ssoAttachmentUrls.length.toLocaleString(),
+                      })}
                     </div>
                     <div className="space-y-1">
                       {ssoAttachmentUrls.map((u) => (
@@ -5990,46 +5964,42 @@ export function AdminAccountingCompliance({
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                {lang === "th"
-                  ? "โครง UI และสรุปข้อมูลรายเดือนสำหรับ KT20K (MVP)"
-                  : lang === "en"
-                    ? "KT20K monthly summary UI scaffold (MVP)"
-                    : "KT20K(กท.20 ก) 월별 집계 UI 스켈레톤(MVP)입니다."}
+                {lang === "th" ? "โครง UI และสรุปข้อมูลรายเดือนสำหรับ KT20K (MVP)" : t("accCompKt20kMvpScaffoldNote")}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-2">
                 <Input
-                  placeholder={lang === "th" ? "เลขผู้เสียภาษีบริษัท" : lang === "en" ? "Company tax ID" : "법인 세금번호"}
+                  placeholder={lang === "th" ? "เลขผู้เสียภาษีบริษัท" : t("accCompKt20kPhCompanyTaxId")}
                   value={kt20kEmployer.companyTaxId}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyTaxId: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
                   className="lg:col-span-2"
-                  placeholder={lang === "th" ? "ชื่อบริษัท" : lang === "en" ? "Company name" : "회사명"}
+                  placeholder={lang === "th" ? "ชื่อบริษัท" : t("accCompKt20kPhCompanyName")}
                   value={kt20kEmployer.companyName}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyName: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "สำนักงานประกันสังคม (จังหวัด)" : lang === "en" ? "SSO office province" : "관할 SSO(주/도)"}
+                  placeholder={lang === "th" ? "สำนักงานประกันสังคม (จังหวัด)" : t("accCompKt20kPhSsoProvince")}
                   value={kt20kEmployer.ssoProvince}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoProvince: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "เบอร์โทรสำนักงานประกันสังคม" : lang === "en" ? "SSO office phone" : "SSO 연락처"}
+                  placeholder={lang === "th" ? "เบอร์โทรสำนักงานประกันสังคม" : t("accCompKt20kPhSsoPhone")}
                   value={kt20kEmployer.ssoPhone}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoPhone: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "รหัสกิจการ 5 หลัก" : lang === "en" ? "Business code (5 digits)" : "사업코드 5자리"}
+                  placeholder={lang === "th" ? "รหัสกิจการ 5 หลัก" : t("accCompKt20kPhBusinessCode5")}
                   value={kt20kEmployer.businessCode5}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, businessCode5: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
                 />
                 <Input
-                  placeholder={lang === "th" ? "อัตราเงินสมทบ %" : lang === "en" ? "Fund rate %" : "기금요율 %"}
+                  placeholder={lang === "th" ? "อัตราเงินสมทบ %" : t("accCompKt20kPhFundRatePercent")}
                   value={kt20kEmployer.fundRatePercent}
                   onChange={(e) => setKt20kEmployer((p) => ({ ...p, fundRatePercent: e.target.value }))}
                   disabled={kt20kSettingsLoading || kt20kSettingsSaving}
@@ -6065,17 +6035,11 @@ export function AdminAccountingCompliance({
                   onClick={() => void saveKt20kEmployerSettings()}
                   disabled={kt20kSettingsSaving || kt20kSettingsLoading}
                 >
-                  {kt20kSettingsSaving
-                    ? t("loading")
-                    : lang === "th"
-                      ? "บันทึกการตั้งค่า"
-                      : lang === "en"
-                        ? "Save settings"
-                        : "설정 저장"}
+                  {kt20kSettingsSaving ? t("loading") : lang === "th" ? "บันทึกการตั้งค่า" : t("accCompKt20kSaveSettings")}
                 </Button>
                 <Button type="button" variant="outline" asChild>
                   <a href={kt20kExportUrl} target="_blank" rel="noopener noreferrer">
-                    {lang === "th" ? "ส่งออก CSV" : lang === "en" ? "Export CSV" : "CSV 내보내기"}
+                    {lang === "th" ? "ส่งออก CSV" : t("accCompVatExport")}
                   </a>
                 </Button>
               </div>
@@ -6085,7 +6049,7 @@ export function AdminAccountingCompliance({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                {lang === "th" ? "สรุปรายเดือน (ม.ค.-ธ.ค.)" : lang === "en" ? "Monthly summary (Jan-Dec)" : "월별 집계(1~12월)"}
+                {lang === "th" ? "สรุปรายเดือน (ม.ค.-ธ.ค.)" : t("accCompKt20kMonthlySummaryTitle")}
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -6142,7 +6106,7 @@ export function AdminAccountingCompliance({
               ) : null}
               {!kt20kLoading && !kt20kData ? (
                 <div className="p-6 text-center text-muted-foreground text-xs">
-                  {lang === "th" ? "ยังไม่มีข้อมูล" : lang === "en" ? "No data" : "데이터가 없습니다."}
+                  {lang === "th" ? "ยังไม่มีข้อมูล" : t("accCompKt20kNoData")}
                 </div>
               ) : null}
             </CardContent>
@@ -6150,9 +6114,7 @@ export function AdminAccountingCompliance({
         </TabsContent>
 
         <TabsContent value="workflow" className={cn(tabsContentClass, "space-y-3")}>
-          <div className="text-[11px] text-muted-foreground">
-            권한: 작성(todo/in_progress)은 작성권한, 검토/완료(review/done)는 확정권한이 필요합니다.
-          </div>
+          <div className="text-[11px] text-muted-foreground">{t("accCompWorkflowPermissionNote")}</div>
           <div className="flex flex-wrap gap-2 items-end">
             {!externalFiling ? (
               <div>
@@ -6196,27 +6158,26 @@ export function AdminAccountingCompliance({
           </div>
           {workflowFallbackUsed ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-              워크플로 기간키 컬럼이 DB에 아직 적용되지 않아 fallback 모드로 조회/저장 중입니다.
-              `tax_filing_period_key.sql` 또는 통합 one-shot 마이그레이션 적용을 권장합니다.
+              {t("accCompWorkflowPeriodKeyFallback")}
             </div>
           ) : null}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">방콕시간 신고 캘린더/리마인더</CardTitle>
+              <CardTitle className="text-base">{t("accCompFilingCalendarTitle")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-xs">
               <div className="text-muted-foreground">
-                미완료 항목 기준으로 기한 임박/지연을 자동 표시합니다. (기준월 {taxMonth}, 매장 {storeTb})
+                {tr(t, "accCompFilingCalendarIntro", { month: taxMonth, store: storeTb })}
               </div>
               <div className="flex flex-wrap gap-2">
                 <span className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-rose-700">
-                  긴급 {Number(workflowReminderSummary?.critical || 0).toLocaleString()}
+                  {t("accCompReminderSeverityCritical")} {Number(workflowReminderSummary?.critical || 0).toLocaleString()}
                 </span>
                 <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-700">
-                  주의 {Number(workflowReminderSummary?.warn || 0).toLocaleString()}
+                  {t("accCompReminderSeverityWarn")} {Number(workflowReminderSummary?.warn || 0).toLocaleString()}
                 </span>
                 <span className="rounded border border-slate-300 bg-slate-50 px-2 py-1 text-slate-700">
-                  참고 {Number(workflowReminderSummary?.info || 0).toLocaleString()}
+                  {t("accCompReminderSeverityInfo")} {Number(workflowReminderSummary?.info || 0).toLocaleString()}
                 </span>
               </div>
               {workflowReminderRows.length ? (
@@ -6224,12 +6185,12 @@ export function AdminAccountingCompliance({
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="border-b bg-muted/30">
-                        <th className="text-left p-1.5">심각도</th>
-                        <th className="text-left p-1.5">신고</th>
-                        <th className="text-left p-1.5">대상월</th>
-                        <th className="text-left p-1.5">기한(방콕)</th>
-                        <th className="text-left p-1.5">현재상태</th>
-                        <th className="text-left p-1.5">메시지</th>
+                        <th className="text-left p-1.5">{t("accCompReminderColSeverity")}</th>
+                        <th className="text-left p-1.5">{t("accCompReminderColFiling")}</th>
+                        <th className="text-left p-1.5">{t("accCompReminderColPeriodMonth")}</th>
+                        <th className="text-left p-1.5">{t("accCompReminderColDueBangkok")}</th>
+                        <th className="text-left p-1.5">{t("accCompReminderColStatus")}</th>
+                        <th className="text-left p-1.5">{t("accCompReminderColMessage")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -6246,7 +6207,11 @@ export function AdminAccountingCompliance({
                                     : "bg-slate-100 text-slate-700"
                               )}
                             >
-                              {r.severity === "critical" ? "긴급" : r.severity === "warn" ? "주의" : "참고"}
+                              {r.severity === "critical"
+                                ? t("accCompReminderSeverityCritical")
+                                : r.severity === "warn"
+                                  ? t("accCompReminderSeverityWarn")
+                                  : t("accCompReminderSeverityInfo")}
                             </span>
                           </td>
                           <td className="p-1.5">{r.filingLabelKo}</td>
@@ -6260,7 +6225,7 @@ export function AdminAccountingCompliance({
                   </table>
                 </div>
               ) : (
-                <div className="text-muted-foreground">현재 임박/지연 리마인더가 없습니다.</div>
+                <div className="text-muted-foreground">{t("accCompReminderEmpty")}</div>
               )}
             </CardContent>
           </Card>

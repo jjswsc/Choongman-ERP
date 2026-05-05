@@ -1,10 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, PenLine, Trash2, Printer, FileSpreadsheet, FileCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 
 export interface InboundTableRow {
   id: string
@@ -23,31 +25,32 @@ export interface InboundTableRow {
 }
 
 interface InboundTableProps {
-  isOffice: boolean
   rows: InboundTableRow[]
   loading?: boolean
-  /** 비본사용: 단순 { date, vendor, item, qty, amount } */
-  storeRows?: { date: string; vendor: string; item: string; qty: number; amount: number; vatAmount: number }[]
   onEdit?: (row: InboundTableRow) => void
   onDelete?: (row: InboundTableRow) => void
   onInvoiceReceivedToggle?: (row: InboundTableRow) => void
   onPrint?: (row: InboundTableRow) => void
   onExcel?: (row: InboundTableRow) => void
+  /** 선택한 여러 입고 건을 한 번에 인쇄 */
+  onBulkPrint?: (rows: InboundTableRow[]) => void
+  /** 선택한 여러 입고 건을 한 파일로 엑셀 저장 */
+  onBulkExcel?: (rows: InboundTableRow[]) => void
   updatingInvoiceId?: number | null
 }
 
 type OfficeSortKey = "poDate" | "inboundDate" | "vendor" | "item" | "qty" | "amount" | "vat" | "total" | "poInvoice"
 
 export function InboundTable({
-  isOffice,
   rows,
   loading = false,
-  storeRows = [],
   onEdit,
   onDelete,
   onInvoiceReceivedToggle,
   onPrint,
   onExcel,
+  onBulkPrint,
+  onBulkExcel,
   updatingInvoiceId = null,
 }: InboundTableProps) {
   const { lang } = useLang()
@@ -55,6 +58,16 @@ export function InboundTable({
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey] = useState<OfficeSortKey>("inboundDate")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectAllRef = useRef<HTMLInputElement>(null)
+
+  const showBulk = !!(onBulkPrint || onBulkExcel)
+
+  const rowIdsKey = useMemo(() => rows.map((r) => r.id).join("\u0001"), [rows])
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [rowIdsKey])
 
   const toggleExpand = (rowId: string) => {
     setExpandedRows((prev) => {
@@ -121,6 +134,12 @@ export function InboundTable({
     return rowsToSort
   }, [rows, sortKey, sortDir])
 
+  useEffect(() => {
+    const el = selectAllRef.current
+    if (!el || !showBulk) return
+    el.indeterminate = selectedIds.size > 0 && selectedIds.size < sortedOfficeRows.length
+  }, [selectedIds, sortedOfficeRows.length, showBulk])
+
   const handleSort = (nextKey: OfficeSortKey) => {
     if (sortKey === nextKey) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
@@ -138,133 +157,176 @@ export function InboundTable({
   const vatLabel = t("posVatLabel") || "VAT"
   const totalLabel = t("inv_total") || t("total") || "Total"
 
-  if (!isOffice) {
-    return (
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+  const checkboxCol = showBulk ? 1 : 0
+  const actionsCol = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 1 : 0
+  const colCount = checkboxCol + 9 + actionsCol
+
+  const toggleRowSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sortedOfficeRows.length) {
+      setSelectedIds(new Set())
+      return
+    }
+    setSelectedIds(new Set(sortedOfficeRows.map((r) => r.id)))
+  }
+
+  const selectedRowsOrdered = useMemo(
+    () => sortedOfficeRows.filter((r) => selectedIds.has(r.id)),
+    [sortedOfficeRows, selectedIds]
+  )
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      {showBulk && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            {t("inHistSelectedCount").replace("{n}", String(selectedIds.size))}
+          </span>
+          <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={clearSelection} disabled={selectedIds.size === 0}>
+            {t("inHistClearSelection")}
+          </Button>
+          {onBulkPrint && (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              disabled={selectedIds.size === 0}
+              onClick={() => onBulkPrint(selectedRowsOrdered)}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              {t("inHistBulkPrint")}
+            </Button>
+          )}
+          {onBulkExcel && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-8 gap-1.5 text-xs"
+              disabled={selectedIds.size === 0}
+              onClick={() => onBulkExcel(selectedRowsOrdered)}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              {t("inHistBulkExcel")}
+            </Button>
+          )}
+        </div>
+      )}
+      <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-[#1E293B] text-white">
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("stockColDate")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold">{t("inVendor")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{supplyLabel}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{vatLabel}</th>
-              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{totalLabel}</th>
+              {showBulk && (
+                <th className="w-9 px-1 py-2.5 text-center">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    className="h-3.5 w-3.5 cursor-pointer rounded border border-white/40 bg-transparent accent-primary disabled:opacity-50"
+                    checked={sortedOfficeRows.length > 0 && selectedIds.size === sortedOfficeRows.length}
+                    onChange={toggleSelectAll}
+                    disabled={loading || sortedOfficeRows.length === 0}
+                    title={t("inHistSelectAll")}
+                    aria-label={t("inHistSelectAll")}
+                  />
+                </th>
+              )}
+              <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("poDate")}>
+                  {t("inPoDate")}{sortMark("poDate")}
+                </button>
+              </th>
+              <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("inboundDate")}>
+                  {t("inInboundDate")}{sortMark("inboundDate")}
+                </button>
+              </th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("vendor")}>
+                  {t("inVendor")}{sortMark("vendor")}
+                </button>
+              </th>
+              <th className="px-3 py-2.5 text-center font-semibold">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("item")}>
+                  {t("outColItem")}{sortMark("item")}
+                </button>
+              </th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("qty")}>
+                  {t("outColQty")}{sortMark("qty")}
+                </button>
+              </th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("amount")}>
+                  {supplyLabel}{sortMark("amount")}
+                </button>
+              </th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("vat")}>
+                  {vatLabel}{sortMark("vat")}
+                </button>
+              </th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("total")}>
+                  {totalLabel}{sortMark("total")}
+                </button>
+              </th>
+              <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">
+                <button type="button" className="hover:text-primary" onClick={() => handleSort("poInvoice")}>
+                  {t("poInvoiceNo")}{sortMark("poInvoice")}
+                </button>
+              </th>
+              {(onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel) && (
+                <th className="px-2 py-2.5 text-center font-semibold min-w-[10rem] whitespace-nowrap">{t("actions")}</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center">{t("loading")}</td>
+                <td colSpan={colCount} className="py-12 text-center">
+                  {t("loading")}
+                </td>
               </tr>
-            ) : storeRows.length === 0 ? (
+            ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-muted-foreground">{t("inNoData")}</td>
+                <td colSpan={colCount} className="py-12 text-center text-muted-foreground">
+                  {t("inNoData")}
+                </td>
               </tr>
             ) : (
-              storeRows.map((r, idx) => (
-                <tr key={idx} className="hover:bg-primary/5 transition-colors">
-                  <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{r.date}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground">{r.vendor}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground">{r.item}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{r.qty.toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{(r.amount || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{(r.vatAmount || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{((r.amount || 0) + (r.vatAmount || 0)).toLocaleString()}</td>
-                </tr>
+              sortedOfficeRows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  row={row}
+                  colCount={colCount}
+                  showCheckboxCol={showBulk}
+                  rowSelected={selectedIds.has(row.id)}
+                  onToggleRowSelected={() => toggleRowSelected(row.id)}
+                  isExpanded={expandedRows.has(row.id)}
+                  onToggleExpand={() => toggleExpand(row.id)}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onInvoiceReceivedToggle={onInvoiceReceivedToggle}
+                  onPrint={onPrint}
+                  onExcel={onExcel}
+                  updatingInvoiceId={updatingInvoiceId}
+                  t={t}
+                />
               ))
             )}
           </tbody>
         </table>
       </div>
-    )
-  }
-
-  const colCount = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 10 : 9
-
-  return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="bg-[#1E293B] text-white">
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("poDate")}>
-                {t("inPoDate")}{sortMark("poDate")}
-              </button>
-            </th>
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("inboundDate")}>
-                {t("inInboundDate")}{sortMark("inboundDate")}
-              </button>
-            </th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("vendor")}>
-                {t("inVendor")}{sortMark("vendor")}
-              </button>
-            </th>
-            <th className="px-3 py-2.5 text-center font-semibold">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("item")}>
-                {t("outColItem")}{sortMark("item")}
-              </button>
-            </th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("qty")}>
-                {t("outColQty")}{sortMark("qty")}
-              </button>
-            </th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("amount")}>
-                {supplyLabel}{sortMark("amount")}
-              </button>
-            </th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("vat")}>
-                {vatLabel}{sortMark("vat")}
-              </button>
-            </th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("total")}>
-                {totalLabel}{sortMark("total")}
-              </button>
-            </th>
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">
-              <button type="button" className="hover:text-primary" onClick={() => handleSort("poInvoice")}>
-                {t("poInvoiceNo")}{sortMark("poInvoice")}
-              </button>
-            </th>
-            {(onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel) && <th className="px-2 py-2.5 text-center font-semibold min-w-[10rem] whitespace-nowrap">{t("actions")}</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {loading ? (
-            <tr>
-              <td colSpan={colCount} className="py-12 text-center">{t("loading")}</td>
-            </tr>
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={colCount} className="py-12 text-center text-muted-foreground">{t("inNoData")}</td>
-            </tr>
-          ) : (
-            sortedOfficeRows.map((row) => (
-              <TableRow
-                key={row.id}
-                row={row}
-                colCount={colCount}
-                isExpanded={expandedRows.has(row.id)}
-                onToggleExpand={() => toggleExpand(row.id)}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onInvoiceReceivedToggle={onInvoiceReceivedToggle}
-                onPrint={onPrint}
-                onExcel={onExcel}
-                updatingInvoiceId={updatingInvoiceId}
-                t={t}
-              />
-            ))
-          )}
-        </tbody>
-      </table>
     </div>
   )
 }
@@ -272,6 +334,9 @@ export function InboundTable({
 function TableRow({
   row,
   colCount,
+  showCheckboxCol,
+  rowSelected,
+  onToggleRowSelected,
   isExpanded,
   onToggleExpand,
   onEdit,
@@ -284,6 +349,9 @@ function TableRow({
 }: {
   row: InboundTableRow
   colCount: number
+  showCheckboxCol: boolean
+  rowSelected: boolean
+  onToggleRowSelected: () => void
   isExpanded: boolean
   onToggleExpand: () => void
   onEdit?: (row: InboundTableRow) => void
@@ -298,15 +366,22 @@ function TableRow({
   const canEdit = row.inboundBatchId != null && onEdit
   const canDelete = row.inboundBatchId != null && onDelete
   const canInvoiceToggle = row.inboundBatchId != null && onInvoiceReceivedToggle
-  const canPrint = row.inboundBatchId != null && onPrint
-  const canExcel = row.inboundBatchId != null && onExcel
+  const canPrint = !!onPrint
+  const canExcel = !!onExcel
   const supplyLabel = t("salesSupplyAmount") || t("posSystemSubtotal") || "Supply"
   const vatLabel = t("posVatLabel") || "VAT"
   const totalLabel = t("inv_total") || t("total") || "Total"
 
   return (
     <>
-      <tr className={cn("transition-colors hover:bg-primary/5")}>
+      <tr className={cn("transition-colors hover:bg-primary/5", rowSelected && "bg-primary/5")}>
+        {showCheckboxCol && (
+          <td className="w-9 px-1 py-2.5 text-center align-middle" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center">
+              <Checkbox checked={rowSelected} onCheckedChange={() => onToggleRowSelected()} aria-label={t("inHistRowCheckbox")} />
+            </div>
+          </td>
+        )}
         <td className="px-2 py-2.5 text-center text-card-foreground whitespace-nowrap text-muted-foreground">{row.poDate ?? "—"}</td>
         <td className="px-2 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.date}</td>
         <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.vendor}</td>
@@ -318,11 +393,7 @@ function TableRow({
                 onClick={onToggleExpand}
                 className="flex-shrink-0 rounded p-0.5 hover:bg-accent transition-colors text-primary"
               >
-                {isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                )}
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
             )}
             {!hasDetails && <span className="inline-block w-[18px]" />}
@@ -332,21 +403,11 @@ function TableRow({
           </div>
         </td>
         <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{row.totalQty.toLocaleString()}</td>
-        <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">
-          {row.totalAmt.toLocaleString()}
-        </td>
-        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">
-          {row.totalVat.toLocaleString()}
-        </td>
-        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">
-          {(row.totalAmt + row.totalVat).toLocaleString()}
-        </td>
+        <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{row.totalAmt.toLocaleString()}</td>
+        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{row.totalVat.toLocaleString()}</td>
+        <td className="px-3 py-2.5 text-right text-card-foreground tabular-nums">{(row.totalAmt + row.totalVat).toLocaleString()}</td>
         <td className="px-2 py-2.5 text-center text-muted-foreground text-xs">
-          {row.invoiceNo ? (
-            <span className="text-card-foreground" title={row.invoiceNo}>{row.invoiceNo}</span>
-          ) : (
-            "—"
-          )}
+          {row.invoiceNo ? <span className="text-card-foreground" title={row.invoiceNo}>{row.invoiceNo}</span> : "—"}
         </td>
         {(canEdit || canDelete || canInvoiceToggle || canPrint || canExcel) && (
           <td className="px-2 py-2.5 min-w-[10rem]">
@@ -354,7 +415,7 @@ function TableRow({
               {canInvoiceToggle && (
                 <button
                   type="button"
-                  onClick={() => onInvoiceReceivedToggle(row)}
+                  onClick={() => onInvoiceReceivedToggle?.(row)}
                   disabled={updatingInvoiceId === row.inboundBatchId}
                   className={`rounded p-1.5 transition-colors ${row.invoiceReceived ? "text-green-600" : "text-muted-foreground hover:text-foreground"}`}
                   title={row.invoiceReceived ? t("poInvoiceReceived") + " ✓" : t("poInvoiceReceived")}
@@ -365,7 +426,7 @@ function TableRow({
               {canEdit && (
                 <button
                   type="button"
-                  onClick={() => onEdit(row)}
+                  onClick={() => onEdit?.(row)}
                   className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                   title={t("edit")}
                 >
@@ -375,7 +436,7 @@ function TableRow({
               {canPrint && (
                 <button
                   type="button"
-                  onClick={() => onPrint(row)}
+                  onClick={() => onPrint?.(row)}
                   className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                   title={t("purchaseOrderPrint")}
                 >
@@ -385,7 +446,7 @@ function TableRow({
               {canExcel && (
                 <button
                   type="button"
-                  onClick={() => onExcel(row)}
+                  onClick={() => onExcel?.(row)}
                   className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
                   title={t("purchaseOrderExcel")}
                 >
@@ -395,7 +456,7 @@ function TableRow({
               {canDelete && (
                 <button
                   type="button"
-                  onClick={() => onDelete(row)}
+                  onClick={() => onDelete?.(row)}
                   className="rounded p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                   title={t("delete")}
                 >
