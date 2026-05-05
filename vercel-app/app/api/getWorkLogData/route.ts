@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
     } else if (name) {
       await mergeRows(String(name).trim())
     }
-    let rows = Array.from(rowById.values()).sort(
+    const rows = Array.from(rowById.values()).sort(
       (a, b) => String(b.log_date || '').localeCompare(String(a.log_date || ''))
     )
     const acceptedNames = new Set<string>()

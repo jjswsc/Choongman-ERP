@@ -3,7 +3,7 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
-import { resolveWorkLogFilterNameFromEmployeeIdParam } from '@/lib/work-log-name'
+import { resolveWorkLogFilterNameFromEmployeeIdParam } from '@/lib/work-log-name-server'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
