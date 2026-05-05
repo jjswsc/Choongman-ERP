@@ -8286,6 +8286,15 @@ export interface PosOrderItem {
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  setChildrenState?: Record<
+    string,
+    {
+      servedAt?: string | null
+      servedBy?: string | null
+      packedAt?: string | null
+      packedBy?: string | null
+    }
+  >
   menuId1?: string
   optionId1?: string
   menuId2?: string
@@ -8856,6 +8865,8 @@ export async function markPosOrderItemServed(params: {
   id: number
   itemId: string
   served: boolean
+  mode?: 'served' | 'packed'
+  childKey?: string
   servedBy?: string
   cancelled?: boolean
   cancelledBy?: string
@@ -8872,6 +8883,8 @@ export async function markPosOrderItemServed(params: {
     servedCount?: number
     totalCount?: number
     cancelledCount?: number
+    childServedCount?: number
+    childTotalCount?: number
   }>
 }
 

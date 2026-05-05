@@ -217,7 +217,10 @@ export async function GET(request: NextRequest) {
         const orderType = String(o.order_type || '').trim().toLowerCase()
         /** 테이블 결제에서 배달앱을 쓰면 채널(Grab/LineMan/Shopee)과 무관하게 홀(Dine in) 분류 */
         if (orderType === 'dine_in' || channel === 'dine_in') {
-          autoDineInDeliveryBreakdown.DineIn = (autoDineInDeliveryBreakdown.DineIn || 0) + deliveryAmt
+          const dineInChannelKey =
+            channel && channel !== 'dine_in' ? normalizeDeliveryCode(channel) : 'DineIn'
+          autoDineInDeliveryBreakdown[dineInChannelKey] =
+            (autoDineInDeliveryBreakdown[dineInChannelKey] || 0) + deliveryAmt
         } else {
           const key = normalizeDeliveryCode(String(o.delivery_app_code || 'Other'))
           autoDeliveryAppBreakdown[key] = (autoDeliveryAppBreakdown[key] || 0) + deliveryAmt

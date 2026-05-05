@@ -17,6 +17,7 @@ import {
   posDineInTableMerge,
   posDineInTableMove,
   updatePosOrder,
+  type PosMenu,
   type PosOrderStatusUpdateResult,
   updatePosOrderStatus,
 } from '@/lib/api-client'
@@ -42,6 +43,8 @@ import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
+import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import {
   buildUpdatePosOrderParamsFromOrder,
   canRemovePosOrderLine,
@@ -56,6 +59,7 @@ import {
 export interface TableOrderPanelProps {
   tableName: string
   order: Order | null
+  menus?: PosMenu[]
   /** 테이블 이동·합석용 (매장 전체 테이블 목록) */
   allTables?: Table[]
   /** 합석 대상에 넣을 포장 주문(가상 테이블 행). absorb는 항상 “현재 테이블 청구서”로만 허용. */
@@ -82,6 +86,7 @@ export interface TableOrderPanelProps {
 export function TableOrderPanel({
   tableName,
   order,
+  menus: menusFromProps = [],
   allTables = [],
   onServed,
   onAddOrder,
@@ -105,6 +110,7 @@ export function TableOrderPanel({
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const mergeDisabledByPayment = isPaidPrepaid
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
+  const [itemChildServed, setItemChildServed] = useState<Record<string, boolean>>({})
   const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
@@ -112,6 +118,7 @@ export function TableOrderPanel({
   useEffect(() => {
     if (!order?.items?.length) {
       setItemServed({})
+      setItemChildServed({})
       setItemCancelled({})
       setExpandedItemId(null)
     }
@@ -120,6 +127,20 @@ export function TableOrderPanel({
         const next = { ...prev }
         order.items.forEach((it) => {
           next[it.id] = Boolean(it.servedAt)
+        })
+        return next
+      })
+      setItemChildServed((prev) => {
+        const next = { ...prev }
+        order.items.forEach((it) => {
+          const childKeys = listPosSetChildKeys(Array.isArray(it.promoItems) ? it.promoItems : [])
+          if (!childKeys.length) return
+          const childState = readPosSetChildrenState(it.setChildrenState)
+          childKeys.forEach((key) => {
+            const raw = childState[key]
+            const done = Boolean(String(raw?.servedAt ?? (it.servedAt ? '1' : '')).trim())
+            next[`${it.id}::${key}`] = done
+          })
         })
         return next
       })
@@ -170,6 +191,50 @@ export function TableOrderPanel({
         return
       }
       setItemServed((prev) => ({ ...prev, [itemId]: nextServed }))
+      onServed?.()
+    } catch (e) {
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setSavingItemId(null)
+    }
+  }
+
+  const toggleSetChildServed = async (itemId: string, childKey: string) => {
+    if (!order) return
+    if (itemCancelled[itemId]) return
+    if (isDemo && onDemoOrderReplace) {
+      const mapKey = `${itemId}::${childKey}`
+      setItemChildServed((prev) => ({ ...prev, [mapKey]: !prev[mapKey] }))
+      return
+    }
+    const id = Number(order.id)
+    if (Number.isNaN(id)) return
+    if (!posOrderHasServerId(order.id)) {
+      const msg = t('posServedNeedsOrderId')
+      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : tDefault('posServedNeedsOrderId'))
+      return
+    }
+    const mapKey = `${itemId}::${childKey}`
+    const nextServed = !itemChildServed[mapKey]
+    setSavingItemId(itemId)
+    try {
+      const res = await markPosOrderItemServed({
+        id,
+        itemId,
+        childKey,
+        mode: 'served',
+        served: nextServed,
+      })
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+        return
+      }
+      setItemChildServed((prev) => ({ ...prev, [mapKey]: nextServed }))
+      const childServedCount = Number(res.childServedCount ?? -1)
+      const childTotalCount = Number(res.childTotalCount ?? -1)
+      if (childServedCount >= 0 && childTotalCount >= 0) {
+        setItemServed((prev) => ({ ...prev, [itemId]: childServedCount >= childTotalCount }))
+      }
       onServed?.()
     } catch (e) {
       await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
@@ -866,10 +931,52 @@ export function TableOrderPanel({
                             </p>
                           )}
                           {expanded && (
-                            <p className="text-sm text-muted-foreground pt-0.5 whitespace-normal break-words border-t border-border/40 mt-1">
-                              {fullNameT}
-                              {noteTrim ? ` · ${noteTrim}` : ''}
-                            </p>
+                            <div className="pt-0.5 border-t border-border/40 mt-1 space-y-1.5">
+                              <p className="text-sm text-muted-foreground whitespace-normal break-words">
+                                {fullNameT}
+                                {noteTrim ? ` · ${noteTrim}` : ''}
+                              </p>
+                              {Array.isArray(item.promoItems) && item.promoItems.length > 0 && (
+                                <div className="w-full max-w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
+                                  {item.promoItems.flatMap((line, idx) => {
+                                    const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
+                                    const menuId = String(line.menuId ?? '').trim()
+                                    const optId = String(line.optionId ?? '').trim()
+                                    const menuLabel = menuId
+                                      ? resolvePosOrderItemMenuDisplayName({ id: menuId, name: menuId, menuId }, menusFromProps)
+                                      : `Set ${idx + 1}`
+                                    const childLabel = optId
+                                      ? `${menuLabel} (${optId})`
+                                      : menuLabel
+                                    return Array.from({ length: qty }).map((_, n) => {
+                                      const childKey = buildPosSetChildKey(line, idx, n)
+                                      const mapKey = `${item.id}::${childKey}`
+                                      const childDone = Boolean(itemChildServed[mapKey])
+                                      return (
+                                        <button
+                                          key={`${item.id}-${childKey}`}
+                                          type="button"
+                                          className={cn(
+                                            'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded pl-2 pr-0.5 py-1.5 text-left text-base font-medium transition-colors',
+                                            childDone
+                                              ? 'bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                                              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                                          )}
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            void toggleSetChildServed(item.id, childKey)
+                                          }}
+                                          disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                                        >
+                                          <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, t)}</span>
+                                          {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}
+                                        </button>
+                                      )
+                                    })
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           )}
                           {cancelled && (
                             <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">

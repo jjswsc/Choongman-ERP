@@ -78,6 +78,15 @@ export interface OrderItem {
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  setChildrenState?: Record<
+    string,
+    {
+      servedAt?: string | null
+      servedBy?: string | null
+      packedAt?: string | null
+      packedBy?: string | null
+    }
+  >
   /** items_json 줄 단위 (연동 등) */
   deliveryAppCode?: string
 }

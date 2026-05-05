@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  listPosSetChildKeys,
+  readPosSetChildrenState,
+  type PosSetChildrenState,
+} from '@/lib/pos-set-children-state'
 
 function nowBangkokIso(): string {
   const dtf = new Intl.DateTimeFormat('sv-SE', {
@@ -37,6 +42,8 @@ export async function POST(req: NextRequest) {
     }
     const id = Number(body?.id)
     const itemId = String(body?.itemId ?? '').trim()
+    const childKey = String(body?.childKey ?? '').trim()
+    const mode = String(body?.mode ?? '').trim().toLowerCase() === 'packed' ? 'packed' : 'served'
     const served = body?.served === true
     const servedBy = String(body?.servedBy ?? '').trim()
     const cancelled = body?.cancelled === true
@@ -84,6 +91,29 @@ export async function POST(req: NextRequest) {
     }
 
     const target = { ...(items[idx] || {}) }
+    const setChildKeys = listPosSetChildKeys(
+      Array.isArray(target.promoItems)
+        ? (target.promoItems as Array<{ menuId?: string | null; optionId?: string | null; quantity?: number }>)
+        : []
+    )
+    const hasSetChildren = setChildKeys.length > 0
+    const setChildrenState: PosSetChildrenState = readPosSetChildrenState(target.setChildrenState)
+
+    const getChildDone = (state: PosSetChildrenState, key: string): boolean => {
+      const row = state[key]
+      if (!row) return false
+      if (mode === 'packed') return Boolean(String(row.packedAt ?? '').trim())
+      return Boolean(String(row.servedAt ?? '').trim())
+    }
+    const recomputeParentDone = (state: PosSetChildrenState): boolean => {
+      if (!hasSetChildren) return served
+      if (!setChildKeys.length) return false
+      for (const k of setChildKeys) {
+        if (!getChildDone(state, k)) return false
+      }
+      return true
+    }
+
     if (cancelled) {
       target.cancelledAt = String(target.cancelledAt || nowBangkokIso())
       if (cancelledBy) target.cancelledBy = cancelledBy
@@ -91,18 +121,74 @@ export async function POST(req: NextRequest) {
       // 취소 항목은 서빙/포장 완료 카운트에서 제외
       target.servedAt = null
       target.servedBy = null
+      if (hasSetChildren) {
+        for (const key of setChildKeys) {
+          setChildrenState[key] = {
+            ...(setChildrenState[key] || {}),
+            servedAt: null,
+            servedBy: null,
+            packedAt: null,
+            packedBy: null,
+          }
+        }
+        target.setChildrenState = setChildrenState
+      }
     } else {
       if (body && Object.prototype.hasOwnProperty.call(body, 'cancelled')) {
         target.cancelledAt = null
         target.cancelledBy = null
         target.cancelReason = null
       }
-      if (served) {
-        target.servedAt = String(target.servedAt || nowBangkokIso())
-        if (servedBy) target.servedBy = servedBy
+      if (childKey && hasSetChildren) {
+        if (!setChildKeys.includes(childKey)) {
+          return NextResponse.json({ success: false, message: '세트 하위 항목 키가 유효하지 않습니다.' }, { headers })
+        }
+        const next = { ...(setChildrenState[childKey] || {}) }
+        if (mode === 'packed') {
+          if (served) {
+            next.packedAt = String(next.packedAt || nowBangkokIso())
+            if (servedBy) next.packedBy = servedBy
+          } else {
+            next.packedAt = null
+            next.packedBy = null
+          }
+        } else if (served) {
+          next.servedAt = String(next.servedAt || nowBangkokIso())
+          if (servedBy) next.servedBy = servedBy
+        } else {
+          next.servedAt = null
+          next.servedBy = null
+        }
+        setChildrenState[childKey] = next
+        const parentDone = recomputeParentDone(setChildrenState)
+        if (parentDone) {
+          target.servedAt = String(target.servedAt || nowBangkokIso())
+          if (servedBy) target.servedBy = servedBy
+        } else {
+          target.servedAt = null
+          target.servedBy = null
+        }
+        target.setChildrenState = setChildrenState
       } else {
-        target.servedAt = null
-        target.servedBy = null
+        if (served) {
+          target.servedAt = String(target.servedAt || nowBangkokIso())
+          if (servedBy) target.servedBy = servedBy
+        } else {
+          target.servedAt = null
+          target.servedBy = null
+        }
+        if (hasSetChildren) {
+          for (const key of setChildKeys) {
+            setChildrenState[key] = {
+              ...(setChildrenState[key] || {}),
+              servedAt: served ? String(setChildrenState[key]?.servedAt || nowBangkokIso()) : null,
+              servedBy: served ? servedBy || setChildrenState[key]?.servedBy || null : null,
+              packedAt: served ? String(setChildrenState[key]?.packedAt || nowBangkokIso()) : null,
+              packedBy: served ? servedBy || setChildrenState[key]?.packedBy || null : null,
+            }
+          }
+          target.setChildrenState = setChildrenState
+        }
       }
     }
     items[idx] = target
@@ -114,8 +200,17 @@ export async function POST(req: NextRequest) {
     const activeItems = items.filter((it) => !String(it?.cancelledAt ?? '').trim())
     const servedCount = activeItems.filter((it) => Boolean(String(it?.servedAt ?? '').trim())).length
     const cancelledCount = items.length - activeItems.length
+    const childDoneCount = hasSetChildren
+      ? setChildKeys.filter((k) => getChildDone(setChildrenState, k)).length
+      : undefined
     return NextResponse.json(
-      { success: true, servedCount, totalCount: items.length, cancelledCount },
+      {
+        success: true,
+        servedCount,
+        totalCount: items.length,
+        cancelledCount,
+        ...(hasSetChildren ? { childServedCount: childDoneCount, childTotalCount: setChildKeys.length } : {}),
+      },
       { headers }
     )
   } catch (e) {

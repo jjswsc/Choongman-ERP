@@ -70,6 +70,9 @@ export async function generateMetadata(): Promise<Metadata> {
       icon: brand.iconPath,
       apple: brand.iconPath,
     },
+    other: {
+      google: "notranslate",
+    },
   }
 }
 
@@ -88,9 +91,9 @@ export default async function RootLayout({
 }>) {
   const brand = await getServerAppBrandConfig()
   return (
-    <html lang="ko">
+    <html lang="ko" translate="no" className="notranslate">
       <body
-        className={`${inter.variable} ${pretendard.variable} ${notoSansThai.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased`}
+        className={`${inter.variable} ${pretendard.variable} ${notoSansThai.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased notranslate`}
       >
         <AppBrandProvider value={brand}>
           <ErrorBoundary>

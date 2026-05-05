@@ -92,6 +92,15 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       promoId?: string
       promoCode?: string
       promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+      setChildrenState?: Record<
+        string,
+        {
+          servedAt?: string | null
+          servedBy?: string | null
+          packedAt?: string | null
+          packedBy?: string | null
+        }
+      >
       deliveryAppCode?: string
     }
   >()
@@ -108,6 +117,10 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
     const deliveryAppCode = String(it.deliveryAppCode ?? '').trim()
     const promoItems =
       promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0 ? it.promoItems : undefined
+    const setChildrenState =
+      it.setChildrenState && typeof it.setChildrenState === 'object' && !Array.isArray(it.setChildrenState)
+        ? (it.setChildrenState as Record<string, { servedAt?: string | null; servedBy?: string | null; packedAt?: string | null; packedBy?: string | null }>)
+        : undefined
     const qty = resolveItemsJsonLineQty(it)
     const price = Number(it.price ?? 0) || 0
     const idRaw = String(it.id ?? '').trim()
@@ -122,6 +135,7 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       promoId,
       promoCode,
       JSON.stringify(promoItems ?? []),
+      JSON.stringify(setChildrenState ?? {}),
       deliveryAppCode,
       String(it.servedAt ?? ''),
       String(it.cancelledAt ?? ''),
@@ -150,6 +164,7 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
             promoId,
             ...(promoCode ? { promoCode } : {}),
             ...(promoItems ? { promoItems } : {}),
+            ...(setChildrenState ? { setChildrenState } : {}),
           }
         : {}),
       ...(deliveryAppCode ? { deliveryAppCode } : {}),

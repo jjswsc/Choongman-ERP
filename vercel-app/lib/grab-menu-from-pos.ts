@@ -162,7 +162,7 @@ function localizeGrabOptionLabel(raw: string): string {
   // Grab 앱에 한글 옵션이 노출되지 않도록 최소 치환
   s = s
     .replace(/순살/g, 'Boneless')
-    .replace(/봉/g, 'Bone-in')
+    .replace(/봉/g, 'Drumette')
     .replace(/윙/g, 'Wing')
   return s
 }
@@ -172,7 +172,9 @@ function shouldForceSingleSelectGroup(groupName: string, rows: OptionRow[]): boo
   // 사이즈/부위 단일 선택 그룹 (예: M/S/L)
   if (/^(xxl|xl|l|m|s)$/.test(g)) return true
   const names = rows.map((r) => String(r.name ?? '').toLowerCase())
-  const hasCutChoices = names.some((n) => n.includes('boneless') || n.includes('bone-in') || n.includes('wing'))
+  const hasCutChoices = names.some(
+    (n) => n.includes('boneless') || n.includes('drumette') || n.includes('bone-in') || n.includes('wing')
+  )
   return hasCutChoices
 }
 
@@ -439,6 +441,15 @@ export async function buildGrabMenuFromPos(params: {
     : null
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])
   const categoryOrderMap = buildCategoryOrderMap(policyBundle?.categoryOrders || [])
+  const sectionOrderMap = new Map<string, number>()
+  for (const [k, order] of categoryOrderMap.entries()) {
+    const [main] = String(k || '').split('::')
+    const section = normalizeSectionName(main)
+    const n = Number(order)
+    if (!Number.isFinite(n)) continue
+    const prev = sectionOrderMap.get(section)
+    if (prev == null || n < prev) sectionOrderMap.set(section, n)
+  }
 
   const options = await loadOptions()
   const optionByMenuId = new Map<number, OptionRow[]>()
@@ -648,6 +659,13 @@ export async function buildGrabMenuFromPos(params: {
     }))
     .filter((s) => s.categories.length > 0)
     .sort((a, b) => {
+      const ao = sectionOrderMap.get(a.sectionName)
+      const bo = sectionOrderMap.get(b.sectionName)
+      if (ao != null || bo != null) {
+        const ra = ao ?? Number.MAX_SAFE_INTEGER
+        const rb = bo ?? Number.MAX_SAFE_INTEGER
+        if (ra !== rb) return ra - rb
+      }
       const ka = sectionSortKey(a.sectionName)
       const kb = sectionSortKey(b.sectionName)
       if (ka !== kb) return ka - kb

@@ -53,6 +53,9 @@ export function orderItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
       if (it.promoCode) base.promoCode = String(it.promoCode)
       base.promoItems = it.promoItems
     }
+    if (it.setChildrenState && typeof it.setChildrenState === 'object' && !Array.isArray(it.setChildrenState)) {
+      base.setChildrenState = it.setChildrenState
+    }
     const lineApp = String(it.deliveryAppCode ?? '').trim()
     if (lineApp) base.deliveryAppCode = lineApp
     if (typeof it.servedAt === 'string' && it.servedAt) base.servedAt = it.servedAt

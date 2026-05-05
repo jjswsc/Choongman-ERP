@@ -82,6 +82,24 @@ export function POSHeader({
   /** POS 헤더 새로고침 — ghost보다 눈에 띄게 (테두리·포인트색·최소 터치 높이) */
   const refreshButtonClassName =
     "h-9 min-h-[44px] shrink-0 gap-1.5 border-2 border-primary/45 bg-primary/5 px-2.5 font-semibold text-primary shadow-sm hover:bg-primary/15 dark:border-primary/55 dark:bg-primary/15 dark:hover:bg-primary/25 sm:h-8 sm:min-h-0 sm:px-3"
+  const handleRefreshClick = () => {
+    if (!onRefresh) {
+      window.location.reload()
+      return
+    }
+    try {
+      const maybePromise = onRefresh()
+      Promise.resolve(maybePromise)
+        .then(() => {
+          router.refresh()
+        })
+        .catch(() => {
+          window.location.reload()
+        })
+    } catch {
+      window.location.reload()
+    }
+  }
 
   const langOptions: { value: typeof lang; labelKey: string }[] = [
     { value: 'ko', labelKey: 'posLangKo' },
@@ -129,6 +147,7 @@ export function POSHeader({
           ) : (
             showBackButton && (
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 className="h-8 gap-1"
@@ -163,7 +182,7 @@ export function POSHeader({
               title={t('posRefresh')}
               aria-label={t('posRefresh')}
               className={refreshButtonClassName}
-              onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
+              onClick={handleRefreshClick}
             >
               <RefreshCw className="h-[1.125rem] w-[1.125rem] shrink-0 sm:mr-1" aria-hidden />
               <span className="hidden min-[400px]:inline">{t('posRefresh')}</span>
@@ -173,6 +192,7 @@ export function POSHeader({
 
         {typeof isMainPosDevice === "boolean" && onMainPosDeviceChange && (
           <Button
+            type="button"
             variant={isMainPosDevice ? "default" : "outline"}
             size="sm"
             className="h-8 shrink-0 gap-1 sm:gap-1.5"
@@ -197,7 +217,7 @@ export function POSHeader({
             title={t('posRefresh')}
             aria-label={t('posRefresh')}
             data-tour={dataTour ? 'pos-tour-header-refresh' : undefined}
-            onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
+            onClick={handleRefreshClick}
           >
             <RefreshCw className="h-[1.125rem] w-[1.125rem] shrink-0 sm:mr-1" aria-hidden />
             <span className="hidden min-[400px]:inline">{t('posRefresh')}</span>
@@ -227,7 +247,7 @@ export function POSHeader({
         </span>
         {canAccessAdminProp && (
           <Link href="/admin/pos-screen-config">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
               <Settings className="w-4 h-4" />
             </Button>
           </Link>

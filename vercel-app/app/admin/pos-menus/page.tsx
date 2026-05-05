@@ -96,7 +96,7 @@ const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as co
 
 /** 옵션관리 탭: 고정 2단계 — 1. 사이즈, 2. 부위 */
 const OPTION_SIZE_VALUES = ["S", "M", "L"]
-const OPTION_PART_VALUES = ["순살", "윙", "봉"] as const
+const OPTION_PART_VALUES = ["Boneless", "Wing", "Drumette"] as const
 /** 치킨 메뉴: 코드가 c로 시작. 기본가=S 순살, 옵션은 M 순살/윙/봉 3개만 */
 const CHICKEN_CODE_PREFIX = "c"
 function isChickenMenu(code: string | undefined): boolean {
@@ -1158,11 +1158,13 @@ export default function PosMenusPage() {
     try {
       if (isChickenMenu(optionsConfigSelectedMenu.code)) {
         await ensureChickenMenuOptionGroups()
-        if (!newOptionSize || !newOptionPart) return
-        const name = `${newOptionSize} - ${newOptionPart}`
-        const optionStepValues = { size: newOptionSize, part: newOptionPart }
+        const sizeVal = String(newOptionSize || "").trim()
+        const partVal = String(newOptionPart || "").trim()
+        if (!sizeVal || !partVal) return
+        const name = `${sizeVal} - ${partVal}`
+        const optionStepValues = { size: sizeVal, part: partVal }
         const exists = optionsConfigMenuOptions.some(
-          (o) => o.optionStepValues?.size === newOptionSize && o.optionStepValues?.part === newOptionPart
+          (o) => o.optionStepValues?.size === sizeVal && o.optionStepValues?.part === partVal
         )
         if (exists) {
           await appAlert(`${name} ${t("itemsAlertCodeExists") || "이미 있습니다."}`)
@@ -1335,9 +1337,9 @@ export default function PosMenusPage() {
     const price = 0
     const combinations: { size: string; part: string; sellHall: boolean; sellDelivery: boolean; sellPackaging: boolean }[] = isChicken
       ? [
-          { size: "M", part: "순살", sellHall: true, sellDelivery: true, sellPackaging: true },
-          { size: "M", part: "윙", sellHall: true, sellDelivery: true, sellPackaging: true },
-          { size: "M", part: "봉", sellHall: true, sellDelivery: true, sellPackaging: true },
+          { size: "M", part: "Boneless", sellHall: true, sellDelivery: true, sellPackaging: true },
+          { size: "M", part: "Wing", sellHall: true, sellDelivery: true, sellPackaging: true },
+          { size: "M", part: "Drumette", sellHall: true, sellDelivery: true, sellPackaging: true },
         ]
       : OPTION_SIZE_VALUES.flatMap((size) =>
           OPTION_PART_VALUES.map((part) => ({
@@ -1377,9 +1379,9 @@ export default function PosMenusPage() {
 
   /** 기본가 = S 순살. 옵션으로 붙는 것은 M 순살/윙/봉 3개만 */
   const CHICKEN_OPTION_COMBOS = [
-    { size: "M", part: "순살", sellHall: true, sellDelivery: true, sellPackaging: true },
-    { size: "M", part: "윙", sellHall: true, sellDelivery: true, sellPackaging: true },
-    { size: "M", part: "봉", sellHall: true, sellDelivery: true, sellPackaging: true },
+    { size: "M", part: "Boneless", sellHall: true, sellDelivery: true, sellPackaging: true },
+    { size: "M", part: "Wing", sellHall: true, sellDelivery: true, sellPackaging: true },
+    { size: "M", part: "Drumette", sellHall: true, sellDelivery: true, sellPackaging: true },
   ] as const
 
   const handleChickenBatchApply = async () => {
@@ -3230,19 +3232,27 @@ export default function PosMenusPage() {
                               </div>
                               <div>
                                 <label className="text-xs font-medium block mb-0.5">2. {t("posOptionGroupPart")}</label>
-                                <Select value={newOptionPart || "_"} onValueChange={(v) => setNewOptionPart(v === "_" ? "" : v)}>
-                                  <SelectTrigger className="h-8 w-24 text-xs">
-                                    <SelectValue placeholder={t("posOptionPartPlaceholder") || "순살/윙/봉"} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="_">{t("posMenuCategoryAll") || "선택"}</SelectItem>
-                                    {OPTION_PART_VALUES.map((v) => (
-                                      <SelectItem key={v} value={v}>
-                                        {v === "순살" ? t("posOptionPartBoneless") : v === "윙" ? t("posOptionPartWing") : t("posOptionPartDrumstick")}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <div className="flex items-center gap-1">
+                                  <Select value={newOptionPart || "_"} onValueChange={(v) => setNewOptionPart(v === "_" ? "" : v)}>
+                                    <SelectTrigger className="h-8 w-28 text-xs">
+                                      <SelectValue placeholder={t("posOptionPartPlaceholder") || "Boneless/Wing/Drumette"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="_">{t("posMenuCategoryAll") || "선택"}</SelectItem>
+                                      {OPTION_PART_VALUES.map((v) => (
+                                        <SelectItem key={v} value={v}>
+                                          {v}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    className="h-8 w-28 text-xs"
+                                    value={newOptionPart}
+                                    onChange={(e) => setNewOptionPart(e.target.value)}
+                                    placeholder={t("posOptionPartCustomPlaceholder") || "Custom type"}
+                                  />
+                                </div>
                               </div>
                             </>
                           ) : optionsConfigStepGroups.length > 0 ? (

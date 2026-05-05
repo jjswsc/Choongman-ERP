@@ -260,7 +260,6 @@ export default function PosCustomerDisplayPage() {
                         <div className="mt-1 flex items-center justify-between">
                           <span>{formatFeeLabel(t("vatFee") || "부가세", state.breakdown.vatRate, state.breakdown.vatMode)}</span>
                           <span>
-                            +
                             {Number(
                               resolveReceiptVatPrintAmount({
                                 vatFeeAmt: state.breakdown.vatFeeAmt,

@@ -140,6 +140,14 @@ function buildAutoBreakdown(
   return Object.fromEntries(Object.entries(outNum).map(([k, v]) => [k, v > 0 ? String(v) : '']))
 }
 
+function toDeliveryChannelDisplayName(name: string): string {
+  const key = String(name || '').trim().toLowerCase()
+  if (key === 'grab') return 'Grab Dine in'
+  if (key === 'line man' || key === 'lineman') return 'Line man Dine In'
+  if (key === 'shopee' || key === 'shopee food') return 'Shopee Dine in'
+  return name
+}
+
 /** 태국 바트 지폐·동전 단위 (฿) */
 const CASH_DENOMINATIONS = [
   { value: 1000, label: '1,000' },
@@ -328,6 +336,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     () => computeSettlementDeliveryKeys(deliveryAppKeys, deliveryApps),
     [deliveryAppKeys, deliveryApps]
   )
+  const displayDineInKeyList = React.useMemo(() => {
+    const extra = Object.keys(dineInDeliveryBreakdown).filter((k) => !DINE_IN_DELIVERY_KEYS.includes(k))
+    return [...DINE_IN_DELIVERY_KEYS, ...extra.sort()]
+  }, [DINE_IN_DELIVERY_KEYS, dineInDeliveryBreakdown])
 
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canUnclose = canAccessSettings(auth?.role || '')
@@ -483,6 +495,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           dineInKeys.forEach((k) => {
             di[k] = String(newDine[k] ?? oldDel[k] ?? '')
           })
+          for (const [k, v] of Object.entries(newDine)) {
+            if (!Object.prototype.hasOwnProperty.call(di, k)) {
+              di[k] = String(v ?? '')
+            }
+          }
           let extraDine = 0
           for (const [k, v] of Object.entries(oldDel)) {
             if (deliverySettlementKeyIsDineIn(k, deliveryApps) && !dineInKeys.includes(k)) {
@@ -502,11 +519,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           ) {
             di[dineInKeys[0]] = formatBahtAmountForField(single.dineInDeliveryAmt)
           }
-          const autoDi = buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false })
           const dineInBreakdownEmpty = isBreakdownEmpty(di)
           setDineInDeliveryBreakdown(
             mapBreakdownStringsToBahtDisplay(
-              dineInBreakdownEmpty && autoDineInTotal > 0 ? autoDi : di
+              dineInBreakdownEmpty && autoDineInTotal > 0
+                ? buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: true })
+                : di
             )
           )
           if ((Number(single.deliveryAppAmt ?? 0) || 0) <= 0 && autoDeliveryTotal > 0) {
@@ -581,7 +599,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           )
           setDineInDeliveryBreakdown(
             mapBreakdownStringsToBahtDisplay(
-              buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: false })
+              buildAutoBreakdown(autoDineInMap, dineInKeys, { allowExtra: true })
             )
           )
           setMemo('')
@@ -719,7 +737,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     PLATFORM_DELIVERY_KEYS.reduce((s, k) => s + parseBahtAmount(deliveryAppBreakdown[k]), 0) ||
     parseBahtAmount(deliveryAppAmt) ||
     0
-  const dineInNum = DINE_IN_DELIVERY_KEYS.reduce((s, k) => s + parseBahtAmount(dineInDeliveryBreakdown[k]), 0)
+  const dineInNum = Object.values(dineInDeliveryBreakdown).reduce((s, v) => s + parseBahtAmount(v), 0)
   const deliveryAppTotalNum = deliveryNum + dineInNum
   const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + dineInNum + otherNum
   const currencySuffix = ' ฿'
@@ -784,7 +802,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         ) as Record<string, number>,
         dineInDeliveryAmt: dineInNum,
         dineInDeliveryBreakdown: Object.fromEntries(
-          DINE_IN_DELIVERY_KEYS.map((k) => [k, parseBahtAmount(dineInDeliveryBreakdown[k])])
+          displayDineInKeyList.map((k) => [k, parseBahtAmount(dineInDeliveryBreakdown[k])])
         ) as Record<string, number>,
         otherAmt: otherNum,
         otherBreakdown: Object.fromEntries(
@@ -841,6 +859,25 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     const footerStamp = `
       ${closed ? `<div class="text-center" style="margin-top:6px;font-weight:700">${escapeHtml(t('posClosed') || '마감')}</div>` : ''}
       <div class="text-xs text-center" style="margin-top:8px;color:#333">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</div>`
+    const platformBreakdownPrintRows = PLATFORM_DELIVERY_KEYS
+      .map((k) => ({ key: k, amount: parseBahtAmount(deliveryAppBreakdown[k]) }))
+      .filter((row) => row.amount > 0.005)
+      .map((row) => amtIndent(`- ${toDeliveryChannelDisplayName(row.key)}`, formatBahtNum(row.amount)))
+      .join('')
+    const dineInBreakdownPrintRows = displayDineInKeyList
+      .map((k) => ({ key: k, amount: parseBahtAmount(dineInDeliveryBreakdown[k]) }))
+      .filter((row) => row.amount > 0.005)
+      .map((row) =>
+        amtIndent(
+          `- ${
+            row.key === POS_SETTLEMENT_DINE_IN_CODE
+              ? (t('posDeliveryPayDineIn') || 'Dine in')
+              : toDeliveryChannelDisplayName(row.key)
+          }`,
+          formatBahtNum(row.amount)
+        )
+      )
+      .join('')
 
     const bodyInner = openMode
         ? (() => {
@@ -873,7 +910,9 @@ ${amt(t('posPaymentQrCode') || 'QR 코드', formatBahtNum(qrNum))}
 <div class="receipt-divider-strong"></div>
 ${amt(t('posPaymentDeliveryApp') || '배달앱', formatBahtNum(deliveryAppTotalNum))}
 ${amtIndent(t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)', formatBahtNum(deliveryNum))}
+${platformBreakdownPrintRows}
 ${amtIndent(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)', formatBahtNum(dineInNum))}
+${dineInBreakdownPrintRows}
 ${amt(t('posPaymentOther') || '기타', formatBahtNum(otherNum))}
 <div class="receipt-divider"></div>
 ${amt(t('posInputTotal') || '입력 합계', formatBahtNum(totalInput), ' receipt-total')}
@@ -1402,7 +1441,7 @@ ${footerStamp}
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           {PLATFORM_DELIVERY_KEYS.map((k) => (
                             <label key={k} className="flex items-center gap-2 text-xs">
-                              <span className="w-16 shrink-0">{k}</span>
+                              <span className="w-16 shrink-0">{toDeliveryChannelDisplayName(k)}</span>
                               <Input
                                 type="text"
                                 inputMode="decimal"
@@ -1435,12 +1474,12 @@ ${footerStamp}
                             '홀 주문인데 POS 배달앱 탭·채널 Dine in 으로 받은 금액.'}
                         </p>
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          {DINE_IN_DELIVERY_KEYS.map((k) => (
+                          {displayDineInKeyList.map((k) => (
                             <label key={k} className="flex items-center gap-2 text-xs">
                               <span className="w-16 shrink-0">
                                 {k === POS_SETTLEMENT_DINE_IN_CODE
                                   ? t('posDeliveryPayDineIn') || 'Dine in'
-                                  : k}
+                                  : toDeliveryChannelDisplayName(k)}
                               </span>
                               <Input
                                 type="text"

@@ -1998,14 +1998,14 @@ export default function PosOrderPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="grab">{t("posDeliveryPayGrab") || "Grab"}</SelectItem>
-                        <SelectItem value="lineman">{t("posDeliveryPayLineman") || "Line Man"}</SelectItem>
-                        <SelectItem value="shopee">{t("posDeliveryPayShopeeFood") || "Shopee Food"}</SelectItem>
+                        <SelectItem value="grab">{t("posDeliveryPayGrab") || "Grab Dine in"}</SelectItem>
+                        <SelectItem value="lineman">{t("posDeliveryPayLineman") || "Line man Dine In"}</SelectItem>
+                        <SelectItem value="shopee">{t("posDeliveryPayShopeeFood") || "Shopee Dine in"}</SelectItem>
                       </SelectContent>
                     </Select>
                     {orderType === "dine_in" && (
                       <p className="text-[11px] leading-snug text-muted-foreground">
-                        {"테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab/Line Man/Shopee 중에서 선택하세요."}
+                        {"테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab Dine in/Line man Dine In/Shopee Dine in 중에서 선택하세요."}
                       </p>
                     )}
                   </div>

@@ -2065,6 +2065,9 @@ if (!gotLock) {
         storeCode,
         kind,
         updatedAt: String(payload?.updatedAt || new Date().toISOString()),
+        uiLang: ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"].includes(String(payload?.uiLang || ""))
+          ? String(payload.uiLang)
+          : undefined,
         title: typeof payload?.title === "string" ? payload.title : undefined,
         message: typeof payload?.message === "string" ? payload.message : undefined,
         qrPayload: typeof payload?.qrPayload === "string" ? payload.qrPayload : undefined,
