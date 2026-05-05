@@ -32,7 +32,6 @@ import {
   kitchenRoutingItemFromOrderItem,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
-import { PosItemCancelReasonDialog } from '@/components/pos/pos-item-cancel-reason-dialog'
 
 export interface TakeoutOrderPanelProps {
   orderLabel: string
@@ -130,45 +129,6 @@ export function TakeoutOrderPanel({
     }
   }
 
-  const toggleItemCancelled = async (itemId: string, reason?: string) => {
-    if (!order) return
-    const nextCancelled = !itemCancelled[itemId]
-    const resolvedReason = nextCancelled ? String(reason ?? '').trim() : ''
-    if (nextCancelled && resolvedReason.length < 2) return
-    const id = Number(order.id)
-    if (Number.isNaN(id)) return
-    if (!posOrderHasServerId(order.id)) {
-      const msg = t('posServedNeedsOrderId')
-      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
-      return
-    }
-    setSavingItemId(itemId)
-    try {
-      const res = await markPosOrderItemServed({
-        id,
-        itemId,
-        served: false,
-        cancelled: nextCancelled,
-        cancelledBy: 'pos_staff',
-        cancelReason: resolvedReason,
-      })
-      if (!res.success) {
-        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
-        return
-      }
-      setItemCancelled((prev) => ({ ...prev, [itemId]: nextCancelled }))
-      if (nextCancelled) {
-        setItemPackaged((prev) => ({ ...prev, [itemId]: false }))
-        setSelectedLineItemId((prev) => (prev === itemId ? null : prev))
-      }
-      onPackaged?.()
-    } catch (e) {
-      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
-    } finally {
-      setSavingItemId(null)
-    }
-  }
-
   const activeItems = order?.items?.filter((it) => !itemCancelled[it.id]) ?? []
   const packagedCount = activeItems.filter((it) => itemPackaged[it.id]).length
   const allPackaged = activeItems.length > 0 ? packagedCount >= activeItems.length : false
@@ -180,7 +140,6 @@ export function TakeoutOrderPanel({
   const [cancelling, setCancelling] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
-  const [cancelReasonItemId, setCancelReasonItemId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -369,41 +328,39 @@ export function TakeoutOrderPanel({
                       <li
                         key={item.id}
                         className={cn(
-                          'grid grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50',
+                          'cursor-default py-2 px-2 rounded-lg border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
-                          !cancelled && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                          !cancelled && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
+                          selectedLineItemId === item.id &&
+                            !cancelled &&
+                            'ring-2 ring-primary/45 border-primary/50 bg-primary/5 dark:bg-primary/10'
                         )}
+                        onClick={() => {
+                          if (cancelled) return
+                          setSelectedLineItemId(null)
+                        }}
                       >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate" title={fullDisp}>{mainDisp}</p>
-                          <p className="text-xs text-muted-foreground tabular-nums">
-                            {optionDisp && <span className="mr-1">{optionDisp}</span>}
-                            x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
-                          </p>
-                          {cancelled && (
-                            <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">
-                              {t('posLineCancelled') || '취소 처리됨'}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant={cancelled ? 'destructive' : 'outline'}
-                          className="h-9 w-9 p-0"
+                        <button
+                          type="button"
+                          className="w-full truncate rounded-sm px-0.5 text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 -mx-0.5"
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (cancelled) {
-                              void toggleItemCancelled(item.id)
-                              return
-                            }
-                            setCancelReasonItemId(item.id)
+                            if (cancelled) return
+                            setSelectedLineItemId((prev) => (prev === item.id ? null : item.id))
                           }}
-                          disabled={savingItemId === item.id || removingItemId !== null}
-                          aria-label={t('posCancel') || '취소'}
-                          title={t('posCancel') || '취소'}
+                          title={fullDisp}
                         >
-                          <XCircle className="w-5 h-5" />
-                        </Button>
+                          {mainDisp}
+                        </button>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          {optionDisp && <span className="mr-1">{optionDisp}</span>}
+                          x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
+                        </p>
+                        {cancelled && (
+                          <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300">
+                            {t('posLineCancelled') || '취소 처리됨'}
+                          </p>
+                        )}
                       </li>
                     )
                   })}
@@ -415,10 +372,43 @@ export function TakeoutOrderPanel({
                   : (t('posTablePayInStore') || '매장 결제')}
               </Button>
               {canCancel && (
-                <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
-                  <XCircle className="w-4 h-4 mr-1" />
-                  {t('posOrderCancelFull') || t('posOrderCancel') || '전체 취소'}
-                </Button>
+                <div className="space-y-1.5">
+                  {canRemovePosOrderLine(order) && !selectedLineItemId ? (
+                    <p className="text-center text-xs text-muted-foreground px-1">
+                      {t('posLineItemSelectFirst') || ti('posLineItemSelectFirst')}
+                    </p>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                      disabled={
+                        cancelling ||
+                        removingItemId !== null ||
+                        !canRemovePosOrderLine(order) ||
+                        !selectedLineItemId
+                      }
+                      onClick={() => {
+                        void handlePartialCancel()
+                      }}
+                    >
+                      {t('posOrderCancelPartial') || ti('posOrderCancelPartial')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="disabled:opacity-50"
+                      disabled={cancelling || removingItemId !== null}
+                      onClick={handleCancelOrder}
+                    >
+                      <XCircle className="w-4 h-4 mr-1 inline" aria-hidden />
+                      {t('posOrderCancelFull') || ti('posOrderCancelFull')}
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           ) : (
@@ -497,43 +487,23 @@ export function TakeoutOrderPanel({
                             </p>
                           )}
                         </div>
-                        <div className="shrink-0 self-start mt-0.5 flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant={packaged ? 'default' : 'outline'}
-                            className="h-9 w-9 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void toggleItemPackaged(item.id)
-                            }}
-                            disabled={savingItemId === item.id || removingItemId !== null || cancelled}
-                            aria-label={
-                              packaged
-                                ? (t('cancel') || '취소')
-                                : (t('posDeliveryPackagingComplete') || '포장 완료')
-                            }
-                          >
-                            {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={cancelled ? 'destructive' : 'outline'}
-                            className="h-9 w-9 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (cancelled) {
-                                void toggleItemCancelled(item.id)
-                                return
-                              }
-                              setCancelReasonItemId(item.id)
-                            }}
-                            disabled={savingItemId === item.id || removingItemId !== null}
-                            aria-label={t('posCancel') || '취소'}
-                            title={t('posCancel') || '취소'}
-                          >
-                            <XCircle className="w-5 h-5" />
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant={packaged ? 'default' : 'outline'}
+                          className="shrink-0 self-start mt-0.5 h-9 w-9 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void toggleItemPackaged(item.id)
+                          }}
+                          disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                          aria-label={
+                            packaged
+                              ? (t('cancel') || '취소')
+                              : (t('posDeliveryPackagingComplete') || '포장 완료')
+                          }
+                        >
+                          {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                        </Button>
                       </li>
                     )
                   })}
@@ -547,7 +517,6 @@ export function TakeoutOrderPanel({
 
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={handlePackComplete} className="h-11 text-base font-semibold" disabled={!allPackaged}>
-                  <CheckCircle className="w-4 h-4 mr-2" />
                   {allPackaged
                     ? (t('posDeliveryPackagingComplete') || '포장 완료')
                     : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeItems.length || order.items.length})`}
@@ -626,20 +595,6 @@ export function TakeoutOrderPanel({
             setChecklistSubmitting(false)
           }
         }}
-      />
-      <PosItemCancelReasonDialog
-        open={cancelReasonItemId != null}
-        onOpenChange={(v) => {
-          if (!v) setCancelReasonItemId(null)
-        }}
-        onConfirm={async (reason) => {
-          const itemId = cancelReasonItemId
-          if (!itemId) return
-          await toggleItemCancelled(itemId, reason)
-          setCancelReasonItemId(null)
-        }}
-        submitting={savingItemId != null}
-        t={t}
       />
     </>
   )

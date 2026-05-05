@@ -41,7 +41,6 @@ import {
   kitchenRoutingItemFromOrderItem,
   type PosKitchenReprintPayload,
 } from '@/lib/pos-kitchen-slip-routing'
-import { PosItemCancelReasonDialog } from '@/components/pos/pos-item-cancel-reason-dialog'
 
 export interface DeliveryOrderPanelProps {
   orderLabel: string
@@ -186,45 +185,6 @@ export function DeliveryOrderPanel({
     }
   }
 
-  const toggleItemCancelled = async (itemId: string, reason?: string) => {
-    if (!order) return
-    const nextCancelled = !itemCancelled[itemId]
-    const resolvedReason = nextCancelled ? String(reason ?? '').trim() : ''
-    if (nextCancelled && resolvedReason.length < 2) return
-    const id = Number(order.id)
-    if (Number.isNaN(id)) return
-    if (!posOrderHasServerId(order.id)) {
-      const msg = t('posServedNeedsOrderId')
-      await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : ti('posServedNeedsOrderId'))
-      return
-    }
-    setSavingItemId(itemId)
-    try {
-      const res = await markPosOrderItemServed({
-        id,
-        itemId,
-        served: false,
-        cancelled: nextCancelled,
-        cancelledBy: 'pos_staff',
-        cancelReason: resolvedReason,
-      })
-      if (!res.success) {
-        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
-        return
-      }
-      setItemCancelled((prev) => ({ ...prev, [itemId]: nextCancelled }))
-      if (nextCancelled) {
-        setItemPackaged((prev) => ({ ...prev, [itemId]: false }))
-        setSelectedLineItemId((prev) => (prev === itemId ? null : prev))
-      }
-      onPackaged?.()
-    } catch (e) {
-      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
-    } finally {
-      setSavingItemId(null)
-    }
-  }
-
   const activeItems = order?.items?.filter((it) => !itemCancelled[it.id]) ?? []
   const packagedCount = activeItems.filter((it) => itemPackaged[it.id]).length
   const allPackaged = activeItems.length > 0 ? packagedCount >= activeItems.length : false
@@ -237,7 +197,6 @@ export function DeliveryOrderPanel({
   const [deciding, setDeciding] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
-  const [cancelReasonItemId, setCancelReasonItemId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -668,43 +627,23 @@ export function DeliveryOrderPanel({
                             </p>
                           )}
                         </div>
-                        <div className="shrink-0 self-start mt-0.5 flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant={packaged ? 'default' : 'outline'}
-                            className="h-9 w-9 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void toggleItemPackaged(item.id)
-                            }}
-                            disabled={savingItemId === item.id || removingItemId !== null || cancelled}
-                            aria-label={
-                              packaged
-                                ? (t('cancel') || '취소')
-                                : (t('posDeliveryPackagingComplete') || '포장 완료')
-                            }
-                          >
-                            {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={cancelled ? 'destructive' : 'outline'}
-                            className="h-9 w-9 p-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (cancelled) {
-                                void toggleItemCancelled(item.id)
-                                return
-                              }
-                              setCancelReasonItemId(item.id)
-                            }}
-                            disabled={savingItemId === item.id || removingItemId !== null}
-                            aria-label={t('posCancel') || '취소'}
-                            title={t('posCancel') || '취소'}
-                          >
-                            <XCircle className="w-5 h-5" />
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant={packaged ? 'default' : 'outline'}
+                          className="shrink-0 self-start mt-0.5 h-9 w-9 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void toggleItemPackaged(item.id)
+                          }}
+                          disabled={savingItemId === item.id || removingItemId !== null || cancelled}
+                          aria-label={
+                            packaged
+                              ? (t('cancel') || '취소')
+                              : (t('posDeliveryPackagingComplete') || '포장 완료')
+                          }
+                        >
+                          {packaged ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                        </Button>
                       </li>
                     )
                   })}
@@ -717,7 +656,6 @@ export function DeliveryOrderPanel({
               </div>
 
               <Button onClick={handlePackComplete} className="w-full h-11 text-base font-semibold" disabled={!allPackaged}>
-                <CheckCircle className="w-4 h-4 mr-2" />
                 {allPackaged
                   ? (t('posDeliveryPackagingComplete') || '포장 완료')
                   : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeItems.length || order.items.length})`}
@@ -807,20 +745,6 @@ export function DeliveryOrderPanel({
             setChecklistSubmitting(false)
           }
         }}
-      />
-      <PosItemCancelReasonDialog
-        open={cancelReasonItemId != null}
-        onOpenChange={(v) => {
-          if (!v) setCancelReasonItemId(null)
-        }}
-        onConfirm={async (reason) => {
-          const itemId = cancelReasonItemId
-          if (!itemId) return
-          await toggleItemCancelled(itemId, reason)
-          setCancelReasonItemId(null)
-        }}
-        submitting={savingItemId != null}
-        t={t}
       />
     </>
   )
