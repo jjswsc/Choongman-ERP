@@ -26,19 +26,20 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
   const promoIdNum = Number(p.promoId)
   if (!promoIdNum) return { ok: false, message: 'promo id 없음' }
 
-  const baseMenuRow: Record<string, unknown> = {
+  const mirrorFieldsSansImage: Record<string, unknown> = {
     code: p.code,
     name: p.name,
     category: p.categorySub || PROMOTION_DEFAULT_SUBCATEGORIES[0],
     category_main: p.categoryMain || PROMOTION_MAIN_CATEGORY,
     price: p.price,
     price_delivery: p.priceDelivery,
-    image: '',
     vat_included: p.vatIncluded !== false,
     is_active: p.isActive !== false,
     sort_order: 0,
     promo_id: promoIdNum,
   }
+  /** 신규 미러 행만 빈 썸네일로 시작. 기존 행 UPDATE에 image를 넣으면 POS에서 올린 썸네일이 매 프로모 저장마다 지워짐 */
+  const insertMenuRow: Record<string, unknown> = { ...mirrorFieldsSansImage, image: '' }
 
   try {
     const linked = (await supabaseSelectFilter(
@@ -49,7 +50,7 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
 
     if (linked && linked.length > 0) {
       const menuId = String(linked[0].id ?? '')
-      await supabaseUpdateByFilter('pos_menus', `id=eq.${menuId}`, baseMenuRow)
+      await supabaseUpdateByFilter('pos_menus', `id=eq.${menuId}`, mirrorFieldsSansImage)
       return { ok: true }
     }
 
@@ -65,7 +66,7 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
       return { ok: false, message: '동일 코드의 일반 메뉴가 이미 있습니다. 프로모션 코드를 바꿔 주세요.' }
     }
 
-    await supabaseInsert('pos_menus', baseMenuRow)
+    await supabaseInsert('pos_menus', insertMenuRow)
     return { ok: true }
   } catch (e) {
     const msg = String(e)
