@@ -140,12 +140,17 @@ function buildAutoBreakdown(
   return Object.fromEntries(Object.entries(outNum).map(([k, v]) => [k, v > 0 ? String(v) : '']))
 }
 
-function toDeliveryChannelDisplayName(name: string): string {
-  const key = String(name || '').trim().toLowerCase()
-  if (key === 'grab') return 'Grab Dine in'
-  if (key === 'line man' || key === 'lineman') return 'Line man Dine In'
-  if (key === 'shopee' || key === 'shopee food') return 'Shopee Dine in'
-  return name
+/** 결산 「실제 배달(플랫폼)」 등: 플랫폼명만 표시 — "Dine in" 접미사는 매장 홀 하위 블록에서만 */
+function deliveryPlatformSettlementLabel(name: string): string {
+  const k = String(name || '').trim().toLowerCase().replace(/[\s_-]+/g, '')
+  if (k === 'grab') return 'Grab'
+  if (k === 'lineman') return 'Line Man'
+  if (k === 'shopee' || k === 'shopeefood') return 'Shopee'
+  return String(name || '').trim()
+}
+
+function hasHybridPosPrintShell(win: Window & typeof globalThis): boolean {
+  return typeof (win as Window & { cmPosShell?: { printHtml?: unknown } }).cmPosShell?.printHtml === 'function'
 }
 
 /** 태국 바트 지폐·동전 단위 (฿) */
@@ -344,6 +349,26 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canUnclose = canAccessSettings(auth?.role || '')
   const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
+
+  /** 결산 인쇄 직후 await 최소화(웹에서 print 제스처 만료 완화) + 수동 인쇄 재사용 */
+  const settlementPrinterHwRef = React.useRef<Awaited<ReturnType<typeof getPosPrinterSettings>> | null | undefined>(
+    undefined
+  )
+  React.useEffect(() => {
+    settlementPrinterHwRef.current = undefined
+    if (!effectiveStore) return
+    let cancelled = false
+    getPosPrinterSettings({ storeCode: effectiveStore })
+      .then((h) => {
+        if (!cancelled) settlementPrinterHwRef.current = h ?? null
+      })
+      .catch(() => {
+        if (!cancelled) settlementPrinterHwRef.current = null
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [effectiveStore])
 
   React.useEffect(() => {
     if (!effectiveStore) return
@@ -771,18 +796,163 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther
   const tillNetAppliedToDrawer = openMode ? 0 : tillNetForSettleDate
   const expectedDrawerByOpenAndCash = (openingCashActual ?? 0) + cashAmtNum + tillNetAppliedToDrawer
-  /** 직원 확인용: 아침 권종 베이스(=시작 시제) unchanged 시 −당일 현금 매출처럼 보임. 재실사·출금 반영 시 0 또는 시재 순액 쪽으로 맞춤 */
+  /** 권종 실사 − 「예상 돈통 시제」(시작+당일 현금 매출±시재 입출금 순액). Till 순액을 빼면 출금 분만큼 차이가 틀어짐 */
   const drawerDenomDeltaVsPosCash =
-    openingCashActual != null ? cashActualNum - Number(openingCashActual) - cashAmtNum : null
+    openingCashActual != null ? cashActualNum - expectedDrawerByOpenAndCash : null
 
   /** 서버에 마감 확정된 건만 잠금. 체크만 한 뒤에는 저장까지 입력·저장 가능 */
   const inputsLocked = Boolean(settlement?.closed) && !canUnclose
+
+  const composeSettlementReceiptFullHtml = (): string => {
+    const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
+    const reportTitle = openMode
+      ? t('posSettlementOpenReport') || t('posBusinessOpen') || 'POS opening report'
+      : t('posSettlementReport') || 'POS 결산 리포트'
+    const dateLabel =
+      openMode ? t('posOpenReportDate') || t('posSettleDate') || '결산일' : t('posSettleDate') || '결산일'
+    const htmlLang =
+      typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim()) ? lang.trim() : undefined
+    const docTitle = `${reportTitle} - ${storeLabel} - ${settleDate}`
+
+    const amt = (label: string, value: string, rowClass = '') =>
+      `<div class="receipt-row${rowClass}"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
+    const amtIndent = (label: string, value: string) =>
+      `<div class="receipt-row"><span style="padding-left:2mm">${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
+    const headerBlock = `
+      <div class="receipt-order-header text-center">
+        <div class="receipt-store-name">${escapeHtml(String(storeLabel))}</div>
+        <div class="receipt-order-label">${escapeHtml(reportTitle)}</div>
+      </div>
+      <div class="receipt-divider"></div>
+      <div class="text-xs text-center">${escapeHtml(dateLabel)}: ${escapeHtml(settleDate)}</div>
+      <div class="receipt-divider"></div>`
+    const footerStamp = `
+      ${closed ? `<div class="text-center" style="margin-top:6px;font-weight:700">${escapeHtml(t('posClosed') || '마감')}</div>` : ''}
+      <div class="text-xs text-center" style="margin-top:8px;color:#333">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</div>`
+    const platformBreakdownPrintRows = PLATFORM_DELIVERY_KEYS
+      .map((k) => ({ key: k, amount: parseBahtAmount(deliveryAppBreakdown[k]) }))
+      .filter((row) => row.amount > 0.005)
+      .map((row) => amtIndent(`- ${deliveryPlatformSettlementLabel(row.key)}`, formatBahtNum(row.amount)))
+      .join('')
+    const dineInBreakdownPrintRows = displayDineInKeyList
+      .map((k) => ({ key: k, amount: parseBahtAmount(dineInDeliveryBreakdown[k]) }))
+      .filter((row) => row.amount > 0.005)
+      .map((row) =>
+        amtIndent(
+          `- ${
+            row.key === POS_SETTLEMENT_DINE_IN_CODE
+              ? (t('posDeliveryPayDineIn') || 'Dine in')
+              : deliveryPlatformSettlementLabel(row.key)
+          }`,
+          formatBahtNum(row.amount)
+        )
+      )
+      .join('')
+
+    const bodyInner = openMode
+      ? (() => {
+          const denomRows = CASH_DENOMINATIONS.map((d) => {
+            const qty = parseInt(toIntegerInput(denomCounts[d.value] || '0'), 10) || 0
+            if (qty === 0) return ''
+            const line = d.value * qty
+            return amt(`${d.label} ฿ × ${t('qty') || '수량'} ${qty}`, formatBahtNum(line))
+          }).join('')
+          const prevDayRow =
+            prevDayCashActual != null
+              ? amt(t('posPrevDayCash') || '전날 시재', formatBahtNum(prevDayCashActual))
+              : ''
+          const denomHeadingEsc = escapeHtml(t('posOpenPrintDenomHeading') || '권종')
+          const noDenomNote =
+            denomRows.trim().length === 0
+              ? `<p class="memo" style="color:#444">${escapeHtml(t('posOpenPrintNoDenom') || '권종 수량이 없습니다.')}</p>`
+              : ''
+          return `<div class="receipt-content receipt-order-simple">${headerBlock}${prevDayRow}<div class="text-xs" style="font-weight:700;margin:8px 0 4px;text-align:center">${denomHeadingEsc}</div>${denomRows || noDenomNote}<div class="receipt-divider"></div>${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum), ' receipt-total')}${memo.trim() ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo.trim())}</div>` : ''}${footerStamp}</div>`
+        })()
+      : `<div class="receipt-content receipt-order-simple">${headerBlock}
+${amt(t('posSystemSubtotal') || '공급가액', formatBahtNum(systemSubtotal))}
+${amt(t('posSystemVat') || 'VAT (7%)', formatBahtNum(systemVat))}
+<div class="receipt-divider"></div>
+${amt(t('posSystemTotal') || '시스템 매출', formatBahtNum(systemTotal), ' receipt-total')}
+<div class="receipt-divider"></div>
+${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum))}
+${amt(t('posCard') || '카드', formatBahtNum(cardNum))}
+${amt(t('posPaymentQrCode') || 'QR 코드', formatBahtNum(qrNum))}
+<div class="receipt-divider-strong"></div>
+${amt(t('posPaymentDeliveryApp') || '배달앱', formatBahtNum(deliveryAppTotalNum))}
+${amtIndent(t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)', formatBahtNum(deliveryNum))}
+${platformBreakdownPrintRows}
+${amtIndent(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)', formatBahtNum(dineInNum))}
+${dineInBreakdownPrintRows}
+${amt(t('posPaymentOther') || '기타', formatBahtNum(otherNum))}
+<div class="receipt-divider"></div>
+${amt(t('posInputTotal') || '입력 합계', formatBahtNum(totalInput), ' receipt-total')}
+${memo ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo)}</div>` : ''}
+${footerStamp}
+</div>`
+
+    return buildReceiptDocumentHtml({
+      title: escapeHtml(docTitle),
+      bodyContent: bodyInner,
+      htmlLang,
+    })
+  }
+
+  const resolveSettlementPrinterHw = async () => {
+    if (!effectiveStore) return null
+    const cached = settlementPrinterHwRef.current
+    if (cached !== undefined) return cached
+    const fetched = await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
+    settlementPrinterHwRef.current = fetched ?? null
+    return fetched ?? null
+  }
+
+  const handlePrint = async () => {
+    const reportTitle = openMode
+      ? t('posSettlementOpenReport') || t('posBusinessOpen') || 'POS opening report'
+      : t('posSettlementReport') || 'POS 결산 리포트'
+    const hw =
+      effectiveStore.length > 0 ? await resolveSettlementPrinterHw().catch(() => null) : null
+    const fullHtml = composeSettlementReceiptFullHtml()
+    printPosHtmlDocument(fullHtml, {
+      title: reportTitle,
+      printDelayMs: 0,
+      fallbackCleanupMs: 120_000,
+      printRole: 'receipt',
+      printReceiptKind: 'hall_order',
+      escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'hall_order' }),
+      onPrintUnavailable: () => {
+        void appAlert(t('posPrintUnavailable'))
+      },
+    })
+  }
 
   const handleSave = async () => {
     if (!effectiveStore) {
       await appAlert(t('store') || '매장을 선택하세요.')
       return
     }
+
+    /**
+     * Chromium: 저장 API·알림 뒤엔 사용자 제스처가 사라져 iframe print 무시되는 경우 있음
+     * → 클릭 직후 보조 창 확보(웹만). 영업 시작 저장 / 마감 체크 후 결산 저장 시 자동 인쇄에 사용.
+     */
+    const autoPrintAfterSuccess =
+      typeof window !== 'undefined' && (openMode || (!openMode && closed))
+    const reserveWebKioskPrintPopup =
+      autoPrintAfterSuccess && !hasHybridPosPrintShell(window)
+    let webKioskPrintPopup: Window | null = null
+    if (reserveWebKioskPrintPopup) {
+      try {
+        webKioskPrintPopup = window.open(
+          '',
+          openMode ? 'cm_pos_business_open_receipt' : 'cm_pos_settlement_receipt',
+          'popup=yes,width=160,height=100,left=0,top=0'
+        )
+      } catch {
+        webKioskPrintPopup = null
+      }
+    }
+
     setSaving(true)
     try {
       if (openMode && !isPosDemoFromQuery(searchParams)) {
@@ -832,132 +1002,67 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         memo,
         closed,
       })
-      if (res.success) {
-        await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
-        /** 마감 확정 저장 직후: 다음 오픈 권 교차검증용 요약 영수증 자동 인쇄 (수동 인쇄 누락 방지) */
-        if (!openMode && closed) {
-          await handlePrint()
+      const closePrintPopup = (p: Window | null) => {
+        if (p && !p.closed) {
+          try {
+            p.close()
+          } catch {
+            /* ignore */
+          }
         }
+      }
+      if (res.success) {
+        /** 영업 시작 저장 또는 마감 체크 후 결산 저장: 요약(오픈/마감) 영수증 자동 인쇄 — 알림 전, 웹 제스처·하이브리드 ESC/POS */
+        if (autoPrintAfterSuccess) {
+          const fullHtml = composeSettlementReceiptFullHtml()
+          if (typeof window !== 'undefined' && hasHybridPosPrintShell(window)) {
+            closePrintPopup(webKioskPrintPopup)
+            webKioskPrintPopup = null
+            void handlePrint()
+          } else if (webKioskPrintPopup && !webKioskPrintPopup.closed) {
+            const p = webKioskPrintPopup
+            webKioskPrintPopup = null
+            try {
+              p.document.open()
+              p.document.write(fullHtml)
+              p.document.close()
+              p.focus()
+              p.print()
+              window.setTimeout(() => {
+                closePrintPopup(p)
+              }, 800)
+            } catch {
+              closePrintPopup(p)
+              await handlePrint()
+            }
+          } else {
+            closePrintPopup(webKioskPrintPopup)
+            webKioskPrintPopup = null
+            await handlePrint()
+          }
+        } else {
+          closePrintPopup(webKioskPrintPopup)
+          webKioskPrintPopup = null
+        }
+        await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
         loadData()
       } else {
+        closePrintPopup(webKioskPrintPopup)
+        webKioskPrintPopup = null
         await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
       }
     } catch (e) {
+      if (typeof window !== 'undefined' && webKioskPrintPopup && !webKioskPrintPopup.closed) {
+        try {
+          webKioskPrintPopup.close()
+        } catch {
+          /* ignore */
+        }
+      }
       await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setSaving(false)
     }
-  }
-
-  const handlePrint = async () => {
-    const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
-    const hw =
-      effectiveStore.length > 0
-        ? await getPosPrinterSettings({ storeCode: effectiveStore }).catch(() => null)
-        : null
-    const reportTitle = openMode
-      ? t('posSettlementOpenReport') || t('posBusinessOpen') || 'POS opening report'
-      : t('posSettlementReport') || 'POS 결산 리포트'
-    const dateLabel =
-      openMode ? t('posOpenReportDate') || t('posSettleDate') || '결산일' : t('posSettleDate') || '결산일'
-    const htmlLang =
-      typeof lang === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$/.test(lang.trim()) ? lang.trim() : undefined
-    const docTitle = `${reportTitle} - ${storeLabel} - ${settleDate}`
-
-    /** 홀 주문서·결제 미리보기와 동일: buildReceiptDocumentHtml + hall_order 컷 설정 */
-    const amt = (label: string, value: string, rowClass = '') =>
-      `<div class="receipt-row${rowClass}"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
-    const amtIndent = (label: string, value: string) =>
-      `<div class="receipt-row"><span style="padding-left:2mm">${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`
-    const headerBlock = `
-      <div class="receipt-order-header text-center">
-        <div class="receipt-store-name">${escapeHtml(String(storeLabel))}</div>
-        <div class="receipt-order-label">${escapeHtml(reportTitle)}</div>
-      </div>
-      <div class="receipt-divider"></div>
-      <div class="text-xs text-center">${escapeHtml(dateLabel)}: ${escapeHtml(settleDate)}</div>
-      <div class="receipt-divider"></div>`
-    const footerStamp = `
-      ${closed ? `<div class="text-center" style="margin-top:6px;font-weight:700">${escapeHtml(t('posClosed') || '마감')}</div>` : ''}
-      <div class="text-xs text-center" style="margin-top:8px;color:#333">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</div>`
-    const platformBreakdownPrintRows = PLATFORM_DELIVERY_KEYS
-      .map((k) => ({ key: k, amount: parseBahtAmount(deliveryAppBreakdown[k]) }))
-      .filter((row) => row.amount > 0.005)
-      .map((row) => amtIndent(`- ${toDeliveryChannelDisplayName(row.key)}`, formatBahtNum(row.amount)))
-      .join('')
-    const dineInBreakdownPrintRows = displayDineInKeyList
-      .map((k) => ({ key: k, amount: parseBahtAmount(dineInDeliveryBreakdown[k]) }))
-      .filter((row) => row.amount > 0.005)
-      .map((row) =>
-        amtIndent(
-          `- ${
-            row.key === POS_SETTLEMENT_DINE_IN_CODE
-              ? (t('posDeliveryPayDineIn') || 'Dine in')
-              : toDeliveryChannelDisplayName(row.key)
-          }`,
-          formatBahtNum(row.amount)
-        )
-      )
-      .join('')
-
-    const bodyInner = openMode
-        ? (() => {
-          const denomRows = CASH_DENOMINATIONS.map((d) => {
-            const qty = parseInt(toIntegerInput(denomCounts[d.value] || '0'), 10) || 0
-            if (qty === 0) return ''
-            const line = d.value * qty
-            return amt(`${d.label} ฿ × ${t('qty') || '수량'} ${qty}`, formatBahtNum(line))
-          }).join('')
-          const prevDayRow =
-            prevDayCashActual != null
-              ? amt(t('posPrevDayCash') || '전날 시재', formatBahtNum(prevDayCashActual))
-              : ''
-          const denomHeadingEsc = escapeHtml(t('posOpenPrintDenomHeading') || '권종')
-          const noDenomNote =
-            denomRows.trim().length === 0
-              ? `<p class="memo" style="color:#444">${escapeHtml(t('posOpenPrintNoDenom') || '권종 수량이 없습니다.')}</p>`
-              : ''
-          return `<div class="receipt-content receipt-order-simple">${headerBlock}${prevDayRow}<div class="text-xs" style="font-weight:700;margin:8px 0 4px;text-align:center">${denomHeadingEsc}</div>${denomRows || noDenomNote}<div class="receipt-divider"></div>${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum), ' receipt-total')}${memo.trim() ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo.trim())}</div>` : ''}${footerStamp}</div>`
-        })()
-      : `<div class="receipt-content receipt-order-simple">${headerBlock}
-${amt(t('posSystemSubtotal') || '공급가액', formatBahtNum(systemSubtotal))}
-${amt(t('posSystemVat') || 'VAT (7%)', formatBahtNum(systemVat))}
-<div class="receipt-divider"></div>
-${amt(t('posSystemTotal') || '시스템 매출', formatBahtNum(systemTotal), ' receipt-total')}
-<div class="receipt-divider"></div>
-${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum))}
-${amt(t('posCard') || '카드', formatBahtNum(cardNum))}
-${amt(t('posPaymentQrCode') || 'QR 코드', formatBahtNum(qrNum))}
-<div class="receipt-divider-strong"></div>
-${amt(t('posPaymentDeliveryApp') || '배달앱', formatBahtNum(deliveryAppTotalNum))}
-${amtIndent(t('posSettlementDeliverySubActual') || '실제 배달 (플랫폼)', formatBahtNum(deliveryNum))}
-${platformBreakdownPrintRows}
-${amtIndent(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)', formatBahtNum(dineInNum))}
-${dineInBreakdownPrintRows}
-${amt(t('posPaymentOther') || '기타', formatBahtNum(otherNum))}
-<div class="receipt-divider"></div>
-${amt(t('posInputTotal') || '입력 합계', formatBahtNum(totalInput), ' receipt-total')}
-${memo ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo)}</div>` : ''}
-${footerStamp}
-</div>`
-
-    const fullHtml = buildReceiptDocumentHtml({
-      title: escapeHtml(docTitle),
-      bodyContent: bodyInner,
-      htmlLang,
-    })
-
-    printPosHtmlDocument(fullHtml, {
-      title: reportTitle,
-      printDelayMs: 0,
-      fallbackCleanupMs: 120_000,
-      printRole: 'receipt',
-      printReceiptKind: 'hall_order',
-      escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'hall_order' }),
-      onPrintUnavailable: () => {
-        void appAlert(t('posPrintUnavailable'))
-      },
-    })
   }
 
   const paddingClass = 'px-4 py-6 sm:px-6 lg:px-8'
@@ -1462,7 +1567,7 @@ ${footerStamp}
                         <div className="mt-2 grid grid-cols-2 gap-2">
                           {PLATFORM_DELIVERY_KEYS.map((k) => (
                             <label key={k} className="flex items-center gap-2 text-xs">
-                              <span className="w-16 shrink-0">{toDeliveryChannelDisplayName(k)}</span>
+                              <span className="w-16 shrink-0">{deliveryPlatformSettlementLabel(k)}</span>
                               <Input
                                 type="text"
                                 inputMode="decimal"
@@ -1500,7 +1605,7 @@ ${footerStamp}
                               <span className="w-16 shrink-0">
                                 {k === POS_SETTLEMENT_DINE_IN_CODE
                                   ? t('posDeliveryPayDineIn') || 'Dine in'
-                                  : toDeliveryChannelDisplayName(k)}
+                                  : deliveryPlatformSettlementLabel(k)}
                               </span>
                               <Input
                                 type="text"
@@ -1681,16 +1786,21 @@ ${footerStamp}
                 />
               </div>
 
-              <div className="flex items-center justify-between" data-tour="pos-tour-close-checkbox">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={closed}
-                    onChange={(e) => setClosed(e.target.checked)}
-                    disabled={inputsLocked}
-                  />
-                  {t('posClosed') || '마감'}
-                </label>
+              <div className="flex items-center justify-between gap-3" data-tour="pos-tour-close-checkbox">
+                <div className="min-w-0 flex-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={closed}
+                      onChange={(e) => setClosed(e.target.checked)}
+                      disabled={inputsLocked}
+                    />
+                    <span>{t('posClosed') || '마감'}</span>
+                  </label>
+                  <p className="mt-1 pl-6 text-[10px] leading-snug text-muted-foreground">
+                    {t('posSettlementAutoPrintHint')}
+                  </p>
+                </div>
                 {settlement?.closed && !canUnclose && (
                   <span className="text-xs text-muted-foreground">
                     {t('posClosedByAdminOnly') || '마감 해제는 본사 관리자만 가능합니다.'}
@@ -1841,7 +1951,7 @@ ${footerStamp}
                                   .filter(([, v]) => (v ?? 0) > 0)
                                   .map(([k, v]) => (
                                     <div key={k} className="flex justify-between text-muted-foreground">
-                                      <span>{k}</span>
+                                      <span>{deliveryPlatformSettlementLabel(k)}</span>
                                       <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
                                     </div>
                                   ))}
@@ -1863,7 +1973,7 @@ ${footerStamp}
                                       <span>
                                         {k === POS_SETTLEMENT_DINE_IN_CODE
                                           ? t('posDeliveryPayDineIn') || 'Dine in'
-                                          : k}
+                                          : deliveryPlatformSettlementLabel(k)}
                                       </span>
                                       <span className="tabular-nums">{Number(v).toLocaleString()} ฿</span>
                                     </div>

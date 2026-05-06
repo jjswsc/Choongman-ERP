@@ -8,6 +8,7 @@ import {
   buildMenuPolicyMap,
   getPosDeliveryPolicyBundle,
   isMenuAvailableByDeliveryPolicy,
+  type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
 
 type MenuRow = {
@@ -283,6 +284,7 @@ function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
     serviceHours: sec.serviceHours,
   }))
   const categories: unknown[] = []
+  let globalSequence = 1
   for (const sec of capped) {
     const stId = sec.id
     const cats = Array.isArray(sec.categories) ? sec.categories : []
@@ -291,7 +293,12 @@ function buildSellingTimesAndRootCategories(sections: GrabMenuSectionOut[]): {
       const cat = raw as Record<string, unknown>
       const baseId = String(cat.id ?? '').trim()
       const uniqueId = normalizeId(`${stId}__${baseId || 'cat'}`, `cat-${categories.length + 1}`)
-      const row: Record<string, unknown> = { ...cat, id: uniqueId, sellingTimeID: stId }
+      const row: Record<string, unknown> = {
+        ...cat,
+        id: uniqueId,
+        sequence: globalSequence++,
+        sellingTimeID: stId,
+      }
       delete row.sellingTimeId
       categories.push(row)
     }
@@ -364,22 +371,40 @@ function extractPartnerStoreDigits(raw: string): string {
   return digits?.[1] || ''
 }
 
+/** 같은 Grab 맵 체인 안에서만 값을 따라 최종 partner/ERP 문자열까지 진행 (정책 매칭용, BFS·다매장 탐색 없음) */
+function followGrabStoreMapChainToTerminal(start: string): string {
+  const map = parseGrabStoreMap()
+  let cur = String(start || '').trim()
+  if (!cur) return ''
+  const seen = new Set<string>()
+  for (let i = 0; i < 10; i++) {
+    if (seen.has(cur)) break
+    seen.add(cur)
+    const next = String(map[cur] || '').trim()
+    if (!next || next === cur) break
+    cur = next
+  }
+  return cur
+}
+
 function resolveStoreCodeFromGrabMerchant(merchantID: string, partnerMerchantID: string): string {
   const map = parseGrabStoreMap()
   const m1 = String(merchantID || '').trim()
   const m2 = String(partnerMerchantID || '').trim()
   const fromMap = String(map[m1] || map[m2] || '').trim()
   if (fromMap) {
-    const d = extractPartnerStoreDigits(fromMap)
-    return d || fromMap
+    return followGrabStoreMapChainToTerminal(fromMap) || fromMap
   }
   const fromPartner = extractPartnerStoreDigits(m2)
-  if (fromPartner) return fromPartner
+  if (fromPartner) {
+    return followGrabStoreMapChainToTerminal(fromPartner) || fromPartner
+  }
   if (m1 && !looksLikeGrabMerchantId(m1)) {
     const d = extractPartnerStoreDigits(m1)
-    if (d) return d
+    if (d) return followGrabStoreMapChainToTerminal(d) || d
   }
-  return m2 || m1
+  const tail = String(m2 || m1 || '').trim()
+  return tail ? followGrabStoreMapChainToTerminal(tail) || tail : ''
 }
 
 /** 배달 정책이 ERP store_code 기준이면, 파트너 숫자·별칭과 맞춰 canonical store_code로 */
@@ -405,6 +430,19 @@ async function resolvePolicyStoreCodeForGrabMenu(storeCodeGuess: string): Promis
     // ignore
   }
   return guess
+}
+
+async function resolvePolicyBundleForGrabMenu(storeCodeGuess: string): Promise<{
+  storeCode: string
+  policyBundle: PosDeliveryPolicyBundle | null
+}> {
+  const seed = String(storeCodeGuess || '').trim()
+  if (!seed) return { storeCode: '', policyBundle: null }
+
+  /** ERP에 저장된 배달 정책·메뉴 ON/OFF는 해당 매장의 `store_code`(마스터 기준 정규화) 한 곳만 본다. */
+  const storeCode = (await resolvePolicyStoreCodeForGrabMenu(seed)) || seed
+  const policyBundle = await getPosDeliveryPolicyBundle({ storeCode, appCode: 'grab' }).catch(() => null)
+  return { storeCode, policyBundle }
 }
 
 async function loadOptions(): Promise<OptionRow[]> {
@@ -435,10 +473,9 @@ export async function buildGrabMenuFromPos(params: {
   if (!menus.length) return grabStubMenuJson(params.merchantID, params.partnerMerchantID)
 
   const storeGuess = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
-  const storeCode = await resolvePolicyStoreCodeForGrabMenu(storeGuess)
-  const policyBundle = storeCode
-    ? await getPosDeliveryPolicyBundle({ storeCode, appCode: 'grab' }).catch(() => null)
-    : null
+  const resolved = await resolvePolicyBundleForGrabMenu(storeGuess)
+  const storeCode = resolved.storeCode
+  const policyBundle = resolved.policyBundle
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])
   const categoryOrderMap = buildCategoryOrderMap(policyBundle?.categoryOrders || [])
   const sectionOrderMap = new Map<string, number>()
@@ -464,6 +501,8 @@ export async function buildGrabMenuFromPos(params: {
 
   const groups = new Map<string, MenuRow[]>()
   for (const menu of menus) {
+    /** 메뉴 `is_active` 꺼짐 = 품목 비활성 → 배달 앱 메뉴에도 포함하지 않음(홀·포장과 동일 바닥). 배달 ON/OFF는 그다음 `pos_delivery_menu_policies`로만 조정. */
+    if (menu.is_active === false) continue
     const menuId = Number(menu.id ?? 0)
     const policy = menuPolicyMap.get(menuId)
     if (policy && !policy.enabled) continue
