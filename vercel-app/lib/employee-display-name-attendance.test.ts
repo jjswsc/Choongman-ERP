@@ -5,6 +5,15 @@ import {
 } from '@/lib/employee-display-name'
 
 describe('attendance grid display name', () => {
+  it('닉네임 있으면 닉네임 (풀네임)으로 표시', () => {
+    const { displayByEmployeeId, displayByStoreAndBareName } = buildAttendanceDisplayMapsFromEmployees([
+      { id: 10, store: 'CM Office', name: 'Somchai', name_title: 'Mr.', nick: '챠이' },
+    ])
+    expect(
+      resolveEmployeeDisplayNameForAttendanceGrid('CM Office', 'Somchai', 10, displayByEmployeeId, displayByStoreAndBareName)
+    ).toBe('챠이 (Mr. Somchai)')
+  })
+
   it('employee_id 로 마스터 호칭+이름', () => {
     const { displayByEmployeeId, displayByStoreAndBareName } = buildAttendanceDisplayMapsFromEmployees([
       { id: 10, store: 'CM Office', name: 'Somchai', name_title: 'Mr.' },

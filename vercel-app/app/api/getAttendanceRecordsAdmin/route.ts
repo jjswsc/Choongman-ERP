@@ -389,13 +389,14 @@ export async function GET(request: NextRequest) {
     let displayByStoreAndBareName: Record<string, string> = {}
     try {
       const empRows = (await supabaseSelect('employees', {
-        select: 'id,store,name,name_title,job,sal_type,employee_code',
+        select: 'id,store,name,name_title,nick,job,sal_type,employee_code',
         limit: 5000,
       })) as {
         id?: number
         store?: string
         name?: string
         name_title?: string | null
+        nick?: string | null
         job?: string
         sal_type?: string
         employee_code?: string | null

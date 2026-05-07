@@ -84,6 +84,30 @@ export function isEligibleChickenHalfForBanban(
   return isChickenMenuForBanban(menu) || isSameCategoryAsCodeChickenMenu(menu, allMenus)
 }
 
+/**
+ * 카트·items_json에 저장된 반반 메뉴 표시명에서 두 가지 맛 이름을 추출한다.
+ * 예: "Banban Chicken (Flavor 1 / Flavor 2)" → { baseName: "Banban Chicken", flavor1, flavor2 }
+ *
+ * 반반 패턴이 아니면 `null`. (단순 옵션은 ` / `가 없으므로 영향 없음)
+ */
+export function parseBanbanFlavorsFromName(rawName: string | null | undefined): {
+  baseName: string
+  flavor1: string
+  flavor2: string
+} | null {
+  const name = String(rawName ?? '').trim()
+  if (!name) return null
+  const m = name.match(/^(.+?)\s*\(([^()]+)\)\s*$/u)
+  if (!m) return null
+  const baseName = m[1].trim()
+  const optionPart = m[2].trim()
+  if (!baseName || !optionPart.includes('/')) return null
+  const parts = optionPart.split(/\s*\/\s*/).map((s) => s.trim()).filter(Boolean)
+  if (parts.length !== 2) return null
+  const [flavor1, flavor2] = parts
+  return { baseName, flavor1, flavor2 }
+}
+
 function sortMenusByName(arr: PosMenu[]): PosMenu[] {
   return arr.slice().sort((a, b) => a.name.localeCompare(b.name))
 }

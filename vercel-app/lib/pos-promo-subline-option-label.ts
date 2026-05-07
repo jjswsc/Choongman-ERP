@@ -1,4 +1,5 @@
 import type { PosMenuOption } from '@/lib/api-client'
+import { isChickenMenu } from '@/lib/pos-menu-categories'
 
 export type PosPromoSublineOrderChannel = 'dine-in' | 'takeout' | 'delivery'
 
@@ -43,13 +44,16 @@ export function resolvePromoSublineOptionDisplayName(params: {
   optionById: Map<string, PosMenuOption>
   menuOptions: PosMenuOption[] | undefined
   orderChannel: PosPromoSublineOrderChannel
+  menuCode?: string | null
 }): string {
-  const { optionId, optionById, menuOptions, orderChannel } = params
+  const { optionId, optionById, menuOptions, orderChannel, menuCode } = params
   const id = optionId != null && String(optionId).trim() ? String(optionId).trim() : ''
   if (id) {
     const hit = optionById.get(id)?.name?.trim()
     if (hit) return hit
   }
+
+  if (!id && isChickenMenu(menuCode ?? undefined)) return 'S 순살'
 
   const opts = (menuOptions || []).filter((o) => channelSellAllowed(o, orderChannel))
   if (opts.length === 0) return ''

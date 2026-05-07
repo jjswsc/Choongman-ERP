@@ -77,7 +77,7 @@ export interface OrderItem {
   cancelReason?: string | null
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
   setChildrenState?: Record<
     string,
     {

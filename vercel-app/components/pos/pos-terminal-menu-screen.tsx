@@ -60,6 +60,7 @@ import {
   resolvePosMenuOptionDescriptionForChannel,
 } from '@/lib/pos-menu-display-description'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
+import { isChickenMenu } from '@/lib/pos-menu-categories'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
@@ -449,11 +450,22 @@ export function PosTerminalMenuScreen({
   }
 
   const addResolvedPromo = React.useCallback((resolvedPromo: PosPromoWithItems) => {
-    const normalizedItems = (resolvedPromo.items || []).map((x) => ({
-      menuId: String(x.menuId),
-      optionId: x.optionId ? String(x.optionId) : null,
-      quantity: Math.max(1, Number(x.quantity) || 1),
-    }))
+    /** 카트 라인에 옵션 이름을 미리 캐시 — 카트 패널은 sell 채널 필터·옵션 캐시 누락 시 lookup이 실패할 수 있다. */
+    const normalizedItems = (resolvedPromo.items || []).map((x) => {
+      const optId = x.optionId ? String(x.optionId) : null
+      const menu = menus.find((m) => String(m.id) === String(x.menuId))
+      const optName = optId
+        ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
+        : isChickenMenu(menu?.code)
+          ? 'S 순살'
+          : ''
+      return {
+        menuId: String(x.menuId),
+        optionId: optId,
+        quantity: Math.max(1, Number(x.quantity) || 1),
+        ...(optName ? { optionName: optName } : {}),
+      }
+    })
     const signature = normalizedItems
       .map((x) => `${x.menuId}:${x.optionId || '-'}:${x.quantity}`)
       .join('|')
@@ -465,7 +477,7 @@ export function PosTerminalMenuScreen({
       promoCode: resolvedPromo.code,
       promoItems: normalizedItems,
     })
-  }, [getPromoPrice, onAddItem])
+  }, [allOptions, getPromoPrice, menus, onAddItem])
 
   const addPromo = async (p: PosPromoWithItems) => {
     const freshItems = await getPosPromoItems({ promoId: p.id }).catch(() => null)
@@ -769,7 +781,34 @@ export function PosTerminalMenuScreen({
       }
       const res = await uploadPosMenuImage({ file: toSend })
       if (res?.success && res?.url) {
-        setMenuEditForm((p) => ({ ...p, imageUrl: res.url! }))
+        const newUrl = res.url
+        setMenuEditForm((p) => ({ ...p, imageUrl: newUrl }))
+        /**
+         * 프로모션과 연동된 메뉴(promoId)는 일반 저장 경로가 막혀 있어
+         * 사진만 즉시 DB에 반영해 둔다. 마케팅 화면을 거치지 않고도
+         * 운영자가 메뉴 화면에서 사진을 갱신할 수 있어야 하기 때문.
+         */
+        const targetMenu = menuEditTargetId
+          ? menus.find((m) => m.id === menuEditTargetId)
+          : null
+        if (targetMenu && targetMenu.promoId && targetMenu.promoId.trim()) {
+          try {
+            const saveRes = await savePosMenu({
+              id: targetMenu.id,
+              code: targetMenu.code || '',
+              name: targetMenu.name || '',
+              imageUrl: newUrl,
+              imageOnly: true,
+            })
+            if (saveRes?.success) {
+              await loadMenuData()
+            } else {
+              await appAlert(localizeApiMessage(saveRes?.message, t, t('posSaveFail') || '저장 실패', lang))
+            }
+          } catch (autoErr) {
+            await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(autoErr) }))
+          }
+        }
       } else {
         const msg =
           res?.message === POS_MENU_UPLOAD_TOO_LARGE

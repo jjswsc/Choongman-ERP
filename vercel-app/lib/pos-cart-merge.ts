@@ -31,7 +31,7 @@ export type MergeCartItemInput = {
   optionId?: string | null
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
 }
 
 type PromoRowKey = readonly [string, string | null, number]

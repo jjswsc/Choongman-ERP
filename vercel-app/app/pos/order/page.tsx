@@ -107,6 +107,7 @@ import {
   resolvePosMenuOptionDescriptionForChannel,
 } from "@/lib/pos-menu-display-description"
 import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
+import { isChickenMenu } from "@/lib/pos-menu-categories"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -132,7 +133,7 @@ interface CartItem {
   optionId2?: string
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
 }
 
 type PromoChoiceDialogState = {
@@ -633,12 +634,16 @@ export default function PosOrderPage() {
       const lines = item.promoItems.slice(0, 4).map((line) => {
         const menu = menus.find((m) => String(m.id) === String(line.menuId))
         const menuName = (menu?.name ?? "").trim() || `#${String(line.menuId)}`
-        const optName = resolvePromoSublineOptionDisplayName({
-          optionId: line.optionId,
-          optionById: optionByIdForCartNote,
-          menuOptions: optionsByMenuId[String(line.menuId)],
-          orderChannel,
-        })
+        const cachedOptName = String(line.optionName ?? "").trim()
+        const optName =
+          cachedOptName ||
+          resolvePromoSublineOptionDisplayName({
+            optionId: line.optionId,
+            optionById: optionByIdForCartNote,
+            menuOptions: optionsByMenuId[String(line.menuId)],
+            orderChannel,
+            menuCode: menu?.code,
+          })
         const optionLabel = optName ? ` (${optName})` : ""
         return `${menuName}${optionLabel} x${Math.max(1, Number(line.quantity) || 1)}`
       })
@@ -657,14 +662,24 @@ export default function PosOrderPage() {
     const uniq = Array.from(new Set(targets))
     let cancelled = false
     void (async () => {
-      const rowsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number }[]> = {}
+      const rowsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]> = {}
       for (const pid of uniq) {
         const rows = await getPosPromoItems({ promoId: pid }).catch(() => [])
-        rowsByPromo[pid] = (rows || []).map((r) => ({
-          menuId: String(r.menuId ?? ""),
-          optionId: r.optionId ? String(r.optionId) : null,
-          quantity: Math.max(1, Number(r.quantity) || 1),
-        }))
+        rowsByPromo[pid] = (rows || []).map((r) => {
+          const optId = r.optionId ? String(r.optionId) : null
+          const menu = menus.find((m) => String(m.id) === String(r.menuId ?? ""))
+          const optName = optId
+            ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
+            : isChickenMenu(menu?.code)
+              ? 'S 순살'
+              : ''
+          return {
+            menuId: String(r.menuId ?? ""),
+            optionId: optId,
+            quantity: Math.max(1, Number(r.quantity) || 1),
+            ...(optName ? { optionName: optName } : {}),
+          }
+        })
       }
       if (cancelled) return
       setCart((prev) =>
@@ -681,7 +696,7 @@ export default function PosOrderPage() {
     return () => {
       cancelled = true
     }
-  }, [cart])
+  }, [cart, allOptions, menus])
 
   const getMenuPrice = (menu: PosMenu) =>
     orderType === "delivery" && menu.priceDelivery != null ? menu.priceDelivery : menu.price
@@ -794,11 +809,22 @@ export default function PosOrderPage() {
   }
 
   const addResolvedPromoToCart = React.useCallback((resolvedPromo: PosPromoWithItems) => {
-    const normalizedItems = (resolvedPromo.items || []).map((x) => ({
-      menuId: String(x.menuId),
-      optionId: x.optionId ? String(x.optionId) : null,
-      quantity: Math.max(1, Number(x.quantity) || 1),
-    }))
+    /** 카트 라인 자식 옵션 이름을 미리 캐시 (카트·인쇄 표시용). */
+    const normalizedItems = (resolvedPromo.items || []).map((x) => {
+      const optId = x.optionId ? String(x.optionId) : null
+      const menu = menus.find((m) => String(m.id) === String(x.menuId))
+      const optName = optId
+        ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
+        : isChickenMenu(menu?.code)
+          ? 'S 순살'
+          : ''
+      return {
+        menuId: String(x.menuId),
+        optionId: optId,
+        quantity: Math.max(1, Number(x.quantity) || 1),
+        ...(optName ? { optionName: optName } : {}),
+      }
+    })
     const signature = normalizedItems
       .map((x) => `${x.menuId}:${x.optionId || "-"}:${x.quantity}`)
       .join("|")
@@ -824,7 +850,7 @@ export default function PosOrderPage() {
         },
       ]
     })
-  }, [getPromoPrice])
+  }, [getPromoPrice, allOptions, menus])
 
   const addPromoToCart = async (promo: PosPromoWithItems) => {
     const freshItems = await getPosPromoItems({ promoId: promo.id }).catch(() => null)

@@ -36,7 +36,24 @@ export function resolvePosOrderItemMenuDisplayName(
   const mid = String(item.menuId || '').trim()
   if (mid) {
     const byId = list.find((m) => m.id === mid)
-    if (byId?.name?.trim()) return byId.name.trim()
+    if (byId?.name?.trim()) {
+      const baseName = byId.name.trim()
+      if (raw) {
+        const rawNormalized = raw.replace(/\s+/g, ' ').trim()
+        const rawLower = rawNormalized.toLowerCase()
+        const baseLower = baseName.toLowerCase()
+        const decoratedFromBase =
+          rawLower !== baseLower &&
+          (
+            rawLower.startsWith(`${baseLower} (`) ||
+            rawLower.startsWith(`${baseLower} -`) ||
+            rawLower.includes(' / ') ||
+            /[()·]/.test(rawNormalized)
+          )
+        if (decoratedFromBase) return rawNormalized
+      }
+      return baseName
+    }
   }
   if (raw) {
     const byCode = list.find((m) => String(m.code || '').trim() && String(m.code).trim() === raw)

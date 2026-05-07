@@ -7,6 +7,7 @@ import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
+import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import {
   escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
@@ -282,9 +283,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
     const itemRows = (receiptData.items || [])
       .map((it) => {
-        const name = translatePosMenuLineForReceipt(it.name, t)
+        const banban = parseBanbanFlavorsFromName(it.name)
+        const displayName = banban
+          ? translatePosMenuLineForReceipt(banban.baseName, t)
+          : translatePosMenuLineForReceipt(it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
-        return `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(name)}</td><td class="simple-item-amt">${amt}</td></tr>`
+        const main = `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(displayName)}</td><td class="simple-item-amt">${amt}</td></tr>`
+        if (!banban) return main
+        const subF1 = translatePosMenuLineForReceipt(banban.flavor1, t)
+        const subF2 = translatePosMenuLineForReceipt(banban.flavor2, t)
+        const sub = `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(subF1)}<br/>- ${esc(subF2)}</td></tr>`
+        return main + sub
       })
       .join('')
     const summaryRows = [
@@ -434,6 +443,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
+            const banban = parseBanbanFlavorsFromName(it.name)
+            const displayName = banban ? banban.baseName : it.name
             const promoComposeLines =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
                 ? it.promoItems.slice(0, 4).map((pi) => {
@@ -443,6 +454,12 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
                   })
                 : []
+            const banbanFlavorLines = banban
+              ? [
+                  translatePosMenuLineForReceipt(banban.flavor1, t),
+                  translatePosMenuLineForReceipt(banban.flavor2, t),
+                ]
+              : []
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
@@ -452,10 +469,16 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     .map((line) => `- ${esc(line)}`)
                     .join('<br/>')}</div>`
                 : ''
+            const banbanComposeHtml =
+              banbanFlavorLines.length > 0
+                ? `<div class="receipt-line-note">${banbanFlavorLines
+                    .map((line) => `- ${esc(line)}`)
+                    .join('<br/>')}</div>`
+                : ''
             const barcodeHtml = itemBarcodeUrl
               ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${esc(itemBarcodeUrl)}" alt="Item barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>`
               : ''
-            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(it.name, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${promoComposeHtml}${noteHtml}${barcodeHtml}`
+            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(displayName, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${banbanComposeHtml}${promoComposeHtml}${noteHtml}${barcodeHtml}`
           })
           .join('')}
         <div class="receipt-divider"></div>

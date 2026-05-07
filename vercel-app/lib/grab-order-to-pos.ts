@@ -194,6 +194,25 @@ function buildModifierPriceSignature(mod: Record<string, unknown>): string {
   return `${id}|${name}|${price}|${qty}`
 }
 
+function buildModifierFuzzySignature(mod: Record<string, unknown>): string {
+  const name = String(mod.name ?? mod.title ?? mod.label ?? '').trim().toLowerCase()
+  const price = Number(mod.price ?? mod.amount ?? mod.totalPrice ?? 0) || 0
+  const qty = Math.max(1, Math.trunc(Number(mod.quantity ?? mod.qty ?? 1) || 1))
+  return `${name}|${price}|${qty}`
+}
+
+function readLineMinorTotal(item: Record<string, unknown>): number {
+  const lineTotalMinor = readFirstFinite(
+    item.subtotal,
+    item.totalPrice,
+    item.total,
+    item.finalPrice,
+    item.amount,
+    item.lineAmount
+  )
+  return lineTotalMinor > 0 ? lineTotalMinor : 0
+}
+
 function normalizeStoreCodeCandidate(raw: string): string {
   const s = String(raw || '').trim()
   if (!s) return ''
@@ -394,11 +413,13 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     let modifierMinor = 0
     const modifierNames: string[] = []
     const pricedModifierSignatures = new Set<string>()
+    const pricedModifierFuzzySignatures = new Set<string>()
     for (const m of modifiers) {
       const mod = asRecord(m)
       const modQty = Math.max(1, Math.trunc(toNumber(mod.quantity) || 1))
       modifierMinor += toNumber(mod.price) * modQty
       pricedModifierSignatures.add(buildModifierPriceSignature(mod))
+      pricedModifierFuzzySignatures.add(buildModifierFuzzySignature(mod))
       const names = extractReadableModifierNames(mod)
       for (const n of names) {
         if (!modifierNames.includes(n)) modifierNames.push(n)
@@ -407,12 +428,14 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     for (const mod of extractModifierCandidatesFromItem(item)) {
       // item.modifiers 바깥(중첩 selection/addon)으로 온 가격도 합산
       const sign = buildModifierPriceSignature(mod)
-      if (!pricedModifierSignatures.has(sign)) {
+      const fuzzy = buildModifierFuzzySignature(mod)
+      if (!pricedModifierSignatures.has(sign) && !pricedModifierFuzzySignatures.has(fuzzy)) {
         const p = toNumber(mod.price ?? mod.amount ?? mod.totalPrice ?? 0)
         const q = Math.max(1, Math.trunc(toNumber(mod.quantity ?? mod.qty ?? 1) || 1))
         if (p > 0) {
           modifierMinor += p * q
           pricedModifierSignatures.add(sign)
+          pricedModifierFuzzySignatures.add(fuzzy)
         }
       }
       const names = extractReadableModifierNames(mod)
@@ -433,7 +456,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       for (const s of banbanSlots) modifierNames.push(s)
     }
 
-    const unitMinor = toNumber(item.price) + modifierMinor
+    const unitBaseMinor = toNumber(item.price)
+    const unitMinorByParts = unitBaseMinor + modifierMinor
+    const lineMinor = readLineMinorTotal(item)
     const noteParts = [
       pickCustomerReadableText(
         item.specialRequest,
@@ -446,23 +471,45 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       ecoSummary || '',
     ].filter(Boolean)
 
-    out.push({
-      id: `grab:${String(item.id ?? item.grabItemID ?? idx)}`,
-      name: String(
-        item.name ??
-          item.title ??
-          item.displayName ??
-          item.itemName ??
-          item.grabItemName ??
-          item.grabItemID ??
-          item.id ??
-          `Grab item ${idx + 1}`
-      ),
-      price: minorToMajor(unitMinor, exponent),
-      qty,
-      note: noteParts.length ? noteParts.join(' · ') : undefined,
-      deliveryAppCode: 'grab',
-    })
+    const itemBaseId = String(item.id ?? item.grabItemID ?? idx)
+    const itemName = String(
+      item.name ??
+        item.title ??
+        item.displayName ??
+        item.itemName ??
+        item.grabItemName ??
+        item.grabItemID ??
+        item.id ??
+        `Grab item ${idx + 1}`
+    )
+    const itemNote = noteParts.length ? noteParts.join(' · ') : undefined
+
+    const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {
+      if (rowQty <= 0) return
+      out.push({
+        id: `grab:${itemBaseId}${rowSuffix}`,
+        name: itemName,
+        price: minorToMajor(unitMinor, exponent),
+        qty: rowQty,
+        note: itemNote,
+        deliveryAppCode: 'grab',
+      })
+    }
+
+    if (lineMinor > 0 && qty > 0) {
+      // Grab line total을 POS에 정확히 맞추기 위해 minor unit(사탕) 기준으로 수량에 분배
+      const baseMinor = Math.max(0, Math.floor(lineMinor / qty))
+      const remainder = Math.max(0, lineMinor - baseMinor * qty)
+      if (remainder === 0) {
+        pushPosItem(baseMinor, qty, '')
+      } else {
+        // 예: 총 419 / 수량 2 → 210 x1 + 209 x1 (합계 419 정확 일치)
+        pushPosItem(baseMinor + 1, remainder, '-hi')
+        pushPosItem(baseMinor, qty - remainder, '-lo')
+      }
+    } else {
+      pushPosItem(unitMinorByParts, qty, '')
+    }
     idx += 1
   }
 

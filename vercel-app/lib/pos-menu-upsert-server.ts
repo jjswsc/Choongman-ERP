@@ -32,6 +32,12 @@ export type PosMenuUpsertApiBody = {
   descriptionTable?: string | null
   id?: string
   storeCode?: string
+  /**
+   * true 이면 image 컬럼만 업데이트한다. 프로모션과 연동된 메뉴라도
+   * 사진 업로드는 운영자가 메뉴 화면에서 직접 변경할 수 있어야 하므로,
+   * 이 플래그가 켜진 요청은 다른 필드 비교/검증 단계를 건너뛴다.
+   */
+  imageOnly?: boolean
 }
 
 type ExistingMenuRow = {
@@ -76,7 +82,9 @@ export async function upsertPosMenuFromBody(
   const name = String(body.name ?? '').trim()
   let editingId = body.id ? String(body.id).trim() : null
 
-  if (!code || !name) {
+  // imageOnly 요청은 image 컬럼만 갱신하므로 code/name 입력을 강제하지 않는다.
+  const isImageOnlyEdit = body.imageOnly === true && !!editingId
+  if (!isImageOnlyEdit && (!code || !name)) {
     return { success: false, message: '코드와 메뉴명이 필요합니다.' }
   }
 
@@ -222,6 +230,25 @@ export async function upsertPosMenuFromBody(
         if (!hasSortOrder) {
           baseRow.sort_order = prev.sort_order ?? 0
         }
+
+        // imageOnly 플래그가 켜진 요청은 image 컬럼만 갱신한다.
+        // - 프로모션과 연동된 메뉴라도 사진 업로드는 마케팅 화면을 거치지 않고
+        //   운영자가 메뉴 화면에서 직접 갱신할 수 있어야 한다.
+        if (body.imageOnly === true) {
+          const incomingImage = String(body.imageUrl ?? '').trim()
+          const prevImage = String(prev.image ?? '').trim()
+          const imageRow: Record<string, unknown> = { image: incomingImage }
+          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, imageRow)
+          return {
+            success: true,
+            message: '수정되었습니다.',
+            syncHint: {
+              imageChanged: incomingImage !== prevImage,
+              changedFields: incomingImage !== prevImage ? ['image'] : [],
+              partnerMerchantID: body.storeCode ? String(body.storeCode).trim() : null,
+            },
+          }
+        }
         const pid = prev.promo_id
         if (pid != null && Number(pid) > 0) {
           const rowWithoutImage = { ...row }
@@ -237,25 +264,71 @@ export async function upsertPosMenuFromBody(
             if (!Array.isArray(v)) return []
             return v.map((x) => String(x).trim()).filter(Boolean)
           }
+          /**
+           * 옵션 그룹 설정(option_selection_config)은 저장 시점/입력 경로에 따라
+           * 객체 키 순서·누락 필드(required/minSelect/maxSelect 등)가 달라
+           * 단순 JSON.stringify 비교로는 의미 없는 차이가 검출된다.
+           * 양쪽을 동일하게 정규화한 뒤 비교한다.
+           */
+          const normalizeOptionConfig = (v: unknown): string => {
+            if (!Array.isArray(v)) return '[]'
+            const list = v
+              .map((cfg) => {
+                if (cfg == null || typeof cfg !== 'object') return null
+                const c = cfg as Record<string, unknown>
+                const key = String(c.key ?? '').trim()
+                if (!key) return null
+                const label = String(c.label ?? '').trim() || key
+                const required = c.required === true
+                const minRaw = Number(c.minSelect)
+                const maxRaw = Number(c.maxSelect)
+                const minSelect = Number.isFinite(minRaw)
+                  ? Math.max(0, Math.floor(minRaw))
+                  : (required ? 1 : 0)
+                const maxFromInput = Number.isFinite(maxRaw)
+                  ? Math.max(0, Math.floor(maxRaw))
+                  : 1
+                const maxSelect = Math.max(1, maxFromInput, minSelect)
+                return { key, label, required, minSelect, maxSelect }
+              })
+              .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+            return JSON.stringify(list)
+          }
+          /**
+           * 클라이언트가 명시적으로 보내지 않은 필드(undefined)는 변경 없음으로 간주한다.
+           * (ex: 옵션 그룹/설정·설명 등 일부 화면이 부분 페이로드만 보낼 때)
+           */
+          const fieldUnchanged = (
+            key: keyof typeof rowWithoutImage,
+            normalize: (v: unknown) => string
+          ): boolean => {
+            if (!(key in rowWithoutImage)) return true
+            return (
+              normalize(rowWithoutImage[key as string]) ===
+              normalize((prev as Record<string, unknown>)[key as string])
+            )
+          }
+          const normStr = (v: unknown) => asString(v)
+          const normNum = (v: unknown) => String(asNumberOrNull(v))
+          const normBool = (v: unknown) => String(asBool(v))
+          const normStrArr = (v: unknown) => JSON.stringify(asStringArray(v))
           const sameFieldsExceptImage =
-            asString(rowWithoutImage.name) === asString(prev.name) &&
-            asString(rowWithoutImage.category_main) === asString(prev.category_main) &&
-            asString(rowWithoutImage.category) === asString(prev.category) &&
-            asNumberOrNull(rowWithoutImage.price) === asNumberOrNull(prev.price) &&
-            asNumberOrNull(rowWithoutImage.price_delivery) === asNumberOrNull(prev.price_delivery) &&
-            asBool(rowWithoutImage.vat_included) === asBool(prev.vat_included) &&
-            asBool(rowWithoutImage.is_active) === asBool(prev.is_active) &&
-            asNumberOrNull(rowWithoutImage.sort_order) === asNumberOrNull(prev.sort_order) &&
-            asNumberOrNull(rowWithoutImage.kitchen_printer) === asNumberOrNull(prev.kitchen_printer) &&
-            asNumberOrNull(rowWithoutImage.cooking_time_min) === asNumberOrNull(prev.cooking_time_min) &&
-            asBool(rowWithoutImage.is_banban) === asBool(prev.is_banban) &&
-            asString(rowWithoutImage.description_default) === asString(prev.description_default) &&
-            asString(rowWithoutImage.description_delivery) === asString(prev.description_delivery) &&
-            asString(rowWithoutImage.description_table) === asString(prev.description_table) &&
-            JSON.stringify(asStringArray(rowWithoutImage.option_selection_groups)) ===
-              JSON.stringify(asStringArray(prev.option_selection_groups)) &&
-            JSON.stringify(rowWithoutImage.option_selection_config ?? null) ===
-              JSON.stringify(prev.option_selection_config ?? null)
+            fieldUnchanged('name', normStr) &&
+            fieldUnchanged('category_main', normStr) &&
+            fieldUnchanged('category', normStr) &&
+            fieldUnchanged('price', normNum) &&
+            fieldUnchanged('price_delivery', normNum) &&
+            fieldUnchanged('vat_included', normBool) &&
+            fieldUnchanged('is_active', normBool) &&
+            fieldUnchanged('sort_order', normNum) &&
+            fieldUnchanged('kitchen_printer', normNum) &&
+            fieldUnchanged('cooking_time_min', normNum) &&
+            fieldUnchanged('is_banban', normBool) &&
+            fieldUnchanged('description_default', normStr) &&
+            fieldUnchanged('description_delivery', normStr) &&
+            fieldUnchanged('description_table', normStr) &&
+            fieldUnchanged('option_selection_groups', normStrArr) &&
+            fieldUnchanged('option_selection_config', normalizeOptionConfig)
           if (!sameFieldsExceptImage) {
             return {
               success: false,

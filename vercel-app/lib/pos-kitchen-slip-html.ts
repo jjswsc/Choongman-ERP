@@ -4,6 +4,7 @@
 
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
+import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
@@ -107,6 +108,30 @@ export function localizeKitchenSlipLineNote(rawNote: string): string {
   return note
 }
 
+/**
+ * 반반 메뉴명에서 두 가지 맛 추출.
+ * `withKitchenCodeName`이 `[CODE] Banban Chicken (Flavor1 / Flavor2)` 형태를 만들 수 있으므로
+ * 앞쪽 `[CODE] ` 접두는 제거 후 시도한다.
+ */
+function parseKitchenSlipBanbanFromName(rawName: string): {
+  baseName: string
+  flavor1: string
+  flavor2: string
+} | null {
+  const trimmed = String(rawName ?? '').trim()
+  if (!trimmed) return null
+  const codeMatch = trimmed.match(/^(\[[^\]]+\]\s*)(.+)$/u)
+  const codePrefix = codeMatch ? codeMatch[1] : ''
+  const rest = codeMatch ? codeMatch[2] : trimmed
+  const parsed = parseBanbanFlavorsFromName(rest)
+  if (!parsed) return null
+  return {
+    baseName: `${codePrefix}${parsed.baseName}`.trim(),
+    flavor1: parsed.flavor1,
+    flavor2: parsed.flavor2,
+  }
+}
+
 /** 주방전표 한 줄: 수량 × 메뉴명 + (선택) 줄 메모. `cancelled`면 수량 앞에 `-`로 취소 표기 */
 export function formatKitchenSlipItemRowHtml(
   it: { name: string; qty: number; note?: string | null | undefined; cancelled?: boolean },
@@ -121,6 +146,8 @@ export function formatKitchenSlipItemRowHtml(
         normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       )
     : ''
+  const banban = parseKitchenSlipBanbanFromName(it.name)
+  const displayName = banban ? banban.baseName : it.name
   const rowOpen = cancelled ? '<div class="k-row k-row-cancelled">' : '<div class="k-row">'
   const main =
     '<div class="k-row-main">' +
@@ -130,13 +157,21 @@ export function formatKitchenSlipItemRowHtml(
     ' ×' +
     close('span') +
     '<span class="k-row-name">' +
-    escapeHtml(it.name) +
+    escapeHtml(displayName) +
     close('span') +
     close('div')
-  if (!note) return rowOpen + main + close('div')
+  const banbanHtml = banban
+    ? '<div class="k-line-note">- ' +
+      escapeHtml(banban.flavor1) +
+      '<br/>- ' +
+      escapeHtml(banban.flavor2) +
+      close('div')
+    : ''
+  if (!note) return rowOpen + main + banbanHtml + close('div')
   return (
     rowOpen +
     main +
+    banbanHtml +
     '<div class="k-line-note">' +
     escapeHtml(note) +
     close('div') +

@@ -22,7 +22,7 @@ export type KitchenSlipRoutingItem = {
   name?: string
   qty?: number
   note?: string
-  promoItems?: { menuId: string; optionId: string | null; optionName?: string; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; optionName?: string | null; quantity: number }[]
 }
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */

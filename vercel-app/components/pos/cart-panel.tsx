@@ -278,7 +278,7 @@ export type CartPanelAddItemPayload = {
   optionId?: string | null
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
 }
 
 export interface CartPanelHandle {
@@ -349,7 +349,7 @@ interface CartPanelProps {
       deliveryAppCode?: string
       promoId?: string
       promoCode?: string
-      promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+      promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
     }[]
     tableName: string
     memo?: string
@@ -2996,16 +2996,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   const [flavor1, flavor2] = isBanban && optionPart ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
                   const flavor1Disp = flavor1 ? trMenuLine(flavor1) : null
                   const flavor2Disp = flavor2 ? trMenuLine(flavor2) : null
+                  /**
+                   * 세트 자식 라인의 옵션 이름.
+                   * 1순위: 카트에 add될 때 미리 채워진 `p.optionName` (sell 채널/캐시 누락 영향 없음)
+                   * 2순위: optionId/메뉴 옵션 lookup으로 추정
+                   */
+                  const resolveSubOptionName = (p: { menuId: string; optionId: string | null; optionName?: string | null }) => {
+                    const cached = String(p.optionName ?? '').trim()
+                    if (cached) return cached
+                    const menu = menuByIdForCollab.get(String(p.menuId))
+                    return resolvePromoSublineOptionDisplayName({
+                      optionId: p.optionId,
+                      optionById,
+                      menuOptions: optionsByMenuIdForOrder.get(String(p.menuId)),
+                      orderChannel: orderType,
+                      menuCode: menu?.code,
+                    })
+                  }
                   const promoComposeLines =
                     Array.isArray(item.promoItems) && item.promoItems.length > 0
                       ? item.promoItems.slice(0, 4).map((p) => {
                           const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
-                          const optionName = resolvePromoSublineOptionDisplayName({
-                            optionId: p.optionId,
-                            optionById,
-                            menuOptions: optionsByMenuIdForOrder.get(String(p.menuId)),
-                            orderChannel: orderType,
-                          })
+                          const optionName = resolveSubOptionName(p)
                           const optionLabel = optionName ? ` (${trMenuLine(optionName)})` : ''
                           return `${trMenuLine(menuName)}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
                         })
@@ -3014,12 +3026,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     Array.isArray(item.promoItems) && item.promoItems.length > 0
                       ? item.promoItems.map((p) => {
                           const menuName = menuByIdForCollab.get(String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
-                          const optionName = resolvePromoSublineOptionDisplayName({
-                            optionId: p.optionId,
-                            optionById,
-                            menuOptions: optionsByMenuIdForOrder.get(String(p.menuId)),
-                            orderChannel: orderType,
-                          })
+                          const optionName = resolveSubOptionName(p)
                           const optionLabel = optionName ? ` (${trMenuLine(optionName)})` : ''
                           return `${trMenuLine(menuName)}${optionLabel} x${Math.max(1, Number(p.quantity) || 1)}`
                         })

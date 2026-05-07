@@ -88,11 +88,28 @@ export function formatEmployeeDisplayNameWithNick(
   return `${base} (${n})`
 }
 
+/** 화면 표시: 닉을 앞에 두고 풀네임은 뒤 괄호로 표기 */
+export function formatEmployeeDisplayNameNickFirst(
+  name: string,
+  nameTitle: string | undefined,
+  nick: string | undefined
+): string {
+  const base = formatEmployeeDisplayName(name, nameTitle)
+  const n = String(nick || "")
+    .trim()
+    .replace(/\s+/g, " ")
+  if (!n) return base
+  if (!base) return n
+  if (n === base) return base
+  return `${n} (${base})`
+}
+
 type EmployeeRowForAttendanceDisplay = {
   id?: number
   store?: string
   name?: string
   name_title?: string | null
+  nick?: string | null
 }
 
 /**
@@ -116,7 +133,7 @@ export function buildAttendanceDisplayMapsFromEmployees(
       .replace(/\s+/g, " ")
     if (!store || !nm) continue
     const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
-    const disp = formatEmployeeDisplayName(nm, String(e.name_title ?? "").trim())
+    const disp = formatEmployeeDisplayNameNickFirst(nm, String(e.name_title ?? "").trim(), String(e.nick ?? "").trim())
     if (eid > 0) displayByEmployeeId[eid] = disp
     for (const vs of expandStoreVariantsForGrade(store)) {
       const v = String(vs || "")
