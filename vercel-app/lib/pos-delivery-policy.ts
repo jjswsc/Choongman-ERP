@@ -29,6 +29,8 @@ export type PosDeliveryMenuPolicy = {
   stockQty?: number | null
   soldOut: boolean
   autoStopOnZero: boolean
+  /** 앱별 메뉴 이미지 override (미설정 시 POS 기본 이미지 사용) */
+  imageUrl?: string | null
 }
 
 export type PosDeliveryCategoryOrder = {
@@ -117,7 +119,7 @@ export async function getPosDeliveryPolicyBundle(params: {
     return { appPolicy: defaultPolicy, menuPolicies: [], categoryOrders: [] }
   }
 
-  const [appRows, menuRows, catRows] = await Promise.all([
+  const [appRows, menuRows, catRows, imageRows] = await Promise.all([
     supabaseSelectFilter(
       'pos_delivery_app_policies',
       `store_code=eq.${encodeURIComponent(storeCode)}&app_code=eq.${encodeURIComponent(appCode)}`,
@@ -133,6 +135,11 @@ export async function getPosDeliveryPolicyBundle(params: {
       `store_code=eq.${encodeURIComponent(storeCode)}&app_code=eq.${encodeURIComponent(appCode)}`,
       { limit: 1000, order: 'sort_order.asc,category.asc' }
     ).catch(() => []),
+    supabaseSelectFilter(
+      'pos_delivery_menu_images',
+      `store_code=eq.${encodeURIComponent(storeCode)}&app_code=eq.${encodeURIComponent(appCode)}`,
+      { limit: 5000, select: 'menu_id,image_url' }
+    ).catch(() => []),
   ])
 
   const app = (appRows as Record<string, unknown>[] | null)?.[0] || {}
@@ -143,6 +150,13 @@ export async function getPosDeliveryPolicyBundle(params: {
     orderAcceptanceMode: normalizeAcceptanceMode(app.order_acceptance_mode),
     autoAcceptEnabled: Boolean(app.auto_accept_enabled ?? false),
     updatedAt: String(app.updated_at ?? '') || undefined,
+  }
+
+  const imageMap = new Map<number, string>()
+  for (const row of (imageRows as Record<string, unknown>[] | null) || []) {
+    const menuId = Math.trunc(toNum(row.menu_id, 0))
+    const imageUrl = String(row.image_url ?? '').trim()
+    if (menuId > 0 && imageUrl) imageMap.set(menuId, imageUrl)
   }
 
   const menuPolicies: PosDeliveryMenuPolicy[] = ((menuRows as Record<string, unknown>[] | null) || []).map(
@@ -157,6 +171,7 @@ export async function getPosDeliveryPolicyBundle(params: {
       stockQty: r.stock_qty == null ? null : toNum(r.stock_qty, 0),
       soldOut: Boolean(r.sold_out ?? false),
       autoStopOnZero: Boolean(r.auto_stop_on_zero ?? true),
+      imageUrl: imageMap.get(Math.trunc(toNum(r.menu_id, 0))) || null,
     })
   )
 
@@ -217,6 +232,28 @@ export async function savePosDeliveryPolicyBundle(input: SavePolicyInput): Promi
     if (rows.length > 0) {
       await supabaseUpsert('pos_delivery_menu_policies', rows, 'store_code,app_code,menu_id')
     }
+
+    // 앱별 이미지 override는 별도 테이블에서 관리 (미지정 시 POS 기본 이미지 fallback).
+    try {
+      await supabaseDeleteByFilter(
+        'pos_delivery_menu_images',
+        `store_code=eq.${encodeURIComponent(storeCode)}&app_code=eq.${encodeURIComponent(appCode)}`
+      )
+      const imageRows = input.menuPolicies
+        .map((r) => ({
+          store_code: storeCode,
+          app_code: appCode,
+          menu_id: Math.trunc(toNum(r.menuId, 0)),
+          image_url: String(r.imageUrl ?? '').trim(),
+          updated_at: new Date().toISOString(),
+        }))
+        .filter((r) => r.menu_id > 0 && !!r.image_url)
+      if (imageRows.length > 0) {
+        await supabaseUpsert('pos_delivery_menu_images', imageRows, 'store_code,app_code,menu_id')
+      }
+    } catch {
+      // 마이그레이션 미적용 환경에서는 이미지 override 저장을 건너뛴다.
+    }
   }
 
   if (Array.isArray(input.categoryOrders)) {
@@ -248,7 +285,6 @@ export function resolveOrderAcceptanceMode(
   bundle: PosDeliveryPolicyBundle | null
 ): DeliveryAcceptanceMode {
   if (!bundle?.appPolicy?.enabled) return 'manual'
-  if (bundle.appPolicy.autoAcceptEnabled) return 'auto'
   return normalizeAcceptanceMode(bundle.appPolicy.orderAcceptanceMode)
 }
 

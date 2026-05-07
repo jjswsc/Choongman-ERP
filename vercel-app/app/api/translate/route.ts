@@ -14,9 +14,14 @@ async function translateOne(text: string, targetLang: string): Promise<string> {
   const trimmed = String(text || '').trim()
   if (!trimmed) return ''
   const tl = LANG_MAP[targetLang] || targetLang || 'en'
+  if (tl === 'ko') return trimmed
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(trimmed.slice(0, 5000))}`
     const resp = await fetch(url, { headers: { 'User-Agent': UA } })
+    if (!resp.ok) {
+      console.warn('translate google status:', resp.status)
+      return trimmed
+    }
     const data = (await resp.json()) as unknown
     if (Array.isArray(data) && Array.isArray((data as unknown[])[0])) {
       const first = (data as unknown[])[0] as Array<[string | null]>
@@ -48,10 +53,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ translated: [] }, { headers })
     }
 
+    if (targetLang === 'ko') {
+      return NextResponse.json(
+        { translated: texts.map((s: unknown) => String(s ?? '').trim()) },
+        { headers }
+      )
+    }
+
     const results: string[] = []
     for (let i = 0; i < texts.length; i++) {
-      const t = await translateOne(String(texts[i] || ''), targetLang)
-      results.push(t)
+      const src = String(texts[i] ?? '').trim()
+      const t = await translateOne(src, targetLang)
+      results.push((t && t.trim()) || src)
       if (i < texts.length - 1) await new Promise((r) => setTimeout(r, 80))
     }
     return NextResponse.json({ translated: results }, { headers })

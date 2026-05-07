@@ -59,3 +59,21 @@ create unique index if not exists pos_delivery_category_orders_store_app_cat_uid
 
 create index if not exists pos_delivery_category_orders_store_app_idx
   on public.pos_delivery_category_orders (store_code, app_code);
+
+-- 앱별 메뉴 이미지 override (미설정 시 pos_menus.image 사용)
+create table if not exists public.pos_delivery_menu_images (
+  id bigserial primary key,
+  store_code text not null,
+  app_code text not null,
+  menu_id bigint not null,
+  image_url text not null,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  constraint pos_delivery_menu_images_app_check check (app_code in ('grab', 'lineman', 'shopee'))
+);
+
+create unique index if not exists pos_delivery_menu_images_store_app_menu_uidx
+  on public.pos_delivery_menu_images (store_code, app_code, menu_id);
+
+create index if not exists pos_delivery_menu_images_store_app_idx
+  on public.pos_delivery_menu_images (store_code, app_code);

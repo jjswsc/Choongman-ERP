@@ -149,20 +149,28 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     return Array.from(set)
   }, [localFinish, localContinue, localToday])
 
+  // 언어가 바뀌면 이전 언어로 번역된 캐시는 버린다
   React.useEffect(() => {
-    if (contentsToTranslate.length === 0) {
-      setContentTransMap({})
-      return
-    }
+    setContentTransMap({})
+  }, [lang])
+
+  React.useEffect(() => {
+    if (contentsToTranslate.length === 0) return
+    const missing = contentsToTranslate.filter((txt) => !(txt in contentTransMap))
+    if (missing.length === 0) return
     let cancelled = false
-    translateTexts(contentsToTranslate, lang).then((translated) => {
-      if (cancelled) return
-      const map: Record<string, string> = {}
-      contentsToTranslate.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
-      setContentTransMap(map)
-    }).catch(() => setContentTransMap({}))
-    return () => { cancelled = true }
-  }, [contentsToTranslate.join("\u241E"), lang])
+    const handle = setTimeout(() => {
+      translateTexts(missing, lang).then((translated) => {
+        if (cancelled) return
+        setContentTransMap((prev) => {
+          const next = { ...prev }
+          missing.forEach((txt, i) => { next[txt] = translated[i] ?? txt })
+          return next
+        })
+      }).catch(() => { /* 실패 시 원문 표시 유지 */ })
+    }, 350)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [contentsToTranslate.join("\u241E"), lang, contentTransMap])
 
   const getTransContent = (content: string) => (content?.trim() && contentTransMap[content.trim()]) || content || t("workLogNoContent")
 

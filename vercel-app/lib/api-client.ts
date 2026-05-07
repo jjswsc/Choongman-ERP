@@ -1880,16 +1880,28 @@ export async function getPettyCashMonthDetail(params: {
 
 /** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시 */
 export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
-  const filtered = texts.filter((s) => s && String(s).trim())
+  const filtered = texts.filter((s) => s && String(s).trim()).map((s) => String(s).trim())
   if (filtered.length === 0) return []
   if (!readAutoTranslateEnabled()) return filtered
-  const res = await apiFetchWithOffline('/api/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ texts: filtered, targetLang }),
-  })
-  const data = (await res.json()) as { translated?: string[] }
-  return data.translated || []
+  const tl = String(targetLang || 'ko').toLowerCase().slice(0, 2)
+  if (tl === 'ko') return filtered
+  try {
+    const res = await apiFetchWithOffline('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texts: filtered, targetLang: tl }),
+    })
+    const data = (await res.json()) as { translated?: string[] }
+    const translated = Array.isArray(data?.translated) ? data.translated : []
+    if (translated.length !== filtered.length) return filtered
+    return translated.map((v, i) => {
+      const src = filtered[i]
+      const out = (v == null ? '' : String(v)).trim()
+      return out || src
+    })
+  } catch {
+    return filtered
+  }
 }
 
 export async function addPettyCashTransaction(params: {
@@ -5710,6 +5722,7 @@ export interface PosDeliveryMenuPolicy {
   stockQty?: number | null
   soldOut: boolean
   autoStopOnZero: boolean
+  imageUrl?: string | null
 }
 
 export interface PosDeliveryCategoryOrder {

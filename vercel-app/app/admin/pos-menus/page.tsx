@@ -52,7 +52,9 @@ import {
   getPosPromos,
   getPosPromoSchemaStatus,
   importPosMenus,
+  POS_MENU_UPLOAD_TOO_LARGE,
   refreshPosMenusCatalogCache,
+  uploadPosMenuImage,
   useStoreList,
   type PosMenu,
   type PosOptionSelectionGroupConfig,
@@ -62,6 +64,7 @@ import {
   type PosMenuIngredient,
   type PosPromo,
 } from "@/lib/api-client"
+import { preparePosMenuImageFileForUpload } from "@/lib/pos-menu-image-compress"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -291,6 +294,10 @@ export default function PosMenusPage() {
   const [deliveryOpsAppCode, setDeliveryOpsAppCode] = React.useState<DeliveryAppCode>("grab")
   const [deliveryOpsLoading, setDeliveryOpsLoading] = React.useState(false)
   const [deliveryOpsSaving, setDeliveryOpsSaving] = React.useState(false)
+  const [deliveryOpsImageUploadingMenuId, setDeliveryOpsImageUploadingMenuId] = React.useState<string | null>(null)
+  const [deliveryOpsCopySourceStore, setDeliveryOpsCopySourceStore] = React.useState("")
+  const [deliveryOpsCopying, setDeliveryOpsCopying] = React.useState(false)
+  const [deliveryOpsApplyingAll, setDeliveryOpsApplyingAll] = React.useState(false)
   const [deliveryOpsSearch, setDeliveryOpsSearch] = React.useState("")
   const [deliveryOpsAppPolicy, setDeliveryOpsAppPolicy] = React.useState<PosDeliveryAppPolicy>({
     storeCode: "",
@@ -300,6 +307,7 @@ export default function PosMenusPage() {
     autoAcceptEnabled: false,
   })
   const [deliveryOpsMenuPolicyMap, setDeliveryOpsMenuPolicyMap] = React.useState<Record<string, PosDeliveryMenuPolicy>>({})
+  const deliveryOpsImageInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
   const [deliveryOpsCategoryOrderMap, setDeliveryOpsCategoryOrderMap] = React.useState<Record<string, number>>({})
   const deliveryOpsVisibleMenus = React.useMemo(() => {
     const q = deliveryOpsSearch.trim().toLowerCase()
@@ -1796,6 +1804,34 @@ export default function PosMenusPage() {
     }
   }, [deliveryOpsStoreCode, deliveryOpsAppCode, t])
 
+  const buildDeliveryOpsSavePayload = React.useCallback((storeCode: string) => {
+    const menuPolicies: PosDeliveryMenuPolicy[] = menus.map((m) => {
+      const k = String(m.id)
+      const row = deliveryOpsMenuPolicyMap[k]
+      return {
+        storeCode,
+        appCode: deliveryOpsAppCode,
+        menuId: Number(m.id),
+        enabled: Boolean(row?.enabled ?? true),
+        sortOrder: Number(row?.sortOrder ?? m.sortOrder ?? 0) || 0,
+        sellStartTime: row?.sellStartTime ?? null,
+        sellEndTime: row?.sellEndTime ?? null,
+        stockQty: row?.stockQty == null ? null : Number(row.stockQty),
+        soldOut: Boolean(row?.soldOut ?? false),
+        autoStopOnZero: Boolean(row?.autoStopOnZero ?? true),
+        imageUrl: String(row?.imageUrl ?? "").trim() || null,
+      }
+    })
+    const categoryOrders = deliveryCategoryRows.map((r, idx) => ({
+      storeCode,
+      appCode: deliveryOpsAppCode,
+      categoryMain: r.main,
+      category: r.category,
+      sortOrder: Math.max(1, Number(deliveryOpsCategoryOrderMap[r.key] ?? idx + 1) || (idx + 1)),
+    }))
+    return { menuPolicies, categoryOrders }
+  }, [menus, deliveryOpsMenuPolicyMap, deliveryOpsAppCode, deliveryCategoryRows, deliveryOpsCategoryOrderMap])
+
   React.useEffect(() => {
     if (mainTab !== "deliveryOps") return
     void loadDeliveryOpsPolicy()
@@ -1814,6 +1850,7 @@ export default function PosMenusPage() {
         stockQty: null,
         soldOut: false,
         autoStopOnZero: true,
+        imageUrl: null,
       }
       return {
         ...prev,
@@ -1828,6 +1865,44 @@ export default function PosMenusPage() {
     })
   }, [deliveryOpsStoreCode, deliveryOpsAppCode])
 
+  const handleUploadDeliveryMenuImage = React.useCallback(
+    async (menu: PosMenu, file: File) => {
+      const menuId = String(menu.id)
+      if (!file) return
+      setDeliveryOpsImageUploadingMenuId(menuId)
+      try {
+        let toSend = file
+        try {
+          toSend = await preparePosMenuImageFileForUpload(file)
+        } catch (prepErr) {
+          const pmsg = String(prepErr)
+          if (pmsg.includes("POS_MENU_IMAGE_DECODE_FAIL")) {
+            await appAlert(t("posMenuImageDecodeFail") || "이미지를 열 수 없습니다. JPG·PNG·WebP 등으로 저장 후 다시 시도해 주세요.")
+          } else {
+            await appAlert(pmsg)
+          }
+          return
+        }
+        const res = await uploadPosMenuImage({ file: toSend })
+        if (res?.success && res?.url) {
+          upsertDeliveryMenuPolicy(menuId, { imageUrl: res.url })
+          return
+        }
+        const msg =
+          res?.message === POS_MENU_UPLOAD_TOO_LARGE
+            ? t("posMenuImageUploadTooLarge") ||
+              "파일이 너무 큽니다. 더 작은 사진을 선택하거나, 이미지 주소(URL)로 등록해 주세요."
+            : res?.message || t("msg_upload_fail") || "업로드 실패"
+        await appAlert(msg)
+      } catch (e) {
+        await appAlert(translateApiMessage(String(e ?? "upload_failed"), t))
+      } finally {
+        setDeliveryOpsImageUploadingMenuId(null)
+      }
+    },
+    [t, upsertDeliveryMenuPolicy]
+  )
+
   const handleSaveDeliveryOpsPolicy = React.useCallback(async () => {
     const storeCode = String(deliveryOpsStoreCode || "").trim()
     if (!storeCode) {
@@ -1836,29 +1911,7 @@ export default function PosMenusPage() {
     }
     setDeliveryOpsSaving(true)
     try {
-      const menuPolicies: PosDeliveryMenuPolicy[] = menus.map((m) => {
-        const k = String(m.id)
-        const row = deliveryOpsMenuPolicyMap[k]
-        return {
-          storeCode,
-          appCode: deliveryOpsAppCode,
-          menuId: Number(m.id),
-          enabled: Boolean(row?.enabled ?? true),
-          sortOrder: Number(row?.sortOrder ?? m.sortOrder ?? 0) || 0,
-          sellStartTime: row?.sellStartTime ?? null,
-          sellEndTime: row?.sellEndTime ?? null,
-          stockQty: row?.stockQty == null ? null : Number(row.stockQty),
-          soldOut: Boolean(row?.soldOut ?? false),
-          autoStopOnZero: Boolean(row?.autoStopOnZero ?? true),
-        }
-      })
-      const categoryOrders = deliveryCategoryRows.map((r, idx) => ({
-        storeCode,
-        appCode: deliveryOpsAppCode,
-        categoryMain: r.main,
-        category: r.category,
-        sortOrder: Math.max(1, Number(deliveryOpsCategoryOrderMap[r.key] ?? idx + 1) || (idx + 1)),
-      }))
+      const { menuPolicies, categoryOrders } = buildDeliveryOpsSavePayload(storeCode)
       const res = await savePosDeliveryAppPolicies({
         storeCode,
         appCode: deliveryOpsAppCode,
@@ -1867,7 +1920,7 @@ export default function PosMenusPage() {
           appCode: deliveryOpsAppCode,
           enabled: Boolean(deliveryOpsAppPolicy.enabled),
           orderAcceptanceMode: deliveryOpsAppPolicy.orderAcceptanceMode,
-          autoAcceptEnabled: Boolean(deliveryOpsAppPolicy.autoAcceptEnabled),
+          autoAcceptEnabled: false,
         },
         menuPolicies,
         categoryOrders,
@@ -1875,7 +1928,7 @@ export default function PosMenusPage() {
       if (!res?.success) {
         throw new Error(res?.message || "save_failed")
       }
-      await appAlert(t("msg_save_done") || "저장되었습니다.")
+      await appAlert(t("msg_save_success") || "저장되었습니다.")
       await loadDeliveryOpsPolicy()
     } catch (e) {
       await appAlert(translateApiMessage(String(e ?? "save_failed"), t))
@@ -1886,13 +1939,116 @@ export default function PosMenusPage() {
     deliveryOpsStoreCode,
     deliveryOpsAppCode,
     deliveryOpsAppPolicy,
-    deliveryOpsMenuPolicyMap,
-    deliveryOpsCategoryOrderMap,
-    deliveryCategoryRows,
-    menus,
+    buildDeliveryOpsSavePayload,
     loadDeliveryOpsPolicy,
     t,
   ])
+
+  const handleCopyDeliveryOpsFromStore = React.useCallback(async () => {
+    const targetStoreCode = String(deliveryOpsStoreCode || "").trim()
+    const sourceStoreCode = String(deliveryOpsCopySourceStore || "").trim()
+    if (!targetStoreCode) {
+      await appAlert(t("store") || "매장을 먼저 선택해 주세요.")
+      return
+    }
+    if (!sourceStoreCode || sourceStoreCode === targetStoreCode) {
+      await appAlert(t("posScreenConfigCopyPickOtherStore") || "다른 매장을 원본으로 선택하세요.")
+      return
+    }
+    setDeliveryOpsCopying(true)
+    try {
+      const res = await getPosDeliveryAppPolicies({
+        storeCode: sourceStoreCode,
+        appCode: deliveryOpsAppCode,
+      })
+      if (!res?.success) throw new Error((res as { message?: string })?.message || "load_failed")
+      setDeliveryOpsAppPolicy({
+        storeCode: targetStoreCode,
+        appCode: deliveryOpsAppCode,
+        enabled: Boolean(res.appPolicy?.enabled ?? true),
+        orderAcceptanceMode: (res.appPolicy?.orderAcceptanceMode ?? "manual") as "manual" | "auto",
+        autoAcceptEnabled: false,
+      })
+      const menuMap: Record<string, PosDeliveryMenuPolicy> = {}
+      for (const row of res.menuPolicies || []) {
+        menuMap[String(row.menuId)] = {
+          ...row,
+          storeCode: targetStoreCode,
+          appCode: deliveryOpsAppCode,
+        }
+      }
+      setDeliveryOpsMenuPolicyMap(menuMap)
+      const catMap: Record<string, number> = {}
+      for (const row of res.categoryOrders || []) {
+        const key = `${String(row.categoryMain ?? "").trim()}::${String(row.category ?? "").trim()}`
+        if (key.endsWith("::")) continue
+        const n = Number(row.sortOrder ?? 0) || 0
+        if (n > 0) catMap[key] = n
+      }
+      setDeliveryOpsCategoryOrderMap(catMap)
+      await appAlert(t("posScreenConfigDeliveryCopyDone") || "복사가 완료되었습니다. 저장 후 적용됩니다.")
+    } catch (e) {
+      await appAlert(translateApiMessage(String(e ?? "load_failed"), t))
+    } finally {
+      setDeliveryOpsCopying(false)
+    }
+  }, [deliveryOpsStoreCode, deliveryOpsCopySourceStore, deliveryOpsAppCode, t])
+
+
+  const handleApplyDeliveryOpsToAllStores = React.useCallback(async () => {
+    if (!canSearchAllStores) return
+    const sourceStoreCode = String(deliveryOpsStoreCode || "").trim()
+    if (!sourceStoreCode) {
+      await appAlert(t("store") || "매장을 먼저 선택해 주세요.")
+      return
+    }
+    const targets = stores.filter((s) => s && s !== sourceStoreCode)
+    if (targets.length === 0) {
+      await appAlert(t("noData") || "적용할 다른 매장이 없습니다.")
+      return
+    }
+    const ok = await appConfirm(
+      ((t("posDeliveryOpsApplyAllConfirm") || "{{n}}개 매장에 현재 배달앱 운영 설정을 전체 적용할까요?").includes("Apply to all stores")
+        ? "{{n}}개 매장에 현재 배달앱 운영 설정을 전체 적용할까요?"
+        : t("posDeliveryOpsApplyAllConfirm") || "{{n}}개 매장에 현재 배달앱 운영 설정을 전체 적용할까요?")
+        .replace("{{n}}", String(targets.length))
+    )
+    if (!ok) return
+    setDeliveryOpsApplyingAll(true)
+    try {
+      const { menuPolicies, categoryOrders } = buildDeliveryOpsSavePayload(sourceStoreCode)
+      let done = 0
+      for (const targetStore of targets) {
+        const res = await savePosDeliveryAppPolicies({
+          storeCode: targetStore,
+          appCode: deliveryOpsAppCode,
+          appPolicy: {
+            storeCode: targetStore,
+            appCode: deliveryOpsAppCode,
+            enabled: Boolean(deliveryOpsAppPolicy.enabled),
+            orderAcceptanceMode: deliveryOpsAppPolicy.orderAcceptanceMode,
+            autoAcceptEnabled: false,
+          },
+          menuPolicies: menuPolicies.map((row) => ({ ...row, storeCode: targetStore })),
+          categoryOrders: categoryOrders.map((row) => ({ ...row, storeCode: targetStore })),
+        })
+        if (!res?.success) {
+          throw new Error(`${targetStore}: ${res?.message || "save_failed"}`)
+        }
+        done += 1
+      }
+      await appAlert(
+        ((t("posDeliveryOpsApplyAllDone") || "{{n}}개 매장에 전체 적용했습니다.").includes("Applied to")
+          ? "{{n}}개 매장에 전체 적용했습니다."
+          : t("posDeliveryOpsApplyAllDone") || "{{n}}개 매장에 전체 적용했습니다.").replace("{{n}}", String(done))
+      )
+    } catch (e) {
+      await appAlert(translateApiMessage(String(e ?? "save_failed"), t))
+    } finally {
+      setDeliveryOpsApplyingAll(false)
+    }
+  }, [canSearchAllStores, deliveryOpsStoreCode, stores, t, buildDeliveryOpsSavePayload, deliveryOpsAppCode, deliveryOpsAppPolicy])
+
 
   return (
     <div className="flex-1 overflow-auto">
@@ -3616,14 +3772,59 @@ export default function PosMenusPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold">{t("posMenuTabDeliveryOps") || "배달앱 운영"}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {t("posDeliveryOpsDesc") || "앱별 메뉴 노출/시간대/품절/재고/주문수락 정책을 설정합니다."}
-                  </p>
                 </div>
-                <Button type="button" onClick={handleSaveDeliveryOpsPolicy} disabled={deliveryOpsSaving}>
-                  <Save className="h-4 w-4 mr-1.5" />
-                  {deliveryOpsSaving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {canSearchAllStores && (
+                    <>
+                      <Select
+                        value={deliveryOpsCopySourceStore || "__none__"}
+                        onValueChange={(v) => setDeliveryOpsCopySourceStore(v === "__none__" ? "" : v)}
+                      >
+                        <SelectTrigger className="h-9 w-48">
+                          <SelectValue placeholder={t("posTableLayoutCopyFrom") || "다른 매장에서 복사"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">{t("posTableLayoutCopyFrom") || "다른 매장에서 복사"}</SelectItem>
+                          {stores
+                            .filter((s) => s && s !== deliveryOpsStoreCode)
+                            .map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9"
+                        onClick={() => void handleCopyDeliveryOpsFromStore()}
+                        disabled={
+                          deliveryOpsCopying ||
+                          !deliveryOpsCopySourceStore ||
+                          deliveryOpsCopySourceStore === deliveryOpsStoreCode
+                        }
+                      >
+                        {deliveryOpsCopying ? (t("loading") || "처리 중...") : (t("posTableLayoutCopyBtn") || "복사")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9"
+                        onClick={() => void handleApplyDeliveryOpsToAllStores()}
+                        disabled={deliveryOpsApplyingAll || stores.filter((s) => s && s !== deliveryOpsStoreCode).length === 0}
+                      >
+                        {deliveryOpsApplyingAll
+                          ? (t("loading") || "처리 중...")
+                          : (t("posDeliveryOpsApplyAll") || "전체 적용")}
+                      </Button>
+                    </>
+                  )}
+                  <Button type="button" onClick={handleSaveDeliveryOpsPolicy} disabled={deliveryOpsSaving}>
+                    <Save className="h-4 w-4 mr-1.5" />
+                    {deliveryOpsSaving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
+                  </Button>
+                </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
@@ -3679,17 +3880,8 @@ export default function PosMenusPage() {
                     />
                     {t("posDeliveryOpsEnabled") || "앱 연동 사용"}
                   </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={deliveryOpsAppPolicy.autoAcceptEnabled}
-                      onChange={(e) => setDeliveryOpsAppPolicy((p) => ({ ...p, autoAcceptEnabled: e.target.checked }))}
-                    />
-                    {t("posDeliveryOpsAutoAcceptForce") || "자동승인 강제"}
-                  </label>
                 </div>
               </div>
-
               <div className="rounded-lg border p-3 space-y-2">
                 <h4 className="text-xs font-semibold">{t("posDeliveryOpsCategoryOrder") || "카테고리 순서"}</h4>
                 <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
@@ -3735,6 +3927,7 @@ export default function PosMenusPage() {
                         <th className="p-2 text-center w-24">{t("posDeliveryOpsSellEnd") || "판매 종료"}</th>
                         <th className="p-2 text-center w-24">{t("posDeliveryOpsStockQty") || "재고수량"}</th>
                         <th className="p-2 text-center w-20">{t("posSoldOut") || "품절"}</th>
+                        <th className="p-2 text-center w-44">{t("image") || "이미지"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3750,7 +3943,11 @@ export default function PosMenusPage() {
                           stockQty: null,
                           soldOut: false,
                           autoStopOnZero: true,
+                          imageUrl: null,
                         }
+                        const fallbackImageUrl = String(m.imageUrl || "").trim()
+                        const overrideImageUrl = String(policy.imageUrl || "").trim()
+                        const effectiveImageUrl = overrideImageUrl || fallbackImageUrl
                         return (
                           <tr key={m.id} className="border-b last:border-b-0">
                             <td className="p-2">
@@ -3800,6 +3997,56 @@ export default function PosMenusPage() {
                                 checked={policy.soldOut}
                                 onCheckedChange={(v) => upsertDeliveryMenuPolicy(String(m.id), { soldOut: Boolean(v) })}
                               />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                ref={(el) => {
+                                  deliveryOpsImageInputRefs.current[String(m.id)] = el
+                                }}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (file) {
+                                    await handleUploadDeliveryMenuImage(m, file)
+                                  }
+                                  e.currentTarget.value = ""
+                                }}
+                              />
+                              <div className="flex items-center justify-center gap-1.5">
+                                {effectiveImageUrl ? (
+                                  <img
+                                    src={effectiveImageUrl}
+                                    alt={`${m.name} delivery`}
+                                    className="h-8 w-8 rounded border object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-8 w-8 rounded border bg-muted" />
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px]"
+                                  disabled={deliveryOpsImageUploadingMenuId === String(m.id)}
+                                  onClick={() => deliveryOpsImageInputRefs.current[String(m.id)]?.click()}
+                                >
+                                  {deliveryOpsImageUploadingMenuId === String(m.id)
+                                    ? (t("loading") || "업로드중")
+                                    : (t("upload") || "업로드")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px]"
+                                  disabled={!overrideImageUrl}
+                                  onClick={() => upsertDeliveryMenuPolicy(String(m.id), { imageUrl: null })}
+                                >
+                                  {t("reset") || "기본"}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         )

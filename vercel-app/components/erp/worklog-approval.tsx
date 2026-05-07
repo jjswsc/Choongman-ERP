@@ -91,25 +91,36 @@ export function WorklogApproval() {
     loadData()
   }
 
+  // 언어가 바뀌면 이전 언어로 번역된 캐시는 버린다
   React.useEffect(() => {
-    const contents = [...new Set(list.map((it) => it.content).filter(Boolean))]
+    setContentTransMap({})
+  }, [lang])
+
+  const texts = React.useMemo(() => {
+    const contents = list.map((it) => (it.content || "").trim()).filter(Boolean)
     const comments = list
       .map((it) => (it.managerComment || "").trim())
       .filter((c) => c && !c.startsWith("⚡"))
-    const texts = [...new Set([...contents, ...comments])]
-    if (texts.length === 0) {
-      setContentTransMap({})
-      return
-    }
+    return Array.from(new Set([...contents, ...comments]))
+  }, [list])
+
+  React.useEffect(() => {
+    if (texts.length === 0) return
+    const missing = texts.filter((txt) => !(txt in contentTransMap))
+    if (missing.length === 0) return
     let cancelled = false
-    translateTexts(texts, lang).then((translated) => {
-      if (cancelled) return
-      const map: Record<string, string> = {}
-      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
-      setContentTransMap(map)
-    }).catch(() => setContentTransMap({}))
-    return () => { cancelled = true }
-  }, [list, lang])
+    const handle = setTimeout(() => {
+      translateTexts(missing, lang).then((translated) => {
+        if (cancelled) return
+        setContentTransMap((prev) => {
+          const next = { ...prev }
+          missing.forEach((txt, i) => { next[txt] = translated[i] ?? txt })
+          return next
+        })
+      }).catch(() => { /* 실패 시 원문 표시 유지 */ })
+    }, 350)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [texts, lang, contentTransMap])
 
   const getTransContent = (content: string) => (content && contentTransMap[content]) || content || "-"
   const formatManagerComment = (comment: string) => {

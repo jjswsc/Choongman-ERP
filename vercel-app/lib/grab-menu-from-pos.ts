@@ -734,6 +734,12 @@ export async function buildGrabMenuFromPos(params: {
       const active = menu.is_active !== false
       const available = active && !soldOut && isMenuAvailableByDeliveryPolicy(policy)
       const deliveryPrice = menu.price_delivery != null ? menu.price_delivery : menu.price
+      const policyImageUrl = String(policy?.imageUrl ?? '').trim()
+      const photoUrl = isValidPhotoUrl(policyImageUrl)
+        ? policyImageUrl
+        : isValidPhotoUrl(menu.image)
+          ? menu.image
+          : ''
       const menuDescDelivery = String(menu.description_delivery ?? '').trim()
       const menuDescDefault = String(menu.description_default ?? '').trim()
       const menuDesc = menuDescDelivery || menuDescDefault
@@ -748,7 +754,7 @@ export async function buildGrabMenuFromPos(params: {
         price: Math.max(1, toMinorUnit(deliveryPrice ?? 0)),
         campaignInfo: null,
         description: menuDesc,
-        photos: isValidPhotoUrl(menu.image) ? [menu.image] : [],
+        photos: photoUrl ? [photoUrl] : [],
         modifierGroups: [...modifierGroups, ...banbanModifierGroups],
       }
     })
