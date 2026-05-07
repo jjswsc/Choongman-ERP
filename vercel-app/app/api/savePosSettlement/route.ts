@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 
 const CASH_ACTUAL_DENOM_KEYS = ['1000', '500', '100', '50', '20', '10', '5', '2', '1'] as const
 
@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
     }
     if (!storeCode) {
       return NextResponse.json({ success: false, message: '매장(storeCode)이 필요합니다.' }, { headers })
+    }
+    const existing = (await supabaseSelectFilter(
+      'pos_settlements',
+      `store_code=eq.${encodeURIComponent(storeCode)}&settle_date=eq.${encodeURIComponent(settleDate)}`,
+      { limit: 1, select: 'closed' }
+    )) as { closed?: boolean }[] | null
+    if (existing?.[0]?.closed) {
+      return NextResponse.json(
+        { success: false, message: '이미 마감 완료된 결산입니다. 재저장할 수 없습니다.' },
+        { headers }
+      )
     }
 
     const row = {

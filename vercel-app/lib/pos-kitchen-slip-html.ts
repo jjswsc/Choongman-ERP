@@ -6,6 +6,7 @@ import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
+import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 
 /** 용지 80mm. 본문 폭을 과도하게 줄이면 일부 드라이버에서 오히려 오른쪽 잘림이 커질 수 있어, 폭은 넉넉히 두고 패딩으로 오른쪽 안전 여백을 준다. */
 const POS_PAPER_WIDTH_MM = 80
@@ -83,12 +84,13 @@ export function getKitchenSlipPaperCss(
 function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
   const tp = typographyForScale(design.fontScale)
   return `
-.k-header { text-align: center; font-size: ${tp.header}px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: normal; overflow-wrap: break-word; line-height: 1.35; }
-.k-row { margin: 6px 0; font-size: ${tp.row}px; max-width: 100%; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.45; letter-spacing: -0.01em; }
-.k-line-note { font-size: ${tp.lineNote}px; color: #333; margin-top: 3px; padding-left: 2px; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.35; letter-spacing: -0.01em; }
+.k-header { text-align: center; font-size: ${tp.header}px; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: normal; overflow-wrap: break-word; line-height: 1.35; letter-spacing: 0.02em; }
+.k-order-type { text-align: center; margin: 2px 0 10px 0; padding: 6px 8px; border: 1.7px solid #000; border-radius: 7px; font-size: ${Math.max(12, tp.row - 1)}px; font-weight: 800; letter-spacing: 0.05em; line-height: 1.2; }
+.k-row { margin: 7px 0; font-size: ${tp.row}px; max-width: 100%; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.45; letter-spacing: -0.01em; }
+.k-line-note { font-size: ${tp.lineNote}px; color: #111; margin-top: 4px; padding-left: 3px; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.36; letter-spacing: -0.01em; }
 .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: ${tp.memo}px; }
-.k-row-main { display: flex; align-items: flex-start; gap: 4px; width: 100%; }
-.k-row-qty { flex: 0 0 auto; min-width: 2.5em; font-variant-numeric: tabular-nums; }
+.k-row-main { display: grid; grid-template-columns: 2.3em minmax(0, 1fr); align-items: flex-start; gap: 3px; width: 100%; }
+.k-row-qty { min-width: 0; font-variant-numeric: tabular-nums; font-weight: 700; }
 .k-row-name { flex: 1 1 auto; min-width: 0; white-space: normal; word-break: normal; overflow-wrap: break-word; }
 .k-row-cancelled .k-row-qty { letter-spacing: 0.02em; }
 `
@@ -141,13 +143,15 @@ export function formatKitchenSlipItemRowHtml(
 ): string {
   const showLineNotes = opts?.showLineNotes !== false
   const cancelled = Boolean(it.cancelled)
+  const nameSplit = splitPosPrintItemLine(String(it.name ?? ''))
   const note = showLineNotes
     ? localizeKitchenSlipLineNote(
         normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
       )
     : ''
   const banban = parseKitchenSlipBanbanFromName(it.name)
-  const displayName = banban ? banban.baseName : it.name
+  const baseDisplayName = banban ? banban.baseName : nameSplit.mainName || it.name
+  const optionLine = banban ? '' : localizeKitchenSlipLineNote(nameSplit.optionLine)
   const rowOpen = cancelled ? '<div class="k-row k-row-cancelled">' : '<div class="k-row">'
   const main =
     '<div class="k-row-main">' +
@@ -157,9 +161,15 @@ export function formatKitchenSlipItemRowHtml(
     ' ×' +
     close('span') +
     '<span class="k-row-name">' +
-    escapeHtml(displayName) +
+    escapeHtml(baseDisplayName) +
     close('span') +
     close('div')
+  const simplify = (text: string) => text.replace(/[\s\-_:()]+/g, '').toLowerCase()
+  const optionDupWithNote = optionLine && note && simplify(optionLine) === simplify(note)
+  const optionHtml =
+    optionLine && !optionDupWithNote
+      ? '<div class="k-line-note">- ' + escapeHtml(optionLine) + close('div')
+      : ''
   const banbanHtml = banban
     ? '<div class="k-line-note">- ' +
       escapeHtml(banban.flavor1) +
@@ -167,10 +177,11 @@ export function formatKitchenSlipItemRowHtml(
       escapeHtml(banban.flavor2) +
       close('div')
     : ''
-  if (!note) return rowOpen + main + banbanHtml + close('div')
+  if (!note) return rowOpen + main + optionHtml + banbanHtml + close('div')
   return (
     rowOpen +
     main +
+    optionHtml +
     banbanHtml +
     '<div class="k-line-note">' +
     escapeHtml(note) +
@@ -257,12 +268,15 @@ export function buildKitchenSlipHtml(params: {
     '<body><div class="k-header">' +
     escapeHtml(label) +
     c('div') +
+    '<div class="k-order-type">' +
+    escapeHtml(orderTypeLabel) +
+    c('div') +
     '<div class="k-row"><strong>' +
     escapeHtml(orderNoPrint) +
     c('strong') +
     c('div') +
     '<div class="k-row">' +
-    escapeHtml(storeCode + ' · ' + orderTypeLabel + tablePart) +
+    escapeHtml(storeCode + tablePart) +
     c('div') +
     '<div class="k-row">' +
     dateStr +

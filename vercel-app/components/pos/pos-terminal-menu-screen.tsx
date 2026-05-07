@@ -65,7 +65,16 @@ import { isChickenMenu } from '@/lib/pos-menu-categories'
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
-  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === 'S 순살' || n === 'S - 순살' || n === 'S-순살'
+  return (
+    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
+    /^S\s*[-]?\s*boneless\s*$/i.test(n) ||
+    n === 'S 순살' ||
+    n === 'S - 순살' ||
+    n === 'S-순살' ||
+    n === 'S Boneless' ||
+    n === 'S - Boneless' ||
+    n === 'S-Boneless'
+  )
 }
 
 export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
@@ -148,6 +157,13 @@ export function PosTerminalMenuScreen({
   const [optionPickerSelections, setOptionPickerSelections] = React.useState<Record<string, string>>({})
   const [optionPickerBanbanFirst, setOptionPickerBanbanFirst] = React.useState<PosMenu | null>(null)
   const [promoChoiceDialog, setPromoChoiceDialog] = React.useState<PromoChoiceDialogState | null>(null)
+  /**
+   * 세트 구성품 API가 순간적으로 빈 배열을 줄 때를 대비한 메모리 캐시.
+   * - POS 화면에서 "세트 구성이 안 보임" 체감을 줄인다.
+   */
+  const promoItemsFallbackCacheRef = React.useRef<
+    Map<string, PosPromoWithItems['items']>
+  >(new Map())
   const [searchKeyword, setSearchKeyword] = React.useState('')
   const [listPage, setListPage] = React.useState(0)
   const [screenConfig, setScreenConfig] = React.useState<PosMenuScreenConfig>(DEFAULT_POS_MENU_SCREEN_CONFIG)
@@ -201,7 +217,7 @@ export function PosTerminalMenuScreen({
     const [r0, r1, r2, r3] = await Promise.allSettled([
       getPosMenus(),
       getPosMenuCategories(),
-      getPosMenuOptions(),
+      getPosMenuOptions({ fresh: true }),
       getPosPromosWithItems(),
     ])
     const list = r0.status === 'fulfilled' ? r0.value || [] : []
@@ -368,12 +384,45 @@ export function PosTerminalMenuScreen({
     promoVisibilityById,
   ])
 
+  React.useEffect(() => {
+    const cache = promoItemsFallbackCacheRef.current
+    for (const p of promos) {
+      const pid = String(p.id ?? '').trim()
+      if (!pid) continue
+      if (Array.isArray(p.items) && p.items.length > 0) {
+        cache.set(
+          pid,
+          p.items
+            .map((it) => ({
+              menuId: String(it.menuId ?? '').trim(),
+              optionId: it.optionId != null ? String(it.optionId).trim() || null : null,
+              quantity: Math.max(1, Number(it.quantity) || 1),
+              choiceGroup: it.choiceGroup != null ? String(it.choiceGroup).trim() || null : null,
+              choicePickCount:
+                it.choicePickCount != null && Number.isFinite(Number(it.choicePickCount))
+                  ? Math.max(1, Math.floor(Number(it.choicePickCount)))
+                  : null,
+            }))
+            .filter((it) => it.menuId)
+        )
+      }
+    }
+  }, [promos])
+
   const getMenuPrice = (menu: PosMenu) =>
     orderType === 'delivery' && menu.priceDelivery != null ? menu.priceDelivery : menu.price
   const getOptionModifier = (opt: PosMenuOption) => {
+    const hall = Number.isFinite(Number(opt.priceModifier)) ? Number(opt.priceModifier) : 0
+    const delivery = opt.priceModifierDelivery
+    const packaging = opt.priceModifierPackaging
     if (orderType === 'delivery' && opt.priceModifierDelivery != null) return opt.priceModifierDelivery
     if (orderType === 'takeout' && opt.priceModifierPackaging != null) return opt.priceModifierPackaging
-    return opt.priceModifier ?? 0
+    // 홀 기본값이 0으로 남고 배달/포장만 세팅된 레거시 옵션 보정
+    if (orderType === 'dine-in' && hall === 0) {
+      if (delivery != null && Number.isFinite(Number(delivery))) return Number(delivery)
+      if (packaging != null && Number.isFinite(Number(packaging))) return Number(packaging)
+    }
+    return hall
   }
   const getPromoPrice = (p: PosPromoWithItems) =>
     orderType === 'delivery' && p.priceDelivery != null ? p.priceDelivery : (p.price ?? 0)
@@ -481,13 +530,31 @@ export function PosTerminalMenuScreen({
 
   const addPromo = async (p: PosPromoWithItems) => {
     const freshItems = await getPosPromoItems({ promoId: p.id }).catch(() => null)
-    const resolvedItems =
+    const fallbackCache = promoItemsFallbackCacheRef.current.get(String(p.id))
+    const resolvedItemsRaw =
       Array.isArray(freshItems) && freshItems.length > 0
         ? freshItems
-        : Array.isArray(p.items)
+        : Array.isArray(p.items) && p.items.length > 0
           ? p.items
-          : []
-    const resolvedPromo: PosPromoWithItems = { ...p, items: resolvedItems || [] }
+          : Array.isArray(fallbackCache)
+            ? fallbackCache
+            : []
+    const resolvedItems = resolvedItemsRaw
+      .map((it) => ({
+        menuId: String(it.menuId ?? '').trim(),
+        optionId: it.optionId != null ? String(it.optionId).trim() || null : null,
+        quantity: Math.max(1, Number(it.quantity) || 1),
+        choiceGroup: it.choiceGroup != null ? String(it.choiceGroup).trim() || null : null,
+        choicePickCount:
+          it.choicePickCount != null && Number.isFinite(Number(it.choicePickCount))
+            ? Math.max(1, Math.floor(Number(it.choicePickCount)))
+            : null,
+      }))
+      .filter((it) => it.menuId)
+    if (resolvedItems.length > 0) {
+      promoItemsFallbackCacheRef.current.set(String(p.id), resolvedItems)
+    }
+    const resolvedPromo: PosPromoWithItems = { ...p, items: resolvedItems }
     const { fixedItems, groups } = splitPromoChoiceGroups((resolvedPromo.items || []).map((it) => ({
       menuId: String(it.menuId ?? ''),
       optionId: it.optionId ? String(it.optionId) : null,
@@ -499,6 +566,10 @@ export function PosTerminalMenuScreen({
           : null,
     })))
     if (groups.length === 0) {
+      if (fixedItems.length === 0) {
+        await appAlert(t('msg_save_fail_detail') || '세트 구성 메뉴를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.')
+        return
+      }
       addResolvedPromo({ ...resolvedPromo, items: fixedItems })
       return
     }

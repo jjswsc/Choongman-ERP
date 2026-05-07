@@ -115,7 +115,16 @@ type OrderType = "dine_in" | "takeout" | "delivery"
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
-  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+  return (
+    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
+    /^S\s*[-]?\s*boneless\s*$/i.test(n) ||
+    n === "S 순살" ||
+    n === "S - 순살" ||
+    n === "S-순살" ||
+    n === "S Boneless" ||
+    n === "S - Boneless" ||
+    n === "S-Boneless"
+  )
 }
 
 interface CartItem {
@@ -428,7 +437,7 @@ export default function PosOrderPage() {
     Promise.allSettled([
       getPosMenus(),
       getPosMenuCategories(),
-      getPosMenuOptions(),
+      getPosMenuOptions({ fresh: true }),
       getPosPromosWithItems(),
     ])
       .then(([r0, r1, r2, r3]) => {
@@ -701,9 +710,21 @@ export default function PosOrderPage() {
   const getMenuPrice = (menu: PosMenu) =>
     orderType === "delivery" && menu.priceDelivery != null ? menu.priceDelivery : menu.price
   const getOptionModifier = (opt: PosMenuOption) => {
+    const hall = Number.isFinite(Number(opt.priceModifier)) ? Number(opt.priceModifier) : 0
+    const delivery = opt.priceModifierDelivery
+    const packaging = opt.priceModifierPackaging
     if (orderType === "delivery" && opt.priceModifierDelivery != null) return opt.priceModifierDelivery
     if (orderType === "takeout" && opt.priceModifierPackaging != null) return opt.priceModifierPackaging
-    return opt.priceModifier ?? 0
+    /**
+     * 레거시 매장 일부는 홀 modifier(기본)가 0인데 배달/포장만 값이 채워진 상태가 있어
+     * POS에서 전부 기본가로 보이는 문제가 발생한다.
+     * 홀 값이 0이고 다른 채널 값이 있으면 동일 modifier로 간주해 표시/담기 가격을 맞춘다.
+     */
+    if (orderType === "dine_in" && hall === 0) {
+      if (delivery != null && Number.isFinite(Number(delivery))) return Number(delivery)
+      if (packaging != null && Number.isFinite(Number(packaging))) return Number(packaging)
+    }
+    return hall
   }
 
   const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {

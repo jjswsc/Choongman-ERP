@@ -52,8 +52,8 @@ describe('pos-kitchen-slip-html', () => {
         noEsc,
         close
       )
-      expect(html).toContain('Chicken (M - Boneless)')
-      expect(html).not.toContain('- M - Boneless')
+      expect(html).toContain('Chicken')
+      expect(html).toContain('- Boneless')
     })
   })
 })

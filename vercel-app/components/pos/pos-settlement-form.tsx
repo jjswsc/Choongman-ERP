@@ -302,6 +302,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [deliveryApps, setDeliveryApps] = React.useState<PosDeliveryApp[]>([])
   const [memo, setMemo] = React.useState('')
   const [closed, setClosed] = React.useState(false)
+  const [closedSavedOnce, setClosedSavedOnce] = React.useState(false)
   const [openingCashActual, setOpeningCashActual] = React.useState<number | null>(null)
   /** 결산일 기준 pos_till_transactions 순액 (마감 예상 돈통·오프라인 캐시 동기화) */
   const [tillNetForSettleDate, setTillNetForSettleDate] = React.useState(0)
@@ -582,6 +583,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           }
           setMemo(single.memo ?? '')
           setClosed(single.closed ?? false)
+          setClosedSavedOnce(Boolean(single.closed))
           setOpeningCashActual(single.cashActual != null ? Number(single.cashActual) : null)
           const cashAutoApplied = (Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0
           setAutoFilledFlags({
@@ -654,6 +656,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           )
           setMemo('')
           setClosed(false)
+          setClosedSavedOnce(false)
           setOpeningCashActual(null)
           setAutoFilledFlags({
             card: autoCardTotal > 0 || posCardOrdersTotal > 0,
@@ -679,6 +682,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setTillNetForSettleDate(0)
         setLinkposSummary(null)
         setSettlement(null)
+        setClosedSavedOnce(false)
         setPrevDayCashActual(null)
         setDineInDeliveryBreakdown({})
         setOpeningCashActual(null)
@@ -804,8 +808,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const drawerDenomDeltaVsPosCash =
     openingCashActual != null ? cashActualNum - expectedDrawerByOpenAndCash : null
 
-  /** 서버에 마감 확정된 건만 잠금. 체크만 한 뒤에는 저장까지 입력·저장 가능 */
-  const inputsLocked = Boolean(settlement?.closed) && !canUnclose
+  /** 서버 확정(또는 이번 세션 즉시 확정) 마감은 저장/수정 재시도 차단 */
+  const inputsLocked = (Boolean(settlement?.closed) || closedSavedOnce) && !canUnclose
 
   const composeSettlementReceiptFullHtml = (): string => {
     const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
@@ -917,22 +921,29 @@ ${footerStamp}
     const hw =
       effectiveStore.length > 0 ? await resolveSettlementPrinterHw().catch(() => null) : null
     const fullHtml = composeSettlementReceiptFullHtml()
-    printPosHtmlDocument(fullHtml, {
-      title: reportTitle,
-      printDelayMs: 0,
-      fallbackCleanupMs: 120_000,
-      printRole: 'receipt',
-      printReceiptKind: 'hall_order',
-      escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'hall_order' }),
-      onPrintUnavailable: () => {
-        void appAlert(t('posPrintUnavailable'))
-      },
+    await new Promise<void>((resolve, reject) => {
+      printPosHtmlDocument(fullHtml, {
+        title: reportTitle,
+        printDelayMs: 0,
+        fallbackCleanupMs: 120_000,
+        printRole: 'receipt',
+        printReceiptKind: 'hall_order',
+        escPosCutOverride: resolveEscPosCutOverride(hw, { printRole: 'receipt', printReceiptKind: 'hall_order' }),
+        onPrintUnavailable: () => {
+          reject(new Error(t('posPrintUnavailable')))
+        },
+        onAfterCleanup: () => resolve(),
+      })
     })
   }
 
   const handleSave = async () => {
     if (!effectiveStore) {
       await appAlert(t('store') || '매장을 선택하세요.')
+      return
+    }
+    if (!canUnclose && (Boolean(settlement?.closed) || closedSavedOnce)) {
+      await appAlert(t('posClosedByAdminOnly') || '마감 해제는 본사 관리자만 가능합니다.')
       return
     }
 
@@ -1016,13 +1027,21 @@ ${footerStamp}
         }
       }
       if (res.success) {
+        if (!canUnclose && closed) {
+          setClosedSavedOnce(true)
+        }
         /** 영업 시작 저장 또는 마감 체크 후 결산 저장: 요약(오픈/마감) 영수증 자동 인쇄 — 알림 전, 웹 제스처·하이브리드 ESC/POS */
         if (autoPrintAfterSuccess) {
           const fullHtml = composeSettlementReceiptFullHtml()
           if (typeof window !== 'undefined' && hasHybridPosPrintShell(window)) {
             closePrintPopup(webKioskPrintPopup)
             webKioskPrintPopup = null
-            void handlePrint()
+            try {
+              await handlePrint()
+            } catch {
+              await new Promise((resolve) => window.setTimeout(resolve, 450))
+              await handlePrint()
+            }
           } else if (webKioskPrintPopup && !webKioskPrintPopup.closed) {
             const p = webKioskPrintPopup
             webKioskPrintPopup = null

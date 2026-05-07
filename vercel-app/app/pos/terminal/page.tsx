@@ -116,6 +116,7 @@ import {
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import {
   normalizePosTableNameForMatch,
   translatePosMenuLineForReceipt,
@@ -1057,7 +1058,7 @@ export default function PosTerminalPage() {
         setMenus([])
         setMenuTargets({ byId: new Map(), byName: new Map() })
       })
-    getPosMenuOptions()
+    getPosMenuOptions({ fresh: true })
       .then((rows) => {
         if (seq !== storeSettingsLoadSeqRef.current) return
         setMenuOptions(Array.isArray(rows) ? rows : [])
@@ -1373,13 +1374,13 @@ export default function PosTerminalPage() {
     mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
 
-  const reserveKitchenAutoPrintKey = useCallback((rawKey: string, ttlMs = 20_000) => {
+  const reserveKitchenAutoPrintKey = useCallback((rawKey: string, ttlMs = 6 * 60 * 60 * 1000) => {
     const key = String(rawKey || '').trim()
     if (!key) return true
     const now = Date.now()
     const map = printedKitchenSlipKeysRef.current
     for (const [k, ts] of map.entries()) {
-      if (!Number.isFinite(ts) || now - ts > 120_000) map.delete(k)
+      if (!Number.isFinite(ts) || now - ts > 24 * 60 * 60 * 1000) map.delete(k)
     }
     const prev = map.get(key)
     if (typeof prev === 'number' && now - prev < ttlMs) return false
@@ -2270,6 +2271,16 @@ export default function PosTerminalPage() {
             ct('div')
         : ''
     const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
+    const orderTypeLabelText =
+      payload.orderType === 'delivery'
+        ? tr('posOrderTypeDelivery', 'Delivery')
+        : payload.orderType === 'takeout'
+          ? tr('posOrderTypeTakeout', 'Takeaway')
+          : tr('posOrderTypeDineIn', 'Dine In')
+    const orderTypeRow =
+      '<div class="receipt-order-type-chip">' +
+      esc(orderTypeLabelText) +
+      ct('div')
     const itemsRows = payload.items
       .map((it, idx) => {
         const addon = Boolean((it as { isAddon?: boolean }).isAddon)
@@ -2285,7 +2296,11 @@ export default function PosTerminalPage() {
           name: String(it.name ?? ''),
           menuId: String((it as { menuId?: string }).menuId ?? ''),
         })
-        const line = translatePosMenuLineForReceipt(lineName, (k) => tPrint(k))
+        const lineSplit = splitPosPrintItemLine(lineName)
+        const lineMain = translatePosMenuLineForReceipt(lineSplit.mainName || lineName, (k) => tPrint(k))
+        const lineOption = lineSplit.optionLine
+          ? translatePosMenuLineForReceipt(lineSplit.optionLine, (k) => tPrint(k))
+          : ''
         const lineNote = normalizePosLineNote(String((it as { note?: string }).note ?? ''), {
           keepOptionSummary: false,
         })
@@ -2318,17 +2333,21 @@ export default function PosTerminalPage() {
         const noteHtml = lineNote
           ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
           : ''
+        const optionHtml = lineOption
+          ? '<div class="receipt-line-note">- ' + esc(lineOption) + ct('div')
+          : ''
         return (
           addonHead +
           '<div class="receipt-row"><span>' +
           it.qty +
           'x ' +
-          esc(line) +
+          esc(lineMain) +
           ct('span') +
           '<span>' +
           formatBahtNum(it.price * it.qty) +
           ct('span') +
           ct('div') +
+          optionHtml +
           promoComposeHtml +
           noteHtml
         )
@@ -2344,7 +2363,7 @@ export default function PosTerminalPage() {
       tableName: payload.tableName,
       memo: payload.memo,
     })
-    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(orderNoForPrint) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + channelOrderNoRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + taxInvoiceRow + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ct('span') + ct('div') + ct('div')
+    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(orderNoForPrint) + ct('div') + orderTypeRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + channelOrderNoRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + taxInvoiceRow + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ct('span') + ct('div') + ct('div')
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -2355,6 +2374,8 @@ export default function PosTerminalPage() {
       title: tPrint('posReceipt') || '영수증',
       htmlLang: printLang,
       bodyContent: printContent,
+      extraStyles:
+        '.receipt-order-simple .receipt-order-type-chip{display:inline-block;margin-top:7px;padding:3px 11px;border:1.6px solid #000;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;color:#000;line-height:1.2}.receipt-order-simple .receipt-row{margin:6px 0}.receipt-order-simple .receipt-item-head{padding-bottom:5px}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#111}.receipt-order-simple .receipt-order-label{font-weight:800}',
       footerContent: showPrintButtonInReceipt
         ? '<button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +
             printButtonLabel +
@@ -2980,6 +3001,12 @@ export default function PosTerminalPage() {
       if (!wantRemoteDineInAdd) return
       const ot = String(row.order_type ?? '').trim().toLowerCase()
       if (ot !== 'dine_in') return
+      /**
+       * 결제(updatePosOrder + status 반영) UPDATE는 주방 추가주문 출력 대상이 아님.
+       * - 결제 직전 pending/cooking 상태에서도 payment_* 값이 먼저 반영될 수 있어
+       *   "추가 주문"으로 오인해 주방지가 한 번 더 나갈 수 있다.
+       */
+      if (posOrderRowPaymentSum(row) > 0) return
       if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
       const st = String(row.status ?? '').trim().toLowerCase()
       if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
@@ -4887,6 +4914,12 @@ export default function PosTerminalPage() {
                   }
                   savedOrderId = existingOrderId
                   savedOrderNo = existingOrder.orderNo ?? ''
+                  logPosPrintDebug('submit_save_success_update_pos_order', {
+                    orderId: savedOrderId,
+                    orderNo: savedOrderNo,
+                    isAddOrder: true,
+                    incomingItems: incomingItems.length,
+                  })
                 } else {
                   const saveReq = {
                     storeCode: currentStoreId,
@@ -4925,6 +4958,12 @@ export default function PosTerminalPage() {
                   const queued = Boolean((res as { queued?: boolean }).queued)
                   await notifyQueuedSave(savedOrderNo, queued)
                   if (queued && savedOrderNo.startsWith('LOCAL-')) queuedLocalOrderNo = savedOrderNo
+                  logPosPrintDebug('submit_save_success_new_pos_order', {
+                    orderId: savedOrderId,
+                    orderNo: savedOrderNo,
+                    queued,
+                    incomingItems: incomingItems.length,
+                  })
                 }
                 const markQueuedLocalPrintedIfNeeded = () => {
                   if (!queuedLocalOrderNo) return
@@ -5035,6 +5074,13 @@ export default function PosTerminalPage() {
                         : `order:${savedOrderId}:kitchen`
                       : `submit:${orderNoStr}:${payload.tableName || ''}:${isAddOrder ? 'add' : 'new'}`
                   if (!reserveKitchenAutoPrintKey(kitchenPrintKey)) return
+                  logPosPrintDebug('submit_kitchen_autoprint_dispatch', {
+                    orderId: savedOrderId,
+                    orderNo: orderNoStr,
+                    kitchenPrintKey,
+                    kitchenLines: kitchenCartLines.length,
+                    isAddOrder,
+                  })
                   const itemsForKitchen = kitchenCartLines.map((i) => {
                     const line = i as {
                       menuId?: string
@@ -5130,6 +5176,13 @@ export default function PosTerminalPage() {
                 }
                 if (isMainPosDevice && shouldAutoPrintReceipt && !skipLocalAutoPrint) {
                   markQueuedLocalPrintedIfNeeded()
+                  logPosPrintDebug('submit_receipt_autoprint_dispatch', {
+                    orderId: savedOrderId,
+                    orderNo: orderNoStr,
+                    autoPrintKitchenSlipOnOrder,
+                    skipLocalAutoPrint,
+                    receiptItems: receiptPrintItems.length,
+                  })
                   if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
                     void printReceiptNow(
                       receiptPayloadSubmit,
@@ -5150,6 +5203,12 @@ export default function PosTerminalPage() {
                   kitchenCartLines.length > 0
                 ) {
                   markQueuedLocalPrintedIfNeeded()
+                  logPosPrintDebug('submit_kitchen_only_autoprint_dispatch', {
+                    orderId: savedOrderId,
+                    orderNo: orderNoStr,
+                    skipLocalAutoPrint,
+                    kitchenLines: kitchenCartLines.length,
+                  })
                   setTimeout(runKitchenAfterDineInSubmit, 180)
                 } else if (
                   isMainPosDevice &&

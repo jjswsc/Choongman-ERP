@@ -32,6 +32,21 @@ const RETRY_MAX_MS = 5 * 60_000
 const SNAPSHOT_KEY = 'cm_offline_sync_snapshot_v1'
 let syncSnapshot: SyncSnapshot = { lastSynced: 0, lastFailed: 0 }
 
+function logPosQueueSync(event: string, detail: Record<string, unknown>) {
+  if (typeof window === 'undefined') return
+  try {
+    const enabled = window.localStorage.getItem('cm_pos_pipeline_trace') === '1'
+    if (!enabled) return
+    console.info('[POS_PIPELINE]', {
+      event,
+      at: new Date().toISOString(),
+      ...detail,
+    })
+  } catch {
+    /* ignore trace log failures */
+  }
+}
+
 function readStoredSnapshot(): SyncSnapshot | null {
   if (typeof window === 'undefined') return null
   try {
@@ -171,6 +186,13 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
       continue
     }
     try {
+      if (item.api === '/api/savePosOrder') {
+        logPosQueueSync('queue_sync_attempt_save_pos_order', {
+          queueId: item.id,
+          localOrderNo: String(item.metadata?.localOrderNo ?? ''),
+          retryCount: item.retryCount,
+        })
+      }
       const idempotencyKey = item.metadata?.localOrderNo || item.id
       const init: RequestInit = {
         method: item.method,
@@ -205,6 +227,13 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
         })
         if (res.status >= 500) reportNetworkFailure()
         failed++
+        if (item.api === '/api/savePosOrder') {
+          logPosQueueSync('queue_sync_http_fail_save_pos_order', {
+            queueId: item.id,
+            localOrderNo: String(item.metadata?.localOrderNo ?? ''),
+            status: res.status,
+          })
+        }
         continue
       }
 
@@ -236,6 +265,13 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
           lastTriedAt: now,
         })
         failed++
+        if (item.api === '/api/savePosOrder') {
+          logPosQueueSync('queue_sync_business_fail_save_pos_order', {
+            queueId: item.id,
+            localOrderNo: String(item.metadata?.localOrderNo ?? ''),
+            reason: String(parsedBody.message ?? 'success:false').slice(0, 140),
+          })
+        }
         continue
       }
 
@@ -249,6 +285,11 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
               String(item.metadata?.localOrderNo ?? '')
             )
           }
+          logPosQueueSync('queue_sync_success_save_pos_order', {
+            queueId: item.id,
+            localOrderNo: String(item.metadata?.localOrderNo ?? ''),
+            orderId: Number.isFinite(oid) && oid > 0 ? oid : null,
+          })
         } catch {
           /* ignore */
         }
@@ -266,6 +307,13 @@ export async function syncPending(options?: SyncPendingOptions): Promise<SyncRes
         reportNetworkFailure()
       }
       failed++
+      if (item.api === '/api/savePosOrder') {
+        logPosQueueSync('queue_sync_exception_save_pos_order', {
+          queueId: item.id,
+          localOrderNo: String(item.metadata?.localOrderNo ?? ''),
+          reason: errText.slice(0, 140),
+        })
+      }
     }
   }
 

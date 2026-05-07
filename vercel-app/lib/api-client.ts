@@ -5797,11 +5797,16 @@ export async function savePosDeliveryAppPolicies(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function getPosMenuOptions(params?: { menuId?: string }) {
+export async function getPosMenuOptions(params?: { menuId?: string; fresh?: boolean }) {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)
   const qs = q.toString()
   const url = '/api/getPosMenuOptions' + (qs ? `?${qs}` : '')
+  if (params?.fresh) {
+    const res = await apiFetchWithOffline(url)
+    const data = await res.json().catch(() => [])
+    return Array.isArray(data) ? (data as PosMenuOption[]) : []
+  }
   const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}`
   return fetchPosCatalogCached<PosMenuOption[]>(cacheKey, url, [])
 }

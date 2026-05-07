@@ -110,7 +110,16 @@ function isChickenMenu(code: string | undefined): boolean {
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
-  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+  return (
+    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
+    /^S\s*[-]?\s*boneless\s*$/i.test(n) ||
+    n === "S 순살" ||
+    n === "S - 순살" ||
+    n === "S-순살" ||
+    n === "S Boneless" ||
+    n === "S - Boneless" ||
+    n === "S-Boneless"
+  )
 }
 
 /** 옵션 구성 탭·메뉴 폼: 쉼표 구분 단계 키 (영문 키 권장: size, part, side, drink) */
@@ -1481,7 +1490,33 @@ export default function PosMenusPage() {
         if (!saveMenuRes.success) {
           throw new Error(`메뉴 ${menu.code} 저장 실패: ${saveMenuRes.message}`)
         }
-        const existing = await getPosMenuOptions({ menuId: menu.id })
+        const existing = await getPosMenuOptions({ menuId: menu.id, fresh: true })
+        const existingPriceByStep = new Map<
+          string,
+          { hall: number; delivery: number | null; packaging: number | null }
+        >(
+          (existing || [])
+            .map((opt) => {
+              const size = String(opt.optionStepValues?.size ?? '').trim()
+              const part = String(opt.optionStepValues?.part ?? '').trim()
+              if (!size || !part) return null
+              return [
+                `${size}__${part}`,
+                {
+                  hall: Number.isFinite(Number(opt.priceModifier)) ? Number(opt.priceModifier) : 0,
+                  delivery:
+                    opt.priceModifierDelivery != null && Number.isFinite(Number(opt.priceModifierDelivery))
+                      ? Number(opt.priceModifierDelivery)
+                      : null,
+                  packaging:
+                    opt.priceModifierPackaging != null && Number.isFinite(Number(opt.priceModifierPackaging))
+                      ? Number(opt.priceModifierPackaging)
+                      : null,
+                },
+              ] as const
+            })
+            .filter(Boolean) as [string, { hall: number; delivery: number | null; packaging: number | null }][]
+        )
         for (const opt of existing || []) {
           const delRes = await deletePosMenuOption({ id: String(opt.id) })
           if (!delRes.success) {
@@ -1490,12 +1525,13 @@ export default function PosMenusPage() {
         }
         for (let i = 0; i < CHICKEN_OPTION_COMBOS.length; i++) {
           const { size, part, sellHall, sellDelivery, sellPackaging } = CHICKEN_OPTION_COMBOS[i]
+          const preserved = existingPriceByStep.get(`${size}__${part}`)
           const optRes = await savePosMenuOption({
             menuId: Number(menu.id),
             name: `${size} - ${part}`,
-            priceModifier: 0,
-            priceModifierDelivery: null,
-            priceModifierPackaging: null,
+            priceModifier: preserved?.hall ?? 0,
+            priceModifierDelivery: preserved?.delivery ?? null,
+            priceModifierPackaging: preserved?.packaging ?? null,
             sortOrder: i,
             optionType: "substitution",
             optionStepValues: { size, part },

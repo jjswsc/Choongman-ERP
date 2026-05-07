@@ -4,13 +4,17 @@
  */
 const VAT_RATE = 0.07
 
+function roundTo2(value: number): number {
+  return Math.round(Number(value || 0) * 100) / 100
+}
+
 export function thaiInvoiceTotalsFromRawSubtotal(rawLineSum: number): {
   subtotalRounded: number
   vatRounded: number
   grandTotal: number
 } {
-  const subtotalRounded = Math.round(Math.abs(rawLineSum))
-  const vatRounded = Math.round(subtotalRounded * VAT_RATE)
-  const grandTotal = subtotalRounded + vatRounded
+  const subtotalRounded = roundTo2(Math.abs(rawLineSum))
+  const vatRounded = roundTo2(subtotalRounded * VAT_RATE)
+  const grandTotal = roundTo2(subtotalRounded + vatRounded)
   return { subtotalRounded, vatRounded, grandTotal }
 }

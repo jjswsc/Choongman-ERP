@@ -14,6 +14,21 @@ export type SavePosOrderResult = {
   queued?: boolean
 }
 
+function logPosOrderPipeline(event: string, detail: Record<string, unknown>) {
+  if (typeof window === 'undefined') return
+  try {
+    const enabled = window.localStorage.getItem('cm_pos_pipeline_trace') === '1'
+    if (!enabled) return
+    console.info('[POS_PIPELINE]', {
+      event,
+      at: new Date().toISOString(),
+      ...detail,
+    })
+  } catch {
+    /* ignore trace log failures */
+  }
+}
+
 function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError && e.message?.toLowerCase().includes('fetch')) return true
   if (e instanceof Error) {
@@ -52,7 +67,14 @@ function looksLikeInfraFailureMessage(message: string | undefined): boolean {
 export async function savePosOrderWithOffline(params: Parameters<typeof savePosOrder>[0]): Promise<SavePosOrderResult> {
   try {
     const res = await savePosOrder(params)
-    if (res.success) return { ...res, queued: false }
+    if (res.success) {
+      logPosOrderPipeline('save_pos_order_online_success', {
+        localOrderNo: String(params.localOrderNo ?? ''),
+        orderId: Number((res as { orderId?: number }).orderId ?? 0) || null,
+        orderNo: String((res as { orderNo?: string }).orderNo ?? ''),
+      })
+      return { ...res, queued: false }
+    }
     if (looksLikeInfraFailureMessage(res.message)) {
       const localOrderNo = String(params.localOrderNo ?? '').trim() || `LOCAL-${Date.now()}`
       await addToQueue({
@@ -61,8 +83,16 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
         body: JSON.stringify({ ...params, localOrderNo }),
         metadata: { localOrderNo },
       })
+      logPosOrderPipeline('save_pos_order_queued_by_infra_failure', {
+        localOrderNo,
+        reason: String(res.message ?? '').slice(0, 140),
+      })
       return { success: true, orderNo: localOrderNo, queued: true }
     }
+    logPosOrderPipeline('save_pos_order_online_rejected', {
+      localOrderNo: String(params.localOrderNo ?? ''),
+      reason: String(res.message ?? '').slice(0, 140),
+    })
     return { ...res, queued: false }
   } catch (e) {
     if (!isNetworkError(e)) {
@@ -75,6 +105,10 @@ export async function savePosOrderWithOffline(params: Parameters<typeof savePosO
       method: 'POST',
       body: JSON.stringify({ ...params, localOrderNo }),
       metadata: { localOrderNo },
+    })
+    logPosOrderPipeline('save_pos_order_queued_by_network_error', {
+      localOrderNo,
+      reason: String(e instanceof Error ? e.message : e).slice(0, 140),
     })
     return {
       success: true,

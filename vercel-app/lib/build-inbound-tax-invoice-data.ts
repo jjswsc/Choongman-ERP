@@ -34,12 +34,12 @@ export function buildInboundTaxInvoiceData(params: {
       name: it.name,
       spec: it.spec,
       qty: Math.abs(it.qty || 0),
-      amount: Math.round(Math.abs(it.amount || 0)),
+      amount: Math.abs(it.amount || 0),
     })),
     orderInvoiceTotals: {
-      subtotalRounded: Math.round(row.totalAmt),
-      vatRounded: Math.round(row.totalVat),
-      grandTotal: Math.round(row.totalAmt + row.totalVat),
+      subtotalRounded: Math.round(Number(row.totalAmt || 0) * 100) / 100,
+      vatRounded: Math.round(Number(row.totalVat || 0) * 100) / 100,
+      grandTotal: Math.round((Number(row.totalAmt || 0) + Number(row.totalVat || 0)) * 100) / 100,
     },
     sourceRefType: row.inboundBatchId ? "Inbound" : undefined,
     sourceRefId:

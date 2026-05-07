@@ -105,6 +105,41 @@ export async function deleteReceivableFromAccountingPo(poId: number): Promise<vo
 }
 
 /**
+ * Tax Invoice 인쇄 화면에서 저장된 issueDate(invoice_settings의 invoice_print_override:tax:*)를 조회.
+ * - 미수금 행 ref_type별로 매칭되는 모든 코드를 시도해 최초 유효한 YYYY-MM-DD를 반환.
+ * - AccountingPO 행은 UI 흐름상 sourceRefType이 'PO'로 저장되거나 'AccountingPO'로 저장될 수 있어 둘 다 조회.
+ */
+async function readTaxInvoiceIssueDateOverride(
+  refType: 'Order' | 'ForceOutbound' | 'AccountingPO' | 'PO',
+  refId: number
+): Promise<string | null> {
+  if (!refId || !Number.isFinite(refId)) return null
+  const codes =
+    refType === 'AccountingPO' || refType === 'PO'
+      ? [
+          `invoice_print_override:tax:PO:${refId}`,
+          `invoice_print_override:tax:AccountingPO:${refId}`,
+        ]
+      : [`invoice_print_override:tax:${refType}:${refId}`]
+  for (const code of codes) {
+    try {
+      const rows = (await supabaseSelectFilter(
+        'invoice_settings',
+        `code=eq.${encodeURIComponent(code)}`,
+        { select: 'value', limit: 1 }
+      )) as { value?: string }[] | null
+      if (!rows?.length) continue
+      const parsed = JSON.parse(String(rows[0].value || '{}')) as { issueDate?: string }
+      const issueDate = String(parsed.issueDate || '').trim().slice(0, 10)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) return issueDate
+    } catch {
+      /* malformed override는 무시하고 다음 후보 시도 */
+    }
+  }
+  return null
+}
+
+/**
  * 회계 전용 발주(cart_json 메타) 승인 → 미수금 1건(ref AccountingPO).
  * 물류 PO는 호출 시 기존 AccountingPO 행만 정리한다.
  */
@@ -136,11 +171,15 @@ export async function syncReceivableFromApprovedAccountingPo(poId: number): Prom
   const net = Math.round((total - wht) * 100) / 100
 
   const metaYmd = purchaseOrderMetaOrderDate(po.cart_json)
-  const transDate = metaYmd
+  const fallbackTransDate = metaYmd
     ? metaYmd
     : po.created_at && !isNaN(Date.parse(String(po.created_at)))
       ? new Date(po.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
       : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+
+  // Tax Invoice 인쇄 화면에서 발행일을 수정한 경우, PO 재저장 시 그 값을 우선 사용해 trans_date·invoice_no 원복을 방지
+  const overrideTransDate = await readTaxInvoiceIssueDateOverride('AccountingPO', poId)
+  const transDate = overrideTransDate || fallbackTransDate
 
   const storeName = resolveAccountingPoReceivableStoreName(po)
 
@@ -234,6 +273,11 @@ export async function upsertReceivableFromOrder(params: {
 /**
  * Tax Invoice 인쇄 화면(Update)에서 저장한 날짜·문서번호를 미수금/엑셀에도 반영.
  * (invoice_print_override는 invoice_settings에만 있고 receivable은 갱신되지 않던 문제)
+ *
+ * 지원 refType:
+ *  - 'Order'         → receivable_transactions.ref_type='Order' (invoice_no/memo는 docNo로 갱신)
+ *  - 'ForceOutbound' → receivable_transactions.ref_type='ForceOutbound' (invoice_no/memo는 docNo로 갱신)
+ *  - 'AccountingPO' / 'PO' → receivable_transactions.ref_type='AccountingPO' (invoice_no는 APO{YYYYMMDD}-{poId}로 재생성)
  */
 export async function applyTaxInvoiceOverrideToReceivable(params: {
   refType: string
@@ -241,10 +285,15 @@ export async function applyTaxInvoiceOverrideToReceivable(params: {
   issueDate: string
   documentNo?: string
 }): Promise<void> {
-  const refType = String(params.refType || '').trim()
+  const refTypeRaw = String(params.refType || '').trim()
   const refId = Number(params.refId)
   if (refId <= 0 || !Number.isFinite(refId)) return
-  if (refType !== 'Order' && refType !== 'ForceOutbound') return
+
+  let receivableRefType: 'Order' | 'ForceOutbound' | 'AccountingPO'
+  if (refTypeRaw === 'Order') receivableRefType = 'Order'
+  else if (refTypeRaw === 'ForceOutbound') receivableRefType = 'ForceOutbound'
+  else if (refTypeRaw === 'AccountingPO' || refTypeRaw === 'PO') receivableRefType = 'AccountingPO'
+  else return
 
   const transDate = String(params.issueDate || '')
     .trim()
@@ -253,7 +302,7 @@ export async function applyTaxInvoiceOverrideToReceivable(params: {
 
   const existing = (await supabaseSelectFilter(
     'receivable_transactions',
-    `ref_type=eq.${refType}&ref_id=eq.${refId}`,
+    `ref_type=eq.${receivableRefType}&ref_id=eq.${refId}`,
     { limit: 1 }
   )) as { id?: number }[]
 
@@ -261,9 +310,16 @@ export async function applyTaxInvoiceOverrideToReceivable(params: {
 
   const docNo = String(params.documentNo || '').trim()
   const patch: Record<string, string> = { trans_date: transDate }
-  if (docNo) {
+
+  if (receivableRefType === 'AccountingPO') {
+    // 회계발주 invoice_no 패턴 APO{YYYYMMDD}-{poId} — 날짜 변경 시 자동 재생성해 표시 일관성 유지
+    const dateDigits = transDate.replace(/\D/g, '').slice(0, 8)
+    if (dateDigits.length === 8) {
+      patch.invoice_no = `APO${dateDigits}-${refId}`
+    }
+  } else if (docNo) {
     patch.invoice_no = docNo
-    patch.memo = refType === 'Order' ? docNo : `강제출고 ${docNo}`
+    patch.memo = receivableRefType === 'Order' ? docNo : `강제출고 ${docNo}`
   }
 
   await supabaseUpdate('receivable_transactions', existing[0].id, patch)

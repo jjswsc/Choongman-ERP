@@ -18,6 +18,7 @@ import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 
 function receiptSubtotalAndVatForPrint(receiptData: ReceiptModalData): { subtotalPrint: number; vatPrint: number } {
   const subtotalPrint = resolveReceiptSubtotalPrintAmount({
@@ -284,12 +285,17 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     const itemRows = (receiptData.items || [])
       .map((it) => {
         const banban = parseBanbanFlavorsFromName(it.name)
+        const baseLineSplit = splitPosPrintItemLine(it.name)
         const displayName = banban
           ? translatePosMenuLineForReceipt(banban.baseName, t)
-          : translatePosMenuLineForReceipt(it.name, t)
+          : translatePosMenuLineForReceipt(baseLineSplit.mainName || it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
         const main = `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(displayName)}</td><td class="simple-item-amt">${amt}</td></tr>`
-        if (!banban) return main
+        if (!banban) {
+          if (!baseLineSplit.optionLine) return main
+          const opt = translatePosMenuLineForReceipt(baseLineSplit.optionLine, t)
+          return `${main}<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(opt)}</td></tr>`
+        }
         const subF1 = translatePosMenuLineForReceipt(banban.flavor1, t)
         const subF2 = translatePosMenuLineForReceipt(banban.flavor2, t)
         const sub = `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(subF1)}<br/>- ${esc(subF2)}</td></tr>`
@@ -444,7 +450,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
             const banban = parseBanbanFlavorsFromName(it.name)
-            const displayName = banban ? banban.baseName : it.name
+            const baseLineSplit = splitPosPrintItemLine(it.name)
+            const displayName = banban ? banban.baseName : baseLineSplit.mainName || it.name
             const promoComposeLines =
               Array.isArray(it.promoItems) && it.promoItems.length > 0
                 ? it.promoItems.slice(0, 4).map((pi) => {
@@ -460,6 +467,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                   translatePosMenuLineForReceipt(banban.flavor2, t),
                 ]
               : []
+            const baseOptionLine =
+              !banban && baseLineSplit.optionLine
+                ? [translatePosMenuLineForReceipt(baseLineSplit.optionLine, t)]
+                : []
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
@@ -470,8 +481,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     .join('<br/>')}</div>`
                 : ''
             const banbanComposeHtml =
-              banbanFlavorLines.length > 0
-                ? `<div class="receipt-line-note">${banbanFlavorLines
+              [...baseOptionLine, ...banbanFlavorLines].length > 0
+                ? `<div class="receipt-line-note">${[...baseOptionLine, ...banbanFlavorLines]
                     .map((line) => `- ${esc(line)}`)
                     .join('<br/>')}</div>`
                 : ''
@@ -517,6 +528,14 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-brand-logo.md { width: 108px; }
         .receipt-brand-logo.lg { width: 132px; }
         .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 700; }
+        .receipt-title-block { margin: 4px 0 9px 0; }
+        .receipt-meta-row { margin: 4px 0; }
+        .receipt-item-head { margin-top: 2px; }
+        .receipt-row { margin: 5px 0; }
+        .receipt-total { margin-top: 10px; padding-top: 6px; }
+        .receipt-divider-strong { margin: 10px 0; }
+        .receipt-line-note { margin: -1px 0 5px 0; color: #111; }
+        .receipt-biz-wrap { line-height: 1.42; }
         .receipt-split-badge-wrap { text-align: center; margin: 2px 0 6px 0; }
         .receipt-split-badge {
           display: inline-block;

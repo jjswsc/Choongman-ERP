@@ -1625,7 +1625,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         spec: it.spec,
         lineRemarks: it.lineRemarks?.trim() || undefined,
         qty: Math.abs(it.qty || 0),
-        amount: Math.round(Math.abs(it.amount || 0)),
+        amount: Math.abs(it.amount || 0),
       })),
       orderInvoiceTotals: thaiInvoiceTotalsFromRawSubtotal(group.totalAmt || 0),
     })

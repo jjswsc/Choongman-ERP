@@ -84,7 +84,7 @@ export function buildThaiSalesInvoiceData(params: {
       phone: (client as InvoiceDataClient)?.phone || "-",
     },
     items: lines.map((it, idx) => {
-      const amt = Math.round(Math.abs(it.amount || 0))
+      const amt = Math.abs(Number(it.amount || 0))
       const qty = Math.abs(it.qty || 0)
       const unitPrice = qty ? amt / qty : 0
       const lr = (it.lineRemarks || "").trim()

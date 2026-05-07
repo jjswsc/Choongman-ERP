@@ -11,7 +11,7 @@ export function normalizePosMenuCodeKey(raw: string | undefined | null): string 
 }
 
 /** DB `is_banban` 없을 때도 반반으로 고정 인식할 코드 (normalizePosMenuCodeKey 기준) */
-const KNOWN_BANBAN_CODE_KEYS = new Set(['c024'])
+const KNOWN_BANBAN_CODE_KEYS = new Set(['c024', 'c24'])
 
 export function isKnownBanbanMenuCode(code: string | undefined | null): boolean {
   return KNOWN_BANBAN_CODE_KEYS.has(normalizePosMenuCodeKey(code))
@@ -40,6 +40,9 @@ export function isBanbanMenu(menu: Pick<PosMenu, 'isBanban' | 'name' | 'code'>):
   const name = String(menu.name ?? '').toLowerCase()
   const code = String(menu.code ?? '').trim().toLowerCase()
   if (name.includes('banban') || name.includes('반반')) return true
+  if (name.includes('2 รส') || name.includes('สองรส') || name.includes('2 flavor') || name.includes('two flavor')) {
+    return true
+  }
   if (code.includes('banban') || code.startsWith('bb-') || code === 'banban') return true
   return false
 }
@@ -54,8 +57,12 @@ export function isChickenMenuForBanban(menu: Pick<PosMenu, 'code' | 'categoryMai
     code.startsWith('c') ||
     main === 'chicken' ||
     main.includes('치킨') ||
+    main.includes('ไก่') ||
+    main.includes('gai') ||
     cat.includes('chicken') ||
-    cat.includes('치킨')
+    cat.includes('치킨') ||
+    cat.includes('ไก่') ||
+    cat.includes('gai')
   )
 }
 
@@ -130,8 +137,9 @@ export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu
   if (primary.length > 0) return sortMenusByName(primary)
 
   const banbanMain = String(banbanMenu.categoryMain ?? '').trim()
+  const banbanMainLower = banbanMain.toLowerCase()
   if (banbanMain) {
-    const byMain = base.filter((m) => String(m.categoryMain ?? '').trim() === banbanMain)
+    const byMain = base.filter((m) => String(m.categoryMain ?? '').trim().toLowerCase() === banbanMainLower)
     if (byMain.length > 0) return sortMenusByName(byMain)
   }
 
