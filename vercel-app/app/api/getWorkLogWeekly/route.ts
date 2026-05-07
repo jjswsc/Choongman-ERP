@@ -3,7 +3,10 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
-import { resolveWorkLogFilterNameFromEmployeeIdParam } from '@/lib/work-log-name-server'
+import {
+  resolveWorkLogFilterNameFromEmployeeIdParam,
+  workLogsOrEmployeeIdOrNameFilter,
+} from '@/lib/work-log-name-server'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -20,16 +23,21 @@ export async function GET(req: NextRequest) {
       `log_date=gte.${encodeURIComponent(startStr)}&log_date=lte.${encodeURIComponent(endStr)}`
     if (dept && dept !== 'all') fullFilter += `&dept=eq.${encodeURIComponent(dept)}`
     if (employee && employee !== 'all') {
-      const resolved =
-        (await resolveWorkLogFilterNameFromEmployeeIdParam(employee)) || String(employee).trim()
-      if (resolved) fullFilter += `&name=eq.${encodeURIComponent(resolved)}`
+      const id = Number.parseInt(String(employee).trim(), 10)
+      const resolvedFromId = await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
+      if (resolvedFromId && Number.isFinite(id) && id > 0) {
+        fullFilter += `&${workLogsOrEmployeeIdOrNameFilter(id, resolvedFromId)}`
+      } else {
+        const nameOnly = resolvedFromId || String(employee).trim()
+        if (nameOnly) fullFilter += `&name=eq.${encodeURIComponent(nameOnly)}`
+      }
     }
 
     const rows =
       (await supabaseSelectFilter('work_logs', fullFilter, {
         order: 'log_date.asc',
         limit: 5000,
-        select: 'id,log_date,dept,name,content,progress,status,priority,manager_check',
+        select: 'id,log_date,dept,name,employee_id,content,progress,status,priority,manager_check',
       })) || []
 
     const empList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick,job', limit: 2000 })) || []) as { name?: string; nick?: string; job?: string }[]

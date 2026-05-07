@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -217,6 +218,8 @@ export type CartPanelOrderLinePayload = {
   price: number
   quantity: number
   note?: string
+  menuId?: string
+  optionId?: string
 }
 export type CartPanelSplitReceiptPayload = {
   key: string
@@ -270,6 +273,9 @@ export type CartPanelAddItemPayload = {
   name: string
   price: number
   note?: string
+  /** 카탈로그 메뉴 id — items_json·주방 라우팅에 전달 */
+  menuId?: string
+  optionId?: string | null
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
@@ -337,6 +343,8 @@ interface CartPanelProps {
       price: number
       quantity: number
       note?: string
+      menuId?: string
+      optionId?: string
       orderType?: string
       deliveryAppCode?: string
       promoId?: string
@@ -759,6 +767,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       quantityOverride != null
         ? resolveCartLineQuantityForSave({ quantity: quantityOverride })
         : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
+    const menuIdLine = String(i.menuId ?? '').trim()
+    const optionIdLine = String(i.optionId ?? '').trim()
     return {
       id: i.id,
       name: i.name,
@@ -766,6 +776,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       quantity,
       orderType: orderTypeNorm,
       ...(lineNote ? { note: lineNote } : {}),
+      ...(menuIdLine ? { menuId: menuIdLine } : {}),
+      ...(optionIdLine ? { optionId: optionIdLine } : {}),
       ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
       ...(i.promoId
         ? {
@@ -838,6 +850,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   >([])
   const [appliedCollabId, setAppliedCollabId] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  /** 결제 확정 직후: 현금 거스름 안내(확인 버튼으로만 닫음) */
+  const [postPaymentCashChangeBaht, setPostPaymentCashChangeBaht] = useState<number | null>(null)
   useEffect(() => {
     onPaymentModalOpenChange?.(showPaymentModal)
   }, [showPaymentModal, onPaymentModalOpenChange])
@@ -2274,6 +2288,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     resetPaymentInputs()
     setDeliveryPaymentChannel('grab')
+    setPostPaymentCashChangeBaht(null)
     setShowPaymentModal(true)
   }
   const openPaymentModal = () => {
@@ -2492,9 +2507,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     } else if (orderType !== 'dine-in' && onNonDineOrderComplete) {
       submitNonDineOrder(true)
     }
+    const cashPayRecorded = parseFloat(payCash) || 0
+    const tenderChangeRounded = round2(Math.max(0, cashChangeAmountForTendered))
+    const showPostCashChangeReminder = cashPayRecorded > 0.001 && tenderChangeRounded > 0.001
+
     onPaymentComplete?.()
     setShowPaymentModal(false)
     handleClearCart()
+    if (showPostCashChangeReminder) {
+      setPostPaymentCashChangeBaht(tenderChangeRounded)
+    }
   }
 
   const addItem = (item: CartPanelAddItemPayload) => {
@@ -4816,6 +4838,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </DialogFooter>
           </>
         )}
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={postPaymentCashChangeBaht != null}>
+      <DialogContent
+        hideCloseButton
+        className="max-w-sm gap-5 sm:max-w-sm"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>{tr('posCashChangePostPaymentTitle', '거스름돈')}</DialogTitle>
+          <DialogDescription>{tr('posCashChangePostPaymentBody', '결제가 완료되었습니다. 아래 금액을 거슬러 주세요.')}</DialogDescription>
+        </DialogHeader>
+        <div className="rounded-xl border border-emerald-300/60 bg-emerald-50 px-4 py-5 text-center dark:border-emerald-500/40 dark:bg-emerald-950/35">
+          <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+            {tr('posCashChangeAmount', '거슬러줄 금액')}
+          </p>
+          <p className="mt-2 text-3xl font-extrabold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-300">
+            {postPaymentCashChangeBaht != null ? `${formatBahtNum(postPaymentCashChangeBaht)} ฿` : ''}
+          </p>
+        </div>
+        <DialogFooter className="sm:justify-center">
+          <Button type="button" className="h-12 w-full rounded-xl font-bold sm:max-w-xs" onClick={() => setPostPaymentCashChangeBaht(null)}>
+            {t('posConfirm')}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
     </>

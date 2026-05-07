@@ -426,7 +426,13 @@ export function PosTerminalMenuScreen({
         ? `${menu.name} (${defaultOptionName})`
         : menu.name
     const price = getMenuPrice(menu) + (opt ? getOptionModifier(opt) : 0)
-    onAddItem?.({ id, name, price })
+    onAddItem?.({
+      id,
+      name,
+      price,
+      menuId: menu.id,
+      ...(opt ? { optionId: opt.id } : {}),
+    })
     setOptionPickerMenu(null)
     setOptionPickerStep(0)
     setOptionPickerSelections({})
@@ -437,7 +443,7 @@ export function PosTerminalMenuScreen({
     const id = `banban-${ids.join('-')}`
     const name = `${banbanMenu.name} (${menu1.name} / ${menu2.name})`
     const price = getMenuPrice(banbanMenu)
-    onAddItem?.({ id, name, price })
+    onAddItem?.({ id, name, price, menuId: banbanMenu.id })
     setOptionPickerMenu(null)
     setOptionPickerBanbanFirst(null)
   }
@@ -666,6 +672,24 @@ export function PosTerminalMenuScreen({
         .split(',')
         .map((v) => v.trim())
         .filter(Boolean)
+      const dedupedGroups = optionSelectionGroups.length > 0 ? Array.from(new Set(optionSelectionGroups)) : []
+      const targetMenu = menus.find((m) => m.id === menuEditTargetId)
+      const prevCfgMap = new Map(
+        (targetMenu?.optionSelectionConfig || [])
+          .map((cfg) => [String(cfg?.key ?? '').trim(), cfg] as const)
+          .filter(([key]) => !!key)
+      )
+      const optionSelectionConfig = dedupedGroups.map((key) => {
+        const prev = prevCfgMap.get(key)
+        const required = prev?.required !== false
+        return {
+          key,
+          label: String(prev?.label ?? key).trim() || key,
+          required,
+          minSelect: required ? 1 : 0,
+          maxSelect: 1,
+        }
+      })
       const cm = menuEditForm.categoryMain.trim()
       let cat = menuEditForm.category.trim()
       if (normalizePromotionCategoryMain(cm) === PROMOTION_MAIN_CATEGORY) {
@@ -689,7 +713,8 @@ export function PosTerminalMenuScreen({
               ? 0
               : (Number(menuEditForm.kitchenPrinter) as 1 | 2 | 3),
         cookingTimeMin: menuEditForm.cookingTimeMin.trim() === '' ? null : Number(menuEditForm.cookingTimeMin),
-        optionSelectionGroups: optionSelectionGroups.length > 0 ? Array.from(new Set(optionSelectionGroups)) : [],
+        optionSelectionGroups: dedupedGroups,
+        optionSelectionConfig,
         isBanban: menuEditForm.isBanban,
       })
       if (!res?.success) {
@@ -1334,6 +1359,11 @@ export function PosTerminalMenuScreen({
               optionPickerMenu.code?.trim().toLowerCase().startsWith('c')
             const optsToShow = isChickenBase ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts
             const groups = optionPickerMenu.optionSelectionGroups || []
+            const groupConfigMap = new Map(
+              (optionPickerMenu.optionSelectionConfig || [])
+                .map((cfg) => [String(cfg?.key ?? '').trim(), cfg] as const)
+                .filter(([k]) => !!k)
+            )
             const optsWithSteps = opts.filter(
               (o) =>
                 o.optionType === 'substitution' &&
@@ -1356,6 +1386,8 @@ export function PosTerminalMenuScreen({
             )
             if (useMultiStep) {
               const groupKey = groups[optionPickerStep]
+              const groupCfg = groupConfigMap.get(groupKey)
+              const groupRequired = groupCfg?.required !== false
               const values = [
                 ...new Set(
                   optsWithStepsToShow.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean)
@@ -1388,7 +1420,10 @@ export function PosTerminalMenuScreen({
               return (
                 <div className="flex flex-col gap-3 py-2">
                   {defaultBtn}
-                  <p className="text-xs text-muted-foreground">{groupLabels[groupKey] || groupKey}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(String(groupCfg?.label ?? '').trim() || groupLabels[groupKey] || groupKey) +
+                      (groupRequired ? '' : ` (${t('optional') || '선택'})`)}
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {values.map((val) => (
                       <button
@@ -1401,6 +1436,22 @@ export function PosTerminalMenuScreen({
                       </button>
                     ))}
                   </div>
+                  {!groupRequired && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => fireMenuAction(() => {
+                        if (optionPickerStep >= groups.length - 1) {
+                          void addWithOption(optionPickerMenu, null)
+                        } else {
+                          setOptionPickerStep((s) => s + 1)
+                        }
+                      })}
+                    >
+                      {t('skip') || '건너뛰기'}
+                    </Button>
+                  )}
                   {optionPickerStep > 0 && (
                     <Button
                       variant="ghost"

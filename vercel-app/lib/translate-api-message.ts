@@ -61,6 +61,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "✅ 삭제되었습니다.": "msg_delete_ok",
   "추가되었습니다.": "msg_add_ok",
   "변경되었습니다.": "msg_updated",
+  "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.": "posMenuPromoLinkedEdit",
 
   // 비밀번호
   "비밀번호가 변경되었습니다. 다시 로그인해 주세요.": "pw_success",

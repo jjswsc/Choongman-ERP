@@ -17,6 +17,13 @@ export type PosMenuUpsertApiBody = {
   isActive?: boolean
   sortOrder?: number
   optionSelectionGroups?: string[]
+  optionSelectionConfig?: {
+    key: string
+    label?: string
+    required?: boolean
+    minSelect?: number
+    maxSelect?: number
+  }[]
   kitchenPrinter?: number | null
   cookingTimeMin?: number | null
   isBanban?: boolean
@@ -40,6 +47,7 @@ type ExistingMenuRow = {
   is_active?: boolean | null
   sort_order?: number | null
   option_selection_groups?: unknown
+  option_selection_config?: unknown
   kitchen_printer?: number | null
   cooking_time_min?: number | null
   is_banban?: boolean | null
@@ -94,6 +102,31 @@ export async function upsertPosMenuFromBody(
     body.optionSelectionGroups.length > 0
       ? body.optionSelectionGroups.map((x) => String(x).trim()).filter(Boolean)
       : null
+  const optionSelectionConfigExplicit =
+    'optionSelectionConfig' in body && Array.isArray(body.optionSelectionConfig)
+  const optionSelectionConfigCleaned = optionSelectionConfigExplicit
+    ? body.optionSelectionConfig!
+        .map((cfg) => {
+          const key = String(cfg?.key ?? '').trim()
+          if (!key) return null
+          const label = String(cfg?.label ?? '').trim()
+          const minRaw = Number(cfg?.minSelect)
+          const maxRaw = Number(cfg?.maxSelect)
+          const required = cfg?.required === true
+          const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
+          const maxSelect = Number.isFinite(maxRaw) ? Math.max(0, Math.floor(maxRaw)) : 1
+          const normalizedMax = Math.max(1, maxSelect)
+          const normalizedMin = Math.min(minSelect, normalizedMax)
+          return {
+            key,
+            label: label || key,
+            required,
+            minSelect: normalizedMin,
+            maxSelect: normalizedMax,
+          }
+        })
+        .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+    : null
   const kitchenPrinter =
     body.kitchenPrinter === 0 ||
     body.kitchenPrinter === 1 ||
@@ -109,6 +142,7 @@ export async function upsertPosMenuFromBody(
   const hasDescriptionDefault = 'descriptionDefault' in body
   const hasDescriptionDelivery = 'descriptionDelivery' in body
   const hasDescriptionTable = 'descriptionTable' in body
+  const hasSortOrder = body.sortOrder != null && Number.isFinite(Number(body.sortOrder))
   const baseRow: Record<string, unknown> = {
     code,
     name,
@@ -119,8 +153,8 @@ export async function upsertPosMenuFromBody(
     image: String(body.imageUrl ?? '').trim(),
     vat_included: body.vatIncluded !== false,
     is_active: body.isActive !== false,
-    sort_order: Number(body.sortOrder) ?? 0,
   }
+  if (hasSortOrder) baseRow.sort_order = Number(body.sortOrder)
   if (optionSelectionGroupsExplicit) {
     baseRow.option_selection_groups =
       optionSelectionGroupsCleaned && optionSelectionGroupsCleaned.length > 0
@@ -128,6 +162,12 @@ export async function upsertPosMenuFromBody(
         : []
   } else if (optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0) {
     baseRow.option_selection_groups = optionSelectionGroupsLegacy
+  }
+  if (optionSelectionConfigExplicit) {
+    baseRow.option_selection_config =
+      optionSelectionConfigCleaned && optionSelectionConfigCleaned.length > 0
+        ? optionSelectionConfigCleaned
+        : []
   }
   if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
   if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
@@ -165,7 +205,7 @@ export async function upsertPosMenuFromBody(
           {
             limit: 1,
             select:
-              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table',
+              'id,price,price_delivery,name,category_main,category,image,promo_id,vat_included,is_active,sort_order,option_selection_groups,option_selection_config,kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table',
           }
         )) as ExistingMenuRow[] | null
       } catch {
@@ -177,6 +217,11 @@ export async function upsertPosMenuFromBody(
       }
       if (existing && existing.length > 0) {
         const prev = existing[0]
+        // sortOrder를 payload에서 보내지 않은 수정은 기존 값을 유지해야
+        // 프로모 연동 메뉴의 "이미지 단독 수정"이 불필요한 필드 차이로 막히지 않는다.
+        if (!hasSortOrder) {
+          baseRow.sort_order = prev.sort_order ?? 0
+        }
         const pid = prev.promo_id
         if (pid != null && Number(pid) > 0) {
           const rowWithoutImage = { ...row }
@@ -208,7 +253,9 @@ export async function upsertPosMenuFromBody(
             asString(rowWithoutImage.description_delivery) === asString(prev.description_delivery) &&
             asString(rowWithoutImage.description_table) === asString(prev.description_table) &&
             JSON.stringify(asStringArray(rowWithoutImage.option_selection_groups)) ===
-              JSON.stringify(asStringArray(prev.option_selection_groups))
+              JSON.stringify(asStringArray(prev.option_selection_groups)) &&
+            JSON.stringify(rowWithoutImage.option_selection_config ?? null) ===
+              JSON.stringify(prev.option_selection_config ?? null)
           if (!sameFieldsExceptImage) {
             return {
               success: false,
@@ -399,6 +446,7 @@ export async function upsertPosMenuFromBody(
     }
     if (
       (optionSelectionGroupsExplicit ||
+        optionSelectionConfigExplicit ||
         optionSelectionGroupsLegacy ||
         kitchenPrinter != null ||
         cookingTimeMin != null ||
@@ -407,6 +455,7 @@ export async function upsertPosMenuFromBody(
         hasDescriptionDelivery ||
         hasDescriptionTable) &&
       (err.includes('option_selection_groups') ||
+        err.includes('option_selection_config') ||
         err.includes('kitchen_printer') ||
         err.includes('cooking_time_min') ||
         err.includes('is_banban') ||
@@ -417,6 +466,7 @@ export async function upsertPosMenuFromBody(
     ) {
       const rowWithout = { ...baseRow }
       delete rowWithout.option_selection_groups
+      delete rowWithout.option_selection_config
       delete rowWithout.kitchen_printer
       delete rowWithout.cooking_time_min
       delete rowWithout.is_banban

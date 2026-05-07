@@ -13,12 +13,23 @@ function pickFirstBySortOrder(rows: PosMenuOption[]): PosMenuOption | null {
   return [...rows].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))[0]
 }
 
+function optionStepSizeUpper(o: PosMenuOption): string {
+  const v = o.optionStepValues
+  if (!v || typeof v !== 'object') return ''
+  for (const [k, val] of Object.entries(v)) {
+    if (String(k).toLowerCase() === 'size') return String(val ?? '').trim().toUpperCase()
+  }
+  return ''
+}
+
 /** 옵션 표시명이 세트 기본 S(순살/본리스 등)로 보이는지 — optionStepValues 없는 레거시 행 보조 */
 export function looksLikePromoImplicitSizeSOptionName(name: string | undefined): boolean {
   const n = String(name ?? '').trim()
   if (!n) return false
   if (/^S\s*[-]?\s*순살\s*$/i.test(n) || n === 'S 순살' || n === 'S - 순살' || n === 'S-순살') return true
   if (/^S\s*[\s\-–—]/i.test(n)) return true
+  // 영문·태국어 UI 등 "S Boneless" (S 뒤 공백만 있고 하이픈 없음) — 기존 클래스는 'B'에서 걸림
+  if (/^S\b/i.test(n)) return true
   return false
 }
 
@@ -50,7 +61,7 @@ export function resolvePromoSublineOptionDisplayName(params: {
   const subst = opts.filter((o) => o.optionType === 'substitution' || o.optionType == null)
   const pool = subst.length > 0 ? subst : opts
 
-  const stepS = pool.filter((o) => String(o.optionStepValues?.size ?? '').trim().toUpperCase() === 'S')
+  const stepS = pool.filter((o) => optionStepSizeUpper(o) === 'S')
   const fromStep = pickFirstBySortOrder(stepS)
   if (fromStep) return fromStep.name?.trim() || ''
 

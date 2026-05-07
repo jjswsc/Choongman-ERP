@@ -55,6 +55,7 @@ import {
   refreshPosMenusCatalogCache,
   useStoreList,
   type PosMenu,
+  type PosOptionSelectionGroupConfig,
   type PosMenuPackagingCheckItem,
   type PosMenuOption,
   type PosPackagingChecklistOrderType,
@@ -120,6 +121,29 @@ function parseOptionGroupsFromText(text: string): string[] {
 
 function isSizePartGroups(groups: string[]): boolean {
   return groups.length === 2 && groups[0] === "size" && groups[1] === "part"
+}
+
+function normalizeOptionSelectionConfig(
+  groups: string[],
+  existing?: PosOptionSelectionGroupConfig[]
+): PosOptionSelectionGroupConfig[] {
+  const byKey = new Map<string, PosOptionSelectionGroupConfig>()
+  for (const row of existing || []) {
+    const key = String(row?.key ?? "").trim()
+    if (!key) continue
+    byKey.set(key, row)
+  }
+  return groups.map((key) => {
+    const prev = byKey.get(key)
+    const required = prev?.required !== false
+    return {
+      key,
+      label: String(prev?.label ?? key).trim() || key,
+      required,
+      minSelect: required ? 1 : 0,
+      maxSelect: 1,
+    }
+  })
 }
 
 /** 추가형 옵션: 연결 메뉴코드(또는 레거시 품목코드)×수량 */
@@ -247,6 +271,7 @@ export default function PosMenusPage() {
   const [chickenBatchApplying, setChickenBatchApplying] = React.useState(false)
   /** 옵션 구성 탭: 메뉴의 선택 단계(저장 전 편집) */
   const [optionsConfigGroupsDraft, setOptionsConfigGroupsDraft] = React.useState("")
+  const [optionsConfigGroupRulesDraft, setOptionsConfigGroupRulesDraft] = React.useState<PosOptionSelectionGroupConfig[]>([])
   const [optionsConfigNewStepValues, setOptionsConfigNewStepValues] = React.useState<Record<string, string>>({})
   const [optionsConfigApplyingGroups, setOptionsConfigApplyingGroups] = React.useState(false)
   /** 비치킨·선택 단계 없음: POS에서 한 줄로 고르는 치환 옵션 */
@@ -501,13 +526,17 @@ export default function PosMenusPage() {
   const optionsConfigSelectedGroupsKey = React.useMemo(() => {
     if (!optionsConfigSelectedMenuId) return ""
     const sel = menus.find((m) => m.id === optionsConfigSelectedMenuId)
-    return JSON.stringify(sel?.optionSelectionGroups ?? null)
+    return JSON.stringify({
+      groups: sel?.optionSelectionGroups ?? null,
+      config: sel?.optionSelectionConfig ?? null,
+    })
   }, [optionsConfigSelectedMenuId, menus])
 
   React.useEffect(() => {
     if (!optionsConfigSelectedMenuId) {
       setOptionsConfigMenuOptions([])
       setOptionsConfigGroupsDraft("")
+      setOptionsConfigGroupRulesDraft([])
       setOptionsConfigNewStepValues({})
       setOptionsConfigCustomOptionName("")
       return
@@ -526,7 +555,9 @@ export default function PosMenusPage() {
     if (!optionsConfigSelectedMenuId) return
     const sel = menus.find((m) => m.id === optionsConfigSelectedMenuId)
     const g = sel?.optionSelectionGroups
-    setOptionsConfigGroupsDraft(Array.isArray(g) && g.length > 0 ? g.join(", ") : "")
+    const parsedGroups = Array.isArray(g) && g.length > 0 ? g.map((x) => String(x).trim()).filter(Boolean) : []
+    setOptionsConfigGroupsDraft(parsedGroups.join(", "))
+    setOptionsConfigGroupRulesDraft(normalizeOptionSelectionConfig(parsedGroups, sel?.optionSelectionConfig))
   }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupsKey])
 
   React.useEffect(() => {
@@ -750,6 +781,7 @@ export default function PosMenusPage() {
       isActive: formData.isActive,
       sortOrder: 0,
       optionSelectionGroups: editingMenu?.optionSelectionGroups,
+      optionSelectionConfig: editingMenu?.optionSelectionConfig,
       isBanban: formData.isBanban,
     }
     if (editingId) {
@@ -988,6 +1020,15 @@ export default function PosMenusPage() {
   }
 
   const optionsConfigSelectedMenu = optionsConfigSelectedMenuId ? menus.find((m) => m.id === optionsConfigSelectedMenuId) : null
+  const optionsConfigDraftGroupsParsed = React.useMemo(
+    () => parseOptionGroupsFromText(optionsConfigGroupsDraft),
+    [optionsConfigGroupsDraft]
+  )
+
+  React.useEffect(() => {
+    if (!optionsConfigSelectedMenuId) return
+    setOptionsConfigGroupRulesDraft((prev) => normalizeOptionSelectionConfig(optionsConfigDraftGroupsParsed, prev))
+  }, [optionsConfigSelectedMenuId, optionsConfigDraftGroupsParsed])
 
   const optionsConfigStepGroups = React.useMemo(() => {
     if (!optionsConfigSelectedMenuId) return [] as string[]
@@ -1008,6 +1049,7 @@ export default function PosMenusPage() {
     const groups = optionsConfigSelectedMenu.optionSelectionGroups || []
     const hasCorrect = groups.length >= 2 && groups[0] === "size" && groups[1] === "part"
     if (hasCorrect) return
+    const nextConfig = normalizeOptionSelectionConfig(["size", "part"], optionsConfigSelectedMenu.optionSelectionConfig)
     const res = await savePosMenu({
       id: optionsConfigSelectedMenuId,
       code: optionsConfigSelectedMenu.code,
@@ -1020,12 +1062,14 @@ export default function PosMenusPage() {
       vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
       isActive: optionsConfigSelectedMenu.isActive ?? true,
       optionSelectionGroups: ["size", "part"],
+      optionSelectionConfig: nextConfig,
       isBanban: optionsConfigSelectedMenu.isBanban ?? false,
     })
     if (res.success) {
       setMenus((prev) =>
-        prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: ["size", "part"] } : m))
+        prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: ["size", "part"], optionSelectionConfig: nextConfig } : m))
       )
+      setOptionsConfigGroupRulesDraft(nextConfig)
     }
   }, [optionsConfigSelectedMenuId, optionsConfigSelectedMenu])
 
@@ -1037,6 +1081,7 @@ export default function PosMenusPage() {
       return
     }
     const parsed = parseOptionGroupsFromText(optionsConfigGroupsDraft)
+    const nextConfig = normalizeOptionSelectionConfig(parsed, optionsConfigGroupRulesDraft)
     setOptionsConfigApplyingGroups(true)
     try {
       const res = await savePosMenu({
@@ -1052,12 +1097,14 @@ export default function PosMenusPage() {
         vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
         isActive: optionsConfigSelectedMenu.isActive ?? true,
         optionSelectionGroups: parsed,
+        optionSelectionConfig: nextConfig,
         isBanban: optionsConfigSelectedMenu.isBanban ?? false,
       })
       if (res.success) {
         setMenus((prev) =>
-          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: parsed } : m))
+          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: parsed, optionSelectionConfig: nextConfig } : m))
         )
+        setOptionsConfigGroupRulesDraft(nextConfig)
         setOptionsConfigNewStepValues({})
         await appAlert(t("msg_save_success") || "저장되었습니다.")
       } else {
@@ -1078,6 +1125,7 @@ export default function PosMenusPage() {
     }
     const cleaned = preset.map((x) => String(x).trim()).filter(Boolean)
     if (cleaned.length === 0) return
+    const nextConfig = normalizeOptionSelectionConfig(cleaned, optionsConfigGroupRulesDraft)
     setOptionsConfigGroupsDraft(cleaned.join(", "))
     setOptionsConfigApplyingGroups(true)
     try {
@@ -1094,12 +1142,14 @@ export default function PosMenusPage() {
         vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
         isActive: optionsConfigSelectedMenu.isActive ?? true,
         optionSelectionGroups: cleaned,
+        optionSelectionConfig: nextConfig,
         isBanban: optionsConfigSelectedMenu.isBanban ?? false,
       })
       if (res.success) {
         setMenus((prev) =>
-          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: cleaned } : m))
+          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: cleaned, optionSelectionConfig: nextConfig } : m))
         )
+        setOptionsConfigGroupRulesDraft(nextConfig)
         setOptionsConfigNewStepValues({})
         await appAlert(t("msg_save_success") || "저장되었습니다.")
       } else {
@@ -1418,6 +1468,7 @@ export default function PosMenusPage() {
           vatIncluded: menu.vatIncluded ?? true,
           isActive: menu.isActive ?? true,
           optionSelectionGroups: ["size", "part"],
+          optionSelectionConfig: normalizeOptionSelectionConfig(["size", "part"], menu.optionSelectionConfig),
         })
         if (!saveMenuRes.success) {
           throw new Error(`메뉴 ${menu.code} 저장 실패: ${saveMenuRes.message}`)
@@ -3166,6 +3217,72 @@ export default function PosMenusPage() {
                             {t("posOptionConfigPresetSet3") || "세트 3단: 메인+사이드+음료 (저장까지)"}
                           </Button>
                         </div>
+                        {optionsConfigDraftGroupsParsed.length > 0 ? (
+                          <div className="rounded border bg-background p-2 space-y-2">
+                            <p className="text-[11px] font-medium">{t("posOptionSelectionRules")}</p>
+                            <p className="text-[10px] text-muted-foreground leading-snug">{t("posOptionGrabGroupTitleExplainShort")}</p>
+                            <p className="text-[10px] text-muted-foreground leading-snug">{t("posOptionGrabDeliverySyncHint")}</p>
+                            {optionsConfigDraftGroupsParsed.map((groupKey) => {
+                              const row =
+                                optionsConfigGroupRulesDraft.find((x) => x.key === groupKey) ||
+                                ({ key: groupKey, label: groupKey, required: true, minSelect: 1, maxSelect: 1 } as PosOptionSelectionGroupConfig)
+                              const ruleValue = row.required === false ? "optional" : "required"
+                              return (
+                                <div key={groupKey} className="grid grid-cols-1 gap-2 rounded border p-2 md:grid-cols-3">
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionGroupKeyLabel")}</p>
+                                    <Input className="h-8 text-xs font-mono" value={groupKey} disabled aria-readonly title={t("posOptionSelectionGroupKeyHint")} />
+                                    <p className="text-[9px] leading-tight text-muted-foreground">{t("posOptionSelectionGroupKeyHint")}</p>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionStepLabelField")}</p>
+                                    <Input
+                                      className="h-8 text-xs"
+                                      value={String(row.label ?? groupKey)}
+                                      onChange={(e) => {
+                                        const v = e.target.value
+                                        setOptionsConfigGroupRulesDraft((prev) =>
+                                          normalizeOptionSelectionConfig(
+                                            optionsConfigDraftGroupsParsed,
+                                            prev.map((x) => (x.key === groupKey ? { ...x, label: v } : x))
+                                          )
+                                        )
+                                      }}
+                                      disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionRuleFieldLabel")}</p>
+                                    <Select
+                                      value={ruleValue}
+                                      onValueChange={(v) => {
+                                        const nextRequired = v !== "optional"
+                                        setOptionsConfigGroupRulesDraft((prev) =>
+                                          normalizeOptionSelectionConfig(
+                                            optionsConfigDraftGroupsParsed,
+                                            prev.map((x) =>
+                                              x.key === groupKey
+                                                ? { ...x, required: nextRequired, minSelect: nextRequired ? 1 : 0, maxSelect: 1 }
+                                                : x
+                                            )
+                                          )
+                                        )
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs" disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="required">{t("posOptionSelectionRuleExactlyOne")}</SelectItem>
+                                        <SelectItem value="optional">{t("posOptionSelectionRuleOptionalZeroOrOne")}</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : null}
                         <p className="text-[10px] text-muted-foreground">
                           {t("posOptionConfigStepsSaveHint") ||
                             "프리셋은 단계를 DB에 바로 저장합니다. 수동 입력은 쉼표·줄바꿈으로 구분 후 [단계 저장]을 누르세요. 그다음 아래에서 조합을 추가합니다."}
@@ -3179,20 +3296,18 @@ export default function PosMenusPage() {
                             disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
                             onClick={() => void handleApplyOptionPresetAndSave(["set_main"])}
                           >
-                            단일선택: set_main (3개 중 1개)
+                            {t("posOptionConfigPresetSingleSetMain")}
                           </Button>
                         </div>
                       </div>
                       {optionsConfigStepGroups.length === 1 && optionsConfigStepGroups[0] === "set_main" ? (
                         <div className="rounded border p-3 bg-muted/15 space-y-2">
-                          <p className="text-xs font-medium">set_main 빠른 생성 (예: banban chicken 3중1)</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            메인 후보를 쉼표로 입력하면 옵션을 한 번에 만듭니다. 예: 후라이드, 양념, 간장
-                          </p>
+                          <p className="text-xs font-medium">{t("posOptionConfigSetMainQuickTitle")}</p>
+                          <p className="text-[10px] text-muted-foreground">{t("posOptionConfigSetMainQuickHint")}</p>
                           <div className="flex flex-wrap items-end gap-2">
                             <Input
                               className="h-8 min-w-[260px] flex-1 text-xs"
-                              placeholder="후라이드, 양념, 간장"
+                              placeholder={t("posOptionConfigSetMainQuickPlaceholder")}
                               value={optionsConfigSetMainQuickValues}
                               onChange={(e) => setOptionsConfigSetMainQuickValues(e.target.value)}
                               disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
@@ -3205,7 +3320,7 @@ export default function PosMenusPage() {
                               onClick={() => void handleQuickCreateSetMainOptions()}
                             >
                               <Plus className="h-3.5 w-3.5 mr-1" />
-                              3중1 옵션 생성
+                              {t("posOptionConfigSetMainQuickCreateBtn")}
                             </Button>
                           </div>
                         </div>

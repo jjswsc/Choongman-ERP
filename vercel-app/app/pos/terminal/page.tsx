@@ -367,13 +367,24 @@ function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView>
  * 카트 줄 id가 과거에 중복이면 `find`로 잘못 붙을 수 있어, **동일 id가 터미널에 있으면 터미널 수량을 단일 소스로** 쓴다.
  */
 function reconcilePayloadItemsWithTerminalCart<
-  T extends { id?: unknown; quantity?: unknown; qty?: unknown },
+  T extends { id?: unknown; quantity?: unknown; qty?: unknown; menuId?: unknown; optionId?: unknown },
 >(payloadItems: T[] | undefined | null, terminalLines: OrderItem[]): T[] {
   return (payloadItems || []).map((it) => {
     const hit = (terminalLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
     if (hit) {
       const q = resolveCartLineQuantityForSave(hit as { quantity?: unknown; qty?: unknown })
-      return { ...it, quantity: q }
+      const mid = String(
+        (it as { menuId?: unknown }).menuId ?? hit.menuId ?? ''
+      ).trim()
+      const oid = String(
+        (it as { optionId?: unknown }).optionId ?? hit.optionId ?? ''
+      ).trim()
+      return {
+        ...it,
+        quantity: q,
+        ...(mid ? { menuId: mid } : {}),
+        ...(oid ? { optionId: oid } : {}),
+      }
     }
     const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
     if (Number.isFinite(raw) && raw > 0) return it

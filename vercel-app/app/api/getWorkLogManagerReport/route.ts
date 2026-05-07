@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { resolveWorkLogFilterNameFromEmployeeIdParam } from '@/lib/work-log-name-server'
+import {
+  resolveWorkLogFilterNameFromEmployeeIdParam,
+  workLogsOrEmployeeIdOrNameFilter,
+} from '@/lib/work-log-name-server'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -21,9 +24,14 @@ export async function GET(req: NextRequest) {
       filters.push(`dept=eq.${encodeURIComponent(dept)}`)
     }
     if (employee && employee !== 'all') {
-      const resolved =
-        (await resolveWorkLogFilterNameFromEmployeeIdParam(employee)) || String(employee).trim()
-      if (resolved) filters.push(`name=eq.${encodeURIComponent(resolved)}`)
+      const id = Number.parseInt(String(employee).trim(), 10)
+      const resolvedFromId = await resolveWorkLogFilterNameFromEmployeeIdParam(employee)
+      if (resolvedFromId && Number.isFinite(id) && id > 0) {
+        filters.push(workLogsOrEmployeeIdOrNameFilter(id, resolvedFromId))
+      } else {
+        const nameOnly = resolvedFromId || String(employee).trim()
+        if (nameOnly) filters.push(`name=eq.${encodeURIComponent(nameOnly)}`)
+      }
     }
     if (status && status !== 'all') {
       filters.push(`manager_check=eq.${encodeURIComponent(status)}`)
@@ -34,7 +42,7 @@ export async function GET(req: NextRequest) {
       (await supabaseSelectFilter('work_logs', filterStr, {
         order: 'log_date.asc',
         limit: 5000,
-        select: 'id,log_date,dept,name,content,progress,status,priority,manager_check,manager_comment',
+        select: 'id,log_date,dept,name,employee_id,content,progress,status,priority,manager_check,manager_comment',
       })) || []
 
     const result = rows.map((r: Record<string, unknown>) => ({

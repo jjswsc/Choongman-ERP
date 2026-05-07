@@ -1512,11 +1512,19 @@ export async function getWorkLogOfficeOptions() {
   }
 }
 
-export async function getWorkLogData(params: { dateStr: string; name: string }) {
+export async function getWorkLogData(params: {
+  dateStr: string
+  name: string
+  /** 있으면 이름 매칭보다 우선(employees.id) */
+  employeeId?: number
+}) {
   const q = new URLSearchParams({
     dateStr: params.dateStr,
     name: params.name,
   })
+  if (params.employeeId != null && params.employeeId > 0) {
+    q.set('employeeId', String(params.employeeId))
+  }
   const res = await apiFetchWithOffline(`/api/getWorkLogData?${q}`)
   const raw: unknown = await res.json()
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -1534,6 +1542,7 @@ export async function saveWorkLogData(params: {
   date: string
   name: string
   logs: WorkLogItem[]
+  employeeId?: number
 }) {
   const res = await apiFetchWithOffline('/api/saveWorkLogData', {
     method: 'POST',
@@ -1547,6 +1556,7 @@ export async function submitDailyClose(params: {
   date: string
   name: string
   logs: WorkLogItem[]
+  employeeId?: number
 }) {
   const res = await apiFetchWithOffline('/api/submitDailyClose', {
     method: 'POST',
@@ -5527,6 +5537,8 @@ export interface PosMenu {
   soldOutDate?: string | null
   /** 옵션 단계별 선택 그룹. 예: ["size","bone"] → 1단계 사이즈, 2단계 뼈/순살 */
   optionSelectionGroups?: string[]
+  /** 그룹별 선택 규칙(1단계): required/optional + 최대 1개 선택 */
+  optionSelectionConfig?: PosOptionSelectionGroupConfig[]
   /** 주방: null=설정·카테고리 따름, 0=주방 미인쇄, 1~3=해당 주방 */
   kitchenPrinter?: number | null
   /** 조리 시간(분), 예상 완성 시간/KDS 등 활용 */
@@ -5539,6 +5551,14 @@ export interface PosMenu {
   descriptionDefault?: string
   descriptionDelivery?: string | null
   descriptionTable?: string | null
+}
+
+export interface PosOptionSelectionGroupConfig {
+  key: string
+  label?: string
+  required?: boolean
+  minSelect?: number
+  maxSelect?: number
 }
 
 export interface PosMenuOption {
@@ -6201,6 +6221,7 @@ export async function savePosMenu(
     isActive?: boolean
     sortOrder?: number
     optionSelectionGroups?: string[]
+    optionSelectionConfig?: PosOptionSelectionGroupConfig[]
     kitchenPrinter?: number | null
     cookingTimeMin?: number | null
     isBanban?: boolean

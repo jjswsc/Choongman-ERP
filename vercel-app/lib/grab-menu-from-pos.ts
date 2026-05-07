@@ -28,6 +28,8 @@ type MenuRow = {
   description_default?: string
   description_delivery?: string | null
   description_table?: string | null
+  /** POS 옵션 그룹 규칙 (Grab modifierGroups selectionRange에 반영) */
+  option_selection_config?: unknown
 }
 
 type OptionRow = {
@@ -52,6 +54,81 @@ type ModifierGroupBucket = {
   sourceGroupName: string
   firstSort: number
   rows: OptionRow[]
+}
+
+type OptionSelectionConfigEntry = {
+  key: string
+  label: string
+  required: boolean
+  minSelect: number
+  maxSelect: number
+}
+
+function parseOptionSelectionConfigEntries(raw: unknown): OptionSelectionConfigEntry[] {
+  if (!Array.isArray(raw)) return []
+  const out: OptionSelectionConfigEntry[] = []
+  for (const cfg of raw) {
+    if (!cfg || typeof cfg !== 'object') continue
+    const o = cfg as Record<string, unknown>
+    const key = String(o.key ?? '').trim()
+    if (!key) continue
+    const label = String(o.label ?? '').trim() || key
+    const required = o.required === true
+    const minRaw = Number(o.minSelect)
+    const maxRaw = Number(o.maxSelect)
+    const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : required ? 1 : 0
+    const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
+    const maxClamped = Math.max(1, maxSelect)
+    const minClamped = Math.min(minSelect, maxClamped)
+    out.push({ key, label, required, minSelect: minClamped, maxSelect: maxClamped })
+  }
+  return out
+}
+
+/** 버킷 그룹명(옵션명 접두)과 POS에 저장한 key·label 중 하나가 같으면 규칙 적용 */
+function resolveOptionSelectionConfigForBucket(
+  sourceGroupName: string,
+  entries: OptionSelectionConfigEntry[]
+): OptionSelectionConfigEntry | null {
+  if (!entries.length) return null
+  const g = String(sourceGroupName || '').trim().toLowerCase()
+  if (!g) return null
+  for (const e of entries) {
+    if (e.key.trim().toLowerCase() === g) return e
+  }
+  for (const e of entries) {
+    if (e.label.trim().toLowerCase() === g) return e
+  }
+  return null
+}
+
+function grabSelectionRangeForBucket(params: {
+  rows: OptionRow[]
+  groupName: string
+  configEntry: OptionSelectionConfigEntry | null
+  forceSingleSelectLegacy: boolean
+}): { min: number; max: number; groupDisplayName: string } {
+  const n = params.rows.length
+  const cap = Math.max(1, Math.min(10, n))
+  const baseName = String(params.groupName || '').trim() || 'Options'
+  if (params.configEntry) {
+    const min = Math.max(0, Math.floor(params.configEntry.minSelect))
+    let max = Math.max(1, Math.floor(params.configEntry.maxSelect))
+    max = Math.min(max, cap)
+    const minC = Math.min(min, max)
+    const label = String(params.configEntry.label || '').trim()
+    return {
+      min: minC,
+      max,
+      groupDisplayName: (label || baseName).slice(0, 60),
+    }
+  }
+  const forceSingle = params.forceSingleSelectLegacy
+  return {
+    min: 0,
+    max: forceSingle ? 1 : cap,
+    groupDisplayName: baseName.slice(0, 60),
+  }
 }
 
 function normalizeCategory(raw: unknown): string {
@@ -337,11 +414,13 @@ function flattenSectionsToSingle(
 
 async function loadMenus(): Promise<MenuRow[]> {
   const colsAll =
+    'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table,option_selection_config'
+  const colsAllNoConfig =
     'id,code,name,category,category_main,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table'
   const colsWithoutDelivery =
     'id,code,name,category,category_main,price,image,vat_included,is_active,sort_order,sold_out_date,is_banban,description_default,description_delivery,description_table'
   const colsBase = 'id,code,name,category,category_main,price,is_active,sort_order,is_banban'
-  for (const cols of [colsAll, colsWithoutDelivery, colsBase]) {
+  for (const cols of [colsAll, colsAllNoConfig, colsWithoutDelivery, colsBase]) {
     try {
       const rows = (await supabaseSelectAllPages('pos_menus', {
         order: 'sort_order.asc,name.asc',
@@ -474,8 +553,7 @@ export async function buildGrabMenuFromPos(params: {
 
   const storeGuess = resolveStoreCodeFromGrabMerchant(params.merchantID, params.partnerMerchantID)
   const resolved = await resolvePolicyBundleForGrabMenu(storeGuess)
-  const storeCode = resolved.storeCode
-  const policyBundle = resolved.policyBundle
+  const { policyBundle } = resolved
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])
   const categoryOrderMap = buildCategoryOrderMap(policyBundle?.categoryOrders || [])
   const sectionOrderMap = new Map<string, number>()
@@ -546,6 +624,7 @@ export async function buildGrabMenuFromPos(params: {
       return String(a.name ?? '').localeCompare(String(b.name ?? ''))
     })
     const items = sortedMenus.map((menu, itemIndex) => {
+      const selectionConfigEntries = parseOptionSelectionConfigEntries(menu.option_selection_config)
       const menuId = Number(menu.id ?? 0)
       const policy = menuPolicyMap.get(menuId)
       const itemId = buildGrabItemId(menu, itemIndex)
@@ -589,13 +668,20 @@ export async function buildGrabMenuFromPos(params: {
           })
           const groupName = String(bucket.sourceGroupName || '').trim() || 'Options'
           const forceSingleSelect = shouldForceSingleSelectGroup(groupName, rows)
+          const cfgBucket = resolveOptionSelectionConfigForBucket(bucket.sourceGroupName, selectionConfigEntries)
+          const range = grabSelectionRangeForBucket({
+            rows,
+            groupName,
+            configEntry: cfgBucket,
+            forceSingleSelectLegacy: forceSingleSelect,
+          })
           return {
             id: gidx === 0 ? `${itemId}-mods` : `${itemId}-mods-${gidx + 1}`,
-            name: groupName.slice(0, 60),
+            name: range.groupDisplayName,
             sequence: gidx + 1,
             availableStatus: 'AVAILABLE' as const,
-            selectionRangeMin: 0,
-            selectionRangeMax: forceSingleSelect ? 1 : Math.max(1, Math.min(10, rows.length)),
+            selectionRangeMin: range.min,
+            selectionRangeMax: range.max,
             modifiers: rows.map((opt, idx) => {
                   const modId = normalizeId(
                     `mod-${String(opt.id ?? '')}-${itemId}-${idx + 1}`,

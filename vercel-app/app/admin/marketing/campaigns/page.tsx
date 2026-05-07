@@ -3162,7 +3162,7 @@ export default function MarketingCampaignsPage() {
                       {c.budgetTotal > 0 && <span>{tr("예산", "Budget", "งบประมาณ")}: ฿{c.budgetTotal.toLocaleString()}</span>}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
                     <span className="mr-1 text-[10px] font-medium text-muted-foreground">{tr("연결", "Links", "ลิงก์")}:</span>
                     <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
                       title={tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}

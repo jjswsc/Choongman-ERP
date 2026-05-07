@@ -7,6 +7,7 @@ import {
 } from '@/lib/supabase-server'
 import { addBangkokCalendarDays } from '@/lib/bangkok-time'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
+import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -16,39 +17,47 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) || {}
     const date = String(body.date || '').trim()
     const name = String(body.name || '').trim()
+    const rawEmployeeId = (body as { employeeId?: unknown; employee_id?: unknown }).employeeId ?? (body as { employee_id?: unknown }).employee_id
     const logs = Array.isArray(body.logs)
       ? body.logs
       : body.jsonStr
         ? JSON.parse(body.jsonStr)
         : []
 
-    const staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick,job' })) || []) as { name?: string; nick?: string; job?: string }[]
+    const staffList =
+      ((await supabaseSelect('employees', { order: 'id.asc', select: 'id,name,nick,job' })) || []) as {
+        id?: number
+        name?: string
+        nick?: string
+        job?: string
+      }[]
     let savedName = name
     let savedDept = 'Staff'
-    const sk = name.toLowerCase().replace(/\s+/g, '')
-    for (let i = 0; i < staffList.length; i++) {
-      const fn = String(staffList[i].name || '').toLowerCase().replace(/\s+/g, '')
-      const nn = String(staffList[i].nick || '').toLowerCase().replace(/\s+/g, '')
-      if (sk === fn || (nn && sk === nn)) {
-        savedName = workLogStoredNameFromEmployeeMaster(staffList[i].name)
-        savedDept = staffList[i].job || 'Staff'
-        break
-      }
-    }
-    if (savedName === name) {
+    let savedEmployeeId: number | null = null
+
+    const byId = await resolveWorkLogEmployeeById(rawEmployeeId)
+    if (byId) {
+      savedName = byId.name
+      savedDept = byId.job || 'Staff'
+      savedEmployeeId = byId.id
+    } else {
+      const sk = name.toLowerCase().replace(/\s+/g, '')
       for (let i = 0; i < staffList.length; i++) {
         const fn = String(staffList[i].name || '').toLowerCase().replace(/\s+/g, '')
         const nn = String(staffList[i].nick || '').toLowerCase().replace(/\s+/g, '')
-        const nickMatch = nn && nn.length >= 3 && sk.includes(nn)
-        if (sk.includes(fn) || fn.includes(sk) || nickMatch) {
+        if (sk === fn || (nn && sk === nn)) {
           savedName = workLogStoredNameFromEmployeeMaster(staffList[i].name)
           savedDept = staffList[i].job || 'Staff'
+          const eid = staffList[i].id != null ? Math.floor(Number(staffList[i].id)) : 0
+          if (Number.isFinite(eid) && eid > 0) savedEmployeeId = eid
           break
         }
       }
     }
 
     const nextDateStr = addBangkokCalendarDays(date, 1)
+    const employeePatch =
+      savedEmployeeId != null ? { employee_id: savedEmployeeId } : {}
 
     for (let idx = 0; idx < logs.length; idx++) {
       const item = logs[idx]
@@ -65,6 +74,7 @@ export async function POST(req: NextRequest) {
           await supabaseUpdate('work_logs', String(item.id), {
             progress: 100,
             status: 'Finish',
+            ...employeePatch,
           })
         } else {
           await supabaseInsert('work_logs', {
@@ -78,6 +88,7 @@ export async function POST(req: NextRequest) {
             priority: item.priority || '',
             manager_check: '대기',
             manager_comment: '',
+            ...employeePatch,
           })
         }
       } else {
@@ -85,6 +96,7 @@ export async function POST(req: NextRequest) {
           await supabaseUpdate('work_logs', String(item.id), {
             progress,
             status: 'Carry Over',
+            ...employeePatch,
           })
         } else {
           await supabaseInsert('work_logs', {
@@ -98,6 +110,7 @@ export async function POST(req: NextRequest) {
             priority: item.priority || '',
             manager_check: '대기',
             manager_comment: '',
+            ...employeePatch,
           })
         }
         await supabaseInsert('work_logs', {
@@ -115,6 +128,7 @@ export async function POST(req: NextRequest) {
           priority: item.priority || '',
           manager_check: '대기',
           manager_comment: '⚡ 이월됨 (' + date + ' 부터)',
+          ...employeePatch,
         })
       }
     }

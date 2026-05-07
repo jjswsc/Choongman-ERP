@@ -47,9 +47,11 @@ const PRIORITIES = [
 
 interface WorklogMyProps {
   userName: string
+  /** 로그인 세션의 employees.id — 저장·조회 시 이름 오매칭 방지 */
+  employeeId?: number
 }
 
-export function WorklogMy({ userName }: WorklogMyProps) {
+export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [startStr, setStartStr] = React.useState(() => getBangkokTodayDateString())
@@ -103,7 +105,11 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     if (!selectedStaff) return
     setLoading(true)
     try {
-      const res = await getWorkLogData({ dateStr: endStr, name: selectedStaff })
+      const res = await getWorkLogData({
+        dateStr: endStr,
+        name: selectedStaff,
+        ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
+      })
       setData(res)
       setLocalFinish(res.finish || [])
       setLocalContinue((res.continueItems || []).map((it) => ({ ...it, progress: 0 })))
@@ -116,7 +122,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     } finally {
       setLoading(false)
     }
-  }, [endStr, selectedStaff])
+  }, [endStr, selectedStaff, employeeId])
 
   const handleSearch = () => {
     setHasSearched(true)
@@ -291,6 +297,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         date: endStr,
         name: selectedStaff,
         logs: allLogs,
+        ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
       })
       if (res.success) {
         loadData()
@@ -315,6 +322,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         date: endStr,
         name: selectedStaff,
         logs: toClose,
+        ...(employeeId != null && employeeId > 0 ? { employeeId } : {}),
       })
       if (res.success) {
         loadData()

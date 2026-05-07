@@ -250,6 +250,15 @@ export function canAccessPosSettlement(role: string): boolean {
 }
 
 /**
+ * 결산 화면에서 주문·LinkPOS로 채워진 QR/배달앱/기타(AUTO) 상세 금액을 수동으로 바꿀 수 있는지.
+ * 매장 직원이 숫자만 맞추는 식의 조작을 막기 위해 기본은 본사(Office)·회계만 허용.
+ * 카드 브랜드별 입력(EDC 대사)은 별도 정책으로 계속 매장에서 편집 가능.
+ */
+export function canOverridePosSettlementAutoPaymentBreakdown(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role)
+}
+
+/**
  * POS 홈에서 관리자(/admin)로 이동하는 버튼 표시 — 본사(디렉터/오피스/CEO/HR) 및 매장 매니저만.
  * 가맹점주·POS·회계·일반 staff 등은 숨김.
  */

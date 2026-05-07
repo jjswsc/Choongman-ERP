@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS work_logs (
   log_date DATE NOT NULL,
   dept TEXT DEFAULT '',
   name TEXT NOT NULL,
+  employee_id INTEGER,
   content TEXT DEFAULT '',
   progress NUMERIC(5,2) DEFAULT 0,
   status TEXT DEFAULT 'Today',
@@ -247,6 +248,7 @@ CREATE TABLE IF NOT EXISTS work_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_work_logs_log_date ON work_logs(log_date);
 CREATE INDEX IF NOT EXISTS idx_work_logs_name ON work_logs(name);
+CREATE INDEX IF NOT EXISTS idx_work_logs_employee_id ON work_logs(employee_id);
 
 -- 매장방문 (기존 시트 "매장방문_DB") - ID, 날짜, 이름, 방문매장, 구분, 목적, 시간, 위도, 경도, 체류시간, 비고
 CREATE TABLE IF NOT EXISTS store_visits (

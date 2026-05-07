@@ -58,6 +58,8 @@ export type BuildKitchenSlipGroupsOpts = {
   kitchenPrinterByMenuId?: Record<string, KitchenRouteValue | null | undefined>
   /** 구성 메뉴명 표시용 (promoItems 펼칠 때) */
   menuNameByMenuId?: Record<string, string>
+  /** 메뉴 코드(예: CH001) — 주방지 표기/복원 힌트 */
+  menuCodeByMenuId?: Record<string, string>
   /**
    * true: 프로모 줄에 promoItems 가 있으면 구성 메뉴별로 나누어 주방 라우팅(기본 true)
    * false: 예전처럼 프로모 한 줄 전체를 한 주방으로만
@@ -75,6 +77,7 @@ function clampPrinterIndex(idx: KitchenPrinterIndex, mode: number): KitchenPrint
 type MenuLike = {
   id: string
   name?: string
+  code?: string
   category?: string
   categoryMain?: string
   kitchenPrinter?: number | null
@@ -107,12 +110,14 @@ export function buildKitchenSlipGroupOpts(
   const categoryMainByMenuId: Record<string, string> = {}
   const kitchenPrinterByMenuId: Record<string, KitchenRouteValue> = {}
   const menuNameByMenuId: Record<string, string> = {}
+  const menuCodeByMenuId: Record<string, string> = {}
   for (const m of menus) {
     const id = String(m.id ?? '')
     if (!id) continue
     categoryByMenuId[id] = String(m.category ?? '').trim()
     categoryMainByMenuId[id] = String(m.categoryMain ?? '').trim()
     menuNameByMenuId[id] = String(m.name ?? '').trim()
+    menuCodeByMenuId[id] = String(m.code ?? '').trim()
     const kp = m.kitchenPrinter
     if (kp === 0 || kp === 1 || kp === 2 || kp === 3) kitchenPrinterByMenuId[id] = kp
   }
@@ -130,6 +135,7 @@ export function buildKitchenSlipGroupOpts(
     ),
     kitchenPrinterByMenuId,
     menuNameByMenuId,
+    menuCodeByMenuId,
     labels,
   }
 }
@@ -191,6 +197,7 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
 ): KitchenSlipGroupRow<T>[] {
   const splitPromo = opts.splitPromoKitchenLines !== false
   const nameMap = opts.menuNameByMenuId || {}
+  const codeMap = opts.menuCodeByMenuId || {}
   const expanded = expandPromoLinesForKitchenRouting(items, nameMap, splitPromo) as T[]
 
   const catMap = opts.categoryByMenuId || {}
@@ -208,6 +215,8 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
     configuredMode === 1 ? 1 : Math.min(3, Math.max(configuredMode, printerHintMax))
   const menuIdByName: Record<string, string> = {}
   const ambiguousMenuNames = new Set<string>()
+  const menuIdByCode: Record<string, string> = {}
+  const ambiguousMenuCodes = new Set<string>()
   for (const [mid, nm] of Object.entries(nameMap)) {
     const key = String(nm || '').trim().toLowerCase()
     if (!key) continue
@@ -216,6 +225,21 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
       continue
     }
     menuIdByName[key] = mid
+    const codeKey = String(codeMap[mid] || '').trim().toLowerCase()
+    if (codeKey) {
+      if (menuIdByCode[codeKey] && menuIdByCode[codeKey] !== mid) ambiguousMenuCodes.add(codeKey)
+      else menuIdByCode[codeKey] = mid
+    }
+  }
+
+  const extractCodeFromName = (rawName: string): string => {
+    const name = String(rawName || '').trim()
+    if (!name) return ''
+    const lead = name.match(/^\[([^\]]+)\]/)
+    if (lead?.[1]) return String(lead[1]).trim().toLowerCase()
+    const tail = name.match(/\(([^)]+)\)\s*$/)
+    if (tail?.[1]) return String(tail[1]).trim().toLowerCase()
+    return ''
   }
 
   const resolveMenuIdFromComposite = (rawId: string): string => {
@@ -251,11 +275,42 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
         ''
     ).trim()
     if (rawMenuId) return resolveMenuIdFromComposite(rawMenuId)
-    const itemNameKey = String((it as KitchenSlipRoutingItem).name ?? '').trim().toLowerCase()
+
+    /**
+     * items_json/menuId 미보유 줄: 표시명이 아닌 카트 줄 id 우선 해석 후에만 이름 매칭.
+     * - 메뉴 UUID-옵션UUID 형태 id는 catMap/kpMap에 포함된 접두 매칭으로 정확한 행만 가리킨다.
+     * - 이름으로만 같은 상품명의 다른 레코드(주방 미출력=0)·비노출 메뉴 행 UUID에 연결되는 경우 영수증엔 노출되어도 주방에서 빠질 수 있다.
+     * - Grab 등 연동 줄(id가 grab:…)은 POS 메뉴 UUID와 무관하여 이름 매칭이 오판만 만든다 → 이름 매칭 생략(주방=기본 출력).
+     */
+    const idStr = String((it as KitchenSlipRoutingItem).id ?? '').trim()
+    if (/^grab:/i.test(idStr)) {
+      return ''
+    }
+
+    const fromCartId = resolveMenuIdFromComposite(idStr)
+    if (fromCartId && (fromCartId in kpMap || fromCartId in catMap)) return fromCartId
+
+    const itemName = String((it as KitchenSlipRoutingItem).name ?? '').trim()
+    const codeFromName = extractCodeFromName(itemName)
+    if (codeFromName && !ambiguousMenuCodes.has(codeFromName) && menuIdByCode[codeFromName]) {
+      return resolveMenuIdFromComposite(menuIdByCode[codeFromName])
+    }
+    const itemNameKey = itemName.toLowerCase()
     if (itemNameKey && !ambiguousMenuNames.has(itemNameKey) && menuIdByName[itemNameKey]) {
       return resolveMenuIdFromComposite(menuIdByName[itemNameKey])
     }
-    return resolveMenuIdFromComposite(String(it.id ?? ""))
+    return fromCartId
+  }
+
+  const withKitchenCodeName = (it: T, mid: string): T => {
+    const code = String(codeMap[mid] || '').trim()
+    if (!code) return it
+    const currentName = String((it as KitchenSlipRoutingItem).name ?? '').trim()
+    if (!currentName) return it
+    const lower = currentName.toLowerCase()
+    const codeLower = code.toLowerCase()
+    if (lower.startsWith(`[${codeLower}]`) || lower.endsWith(`(${codeLower})`)) return it
+    return { ...it, name: `[${code}] ${currentName}` } as T
   }
   /** 0 = 스킵, 1~3 = 주방 번호 */
   const resolveRoute = (it: T): KitchenRouteValue => {
@@ -271,16 +326,23 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   }
 
   if (mode === 1) {
-    const kept = expanded.filter((it) => resolveRoute(it) !== 0)
+    const kept: T[] = []
+    for (const it of expanded) {
+      const mid = menuIdOf(it)
+      const route = resolveRoute(it)
+      if (route === 0) continue
+      kept.push(withKitchenCodeName(it, mid))
+    }
     if (kept.length === 0) return []
     return [{ label: opts.labels.unified, items: kept, station: 1 }]
   }
 
   const buckets: [T[], T[], T[]] = [[], [], []]
   for (const it of expanded) {
+    const mid = menuIdOf(it)
     const r = resolveRoute(it)
     if (r === 0) continue
-    buckets[r - 1].push(it)
+    buckets[r - 1].push(withKitchenCodeName(it, mid))
   }
   const out: KitchenSlipGroupRow<T>[] = []
   const labelFor = (i: KitchenPrinterIndex) =>

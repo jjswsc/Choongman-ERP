@@ -1634,7 +1634,7 @@ export default function PosPrintersPage() {
                     {menusFilteredForRoute.map((m) => (
                       <KitchenRouteSelectRow
                         key={m.id}
-                        label={`${m.name} (${m.code || m.id})`}
+                        label={`${m.code ? `[${m.code}] ` : ''}${m.name}${m.code ? '' : ` (${m.id})`}`}
                         value={kitchenRouteByMenu[String(m.id)]}
                         maxK={kitchenMode}
                         t={t}

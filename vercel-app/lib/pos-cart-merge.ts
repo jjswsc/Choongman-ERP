@@ -27,6 +27,8 @@ export type MergeCartItemInput = {
   name: string
   price: number
   note?: string
+  menuId?: string
+  optionId?: string | null
   promoId?: string
   promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
@@ -121,5 +123,17 @@ export function mergeCartPanelAddItem(prev: OrderItem[], item: MergeCartItemInpu
     const prevQty = Math.max(1, lineQuantity(existing) || 1)
     return prev.map((p) => (p.id === existing.id ? { ...p, quantity: prevQty + 1 } : p))
   }
-  return [...prev, { id: lineId, name: item.name, price: item.price, quantity: 1 }]
+  const menuIdNew = String(item.menuId ?? '').trim()
+  const optionIdNew = String(item.optionId ?? '').trim()
+  return [
+    ...prev,
+    {
+      id: lineId,
+      name: item.name,
+      price: item.price,
+      quantity: 1,
+      ...(menuIdNew ? { menuId: menuIdNew } : {}),
+      ...(optionIdNew ? { optionId: optionIdNew } : {}),
+    },
+  ]
 }

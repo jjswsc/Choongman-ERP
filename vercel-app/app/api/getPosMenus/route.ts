@@ -5,8 +5,9 @@ import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
 const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_groups'
+const POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG = POS_MENUS_SELECT_WITH_GROUPS + ',option_selection_config'
 const POS_MENUS_SELECT_WITH_ALL =
-  POS_MENUS_SELECT_WITH_GROUPS +
+  POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG +
   ',kitchen_printer,cooking_time_min,is_banban,description_default,description_delivery,description_table'
 const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
@@ -20,6 +21,7 @@ export async function GET() {
     for (const cols of [
       POS_MENUS_SELECT_WITH_ALL_PROMO,
       POS_MENUS_SELECT_WITH_ALL,
+      POS_MENUS_SELECT_WITH_GROUPS_AND_CONFIG,
       POS_MENUS_SELECT_WITH_GROUPS,
       POS_MENUS_SELECT,
       POS_MENUS_SELECT_BASE,
@@ -50,6 +52,7 @@ export async function GET() {
       sort_order?: number
       sold_out_date?: string | null
       option_selection_groups?: unknown
+      option_selection_config?: unknown
       kitchen_printer?: number | null
       cooking_time_min?: number | null
       is_banban?: boolean
@@ -64,6 +67,48 @@ export async function GET() {
       let optionSelectionGroups: string[] = []
       if (Array.isArray(v)) optionSelectionGroups = v
       else if (v && typeof v === 'string') try { optionSelectionGroups = JSON.parse(v) as string[] } catch { /* ignore */ }
+      const c = row.option_selection_config
+      let optionSelectionConfig: { key: string; label?: string; required?: boolean; minSelect?: number; maxSelect?: number }[] = []
+      if (Array.isArray(c)) {
+        optionSelectionConfig = c
+          .map((cfg) => {
+            if (!cfg || typeof cfg !== 'object') return null
+            const o = cfg as Record<string, unknown>
+            const key = String(o.key ?? '').trim()
+            if (!key) return null
+            const label = String(o.label ?? '').trim()
+            const minRaw = Number(o.minSelect)
+            const maxRaw = Number(o.maxSelect)
+            const required = o.required === true
+            const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
+            const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
+            return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
+          })
+          .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+      } else if (c && typeof c === 'string') {
+        try {
+          const arr = JSON.parse(c) as unknown
+          if (Array.isArray(arr)) {
+            optionSelectionConfig = arr
+              .map((cfg) => {
+                if (!cfg || typeof cfg !== 'object') return null
+                const o = cfg as Record<string, unknown>
+                const key = String(o.key ?? '').trim()
+                if (!key) return null
+                const label = String(o.label ?? '').trim()
+                const minRaw = Number(o.minSelect)
+                const maxRaw = Number(o.maxSelect)
+                const required = o.required === true
+                const minSelect = Number.isFinite(minRaw) ? Math.max(0, Math.floor(minRaw)) : (required ? 1 : 0)
+                const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
+                return { key, label: label || key, required, minSelect: Math.min(minSelect, maxSelect), maxSelect }
+              })
+              .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+          }
+        } catch {
+          /* ignore */
+        }
+      }
       const kp = row.kitchen_printer
       const ctm = row.cooking_time_min
       const isBanban = (row as { is_banban?: boolean }).is_banban === true
@@ -82,6 +127,7 @@ export async function GET() {
         sortOrder: Number(row.sort_order) ?? 0,
         soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
         optionSelectionGroups,
+        optionSelectionConfig,
         kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
         isBanban,

@@ -64,7 +64,10 @@ export function WorklogPage() {
 
         <TabsContent value="my" className={adminTabsContentFlushCn}>
           {auth?.user ? (
-            <WorklogMy userName={auth.user} />
+            <WorklogMy
+              userName={auth.user}
+              employeeId={auth.employeeId != null && auth.employeeId > 0 ? auth.employeeId : undefined}
+            />
           ) : (
             <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
               {t("workLogLoginRequired")}

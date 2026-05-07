@@ -8,6 +8,14 @@ export type CartLineForPosOrder = {
   /** 일부 경로·레거시 페이로드는 qty 만 포함할 수 있음 */
   qty?: number
   note?: string
+  /** 터미널·카탈로그 줄의 POS 메뉴 id (주방 라우팅·재조회 안정화) — items_json 에 같이 저장 */
+  menuId?: string
+  menuId1?: string
+  /** 카트·OrderItem 과 items_json 의 option_id1 교차 */
+  optionId?: string
+  optionId1?: string
+  menuId2?: string
+  optionId2?: string
   orderType?: string
   deliveryAppCode?: string
   promoId?: string
@@ -47,6 +55,10 @@ export function resolveCartLineQuantityForSave(line: {
 export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrderItem[] {
   return lines.map((i) => {
     const q = resolveCartLineQuantityForSave(i)
+    const menuIdPrimary = String(i.menuId1 ?? i.menuId ?? '').trim()
+    const optionIdPrimary = String(i.optionId1 ?? i.optionId ?? '').trim()
+    const menuId2 = String(i.menuId2 ?? '').trim()
+    const optionId2 = String(i.optionId2 ?? '').trim()
     return {
       id: i.id,
       name: i.name,
@@ -54,6 +66,10 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
       qty: q,
       quantity: q,
       ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
+      ...(menuIdPrimary ? { menuId1: menuIdPrimary } : {}),
+      ...(optionIdPrimary ? { optionId1: optionIdPrimary } : {}),
+      ...(menuId2 ? { menuId2 } : {}),
+      ...(optionId2 ? { optionId2 } : {}),
       ...(i.orderType ? { orderType: i.orderType } : {}),
       ...(i.deliveryAppCode ? { deliveryAppCode: i.deliveryAppCode } : {}),
       ...(i.promoId

@@ -46,7 +46,7 @@ import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-contex
 import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
-import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
+import { isOfficeRole, canAccessSettings, isAccountingRole } from '@/lib/permissions'
 import { cn, escapeHtml, formatBahtNum } from '@/lib/utils'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
 import { POS_DEMO_ROUTES } from '@/lib/pos-tour/demo-routes'
@@ -348,6 +348,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
   const canSearchAll = isOfficeRole(auth?.role || '')
   const canUnclose = canAccessSettings(auth?.role || '')
+  /** 주문 집계(AUTO) QR·배달·기타 — 매장 역할은 수정 불가(본사·회계만). 데모 튜토리얼은 입력 가능 유지 */
+  const payAutoBreakdownStaffLocked =
+    !isPosDemoFromQuery(searchParams) &&
+    !(isOfficeRole(auth?.role || '') || isAccountingRole(auth?.role || ''))
   const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
 
   /** 결산 인쇄 직후 await 최소화(웹에서 print 제스처 만료 완화) + 수동 인쇄 재사용 */
@@ -1500,6 +1504,12 @@ ${footerStamp}
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
+                    {payAutoBreakdownStaffLocked && autoFilledFlags.qr && (
+                      <p className="mt-2 pl-2 text-[10px] leading-snug text-muted-foreground border-t pt-2">
+                        {t('posSettlementAutoQrLockedHint') ||
+                          'QR·PromptPay 등 금액은 완료 주문·LinkPOS 집계값입니다. 매장 계정에서는 수정할 수 없습니다. 오류 시 본사·회계에서 주문 결제 정정 또는 권한 있는 계정으로만 조정하세요.'}
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-2 pl-2 pt-2 border-t mt-2">
                       {displayQrKeyList.map((k) => (
                         <label key={k} className="flex items-center gap-2 text-xs">
@@ -1516,7 +1526,7 @@ ${footerStamp}
                                 [k]: formatBahtInputDisplay(e.target.value),
                               }))
                             }
-                            disabled={inputsLocked}
+                            disabled={inputsLocked || (payAutoBreakdownStaffLocked && autoFilledFlags.qr)}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
                         </label>
@@ -1551,6 +1561,12 @@ ${footerStamp}
                       {t('posSettlementDeliveryAppIntro') ||
                         '홀에서 배달앱으로 결제한 금액도 결산에서는 「배달앱」 안에 넣되, 아래 두 종류로 나눕니다: 실제 배달 vs 홀(Dine in).'}
                     </p>
+                    {payAutoBreakdownStaffLocked && autoFilledFlags.delivery && (
+                      <p className="mt-2 pl-2 text-[10px] leading-snug text-amber-800/90 dark:text-amber-200/90">
+                        {t('posSettlementAutoDeliveryLockedHint') ||
+                          '배달앱 금액은 완료 주문 집계입니다. 매장 계정에서는 수정할 수 없습니다.'}
+                      </p>
+                    )}
                     <div className="mt-3 space-y-3 rounded-lg border border-border/80 bg-muted/15 p-3">
                       <div>
                         <p className="text-xs font-semibold text-foreground">
@@ -1580,7 +1596,7 @@ ${footerStamp}
                                     [k]: formatBahtInputDisplay(e.target.value),
                                   }))
                                 }
-                                disabled={inputsLocked}
+                                disabled={inputsLocked || (payAutoBreakdownStaffLocked && autoFilledFlags.delivery)}
                               />
                               <span className="text-muted-foreground w-5">฿</span>
                             </label>
@@ -1619,7 +1635,7 @@ ${footerStamp}
                                     [k]: formatBahtInputDisplay(e.target.value),
                                   }))
                                 }
-                                disabled={inputsLocked}
+                                disabled={inputsLocked || (payAutoBreakdownStaffLocked && autoFilledFlags.delivery)}
                               />
                               <span className="text-muted-foreground w-5">฿</span>
                             </label>
@@ -1652,6 +1668,12 @@ ${footerStamp}
                       {t('posSettlementOtherMatchPaymentHint') ||
                         'POS 결제 화면의 「기타」탭·결제 관리의 기타 항목과 같은 줄로 맞춥니다.'}
                     </p>
+                    {payAutoBreakdownStaffLocked && autoFilledFlags.other && (
+                      <p className="mt-2 pl-2 text-[10px] leading-snug text-amber-800/90 dark:text-amber-200/90">
+                        {t('posSettlementAutoOtherLockedHint') ||
+                          '기타 금액이 주문에서 자동 집계된 경우 매장 계정에서는 수정할 수 없습니다.'}
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-2 pl-2 pt-2 border-t mt-2">
                       {OTHER_KEYS.map((k) => (
                         <label key={k} className="flex items-center gap-2 text-xs">
@@ -1668,7 +1690,7 @@ ${footerStamp}
                                 [k]: formatBahtInputDisplay(e.target.value),
                               }))
                             }
-                            disabled={inputsLocked}
+                            disabled={inputsLocked || (payAutoBreakdownStaffLocked && autoFilledFlags.other)}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
                         </label>
@@ -1684,7 +1706,7 @@ ${footerStamp}
                           className="h-8 w-28 text-right tabular-nums"
                           value={otherAmt}
                           onChange={(e) => setOtherAmt(formatBahtInputDisplay(e.target.value))}
-                          disabled={inputsLocked}
+                          disabled={inputsLocked || (payAutoBreakdownStaffLocked && autoFilledFlags.other)}
                         />
                         <span className="w-5">{currencySuffix}</span>
                       </div>

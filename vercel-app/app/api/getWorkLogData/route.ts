@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
+import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 
 function toDateStr(v: string | Date | null): string {
   if (!v) return ''
@@ -34,30 +35,27 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const dateStr = searchParams.get('dateStr') || searchParams.get('date') || ''
     const name = searchParams.get('name') || ''
+    const employeeIdRaw = searchParams.get('employeeId') || searchParams.get('employee_id') || ''
+    const parsedEmployeeId = Math.floor(Number(employeeIdRaw))
+    const hasEmployeeId =
+      String(employeeIdRaw).trim() !== '' && Number.isFinite(parsedEmployeeId) && parsedEmployeeId > 0
 
     const staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick' })) || []) as { name?: string; nick?: string }[]
     let matchedFull = ''
     let matchedNick = ''
     const searchKey = String(name).toLowerCase().replace(/\s+/g, '')
     let matchIdx = -1
-    // 1) 완전 일치 (employees.name 또는 employees.nick과 정확히 일치)
-    for (let k = 0; k < staffList.length; k++) {
-      const fName = String(staffList[k].name || '').toLowerCase().replace(/\s+/g, '')
-      const nName = String(staffList[k].nick || '').toLowerCase().replace(/\s+/g, '')
-      if (searchKey === fName || (nName && searchKey === nName)) {
-        matchIdx = k
-        matchedFull = workLogStoredNameFromEmployeeMaster(staffList[k].name)
-        matchedNick = String(staffList[k].nick || '').trim()
-        break
-      }
-    }
-    // 2) 부분 일치 (닉네임 3자 이상만 - "Mo" 같은 짧은 닉 오매칭 방지)
-    if (matchIdx < 0) {
+
+    const empFromId = hasEmployeeId ? await resolveWorkLogEmployeeById(parsedEmployeeId) : null
+    if (empFromId) {
+      matchIdx = 0
+      matchedFull = empFromId.name
+      matchedNick = empFromId.nick
+    } else {
       for (let k = 0; k < staffList.length; k++) {
         const fName = String(staffList[k].name || '').toLowerCase().replace(/\s+/g, '')
         const nName = String(staffList[k].nick || '').toLowerCase().replace(/\s+/g, '')
-        const nickMatch = nName && nName.length >= 3 && searchKey.includes(nName)
-        if (searchKey.includes(fName) || fName.includes(searchKey) || nickMatch) {
+        if (searchKey === fName || (nName && searchKey === nName)) {
           matchIdx = k
           matchedFull = workLogStoredNameFromEmployeeMaster(staffList[k].name)
           matchedNick = String(staffList[k].nick || '').trim()
@@ -70,6 +68,7 @@ export async function GET(req: NextRequest) {
       id: string
       log_date?: string | Date
       name?: string
+      employee_id?: number | null
       status?: string
       content?: string
       progress?: number
@@ -78,27 +77,28 @@ export async function GET(req: NextRequest) {
       manager_comment?: string
     }
     const rowById = new Map<string, LogRowLite>()
-    const mergeRows = async (key: string) => {
-      if (!key) return
-      const rr = (await supabaseSelectFilter(
-        'work_logs',
-        `name=eq.${encodeURIComponent(key)}`,
-        { order: 'log_date.desc', limit: 2000 }
-      )) as LogRowLite[] | null
+    const mergeRows = async (filter: string) => {
+      const rr = (await supabaseSelectFilter('work_logs', filter, {
+        order: 'log_date.desc',
+        limit: 2000,
+      })) as LogRowLite[] | null
       for (const r of rr || []) {
         const id = String((r as { id?: unknown }).id ?? '').trim()
         if (id && !rowById.has(id)) rowById.set(id, r)
       }
     }
+    if (empFromId) {
+      await mergeRows(`employee_id=eq.${empFromId.id}`)
+    }
     if (matchIdx >= 0) {
-      if (matchedFull) await mergeRows(matchedFull)
+      if (matchedFull) await mergeRows(`name=eq.${encodeURIComponent(matchedFull)}`)
       const nickOk =
         matchedNick &&
         matchedNick !== matchedFull &&
         nickIsUniqueAcrossStaff(staffList, matchedNick)
-      if (nickOk) await mergeRows(matchedNick)
+      if (nickOk) await mergeRows(`name=eq.${encodeURIComponent(matchedNick)}`)
     } else if (name) {
-      await mergeRows(String(name).trim())
+      await mergeRows(`name=eq.${encodeURIComponent(String(name).trim())}`)
     }
     const rows = Array.from(rowById.values()).sort(
       (a, b) => String(b.log_date || '').localeCompare(String(a.log_date || ''))
@@ -112,14 +112,39 @@ export async function GET(req: NextRequest) {
     if (acceptedNames.size === 0 && (matchedFull || name))
       acceptedNames.add(matchedFull || String(name).trim())
 
+    const primaryEmployeeId = empFromId ? empFromId.id : null
+
+    const rowMatchesViewer = (r: { name?: string; employee_id?: number | null }) => {
+      const rowName = String(r.name ?? '').trim()
+      const reRaw = r.employee_id
+      const rowEid = reRaw == null ? NaN : Math.floor(Number(reRaw))
+      if (primaryEmployeeId != null) {
+        if (Number.isFinite(rowEid) && rowEid === primaryEmployeeId) return true
+        if ((!Number.isFinite(rowEid) || reRaw == null) && acceptedNames.has(rowName)) return true
+        return false
+      }
+      return acceptedNames.has(rowName)
+    }
+
     const finish: { id: string; content: string; progress: number; status: string; priority: string; managerCheck: string; managerComment: string }[] = []
     const continueItems: typeof finish = []
     const todayItems: typeof finish = []
 
     for (let i = 0; i < rows.length; i++) {
-      const r = rows[i] as { id: string; log_date: string | Date; name: string; content?: string; progress?: number; status?: string; priority?: string; manager_check?: string; manager_comment?: string }
+      const r = rows[i] as {
+        id: string
+        log_date: string | Date
+        name: string
+        employee_id?: number | null
+        content?: string
+        progress?: number
+        status?: string
+        priority?: string
+        manager_check?: string
+        manager_comment?: string
+      }
       const rowDateStr = toDateStr(r.log_date)
-      if (!rowDateStr || !acceptedNames.has(String(r.name ?? '').trim())) continue
+      if (!rowDateStr || !rowMatchesViewer(r)) continue
       const item = { id: r.id, content: r.content || '', progress: Number(r.progress) || 0, status: String(r.status || ''), priority: r.priority || '', managerCheck: r.manager_check || '', managerComment: r.manager_comment || '' }
       if (rowDateStr === dateStr) {
         if (item.status === 'Finish' || item.progress >= 100) finish.push(item)
@@ -130,9 +155,15 @@ export async function GET(req: NextRequest) {
 
     const existingContent = continueItems.map((x) => x.content)
     for (let j = 0; j < rows.length; j++) {
-      const r2 = rows[j] as { log_date: string | Date; name: string; status?: string; content?: string }
+      const r2 = rows[j] as {
+        log_date: string | Date
+        name: string
+        employee_id?: number | null
+        status?: string
+        content?: string
+      }
       const rowDateStr2 = toDateStr(r2.log_date)
-      if (!acceptedNames.has(String(r2.name ?? '').trim()) || rowDateStr2 >= dateStr || String(r2.status) !== 'Continue')
+      if (!rowMatchesViewer(r2) || rowDateStr2 >= dateStr || String(r2.status) !== 'Continue')
         continue
       if (existingContent.indexOf(r2.content || '') !== -1) continue
       continueItems.push({

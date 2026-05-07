@@ -2154,6 +2154,11 @@ export default function PosOrderPage() {
             const isChickenBasePrice = (optionPickerMenu.categoryMain ?? "") === "Chicken" || optionPickerMenu.code?.trim().toLowerCase().startsWith("c")
             const optsToShow = isChickenBasePrice ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts
             const groups = optionPickerMenu.optionSelectionGroups || []
+            const groupConfigMap = new Map(
+              (optionPickerMenu.optionSelectionConfig || [])
+                .map((cfg) => [String(cfg?.key ?? "").trim(), cfg] as const)
+                .filter(([k]) => !!k)
+            )
             const optsWithSteps = opts.filter(
               (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
             )
@@ -2172,6 +2177,8 @@ export default function PosOrderPage() {
             )
             if (useMultiStep) {
               const groupKey = groups[optionPickerStep]
+              const groupCfg = groupConfigMap.get(groupKey)
+              const groupRequired = groupCfg?.required !== false
               const values = [...new Set(optsWithStepsToShow.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean))] as string[]
               const handleStepSelect = (value: string) => {
                 const nextSelections = { ...optionPickerSelections, [groupKey]: value }
@@ -2203,7 +2210,8 @@ export default function PosOrderPage() {
                 <div className="flex flex-col gap-3 py-2">
                   {defaultBtn}
                   <p className="text-xs text-muted-foreground">
-                    {groupLabels[groupKey] || groupKey}
+                    {(String(groupCfg?.label ?? "").trim() || groupLabels[groupKey] || groupKey) +
+                      (groupRequired ? "" : ` (${t("optional") || "선택"})`)}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {values.map((val) => (
@@ -2216,6 +2224,22 @@ export default function PosOrderPage() {
                       </button>
                     ))}
                   </div>
+                  {!groupRequired && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => {
+                        if (optionPickerStep >= groups.length - 1) {
+                          addToCartWithOption(optionPickerMenu, null)
+                        } else {
+                          setOptionPickerStep((s) => s + 1)
+                        }
+                      }}
+                    >
+                      {t("skip") || "건너뛰기"}
+                    </Button>
+                  )}
                   {optionPickerStep > 0 && (
                     <Button
                       variant="ghost"
