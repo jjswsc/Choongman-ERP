@@ -110,6 +110,44 @@ function resolveDiscountReceiptLabel(
   return defaultLabel
 }
 
+function allocateDiscountByItem(
+  items: ReceiptModalData['items'],
+  totalDiscount: number
+): number[] {
+  const discount = Math.max(0, Number(totalDiscount) || 0)
+  if (!Array.isArray(items) || items.length === 0 || discount <= 0.0001) return []
+  const lineTotals = items.map((it) => Math.max(0, (Number(it.price) || 0) * (Number(it.qty) || 0)))
+  const gross = lineTotals.reduce((sum, v) => sum + v, 0)
+  if (gross <= 0.0001) return items.map(() => 0)
+
+  const out = items.map(() => 0)
+  let used = 0
+  const to2 = (n: number) => Math.round(n * 100) / 100
+  for (let i = 0; i < items.length; i += 1) {
+    if (i === items.length - 1) {
+      out[i] = to2(Math.max(0, discount - used))
+      break
+    }
+    const share = to2((discount * lineTotals[i]) / gross)
+    out[i] = share
+    used = to2(used + share)
+  }
+  return out
+}
+
+function resolveLineDiscountsForReceipt(
+  items: ReceiptModalData['items'],
+  totalDiscount: number,
+  enabled: boolean
+): number[] {
+  if (!enabled || !Array.isArray(items) || items.length === 0) return []
+  const hasSavedLineDiscount = items.some((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001)
+  if (hasSavedLineDiscount) {
+    return items.map((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0))
+  }
+  return allocateDiscountByItem(items, totalDiscount)
+}
+
 export type PosPaymentReceiptDesignResolved = {
   receiptBizName: string
   receiptBizTaxId: string
@@ -250,6 +288,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const logoUrl = d.receiptLogoImageUrl || `${origin}/company-stamp.png`
   const isPaymentReceipt =
     !receiptData.receiptAutoPrintContext || receiptData.receiptAutoPrintContext === 'payment'
+  const lineDiscountAlloc = resolveLineDiscountsForReceipt(
+    receiptData.items || [],
+    receiptData.discountAmt,
+    isPaymentReceipt
+  )
   const payLines = isPaymentReceipt ? collectReceiptPaymentLines(receiptData, tr) : []
   const paymentRowsHtml =
     payLines.length > 0
@@ -301,9 +344,14 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       ? forceSimpleTextMode
       : /ekkamai/i.test(String(receiptData.storeCode || ''))
   if (forceSimple) {
+    const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
+      receiptData.items || [],
+      receiptData.discountAmt,
+      isPaymentReceipt
+    )
     const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
     const itemRows = (receiptData.items || [])
-      .map((it) => {
+      .map((it, idx) => {
         const banban = parseBanbanFlavorsFromName(it.name)
         const baseLineSplit = splitPosPrintItemLine(it.name)
         const displayName = banban
@@ -311,15 +359,20 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           : translatePosMenuLineForReceipt(baseLineSplit.mainName || it.name, t)
         const amt = formatBahtNum((Number(it.price) || 0) * (Number(it.qty) || 0))
         const main = `<tr><td class="simple-item-name">${Number(it.qty) || 1}x ${esc(displayName)}</td><td class="simple-item-amt">${amt}</td></tr>`
+        const lineDiscount = Math.max(0, Number(lineDiscountAllocSimple[idx] ?? 0) || 0)
+        const lineDiscountRow =
+          lineDiscount > 0.0001
+            ? `<tr><td class="simple-item-name simple-item-sub" colspan="2">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(lineDiscount)}</td></tr>`
+            : ''
         if (!banban) {
-          if (!baseLineSplit.optionLine) return main
+          if (!baseLineSplit.optionLine) return main + lineDiscountRow
           const opt = translatePosMenuLineForReceipt(baseLineSplit.optionLine, t)
-          return `${main}<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(opt)}</td></tr>`
+          return `${main}${lineDiscountRow}<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(opt)}</td></tr>`
         }
         const subF1 = translatePosMenuLineForReceipt(banban.flavor1, t)
         const subF2 = translatePosMenuLineForReceipt(banban.flavor2, t)
         const sub = `<tr><td class="simple-item-name simple-item-sub" colspan="2">- ${esc(subF1)}<br/>- ${esc(subF2)}</td></tr>`
-        return main + sub
+        return main + lineDiscountRow + sub
       })
       .join('')
     const summaryRows = [
@@ -465,7 +518,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
         ${receiptData.items
-          .map((it) => {
+          .map((it, idx) => {
             const lineNote = normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
             const itemCode = posReceiptItemSkuForBarcode(it.id)
             const itemBarcodeUrl = d.itemBarcode && itemCode ? buildCode128BarcodeUrl(itemCode) : ''
@@ -494,6 +547,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const noteHtml = lineNote
               ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
               : ''
+            const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)
+            const lineDiscountHtml =
+              lineDiscount > 0.0001
+                ? `<div class="receipt-line-note">${esc(tr('posDiscount', '할인'))}: -${formatBahtNum(lineDiscount)}</div>`
+                : ''
             const promoComposeHtml =
               promoComposeLines.length > 0
                 ? `<div class="receipt-line-note">${promoComposeLines
@@ -509,7 +567,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             const barcodeHtml = itemBarcodeUrl
               ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${esc(itemBarcodeUrl)}" alt="Item barcode" style="width: 100%; max-width: 100%; height: auto; object-fit: contain;" /></div>`
               : ''
-            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(displayName, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${banbanComposeHtml}${promoComposeHtml}${noteHtml}${barcodeHtml}`
+            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(displayName, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${lineDiscountHtml}${banbanComposeHtml}${promoComposeHtml}${noteHtml}${barcodeHtml}`
           })
           .join('')}
         <div class="receipt-divider"></div>

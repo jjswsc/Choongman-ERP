@@ -13,6 +13,7 @@ import { ItemTable } from "@/components/erp/item-table"
 import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
 import { ItemCategorySettingsDialog } from "@/components/erp/item-category-settings-dialog"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
+import { PriceScheduleTab } from "@/components/erp/price-schedule-tab"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -30,6 +31,7 @@ import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, dele
 import { compareByCode } from "@/lib/sort-utils"
 import { useAuth } from "@/lib/auth-context"
 import { canToggleItemOrderDisabled } from "@/lib/permissions"
+import { isOfficeRole } from "@/lib/permissions"
 
 export type Product = AdminItem
 
@@ -77,6 +79,7 @@ export default function ItemsPage() {
   const [categorySettingsOpen, setCategorySettingsOpen] = React.useState(false)
   const [excelImporting, setExcelImporting] = React.useState(false)
   const [itemsTab, setItemsTab] = React.useState<"list" | "priceHistory">("list")
+  const [priceManageTab, setPriceManageTab] = React.useState<"history" | "schedule">("history")
   const excelInputRef = React.useRef<HTMLInputElement>(null)
 
   const loadOutboundLocations = React.useCallback(async () => {
@@ -610,8 +613,23 @@ export default function ItemsPage() {
         </div>
           </TabsContent>
           <TabsContent value="priceHistory" className={adminTabsContentCn}>
-            <div className="rounded-xl border bg-card p-6">
-              <PriceHistoryTab entityTypes={["item"]} mode="item" />
+            <div className="rounded-xl border bg-card p-4 sm:p-6 space-y-4">
+              <Tabs value={priceManageTab} onValueChange={(v) => setPriceManageTab(v as "history" | "schedule")}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="history" className={adminTabsTriggerCn}>
+                    {t("priceHistoryTabLabel") || "가격 이력"}
+                  </TabsTrigger>
+                  <TabsTrigger value="schedule" className={adminTabsTriggerCn}>
+                    {t("priceScheduleTabLabel") || "가격 예약"}
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="history" className="mt-4">
+                  <PriceHistoryTab entityTypes={["item"]} mode="item" />
+                </TabsContent>
+                <TabsContent value="schedule" className="mt-4">
+                  <PriceScheduleTab mode="item" canManage={isOfficeRole(auth?.role || "")} />
+                </TabsContent>
+              </Tabs>
             </div>
           </TabsContent>
         </Tabs>

@@ -6558,7 +6558,11 @@ export const i18n = {
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다.',
     helpHow_admin_pos_menus:
-      '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 이유·탭 흐름은「도움말」본문을 보세요.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션 등을 저장합니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 그룹, 우측 상세 편집의 3패널 구조입니다. 먼저 단계를 저장하고, 우측 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·원가율을 저장하고, 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.\n⑥ POS에 반영이 늦으면 단말을 새로고침하거나 잠시 후 다시 열어 확인합니다.',
+      '【가격】매장·포장은 홀(매장) 가격, 배달은 배달(앱) 가격이 적용됩니다. 메뉴 정보에서 배달가를 비우면 홀 가격이 사용됩니다. 가격이력 탭 안의 「가격 예약」에서 지정일 가격을 미리 등록할 수 있습니다.\n【메뉴 사용/배달】메뉴 정보에서「사용」을 끄면 홀·포장·배달 앱(Grab 등) 메뉴 모두에서 빠집니다. 메뉴가 켜져 있을 때만「배달앱 운영」탭의 앱별 메뉴 ON/OFF·순서·시간이 배달 쪽에 적용됩니다.\n① 매장을 고른 뒤 메뉴 그리드·폼에서 품목·홀/배달가·옵션 등을 저장합니다.\n② 「옵션 구성」은 좌측 메뉴 목록, 가운데 옵션 그룹, 우측 상세 편집의 3패널 구조입니다. 먼저 단계를 저장하고, 우측 카드에서 판매 채널(기본채널=홀+포장 / 배달)과 가격 조정을 분리해 수정하세요.\n③ 옵션 카드의 배달·포장 가격이 비어 있으면 기본채널 가격을 따릅니다. 포장은 카드의 고급 영역에서 별도 판매/가격을 켤 수 있습니다.\n④ 「세트」탭에서 번들 가격·채널·원가율을 저장하고, 「번들 세트 조회」에서 활성/중단/복사/캠페인 연결을 관리합니다.\n⑤ 「가격 이력」 내부의 「가격 예약」에서 예약 등록·조회·취소를 관리할 수 있습니다.\n⑥ 포장 체크리스트 탭에서 메뉴·옵션별 확인 항목(필수/선택, 포장/배달 적용)을 저장하면 POS 포장 완료 시 팝업으로 점검할 수 있습니다.',
+    helpSum_admin_items:
+      '품목 기본정보와 판매가/원가를 관리하고, 가격 이력과 가격 예약(지정일 자동 반영)을 조회·등록하는 화면입니다.',
+    helpHow_admin_items:
+      '① 목록 탭에서 품목을 조회·등록·수정합니다.\n② 가격이력 탭에서 변경 타임라인을 확인합니다.\n③ 가격이력 내부의 「가격 예약」에서 적용 시각(방콕 기준)과 변경가를 등록합니다.\n④ 예약 목록에서 대기·적용·취소 상태를 확인하고 필요한 건을 취소합니다.',
     helpSum_admin_company_documents:
       '매장별 계약·면허·세무 등 회사 문서를 Drive 링크 또는 파일 업로드로 등록하고, 목록에서 검색·정렬·발급일·등록일을 확인하는 화면입니다.',
     helpHow_admin_company_documents:
@@ -7246,6 +7250,8 @@ export const i18n = {
     posMenuPriceApplyHint: '메뉴 정보 탭에서 홀·배달앱 가격을 각각 설정할 수 있습니다. 배달앱 가격이 없으면 홀 가격이 적용됩니다.',
     posPricingTabMenuHint: '매장별 부가세·서비스·카드비 등 결제 시 최종 금액에 반영되는 비율 옵션입니다.',
     itemsTabPriceHistory: '품목 가격이력',
+    priceHistoryTabLabel: '가격 이력',
+    priceScheduleTabLabel: '가격 예약',
     priceHistorySearchPh: '메뉴/품목명 검색',
     priceHistoryMenuSelect: '메뉴 선택',
     priceHistoryBtnSearch: '검색',
@@ -14232,7 +14238,11 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery).',
     helpHow_admin_pos_menus:
-      '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Open Help for the full “what / how” text.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n① After choosing a store, use the menu grid and form to save items and hall / delivery prices.\n② In Options config, use the 3-panel layout (menu list, option groups, right-side editor). Save steps first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ Use related tabs (sets, price history, final price, delivery ops, packaging checklist) as your role allows.\n⑤ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.\n⑥ If terminals look stale, refresh the POS or wait a moment and reopen.',
+      '【Pricing】Dine-in and takeout use the hall (in-store) list price; delivery uses the delivery-app list price. If the delivery price is left blank, the hall price is used. Inside Price history, use “Price schedule” to pre-register future price changes.\n【Menu vs delivery】Turning off “Active” in Menu info removes the item from dine-in, takeout, and delivery-app menus (Grab, etc.). When a menu stays active, per-app toggles, order, and hours on the Delivery app operations tab apply to delivery only.\n① After choosing a store, use the menu grid and form to save items and hall / delivery prices.\n② In Options config, use the 3-panel layout (menu list, option groups, right-side editor). Save steps first, then edit channel toggles (base channel = dine-in+takeout vs delivery) and price adjustments in option cards.\n③ If delivery/packaging modifier is blank, it falls back to base-channel modifier. Packaging-specific selling/price can be set in each card’s Advanced section.\n④ Use related tabs (sets, price history, final price, delivery ops, packaging checklist) as your role allows.\n⑤ In Price history > Price schedule, register, review, and cancel future price updates.\n⑥ In Packaging checklist, save menu/option checks (required/optional and takeout/delivery scope) to show a checklist popup when POS marks packaging complete.',
+    helpSum_admin_items:
+      'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
+    helpHow_admin_items:
+      '① Use the list tab to query, add, and edit items.\n② Use Price history to review past changes.\n③ In Price history > Price schedule, set Bangkok-time effective datetime and target price.\n④ Monitor pending/applied/cancelled status and cancel pending records when needed.',
     helpSum_admin_company_documents:
       'Register and browse company documents per store via Drive links or file uploads; search, sort by title, and see issue and created dates.',
     helpHow_admin_company_documents:
@@ -14795,6 +14805,8 @@ orderItemQty: 'Qty',
     posMenuPriceApplyHint: 'Set Hall and Delivery app prices in the menu info tab. If no delivery price is set, hall price is used.',
     posPricingTabMenuHint: 'Per-store VAT, service, card fee and other rates applied to the final payment amount.',
     itemsTabPriceHistory: 'Item Price History',
+    priceHistoryTabLabel: 'Price History',
+    priceScheduleTabLabel: 'Price Schedule',
     posMenuTabCategories: 'Categories',
     priceHistorySearchPh: 'Search menu/item name',
     priceHistoryMenuSelect: 'Select menu',
@@ -19571,6 +19583,8 @@ orderItemQty: 'จำนวน',
     posMenuPriceApplyDelivery: 'ใช้ราคาแอปเดลิเวอรี',
     posMenuPriceApplyHint: 'ตั้งราคาห้องและเดลิเวอรีในแท็บข้อมูลเมนู หากไม่กำหนดราคาเดลิเวอรีจะใช้ราคาห้อง',
     itemsTabPriceHistory: 'ประวัติราคาสินค้า',
+    priceHistoryTabLabel: 'ประวัติราคา',
+    priceScheduleTabLabel: 'จองราคา',
     posMenuTabCategories: 'หมวดหมู่',
     priceHistorySearchPh: 'ค้นหาชื่อเมนู/สินค้า',
     priceHistoryMenuSelect: 'เลือกเมนู',
@@ -25821,6 +25835,8 @@ orderItemQty: 'အရေအတွက်',
     posMenuPriceApplyDelivery: 'ပို့ဆောင်အက်ပ်ဈေးပြု',
     posMenuPriceApplyHint: 'မီနူးအချက်အလက်တပ်ဗ်တွင် ဟော်လ်နှင့် ပို့ဆောင်အက်ပ်ဈေးသတ်မှတ်ပါ။ ပို့ဆောင်ဈေးမသတ်မှတ်ပါက ဟော်လ်ဈေးအသုံးပြုသည်။',
     itemsTabPriceHistory: 'ပစ္စည်းဈေးနှုန်းမှတ်တမ်း',
+    priceHistoryTabLabel: 'ဈေးနှုန်းမှတ်တမ်း',
+    priceScheduleTabLabel: 'ဈေးနှုန်းကြိုတင်သတ်မှတ်',
     posMenuTabCategories: 'အမျိုးအစား',
     priceHistorySearchPh: 'မီနူး/ပစ္စည်းအမည်ရှာပါ',
     priceHistoryMenuSelect: 'မီနူးရွေးပါ',
@@ -31955,6 +31971,8 @@ orderItemQty: 'ຈຳນວນ',
     posMenuPriceApplyDelivery: 'ນຳໃຊ້ລາຄາແອັບສົ່ງ',
     posMenuPriceApplyHint: 'ຕັ້ງລາຄາຮ້ານແລະແອັບສົ່ງໃນແທັບຂໍ້ມູນເມນູ ຖ້າບໍ່ມີລາຄາສົ່ງຈະໃຊ້ລາຄາຮ້ານ',
     itemsTabPriceHistory: 'ປະຫວັດລາຄາສິນຄ້າ',
+    priceHistoryTabLabel: 'ປະຫວັດລາຄາ',
+    priceScheduleTabLabel: 'ຈອງລາຄາ',
     posMenuTabCategories: 'ປະເພດ',
     priceHistorySearchPh: 'ຄົ້ນຫາຊື່ເມນູ/ສິນຄ້າ',
     priceHistoryMenuSelect: 'ເລືອກເມນູ',

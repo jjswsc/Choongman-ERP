@@ -1082,6 +1082,27 @@ export default function PosOrderPage() {
     (Number(payDeliveryApp) || 0)
   const paymentInputMatch = Math.abs(paymentInputSum - paymentPreviewTotal) < 0.01
 
+  const lineDiscountSnapshot = React.useMemo(() => {
+    const to2 = (n: number) => Math.round(n * 100) / 100
+    const totalDiscount = Math.max(0, Number(discountAmt) || 0)
+    if (!Array.isArray(cart) || cart.length === 0 || totalDiscount <= 0.0001) return cart.map(() => 0)
+    const lineTotals = cart.map((it) => Math.max(0, (Number(it.price) || 0) * (Number(it.qty) || 0)))
+    const gross = lineTotals.reduce((sum, v) => sum + v, 0)
+    if (gross <= 0.0001) return cart.map(() => 0)
+    const out = cart.map(() => 0)
+    let used = 0
+    for (let i = 0; i < cart.length; i += 1) {
+      if (i === cart.length - 1) {
+        out[i] = to2(Math.max(0, totalDiscount - used))
+        break
+      }
+      const share = to2((totalDiscount * lineTotals[i]) / gross)
+      out[i] = share
+      used = to2(used + share)
+    }
+    return out
+  }, [cart, discountAmt])
+
   const handleApplyCoupon = async () => {
     const code = couponCode.trim().toUpperCase()
     if (!code) return
@@ -1164,11 +1185,14 @@ export default function PosOrderPage() {
         deliveryPaymentChannel:
           payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,
         pricingAdjustments,
-        items: cart.map((it) => ({
+        items: cart.map((it, idx) => ({
           id: it.id,
           name: it.name,
           price: it.price,
           qty: it.qty,
+          ...(lineDiscountSnapshot[idx] > 0.0001
+            ? { lineDiscountAmt: lineDiscountSnapshot[idx] }
+            : {}),
           note: it.note,
           orderType,
           ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
@@ -1185,7 +1209,12 @@ export default function PosOrderPage() {
         setShowPaymentModal(false)
         setReceiptData({
           orderNo: res.orderNo ?? "",
-          items: [...cart],
+          items: cart.map((it, idx) => ({
+            ...it,
+            ...(lineDiscountSnapshot[idx] > 0.0001
+              ? { lineDiscountAmt: lineDiscountSnapshot[idx] }
+              : {}),
+          })),
           subtotal,
           discountAmt,
           deliveryFee: deliveryFeeAmt,

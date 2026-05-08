@@ -49,6 +49,8 @@ export type ReceiptModalData = {
     name: string
     price: number
     qty: number
+    /** 주문 저장 시점 메뉴별 할인 스냅샷(손님 영수증 우선 표시) */
+    lineDiscountAmt?: number
     note?: string
     promoId?: string
     promoItems?: { menuId: string; optionId: string | null; quantity: number }[]

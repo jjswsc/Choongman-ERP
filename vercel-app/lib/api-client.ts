@@ -5443,6 +5443,23 @@ export interface PriceHistoryRow {
   changed_by: string | null
 }
 
+export interface PriceScheduleRow {
+  id: number
+  entity_type: "item" | "pos_menu"
+  entity_id: string
+  entity_display_name: string | null
+  field_name: string
+  current_value: number | null
+  scheduled_value: number
+  status: "pending" | "applied" | "cancelled" | "failed"
+  effective_at: string
+  created_by: string | null
+  created_at: string
+  applied_at?: string | null
+  cancelled_at?: string | null
+  failed_reason?: string | null
+}
+
 export async function getPriceHistory(params: {
   entityType?: 'pos_menu' | 'pos_menu_option' | 'item'
   entityId?: string
@@ -5509,6 +5526,64 @@ export async function restoreFromPriceHistory(params?: { targetDate?: string; dr
     dryRun: data.dryRun,
     targetDate: data.targetDate,
     details: data.details,
+  }
+}
+
+export async function getPriceSchedules(params: {
+  entityType?: "item" | "pos_menu"
+  status?: "pending" | "applied" | "cancelled" | "failed"
+  search?: string
+  limit?: number
+}) {
+  const sp = new URLSearchParams()
+  if (params.entityType) sp.set("entityType", params.entityType)
+  if (params.status) sp.set("status", params.status)
+  if (params.search) sp.set("search", params.search)
+  if (params.limit != null) sp.set("limit", String(params.limit))
+  const q = sp.toString()
+  const res = await apiFetchWithOffline(`/api/getPriceSchedules${q ? `?${q}` : ""}`)
+  const data = await res.json().catch(() => [])
+  if (!res.ok || (data && typeof data === "object" && "error" in data)) return []
+  return Array.isArray(data) ? (data as PriceScheduleRow[]) : []
+}
+
+export async function savePriceSchedule(params: {
+  entityType: "item" | "pos_menu"
+  entityId: string
+  fieldName: string
+  scheduledValue: number
+  effectiveAt: string
+}) {
+  const res = await apiFetchWithOffline("/api/savePriceSchedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  return (await res.json().catch(() => ({ success: false, message: "저장 실패" }))) as {
+    success: boolean
+    message?: string
+  }
+}
+
+export async function cancelPriceSchedule(params: { id: number }) {
+  const res = await apiFetchWithOffline("/api/cancelPriceSchedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  return (await res.json().catch(() => ({ success: false, message: "취소 실패" }))) as {
+    success: boolean
+    message?: string
+  }
+}
+
+export async function applyDuePriceSchedules() {
+  const res = await apiFetchWithOffline("/api/applyDuePriceSchedules", { method: "POST" })
+  return (await res.json().catch(() => ({ success: false, message: "실행 실패", appliedCount: 0, failedCount: 0 }))) as {
+    success: boolean
+    message?: string
+    appliedCount: number
+    failedCount: number
   }
 }
 
@@ -8485,6 +8560,8 @@ export interface PosOrderItem {
   name: string
   price: number
   qty: number
+  /** 주문 저장 시점 메뉴별 할인 스냅샷(손님 영수증 우선 표시) */
+  lineDiscountAmt?: number
   /** 일부 `items_json`·연동은 quantity 만 사용 (서버/클라이언트에서 qty 와 병용 해석) */
   quantity?: number
   /** 줄 단위 메모 (주방·영수증) */

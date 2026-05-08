@@ -88,6 +88,7 @@ import { PosSetMenuTabWorkspace } from "@/components/erp/pos-set-menu-tab-worksp
 import { PosSetMenuInquiryTab } from "@/components/erp/pos-set-menu-inquiry-tab"
 import { PosStoreFinalPriceSettings } from "@/components/erp/pos-store-final-price-settings"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
+import { PriceScheduleTab } from "@/components/erp/price-schedule-tab"
 import { OptionsConfigShell } from "@/components/erp/options-config-shell"
 import { OptionGroupListPanel } from "@/components/erp/option-group-list-panel"
 import { OptionGroupEditorPanel } from "@/components/erp/option-group-editor-panel"
@@ -280,6 +281,7 @@ export default function PosMenusPage() {
   const [mainTab, setMainTab] = React.useState<
     "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "finalPrice" | "deliveryOps"
   >("screen")
+  const [priceManageTab, setPriceManageTab] = React.useState<"history" | "schedule">("history")
   const [pricingStoreCode, setPricingStoreCode] = React.useState("")
   const canSearchAllStores = isOfficeRole(auth?.role || "")
   const effectivePricingStore = canSearchAllStores && pricingStoreCode ? pricingStoreCode : auth?.store || ""
@@ -5020,8 +5022,23 @@ export default function PosMenusPage() {
             </div>
           </TabsContent>
           <TabsContent value="priceHistory" className={adminTabsContentCn}>
-            <div className="rounded-xl border bg-card p-6">
-              <PriceHistoryTab entityTypes={["pos_menu", "pos_menu_option"]} mode="menu" />
+            <div className="rounded-xl border bg-card p-4 sm:p-6 space-y-4">
+              <Tabs value={priceManageTab} onValueChange={(v) => setPriceManageTab(v as "history" | "schedule")}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="history" className={adminTabsTriggerCn}>
+                    {t("priceHistoryTabLabel") || "가격 이력"}
+                  </TabsTrigger>
+                  <TabsTrigger value="schedule" className={adminTabsTriggerCn}>
+                    {t("priceScheduleTabLabel") || "가격 예약"}
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="history" className="mt-4">
+                  <PriceHistoryTab entityTypes={["pos_menu", "pos_menu_option"]} mode="menu" />
+                </TabsContent>
+                <TabsContent value="schedule" className="mt-4">
+                  <PriceScheduleTab mode="pos_menu" canManage={canSearchAllStores} />
+                </TabsContent>
+              </Tabs>
             </div>
           </TabsContent>
           <TabsContent value="finalPrice" className={adminTabsContentCn}>

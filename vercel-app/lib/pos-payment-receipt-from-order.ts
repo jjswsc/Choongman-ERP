@@ -262,6 +262,7 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
       name: String(it.name ?? ''),
       price: Number(it.price ?? 0),
       qty: Math.max(1, Number(it.qty ?? (it as { quantity?: number }).quantity ?? 1) || 1),
+      lineDiscountAmt: Math.max(0, Number((it as { lineDiscountAmt?: unknown }).lineDiscountAmt ?? 0) || 0),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
       ...(rowDelivery ? { deliveryAppCode: rowDelivery } : {}),
       ...(promo && promo.length > 0 ? { promoItems: promo } : {}),
