@@ -148,9 +148,12 @@ function normalizeOptionSelectionConfig(
   return groups.map((key) => {
     const prev = byKey.get(key)
     const required = prev?.required !== false
+    const audience =
+      prev?.audience === "delivery" || prev?.audience === "hall" ? prev.audience : "all"
     return {
       key,
       label: String(prev?.label ?? key).trim() || key,
+      audience,
       required,
       minSelect: required ? 1 : 0,
       maxSelect: 1,
@@ -242,6 +245,7 @@ export default function PosMenusPage() {
   const [newOptionName, setNewOptionName] = React.useState("")
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
   const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
+  const [newOptionChannelScope, setNewOptionChannelScope] = React.useState<"all" | "hall" | "delivery" | "packaging">("all")
   const [newOptionDescriptionDefault, setNewOptionDescriptionDefault] = React.useState("")
   const [newOptionDescriptionDelivery, setNewOptionDescriptionDelivery] = React.useState("")
   const [newOptionDescriptionTable, setNewOptionDescriptionTable] = React.useState("")
@@ -290,6 +294,7 @@ export default function PosMenusPage() {
   const [optionsConfigCustomOptionName, setOptionsConfigCustomOptionName] = React.useState("")
   /** set_main 단계 빠른 생성 입력 (예: 후라이드, 양념, 간장) */
   const [optionsConfigSetMainQuickValues, setOptionsConfigSetMainQuickValues] = React.useState("")
+  const [optionsConfigNewOptionTitle, setOptionsConfigNewOptionTitle] = React.useState("")
   const [promoListForSetTab, setPromoListForSetTab] = React.useState<PosPromo[]>([])
   const [setTabPromosLoading, setSetTabPromosLoading] = React.useState(false)
   const [schemaStatus, setSchemaStatus] = React.useState<{
@@ -307,6 +312,50 @@ export default function PosMenusPage() {
   const [deliveryOpsCopySourceStore, setDeliveryOpsCopySourceStore] = React.useState("")
   const [deliveryOpsCopying, setDeliveryOpsCopying] = React.useState(false)
   const [deliveryOpsApplyingAll, setDeliveryOpsApplyingAll] = React.useState(false)
+
+  const resolveNewOptionChannelPayload = React.useCallback(() => {
+    const hall = Number(newOptionModifier) || 0
+    const deliveryInput = newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null
+    const packagingInput = newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null
+    if (newOptionChannelScope === "hall") {
+      return {
+        sellHall: true,
+        sellDelivery: false,
+        sellPackaging: false,
+        priceModifier: hall,
+        priceModifierDelivery: null as number | null,
+        priceModifierPackaging: null as number | null,
+      }
+    }
+    if (newOptionChannelScope === "delivery") {
+      return {
+        sellHall: false,
+        sellDelivery: true,
+        sellPackaging: false,
+        priceModifier: hall,
+        priceModifierDelivery: deliveryInput ?? hall,
+        priceModifierPackaging: null as number | null,
+      }
+    }
+    if (newOptionChannelScope === "packaging") {
+      return {
+        sellHall: false,
+        sellDelivery: false,
+        sellPackaging: true,
+        priceModifier: hall,
+        priceModifierDelivery: null as number | null,
+        priceModifierPackaging: packagingInput ?? hall,
+      }
+    }
+    return {
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+      priceModifier: hall,
+      priceModifierDelivery: deliveryInput,
+      priceModifierPackaging: packagingInput,
+    }
+  }, [newOptionChannelScope, newOptionModifier, newOptionModifierDelivery, newOptionModifierPackaging])
   const [deliveryOpsSearch, setDeliveryOpsSearch] = React.useState("")
   const [deliveryOpsAppPolicy, setDeliveryOpsAppPolicy] = React.useState<PosDeliveryAppPolicy>({
     storeCode: "",
@@ -556,11 +605,13 @@ export default function PosMenusPage() {
       setOptionsConfigGroupRulesDraft([])
       setOptionsConfigNewStepValues({})
       setOptionsConfigCustomOptionName("")
+      setOptionsConfigNewOptionTitle("")
       return
     }
     getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
     setOptionsConfigNewStepValues({})
     setOptionsConfigCustomOptionName("")
+    setOptionsConfigNewOptionTitle("")
     setNewOptionSize("")
     setNewOptionPart("")
     setNewOptionModifier("0")
@@ -846,6 +897,7 @@ export default function PosMenusPage() {
     setNewOptionName("")
     setNewOptionModifier("0")
     setNewOptionModifierDelivery("")
+    setNewOptionChannelScope("all")
     setNewOptionDescriptionDefault("")
     setNewOptionDescriptionDelivery("")
     setNewOptionDescriptionTable("")
@@ -873,11 +925,13 @@ export default function PosMenusPage() {
       newOptionType === "substitution" && currentMenuGroups.length > 0
         ? Object.fromEntries(currentMenuGroups.map((g) => [g, (newOptionStepValues[g] || "").trim()]))
         : undefined
+    const channelPayload = resolveNewOptionChannelPayload()
     const res = await savePosMenuOption({
       menuId: Number(editingId),
       name: newOptionName.trim(),
-      priceModifier: Number(newOptionModifier) || 0,
-      priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
+      priceModifier: channelPayload.priceModifier,
+      priceModifierDelivery: channelPayload.priceModifierDelivery,
+      priceModifierPackaging: channelPayload.priceModifierPackaging,
       sortOrder: menuOptions.length,
       optionType: newOptionType,
       itemCode: null,
@@ -885,6 +939,9 @@ export default function PosMenusPage() {
         newOptionType === "additive" ? Number(newOptionSourceMenuId) || null : null,
       quantity: newOptionType === "additive" ? Number(newOptionQuantity) || 1 : 1,
       optionStepValues,
+      sellHall: channelPayload.sellHall,
+      sellDelivery: channelPayload.sellDelivery,
+      sellPackaging: channelPayload.sellPackaging,
       descriptionDefault: newOptionDescriptionDefault.trim(),
       descriptionDelivery: newOptionDescriptionDelivery.trim() || null,
       descriptionTable: newOptionDescriptionTable.trim() || null,
@@ -894,6 +951,8 @@ export default function PosMenusPage() {
       setNewOptionName("")
       setNewOptionModifier("0")
       setNewOptionModifierDelivery("")
+      setNewOptionModifierPackaging("")
+      setNewOptionChannelScope("all")
       setNewOptionType("substitution")
       setNewOptionSourceMenuId("")
       setNewOptionQuantity("1")
@@ -1212,9 +1271,11 @@ export default function PosMenusPage() {
     if (res.success) {
       getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
       setOptionsConfigCustomOptionName("")
+      setOptionsConfigNewOptionTitle("")
       setNewOptionModifier("0")
       setNewOptionModifierDelivery("")
       setNewOptionModifierPackaging("")
+      setNewOptionChannelScope("all")
     } else {
       await appAlert(res.message || t("msg_save_fail_detail"))
     }
@@ -1223,43 +1284,9 @@ export default function PosMenusPage() {
   const handleAddOptionForConfig = async () => {
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     try {
+      const explicitTitle = optionsConfigNewOptionTitle.trim()
       if (isChickenMenu(optionsConfigSelectedMenu.code)) {
-        await ensureChickenMenuOptionGroups()
-        const sizeVal = String(newOptionSize || "").trim()
-        const partVal = String(newOptionPart || "").trim()
-        if (!sizeVal || !partVal) return
-        const name = `${sizeVal} - ${partVal}`
-        const optionStepValues = { size: sizeVal, part: partVal }
-        const exists = optionsConfigMenuOptions.some(
-          (o) => o.optionStepValues?.size === sizeVal && o.optionStepValues?.part === partVal
-        )
-        if (exists) {
-          await appAlert(`${name} ${t("itemsAlertCodeExists") || "이미 있습니다."}`)
-          return
-        }
-        const res = await savePosMenuOption({
-          menuId: Number(optionsConfigSelectedMenuId),
-          name,
-          priceModifier: Number(newOptionModifier) || 0,
-          priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
-          priceModifierPackaging: newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
-          sortOrder: optionsConfigMenuOptions.length,
-          optionType: "substitution",
-          optionStepValues,
-          sellHall: true,
-          sellDelivery: true,
-          sellPackaging: true,
-        })
-        if (res.success) {
-          getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
-          setNewOptionSize("")
-          setNewOptionPart("")
-          setNewOptionModifier("0")
-          setNewOptionModifierDelivery("")
-          setNewOptionModifierPackaging("")
-        } else {
-          await appAlert(res.message || t("msg_save_fail_detail"))
-        }
+        await appAlert(t("posChickenTitleOnlyHint") || "치킨 메뉴는 기존 옵션을 유지하고, 아래 목록에서 옵션 제목만 수정해 주세요.")
         return
       }
 
@@ -1287,7 +1314,7 @@ export default function PosMenusPage() {
         optionStepValues = Object.fromEntries(groups.map((g) => [g, (optionsConfigNewStepValues[g] ?? "").trim()]))
       }
 
-      const name = groups.map((g) => optionStepValues[g]).join(" - ")
+      const name = explicitTitle || groups.map((g) => optionStepValues[g]).join(" - ")
       const exists = optionsConfigMenuOptions.some((o) => groups.every((g) => o.optionStepValues?.[g] === optionStepValues[g]))
       if (exists) {
         await appAlert(`${name} ${t("itemsAlertCodeExists") || "이미 있습니다."}`)
@@ -1309,9 +1336,11 @@ export default function PosMenusPage() {
       if (res.success) {
         getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
         setOptionsConfigNewStepValues({})
+        setOptionsConfigNewOptionTitle("")
         setNewOptionModifier("0")
         setNewOptionModifierDelivery("")
         setNewOptionModifierPackaging("")
+        setNewOptionChannelScope("all")
       } else {
         await appAlert(res.message || t("msg_save_fail_detail"))
       }
@@ -1327,6 +1356,7 @@ export default function PosMenusPage() {
    * - 입력값은 쉼표/줄바꿈으로 구분
    */
   const handleQuickCreateSetMainOptions = async () => {
+    const channelPayload = resolveNewOptionChannelPayload()
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     const pid = optionsConfigSelectedMenu.promoId?.trim()
     if (pid) {
@@ -1360,15 +1390,15 @@ export default function PosMenusPage() {
       const res = await savePosMenuOption({
         menuId: Number(optionsConfigSelectedMenuId),
         name: label,
-        priceModifier: Number(newOptionModifier) || 0,
-        priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
-        priceModifierPackaging: newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
+        priceModifier: channelPayload.priceModifier,
+        priceModifierDelivery: channelPayload.priceModifierDelivery,
+        priceModifierPackaging: channelPayload.priceModifierPackaging,
         sortOrder: existing.length + added,
         optionType: "substitution",
         optionStepValues: { set_main: label },
-        sellHall: true,
-        sellDelivery: true,
-        sellPackaging: true,
+        sellHall: channelPayload.sellHall,
+        sellDelivery: channelPayload.sellDelivery,
+        sellPackaging: channelPayload.sellPackaging,
       })
       if (!res.success) {
         await appAlert(res.message || t("msg_save_fail_detail"))
@@ -1385,18 +1415,18 @@ export default function PosMenusPage() {
   }
 
   const handleAddAllOptionsForConfig = async () => {
+    const channelPayload = resolveNewOptionChannelPayload()
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     const isChicken = isChickenMenu(optionsConfigSelectedMenu.code)
     if (isChicken) {
-      await ensureChickenMenuOptionGroups()
-    } else {
-      if (!isSizePartGroups(optionsConfigStepGroups)) {
-        await appAlert(
-          t("posOptionConfigAddAllSizePartOnly") ||
-            "[전체 조합 추가]는 선택 단계가 size, part 순서일 때만 사용할 수 있습니다. (치킨은 자동)"
-        )
-        return
-      }
+      await appAlert(t("posChickenTitleOnlyHint") || "치킨 메뉴는 기존 옵션을 유지하고, 아래 목록에서 옵션 제목만 수정해 주세요.")
+      return
+    } else if (!isSizePartGroups(optionsConfigStepGroups)) {
+      await appAlert(
+        t("posOptionConfigAddAllSizePartOnly") ||
+          "[전체 조합 추가]는 선택 단계가 size, part 순서일 때만 사용할 수 있습니다."
+      )
+      return
     }
     const existingKeys = new Set(
       optionsConfigMenuOptions.map((o) => `${o.optionStepValues?.size ?? ""}_${o.optionStepValues?.part ?? ""}`)
@@ -1424,15 +1454,15 @@ export default function PosMenusPage() {
       const res = await savePosMenuOption({
         menuId: Number(optionsConfigSelectedMenuId),
         name,
-        priceModifier: isChicken ? price : Number(newOptionModifier) || 0,
-        priceModifierDelivery: isChicken ? price : newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
-        priceModifierPackaging: isChicken ? price : newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
+        priceModifier: isChicken ? price : channelPayload.priceModifier,
+        priceModifierDelivery: isChicken ? price : channelPayload.priceModifierDelivery,
+        priceModifierPackaging: isChicken ? price : channelPayload.priceModifierPackaging,
         sortOrder: optionsConfigMenuOptions.length + added,
         optionType: "substitution",
         optionStepValues: { size, part },
-        sellHall,
-        sellDelivery,
-        sellPackaging,
+        sellHall: isChicken ? sellHall : channelPayload.sellHall,
+        sellDelivery: isChicken ? sellDelivery : channelPayload.sellDelivery,
+        sellPackaging: isChicken ? sellPackaging : channelPayload.sellPackaging,
       })
       if (res.success) {
         existingKeys.add(`${size}_${part}`)
@@ -1452,6 +1482,8 @@ export default function PosMenusPage() {
   ] as const
 
   const handleChickenBatchApply = async () => {
+    await appAlert(t("posChickenTitleOnlyHint") || "현재는 치킨 기존 옵션을 유지합니다. 옵션 목록에서 제목만 수정해 주세요.")
+    return
     let list = menus
     if (list.length === 0) {
       try {
@@ -1559,13 +1591,6 @@ export default function PosMenusPage() {
     }
   }
 
-  const handleToggleSellChannelForConfig = (opt: PosMenuOption, channel: "sellHall" | "sellDelivery" | "sellPackaging") => {
-    const next = !(opt[channel] ?? true)
-    setOptionsConfigMenuOptions((prev) =>
-      prev.map((o) => (o.id === opt.id ? { ...o, [channel]: next } : o))
-    )
-  }
-
   const handlePriceChangeForConfig = (opt: PosMenuOption, field: "priceModifier" | "priceModifierDelivery" | "priceModifierPackaging", value: string) => {
     const num = value === "" ? NaN : Number(value)
     const v = field === "priceModifier" 
@@ -1573,6 +1598,31 @@ export default function PosMenusPage() {
       : (Number.isNaN(num) ? null : num)
     setOptionsConfigMenuOptions((prev) =>
       prev.map((o) => (o.id === opt.id ? { ...o, [field]: v } : o))
+    )
+  }
+
+  const handleOptionAudienceChangeForConfig = (
+    opt: PosMenuOption,
+    audience: "all" | "hall" | "delivery" | "packaging"
+  ) => {
+    setOptionsConfigMenuOptions((prev) =>
+      prev.map((o) =>
+        o.id === opt.id
+          ? {
+              ...o,
+              sellHall: audience === "all" || audience === "hall",
+              sellDelivery: audience === "all" || audience === "delivery",
+              sellPackaging: audience === "all" || audience === "packaging",
+            }
+          : o
+      )
+    )
+  }
+
+  const handleOptionNameChangeForConfig = (opt: PosMenuOption, value: string) => {
+    const name = value
+    setOptionsConfigMenuOptions((prev) =>
+      prev.map((o) => (o.id === opt.id ? { ...o, name } : o))
     )
   }
 
@@ -2460,6 +2510,20 @@ export default function PosMenusPage() {
                           </div>
                         )}
                         <div className="flex gap-2 text-xs">
+                          <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posChannel") || "채널"}</span>
+                          <Select value={newOptionChannelScope} onValueChange={(v) => setNewOptionChannelScope(v as "all" | "hall" | "delivery" | "packaging")}>
+                            <SelectTrigger className="h-8 w-32 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">{t("all") || "전체"}</SelectItem>
+                              <SelectItem value="hall">{t("posOptionSellHall") || "홀"}</SelectItem>
+                              <SelectItem value="delivery">{t("posOptionSellDelivery") || "배달"}</SelectItem>
+                              <SelectItem value="packaging">{t("posOptionSellPackaging") || "포장"}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex gap-2 text-xs">
                           <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
                           <Input type="number" placeholder="+0" className="h-8 w-20 text-right text-xs" value={newOptionModifier} onChange={(e) => setNewOptionModifier(e.target.value)} />
                           <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
@@ -3328,17 +3392,6 @@ export default function PosMenusPage() {
                     <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
                         <h3 className="text-sm font-bold">{optionsConfigSelectedMenu?.name} ({optionsConfigSelectedMenu?.code})</h3>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {optionsConfigUseSizePartUi
-                            ? `1. ${t("posOptionGroupSize")} (S, M, L) → 2. ${t("posOptionGroupPart")} (${t("posOptionPartBoneless")}, ${t("posOptionPartWing")}, ${t("posOptionPartDrumstick")})`
-                            : optionsConfigStepGroups.length > 0
-                              ? (t("posOptionConfigCurrentSteps") || "저장된 선택 단계") +
-                                ": " +
-                                optionsConfigStepGroups.join(" → ") +
-                                " · " +
-                                (t("posOptionConfigNonChickenStepHint") || "각 칸에 원하는 문구를 직접 입력하세요 (한글·영문 가능).")
-                              : t("posOptionConfigNoStepsYet") || "선택 단계가 없습니다. 아래에 입력 후 [단계 저장] 하세요."}
-                        </p>
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleResetOptionsForConfig} disabled={optionsConfigMenuOptions.length === 0}><RotateCcw className="h-3.5 w-3.5 mr-1" />{t("posMenuOptionsConfigReset") || "초기화"}</Button>
@@ -3349,13 +3402,33 @@ export default function PosMenusPage() {
                       <p className="text-[11px] text-muted-foreground">
                         {t("posOptionResetHint") || "기존 옵션을 지우고 새로 적용하려면 먼저 [초기화]를 누른 뒤 옵션을 추가하세요."}
                       </p>
-                      <div className="rounded border p-3 bg-muted/30 space-y-2">
+                      <div className="rounded border p-3 bg-muted/30 space-y-3">
+                        <div className="rounded border bg-background p-2.5">
+                          <p className="text-xs font-semibold">
+                            {t("posOptionSelectionGroups") || "옵션 선택 단계"}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            {(t("posOptionConfigStepsSimpleHint") ||
+                              "1) 단계 입력/프리셋 → 2) 단계 저장 → 3) 옵션 추가")}
+                          </p>
+                          {optionsConfigStepGroups.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {optionsConfigStepGroups.map((g, idx) => (
+                                <span key={`${g}-${idx}`} className="rounded bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                                  {idx + 1}. {g}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
                         <div className="flex flex-wrap items-end gap-2">
-                          <div className="min-w-[200px] flex-1">
-                            <label className="text-xs font-medium block mb-0.5">{t("posOptionSelectionGroups") || "옵션 선택 단계"}</label>
+                          <div className="min-w-[220px] flex-1">
+                            <label className="text-xs font-medium block mb-0.5">
+                              {t("posOptionGroupName") || "옵션 그룹 이름"}
+                            </label>
                             <Input
                               className="h-8 text-xs"
-                              placeholder={t("posOptionSelectionGroupsHint") || "예: size, part 또는 side, drink"}
+                              placeholder={t("posOptionGroupNamePlaceholder") || "예: 맛 선택 / 사이즈 선택"}
                               value={optionsConfigGroupsDraft}
                               onChange={(e) => setOptionsConfigGroupsDraft(e.target.value)}
                               disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
@@ -3369,10 +3442,13 @@ export default function PosMenusPage() {
                             disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
                             onClick={() => handleApplyOptionGroupsForConfig()}
                           >
-                            {optionsConfigApplyingGroups ? (t("loading") || "…") : (t("posOptionConfigApplySteps") || "단계 저장")}
+                            {optionsConfigApplyingGroups ? (t("loading") || "…") : (t("posOptionConfigApplySteps") || "2) 단계 저장")}
                           </Button>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 rounded border bg-background p-2">
+                          <span className="self-center text-[11px] font-medium text-muted-foreground">
+                            {t("posOptionConfigPresetLabel") || "빠른 프리셋"}
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
@@ -3386,46 +3462,19 @@ export default function PosMenusPage() {
                             }
                             onClick={() => void handleApplyOptionPresetAndSave(["size", "part"])}
                           >
-                            {t("posOptionConfigPresetChicken") || "프리셋: size, part (치킨)"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px]"
-                            disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                            onClick={() => void handleApplyOptionPresetAndSave(["side", "drink"])}
-                          >
-                            {t("posOptionConfigPresetSet") || "세트: side + drink (저장까지)"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px]"
-                            disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                            onClick={() => void handleApplyOptionPresetAndSave(["set_main", "side", "drink"])}
-                          >
-                            {t("posOptionConfigPresetSet3") || "세트 3단: 메인+사이드+음료 (저장까지)"}
+                            {t("posOptionConfigPresetChicken") || "치킨: size > part"}
                           </Button>
                         </div>
                         {optionsConfigDraftGroupsParsed.length > 0 ? (
                           <div className="rounded border bg-background p-2 space-y-2">
                             <p className="text-[11px] font-medium">{t("posOptionSelectionRules")}</p>
-                            <p className="text-[10px] text-muted-foreground leading-snug">{t("posOptionGrabGroupTitleExplainShort")}</p>
-                            <p className="text-[10px] text-muted-foreground leading-snug">{t("posOptionGrabDeliverySyncHint")}</p>
                             {optionsConfigDraftGroupsParsed.map((groupKey) => {
                               const row =
                                 optionsConfigGroupRulesDraft.find((x) => x.key === groupKey) ||
                                 ({ key: groupKey, label: groupKey, required: true, minSelect: 1, maxSelect: 1 } as PosOptionSelectionGroupConfig)
                               const ruleValue = row.required === false ? "optional" : "required"
                               return (
-                                <div key={groupKey} className="grid grid-cols-1 gap-2 rounded border p-2 md:grid-cols-3">
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionGroupKeyLabel")}</p>
-                                    <Input className="h-8 text-xs font-mono" value={groupKey} disabled aria-readonly title={t("posOptionSelectionGroupKeyHint")} />
-                                    <p className="text-[9px] leading-tight text-muted-foreground">{t("posOptionSelectionGroupKeyHint")}</p>
-                                  </div>
+                                <div key={groupKey} className="grid grid-cols-1 gap-2 rounded border p-2 md:grid-cols-2">
                                   <div className="space-y-1">
                                     <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionStepLabelField")}</p>
                                     <Input
@@ -3475,50 +3524,25 @@ export default function PosMenusPage() {
                             })}
                           </div>
                         ) : null}
-                        <p className="text-[10px] text-muted-foreground">
-                          {t("posOptionConfigStepsSaveHint") ||
-                            "프리셋은 단계를 DB에 바로 저장합니다. 수동 입력은 쉼표·줄바꿈으로 구분 후 [단계 저장]을 누르세요. 그다음 아래에서 조합을 추가합니다."}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px]"
-                            disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                            onClick={() => void handleApplyOptionPresetAndSave(["set_main"])}
-                          >
-                            {t("posOptionConfigPresetSingleSetMain")}
-                          </Button>
-                        </div>
                       </div>
-                      {optionsConfigStepGroups.length === 1 && optionsConfigStepGroups[0] === "set_main" ? (
-                        <div className="rounded border p-3 bg-muted/15 space-y-2">
-                          <p className="text-xs font-medium">{t("posOptionConfigSetMainQuickTitle")}</p>
-                          <p className="text-[10px] text-muted-foreground">{t("posOptionConfigSetMainQuickHint")}</p>
-                          <div className="flex flex-wrap items-end gap-2">
-                            <Input
-                              className="h-8 min-w-[260px] flex-1 text-xs"
-                              placeholder={t("posOptionConfigSetMainQuickPlaceholder")}
-                              value={optionsConfigSetMainQuickValues}
-                              onChange={(e) => setOptionsConfigSetMainQuickValues(e.target.value)}
-                              disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-8 text-xs"
-                              disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
-                              onClick={() => void handleQuickCreateSetMainOptions()}
-                            >
-                              <Plus className="h-3.5 w-3.5 mr-1" />
-                              {t("posOptionConfigSetMainQuickCreateBtn")}
-                            </Button>
-                          </div>
-                        </div>
-                      ) : null}
                       <div className="rounded border p-3 bg-muted/20">
+                        {optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code) && (
+                          <p className="mb-2 text-xs text-amber-700">
+                            {t("posChickenTitleOnlyHint") || "치킨 메뉴는 기존 옵션 구조를 유지합니다. 아래 옵션 목록에서 제목만 수정해 주세요."}
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-2 items-end">
+                          <div className="w-full">
+                            <label className="text-xs font-medium block mb-0.5">
+                              {t("posOptionTitle") || "제목"} ({t("optional") || "선택"})
+                            </label>
+                            <Input
+                              className="h-8 w-full text-xs"
+                              placeholder={t("posOptionNamePlaceholder") || "미입력 시 단계값으로 자동 생성"}
+                              value={optionsConfigNewOptionTitle}
+                              onChange={(e) => setOptionsConfigNewOptionTitle(e.target.value)}
+                            />
+                          </div>
                           {optionsConfigUseSizePartUi ? (
                             <>
                               <div>
@@ -3599,10 +3623,11 @@ export default function PosMenusPage() {
                               className="h-8 px-3"
                               onClick={handleAddOptionForConfig}
                               disabled={
-                                optionsConfigUseSizePartUi
+                                (optionsConfigSelectedMenu ? isChickenMenu(optionsConfigSelectedMenu.code) : false) ||
+                                (optionsConfigUseSizePartUi
                                   ? !newOptionSize || !newOptionPart
                                   : optionsConfigStepGroups.length === 0 ||
-                                    optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim())
+                                    optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim()))
                               }
                               type="button"
                             >
@@ -3619,12 +3644,15 @@ export default function PosMenusPage() {
                               onClick={handleAddAllOptionsForConfig}
                               disabled={
                                 !optionsConfigSelectedMenu ||
+                                isChickenMenu(optionsConfigSelectedMenu.code) ||
                                 (!isChickenMenu(optionsConfigSelectedMenu.code) && !isSizePartGroups(optionsConfigStepGroups))
                               }
                               title={
                                 !optionsConfigSelectedMenu ||
                                 (!isChickenMenu(optionsConfigSelectedMenu.code) && !isSizePartGroups(optionsConfigStepGroups))
                                   ? (t("posOptionConfigAddAllSizePartOnly") || "size, part 단계일 때만 사용")
+                                  : isChickenMenu(optionsConfigSelectedMenu.code)
+                                    ? (t("posChickenTitleOnlyHint") || "치킨은 기존 옵션 제목만 수정")
                                   : undefined
                               }
                             >
@@ -3638,10 +3666,7 @@ export default function PosMenusPage() {
                       {optionsConfigSelectedMenu && !isChickenMenu(optionsConfigSelectedMenu.code) && optionsConfigStepGroups.length === 0 ? (
                         <div className="rounded border p-3 bg-muted/15 space-y-2">
                           <p className="text-xs font-medium">{t("posOptionDirectAddSection") || "옵션명 직접 추가 (단계 없음)"}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {t("posOptionDirectAddHint") ||
-                              "세트처럼 단계 선택이 필요 없을 때 한 줄 옵션만 씁니다. 사이드+음료 세트는 위에서 세트 프리셋으로 단계를 만든 뒤 조합을 추가하세요."}
-                          </p>
+                          
                           <div className="flex flex-wrap items-end gap-2">
                             <div className="min-w-[180px] flex-1">
                               <Input
@@ -3670,9 +3695,15 @@ export default function PosMenusPage() {
                         <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 목록"}</h4>
                         <div className="max-h-60 overflow-y-auto">
                           {(() => {
-                            const optionsToShow = optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
+                            const optionsToShowRaw = optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
                               ? optionsConfigMenuOptions.filter((o) => !isChickenDefaultOption(o.name))
                               : optionsConfigMenuOptions
+                            const optionsToShow = [...optionsToShowRaw].sort((a, b) => {
+                              const ao = Number(a.sortOrder ?? 0)
+                              const bo = Number(b.sortOrder ?? 0)
+                              if (ao !== bo) return ao - bo
+                              return String(a.name ?? "").localeCompare(String(b.name ?? ""))
+                            })
                             if (optionsToShow.length === 0) {
                               return <p className="py-6 text-center text-xs text-muted-foreground">{optionsConfigMenuOptions.length === 0 ? (t("posOptionsConfigEmptyOptions") || "위에서 옵션을 추가해 주세요.") : (t("posChickenBaseOnlyHint") || "치킨은 기본(S 순살)만 있습니다. M 순살/윙/봉은 \"치킨 옵션 추가\"로 넣으세요.")}</p>
                             }
@@ -3681,9 +3712,7 @@ export default function PosMenusPage() {
                               <thead>
                                 <tr className="border-b text-muted-foreground">
                                   <th className="text-left py-2 px-2 font-medium">{t("posOptionsConfigOptionCol") || "옵션"}</th>
-                                  <th className="text-center py-2 px-2 w-20">{t("posOptionSellHall")}</th>
-                                  <th className="text-center py-2 px-2 w-20">{t("posOptionSellDelivery")}</th>
-                                  <th className="text-center py-2 px-2 w-20">{t("posOptionSellPackaging")}</th>
+                                  <th className="text-center py-2 px-2 w-28">{t("posChannel") || "채널"}</th>
                                   <th className="text-right py-2 px-2 w-24 text-xs font-medium">{t("posOptionSellHall")}</th>
                                   <th className="text-right py-2 px-2 w-24 text-xs font-medium">{t("posOptionSellPackaging")}</th>
                                   <th className="text-right py-2 px-2 w-24 text-xs font-medium">{t("posOptionSellDelivery")}</th>
@@ -3693,15 +3722,47 @@ export default function PosMenusPage() {
                               <tbody>
                                 {optionsToShow.map((o) => (
                                   <tr key={o.id} className="border-b last:border-b-0">
-                                    <td className="py-2 px-2 font-medium">{optionPartLabel(o.name)}</td>
-                                    <td className="py-2 px-2 text-center">
-                                      <Checkbox checked={o.sellHall !== false} onCheckedChange={() => handleToggleSellChannelForConfig(o, "sellHall")} />
+                                    <td className="py-2 px-2 font-medium">
+                                      {optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code) ? (
+                                        <Input
+                                          type="text"
+                                          className="h-7 w-full text-xs"
+                                          value={o.name ?? ""}
+                                          onChange={(e) => handleOptionNameChangeForConfig(o, e.target.value)}
+                                          placeholder={t("posOptionTitle") || "제목"}
+                                        />
+                                      ) : (
+                                        optionPartLabel(o.name)
+                                      )}
                                     </td>
                                     <td className="py-2 px-2 text-center">
-                                      <Checkbox checked={o.sellDelivery !== false} onCheckedChange={() => handleToggleSellChannelForConfig(o, "sellDelivery")} />
-                                    </td>
-                                    <td className="py-2 px-2 text-center">
-                                      <Checkbox checked={o.sellPackaging !== false} onCheckedChange={() => handleToggleSellChannelForConfig(o, "sellPackaging")} />
+                                      <Select
+                                        value={
+                                          o.sellHall !== false && o.sellDelivery !== false && o.sellPackaging !== false
+                                            ? "all"
+                                            : o.sellDelivery !== false && o.sellHall === false && o.sellPackaging === false
+                                              ? "delivery"
+                                              : o.sellPackaging !== false && o.sellHall === false && o.sellDelivery === false
+                                                ? "packaging"
+                                                : "hall"
+                                        }
+                                        onValueChange={(v) =>
+                                          handleOptionAudienceChangeForConfig(
+                                            o,
+                                            (v as "all" | "hall" | "delivery" | "packaging")
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger className="h-7 w-24 text-xs">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="all">{t("all") || "전체"}</SelectItem>
+                                          <SelectItem value="hall">{t("posOptionSellHall") || "홀"}</SelectItem>
+                                          <SelectItem value="packaging">{t("posOptionSellPackaging") || "포장"}</SelectItem>
+                                          <SelectItem value="delivery">{t("posOptionSellDelivery") || "배달"}</SelectItem>
+                                        </SelectContent>
+                                      </Select>
                                     </td>
                                     <td className="py-2 px-2">
                                       <Input type="number" className="h-7 w-24 text-right text-xs tabular-nums" value={o.priceModifier != null ? o.priceModifier : ""} onChange={(e) => handlePriceChangeForConfig(o, "priceModifier", e.target.value)} placeholder="0" />

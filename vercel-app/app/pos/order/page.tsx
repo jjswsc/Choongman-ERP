@@ -102,10 +102,6 @@ import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/l
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
-import {
-  resolvePosMenuDescriptionForChannel,
-  resolvePosMenuOptionDescriptionForChannel,
-} from "@/lib/pos-menu-display-description"
 import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
 import { isChickenMenu } from "@/lib/pos-menu-categories"
 
@@ -435,7 +431,7 @@ export default function PosOrderPage() {
     setLoading(true)
     const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
     Promise.allSettled([
-      getPosMenus(),
+      getPosMenus({ fresh: true }),
       getPosMenuCategories(),
       getPosMenuOptions({ fresh: true }),
       getPosPromosWithItems(),
@@ -1546,7 +1542,6 @@ export default function PosOrderPage() {
               </button>
             ))}
             {filteredMenus.map((m) => {
-              const menuDesc = resolvePosMenuDescriptionForChannel(m, orderType)
               return (
               <button
                 key={m.id}
@@ -1568,14 +1563,6 @@ export default function PosOrderPage() {
                   >
                     {m.name}
                   </div>
-                  {menuDesc ? (
-                    <p
-                      className="line-clamp-2 text-[10px] leading-snug text-slate-500"
-                      title={menuDesc}
-                    >
-                      {menuDesc}
-                    </p>
-                  ) : null}
                 </div>
                 <div className="mt-auto text-xs font-bold text-emerald-600">
                   {(getMenuPrice(m)) > 0 ? `${formatBahtNum(getMenuPrice(m))} ฿` : "-"}
@@ -2133,16 +2120,6 @@ export default function PosOrderPage() {
                 ? ` (${(optionPickerStep || 0) + 1}/${optionPickerMenu.optionSelectionGroups.length})`
                 : ""}
             </DialogTitle>
-            {optionPickerMenu
-              ? (() => {
-                  const md = resolvePosMenuDescriptionForChannel(optionPickerMenu, orderType)
-                  return md ? (
-                    <p className="text-left text-xs text-muted-foreground whitespace-pre-wrap max-h-28 overflow-y-auto pr-1">
-                      {md}
-                    </p>
-                  ) : null
-                })()
-              : null}
           </DialogHeader>
           {optionPickerMenu && (() => {
             if (isBanbanMenu(optionPickerMenu)) {
@@ -2163,7 +2140,6 @@ export default function PosOrderPage() {
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {list.map((menu) => {
-                        const banDesc = resolvePosMenuDescriptionForChannel(menu, orderType)
                         return (
                         <button
                           key={menu.id}
@@ -2178,11 +2154,6 @@ export default function PosOrderPage() {
                           className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                         >
                           <span className="block font-medium text-slate-800">{menu.name}</span>
-                          {banDesc ? (
-                            <span className="mt-0.5 block line-clamp-2 text-[11px] text-muted-foreground" title={banDesc}>
-                              {banDesc}
-                            </span>
-                          ) : null}
                           <span className="text-xs text-emerald-600">{formatBahtNum(getMenuPrice(menu))} ฿</span>
                         </button>
                         )
@@ -2200,12 +2171,17 @@ export default function PosOrderPage() {
             const opts = optionsByMenuId[optionPickerMenu.id] || []
             const isChickenBasePrice = (optionPickerMenu.categoryMain ?? "") === "Chicken" || optionPickerMenu.code?.trim().toLowerCase().startsWith("c")
             const optsToShow = isChickenBasePrice ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts
-            const groups = optionPickerMenu.optionSelectionGroups || []
             const groupConfigMap = new Map(
               (optionPickerMenu.optionSelectionConfig || [])
                 .map((cfg) => [String(cfg?.key ?? "").trim(), cfg] as const)
                 .filter(([k]) => !!k)
             )
+            const stepAudience = orderType === "delivery" ? "delivery" : "hall"
+            const groups = (optionPickerMenu.optionSelectionGroups || []).filter((key) => {
+              const cfg = groupConfigMap.get(key)
+              const audience = cfg?.audience
+              return !audience || audience === "all" || audience === stepAudience
+            })
             const optsWithSteps = opts.filter(
               (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
             )
@@ -2304,7 +2280,6 @@ export default function PosOrderPage() {
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
                 {optsToShow.map((opt) => {
-                  const optDesc = resolvePosMenuOptionDescriptionForChannel(opt, orderType)
                   return (
                   <button
                     key={opt.id}
@@ -2313,11 +2288,6 @@ export default function PosOrderPage() {
                   >
                     <span className="min-w-0 flex-1 text-slate-800">
                       <span className="block font-medium">{translateChickenPartLabel(opt.name)}</span>
-                      {optDesc ? (
-                        <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={optDesc}>
-                          {optDesc}
-                        </span>
-                      ) : null}
                     </span>
                     <span className="shrink-0 font-bold text-emerald-600">
                       {formatBahtNum(getMenuPrice(optionPickerMenu) + getOptionModifier(opt))} ฿

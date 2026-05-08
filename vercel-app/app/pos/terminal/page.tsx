@@ -1051,7 +1051,7 @@ export default function PosTerminalPage() {
         setCustomerDisplayIdleMediaType('none')
         setCustomerDisplayIdleMediaUrl('')
       })
-    getPosMenus()
+    getPosMenus({ fresh: true })
       .then(applyPosMenusList)
       .catch(() => {
         if (seq !== storeSettingsLoadSeqRef.current) return

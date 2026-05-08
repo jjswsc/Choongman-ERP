@@ -5568,6 +5568,8 @@ export interface PosMenu {
 export interface PosOptionSelectionGroupConfig {
   key: string
   label?: string
+  /** 단계 노출 채널: all(홀+배달+포장) | hall(홀+포장) | delivery(배달 전용) */
+  audience?: 'all' | 'hall' | 'delivery'
   required?: boolean
   minSelect?: number
   maxSelect?: number
@@ -5629,7 +5631,12 @@ export interface PosOrderPackagingChecklistGroup {
   }[]
 }
 
-export async function getPosMenus() {
+export async function getPosMenus(params?: { fresh?: boolean }) {
+  if (params?.fresh) {
+    const res = await apiFetchWithOffline('/api/getPosMenus')
+    const data = await res.json().catch(() => [])
+    return Array.isArray(data) ? (data as PosMenu[]) : []
+  }
   return fetchPosCatalogCached<PosMenu[]>(ERP_POS_CATALOG_MENUS_CACHE_KEY, '/api/getPosMenus', [])
 }
 

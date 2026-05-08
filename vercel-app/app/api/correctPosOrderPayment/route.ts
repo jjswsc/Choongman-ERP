@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, type JwtPayload } from '@/lib/jwt-auth'
 import { isOfficeRole } from '@/lib/permissions'
 import { normStoreKey } from '@/lib/store-list-keys'
-import { toDateStrBangkok } from '@/lib/attendance-utils'
+import {
+  addDaysYmd,
+  getPosBusinessDateStrFromConfig,
+} from '@/lib/pos-business-day'
+import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   coercePaymentOtherBreakdownForSave,
@@ -122,9 +126,20 @@ export async function POST(req: NextRequest) {
     if (!CORRECTABLE.has(st)) {
       return NextResponse.json({ success: false, message: 'status_not_correctable' }, { status: 400, headers })
     }
-    const createdDay = toDateStrBangkok(row.created_at ?? null)
-    const todayBangkok = toDateStrBangkok(new Date())
-    if (!createdDay || createdDay !== todayBangkok) {
+    /**
+     * 정정 가능 시점: 매장 영업일(operating day) 기준으로 오늘 또는 어제까지.
+     * - 영업시간 11:00→익일 02:00 같은 야간 영업이면 자정 이후 주문도 같은 영업일로 묶이고,
+     *   다음 날 오전(영업 시작 전)에 정정해도 어제 영업일로 인정한다.
+     */
+    const businessHours = await loadPosBusinessHoursForServer(storeCode)
+    const createdAt = row.created_at ? new Date(row.created_at) : null
+    const createdBd =
+      createdAt && !Number.isNaN(createdAt.getTime())
+        ? getPosBusinessDateStrFromConfig(createdAt, businessHours)
+        : ''
+    const todayBd = getPosBusinessDateStrFromConfig(new Date(), businessHours)
+    const yesterdayBd = todayBd ? addDaysYmd(todayBd, -1) : ''
+    if (!createdBd || (createdBd !== todayBd && createdBd !== yesterdayBd)) {
       return NextResponse.json({ success: false, message: 'today_only' }, { status: 400, headers })
     }
     const prevTotal = Number(row.total ?? 0)

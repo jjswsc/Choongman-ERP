@@ -57,7 +57,7 @@ import {
 } from '@/lib/pos-tax-invoice'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
-import { toDateStrBangkok } from '@/lib/attendance-utils'
+import { addDaysYmd, getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import {
@@ -684,13 +684,23 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
   }
 
+  /**
+   * 정정 가능: 결제·주방 진행 중이거나 완료된 당일(POS 영업일) 주문.
+   * - 영업일은 매장별 영업시간(시작·종료)에 따라 자정을 넘길 수 있으므로,
+   *   `pos-business-day-hydrate.tsx`가 주입한 매장 영업시간을 사용한다.
+   * - 야간 영업 마감 후 다음 날 오전에 전날 주문을 정정할 수 있도록 **오늘·어제 영업일**까지 허용.
+   * - 권한·매장 일치, 사유 필수 등 추가 검증은 서버(correctPosOrderPayment)에서 수행.
+   */
   const isPayCorrectableOrder = (o: PosOrder) => {
     const st = String(o.status ?? '').toLowerCase()
     if (!['paid', 'completed', 'ready', 'cooking', 'preparing'].includes(st)) return false
     if (!(Number(o.total) > 0.005)) return false
-    const d = toDateStrBangkok(o.createdAt ?? null)
-    const today = toDateStrBangkok(new Date())
-    return Boolean(d && today && d === today)
+    if (!o.createdAt) return false
+    const orderBd = getPosBusinessDateStr(new Date(o.createdAt))
+    const todayBd = getPosBusinessDateStr(new Date())
+    if (!orderBd || !todayBd) return false
+    if (orderBd === todayBd) return true
+    return orderBd === addDaysYmd(todayBd, -1)
   }
 
   const openPayCorrect = (o: PosOrder) => {
@@ -1322,12 +1332,29 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                           {formatBangkokDateTime(o.createdAt)}
                         </td>
                         <td className="px-4 py-3">
-                          <ChevronDown
-                            className={cn(
-                              'h-4 w-4 transition',
-                              expandedId === o.id && 'rotate-180'
+                          <div className="flex items-center justify-end gap-1">
+                            {isPayCorrectableOrder(o) && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-950/40 dark:hover:text-amber-200"
+                                title={t('posReceiptPayCorrect') || '결제 수단 정정'}
+                                aria-label={t('posReceiptPayCorrect') || '결제 수단 정정'}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openPayCorrect(o)
+                                }}
+                              >
+                                <PencilLine className="h-3.5 w-3.5" />
+                              </Button>
                             )}
-                          />
+                            <ChevronDown
+                              className={cn(
+                                'h-4 w-4 transition',
+                                expandedId === o.id && 'rotate-180'
+                              )}
+                            />
+                          </div>
                         </td>
                       </tr>
                       {expandedId === o.id && (

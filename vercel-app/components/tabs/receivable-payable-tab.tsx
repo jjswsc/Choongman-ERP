@@ -176,7 +176,6 @@ export function ReceivablePayableTab() {
       let refType: "Order" | "ForceOutbound" | "PO" | null = null
       let refId: number | null = null
       if (row.ref_type === "Order") {
-        if (!row.receive_checked) return
         const orderId = orderIdFromReceivableOrderRow(row)
         if (orderId == null) {
           await appAlert(tt("recTaxInvoiceNoOrderId", "Cannot identify the order."))
@@ -193,7 +192,6 @@ export function ReceivablePayableTab() {
         refType = "ForceOutbound"
         refId = sid
       } else if (row.ref_type === "AccountingPO") {
-        if (!row.receive_checked) return
         const poId = Number(row.ref_id)
         if (!Number.isFinite(poId) || poId <= 0) {
           await appAlert(tt("recTaxInvoiceNoPoId", "Cannot identify accounting PO."))
@@ -1413,9 +1411,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         )}
                                       </td>
                                       <td className="py-1.5 px-1 w-[72px] text-center align-middle">
-                                        {((row.ref_type === "Order" && row.receive_checked && rowOrderId != null) ||
+                                        {((row.ref_type === "Order" && rowOrderId != null) ||
                                           (row.ref_type === "ForceOutbound" && rowForceLogId != null) ||
-                                          (row.ref_type === "AccountingPO" && row.receive_checked && row.ref_id != null)) ? (
+                                          (row.ref_type === "AccountingPO" && row.ref_id != null)) ? (
                                           <Button
                                             type="button"
                                             variant="ghost"

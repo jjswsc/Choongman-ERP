@@ -215,7 +215,7 @@ export function PosTerminalMenuScreen({
   const loadMenuData = React.useCallback(async () => {
     const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
     const [r0, r1, r2, r3] = await Promise.allSettled([
-      getPosMenus(),
+      getPosMenus({ fresh: true }),
       getPosMenuCategories(),
       getPosMenuOptions({ fresh: true }),
       getPosPromosWithItems(),
@@ -1468,12 +1468,17 @@ export function PosTerminalMenuScreen({
               (optionPickerMenu.categoryMain ?? '') === 'Chicken' ||
               optionPickerMenu.code?.trim().toLowerCase().startsWith('c')
             const optsToShow = isChickenBase ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts
-            const groups = optionPickerMenu.optionSelectionGroups || []
             const groupConfigMap = new Map(
               (optionPickerMenu.optionSelectionConfig || [])
                 .map((cfg) => [String(cfg?.key ?? '').trim(), cfg] as const)
                 .filter(([k]) => !!k)
             )
+            const stepAudience = orderType === 'delivery' ? 'delivery' : 'hall'
+            const groups = (optionPickerMenu.optionSelectionGroups || []).filter((key) => {
+              const cfg = groupConfigMap.get(key)
+              const audience = cfg?.audience
+              return !audience || audience === 'all' || audience === stepAudience
+            })
             const optsWithSteps = opts.filter(
               (o) =>
                 o.optionType === 'substitution' &&

@@ -56,6 +56,7 @@ export type CollabCartLineLike = {
   /** 장바구니 줄 수량 */
   quantity?: number
   qty?: number
+  menuId?: string
   menuId1?: string
   menuId2?: string
 }
@@ -63,15 +64,36 @@ export type CollabCartLineLike = {
 /** 장바구니 한 줄에 연결된 메뉴 id (반반 등) */
 export function menuIdsForCollabLine(line: CollabCartLineLike): string[] {
   const out: string[] = []
+  const primary = String(line.menuId ?? '').trim()
   const a = String(line.menuId1 ?? '').trim()
   const b = String(line.menuId2 ?? '').trim()
+  if (primary) out.push(primary)
   if (a) out.push(a)
   if (b) out.push(b)
   if (out.length === 0) {
     const m = menuIdFromCartLineId(line.id)
     if (m) out.push(m)
   }
-  return out
+  return Array.from(new Set(out))
+}
+
+function menuIdsForCollabLineWithCatalog(
+  line: CollabCartLineLike,
+  menuById: Map<string, Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>>
+): string[] {
+  const explicit = menuIdsForCollabLine(line).filter((id) => menuById.has(id))
+  if (explicit.length > 0) return explicit
+
+  const rawId = String(line.id ?? '').trim()
+  if (!rawId) return []
+  if (menuById.has(rawId)) return [rawId]
+
+  const cartPayloadId = rawId.startsWith('cart-') ? rawId.slice('cart-'.length) : rawId
+  const matched: string[] = []
+  for (const id of menuById.keys()) {
+    if (cartPayloadId === id || cartPayloadId.startsWith(`${id}-`)) matched.push(id)
+  }
+  return matched
 }
 
 function lineEligibleForCollab(
@@ -79,7 +101,7 @@ function lineEligibleForCollab(
   menuById: Map<string, Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>>,
   detail: MarketingCollabDetail
 ): boolean {
-  const ids = menuIdsForCollabLine(line)
+  const ids = menuIdsForCollabLineWithCatalog(line, menuById)
   if (ids.length === 0) return !collabScopeAny(detail)
   return ids.some((mid) => {
     const m = menuById.get(mid)
