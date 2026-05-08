@@ -72,8 +72,8 @@ type PosCostListSortKey =
 function posCostListRowMiseAndRatios(r: PosMenuCostAnalysisRow) {
   const miseMult = 1 + MISE_RATE_DEFAULT / 100
   const m = (c: number) => Math.round(c * miseMult * 10) / 10
-  const priceH = (r.priceHall ?? 0) || 1
-  const priceD = (r.priceDelivery ?? r.priceHall ?? 0) || 1
+  const priceH = Number(r.priceHall ?? 0)
+  const priceD = Number(r.priceDelivery ?? r.priceHall ?? 0)
   const costHMise = m(r.costHall ?? 0)
   const costDMise = m(r.costDelivery ?? 0)
   return {
@@ -81,8 +81,8 @@ function posCostListRowMiseAndRatios(r: PosMenuCostAnalysisRow) {
     priceD,
     costHMise,
     costDMise,
-    costRatioH: (costHMise / priceH) * 100,
-    costRatioD: (costDMise / priceD) * 100,
+    costRatioH: priceH > 0 ? (costHMise / priceH) * 100 : 0,
+    costRatioD: priceD > 0 ? (costDMise / priceD) * 100 : 0,
   }
 }
 

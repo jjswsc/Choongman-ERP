@@ -4,6 +4,13 @@ import { parseGrabStoreMap } from '@/lib/grab-store-map-env'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
 import { normStoreKey } from '@/lib/store-list-keys'
 import {
+  type PosOptionGroupRow,
+  buildMenuOptionsFromLinks,
+  buildSelectionConfigFromLinks,
+  loadMenuGroupLinks,
+  loadPosOptionGroupsWithItems,
+} from '@/lib/pos-option-groups-server'
+import {
   buildCategoryOrderMap,
   buildMenuPolicyMap,
   getPosDeliveryPolicyBundle,
@@ -40,6 +47,7 @@ type OptionRow = {
   price_modifier_delivery?: number | null
   sort_order?: number
   sell_delivery?: boolean
+  option_step_values?: Record<string, string> | null
   description_default?: string
   description_delivery?: string | null
   description_table?: string | null
@@ -530,7 +538,7 @@ async function resolvePolicyBundleForGrabMenu(storeCodeGuess: string): Promise<{
 
 async function loadOptions(): Promise<OptionRow[]> {
   const cols =
-    'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,sell_delivery,description_default,description_delivery,description_table'
+    'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,sell_delivery,option_step_values,description_default,description_delivery,description_table'
   const colsLegacy =
     'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,description_default,description_delivery,description_table'
   for (const c of [cols, colsLegacy]) {
@@ -571,8 +579,62 @@ export async function buildGrabMenuFromPos(params: {
   }
 
   const options = await loadOptions()
+  const linkedMenuIds = new Set<number>()
+  const linkedOptions: OptionRow[] = []
+  const linkedSelectionConfigByMenuId = new Map<number, OptionSelectionConfigEntry[]>()
+  try {
+    const [{ groups, itemsByGroupId }, links] = await Promise.all([
+      loadPosOptionGroupsWithItems(),
+      loadMenuGroupLinks(),
+    ])
+    const groupsById = new Map<number, PosOptionGroupRow>()
+    for (const g of groups || []) {
+      const id = Number(g.id || 0)
+      if (!id) continue
+      groupsById.set(id, g)
+    }
+    const linksByMenuId = new Map<number, typeof links>()
+    for (const link of links || []) {
+      const mid = Number(link.menu_id || 0)
+      if (!mid) continue
+      linkedMenuIds.add(mid)
+      if (!linksByMenuId.has(mid)) linksByMenuId.set(mid, [])
+      linksByMenuId.get(mid)!.push(link)
+    }
+    for (const [mid, menuLinks] of linksByMenuId.entries()) {
+      const built = buildMenuOptionsFromLinks(mid, menuLinks, groupsById, itemsByGroupId)
+      for (const row of built) {
+        linkedOptions.push({
+          id: Number(String(row.id).replace(/[^\d]/g, '')) || undefined,
+          menu_id: Number(row.menuId),
+          name: row.name,
+          price_modifier: row.priceModifier,
+          price_modifier_delivery: row.priceModifierDelivery ?? null,
+          sort_order: row.sortOrder,
+          sell_delivery: row.sellDelivery !== false,
+          option_step_values: row.optionStepValues || null,
+        })
+      }
+      const cfg = buildSelectionConfigFromLinks(menuLinks, groupsById)
+      linkedSelectionConfigByMenuId.set(
+        mid,
+        parseOptionSelectionConfigEntries(cfg.optionSelectionConfig)
+      )
+    }
+  } catch {
+    // 신규 테이블 미배포 환경 fallback
+  }
   const optionByMenuId = new Map<number, OptionRow[]>()
   for (const opt of options) {
+    const menuId = Number(opt.menu_id ?? 0)
+    if (!menuId) continue
+    if (linkedMenuIds.has(menuId)) continue
+    if (opt.sell_delivery === false) continue
+    const list = optionByMenuId.get(menuId) || []
+    list.push(opt)
+    optionByMenuId.set(menuId, list)
+  }
+  for (const opt of linkedOptions) {
     const menuId = Number(opt.menu_id ?? 0)
     if (!menuId) continue
     if (opt.sell_delivery === false) continue
@@ -628,8 +690,10 @@ export async function buildGrabMenuFromPos(params: {
       return String(a.name ?? '').localeCompare(String(b.name ?? ''))
     })
     const items = sortedMenus.map((menu, itemIndex) => {
-      const selectionConfigEntries = parseOptionSelectionConfigEntries(menu.option_selection_config)
       const menuId = Number(menu.id ?? 0)
+      const selectionConfigEntries =
+        linkedSelectionConfigByMenuId.get(menuId) ||
+        parseOptionSelectionConfigEntries(menu.option_selection_config)
       const policy = menuPolicyMap.get(menuId)
       const itemId = buildGrabItemId(menu, itemIndex)
       const menuOptions = (optionByMenuId.get(menuId) || []).sort((a, b) => {
@@ -641,7 +705,24 @@ export async function buildGrabMenuFromPos(params: {
       const modifierGroupBuckets = new Map<string, ModifierGroupBucket>()
       for (const opt of menuOptions) {
         const originalName = String(opt.name ?? '').trim()
-        const split = splitOptionGroupAndName(originalName)
+        let split = splitOptionGroupAndName(originalName)
+        const stepValues = opt.option_step_values
+        if (
+          stepValues &&
+          typeof stepValues === 'object' &&
+          !Array.isArray(stepValues)
+        ) {
+          const entries = Object.entries(stepValues).filter(
+            ([k, v]) => String(k).trim() && String(v).trim()
+          )
+          if (entries.length > 0) {
+            const [groupKey, optionValue] = entries[0]
+            split = {
+              groupName: String(groupKey).trim(),
+              optionName: String(optionValue).trim(),
+            }
+          }
+        }
         const key = split.groupName.toLowerCase()
         const sort = Number(opt.sort_order ?? 0)
         if (!modifierGroupBuckets.has(key)) {

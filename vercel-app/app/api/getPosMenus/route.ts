@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
+import {
+  type PosOptionGroupRow,
+  type PosMenuOptionGroupLinkRow,
+  buildSelectionConfigFromLinks,
+  loadMenuGroupLinks,
+  loadPosOptionGroupsWithItems,
+} from '@/lib/pos-option-groups-server'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
@@ -17,6 +24,32 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    let groupsById = new Map<number, PosOptionGroupRow>()
+    let linksByMenuId = new Map<number, PosMenuOptionGroupLinkRow[]>()
+    try {
+      const [{ groups }, links] = await Promise.all([
+        loadPosOptionGroupsWithItems(),
+        loadMenuGroupLinks(),
+      ])
+      const nextGroupsById = new Map<number, typeof groups[number]>()
+      for (const g of groups || []) {
+        const id = Number(g.id || 0)
+        if (!id) continue
+        nextGroupsById.set(id, g)
+      }
+      groupsById = nextGroupsById
+      const grouped = new Map<number, typeof links>()
+      for (const link of links || []) {
+        const menuId = Number(link.menu_id || 0)
+        if (!menuId) continue
+        if (!grouped.has(menuId)) grouped.set(menuId, [])
+        grouped.get(menuId)!.push(link)
+      }
+      linksByMenuId = grouped
+    } catch {
+      // 신규 테이블 미배포 환경 fallback
+    }
+
     let rows: unknown[] | null = null
     for (const cols of [
       POS_MENUS_SELECT_WITH_ALL_PROMO,
@@ -107,6 +140,14 @@ export async function GET() {
           }
         } catch {
           /* ignore */
+        }
+      }
+      const menuLinks = linksByMenuId.get(Number(row.id || 0)) || []
+      if (menuLinks.length > 0 && groupsById.size > 0) {
+        const resolved = buildSelectionConfigFromLinks(menuLinks, groupsById)
+        if (resolved.optionSelectionGroups.length > 0) {
+          optionSelectionGroups = resolved.optionSelectionGroups
+          optionSelectionConfig = resolved.optionSelectionConfig
         }
       }
       const kp = row.kitchen_printer

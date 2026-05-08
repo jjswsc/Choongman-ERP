@@ -5602,6 +5602,41 @@ export interface PosMenuOption {
   descriptionTable?: string | null
 }
 
+export interface PosOptionGroupItem {
+  id: string
+  groupId: string
+  itemName: string
+  sortOrder: number
+  basePriceHall: number
+  basePriceDelivery?: number | null
+  sellHall: boolean
+  sellDelivery: boolean
+}
+
+export interface PosMenuOptionGroupLink {
+  id?: string
+  menuId: string
+  groupId: string
+  sortOrder: number
+  sellHall: boolean
+  sellDelivery: boolean
+  priceHallOverride?: number | null
+  priceDeliveryOverride?: number | null
+  required?: boolean
+  minSelect?: number
+  maxSelect?: number
+}
+
+export interface PosOptionGroup {
+  id: string
+  key: string
+  name: string
+  isActive: boolean
+  sortOrder: number
+  items: PosOptionGroupItem[]
+  link?: PosMenuOptionGroupLink | null
+}
+
 export type PosPackagingChecklistOrderType = 'takeout' | 'delivery' | 'both'
 
 export interface PosMenuPackagingCheckItem {
@@ -5816,6 +5851,93 @@ export async function getPosMenuOptions(params?: { menuId?: string; fresh?: bool
   }
   const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}`
   return fetchPosCatalogCached<PosMenuOption[]>(cacheKey, url, [])
+}
+
+export async function getPosOptionGroups(params?: { menuId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.menuId) q.set("menuId", params.menuId)
+  const qs = q.toString()
+  const res = await apiFetchWithOffline(
+    "/api/getPosOptionGroups" + (qs ? `?${qs}` : "")
+  )
+  const data = await res.json().catch(() => [])
+  return Array.isArray(data) ? (data as PosOptionGroup[]) : []
+}
+
+export async function savePosOptionGroup(params: {
+  id?: string
+  key: string
+  name: string
+  isActive?: boolean
+  sortOrder?: number
+  items: Array<{
+    id?: string
+    itemName: string
+    sortOrder: number
+    basePriceHall?: number
+    basePriceDelivery?: number | null
+    sellHall?: boolean
+    sellDelivery?: boolean
+  }>
+}) {
+  const res = await apiFetchWithOffline("/api/savePosOptionGroup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: string; message?: string }>
+}
+
+export async function deletePosOptionGroup(params: { id: string }) {
+  const res = await apiFetchWithOffline("/api/deletePosOptionGroup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function savePosMenuOptionGroupLinks(params: {
+  menuId: number
+  links: Array<{
+    id?: string
+    groupId: string
+    sortOrder: number
+    sellHall?: boolean
+    sellDelivery?: boolean
+    priceHallOverride?: number | null
+    priceDeliveryOverride?: number | null
+    required?: boolean
+    minSelect?: number
+    maxSelect?: number
+  }>
+}) {
+  const res = await apiFetchWithOffline("/api/savePosMenuOptionGroupLinks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function migratePosMenuOptionsToGroupLinks(params?: {
+  menuId?: number
+  dryRun?: boolean
+}) {
+  const res = await apiFetchWithOffline("/api/migratePosMenuOptionsToGroupLinks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params || {}),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    dryRun?: boolean
+    menuCount?: number
+    groupsCreated?: number
+    itemsCreated?: number
+    linksSaved?: number
+    message?: string
+  }>
 }
 
 /** 오프라인 큐의 가짜 성공(JSON)과 구분 — 관리자 원가 분석 등 “즉시 반영”이 필요한 저장용 */

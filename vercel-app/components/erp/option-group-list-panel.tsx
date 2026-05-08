@@ -30,6 +30,12 @@ type OptionGroupListPanelProps = {
   selectedGroupKey: string
   onSelectGroup: (key: string) => void
   onChangeGroupLabel: (groupKey: string, label: string) => void
+  saveGroupsLabel: string
+  onSaveGroups: () => void
+  saveGroupsDisabled?: boolean
+  chickenPresetLabel: string
+  onApplyChickenPreset: () => void
+  chickenPresetDisabled?: boolean
   moveUpLabel: string
   moveDownLabel: string
   onMoveGroup: (groupKey: string, direction: "up" | "down") => void
@@ -64,6 +70,12 @@ export function OptionGroupListPanel({
   selectedGroupKey,
   onSelectGroup,
   onChangeGroupLabel,
+  saveGroupsLabel,
+  onSaveGroups,
+  saveGroupsDisabled,
+  chickenPresetLabel,
+  onApplyChickenPreset,
+  chickenPresetDisabled,
   moveUpLabel,
   moveDownLabel,
   onMoveGroup,
@@ -92,6 +104,14 @@ export function OptionGroupListPanel({
     <div className="rounded-xl border bg-card overflow-hidden">
       <div className="border-b bg-muted/20 px-4 py-3">
         <h3 className="text-sm font-bold">{title}</h3>
+        <div className="mt-2 flex flex-wrap gap-1">
+          <Button type="button" size="sm" className="h-7 text-[11px]" onClick={onSaveGroups} disabled={saveGroupsDisabled}>
+            {saveGroupsLabel}
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="h-7 text-[11px]" onClick={onApplyChickenPreset} disabled={chickenPresetDisabled}>
+            {chickenPresetLabel}
+          </Button>
+        </div>
       </div>
       <div className="max-h-[560px] overflow-y-auto p-2 space-y-2">
         {groups.length === 0 ? (

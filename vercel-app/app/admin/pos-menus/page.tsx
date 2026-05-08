@@ -37,6 +37,7 @@ import {
   type PosDeliveryAppPolicy,
   type PosDeliveryMenuPolicy,
   getPosMenuOptions,
+  getPosOptionGroups,
   getPosMenuIngredients,
   getPosMenuPackagingChecklist,
   getMenuCost,
@@ -45,9 +46,12 @@ import {
   savePosMenuPackagingChecklist,
   savePosMenuOption,
   savePosMenuOptionsBulk,
+  savePosOptionGroup,
+  savePosMenuOptionGroupLinks,
   savePosMenuIngredient,
   deletePosMenu,
   deletePosMenuOption,
+  deletePosOptionGroup,
   deletePosMenuIngredient,
   updatePosMenuSoldOut,
   getPosPromos,
@@ -61,6 +65,8 @@ import {
   type PosOptionSelectionGroupConfig,
   type PosMenuPackagingCheckItem,
   type PosMenuOption,
+  type PosOptionGroup,
+  type PosOptionGroupItem,
   type PosPackagingChecklistOrderType,
   type PosMenuIngredient,
   type PosPromo,
@@ -311,6 +317,15 @@ export default function PosMenusPage() {
   /** set_main 단계 빠른 생성 입력 (예: 후라이드, 양념, 간장) */
   const [optionsConfigSetMainQuickValues, setOptionsConfigSetMainQuickValues] = React.useState("")
   const [optionsConfigNewOptionTitle, setOptionsConfigNewOptionTitle] = React.useState("")
+  const [optionGroupMasters, setOptionGroupMasters] = React.useState<PosOptionGroup[]>([])
+  const [optionGroupMasterLoading, setOptionGroupMasterLoading] = React.useState(false)
+  const [optionGroupMasterSaving, setOptionGroupMasterSaving] = React.useState(false)
+  const [optionGroupMasterSelectedId, setOptionGroupMasterSelectedId] = React.useState<string>("")
+  const [optionGroupMasterName, setOptionGroupMasterName] = React.useState("")
+  const [optionGroupMasterKey, setOptionGroupMasterKey] = React.useState("")
+  const [optionGroupMasterSearchTerm, setOptionGroupMasterSearchTerm] = React.useState("")
+  const [optionGroupMasterItems, setOptionGroupMasterItems] = React.useState<PosOptionGroupItem[]>([])
+  const [optionGroupMenuLinksSaving, setOptionGroupMenuLinksSaving] = React.useState(false)
   const [promoListForSetTab, setPromoListForSetTab] = React.useState<PosPromo[]>([])
   const [setTabPromosLoading, setSetTabPromosLoading] = React.useState(false)
   const [schemaStatus, setSchemaStatus] = React.useState<{
@@ -1153,6 +1168,148 @@ export default function PosMenusPage() {
   }
 
   const optionsConfigSelectedMenu = optionsConfigSelectedMenuId ? menus.find((m) => m.id === optionsConfigSelectedMenuId) : null
+  const loadOptionGroupMasters = React.useCallback(
+    async (menuId?: string | null) => {
+      setOptionGroupMasterLoading(true)
+      try {
+        const groups = await getPosOptionGroups({
+          menuId: menuId && menuId.trim() ? menuId : undefined,
+        })
+        setOptionGroupMasters(Array.isArray(groups) ? groups : [])
+      } finally {
+        setOptionGroupMasterLoading(false)
+      }
+    },
+    []
+  )
+  React.useEffect(() => {
+    if (mainTab !== "optionsConfig") return
+    void loadOptionGroupMasters(optionsConfigSelectedMenuId)
+  }, [mainTab, optionsConfigSelectedMenuId, loadOptionGroupMasters])
+  React.useEffect(() => {
+    if (!optionGroupMasterSelectedId) {
+      setOptionGroupMasterItems([])
+      setOptionGroupMasterName("")
+      setOptionGroupMasterKey("")
+      return
+    }
+    const selected = optionGroupMasters.find((x) => x.id === optionGroupMasterSelectedId)
+    if (!selected) return
+    setOptionGroupMasterName(selected.name || "")
+    setOptionGroupMasterKey(selected.key || "")
+    setOptionGroupMasterItems(Array.isArray(selected.items) ? selected.items : [])
+  }, [optionGroupMasterSelectedId, optionGroupMasters])
+  const handleSaveOptionGroupMaster = React.useCallback(async () => {
+    const key = optionGroupMasterKey.trim()
+    const name = optionGroupMasterName.trim()
+    if (!key || !name) {
+      await appAlert(t("posOptionConfigNeedGroupsShort") || "그룹 키와 이름을 입력해 주세요.")
+      return
+    }
+    setOptionGroupMasterSaving(true)
+    try {
+      const res = await savePosOptionGroup({
+        id: optionGroupMasterSelectedId || undefined,
+        key,
+        name,
+        sortOrder:
+          optionGroupMasters.findIndex((x) => x.id === optionGroupMasterSelectedId) >= 0
+            ? optionGroupMasters.findIndex((x) => x.id === optionGroupMasterSelectedId)
+            : optionGroupMasters.length,
+        items: optionGroupMasterItems.map((item, idx) => ({
+          id: item.id || undefined,
+          itemName: item.itemName,
+          sortOrder: idx,
+          basePriceHall: Number(item.basePriceHall ?? 0) || 0,
+          basePriceDelivery:
+            item.basePriceDelivery != null ? Number(item.basePriceDelivery) : null,
+          sellHall: item.sellHall !== false,
+          sellDelivery: item.sellDelivery !== false,
+        })),
+      })
+      if (!res?.success) throw new Error(res?.message || "옵션그룹 저장 실패")
+      setOptionGroupMasterSelectedId(String(res.id || optionGroupMasterSelectedId || ""))
+      await loadOptionGroupMasters(optionsConfigSelectedMenuId)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await appAlert(translateApiMessage(msg, t) || t("saveFailed") || "저장 실패")
+    } finally {
+      setOptionGroupMasterSaving(false)
+    }
+  }, [
+    lang,
+    loadOptionGroupMasters,
+    optionGroupMasterItems,
+    optionGroupMasterKey,
+    optionGroupMasterName,
+    optionGroupMasterSelectedId,
+    optionGroupMasters,
+    optionsConfigSelectedMenuId,
+    t,
+  ])
+  const handleSaveMenuGroupLinks = React.useCallback(async () => {
+    if (!optionsConfigSelectedMenuId) {
+      await appAlert(t("posMenuOptionsConfigNoSelect") || "메뉴를 먼저 선택해 주세요.")
+      return
+    }
+    setOptionGroupMenuLinksSaving(true)
+    try {
+      const links = optionGroupMasters
+        .filter((x) => x.link)
+        .sort(
+          (a, b) =>
+            Number(a.link?.sortOrder ?? 0) - Number(b.link?.sortOrder ?? 0)
+        )
+        .map((x, idx) => ({
+          id: x.link?.id,
+          groupId: x.id,
+          sortOrder: Number(x.link?.sortOrder ?? idx),
+          sellHall: x.link?.sellHall !== false,
+          sellDelivery: x.link?.sellDelivery !== false,
+          priceHallOverride:
+            x.link?.priceHallOverride != null
+              ? Number(x.link?.priceHallOverride)
+              : null,
+          priceDeliveryOverride:
+            x.link?.priceDeliveryOverride != null
+              ? Number(x.link?.priceDeliveryOverride)
+              : null,
+          required: x.link?.required !== false,
+          minSelect: Number(x.link?.minSelect ?? 0),
+          maxSelect: Number(x.link?.maxSelect ?? 1),
+        }))
+      const res = await savePosMenuOptionGroupLinks({
+        menuId: Number(optionsConfigSelectedMenuId),
+        links,
+      })
+      if (!res?.success) throw new Error(res?.message || "메뉴 링크 저장 실패")
+      await loadOptionGroupMasters(optionsConfigSelectedMenuId)
+      await loadMenusAndCategories(setOptionsConfigListLoading)
+      const opts = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+      applyLoadedOptionsForConfig(Array.isArray(opts) ? opts : [])
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      await appAlert(translateApiMessage(msg, t) || t("saveFailed") || "저장 실패")
+    } finally {
+      setOptionGroupMenuLinksSaving(false)
+    }
+  }, [
+    applyLoadedOptionsForConfig,
+    lang,
+    loadOptionGroupMasters,
+    optionGroupMasters,
+    optionsConfigSelectedMenuId,
+    t,
+  ])
+  const optionGroupMastersFiltered = React.useMemo(() => {
+    const q = optionGroupMasterSearchTerm.trim().toLowerCase()
+    if (!q) return optionGroupMasters
+    return optionGroupMasters.filter((g) => {
+      const name = String(g.name || "").toLowerCase()
+      const key = String(g.key || "").toLowerCase()
+      return name.includes(q) || key.includes(q)
+    })
+  }, [optionGroupMasterSearchTerm, optionGroupMasters])
   const optionsConfigDraftGroupsParsed = React.useMemo(
     () => parseOptionGroupsFromText(optionsConfigGroupsDraft),
     [optionsConfigGroupsDraft]
@@ -1974,6 +2131,15 @@ export default function PosMenusPage() {
   const handleSaveOptionsForConfig = async () => {
     if (!optionsConfigSelectedMenuId || optionsConfigMenuOptions.length === 0) return
     try {
+      const currentNumericIds = new Set(
+        optionsConfigMenuOptions
+          .map((o) => String(o.id ?? ""))
+          .filter((id) => /^\d+$/.test(id))
+      )
+      const deletedNumericIds = optionsConfigOriginalOptions
+        .map((o) => String(o.id ?? ""))
+        .filter((id) => /^\d+$/.test(id) && !currentNumericIds.has(id))
+
       const normalizedCurrentOptions = optionsConfigMenuOptions.map((o) => ({
         ...o,
         sellPackaging: o.sellHall ?? true,
@@ -1985,11 +2151,29 @@ export default function PosMenusPage() {
         if (!prev) return true
         return !areOptionsEqualForSave(o, prev)
       })
-      if (changed.length === 0) {
+      if (changed.length === 0 && deletedNumericIds.length === 0) {
         await appAlert(t("msg_save_success") || "저장되었습니다.")
         return
       }
       setOptionsConfigSaving(true)
+
+      if (deletedNumericIds.length > 0) {
+        for (const id of deletedNumericIds) {
+          const del = await deletePosMenuOption({ id })
+          if (!del.success) {
+            await appAlert(del.message || t("msg_delete_fail_detail") || "삭제 실패")
+            return
+          }
+        }
+      }
+
+      if (changed.length === 0) {
+        const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
+        applyLoadedOptionsForConfig(refreshed)
+        await appAlert(t("msg_save_success") || "저장되었습니다.")
+        return
+      }
+
       const res = await savePosMenuOptionsBulk({
         options: changed.map((o) => ({
           id: /^\d+$/.test(String(o.id ?? "")) ? String(o.id) : undefined,
@@ -2052,6 +2236,10 @@ export default function PosMenusPage() {
   const handleDeleteOptionForConfig = async (opt: PosMenuOption) => {
     if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
     if (!/^\d+$/.test(String(opt.id ?? ""))) {
+      await appAlert(
+        t("posOptionConfigDeleteFromGroupHint") ||
+          "이 옵션은 옵션그룹 링크에서 생성된 항목입니다. 왼쪽 '옵션그룹 마스터'에서 항목을 삭제한 뒤 저장해 주세요."
+      )
       setOptionsConfigMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
       return
     }
@@ -3655,6 +3843,499 @@ export default function PosMenusPage() {
                 {chickenBatchApplying ? (t("loading") || "적용 중...") : (t("posChickenBatchButton") || "치킨 메뉴 일괄 옵션 적용")}
               </Button>
             </div>
+            <div className="mb-4 grid gap-3 xl:grid-cols-2">
+              <div className="rounded-xl border bg-card p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold">
+                    {t("posOptionTemplateLibraryTitle") || "옵션그룹 마스터"}
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() => {
+                      setOptionGroupMasterSelectedId("")
+                      setOptionGroupMasterKey("")
+                      setOptionGroupMasterName("")
+                      setOptionGroupMasterItems([])
+                    }}
+                  >
+                    {t("new") || "신규"}
+                  </Button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    className="h-8 text-xs"
+                    placeholder="group key (size, side...)"
+                    value={optionGroupMasterKey}
+                    onChange={(e) => setOptionGroupMasterKey(e.target.value)}
+                  />
+                  <Input
+                    className="h-8 text-xs"
+                    placeholder={t("posOptionGroupName") || "옵션그룹 이름"}
+                    value={optionGroupMasterName}
+                    onChange={(e) => setOptionGroupMasterName(e.target.value)}
+                  />
+                </div>
+                <div className="rounded border p-2 space-y-2">
+                  {(optionGroupMasterItems || []).map((item, idx) => (
+                    <div key={item.id || `new-${idx}`} className="grid grid-cols-[1fr_80px_80px_auto] gap-1">
+                      <Input
+                        className="h-7 text-xs"
+                        value={item.itemName}
+                        placeholder={t("posOptionTitle") || "항목명"}
+                        onChange={(e) =>
+                          setOptionGroupMasterItems((prev) =>
+                            prev.map((x, i) =>
+                              i === idx ? { ...x, itemName: e.target.value } : x
+                            )
+                          )
+                        }
+                      />
+                      <Input
+                        className="h-7 text-xs text-right"
+                        type="number"
+                        value={String(item.basePriceHall ?? 0)}
+                        onChange={(e) =>
+                          setOptionGroupMasterItems((prev) =>
+                            prev.map((x, i) =>
+                              i === idx
+                                ? { ...x, basePriceHall: Number(e.target.value || 0) }
+                                : x
+                            )
+                          )
+                        }
+                      />
+                      <Input
+                        className="h-7 text-xs text-right"
+                        type="number"
+                        value={item.basePriceDelivery == null ? "" : String(item.basePriceDelivery)}
+                        placeholder="-"
+                        onChange={(e) =>
+                          setOptionGroupMasterItems((prev) =>
+                            prev.map((x, i) =>
+                              i === idx
+                                ? {
+                                    ...x,
+                                    basePriceDelivery:
+                                      e.target.value.trim() === ""
+                                        ? null
+                                        : Number(e.target.value || 0),
+                                  }
+                                : x
+                            )
+                          )
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[10px]"
+                        onClick={() =>
+                          setOptionGroupMasterItems((prev) =>
+                            prev.filter((_, i) => i !== idx)
+                          )
+                        }
+                      >
+                        {t("delete") || "삭제"}
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={() =>
+                      setOptionGroupMasterItems((prev) => [
+                        ...prev,
+                        {
+                          id: "",
+                          groupId: optionGroupMasterSelectedId || "",
+                          itemName: "",
+                          sortOrder: prev.length,
+                          basePriceHall: 0,
+                          basePriceDelivery: null,
+                          sellHall: true,
+                          sellDelivery: true,
+                        },
+                      ])
+                    }
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    {t("posOptionAddSingle") || "항목 추가"}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    disabled={optionGroupMasterSaving}
+                    onClick={() => void handleSaveOptionGroupMaster()}
+                  >
+                    {optionGroupMasterSaving ? (t("saving") || "저장 중...") : (t("save") || "저장")}
+                  </Button>
+                  {!!optionGroupMasterSelectedId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px]"
+                      onClick={async () => {
+                        const ok = await appConfirm(
+                          t("confirmDeleteMenu") || "삭제하시겠습니까?"
+                        )
+                        if (!ok) return
+                        await deletePosOptionGroup({ id: optionGroupMasterSelectedId })
+                        setOptionGroupMasterSelectedId("")
+                        await loadOptionGroupMasters(optionsConfigSelectedMenuId)
+                      }}
+                    >
+                      {t("delete") || "삭제"}
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  className="h-8 text-xs"
+                  value={optionGroupMasterSearchTerm}
+                  onChange={(e) => setOptionGroupMasterSearchTerm(e.target.value)}
+                  placeholder={t("itemsSearchPh") || "검색"}
+                />
+                <div className="max-h-40 overflow-y-auto rounded border p-1">
+                  {(optionGroupMastersFiltered || []).map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      className={cn(
+                        "w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
+                        optionGroupMasterSelectedId === g.id && "bg-primary/10"
+                      )}
+                      onClick={() => setOptionGroupMasterSelectedId(g.id)}
+                    >
+                      {g.key} - {g.name}
+                    </button>
+                  ))}
+                  {optionGroupMasterLoading && (
+                    <p className="p-2 text-[11px] text-muted-foreground">
+                      {t("loading") || "로딩 중..."}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-xl border bg-card p-3 space-y-2">
+                <h3 className="text-sm font-bold">
+                  {t("posMenuOptionsConfigSelectHint") || "선택 메뉴 적용"}
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {(optionsConfigSelectedMenu?.name || "-") +
+                    " / " +
+                    (optionsConfigSelectedMenu?.code || "-")}
+                </p>
+                <div className="max-h-[420px] overflow-y-auto rounded border p-2 space-y-1">
+                  {(optionGroupMastersFiltered || []).map((g, idx) => {
+                    const link = g.link
+                    const enabled = !!link
+                    return (
+                      <div key={`link-${g.id}`} className="rounded border p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="flex items-center gap-2 text-xs font-medium">
+                            <Checkbox
+                              checked={enabled}
+                              onCheckedChange={(v) =>
+                                setOptionGroupMasters((prev) =>
+                                  prev.map((x, idx) =>
+                                    x.id !== g.id
+                                      ? x
+                                      : {
+                                          ...x,
+                                          link:
+                                            v === true
+                                              ? {
+                                                  id: x.link?.id,
+                                                  menuId: optionsConfigSelectedMenuId || "",
+                                                  groupId: x.id,
+                                                  sortOrder: idx,
+                                                  sellHall: true,
+                                                  sellDelivery: true,
+                                                  required: true,
+                                                  minSelect: 1,
+                                                  maxSelect: 1,
+                                                }
+                                              : null,
+                                        }
+                                  )
+                                )
+                              }
+                            />
+                            {g.name}
+                          </label>
+                          <span className="text-[10px] text-muted-foreground">
+                            {g.key}
+                          </span>
+                        </div>
+                        {enabled ? (
+                          <div className="mt-2 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="mb-1 text-[10px] text-muted-foreground">
+                                  {t("sort_order") || "순서"}
+                                </p>
+                                <Input
+                                  className="h-7 text-right text-xs"
+                                  type="number"
+                                  value={String(link?.sortOrder ?? 0)}
+                                  onChange={(e) =>
+                                    setOptionGroupMasters((prev) =>
+                                      prev.map((x) =>
+                                        x.id === g.id
+                                          ? {
+                                              ...x,
+                                              link: {
+                                                ...(x.link || {
+                                                  menuId: optionsConfigSelectedMenuId || "",
+                                                  groupId: x.id,
+                                                  sellHall: true,
+                                                  sellDelivery: true,
+                                                }),
+                                                sortOrder: Number(e.target.value || 0),
+                                              },
+                                            }
+                                          : x
+                                      )
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-1">
+                                <label className="rounded border px-1.5 py-1 text-[10px] flex items-center gap-1">
+                                  <Checkbox
+                                    checked={link?.sellHall !== false}
+                                    onCheckedChange={(v) =>
+                                      setOptionGroupMasters((prev) =>
+                                        prev.map((x) =>
+                                          x.id === g.id
+                                            ? {
+                                                ...x,
+                                                link: {
+                                                  ...(x.link || {
+                                                    menuId: optionsConfigSelectedMenuId || "",
+                                                    groupId: x.id,
+                                                    sortOrder: 0,
+                                                    sellHall: true,
+                                                    sellDelivery: true,
+                                                  }),
+                                                  sellHall: v === true,
+                                                },
+                                              }
+                                            : x
+                                        )
+                                      )
+                                    }
+                                  />
+                                  {t("posOptionSellHall") || "홀"}
+                                </label>
+                                <label className="rounded border px-1.5 py-1 text-[10px] flex items-center gap-1">
+                                  <Checkbox
+                                    checked={link?.sellDelivery !== false}
+                                    onCheckedChange={(v) =>
+                                      setOptionGroupMasters((prev) =>
+                                        prev.map((x) =>
+                                          x.id === g.id
+                                            ? {
+                                                ...x,
+                                                link: {
+                                                  ...(x.link || {
+                                                    menuId: optionsConfigSelectedMenuId || "",
+                                                    groupId: x.id,
+                                                    sortOrder: 0,
+                                                    sellHall: true,
+                                                    sellDelivery: true,
+                                                  }),
+                                                  sellDelivery: v === true,
+                                                },
+                                              }
+                                            : x
+                                        )
+                                      )
+                                    }
+                                  />
+                                  {t("posOptionSellDelivery") || "배달"}
+                                </label>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="mb-1 text-[10px] text-muted-foreground">
+                                  {t("posOptionBasePriceLabel") || "홀 가격 오버라이드"}
+                                </p>
+                                <Input
+                                  className="h-7 text-right text-xs"
+                                  type="number"
+                                  placeholder="-"
+                                  value={link?.priceHallOverride == null ? "" : String(link.priceHallOverride)}
+                                  onChange={(e) =>
+                                    setOptionGroupMasters((prev) =>
+                                      prev.map((x) =>
+                                        x.id === g.id
+                                          ? {
+                                              ...x,
+                                              link: {
+                                                ...(x.link || {
+                                                  menuId: optionsConfigSelectedMenuId || "",
+                                                  groupId: x.id,
+                                                  sortOrder: 0,
+                                                  sellHall: true,
+                                                  sellDelivery: true,
+                                                }),
+                                                priceHallOverride:
+                                                  e.target.value.trim() === "" ? null : Number(e.target.value || 0),
+                                              },
+                                            }
+                                          : x
+                                      )
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <p className="mb-1 text-[10px] text-muted-foreground">
+                                  {t("posOptionDeliveryPriceLabel") || "배달 가격 오버라이드"}
+                                </p>
+                                <Input
+                                  className="h-7 text-right text-xs"
+                                  type="number"
+                                  placeholder="-"
+                                  value={link?.priceDeliveryOverride == null ? "" : String(link.priceDeliveryOverride)}
+                                  onChange={(e) =>
+                                    setOptionGroupMasters((prev) =>
+                                      prev.map((x) =>
+                                        x.id === g.id
+                                          ? {
+                                              ...x,
+                                              link: {
+                                                ...(x.link || {
+                                                  menuId: optionsConfigSelectedMenuId || "",
+                                                  groupId: x.id,
+                                                  sortOrder: 0,
+                                                  sellHall: true,
+                                                  sellDelivery: true,
+                                                }),
+                                                priceDeliveryOverride:
+                                                  e.target.value.trim() === "" ? null : Number(e.target.value || 0),
+                                              },
+                                            }
+                                          : x
+                                      )
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <label className="rounded border px-1.5 py-1 text-[10px] flex items-center gap-1">
+                                <Checkbox
+                                  checked={link?.required !== false}
+                                  onCheckedChange={(v) =>
+                                    setOptionGroupMasters((prev) =>
+                                      prev.map((x) =>
+                                        x.id === g.id
+                                          ? {
+                                              ...x,
+                                              link: {
+                                                ...(x.link || {
+                                                  menuId: optionsConfigSelectedMenuId || "",
+                                                  groupId: x.id,
+                                                  sortOrder: 0,
+                                                  sellHall: true,
+                                                  sellDelivery: true,
+                                                }),
+                                                required: v === true,
+                                              },
+                                            }
+                                          : x
+                                      )
+                                    )
+                                  }
+                                />
+                                {t("required") || "필수"}
+                              </label>
+                              <Input
+                                className="h-7 text-right text-xs"
+                                type="number"
+                                min={0}
+                                value={String(link?.minSelect ?? 0)}
+                                onChange={(e) =>
+                                  setOptionGroupMasters((prev) =>
+                                    prev.map((x) =>
+                                      x.id === g.id
+                                        ? {
+                                            ...x,
+                                            link: {
+                                              ...(x.link || {
+                                                menuId: optionsConfigSelectedMenuId || "",
+                                                groupId: x.id,
+                                                sortOrder: 0,
+                                                sellHall: true,
+                                                sellDelivery: true,
+                                              }),
+                                              minSelect: Math.max(0, Number(e.target.value || 0)),
+                                            },
+                                          }
+                                        : x
+                                    )
+                                  )
+                                }
+                              />
+                              <Input
+                                className="h-7 text-right text-xs"
+                                type="number"
+                                min={1}
+                                value={String(link?.maxSelect ?? 1)}
+                                onChange={(e) =>
+                                  setOptionGroupMasters((prev) =>
+                                    prev.map((x) =>
+                                      x.id === g.id
+                                        ? {
+                                            ...x,
+                                            link: {
+                                              ...(x.link || {
+                                                menuId: optionsConfigSelectedMenuId || "",
+                                                groupId: x.id,
+                                                sortOrder: 0,
+                                                sellHall: true,
+                                                sellDelivery: true,
+                                              }),
+                                              maxSelect: Math.max(1, Number(e.target.value || 1)),
+                                            },
+                                          }
+                                        : x
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => void handleSaveMenuGroupLinks()}
+                  disabled={!optionsConfigSelectedMenuId || optionGroupMenuLinksSaving}
+                >
+                  {optionGroupMenuLinksSaving
+                    ? t("saving") || "저장 중..."
+                    : t("save") || "저장"}
+                </Button>
+              </div>
+            </div>
             <OptionsConfigShell
               menuListPanel={
                 <div className="rounded-xl border bg-card overflow-hidden">
@@ -3781,6 +4462,17 @@ export default function PosMenusPage() {
                   selectedGroupKey={optionsConfigSelectedGroupKey || optionsConfigGroupPanelItems[0]?.key || ""}
                   onSelectGroup={setOptionsConfigSelectedGroupKey}
                   onChangeGroupLabel={handleOptionGroupLabelChange}
+                  saveGroupsLabel={t("posOptionConfigApplySteps") || "단계 저장"}
+                  onSaveGroups={() => void handleApplyOptionGroupsForConfig()}
+                  saveGroupsDisabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
+                  chickenPresetLabel={t("posOptionConfigPresetChicken") || "치킨: size > part"}
+                  onApplyChickenPreset={() => void handleApplyOptionPresetAndSave(["size", "part"])}
+                  chickenPresetDisabled={
+                    optionsConfigApplyingGroups ||
+                    !!optionsConfigSelectedMenu?.promoId?.trim() ||
+                    !optionsConfigSelectedMenu ||
+                    !isChickenMenu(optionsConfigSelectedMenu.code)
+                  }
                   moveUpLabel={t("move_up") || "위로"}
                   moveDownLabel={t("move_down") || "아래로"}
                   onMoveGroup={handleMoveOptionGroup}
@@ -3824,151 +4516,10 @@ export default function PosMenusPage() {
                       {t("posOptionResetHint") || "기존 옵션을 지우고 새로 적용하려면 먼저 [초기화]를 누른 뒤 옵션을 추가하세요."}
                     </p>
 
-                    <div className="rounded border p-3 bg-muted/30 space-y-3">
-                      <div className="rounded border bg-background p-2.5">
-                        <p className="text-xs font-semibold">{t("posOptionSelectionGroups") || "옵션 선택 단계"}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {t("posOptionConfigStepsSimpleHint") || "1) 단계 입력/프리셋 → 2) 단계 저장 → 3) 옵션 추가"}
-                        </p>
-                        {optionsConfigStepGroups.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {optionsConfigStepGroups.map((g, idx) => (
-                              <span key={`${g}-${idx}`} className="rounded bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
-                                {idx + 1}. {g}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="min-w-[220px] flex-1">
-                          <label className="text-xs font-medium block mb-0.5">{t("posOptionGroupName") || "옵션 그룹 이름"}</label>
-                          <Input
-                            className="h-8 text-xs"
-                            placeholder={t("posOptionGroupNamePlaceholder") || "예: 맛 선택 / 사이즈 선택"}
-                            value={optionsConfigGroupsDraft}
-                            onChange={(e) => setOptionsConfigGroupsDraft(e.target.value)}
-                            disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 text-xs"
-                          disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                          onClick={() => handleApplyOptionGroupsForConfig()}
-                        >
-                          {optionsConfigApplyingGroups ? (t("loading") || "…") : (t("posOptionConfigApplySteps") || "2) 단계 저장")}
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-2 rounded border bg-background p-2">
-                        <span className="self-center text-[11px] font-medium text-muted-foreground">
-                          {t("posOptionConfigPresetLabel") || "빠른 프리셋"}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[11px]"
-                          disabled={
-                            optionsConfigApplyingGroups ||
-                            !!optionsConfigSelectedMenu?.promoId?.trim() ||
-                            !optionsConfigSelectedMenu ||
-                            !isChickenMenu(optionsConfigSelectedMenu.code)
-                          }
-                          onClick={() => void handleApplyOptionPresetAndSave(["size", "part"])}
-                        >
-                          {t("posOptionConfigPresetChicken") || "치킨: size > part"}
-                        </Button>
-                      </div>
-
-                      {(() => {
-                        const selectedKey =
-                          optionsConfigSelectedGroupKey || optionsConfigStepGroups[0] || optionsConfigDraftGroupsParsed[0]
-                        if (!selectedKey) return null
-                        const row =
-                          optionsConfigGroupRulesDraft.find((x) => x.key === selectedKey) ||
-                          ({
-                            key: selectedKey,
-                            label: selectedKey,
-                            required: true,
-                            minSelect: 1,
-                            maxSelect: 1,
-                          } as PosOptionSelectionGroupConfig)
-                        const ruleValue = row.required === false ? "optional" : "required"
-                        return (
-                          <div className="rounded border bg-background p-2 space-y-2">
-                            <p className="text-[11px] font-medium">
-                              {t("posOptionSelectionRules") || "선택 규칙"}: {selectedKey}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {(t("posOptionSelectionRuleSummary") || "채널: {audience} / 최소 {min}개 / 최대 {max}개")
-                                .replace(
-                                  "{audience}",
-                                  row.audience === "delivery"
-                                    ? (t("posOptionSellDelivery") || "배달")
-                                    : row.audience === "hall"
-                                      ? (t("posOptionSellHall") || "홀")
-                                      : (t("all") || "전체")
-                                )
-                                .replace("{min}", String(row.minSelect ?? (row.required === false ? 0 : 1)))
-                                .replace("{max}", String(row.maxSelect ?? 1))}
-                            </p>
-                            <div className="grid grid-cols-1 gap-2 rounded border p-2 md:grid-cols-2">
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionStepLabelField")}</p>
-                                <Input
-                                  className="h-8 text-xs"
-                                  value={String(row.label ?? selectedKey)}
-                                  onChange={(e) => {
-                                    const v = e.target.value
-                                    setOptionsConfigGroupRulesDraft((prev) =>
-                                      normalizeOptionSelectionConfig(
-                                        optionsConfigDraftGroupsParsed.length > 0
-                                          ? optionsConfigDraftGroupsParsed
-                                          : optionsConfigStepGroups,
-                                        prev.map((x) => (x.key === selectedKey ? { ...x, label: v } : x))
-                                      )
-                                    )
-                                  }}
-                                  disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[10px] text-muted-foreground">{t("posOptionSelectionRuleFieldLabel")}</p>
-                                <Select
-                                  value={ruleValue}
-                                  onValueChange={(v) => {
-                                    const nextRequired = v !== "optional"
-                                    setOptionsConfigGroupRulesDraft((prev) =>
-                                      normalizeOptionSelectionConfig(
-                                        optionsConfigDraftGroupsParsed.length > 0
-                                          ? optionsConfigDraftGroupsParsed
-                                          : optionsConfigStepGroups,
-                                        prev.map((x) =>
-                                          x.key === selectedKey
-                                            ? { ...x, required: nextRequired, minSelect: nextRequired ? 1 : 0, maxSelect: 1 }
-                                            : x
-                                        )
-                                      )
-                                    )
-                                  }}
-                                >
-                                  <SelectTrigger className="h-8 text-xs" disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="required">{t("posOptionSelectionRuleExactlyOne")}</SelectItem>
-                                    <SelectItem value="optional">{t("posOptionSelectionRuleOptionalZeroOrOne")}</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })()}
+                    <div className="rounded border bg-muted/10 p-2">
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("posOptionGroupEditHintRight") || "옵션그룹 선택 단계 수정은 가운데 패널에서 진행하세요. 이 영역은 그룹의 옵션 항목 편집 전용입니다."}
+                      </p>
                     </div>
 
                     <div className="rounded border p-3 bg-muted/20">

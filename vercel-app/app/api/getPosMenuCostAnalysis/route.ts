@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
@@ -17,6 +17,7 @@ type MenuRow = {
   name?: string
   category?: string
   category_main?: string
+  promo_id?: number | null
   price?: number
   price_delivery?: number | null
   vat_included?: boolean
@@ -42,6 +43,12 @@ type OptRow = {
   sort_order?: number
   price_modifier?: number
   price_modifier_delivery?: number | null
+}
+type PromoItemRow = {
+  promo_id?: number
+  menu_id?: number
+  option_id?: number | null
+  quantity?: number
 }
 type ItemRow = {
   id?: number
@@ -115,12 +122,12 @@ async function loadPosMenusPaged(): Promise<MenuRow[]> {
   try {
     return (await supabaseSelectAllPages('pos_menus', {
       order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
-      select: 'id,code,name,category,category_main,price,price_delivery,vat_included,cooking_time_min',
+      select: 'id,code,name,category,category_main,promo_id,price,price_delivery,vat_included,cooking_time_min',
     })) as MenuRow[]
   } catch {
     return (await supabaseSelectAllPages('pos_menus', {
       order: 'category.asc,sort_order.asc,name.asc',
-      select: 'id,code,name,category,price,price_delivery,vat_included',
+      select: 'id,code,name,category,promo_id,price,price_delivery,vat_included',
     })) as MenuRow[]
   }
 }
@@ -176,6 +183,35 @@ export async function GET(request: NextRequest) {
       }).catch(() => []),
     ])
     const [menuRows, ingRows, optRows, itemRows] = menuData as [MenuRow[], IngRow[], OptRow[], ItemRow[]]
+    const promoItemsByPromoId: Record<number, PromoItemRow[]> = {}
+    const promoIds = Array.from(
+      new Set(
+        (menuRows || [])
+          .map((m) => Number(m.promo_id ?? 0))
+          .filter((n) => Number.isFinite(n) && n > 0)
+      )
+    )
+    if (promoIds.length > 0) {
+      const chunkSize = 300
+      for (let i = 0; i < promoIds.length; i += chunkSize) {
+        const chunk = promoIds.slice(i, i + chunkSize)
+        const rows = (await supabaseSelectFilter(
+          'pos_promo_items',
+          `promo_id=in.(${chunk.join(',')})`,
+          {
+            order: 'sort_order.asc,id.asc',
+            limit: 10000,
+            select: 'promo_id,menu_id,option_id,quantity',
+          }
+        ).catch(() => [])) as PromoItemRow[]
+        for (const r of rows || []) {
+          const pid = Number(r.promo_id ?? 0)
+          if (!Number.isFinite(pid) || pid <= 0) continue
+          if (!promoItemsByPromoId[pid]) promoItemsByPromoId[pid] = []
+          promoItemsByPromoId[pid].push(r)
+        }
+      }
+    }
     if ((ingRows || []).length === 0 && (menuRows || []).length > 0) {
       console.warn(
         'getPosMenuCostAnalysis: pos_menu_ingredients 0행·메뉴는 있음. RLS에 SELECT 정책 없음 또는 anon 키만 쓰는 경우입니다. supabase_pos_orders_table_layouts_rls_policies.sql 의 pos_menu_ingredients 정책 적용 또는 SUPABASE_SERVICE_ROLE_KEY 사용.'
@@ -406,6 +442,54 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      const hasComputedCost = (c: { costHall: number; costDelivery: number; breakdown: BreakdownRow[] }) =>
+        c.breakdown.length > 0 || c.costHall > 0 || c.costDelivery > 0
+
+      /**
+       * 메뉴 옵션을 재생성하면 새 option_id가 생기고, 예전에 옵션별로 입력한 BOM은
+       * pos_menu_ingredients.option_id에 고아 행으로 남을 수 있다. 직접 매칭이 없을 때만
+       * 메뉴 안의 옵션 순서로 legacy BOM을 붙여 옵션별 원가를 우선 복구한다.
+       */
+      const allCurrentOptSegs = new Set(
+        opts
+          .map((o) => (o.id == null ? '' : normalizeIngOptionKeySeg(o.id)))
+          .filter((seg) => seg && seg !== 'null')
+      )
+      const orphanBomSegs = Array.from(
+        new Set(
+          Object.keys(ingByMenuOpt)
+            .filter((k) => k.startsWith(`${mid}:`))
+            .map((k) => k.slice(String(`${mid}:`).length))
+            .filter((seg) => seg !== 'null' && !allCurrentOptSegs.has(seg))
+        )
+      ).sort((a, b) => {
+        const na = Number(a)
+        const nb = Number(b)
+        if (Number.isFinite(na) && Number.isFinite(nb) && /^\d+$/.test(a) && /^\d+$/.test(b)) return na - nb
+        return a.localeCompare(b)
+      })
+      const legacyBomSegByOptId = new Map<number, string>()
+      let orphanIdx = 0
+      for (const opt of optsToShow) {
+        if (opt.id == null) continue
+        const optId = Number(opt.id)
+        if (!Number.isFinite(optId)) continue
+        const direct = computeCost(String(opt.id), { substitutionFallbackBase: false })
+        if (hasComputedCost(direct)) continue
+        const legacySeg = orphanBomSegs[orphanIdx]
+        if (!legacySeg) break
+        legacyBomSegByOptId.set(optId, legacySeg)
+        orphanIdx += 1
+      }
+      const computeOptionOwnCost = (opt: OptRow): { costHall: number; costDelivery: number; breakdown: BreakdownRow[] } | null => {
+        if (opt.id == null) return null
+        const direct = computeCost(String(opt.id), { substitutionFallbackBase: false })
+        if (hasComputedCost(direct)) return direct
+        const optId = Number(opt.id)
+        const legacySeg = Number.isFinite(optId) ? legacyBomSegByOptId.get(optId) : undefined
+        return legacySeg ? computeCost(legacySeg, { substitutionFallbackBase: false }) : null
+      }
+
       /** 가산형 옵션만: 소스메뉴·item_code·옵션 BOM (기본 레시피 제외) */
       const additiveIncremental = (opt: OptRow): { addFood: number; addPkg: number; incBreakdown: BreakdownRow[] } => {
         let addFood = 0
@@ -415,28 +499,57 @@ export async function GET(request: NextRequest) {
         const qtyMult = Number(opt.quantity) ?? 1
         if (srcMid > 0) {
           const srcKey = `${srcMid}:null`
-          for (const ing of ingByMenuOpt[srcKey] || []) {
-            const code = String(ing.item_code ?? '').trim()
-            const qty = (Number(ing.quantity) ?? 1) * qtyMult
-            const lossRate = Number(ing.loss_rate) ?? 0
-            const itype: 'food' | 'packaging' =
-              (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
-            const info = resolveItemInfo(code, itemLookup)
-            const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
-            const costTotal = costPerUnit * qty * (1 + lossRate / 100)
-            if (itype === 'packaging') addPkg += costTotal
-            else addFood += costTotal
-            incBreakdown.push({
-              itemCode: code,
-              itemName: info?.name ?? code,
-              unit: info?.unit ?? '',
-              costPerUnit,
-              quantity: qty,
-              lossRate,
-              costTotal: Math.round(costTotal * 10) / 10,
-              source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
-              ingredientType: itype,
-            })
+          const srcBaseIngs = ingByMenuOpt[srcKey] || []
+          if (srcBaseIngs.length > 0) {
+            for (const ing of srcBaseIngs) {
+              const code = String(ing.item_code ?? '').trim()
+              const qty = (Number(ing.quantity) ?? 1) * qtyMult
+              const lossRate = Number(ing.loss_rate) ?? 0
+              const itype: 'food' | 'packaging' =
+                (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
+              const info = resolveItemInfo(code, itemLookup)
+              const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
+              const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+              if (itype === 'packaging') addPkg += costTotal
+              else addFood += costTotal
+              incBreakdown.push({
+                itemCode: code,
+                itemName: info?.name ?? code,
+                unit: info?.unit ?? '',
+                costPerUnit,
+                quantity: qty,
+                lossRate,
+                costTotal: Math.round(costTotal * 10) / 10,
+                source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
+                ingredientType: itype,
+              })
+            }
+          } else {
+            /**
+             * 세트 구성용 source 메뉴가 option null BOM 없이 옵션 기반 원가만 가진 경우,
+             * source 메뉴 기본 행(이미 계산된 결과)을 폴백으로 사용해 0원가 표시를 방지한다.
+             */
+            const srcBaseRow = result.find((r) => Number(r.menuId) === srcMid && r.optionId == null)
+            if (srcBaseRow) {
+              const srcFood = Number(srcBaseRow.costHall ?? 0)
+              const srcPkg = Math.max(0, Number(srcBaseRow.costDelivery ?? 0) - srcFood)
+              const totalFood = srcFood * qtyMult
+              const totalPkg = srcPkg * qtyMult
+              addFood += totalFood
+              addPkg += totalPkg
+              const srcMenuName = String(menusById[srcMid]?.name ?? srcBaseRow.menuName ?? `menu:${srcMid}`)
+              incBreakdown.push({
+                itemCode: `MENU:${srcMid}`,
+                itemName: `${srcMenuName} (set source)`,
+                unit: 'set',
+                costPerUnit: Math.round((srcFood + srcPkg) * 10) / 10,
+                quantity: qtyMult,
+                lossRate: 0,
+                costTotal: Math.round((totalFood + totalPkg) * 10) / 10,
+                source: 'hq',
+                ingredientType: 'food',
+              })
+            }
           }
         } else if (opt.item_code) {
           const info = resolveItemInfo(String(opt.item_code).trim(), itemLookup)
@@ -455,7 +568,10 @@ export async function GET(request: NextRequest) {
             ingredientType: 'food',
           })
         }
-        const addOptSeg = normalizeIngOptionKeySeg(String(opt.id ?? ''))
+        const optId = Number(opt.id ?? NaN)
+        const addOptSeg = Number.isFinite(optId)
+          ? (legacyBomSegByOptId.get(optId) ?? normalizeIngOptionKeySeg(String(opt.id ?? '')))
+          : normalizeIngOptionKeySeg(String(opt.id ?? ''))
         if (addOptSeg !== 'null') {
           for (const ing of ingByMenuOpt[`${mid}:${addOptSeg}`] || []) {
             const code = String(ing.item_code ?? '').trim()
@@ -498,8 +614,8 @@ export async function GET(request: NextRequest) {
       if (baseIsEmpty) {
         for (const opt of optsToShow) {
           if (opt.id == null) continue
-          const sub = computeCost(String(opt.id), { substitutionFallbackBase: false })
-          if (sub.breakdown.length > 0 || sub.costHall > 0) {
+          const sub = computeOptionOwnCost(opt)
+          if (sub && hasComputedCost(sub)) {
             baseDisplay = sub
             baseDisplaySourceOptId = Number(opt.id)
             break
@@ -604,7 +720,14 @@ export async function GET(request: NextRequest) {
             cookingTimeMin,
           })
         } else {
-          const computed = computeCost(String(opt.id), { substitutionFallbackBase: true })
+          /**
+           * 대체형: 옵션 전용 BOM(직접 매칭 + orphan option_id 매칭)이 있으면 그 값을 우선,
+           * 둘 다 없으면 메뉴 기본 BOM으로 폴백해 base와 동일 cost로 표시한다.
+           * (폴백을 끊으면 옵션 BOM이 누락된 메뉴가 모두 0으로 표시되어 운영상 더 혼란스러움.
+           *  실제 옵션별 cost를 다르게 보고 싶으면 cost-calculator에서 옵션 BOM을 직접 입력.)
+           */
+          const computed =
+            computeOptionOwnCost(opt) ?? computeCost(String(opt.id), { substitutionFallbackBase: true })
           result.push({
             menuId: String(menu.id ?? ''),
             menuCode: String(menu.code ?? ''),
@@ -623,6 +746,45 @@ export async function GET(request: NextRequest) {
             cookingTimeMin,
           })
         }
+      }
+    }
+
+    /**
+     * 프로모션 미러 메뉴(pos_menus.promo_id)는 BOM 대신 pos_promo_items 합성으로 원가를 잡는다.
+     * 기본 계산에서 0으로 남은 미러 메뉴(base row)에만 구성 메뉴 원가를 합산해 채운다.
+     */
+    const rowMapByKey = new Map<string, MenuCostRow>()
+    for (const r of result) {
+      const optSeg =
+        r.optionId == null || String(r.optionId).trim() === '' ? 'null' : normalizeIngOptionKeySeg(r.optionId)
+      rowMapByKey.set(`${r.menuId}:${optSeg}`, r)
+    }
+    for (const r of result) {
+      if (r.optionId != null) continue
+      if (r.costHall > 0 || r.costDelivery > 0 || (r.breakdown?.length ?? 0) > 0) continue
+      const mid = Number(r.menuId)
+      if (!Number.isFinite(mid) || mid <= 0) continue
+      const promoId = Number(menusById[mid]?.promo_id ?? 0)
+      if (!Number.isFinite(promoId) || promoId <= 0) continue
+      const comp = promoItemsByPromoId[promoId] || []
+      if (comp.length === 0) continue
+      let hall = 0
+      let del = 0
+      for (const c of comp) {
+        const cMid = Number(c.menu_id ?? 0)
+        if (!Number.isFinite(cMid) || cMid <= 0) continue
+        const cOptSeg = normalizeIngOptionKeySeg(c.option_id)
+        const qty = Number(c.quantity ?? 1)
+        const child =
+          rowMapByKey.get(`${cMid}:${cOptSeg}`) ??
+          rowMapByKey.get(`${cMid}:null`)
+        if (!child) continue
+        hall += Number(child.costHall ?? 0) * qty
+        del += Number(child.costDelivery ?? child.costHall ?? 0) * qty
+      }
+      if (hall > 0 || del > 0) {
+        r.costHall = Math.round(hall * 10) / 10
+        r.costDelivery = Math.round(del * 10) / 10
       }
     }
 

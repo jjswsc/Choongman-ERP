@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
+import {
+  type PosOptionGroupRow,
+  buildMenuOptionsFromLinks,
+  loadMenuGroupLinks,
+  loadPosOptionGroupsWithItems,
+} from '@/lib/pos-option-groups-server'
 
 /** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
 export async function GET(request: NextRequest) {
@@ -9,6 +15,38 @@ export async function GET(request: NextRequest) {
   const menuId = searchParams.get('menuId')?.trim()
 
   try {
+    const linkedOptions: ReturnType<typeof buildMenuOptionsFromLinks> = []
+    const linkedMenuIds = new Set<number>()
+    try {
+      const [{ groups, itemsByGroupId }, links] = await Promise.all([
+        loadPosOptionGroupsWithItems(),
+        loadMenuGroupLinks(
+          menuId && Number.isFinite(Number(menuId)) ? Number(menuId) : undefined
+        ),
+      ])
+      const groupsById = new Map<number, PosOptionGroupRow>()
+      for (const g of groups || []) {
+        const id = Number(g.id || 0)
+        if (!id) continue
+        groupsById.set(id, g)
+      }
+      const linksByMenuId = new Map<number, typeof links>()
+      for (const link of links || []) {
+        const mid = Number(link.menu_id || 0)
+        if (!mid) continue
+        linkedMenuIds.add(mid)
+        if (!linksByMenuId.has(mid)) linksByMenuId.set(mid, [])
+        linksByMenuId.get(mid)!.push(link)
+      }
+      for (const [mid, menuLinks] of linksByMenuId.entries()) {
+        linkedOptions.push(
+          ...buildMenuOptionsFromLinks(mid, menuLinks, groupsById, itemsByGroupId)
+        )
+      }
+    } catch {
+      // 신규 구조 미배포 환경 fallback
+    }
+
     const selectCols =
       'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging,description_default,description_delivery,description_table'
     const colsWithoutSellAndStep =
@@ -60,7 +98,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const list = (rows || []).map((row) => {
+    const list = (rows || [])
+      .filter((row) => {
+        const mid = Number(row.menu_id || 0)
+        return !linkedMenuIds.has(mid)
+      })
+      .map((row) => {
       const stepValues = row.option_step_values
       const sv = stepValues && typeof stepValues === 'object' && !Array.isArray(stepValues) ? stepValues as Record<string, string> : null
       return {
@@ -90,7 +133,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(list, { headers })
+    return NextResponse.json([...linkedOptions, ...list], { headers })
   } catch (e) {
     console.error('getPosMenuOptions:', e)
     return NextResponse.json([], { headers })
