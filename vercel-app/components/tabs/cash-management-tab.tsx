@@ -40,7 +40,7 @@ const tillTypeKeys: Record<string, string> = {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 }
 
 /** 조회 기간(start~end)에 거래일이 포함되도록 YYYY-MM-DD 범위 확장 */

@@ -143,17 +143,20 @@ export function ExpenseManagementTab() {
 
   React.useEffect(() => {
     const items = [...expensePlans, ...purchasePlans, ...unlinkedList]
-    const memos = [...new Set(items.map((r) => (r.memo || "").trim()).filter(Boolean))]
-    if (memos.length === 0) {
+    const planRows = [...expensePlans, ...purchasePlans]
+    const memos = items.map((r) => (r.memo || "").trim()).filter(Boolean)
+    const payees = planRows.map((r) => (r.payeeName || "").trim()).filter(Boolean)
+    const keys = [...new Set([...memos, ...payees])]
+    if (keys.length === 0) {
       setMemoTransMap({})
       return
     }
     let cancelled = false
-    translateTexts(memos, lang)
+    translateTexts(keys, lang)
       .then((translated) => {
         if (cancelled) return
         const map: Record<string, string> = {}
-        memos.forEach((m, i) => {
+        keys.forEach((m, i) => {
           map[m] = translated[i] ?? m
         })
         setMemoTransMap(map)
@@ -162,7 +165,20 @@ export function ExpenseManagementTab() {
     return () => { cancelled = true }
   }, [expensePlans, purchasePlans, unlinkedList, lang])
 
-  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
+  const getMemo = React.useCallback((memo: string | undefined) => {
+    const k = (memo || "").trim()
+    if (!k) return "-"
+    return memoTransMap[k] || memo || "-"
+  }, [memoTransMap])
+
+  const getPayeeLine = React.useCallback(
+    (payeeName: string | undefined, codeSuffix: string) => {
+      const k = (payeeName || "").trim()
+      const shown = k ? memoTransMap[k] || payeeName || k : ""
+      return `${shown}${codeSuffix}`
+    },
+    [memoTransMap]
+  )
 
   const loadPlans = React.useCallback(async () => {
     setLoading(true)
@@ -686,7 +702,7 @@ export function ExpenseManagementTab() {
                                     <>
                                       <td className="py-2 px-2 text-center align-top">{renderWithdrawalType(r.withdrawalCategory)}</td>
                                       <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
-                                      <td className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={`${r.payeeName}${codeLabel}`}>{r.payeeName}{codeLabel}</td>
+                                      <td className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words" title={getPayeeLine(r.payeeName, codeLabel)}>{getPayeeLine(r.payeeName, codeLabel)}</td>
                                     </>
                                   )
                                 })()}
@@ -976,9 +992,15 @@ export function ExpenseManagementTab() {
                                 <td className="py-2 px-2 text-muted-foreground align-top break-words text-xs leading-snug">{accountSubjectLabel(r.accountSubjectId) || "-"}</td>
                                 <td
                                   className="py-2 px-2 align-top text-xs leading-snug min-w-[160px] max-w-[224px] w-[224px] break-words"
-                                  title={r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}
+                                  title={
+                                    r.payeeCode && !r.payeeCode.startsWith("auto_")
+                                      ? getPayeeLine(r.payeeName, ` (${r.payeeCode})`)
+                                      : getPayeeLine(r.payeeName, "")
+                                  }
                                 >
-                                  {r.payeeCode && !r.payeeCode.startsWith("auto_") ? `${r.payeeName} (${r.payeeCode})` : r.payeeName}
+                                  {r.payeeCode && !r.payeeCode.startsWith("auto_")
+                                    ? getPayeeLine(r.payeeName, ` (${r.payeeCode})`)
+                                    : getPayeeLine(r.payeeName, "")}
                                 </td>
                                 <td className="py-2 px-2 text-center align-top whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
                                 <td className="py-2 px-2 text-right tabular-nums align-top whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>

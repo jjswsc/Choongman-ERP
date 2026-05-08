@@ -1884,7 +1884,6 @@ export async function translateTexts(texts: string[], targetLang: string): Promi
   if (filtered.length === 0) return []
   if (!readAutoTranslateEnabled()) return filtered
   const tl = String(targetLang || 'ko').toLowerCase().slice(0, 2)
-  if (tl === 'ko') return filtered
   try {
     const res = await apiFetchWithOffline('/api/translate', {
       method: 'POST',

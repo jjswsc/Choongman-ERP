@@ -7,6 +7,7 @@ import * as React from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Tags, Settings, FileSpreadsheet, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import * as XLSX from "xlsx"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
@@ -364,6 +365,79 @@ export default function ItemsPage() {
     }
   }
 
+  const handleExcelDownload = async () => {
+    const source = products
+    if (!source.length) {
+      await appAlert(t("itemsNoResults") || "다운로드할 품목이 없습니다.")
+      return
+    }
+
+    const rows = source.map((p) => {
+      const taxLabel =
+        p.taxType === "taxable"
+          ? (t("taxable") || "과세")
+          : p.taxType === "zero"
+            ? (t("zeroTax") || "영세율")
+            : (t("taxFree") || "면세")
+      const stockUnitOptions = Array.isArray(p.stockUnitOptions) ? p.stockUnitOptions : []
+      const standardUnits = Array.isArray(p.standardUnits) ? p.standardUnits : []
+      const stock1 = stockUnitOptions[0]
+      const stock2 = stockUnitOptions[1]
+      const stock3 = stockUnitOptions[2]
+      const std1 = standardUnits[0]
+      const std2 = standardUnits[1]
+      const std3 = standardUnits[2]
+      return {
+        [t("itemsColCode") || "코드"]: p.code,
+        [t("itemsColName") || "품목명"]: p.name,
+        [t("itemsCategory") || "카테고리"]: p.category || "",
+        [t("itemsVendor") || "거래처"]: p.vendor || "",
+        [t("outboundLocationSettings") || "출고지"]: p.outboundLocation || "",
+        [t("itemsSpec") || "규격"]: p.spec || "",
+        [t("itemsUnit") || "단위"]: p.unit || "",
+        [t("itemsTotalQty") || "총수량"]: p.totalQuantity ?? "",
+        [t("itemsTaxType") || "과세구분"]: taxLabel,
+        [t("itemsPrice") || "판매가"]: p.price ?? 0,
+        [t("itemsCost") || "원가"]: p.cost ?? 0,
+        [t("itemsDesc") || "설명"]: p.description || "",
+        [t("itemsOrderDisabled") || "발주 중지"]: p.orderDisabled ? (t("yes") || "Y") : (t("no") || "N"),
+        ["이미지URL"]: p.imageUrl || "",
+        ["이미지여부"]: p.hasImage ? (t("yes") || "Y") : (t("no") || "N"),
+        ["구분(HQ/Store)"]: p.purchaseSource || "",
+        ["정렬순서(sortOrder)"]: p.sortOrder ?? "",
+        ["재고기본단위(stockBaseUnit)"]: p.stockBaseUnit || "",
+        ["재고단위1"]: stock1?.unit || "",
+        ["재고단위1 환산값"]: stock1?.factor ?? "",
+        ["재고단위2"]: stock2?.unit || "",
+        ["재고단위2 환산값"]: stock2?.factor ?? "",
+        ["재고단위3"]: stock3?.unit || "",
+        ["재고단위3 환산값"]: stock3?.factor ?? "",
+        ["표준단위1"]: std1?.unit || "",
+        ["표준단위1 총수량"]: std1?.totalQuantity ?? "",
+        ["표준단위2"]: std2?.unit || "",
+        ["표준단위2 총수량"]: std2?.totalQuantity ?? "",
+        ["표준단위3"]: std3?.unit || "",
+        ["표준단위3 총수량"]: std3?.totalQuantity ?? "",
+        ["재고단위옵션(JSON)"]: JSON.stringify(stockUnitOptions),
+        ["표준단위목록(JSON)"]: JSON.stringify(standardUnits),
+        ["기본계정과목ID(accountSubjectId)"]: p.accountSubjectId ?? "",
+      }
+    })
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, t("itemsList") || "품목목록")
+
+    const bangkokDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date()).replace(/-/g, "")
+
+    XLSX.writeFile(wb, `items-${bangkokDate}.xlsx`)
+  }
+
   const filteredProducts = React.useMemo(() => {
     if (!hasSearched) return []
     const filtered = products.filter((p) => {
@@ -439,6 +513,16 @@ export default function ItemsPage() {
             >
               <FileSpreadsheet className="h-3.5 w-3.5" />
               {excelImporting ? t("loading") : t("itemsExcelImport")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 px-3 text-xs"
+              onClick={handleExcelDownload}
+              title={t("itemsExcelDownloadHint") || "품목 목록을 Excel로 저장"}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              {t("itemsExcelDownload") || "Excel 다운로드"}
             </Button>
             <Button
               variant="outline"

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { getPosBusinessDateStrFromConfig, posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 
@@ -22,7 +21,10 @@ export async function GET(request: NextRequest) {
   )
   const { startISO, endISOExclusive } =
     startStr && endStr
-      ? bangkokDateRangeToUtc(startStr, endStr)
+      ? {
+          startISO: posBusinessDateYmdToUtcRange(startStr, bizStart).startISO,
+          endISOExclusive: posBusinessDateYmdToUtcRange(endStr, bizStart).endISOExclusive,
+        }
       : posBusinessDateYmdToUtcRange(getPosBusinessDateStrFromConfig(new Date(), bizStart), bizStart)
 
   try {

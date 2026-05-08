@@ -2,7 +2,7 @@
  * 사용자 입력 텍스트 번역 API (내용/memo 등)
  * POST body: { texts: string[], targetLang: string } → { translated: string[] }
  * targetLang: ko, en, th, mm, la (mm→my, la→lo 변환)
- * 원문 언어 자동 감지 (sl=auto)
+ * 원문 언어 자동 감지 (sl=auto). ko(한국어 UI)도 태·영 등 원문을 번역해 표시한다.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
@@ -14,7 +14,6 @@ async function translateOne(text: string, targetLang: string): Promise<string> {
   const trimmed = String(text || '').trim()
   if (!trimmed) return ''
   const tl = LANG_MAP[targetLang] || targetLang || 'en'
-  if (tl === 'ko') return trimmed
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(trimmed.slice(0, 5000))}`
     const resp = await fetch(url, { headers: { 'User-Agent': UA } })
@@ -51,13 +50,6 @@ export async function POST(request: NextRequest) {
 
     if (!texts.length) {
       return NextResponse.json({ translated: [] }, { headers })
-    }
-
-    if (targetLang === 'ko') {
-      return NextResponse.json(
-        { translated: texts.map((s: unknown) => String(s ?? '').trim()) },
-        { headers }
-      )
     }
 
     const results: string[] = []

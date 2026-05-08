@@ -2315,6 +2315,124 @@ export default function PosMenusPage() {
     return sortByCode(filtered, (m) => m.code)
   }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter])
 
+  const handleDownloadFilteredMenusExcel = React.useCallback(async () => {
+    if (filteredMenus.length === 0) {
+      await appAlert(t("itemsNoResults") || "다운로드할 메뉴가 없습니다.")
+      return
+    }
+    try {
+      const XLSX = await import("xlsx")
+      const rows = filteredMenus.map((m) => ({
+        [t("itemsColCode") || "코드"]: m.code ?? "",
+        [t("posMenuName") || "메뉴명"]: m.name ?? "",
+        [t("posMenuCategoryMain") || "대분류"]: m.categoryMain ?? "",
+        [t("posMenuCategory") || "카테고리"]: m.category ?? "",
+        [t("posMenuPriceHall") || "홀 가격"]: Number(m.price ?? 0),
+        [t("posMenuPriceDelivery") || "배달 가격"]: Number(m.priceDelivery ?? 0),
+        [t("posMenuVatIncluded") || "부가세 포함"]: m.vatIncluded ? (t("yes") || "Y") : (t("no") || "N"),
+        [t("posMenuActive") || "활성"]: m.isActive ? (t("yes") || "Y") : (t("no") || "N"),
+      }))
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, t("posMenuList") || "메뉴 목록")
+      const bangkokDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+        .format(new Date())
+        .replace(/-/g, "")
+      XLSX.writeFile(wb, `pos-menus-${bangkokDate}.xlsx`)
+    } catch (e) {
+      await appAlert(String(e instanceof Error ? e.message : e))
+    }
+  }, [filteredMenus, t])
+
+  const handleDownloadAllMenusDetailedExcel = React.useCallback(async () => {
+    if (menus.length === 0) {
+      await appAlert(t("itemsNoResults") || "다운로드할 메뉴가 없습니다.")
+      return
+    }
+    try {
+      const XLSX = await import("xlsx")
+      const sortedMenus = sortByCode([...menus], (m) => m.code)
+      const menuRows = sortedMenus.map((m) => ({
+        id: m.id ?? "",
+        [t("itemsColCode") || "코드"]: m.code ?? "",
+        [t("posMenuName") || "메뉴명"]: m.name ?? "",
+        [t("posMenuCategoryMain") || "대분류"]: m.categoryMain ?? "",
+        [t("posMenuCategory") || "카테고리"]: m.category ?? "",
+        [t("posMenuPriceHall") || "홀 가격"]: Number(m.price ?? 0),
+        [t("posMenuPriceDelivery") || "배달 가격"]: Number(m.priceDelivery ?? 0),
+        [t("posMenuVatIncluded") || "부가세 포함"]: m.vatIncluded ? (t("yes") || "Y") : (t("no") || "N"),
+        [t("posMenuActive") || "활성"]: m.isActive ? (t("yes") || "Y") : (t("no") || "N"),
+        soldOutDate: m.soldOutDate ?? "",
+        isBanban: m.isBanban ? (t("yes") || "Y") : (t("no") || "N"),
+        promoId: m.promoId ?? "",
+        kitchenPrinter: m.kitchenPrinter ?? "",
+        cookingTimeMin: m.cookingTimeMin ?? "",
+        optionSelectionGroups: Array.isArray(m.optionSelectionGroups) ? m.optionSelectionGroups.join(", ") : "",
+        descriptionDefault: m.descriptionDefault ?? "",
+        descriptionDelivery: m.descriptionDelivery ?? "",
+        descriptionTable: m.descriptionTable ?? "",
+        imageUrl: m.imageUrl ?? "",
+      }))
+
+      const allOptions = await getPosMenuOptions({ fresh: true }).catch(() => [])
+      const menuById = new Map(sortedMenus.map((m) => [m.id, m]))
+      const optionRows = [...allOptions]
+        .sort((a, b) => {
+          const aMenu = menuById.get(a.menuId)?.code ?? ""
+          const bMenu = menuById.get(b.menuId)?.code ?? ""
+          if (aMenu !== bMenu) return aMenu.localeCompare(bMenu, "en")
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+        })
+        .map((opt) => {
+          const menu = menuById.get(opt.menuId)
+          return {
+            menuId: opt.menuId ?? "",
+            menuCode: menu?.code ?? "",
+            menuName: menu?.name ?? "",
+            optionId: opt.id ?? "",
+            optionName: opt.name ?? "",
+            sortOrder: opt.sortOrder ?? 0,
+            priceModifierHall: Number(opt.priceModifier ?? 0),
+            priceModifierDelivery: Number(opt.priceModifierDelivery ?? 0),
+            priceModifierPackaging: Number(opt.priceModifierPackaging ?? 0),
+            optionType: opt.optionType ?? "",
+            itemCode: opt.itemCode ?? "",
+            additiveSourceMenuId: opt.additiveSourceMenuId ?? "",
+            quantity: opt.quantity ?? "",
+            sellHall: opt.sellHall === false ? (t("no") || "N") : (t("yes") || "Y"),
+            sellDelivery: opt.sellDelivery === false ? (t("no") || "N") : (t("yes") || "Y"),
+            sellPackaging: opt.sellPackaging === false ? (t("no") || "N") : (t("yes") || "Y"),
+            descriptionDefault: opt.descriptionDefault ?? "",
+            descriptionDelivery: opt.descriptionDelivery ?? "",
+            descriptionTable: opt.descriptionTable ?? "",
+            optionStepValues: opt.optionStepValues ? JSON.stringify(opt.optionStepValues) : "",
+          }
+        })
+
+      const wb = XLSX.utils.book_new()
+      const wsMenus = XLSX.utils.json_to_sheet(menuRows)
+      XLSX.utils.book_append_sheet(wb, wsMenus, t("posMenuList") || "메뉴 목록")
+      const wsOptions = XLSX.utils.json_to_sheet(optionRows)
+      XLSX.utils.book_append_sheet(wb, wsOptions, t("posFormTabOptions") || "옵션")
+      const bangkokDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+        .format(new Date())
+        .replace(/-/g, "")
+      XLSX.writeFile(wb, `pos-menus-all-detailed-${bangkokDate}.xlsx`)
+    } catch (e) {
+      await appAlert(String(e instanceof Error ? e.message : e))
+    }
+  }, [menus, t])
+
   const optionsConfigFilteredMenus = React.useMemo(() => {
     const filtered = menus.filter((m) => {
       const matchTerm =
@@ -3565,6 +3683,26 @@ export default function PosMenusPage() {
                   className="hidden"
                   onChange={handlePosMenuImportFileChange}
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => void handleDownloadFilteredMenusExcel()}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  {t("outExcelDownload") || "엑셀 다운로드"} ({t("btn_query") || "조회"})
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => void handleDownloadAllMenusDetailedExcel()}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  {t("outExcelDownload") || "엑셀 다운로드"} ({t("all") || "전체"})
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
