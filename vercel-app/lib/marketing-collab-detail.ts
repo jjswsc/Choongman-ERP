@@ -17,6 +17,12 @@ export type MarketingCollabDetail = {
   scopeDrinksNonAlcohol: boolean
   scopeAlcohol: boolean
   scopeTopping: boolean
+  /** POS 대분류명 기준 동적 할인 범위 */
+  scopeMainCategories: string[]
+  /** POS 카테고리 키: `${categoryMain}::${category}` */
+  scopeCategoryKeys: string[]
+  /** 특정 POS 메뉴 id */
+  scopeMenuIds: string[]
   scopeNote: string
   /**
    * POS에서 협업 버튼으로 적용할 할인 — 비우면(미설정) POS 목록에 안 나옴.
@@ -51,6 +57,9 @@ export function emptyMarketingCollabDetail(): MarketingCollabDetail {
     scopeDrinksNonAlcohol: false,
     scopeAlcohol: false,
     scopeTopping: false,
+    scopeMainCategories: [],
+    scopeCategoryKeys: [],
+    scopeMenuIds: [],
     scopeNote: '',
     posDiscountType: '',
     posDiscountValue: 0,
@@ -76,6 +85,11 @@ function asNum(v: unknown): number {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   const n = parseFloat(String(v ?? '').replace(/,/g, '').trim())
   return Number.isFinite(n) ? n : 0
+}
+
+function asStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return Array.from(new Set(v.map((x) => asStr(x)).filter(Boolean)))
 }
 
 const PARTNER_TYPES = new Set(['enterprise', 'school', 'public', 'other'])
@@ -105,6 +119,9 @@ export function normalizeMarketingCollabDetail(raw: unknown): MarketingCollabDet
   e.scopeDrinksNonAlcohol = asBool(scope?.drinksNonAlcohol ?? o.scopeDrinksNonAlcohol)
   e.scopeAlcohol = asBool(scope?.alcohol ?? o.scopeAlcohol)
   e.scopeTopping = asBool(scope?.topping ?? o.scopeTopping)
+  e.scopeMainCategories = asStringArray(o.scopeMainCategories)
+  e.scopeCategoryKeys = asStringArray(o.scopeCategoryKeys)
+  e.scopeMenuIds = asStringArray(o.scopeMenuIds)
   e.scopeNote = asStr(o.scopeNote)
   const pdt = asStr(o.posDiscountType)
   e.posDiscountType = POS_DISCOUNT_TYPES.has(pdt) ? (pdt as MarketingCollabDetail['posDiscountType']) : ''
@@ -143,6 +160,9 @@ export function collabDetailToJson(d: MarketingCollabDetail): Record<string, unk
     scopeDrinksNonAlcohol: d.scopeDrinksNonAlcohol,
     scopeAlcohol: d.scopeAlcohol,
     scopeTopping: d.scopeTopping,
+    scopeMainCategories: d.scopeMainCategories,
+    scopeCategoryKeys: d.scopeCategoryKeys,
+    scopeMenuIds: d.scopeMenuIds,
     scope: {
       chicken: d.scopeChicken,
       korean: d.scopeKorean,

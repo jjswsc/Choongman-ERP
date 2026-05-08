@@ -10,6 +10,7 @@ export type PosCollabCampaignForStore = {
 
 function collabScopeAny(d: MarketingCollabDetail): boolean {
   return (
+    collabDynamicScopeAny(d) ||
     d.scopeChicken ||
     d.scopeKorean ||
     d.scopeSide ||
@@ -19,29 +20,69 @@ function collabScopeAny(d: MarketingCollabDetail): boolean {
   )
 }
 
-/** 협업 상세의 카테고리 체크와 pos_menus 대분류·소분류·이름을 대응 (영·한·태국어 일부 키워드) */
-export function menuMatchesCollabScope(
-  menu: Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>,
-  detail: MarketingCollabDetail
-): boolean {
+function collabDynamicScopeAny(d: MarketingCollabDetail): boolean {
+  return (
+    (d.scopeMainCategories || []).length > 0 ||
+    (d.scopeCategoryKeys || []).length > 0 ||
+    (d.scopeMenuIds || []).length > 0
+  )
+}
+
+function scopeSet(values: string[] | undefined): Set<string> {
+  return new Set((values || []).map((x) => String(x ?? '').trim()).filter(Boolean))
+}
+
+function categoryScopeKey(main: string | undefined | null, category: string | undefined | null): string {
+  return `${String(main ?? '').trim()}::${String(category ?? '').trim()}`
+}
+
+function normalizeScopeText(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function textHasAny(text: string, words: string[]): boolean {
+  return words.some((word) => text.includes(word))
+}
+
+function blobMatchesCollabScope(blobRaw: string, detail: MarketingCollabDetail): boolean {
   if (!collabScopeAny(detail)) return true
-  const blob = `${menu.categoryMain ?? ''} ${menu.category ?? ''} ${menu.name ?? ''} ${menu.code ?? ''}`.toLowerCase()
+  const blob = normalizeScopeText(blobRaw)
+  if (!blob) return false
 
-  const hit = (re: RegExp) => re.test(blob)
-
-  if (detail.scopeChicken && hit(/\b(chicken|치킨|ไก่|chik|닭)\b/i)) return true
-  if (detail.scopeKorean && hit(/\b(korean|한식|เกาหลี|korea)\b/i)) return true
-  if (detail.scopeSide && hit(/\b(side|사이드|เครื่องเคียง|snack)\b/i)) return true
+  if (detail.scopeChicken && textHasAny(blob, ['chicken', '치킨', 'ไก่', 'chik', '닭'])) return true
+  if (detail.scopeKorean && textHasAny(blob, ['korean', '한식', 'เกาหลี', 'korea'])) return true
+  if (detail.scopeSide && textHasAny(blob, ['side', '사이드', 'เครื่องเคียง', 'snack', 'fries', 'fried', '떡', 'tteok'])) return true
   if (
     detail.scopeDrinksNonAlcohol &&
-    hit(/\b(drink|beverage|음료|น้ำ|soda|juice|tea|coffee|콜라|물)\b/i) &&
-    !hit(/\b(alcohol|beer|wine|soju|맥주|소주|whisky|vodka)\b/i)
+    textHasAny(blob, ['drink', 'beverage', '음료', 'น้ำ', 'soda', 'juice', 'tea', 'coffee', '콜라', '물']) &&
+    !textHasAny(blob, ['alcohol', 'beer', 'wine', 'soju', '맥주', '소주', 'whisky', 'vodka', 'เหล้า', 'เบียร์'])
   )
     return true
-  if (detail.scopeAlcohol && hit(/\b(alcohol|beer|wine|soju|맥주|소주|whisky|vodka|เหล้า|เบียร์)\b/i)) return true
-  if (detail.scopeTopping && hit(/\b(topping|토핑|เพิ่มเติม|extra)\b/i)) return true
+  if (detail.scopeAlcohol && textHasAny(blob, ['alcohol', 'beer', 'wine', 'soju', '맥주', '소주', 'whisky', 'vodka', 'เหล้า', 'เบียร์'])) return true
+  if (detail.scopeTopping && textHasAny(blob, ['topping', '토핑', 'เพิ่มเติม', 'extra', 'sauce', '소스'])) return true
 
   return false
+}
+
+/** 협업 상세의 카테고리 체크와 pos_menus 대분류·소분류·이름을 대응 (영·한·태국어 일부 키워드) */
+export function menuMatchesCollabScope(
+  menu: Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>,
+  detail: MarketingCollabDetail
+): boolean {
+  if (collabDynamicScopeAny(detail)) {
+    const menuIds = scopeSet(detail.scopeMenuIds)
+    const mains = scopeSet(detail.scopeMainCategories)
+    const categoryKeys = scopeSet(detail.scopeCategoryKeys)
+    const menuId = String(menu.id ?? '').trim()
+    const main = String(menu.categoryMain ?? '').trim()
+    const cat = String(menu.category ?? '').trim()
+    return (
+      (menuId !== '' && menuIds.has(menuId)) ||
+      (main !== '' && mains.has(main)) ||
+      (main !== '' && cat !== '' && categoryKeys.has(categoryScopeKey(main, cat)))
+    )
+  }
+  return blobMatchesCollabScope(`${menu.categoryMain ?? ''} ${menu.category ?? ''} ${menu.name ?? ''} ${menu.code ?? ''}`, detail)
 }
 
 function menuIdFromCartLineId(id: string): string {
@@ -52,6 +93,7 @@ function menuIdFromCartLineId(id: string): string {
 
 export type CollabCartLineLike = {
   id: string
+  name?: string
   price: number
   /** 장바구니 줄 수량 */
   quantity?: number
@@ -79,7 +121,7 @@ export function menuIdsForCollabLine(line: CollabCartLineLike): string[] {
 
 function menuIdsForCollabLineWithCatalog(
   line: CollabCartLineLike,
-  menuById: Map<string, Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>>
+  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>
 ): string[] {
   const explicit = menuIdsForCollabLine(line).filter((id) => menuById.has(id))
   if (explicit.length > 0) return explicit
@@ -98,21 +140,29 @@ function menuIdsForCollabLineWithCatalog(
 
 function lineEligibleForCollab(
   line: CollabCartLineLike,
-  menuById: Map<string, Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>>,
+  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>,
   detail: MarketingCollabDetail
 ): boolean {
+  const dynamicScope = collabDynamicScopeAny(detail)
+  if (dynamicScope) {
+    const selectedMenuIds = scopeSet(detail.scopeMenuIds)
+    if (menuIdsForCollabLine(line).some((id) => selectedMenuIds.has(id))) return true
+  }
   const ids = menuIdsForCollabLineWithCatalog(line, menuById)
+  if (dynamicScope && ids.length === 0) return false
   if (ids.length === 0) return !collabScopeAny(detail)
-  return ids.some((mid) => {
+  const menuMatched = ids.some((mid) => {
     const m = menuById.get(mid)
     if (!m) return !collabScopeAny(detail)
     return menuMatchesCollabScope(m, detail)
   })
+  if (menuMatched) return true
+  return blobMatchesCollabScope(String(line.name ?? ''), detail)
 }
 
 export function collabEligibleSubtotal(
   lines: CollabCartLineLike[],
-  menuById: Map<string, Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>>,
+  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>,
   detail: MarketingCollabDetail
 ): number {
   let s = 0
@@ -141,7 +191,7 @@ export function computeCollabDiscountAmount(
 
 export function collabDiscountAmountForCart(
   lines: CollabCartLineLike[],
-  menuById: Map<string, Pick<PosMenu, 'category' | 'categoryMain' | 'name' | 'code'>>,
+  menuById: Map<string, Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>>,
   detail: MarketingCollabDetail
 ): number {
   const eligible = collabEligibleSubtotal(lines, menuById, detail)

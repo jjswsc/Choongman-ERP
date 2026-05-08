@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { getPosMenuCategoriesConfig, getPosMenus, type PosMenu } from "@/lib/api-client"
 import type { MarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { collabHasPosDiscount } from "@/lib/pos-collab-discount"
 import { Loader2, Save } from "lucide-react"
@@ -40,6 +41,19 @@ function scopeCheckbox(
   )
 }
 
+function categoryScopeKey(main: string, category: string): string {
+  return `${String(main ?? "").trim()}::${String(category ?? "").trim()}`
+}
+
+function toggleListValue(list: string[], value: string, checked: boolean): string[] {
+  const v = String(value ?? "").trim()
+  if (!v) return list
+  const set = new Set(list.map((x) => String(x ?? "").trim()).filter(Boolean))
+  if (checked) set.add(v)
+  else set.delete(v)
+  return Array.from(set)
+}
+
 export function CollabManagementDetailForm(props: {
   t: TFn
   basics: Basics
@@ -51,6 +65,11 @@ export function CollabManagementDetailForm(props: {
   loading: boolean
 }) {
   const { t, basics, allStoresLabel, draft, onChange, onSave, saving, loading } = props
+  const [mainCategories, setMainCategories] = React.useState<string[]>([])
+  const [categoriesByMain, setCategoriesByMain] = React.useState<Record<string, string[]>>({})
+  const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [scopeCatalogLoading, setScopeCatalogLoading] = React.useState(false)
+  const [menuSearch, setMenuSearch] = React.useState("")
 
   const set = React.useCallback(
     (patch: Partial<MarketingCollabDetail>) => {
@@ -58,6 +77,99 @@ export function CollabManagementDetailForm(props: {
     },
     [draft, onChange]
   )
+  const tr = React.useCallback(
+    (key: string, fallback: string) => {
+      const value = t(key)
+      return value && value !== key ? value : fallback
+    },
+    [t]
+  )
+  const selectedMainSet = React.useMemo(
+    () => new Set((draft.scopeMainCategories || []).map((x) => String(x).trim()).filter(Boolean)),
+    [draft.scopeMainCategories]
+  )
+  const selectedCategoryKeySet = React.useMemo(
+    () => new Set((draft.scopeCategoryKeys || []).map((x) => String(x).trim()).filter(Boolean)),
+    [draft.scopeCategoryKeys]
+  )
+  const selectedMenuIdSet = React.useMemo(
+    () => new Set((draft.scopeMenuIds || []).map((x) => String(x).trim()).filter(Boolean)),
+    [draft.scopeMenuIds]
+  )
+  const selectedScopeMainCategories = draft.scopeMainCategories || []
+  const selectedScopeCategoryKeys = draft.scopeCategoryKeys || []
+  const selectedScopeMenuIds = draft.scopeMenuIds || []
+  const dynamicScopeCount =
+    selectedScopeMainCategories.length + selectedScopeCategoryKeys.length + selectedScopeMenuIds.length
+  const visibleMenuRows = React.useMemo(() => {
+    const keyword = menuSearch.trim().toLowerCase()
+    const activeMains = selectedMainSet
+    return menus
+      .filter((m) => {
+        const main = String(m.categoryMain ?? "").trim()
+        const cat = String(m.category ?? "").trim()
+        const key = categoryScopeKey(main, cat)
+        if (activeMains.size > 0 && !activeMains.has(main) && !selectedCategoryKeySet.has(key)) return false
+        if (!keyword) return true
+        return `${m.code ?? ""} ${m.name ?? ""} ${main} ${cat}`.toLowerCase().includes(keyword)
+      })
+      .slice(0, 80)
+  }, [menuSearch, menus, selectedCategoryKeySet, selectedMainSet])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setScopeCatalogLoading(true)
+    Promise.all([getPosMenuCategoriesConfig().catch(() => null), getPosMenus().catch(() => [])])
+      .then(([cfg, menuRows]) => {
+        if (cancelled) return
+        const mainsFromCfg = Array.isArray(cfg?.mainCategories) ? cfg.mainCategories : []
+        const menuList = Array.isArray(menuRows) ? menuRows : []
+        const derivedMains = Array.from(
+          new Set(menuList.map((m) => String(m.categoryMain ?? "").trim()).filter(Boolean))
+        )
+        setMainCategories(mainsFromCfg.length > 0 ? mainsFromCfg : derivedMains)
+        setCategoriesByMain(cfg?.categoriesByMain || {})
+        setMenus(menuList.filter((m) => m.isActive !== false))
+      })
+      .finally(() => {
+        if (!cancelled) setScopeCatalogLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (mainCategories.length <= 0 || dynamicScopeCount > 0) return
+    const legacyRules: [boolean, string[]][] = [
+      [draft.scopeChicken, ["chicken", "치킨", "ไก่"]],
+      [draft.scopeKorean, ["korean", "한식", "เกาหลี"]],
+      [draft.scopeSide, ["side", "사이드", "เครื่องเคียง"]],
+      [draft.scopeDrinksNonAlcohol, ["drink", "drinks", "음료", "น้ำ"]],
+      [draft.scopeAlcohol, ["alcohol", "beer", "맥주", "เบียร์"]],
+      [draft.scopeTopping, ["topping", "토핑", "sauce", "소스"]],
+    ]
+    const nextMains = new Set<string>()
+    for (const [enabled, needles] of legacyRules) {
+      if (!enabled) continue
+      const hit = mainCategories.find((main) => {
+        const s = String(main).toLowerCase()
+        return needles.some((needle) => s.includes(needle.toLowerCase()))
+      })
+      if (hit) nextMains.add(hit)
+    }
+    if (nextMains.size > 0) set({ scopeMainCategories: Array.from(nextMains) })
+  }, [
+    draft.scopeAlcohol,
+    draft.scopeChicken,
+    draft.scopeDrinksNonAlcohol,
+    draft.scopeKorean,
+    draft.scopeSide,
+    draft.scopeTopping,
+    dynamicScopeCount,
+    mainCategories,
+    set,
+  ])
 
   return (
     <div className="space-y-6">
@@ -252,43 +364,120 @@ export function CollabManagementDetailForm(props: {
             </div>
             <p className="text-[11px] font-medium text-foreground/90">{t("marketingCollabDetailSectionScope")}</p>
             <p className="text-[11px] text-muted-foreground">{t("marketingCollabDetailScopeHint")}</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {scopeCheckbox(
-                "collab-sc-chicken",
-                t("marketingCollabDetailScopeChicken"),
-                draft.scopeChicken,
-                (v) => set({ scopeChicken: v })
-              )}
-              {scopeCheckbox(
-                "collab-sc-korean",
-                t("marketingCollabDetailScopeKorean"),
-                draft.scopeKorean,
-                (v) => set({ scopeKorean: v })
-              )}
-              {scopeCheckbox(
-                "collab-sc-side",
-                t("marketingCollabDetailScopeSide"),
-                draft.scopeSide,
-                (v) => set({ scopeSide: v })
-              )}
-              {scopeCheckbox(
-                "collab-sc-drink",
-                t("marketingCollabDetailScopeDrinks"),
-                draft.scopeDrinksNonAlcohol,
-                (v) => set({ scopeDrinksNonAlcohol: v })
-              )}
-              {scopeCheckbox(
-                "collab-sc-alc",
-                t("marketingCollabDetailScopeAlcohol"),
-                draft.scopeAlcohol,
-                (v) => set({ scopeAlcohol: v })
-              )}
-              {scopeCheckbox(
-                "collab-sc-top",
-                t("marketingCollabDetailScopeTopping"),
-                draft.scopeTopping,
-                (v) => set({ scopeTopping: v })
-              )}
+            <div className="space-y-4 rounded-lg border border-border/50 bg-muted/10 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold">{tr("marketingCollabScopeMainTitle", "1. 대분류 선택")}</p>
+                {scopeCatalogLoading ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {t("loading")}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    {tr("marketingCollabScopeSelectedCount", "선택")} {dynamicScopeCount}
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {mainCategories.map((main) =>
+                  scopeCheckbox(
+                    `collab-main-${main}`,
+                    main,
+                    selectedMainSet.has(main),
+                    (checked) => {
+                      const nextMains = toggleListValue(selectedScopeMainCategories, main, checked)
+                      const nextCategoryKeys = checked
+                        ? selectedScopeCategoryKeys
+                        : selectedScopeCategoryKeys.filter((key) => !key.startsWith(`${main}::`))
+                      set({ scopeMainCategories: nextMains, scopeCategoryKeys: nextCategoryKeys })
+                    }
+                  )
+                )}
+              </div>
+
+              <div className="space-y-2 border-t border-border/50 pt-3">
+                <p className="text-xs font-semibold">{tr("marketingCollabScopeCategoryTitle", "2. 하위 카테고리 선택")}</p>
+                {selectedScopeMainCategories.length <= 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    {tr("marketingCollabScopePickMainFirst", "대분류를 먼저 선택하면 하위 카테고리를 고를 수 있습니다.")}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {selectedScopeMainCategories.map((main) => {
+                      const subs = categoriesByMain[main] || Array.from(new Set(
+                        menus
+                          .filter((m) => String(m.categoryMain ?? "").trim() === main)
+                          .map((m) => String(m.category ?? "").trim())
+                          .filter(Boolean)
+                      ))
+                      if (subs.length <= 0) return null
+                      return (
+                        <div key={main} className="rounded-md bg-background/70 p-2">
+                          <p className="mb-2 text-[11px] font-medium text-muted-foreground">{main}</p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {subs.map((cat) => {
+                              const key = categoryScopeKey(main, cat)
+                              return scopeCheckbox(
+                                `collab-cat-${key}`,
+                                cat,
+                                selectedCategoryKeySet.has(key),
+                                (checked) =>
+                                  set({
+                                    scopeCategoryKeys: toggleListValue(selectedScopeCategoryKeys, key, checked),
+                                  })
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 border-t border-border/50 pt-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-semibold">{tr("marketingCollabScopeMenuTitle", "3. 특정 메뉴 선택")}</p>
+                  <Input
+                    value={menuSearch}
+                    onChange={(e) => setMenuSearch(e.target.value)}
+                    placeholder={tr("marketingCollabScopeMenuSearch", "메뉴명/코드 검색")}
+                    className="h-8 sm:w-64"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {tr("marketingCollabScopeMenuHint", "대분류/카테고리와 별도로 특정 메뉴를 추가 적용할 수 있습니다.")}
+                </p>
+                <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2">
+                  {visibleMenuRows.length <= 0 ? (
+                    <p className="py-4 text-center text-xs text-muted-foreground">
+                      {tr("marketingCollabScopeMenuEmpty", "표시할 메뉴가 없습니다.")}
+                    </p>
+                  ) : (
+                    visibleMenuRows.map((menu) => {
+                      const id = String(menu.id)
+                      const label = `${menu.code ? `[${menu.code}] ` : ""}${menu.name}`
+                      return (
+                        <div key={id} className="flex items-start gap-2 py-1">
+                          <Checkbox
+                            id={`collab-menu-${id}`}
+                            checked={selectedMenuIdSet.has(id)}
+                            onCheckedChange={(checked) =>
+                              set({ scopeMenuIds: toggleListValue(selectedScopeMenuIds, id, checked === true) })
+                            }
+                          />
+                          <label htmlFor={`collab-menu-${id}`} className="min-w-0 cursor-pointer text-sm leading-tight">
+                            <span className="block truncate">{label}</span>
+                            <span className="block text-[11px] text-muted-foreground">
+                              {String(menu.categoryMain ?? "").trim()} / {String(menu.category ?? "").trim()}
+                            </span>
+                          </label>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">{t("marketingCollabDetailScopeNote")}</Label>

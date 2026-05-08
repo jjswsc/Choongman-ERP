@@ -87,6 +87,56 @@ async function applyCategoryChangesToMenus(
       updated++
     }
   }
+  const remapCollabScopes = async () => {
+    const rows = (await supabaseSelect('marketing_campaigns', {
+      select: 'id,collab_detail',
+      limit: 10000,
+    })) as { id?: number | string; collab_detail?: Record<string, unknown> | null }[] | null
+
+    for (const row of rows || []) {
+      const id = String(row.id ?? '').trim()
+      const detail = row.collab_detail
+      if (!id || !detail || typeof detail !== 'object' || Array.isArray(detail)) continue
+
+      const mapMain = (main: string) => mainMap.get(main) ?? main
+      const mapCategoryKey = (key: string) => {
+        const raw = String(key ?? '').trim()
+        const sep = raw.indexOf('::')
+        if (sep < 0) return raw
+        const oldMain = raw.slice(0, sep)
+        const oldSub = raw.slice(sep + 2)
+        const nextMain = mapMain(oldMain)
+        const nextSub = subMapByMain.get(oldMain)?.get(oldSub) ?? oldSub
+        return `${nextMain}::${nextSub}`
+      }
+      const uniqueStrings = (value: unknown, mapper: (s: string) => string) =>
+        Array.from(
+          new Set(
+            (Array.isArray(value) ? value : [])
+              .map((x) => mapper(String(x ?? '').trim()))
+              .filter(Boolean)
+          )
+        )
+
+      const nextDetail = {
+        ...detail,
+        scopeMainCategories: uniqueStrings(detail.scopeMainCategories, mapMain),
+        scopeCategoryKeys: uniqueStrings(detail.scopeCategoryKeys, mapCategoryKey),
+      }
+      const changed =
+        JSON.stringify(nextDetail.scopeMainCategories) !== JSON.stringify(detail.scopeMainCategories ?? []) ||
+        JSON.stringify(nextDetail.scopeCategoryKeys) !== JSON.stringify(detail.scopeCategoryKeys ?? [])
+      if (changed) {
+        await supabaseUpdateByFilter(
+          'marketing_campaigns',
+          `id=eq.${encodeURIComponent(id)}`,
+          { collab_detail: nextDetail }
+        )
+      }
+    }
+  }
+
+  await remapCollabScopes()
   return { updated }
 }
 

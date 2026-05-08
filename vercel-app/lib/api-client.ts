@@ -5873,6 +5873,47 @@ export async function savePosMenuOption(
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function savePosMenuOptionsBulk(
+  params: {
+    options: Array<{
+      id?: string
+      menuId: number
+      name: string
+      priceModifier?: number
+      priceModifierDelivery?: number | null
+      priceModifierPackaging?: number | null
+      sortOrder?: number
+      optionType?: "substitution" | "additive"
+      itemCode?: string | null
+      additiveSourceMenuId?: number | null
+      quantity?: number
+      optionStepValues?: Record<string, string> | null
+      sellHall?: boolean
+      sellDelivery?: boolean
+      sellPackaging?: boolean
+    }>
+    storeCode?: string
+  },
+  opts?: { requireOnline?: boolean }
+) {
+  const init: RequestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  }
+  const res = opts?.requireOnline
+    ? await apiFetch("/api/savePosMenuOptionsBulk", init)
+    : await apiFetchWithOffline("/api/savePosMenuOptionsBulk", init)
+  if (opts?.requireOnline) {
+    return parsePosMutationResponse(res)
+  }
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    results?: { id?: string; success: boolean; message?: string }[]
+  }>
+}
+
 export interface PosMenuIngredient {
   id: string
   menuId: string

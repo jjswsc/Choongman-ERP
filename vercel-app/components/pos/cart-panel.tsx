@@ -287,17 +287,17 @@ export interface CartPanelHandle {
   openDineInPaymentFromOrder: (payload: {
     tableName: string
     orderNo?: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
     existingOrderId?: number | null
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     /** 기존 pos_orders 행 결제 시 부모가 넘기는 id (CartPanel 언마운트·ref 타이밍 대비) */
     existingOrderId?: number | null
   }) => void
@@ -2553,7 +2553,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const openDineInPaymentFromOrder = (payload: {
     tableName: string
     orderNo?: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   }) => {
     checkoutExistingPosOrderIdRef.current = null
     setIsExistingOrderCheckout(false)
@@ -2562,6 +2562,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       name: i.name,
       price: i.price,
       quantity: i.quantity,
+      ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
       ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
     setDiscountType('percent')
@@ -2581,7 +2582,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openTakeoutPaymentFromOrder = (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
@@ -2592,6 +2593,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       name: i.name,
       price: i.price,
       quantity: i.quantity,
+      ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
       ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
     setDiscountType('percent')
@@ -2609,7 +2611,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openDeliveryPaymentFromOrder = async (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
     existingOrderId?: number | null
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
@@ -2620,6 +2622,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       name: i.name,
       price: i.price,
       quantity: i.quantity,
+      ...(String(i.menuId ?? '').trim() ? { menuId: String(i.menuId).trim() } : {}),
       ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
     setDiscountType('percent')

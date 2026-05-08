@@ -329,7 +329,7 @@ export type DeliveryApp = string
 type TakeoutMode = 'slot' | 'member'
 type PendingPayRequest = {
   tableName: string
-  items: { id: string; name: string; price: number; quantity: number; note?: string }[]
+  items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string }[]
   /** 기존 주문 결제 시 영수증용 */
   orderNo?: string
 } | null
@@ -6413,6 +6413,7 @@ export default function PosTerminalPage() {
                     }),
                     price: item.price,
                     quantity: item.quantity,
+                    ...(item.menuId ? { menuId: item.menuId } : {}),
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: selectedDeliveryOrder.orderNo,
@@ -6487,6 +6488,7 @@ export default function PosTerminalPage() {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
+                    ...(item.menuId ? { menuId: item.menuId } : {}),
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: servingTable.order.orderNo,
@@ -6539,6 +6541,7 @@ export default function PosTerminalPage() {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
+                    ...(item.menuId ? { menuId: item.menuId } : {}),
                     ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: selectedTakeoutOrder.orderNo,

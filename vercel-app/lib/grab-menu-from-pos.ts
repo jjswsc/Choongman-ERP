@@ -59,6 +59,7 @@ type ModifierGroupBucket = {
 type OptionSelectionConfigEntry = {
   key: string
   label: string
+  audience: 'all' | 'hall' | 'delivery'
   required: boolean
   minSelect: number
   maxSelect: number
@@ -73,6 +74,9 @@ function parseOptionSelectionConfigEntries(raw: unknown): OptionSelectionConfigE
     const key = String(o.key ?? '').trim()
     if (!key) continue
     const label = String(o.label ?? '').trim() || key
+    const audienceRaw = String(o.audience ?? 'all').trim().toLowerCase()
+    const audience: 'all' | 'hall' | 'delivery' =
+      audienceRaw === 'hall' || audienceRaw === 'delivery' ? audienceRaw : 'all'
     const required = o.required === true
     const minRaw = Number(o.minSelect)
     const maxRaw = Number(o.maxSelect)
@@ -80,7 +84,7 @@ function parseOptionSelectionConfigEntries(raw: unknown): OptionSelectionConfigE
     const maxSelect = Number.isFinite(maxRaw) ? Math.max(1, Math.floor(maxRaw)) : 1
     const maxClamped = Math.max(1, maxSelect)
     const minClamped = Math.min(minSelect, maxClamped)
-    out.push({ key, label, required, minSelect: minClamped, maxSelect: maxClamped })
+    out.push({ key, label, audience, required, minSelect: minClamped, maxSelect: maxClamped })
   }
   return out
 }
@@ -669,6 +673,7 @@ export async function buildGrabMenuFromPos(params: {
           const groupName = String(bucket.sourceGroupName || '').trim() || 'Options'
           const forceSingleSelect = shouldForceSingleSelectGroup(groupName, rows)
           const cfgBucket = resolveOptionSelectionConfigForBucket(bucket.sourceGroupName, selectionConfigEntries)
+          if (cfgBucket?.audience === 'hall') return null
           const range = grabSelectionRangeForBucket({
             rows,
             groupName,
@@ -702,6 +707,7 @@ export async function buildGrabMenuFromPos(params: {
             }),
           }
         })
+        .filter((group): group is NonNullable<typeof group> => group != null)
 
       const banbanFlavorMenus = isBanbanMenuRow(menu)
         ? menus.filter((m) => isBanbanFlavorCandidate(m, menu)).slice(0, 30)
