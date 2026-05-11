@@ -10,7 +10,11 @@ import {
   parseOrderTypesParam,
   rowMatchesOrderFilter,
 } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
+import {
+  resolveStoresFromParams,
+  appendStoreCodeFilter,
+  canonicalSalesStoreRowKey,
+} from '@/lib/pos-sales-store-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 const FETCH_LIMIT = 50000
@@ -73,7 +77,7 @@ export async function GET(request: NextRequest) {
     for (const r of rows) {
       if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
-      const store = String(r.store_code ?? '').trim() || '(미지정)'
+      const store = canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)')
       if (!byStore[store])
         byStore[store] = {
           count: 0,

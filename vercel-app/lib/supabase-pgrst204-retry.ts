@@ -1,6 +1,7 @@
 import {
   supabaseInsert,
   supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 
@@ -85,6 +86,45 @@ export async function supabaseSelectFilterStrippingUnknownColumns(
   for (let i = 0; i < 40; i++) {
     try {
       return await supabaseSelectFilter(table, filter, { ...opts, select: use.join(',') })
+    } catch (e) {
+      const missingCol = extractAnyMissingColumn(e)
+      if (!missingCol) throw e
+      const next = use.filter((c) => c !== missingCol)
+      if (next.length === use.length) throw e
+      use = next
+      console.warn(`${logLabel}: select omit missing column '${missingCol}'`)
+    }
+  }
+  throw new Error(`${logLabel}: too many select column retries`)
+}
+
+/**
+ * `supabaseSelectFilterAllPages` + 컬럼 미존재 시 select에서 해당 컬럼만 제거 후 재시도
+ */
+export async function supabaseSelectFilterAllPagesStrippingUnknownColumns(
+  table: string,
+  filter: string,
+  opts: {
+    select: string
+    order?: string
+    pageSize?: number
+    maxRows?: number
+  },
+  logLabel: string
+): Promise<unknown[]> {
+  const cols = opts.select
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  let use = [...cols]
+  for (let i = 0; i < 40; i++) {
+    try {
+      return (await supabaseSelectFilterAllPages(table, filter, {
+        order: opts.order,
+        select: use.join(','),
+        pageSize: opts.pageSize,
+        maxRows: opts.maxRows,
+      })) as unknown[]
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)
       if (!missingCol) throw e

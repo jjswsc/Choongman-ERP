@@ -12,6 +12,36 @@ export type PoCartLine = {
   spec?: string
 }
 
+/** 발주 줄 VAT 면세 여부 — `savePurchaseOrder`·화면 합계와 동일 규칙 */
+export function poLineIsVatExempt(taxType?: string | null): boolean {
+  const t = String(taxType ?? '').trim()
+  return t === 'exempt' || t === '면세' || t === '영세율' || t === 'zero'
+}
+
+/**
+ * 태국 7% VAT: 과세 줄 합계에만 VAT 적용(소계 합 → VAT round → 합계).
+ * `savePurchaseOrder`와 동일한 금액 규칙.
+ */
+export function computePurchaseOrderMoneyTotals(items: PoCartLine[]): {
+  subtotal: number
+  taxableSubtotal: number
+  vat: number
+  total: number
+} {
+  let subtotal = 0
+  let taxableSubtotal = 0
+  for (const c of items) {
+    const price = Number(c.price ?? (c as { cost?: number }).cost ?? 0)
+    const qty = Number(c.qty || 0)
+    const amt = price * qty
+    subtotal += amt
+    if (!poLineIsVatExempt(c.taxType)) taxableSubtotal += amt
+  }
+  const vat = Math.round(taxableSubtotal * 0.07 * 100) / 100
+  const total = Math.round((subtotal + vat) * 100) / 100
+  return { subtotal, taxableSubtotal, vat, total }
+}
+
 export type PoBillingKind = "royalty" | "delivery_gp" | "grab_gp" | "all"
 
 export type PoCartMeta = {

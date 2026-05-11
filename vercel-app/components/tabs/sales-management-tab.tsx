@@ -37,6 +37,8 @@ import {
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
 import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
+import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
+import { addDaysYmd } from "@/lib/pos-business-day"
 import { buildPosStoreDisplayNameLookup, resolvePosStoreDisplayName } from "@/lib/pos-store-display-name"
 import { displayPosCancelReasonKey } from "@/lib/pos-cancel-reason-key"
 import {
@@ -154,31 +156,6 @@ function normalizeStoreCodes(values: string[]): string[] {
   return [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b)
   )
-}
-
-function parseYmdDate(value: string): Date {
-  const [y, m, d] = value.split("-").map((x) => parseInt(x, 10))
-  return new Date(y, (m || 1) - 1, d || 1)
-}
-
-function formatYmdDate(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, "0")
-  const d = String(date.getDate()).padStart(2, "0")
-  return `${y}-${m}-${d}`
-}
-
-function addDaysYmd(value: string, delta: number): string {
-  const d = parseYmdDate(value)
-  d.setDate(d.getDate() + delta)
-  return formatYmdDate(d)
-}
-
-function diffDaysInclusive(startStr: string, endStr: string): number {
-  const start = parseYmdDate(startStr).getTime()
-  const end = parseYmdDate(endStr).getTime()
-  const raw = Math.floor((end - start) / 86400000) + 1
-  return Number.isFinite(raw) && raw > 0 ? raw : 1
 }
 
 type AnalyticsView =
@@ -308,11 +285,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     return isManagerRole(r) || isFranchiseeRole(r)
   }, [auth?.role])
   const defaultLanding = React.useMemo(() => resolveDefaultSalesLanding(pathname), [pathname])
-  const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const monthStart = React.useMemo(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
-  }, [])
+  /** 방콕 달력 기준(브라우저/UTC `toISOString`·로컬 `getMonth` 사용 안 함) */
+  const today = React.useMemo(() => todayStrBangkok(), [])
+  const monthStart = React.useMemo(() => `${today.slice(0, 7)}-01`, [today])
 
   const [startStr, setStartStr] = React.useState(monthStart)
   const [endStr, setEndStr] = React.useState(today)
@@ -1237,7 +1212,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (!startStr || !endStr) return
     const keySnapshot = analyticsParamKey
     const id = ++loadIdRef.current
-    const dateSpan = diffDaysInclusive(startStr, endStr)
+    const dateSpan = diffDaysInclusiveBangkok(startStr, endStr)
     const prevStart = addDaysYmd(startStr, -dateSpan)
     const prevEnd = addDaysYmd(endStr, -dateSpan)
     const weekStart = addDaysYmd(startStr, -7)

@@ -7,10 +7,18 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc } from '@/lib/supabase-server'
-import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import {
+  supabaseSelectFilterAllPagesStrippingUnknownColumns,
+} from '@/lib/supabase-pgrst204-retry'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
-import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
+import {
+  resolveStoresFromParams,
+  appendStoreCodeFilter,
+  expandSalesStoreCodesForFilter,
+  rowMatchesSalesStoreSelection,
+  canonicalSalesStoreRowKey,
+} from '@/lib/pos-sales-store-filter'
 import { aggregatePosSalesByPeriod, type PeriodOrderRow } from '@/lib/pos-sales-period-aggregate'
 import {
   loadPosBusinessDaySettingsContext,
@@ -18,6 +26,26 @@ import {
 } from '@/lib/pos-business-day-server'
 
 const FETCH_LIMIT = 50000
+/** RPC·단일 limit(5만) 초과 시 기간 말일 누락 방지 — 전체 페이지 상한 */
+const PERIOD_FETCH_MAX_ROWS = 500_000
+const PERIOD_PAGE_SIZE = 8000
+
+const PERIOD_ORDER_SELECT =
+  'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,service_amt,guest_count,store_code,status,order_type'
+
+async function loadPeriodOrderRows(filter: string): Promise<PeriodOrderRow[]> {
+  return (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
+    'pos_orders',
+    filter,
+    {
+      select: PERIOD_ORDER_SELECT,
+      order: 'created_at.asc',
+      pageSize: PERIOD_PAGE_SIZE,
+      maxRows: PERIOD_FETCH_MAX_ROWS,
+    },
+    'posSalesByPeriod'
+  )) as PeriodOrderRow[]
+}
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -31,6 +59,7 @@ export async function GET(request: NextRequest) {
     const groupBy = searchParams.get('groupBy') || 'day'
     const pos = searchParams.get('pos')?.trim()
     const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
+    const expandedStores = expandSalesStoreCodesForFilter(stores)
     const splitByStore = searchParams.get('splitByStore') === '1' || searchParams.get('splitByStore') === 'true'
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
@@ -47,37 +76,27 @@ export async function GET(request: NextRequest) {
       const rpcRows = (await supabaseRpc<PeriodOrderRow[]>('get_pos_sales_period_rows', {
         p_start_utc: startISO,
         p_end_utc_exclusive: endISOExclusive,
-        p_store_codes: stores.length > 0 ? stores : null,
+        p_store_codes: expandedStores.length > 0 ? expandedStores : null,
         p_limit: FETCH_LIMIT,
       })) as PeriodOrderRow[]
-      if (Array.isArray(rpcRows)) {
-        rows = rpcRows
-        usedRpc = true
+      if (Array.isArray(rpcRows) && rpcRows.length > 0 && rpcRows.length < FETCH_LIMIT) {
+        const hasServiceColumn = rpcRows.some((r) =>
+          Object.prototype.hasOwnProperty.call(r, 'service_amt')
+        )
+        if (hasServiceColumn) {
+          rows = rpcRows
+          usedRpc = true
+        }
       }
     } catch {
       usedRpc = false
     }
     if (!usedRpc) {
-      rows = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
-        limit: FETCH_LIMIT,
-        select:
-          'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,service_amt,guest_count,store_code,status,order_type',
-      }, 'posSalesByPeriod')) as PeriodOrderRow[]
-    } else {
-      const hasServiceColumn = rows.some((r) => Object.prototype.hasOwnProperty.call(r, 'service_amt'))
-      if (!hasServiceColumn && rows.length > 0) {
-        rows = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
-          limit: FETCH_LIMIT,
-          select:
-            'created_at,total,subtotal,vat,discount_amt,coupon_discount_amt,service_amt,guest_count,store_code,status,order_type',
-        }, 'posSalesByPeriod')) as PeriodOrderRow[]
-        usedRpc = false
-      }
+      rows = await loadPeriodOrderRows(filter)
     }
-
-    const truncated = rows.length >= FETCH_LIMIT
+    const truncated = rows.length >= PERIOD_FETCH_MAX_ROWS
     if (truncated) headers.set('X-Sales-Truncated', '1')
-    headers.set('X-Pos-Sales-Source', usedRpc ? 'rpc' : 'select')
+    headers.set('X-Pos-Sales-Source', usedRpc ? 'rpc' : 'select-all-pages')
 
     const bizCtx = await loadPosBusinessDaySettingsContext()
     const resolveSc = (sc: string) => resolvePosBusinessHoursFromContext(bizCtx, sc)
@@ -86,7 +105,7 @@ export async function GET(request: NextRequest) {
       const series: Record<string, ReturnType<typeof aggregatePosSalesByPeriod>> = {}
       if (stores.length >= 2) {
         for (const code of stores) {
-          const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
+          const subset = rows.filter((r) => rowMatchesSalesStoreSelection(r.store_code, code))
           series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
         }
       } else if (stores.length === 1) {
@@ -94,10 +113,17 @@ export async function GET(request: NextRequest) {
         series[code] = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed, undefined, resolveSc)
       } else {
         const codes = [
-          ...new Set(rows.map((r) => String(r.store_code ?? '').trim()).filter(Boolean)),
+          ...new Set(
+            rows.map((r) =>
+              canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)')
+            )
+          ),
         ].sort((a, b) => a.localeCompare(b))
         for (const code of codes) {
-          const subset = rows.filter((r) => String(r.store_code ?? '').trim() === code)
+          const subset = rows.filter(
+            (r) =>
+              canonicalSalesStoreRowKey(String(r.store_code ?? '').trim() || '(미지정)') === code
+          )
           series[code] = aggregatePosSalesByPeriod(subset, groupBy, orderTypesAllowed, undefined, resolveSc)
         }
       }

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
+import {
+  supabaseSelectAllPages,
+  supabaseSelectFilter,
+} from '@/lib/supabase-server'
 import {
   type PosOptionGroupRow,
   buildMenuOptionsFromLinks,
@@ -17,6 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     const linkedOptions: ReturnType<typeof buildMenuOptionsFromLinks> = []
     const linkedMenuIds = new Set<number>()
+    const menuCodeById = new Map<number, string>()
     try {
       const [{ groups, itemsByGroupId }, links] = await Promise.all([
         loadPosOptionGroupsWithItems(),
@@ -40,21 +44,55 @@ export async function GET(request: NextRequest) {
       }
       for (const [mid, menuLinks] of linksByMenuId.entries()) {
         linkedOptions.push(
-          ...buildMenuOptionsFromLinks(mid, menuLinks, groupsById, itemsByGroupId)
+          ...buildMenuOptionsFromLinks(
+            mid,
+            menuLinks,
+            groupsById,
+            itemsByGroupId,
+            menuCodeById.get(mid)
+          )
         )
       }
     } catch {
       // 신규 구조 미배포 환경 fallback
     }
 
+    try {
+      if (menuId && Number.isFinite(Number(menuId))) {
+        const singleMenuId = Number(menuId)
+        const menuRows = (await supabaseSelectFilter('pos_menus', `id=eq.${singleMenuId}`, {
+          limit: 1,
+          select: 'id,code',
+        })) as { id?: number; code?: string }[] | null
+        const first = menuRows?.[0]
+        if (first?.id != null) {
+          menuCodeById.set(Number(first.id), String(first.code ?? '').trim())
+        }
+      } else {
+        const menuRows = (await supabaseSelectAllPages('pos_menus', {
+          order: 'id.asc',
+          pageSize: 3000,
+          maxRows: 200000,
+          select: 'id,code',
+        })) as { id?: number; code?: string }[] | null
+        for (const row of menuRows || []) {
+          const id = Number(row.id || 0)
+          if (!id) continue
+          menuCodeById.set(id, String(row.code ?? '').trim())
+        }
+      }
+    } catch {
+      // fallback: option_code가 없으면 응답에서 빈 문자열 허용
+    }
+
     const selectCols =
-      'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging,description_default,description_delivery,description_table'
+      'id,menu_id,name,option_code,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging,description_default,description_delivery,description_table'
     const colsWithoutSellAndStep =
       'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,description_default,description_delivery,description_table'
     const colsBaseWithDelivery = 'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order'
     const colsBaseWithDeliveryOnly = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order'
     const minimalCols = 'id,menu_id,name,price_modifier,sort_order'
-    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean; description_default?: string; description_delivery?: string | null; description_table?: string | null }[] | null = null
+    let rows: { id?: number; menu_id?: number; name?: string; option_code?: string | null; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean; description_default?: string; description_delivery?: string | null; description_table?: string | null }[] | null = null
 
     const doSelect = async (cols: string) => {
       if (menuId) {
@@ -109,6 +147,7 @@ export async function GET(request: NextRequest) {
       return {
         id: String(row.id ?? ''),
         menuId: String(row.menu_id ?? ''),
+        optionCode: row.option_code && String(row.option_code).trim() ? String(row.option_code).trim() : '',
         name: String(row.name ?? ''),
         priceModifier: Number(row.price_modifier) ?? 0,
         priceModifierDelivery: row.price_modifier_delivery != null ? Number(row.price_modifier_delivery) : null,

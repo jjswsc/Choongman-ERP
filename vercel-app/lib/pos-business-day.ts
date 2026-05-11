@@ -150,10 +150,14 @@ export function clockToMinutes(h: number, m: number): number {
   return h * 60 + m
 }
 
+/** 방콕 달력 YYYY-MM-DD에 delta일(정수). 브라우저 로컬/UTC 날짜 혼용 없음. */
 export function addDaysYmd(dateStr: string, delta: number): string {
-  const d = new Date(`${dateStr}T12:00:00`)
-  d.setDate(d.getDate() + delta)
-  return d.toISOString().slice(0, 10)
+  const s = dateStr.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return getBangkokDateStr()
+  const base = Date.parse(`${s}T12:00:00+07:00`)
+  if (!Number.isFinite(base)) return getBangkokDateStr()
+  const ms = base + delta * 86400000
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: POS_TIMEZONE })
 }
 
 function bangkokWallToUtcMs(ymd: string, clock: PosBusinessClock): number {

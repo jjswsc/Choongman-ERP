@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { recordPriceChanges } from '@/lib/price-history'
 import { triggerGrabMenuNotification } from '@/lib/grab-menu-sync-trigger'
+import { createMenuOptionCodeAllocator } from '@/lib/pos-option-code-server'
 
 async function getMenuCategories(menuId: number): Promise<{ categoryMain: string; category: string }> {
   try {
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     const priceModifierPackaging = body?.priceModifierPackaging != null ? Number(body.priceModifierPackaging) : null
     const sortOrder = Number(body?.sortOrder) ?? 0
     const optionType = (body?.optionType || 'substitution') as string
+    const optionCodeRaw = String(body?.optionCode ?? '').trim()
     const itemCode = body?.itemCode ? String(body.itemCode).trim() : null
     const rawAddMenu = body?.additiveSourceMenuId
     const parsedAddMenu =
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest) {
       sort_order: sortOrder,
     }
 
-    const doSave = async (row: Record<string, unknown>): Promise<void> => {
+    const doSave = async (row: Record<string, unknown>): Promise<string | null> => {
       if (id) {
         const existing = (await supabaseSelectFilter(
           'pos_menu_options',
@@ -121,6 +123,7 @@ export async function POST(req: NextRequest) {
           }
         }
         await supabaseUpdateByFilter('pos_menu_options', `id=eq.${id}`, row)
+        return String(id)
       } else {
         const inserted = (await supabaseInsert('pos_menu_options', { menu_id: menuId, ...row })) as { id?: number }[] | { id?: number }
         const newRow = Array.isArray(inserted) ? inserted[0] : inserted
@@ -143,11 +146,13 @@ export async function POST(req: NextRequest) {
             }).catch(() => {})
           }
         }
+        return newId
       }
     }
 
+    let savedOptionId: string | null = null
     try {
-      await doSave(rowFull)
+      savedOptionId = await doSave(rowFull)
     } catch (_err1) {
       const rowWithoutNew = { ...rowFull }
       delete rowWithoutNew.option_step_values
@@ -159,14 +164,29 @@ export async function POST(req: NextRequest) {
       delete rowWithoutNew.item_code
       delete rowWithoutNew.additive_source_menu_id
       delete rowWithoutNew.quantity
+      delete rowWithoutNew.option_code
       delete rowWithoutNew.description_default
       delete rowWithoutNew.description_delivery
       delete rowWithoutNew.description_table
       if (priceModifierDelivery != null) (rowWithoutNew as Record<string, unknown>).price_modifier_delivery = priceModifierDelivery
       try {
-        await doSave(rowWithoutNew)
+        savedOptionId = await doSave(rowWithoutNew)
       } catch (_err2) {
-        await doSave(rowMinimal)
+        savedOptionId = await doSave(rowMinimal)
+      }
+    }
+
+    let optionCodeResult: { optionCode: string; remapped: boolean } | null = null
+    if (savedOptionId) {
+      try {
+        const allocator = await createMenuOptionCodeAllocator(menuId)
+        optionCodeResult = await allocator.assign({
+          optionId: savedOptionId,
+          preferredCode: optionCodeRaw || undefined,
+          fallbackSortOrder: sortOrder,
+        })
+      } catch (codeErr) {
+        console.warn('savePosMenuOption: option_code assign skipped', codeErr)
       }
     }
 
@@ -174,7 +194,14 @@ export async function POST(req: NextRequest) {
       reason: 'menu_modifier_updated',
       partnerMerchantID: body?.storeCode ? String(body.storeCode).trim() : null,
     })
-    return NextResponse.json({ success: true }, { headers })
+    return NextResponse.json(
+      {
+        success: true,
+        optionCode: optionCodeResult?.optionCode || undefined,
+        remappedOptionCode: optionCodeResult?.remapped || false,
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('savePosMenuOption:', e)
     return NextResponse.json(

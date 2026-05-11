@@ -10,6 +10,7 @@ import type { PosMenuOption } from "@/lib/api-client"
 type OptionItemRowCardProps = {
   option: PosMenuOption
   displayName: React.ReactNode
+  displayCode?: string
   editableName?: boolean
   optionNamePlaceholder: string
   channelTitle: string
@@ -32,6 +33,7 @@ type OptionItemRowCardProps = {
 export function OptionItemRowCard({
   option,
   displayName,
+  displayCode,
   editableName,
   optionNamePlaceholder,
   channelTitle,
@@ -67,10 +69,18 @@ export function OptionItemRowCard({
         onDrop?.()
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="mt-1 text-muted-foreground">
+      <div className="flex items-center gap-2">
+        <span
+          className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+          aria-hidden
+        >
           <GripVertical className="h-4 w-4" />
         </span>
+        {displayCode ? (
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground tabular-nums">
+            {displayCode}
+          </span>
+        ) : null}
         <div className="min-w-0 flex-1">
           {editableName ? (
             <Input
@@ -86,8 +96,10 @@ export function OptionItemRowCard({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-destructive hover:text-destructive"
+          className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
           onClick={onDelete}
+          type="button"
+          aria-label="Delete option"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>

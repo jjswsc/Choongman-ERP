@@ -13,6 +13,16 @@ export async function GET(req: NextRequest) {
       Number.isFinite(menuId) && menuId > 0
         ? await loadMenuGroupLinks(menuId)
         : []
+    const allLinksForStats =
+      Number.isFinite(menuId) && menuId > 0 ? [] : await loadMenuGroupLinks()
+    const menuCountByGroup = new Map<number, Set<number>>()
+    for (const row of allLinksForStats) {
+      const gid = Number(row.group_id || 0)
+      const mid = Number(row.menu_id || 0)
+      if (!gid || !mid) continue
+      if (!menuCountByGroup.has(gid)) menuCountByGroup.set(gid, new Set())
+      menuCountByGroup.get(gid)!.add(mid)
+    }
     const linksByGroupId = new Map<number, (typeof menuLinks)[number]>()
     for (const row of menuLinks) {
       linksByGroupId.set(Number(row.group_id || 0), row)
@@ -61,6 +71,10 @@ export async function GET(req: NextRequest) {
               maxSelect: Number(link.max_select ?? 1),
             }
           : null,
+        linkedMenuCount:
+          Number.isFinite(menuId) && menuId > 0
+            ? undefined
+            : menuCountByGroup.get(gid)?.size ?? 0,
       }
     })
     return NextResponse.json(list, { headers })

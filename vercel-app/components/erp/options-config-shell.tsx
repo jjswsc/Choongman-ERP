@@ -10,10 +10,10 @@ type OptionsConfigShellProps = {
 
 export function OptionsConfigShell({ menuListPanel, optionGroupPanel, editorPanel }: OptionsConfigShellProps) {
   return (
-    <div className="grid gap-4 xl:grid-cols-[280px_260px_1fr]">
+    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_260px]">
       <div className="xl:sticky xl:top-0 xl:self-start">{menuListPanel}</div>
-      <div className="xl:sticky xl:top-0 xl:self-start">{optionGroupPanel}</div>
       <div>{editorPanel}</div>
+      <div className="xl:sticky xl:top-0 xl:self-start">{optionGroupPanel}</div>
     </div>
   )
 }

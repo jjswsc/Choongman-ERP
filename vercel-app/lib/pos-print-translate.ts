@@ -1,8 +1,21 @@
 /**
- * POS 영수증/인쇄용: 테이블명 끝 `번` 제거·치킨 부위 옵션명 번역 등.
+ * POS 영수증/인쇄용: 테이블명 끝 `번` 제거·치킨 부위 표기 영문 통일 등.
  */
 
-import { getClientUiLang, getUiString } from '@/lib/i18n'
+/** 치킨 기본가에 해당하는 대표 옵션 표기(표시·카트 기본 선택 등). DB 레거시 `S 순살`과 병행 인식. */
+export const POS_CHICKEN_DEFAULT_OPTION_DISPLAY = 'S Boneless'
+
+/**
+ * 치킨 부위 한글(순살·윙·봉)을 영문 Boneless / Wing / Drumette 로 통일.
+ * 메뉴·옵션명·장바구니·영수증에서 번역 키와 혼용되지 않도록 단일 표기 유지.
+ */
+export function canonicalEnglishChickenMenuLine(text: string): string {
+  let out = String(text ?? '')
+  out = out.replace(/순살/gi, 'Boneless')
+  out = out.replace(/윙/g, 'Wing')
+  out = out.replace(/봉/g, 'Drumette')
+  return out
+}
 
 /** 테이블명 끝 한글 접미사 `번` 제거 (1F-2번 → 1F-2). 언어와 무관하게 표시만 정리. */
 export function translateReceiptTableDisplayName(tableName: string, _t?: (key: string) => string): string {
@@ -22,28 +35,8 @@ export function normalizePosTableNameForMatch(raw: string | undefined | null): s
   return s
 }
 
-type PartKey = 'posOptionPartBoneless' | 'posOptionPartWing' | 'posOptionPartDrumstick'
-
-/** `t`가 키 문자열만 돌려줄 때(폴백 `k=>k` 등)에도 UI 언어·영문 사전으로 부위명 확보 */
-function resolvePartLabel(t: (key: string) => string, key: PartKey): string {
-  const v = t(key)
-  if (v && v !== key) return v
-  const lang = getClientUiLang()
-  let g = getUiString(lang, key)
-  if (g && g !== key) return g
-  g = getUiString('en', key)
-  return g && g !== key ? g : v || key
-}
-
-/** 품목 줄에 포함된 순살/윙/봉 한글을 현재 언어 문구로 치환 ("M - 순살" 등) */
-export function translatePosMenuLineForReceipt(name: string, t: (key: string) => string): string {
+/** 품목 줄 표시: 치킨 부위 한글 → 영문 통일. `t`는 호환용(미사용). */
+export function translatePosMenuLineForReceipt(name: string, _t?: (key: string) => string): string {
   if (!name?.trim()) return name ?? ''
-  let out = String(name)
-  const boneless = resolvePartLabel(t, 'posOptionPartBoneless')
-  const wing = resolvePartLabel(t, 'posOptionPartWing')
-  const drum = resolvePartLabel(t, 'posOptionPartDrumstick')
-  if (boneless) out = out.replace(/순살/g, boneless)
-  if (wing) out = out.replace(/윙/g, wing)
-  if (drum) out = out.replace(/봉/g, drum)
-  return out
+  return canonicalEnglishChickenMenuLine(String(name))
 }

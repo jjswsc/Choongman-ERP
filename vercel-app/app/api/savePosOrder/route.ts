@@ -17,6 +17,7 @@ import {
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
@@ -215,7 +216,8 @@ export async function POST(req: NextRequest) {
     const pointUsed = Math.max(0, Math.trunc(Number(body.pointUsed ?? 0)))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body.pointEarned ?? 0)))
     const guestCountReq = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
-    const items = Array.isArray(body.items) ? body.items : []
+    const itemsRaw = Array.isArray(body.items) ? body.items : []
+    const items = await enrichOrderItemsWithOptionCode(itemsRaw)
     const pricingAdjustments = body.pricingAdjustments || {}
     const createdBy = String(body.createdBy ?? body.created_by ?? '').trim()
     const linkposPayment =

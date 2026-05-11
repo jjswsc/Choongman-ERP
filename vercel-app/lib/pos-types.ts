@@ -65,6 +65,8 @@ export interface OrderItem {
   menuId?: string
   /** `items_json`의 option_id1 등 — 포장 체크리스트 옵션 매핑용 */
   optionId?: string
+  /** `items_json`의 option_code1 등 — 메뉴별 고유 옵션 코드 */
+  optionCode?: string
   quantity: number
   price: number
   /** 줄 단위 메모 (주방·items_json) */
@@ -77,7 +79,7 @@ export interface OrderItem {
   cancelReason?: string | null
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
+  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number; optionName?: string | null }[]
   setChildrenState?: Record<
     string,
     {

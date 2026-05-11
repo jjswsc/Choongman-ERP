@@ -14,7 +14,9 @@ import {
 import { appAlert, appConfirm } from "@/lib/app-message"
 import {
   getAdminItems,
+  getItemCategories,
   getPosMenus,
+  getPosMenuCategoriesConfig,
   getPriceSchedules,
   savePriceSchedule,
   cancelPriceSchedule,
@@ -77,11 +79,13 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
   const [applying, setApplying] = React.useState(false)
   const [statusFilter, setStatusFilter] = React.useState<"all" | "pending" | "applied" | "cancelled" | "failed">("pending")
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [entityId, setEntityId] = React.useState("")
   const [fieldName, setFieldName] = React.useState(mode === "item" ? "price" : "price")
   const [scheduledValue, setScheduledValue] = React.useState("")
   const [effectiveAtLocal, setEffectiveAtLocal] = React.useState(nextHourBangkokLocalInput())
-  const [itemOptions, setItemOptions] = React.useState<{ id: string; label: string }[]>([])
+  const [itemOptions, setItemOptions] = React.useState<{ id: string; label: string; category: string }[]>([])
+  const [categoryOptions, setCategoryOptions] = React.useState<string[]>([])
 
   const fieldOptions = React.useMemo(() => {
     if (mode === "item") {
@@ -98,15 +102,32 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
 
   const loadEntityOptions = React.useCallback(async () => {
     if (mode === "item") {
-      const items = await getAdminItems()
+      const [items, categoryRes] = await Promise.all([getAdminItems(), getItemCategories()])
+      const categories = (categoryRes?.categories || []).filter(Boolean).sort()
+      setCategoryOptions(categories)
       setItemOptions(
-        (items || []).map((x) => ({ id: String(x.code || ""), label: `${x.code} ${x.name}` })).filter((x) => x.id)
+        (items || [])
+          .map((x) => ({
+            id: String(x.code || ""),
+            label: `${x.code} ${x.name}`,
+            category: String(x.category || "").trim(),
+          }))
+          .filter((x) => x.id)
       )
       return
     }
-    const menus = await getPosMenus()
+    const [menus, categoriesConfig] = await Promise.all([getPosMenus(), getPosMenuCategoriesConfig()])
+    const categoryMap = categoriesConfig?.categoriesByMain || {}
+    const categories = Array.from(new Set(Object.values(categoryMap).flat().filter(Boolean))).sort()
+    setCategoryOptions(categories)
     setItemOptions(
-      (menus || []).map((x) => ({ id: String(x.id || ""), label: `${x.code || x.id} ${x.name}` })).filter((x) => x.id)
+      (menus || [])
+        .map((x) => ({
+          id: String(x.id || ""),
+          label: `${x.code || x.id} ${x.name}`,
+          category: String(x.category || "").trim(),
+        }))
+        .filter((x) => x.id)
     )
   }, [mode])
 
@@ -117,13 +138,26 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
         entityType: mode,
         status: statusFilter === "all" ? undefined : statusFilter,
         search: searchTerm.trim() || undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
         limit: 300,
       })
       setRows(data)
     } finally {
       setLoading(false)
     }
-  }, [mode, statusFilter, searchTerm])
+  }, [mode, statusFilter, searchTerm, categoryFilter])
+
+  const filteredEntityOptions = React.useMemo(() => {
+    if (categoryFilter === "all") return itemOptions
+    return itemOptions.filter((x) => (x.category || "").trim() === categoryFilter)
+  }, [itemOptions, categoryFilter])
+
+  React.useEffect(() => {
+    if (!entityId) return
+    if (!filteredEntityOptions.some((x) => x.id === entityId)) {
+      setEntityId("")
+    }
+  }, [entityId, filteredEntityOptions])
 
   React.useEffect(() => {
     loadEntityOptions().catch(() => setItemOptions([]))
@@ -224,6 +258,17 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
             <SelectItem value="failed">실패</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="h-9 w-[150px] text-xs">
+            <SelectValue placeholder="카테고리" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">카테고리 전체</SelectItem>
+            {categoryOptions.map((c) => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -253,7 +298,7 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
               <SelectValue placeholder={mode === "item" ? "품목 선택" : "메뉴 선택"} />
             </SelectTrigger>
             <SelectContent>
-              {itemOptions.map((o) => (
+              {filteredEntityOptions.map((o) => (
                 <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
               ))}
             </SelectContent>

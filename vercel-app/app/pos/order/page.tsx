@@ -79,7 +79,8 @@ import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kit
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
-import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
+import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
+import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
 import {
   printPosHtmlDocument,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
@@ -107,7 +108,7 @@ import { isChickenMenu } from "@/lib/pos-menu-categories"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
-/** 치킨 기본 옵션(S 순살): POS 옵션 목록에서 제외, "기본 (S 순살)" 버튼으로만 선택 */
+/** 치킨 기본 옵션(S Boneless): POS 옵션 목록에서 제외, 기본 버튼으로만 선택 */
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
@@ -130,15 +131,18 @@ interface CartItem {
   qty: number
   note?: string
   optionId?: string
+  optionCode?: string
   optionName?: string
-  /** 반반: 1번째 맛 메뉴/옵션 ID (S 순살) */
+  /** 반반: 1번째 맛 메뉴/옵션 ID (S Boneless) */
   menuId1?: string
   optionId1?: string
+  optionCode1?: string
   menuId2?: string
   optionId2?: string
+  optionCode2?: string
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
+  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number; optionName?: string | null }[]
 }
 
 type PromoChoiceDialogState = {
@@ -488,6 +492,15 @@ export default function PosOrderPage() {
     () => new Map<string, PosMenuOption>(allOptions.map((o) => [String(o.id), o])),
     [allOptions]
   )
+  const optionByCodeForCartNote = React.useMemo(() => {
+    const map = new Map<string, PosMenuOption>()
+    for (const opt of allOptions) {
+      const code = String(opt.optionCode ?? "").trim()
+      if (!code) continue
+      map.set(code, opt)
+    }
+    return map
+  }, [allOptions])
 
   const promoCatalogById = React.useMemo(() => {
     const m = new Map<string, PosPromoWithItems>()
@@ -644,7 +657,9 @@ export default function PosOrderPage() {
           cachedOptName ||
           resolvePromoSublineOptionDisplayName({
             optionId: line.optionId,
+            optionCode: line.optionCode,
             optionById: optionByIdForCartNote,
+            optionByCode: optionByCodeForCartNote,
             menuOptions: optionsByMenuId[String(line.menuId)],
             orderChannel,
             menuCode: menu?.code,
@@ -655,7 +670,7 @@ export default function PosOrderPage() {
       const hiddenCount = Math.max(0, item.promoItems.length - lines.length)
       return hiddenCount > 0 ? `${lines.join(", ")}, +${hiddenCount}` : lines.join(", ")
     },
-    [menus, optionByIdForCartNote, optionsByMenuId, orderType]
+    [menus, optionByIdForCartNote, optionByCodeForCartNote, optionsByMenuId, orderType]
   )
 
   React.useEffect(() => {
@@ -667,20 +682,22 @@ export default function PosOrderPage() {
     const uniq = Array.from(new Set(targets))
     let cancelled = false
     void (async () => {
-      const rowsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]> = {}
+      const rowsByPromo: Record<string, { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number; optionName?: string | null }[]> = {}
       for (const pid of uniq) {
         const rows = await getPosPromoItems({ promoId: pid }).catch(() => [])
         rowsByPromo[pid] = (rows || []).map((r) => {
           const optId = r.optionId ? String(r.optionId) : null
+          const option = optId ? allOptions.find((o) => String(o.id) === optId) : null
           const menu = menus.find((m) => String(m.id) === String(r.menuId ?? ""))
           const optName = optId
-            ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
+            ? (option?.name?.trim() || '')
             : isChickenMenu(menu?.code)
-              ? 'S 순살'
+              ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
               : ''
           return {
             menuId: String(r.menuId ?? ""),
             optionId: optId,
+            ...(option?.optionCode ? { optionCode: option.optionCode } : {}),
             quantity: Math.max(1, Number(r.quantity) || 1),
             ...(optName ? { optionName: optName } : {}),
           }
@@ -725,7 +742,12 @@ export default function PosOrderPage() {
 
   const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
-    const name = opt ? `${menu.name} (${opt.name})` : (defaultOptionDisplayName ? `${menu.name} (${defaultOptionDisplayName})` : menu.name)
+    const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt) : ""
+    const name = opt
+      ? `${menu.name} (${optBracket})`
+      : defaultOptionDisplayName
+        ? `${menu.name} (${defaultOptionDisplayName})`
+        : menu.name
     const price = getMenuPrice(menu) + (opt ? getOptionModifier(opt) : 0)
     setCart((prev) => {
       const i = prev.findIndex((x) => x.id === cartId)
@@ -740,7 +762,8 @@ export default function PosOrderPage() {
         price,
         qty: 1,
         optionId: opt?.id,
-        optionName: opt?.name ?? defaultOptionDisplayName,
+        optionCode: opt?.optionCode,
+        optionName: (opt ? optBracket : "") || defaultOptionDisplayName,
       }]
     })
     setOptionPickerMenu(null)
@@ -772,6 +795,7 @@ export default function PosOrderPage() {
           items: rows.map((r) => ({
             menuId: String(r.menuId ?? ""),
             optionId: r.optionId ? String(r.optionId) : null,
+            optionCode: r.optionCode ? String(r.optionCode).trim() : null,
             quantity: Math.max(1, Number(r.quantity) || 1),
             choiceGroup: String(r.choiceGroup ?? "").trim() || null,
             choicePickCount:
@@ -797,7 +821,7 @@ export default function PosOrderPage() {
     addToCartWithOption(menu, null)
   }
 
-  /** 반반: 치킨 메뉴 2개(기본가=S 순살)를 골라 한 상으로 추가, 원가 = 각 0.5씩 */
+  /** 반반: 치킨 메뉴 2개(기본가=S Boneless)를 골라 한 상으로 추가, 원가 = 각 0.5씩 */
   const addToCartBanban = (banbanMenu: PosMenu, menu1: PosMenu, menu2: PosMenu) => {
     const ids = [menu1.id, menu2.id].sort()
     const cartId = `banban-${ids.join("-")}`
@@ -829,21 +853,23 @@ export default function PosOrderPage() {
     /** 카트 라인 자식 옵션 이름을 미리 캐시 (카트·인쇄 표시용). */
     const normalizedItems = (resolvedPromo.items || []).map((x) => {
       const optId = x.optionId ? String(x.optionId) : null
+      const optCode = x.optionCode ? String(x.optionCode).trim() : ""
       const menu = menus.find((m) => String(m.id) === String(x.menuId))
       const optName = optId
         ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
         : isChickenMenu(menu?.code)
-          ? 'S 순살'
+          ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
           : ''
       return {
         menuId: String(x.menuId),
         optionId: optId,
+        ...(optCode ? { optionCode: optCode } : {}),
         quantity: Math.max(1, Number(x.quantity) || 1),
         ...(optName ? { optionName: optName } : {}),
       }
     })
     const signature = normalizedItems
-      .map((x) => `${x.menuId}:${x.optionId || "-"}:${x.quantity}`)
+      .map((x) => `${x.menuId}:${x.optionCode || x.optionId || "-"}:${x.quantity}`)
       .join("|")
     const cartId = `promo-${resolvedPromo.id}-${signature || "base"}`
     const price = getPromoPrice(resolvedPromo)
@@ -881,6 +907,7 @@ export default function PosOrderPage() {
     const { fixedItems, groups } = splitPromoChoiceGroups((resolvedPromo.items || []).map((it) => ({
       menuId: String(it.menuId ?? ""),
       optionId: it.optionId ? String(it.optionId) : null,
+      optionCode: it.optionCode ? String(it.optionCode).trim() : null,
       quantity: Math.max(1, Number(it.quantity) || 1),
       choiceGroup: String(it.choiceGroup ?? "").trim() || null,
       choicePickCount:
@@ -938,6 +965,7 @@ export default function PosOrderPage() {
         .map((line) => ({
           menuId: line.menuId,
           optionId: line.optionId,
+          ...(line.optionCode ? { optionCode: line.optionCode } : {}),
           quantity: line.quantity,
         }))
     })
@@ -989,7 +1017,7 @@ export default function PosOrderPage() {
     if (!order.items?.length) return
     setCart((prev) => {
       const next = [...prev]
-      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; note?: string; menuId1?: string; optionId1?: string; menuId2?: string; optionId2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[]) {
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; note?: string; menuId1?: string; optionId1?: string; optionCode1?: string; menuId2?: string; optionId2?: string; optionCode2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[] }[]) {
         const id = String(it.id ?? "")
         const name = String(it.name ?? "")
         const price = Number(it.price ?? 0)
@@ -1003,7 +1031,7 @@ export default function PosOrderPage() {
           price,
           qty,
           ...(note && { note }),
-          ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
+          ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, optionCode1: it.optionCode1, menuId2: it.menuId2, optionId2: it.optionId2, optionCode2: it.optionCode2 }),
           ...(it.promoId
             ? {
                 promoId: it.promoId,
@@ -1195,7 +1223,7 @@ export default function PosOrderPage() {
             : {}),
           note: it.note,
           orderType,
-          ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
+          ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, optionCode1: it.optionCode1, menuId2: it.menuId2, optionId2: it.optionId2, optionCode2: it.optionCode2 }),
           ...(it.promoId
             ? {
                 promoId: it.promoId,
@@ -2129,7 +2157,7 @@ export default function PosOrderPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 옵션 선택 모달 - 단계별(사이즈→순살/뼈) 또는 평면 목록 */}
+      {/* 옵션 선택 모달 - 단계별(사이즈→부위) 또는 평면 목록 */}
       <Dialog
         open={!!optionPickerMenu}
         onOpenChange={(open) => {
@@ -2216,14 +2244,14 @@ export default function PosOrderPage() {
             )
             const optsWithStepsToShow = isChickenBasePrice ? optsWithSteps.filter((o) => !isChickenDefaultOption(o.name)) : optsWithSteps
             const useMultiStep = groups.length > 0 && optsWithStepsToShow.length > 0
-            /** S 사이즈(기본 S 순살)는 배달에서만 사용: 배달일 때만 "기본 (S 순살)" 버튼 표시 */
+            /** S 사이즈 기본(S Boneless)은 배달에서만 사용: 배달일 때만 기본 버튼 표시 */
             const defaultBtn = isChickenBasePrice && orderType === "delivery" && (
               <button
                 type="button"
-                onClick={() => addToCartWithOption(optionPickerMenu, null, "S 순살")}
+                onClick={() => addToCartWithOption(optionPickerMenu, null, POS_CHICKEN_DEFAULT_OPTION_DISPLAY)}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
-                <span className="font-medium text-slate-800">{t("posOptionDefault") || "기본 (S 순살)"}</span>
+                <span className="font-medium text-slate-800">{t("posOptionDefault") || "기본 (S Boneless)"}</span>
                 <span className="font-bold text-amber-600">{formatBahtNum(getMenuPrice(optionPickerMenu))} ฿</span>
               </button>
             )
@@ -2250,7 +2278,7 @@ export default function PosOrderPage() {
                 size: "사이즈",
                 part: "부위",
                 topping: "토핑",
-                bone: "뼈/순살",
+                bone: "Bone / Boneless",
                 type: "타입",
                 set_main: "세트 메인",
                 side: "사이드",
@@ -2348,9 +2376,13 @@ export default function PosOrderPage() {
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {group.lines.map((line) => {
                         const menu = menus.find((m) => String(m.id) === String(line.menuId))
-                        const option = line.optionId
-                          ? allOptions.find((o) => String(o.id) === String(line.optionId))
-                          : null
+                        const option =
+                          (line.optionCode
+                            ? allOptions.find((o) => String(o.optionCode ?? "") === String(line.optionCode))
+                            : null) ||
+                          (line.optionId
+                            ? allOptions.find((o) => String(o.id) === String(line.optionId))
+                            : null)
                         const label = `${menu?.name ?? `#${line.menuId}`}${option?.name ? ` (${option.name})` : ''}`
                         const active = selected.includes(line.rowKey)
                         return (

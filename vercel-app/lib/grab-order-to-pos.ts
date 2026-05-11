@@ -37,6 +37,8 @@ type PosItem = {
   name: string
   price: number
   qty: number
+  optionCode?: string | null
+  optionCodes?: string[]
   note?: string
   deliveryAppCode?: string
 }
@@ -199,6 +201,33 @@ function buildModifierFuzzySignature(mod: Record<string, unknown>): string {
   const price = Number(mod.price ?? mod.amount ?? mod.totalPrice ?? 0) || 0
   const qty = Math.max(1, Math.trunc(Number(mod.quantity ?? mod.qty ?? 1) || 1))
   return `${name}|${price}|${qty}`
+}
+
+function isLikelyOptionCode(raw: string): boolean {
+  const s = String(raw || '').trim()
+  if (!s) return false
+  return /^[A-Za-z][A-Za-z0-9]*-\d+$/.test(s)
+}
+
+function extractOptionCodesFromModifier(mod: Record<string, unknown>): string[] {
+  const out = new Set<string>()
+  const idCandidates = [
+    mod.id,
+    mod.modifierID,
+    mod.modifierId,
+    mod.optionID,
+    mod.optionId,
+    mod.code,
+    mod.optionCode,
+  ]
+  for (const raw of idCandidates) {
+    const text = String(raw ?? '').trim()
+    if (!text) continue
+    const fromModId = /(?:^|[^A-Za-z0-9])mod-([A-Za-z0-9]+-\d+)-item-/i.exec(text)?.[1]
+    if (fromModId && isLikelyOptionCode(fromModId)) out.add(fromModId.toUpperCase())
+    if (isLikelyOptionCode(text)) out.add(text.toUpperCase())
+  }
+  return Array.from(out)
 }
 
 function readLineMinorTotal(item: Record<string, unknown>): number {
@@ -414,6 +443,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
     const modifierNames: string[] = []
     const pricedModifierSignatures = new Set<string>()
     const pricedModifierFuzzySignatures = new Set<string>()
+    const optionCodeSet = new Set<string>()
     for (const m of modifiers) {
       const mod = asRecord(m)
       const modQty = Math.max(1, Math.trunc(toNumber(mod.quantity) || 1))
@@ -424,6 +454,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       for (const n of names) {
         if (!modifierNames.includes(n)) modifierNames.push(n)
       }
+      for (const c of extractOptionCodesFromModifier(mod)) optionCodeSet.add(c)
     }
     for (const mod of extractModifierCandidatesFromItem(item)) {
       // item.modifiers 바깥(중첩 selection/addon)으로 온 가격도 합산
@@ -442,6 +473,7 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       for (const n of names) {
         if (!modifierNames.includes(n)) modifierNames.push(n)
       }
+      for (const c of extractOptionCodesFromModifier(mod)) optionCodeSet.add(c)
     }
     for (const n of extractReadableOptionsFromItemText(item)) {
       if (!modifierNames.includes(n)) modifierNames.push(n)
@@ -470,6 +502,9 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
       modifierNames.length ? `mods:${modifierNames.join(',')}` : '',
       ecoSummary || '',
     ].filter(Boolean)
+    if (optionCodeSet.size > 0) {
+      noteParts.push(`optc:${Array.from(optionCodeSet).join(',')}`)
+    }
 
     const itemBaseId = String(item.id ?? item.grabItemID ?? idx)
     const itemName = String(
@@ -486,11 +521,14 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
 
     const pushPosItem = (unitMinor: number, rowQty: number, rowSuffix: string) => {
       if (rowQty <= 0) return
+      const optionCodes = Array.from(optionCodeSet)
       out.push({
         id: `grab:${itemBaseId}${rowSuffix}`,
         name: itemName,
         price: minorToMajor(unitMinor, exponent),
         qty: rowQty,
+        ...(optionCodes.length === 1 ? { optionCode: optionCodes[0] } : {}),
+        ...(optionCodes.length > 1 ? { optionCodes } : {}),
         note: itemNote,
         deliveryAppCode: 'grab',
       })

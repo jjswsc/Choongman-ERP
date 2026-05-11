@@ -17,6 +17,8 @@ export interface PoPrintItem {
   price: number
   qty: number
   store?: string
+  /** taxable | exempt 등 — 면세 줄 표시용 */
+  taxType?: string
 }
 
 export interface PoPrintData {
@@ -114,6 +116,8 @@ export function PurchaseOrderPrint({
     subtotal?: string
     vat?: string
     grandTotal?: string
+    /** VAT 행 왼쪽 라벨(끝 콜론 제외) — None VAT 시 다국어 문구 */
+    poPrintVatLineLeft?: string
     /** 세금 포함 공급대가 합계(인보이스 총액) */
     invoiceTotal?: string
     preparedBy?: string
@@ -421,7 +425,8 @@ export function PurchaseOrderPrint({
             </div>
             <div className="flex justify-between text-sm py-2">
               <span className="text-muted-foreground">
-                {t("vat") || "VAT"} (7%):
+                {labels?.poPrintVatLineLeft ?? `${t("vat") || "VAT"} (7%)`}
+                :
               </span>
               <span className="font-medium">
                 {formatCurrency(data.vat)} THB

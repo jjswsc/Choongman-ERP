@@ -1,5 +1,6 @@
 import type { PosMenuOption } from '@/lib/api-client'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
+import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 
 export type PosPromoSublineOrderChannel = 'dine-in' | 'takeout' | 'delivery'
 
@@ -28,6 +29,8 @@ export function looksLikePromoImplicitSizeSOptionName(name: string | undefined):
   const n = String(name ?? '').trim()
   if (!n) return false
   if (/^S\s*[-]?\s*순살\s*$/i.test(n) || n === 'S 순살' || n === 'S - 순살' || n === 'S-순살') return true
+  if (/^S\s*[-]?\s*Boneless\s*$/i.test(n) || n === 'S Boneless' || n === 'S - Boneless' || n === 'S-Boneless')
+    return true
   if (/^S\s*[\s\-–—]/i.test(n)) return true
   // 영문·태국어 UI 등 "S Boneless" (S 뒤 공백만 있고 하이픈 없음) — 기존 클래스는 'B'에서 걸림
   if (/^S\b/i.test(n)) return true
@@ -41,19 +44,26 @@ export function looksLikePromoImplicitSizeSOptionName(name: string | undefined):
  */
 export function resolvePromoSublineOptionDisplayName(params: {
   optionId: string | null | undefined
+  optionCode?: string | null | undefined
   optionById: Map<string, PosMenuOption>
+  optionByCode?: Map<string, PosMenuOption>
   menuOptions: PosMenuOption[] | undefined
   orderChannel: PosPromoSublineOrderChannel
   menuCode?: string | null
 }): string {
-  const { optionId, optionById, menuOptions, orderChannel, menuCode } = params
+  const { optionId, optionCode, optionById, optionByCode, menuOptions, orderChannel, menuCode } = params
+  const code = optionCode != null && String(optionCode).trim() ? String(optionCode).trim() : ''
+  if (code && optionByCode) {
+    const hitByCode = optionByCode.get(code)?.name?.trim()
+    if (hitByCode) return hitByCode
+  }
   const id = optionId != null && String(optionId).trim() ? String(optionId).trim() : ''
   if (id) {
     const hit = optionById.get(id)?.name?.trim()
     if (hit) return hit
   }
 
-  if (!id && isChickenMenu(menuCode ?? undefined)) return 'S 순살'
+  if (!id && isChickenMenu(menuCode ?? undefined)) return POS_CHICKEN_DEFAULT_OPTION_DISPLAY
 
   const opts = (menuOptions || []).filter((o) => channelSellAllowed(o, orderChannel))
   if (opts.length === 0) return ''

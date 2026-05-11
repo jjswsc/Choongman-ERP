@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { parseBanbanFlavorsFromName } from './pos-banban-utils'
+import { isBanbanMenu, parseBanbanFlavorsFromName } from './pos-banban-utils'
 
 describe('parseBanbanFlavorsFromName', () => {
   it('기본 패턴 "Base (A / B)" 두 가지 맛을 분리한다', () => {
-    expect(parseBanbanFlavorsFromName('Banban Chicken (S 순살 / M 순살)')).toEqual({
+    expect(parseBanbanFlavorsFromName('Banban Chicken (S Boneless / M Boneless)')).toEqual({
       baseName: 'Banban Chicken',
-      flavor1: 'S 순살',
-      flavor2: 'M 순살',
+      flavor1: 'S Boneless',
+      flavor2: 'M Boneless',
     })
   })
 
@@ -35,5 +35,27 @@ describe('parseBanbanFlavorsFromName', () => {
 
   it('기본명이 비어 있으면 null', () => {
     expect(parseBanbanFlavorsFromName('(A / B)')).toBeNull()
+  })
+})
+
+describe('isBanbanMenu', () => {
+  it('Bar.B.Q류 코드(bb-q-…)는 반반으로 보지 않는다', () => {
+    expect(
+      isBanbanMenu({
+        isBanban: false,
+        code: 'BB-Q-001',
+        name: 'GUCHUJANG Bar.B.Q',
+      })
+    ).toBe(false)
+  })
+
+  it('이름·코드에 banban이 있으면 반반으로 본다', () => {
+    expect(
+      isBanbanMenu({
+        isBanban: false,
+        code: 'bb-banban-x',
+        name: 'x',
+      })
+    ).toBe(true)
   })
 })

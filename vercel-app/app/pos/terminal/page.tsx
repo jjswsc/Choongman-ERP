@@ -368,7 +368,7 @@ function TableFloorWithW13dTimeTour(props: ComponentProps<typeof TableFloorView>
  * 카트 줄 id가 과거에 중복이면 `find`로 잘못 붙을 수 있어, **동일 id가 터미널에 있으면 터미널 수량을 단일 소스로** 쓴다.
  */
 function reconcilePayloadItemsWithTerminalCart<
-  T extends { id?: unknown; quantity?: unknown; qty?: unknown; menuId?: unknown; optionId?: unknown },
+  T extends { id?: unknown; quantity?: unknown; qty?: unknown; menuId?: unknown; optionId?: unknown; optionCode?: unknown },
 >(payloadItems: T[] | undefined | null, terminalLines: OrderItem[]): T[] {
   return (payloadItems || []).map((it) => {
     const hit = (terminalLines || []).find((line) => String(line.id ?? '') === String(it.id ?? ''))
@@ -380,11 +380,15 @@ function reconcilePayloadItemsWithTerminalCart<
       const oid = String(
         (it as { optionId?: unknown }).optionId ?? hit.optionId ?? ''
       ).trim()
+      const oc = String(
+        (it as { optionCode?: unknown }).optionCode ?? hit.optionCode ?? ''
+      ).trim()
       return {
         ...it,
         quantity: q,
         ...(mid ? { menuId: mid } : {}),
         ...(oid ? { optionId: oid } : {}),
+        ...(oc ? { optionCode: oc } : {}),
       }
     }
     const raw = Number((it as { quantity?: unknown }).quantity ?? (it as { qty?: unknown }).qty)
@@ -686,6 +690,16 @@ export default function PosTerminalPage() {
     }
     return out
   }, [menuOptions])
+  const optionNameByCode = useMemo(() => {
+    const out = new Map<string, string>()
+    for (const opt of menuOptions) {
+      const code = String(opt.optionCode ?? '').trim()
+      const name = String(opt.name ?? '').trim()
+      if (!code || !name) continue
+      out.set(code, name)
+    }
+    return out
+  }, [menuOptions])
   const promoCatalogById = useMemo(() => {
     const m = new Map<string, PosPromoWithItems>()
     for (const p of promosWithItems) {
@@ -698,12 +712,13 @@ export default function PosTerminalPage() {
     [promoCatalogById, menus]
   )
   const enrichPromoItemsWithOptionName = useCallback(
-    (list: { menuId: string; optionId: string | null; quantity: number }[]) =>
+    (list: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]) =>
       list.map((p) => ({
         ...p,
-        ...(p.optionId && optionNameById.get(String(p.optionId)) ? { optionName: optionNameById.get(String(p.optionId)) } : {}),
+        ...((p.optionCode && optionNameByCode.get(String(p.optionCode))) ? { optionName: optionNameByCode.get(String(p.optionCode)) } : {}),
+        ...((p.optionId && optionNameById.get(String(p.optionId))) ? { optionName: optionNameById.get(String(p.optionId)) } : {}),
       })),
-    [optionNameById]
+    [optionNameByCode, optionNameById]
   )
   const pushReceiptQueue = useCallback((batch: ReceiptModalData[]) => {
     if (!Array.isArray(batch) || batch.length === 0) return
@@ -1496,6 +1511,7 @@ export default function PosTerminalPage() {
       const items = (order.items || []).map((it) => {
         const note = String(it.note ?? '').trim()
         const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+        const optionCode = String((it as { optionCode1?: string; optionCode2?: string }).optionCode1 ?? (it as { optionCode1?: string; optionCode2?: string }).optionCode2 ?? '').trim()
         const displayName = resolvePosOrderItemMenuDisplayName(
           {
             id: String(it.id ?? ''),
@@ -1518,6 +1534,7 @@ export default function PosTerminalPage() {
           price: Number(it.price ?? 0),
           qty: Number(it.qty ?? 1),
           ...(menuId ? { menuId } : {}),
+          ...(optionCode ? { optionCode } : {}),
           ...(note ? { note } : {}),
           ...(promoId ? { promoId } : {}),
           ...(promoCode ? { promoCode } : {}),
@@ -1703,6 +1720,7 @@ export default function PosTerminalPage() {
               const items = (order.items || []).map((it) => {
                 const note = String(it.note ?? '').trim()
                 const menuId = String(it.menuId1 ?? it.menuId2 ?? '').trim()
+                const optionCode = String((it as { optionCode1?: string; optionCode2?: string }).optionCode1 ?? (it as { optionCode1?: string; optionCode2?: string }).optionCode2 ?? '').trim()
                 const displayName = resolvePosOrderItemMenuDisplayName({
                   id: String(it.id ?? ''),
                   name: String(it.name ?? ''),
@@ -1722,6 +1740,7 @@ export default function PosTerminalPage() {
                   price: Number(it.price ?? 0),
                   qty: Number(it.qty ?? 1),
                   ...(menuId ? { menuId } : {}),
+                  ...(optionCode ? { optionCode } : {}),
                   ...(note ? { note } : {}),
                   ...(promoId ? { promoId } : {}),
                   ...(promoCode ? { promoCode } : {}),
@@ -2128,7 +2147,8 @@ export default function PosTerminalPage() {
     qty: number
     note?: string
     menuId?: string
-    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+    optionCode?: string
+    promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
   }
 
   const parseRealtimePosOrderRowItemsJson = useCallback(
@@ -2147,10 +2167,14 @@ export default function PosTerminalPage() {
             menuId1?: string
             menu_id1?: string
             menuId?: string
-            promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+            optionCode1?: string
+            option_code1?: string
+            optionCode?: string
+            promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
           }) => {
             const note = String(it.note ?? '').trim()
             const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
+            const optionCode = String(it.optionCode1 ?? it.option_code1 ?? it.optionCode ?? '').trim()
             const displayName = resolveOrderItemDisplayName({
               id: String(it.id ?? ''),
               name: String(it.name ?? ''),
@@ -2162,6 +2186,7 @@ export default function PosTerminalPage() {
               price: Number(it.price ?? 0),
               qty: Number(it.qty ?? it.quantity ?? 1),
               ...(menuId ? { menuId } : {}),
+              ...(optionCode ? { optionCode } : {}),
               ...(note ? { note } : {}),
               ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) } : {}),
             }
@@ -2190,7 +2215,7 @@ export default function PosTerminalPage() {
         note?: string
         isAddon?: boolean
         menuId?: string
-        promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+        promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
       }[]
       subtotal: number
       discountAmt: number
@@ -3763,6 +3788,7 @@ export default function PosTerminalPage() {
       ...(it.note?.trim() ? { note: it.note.trim() } : {}),
       ...(it.menuId ? { menuId1: String(it.menuId) } : {}),
       ...(it.optionId ? { optionId1: String(it.optionId) } : {}),
+      ...(it.optionCode ? { optionCode1: String(it.optionCode) } : {}),
       ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
     }))
 

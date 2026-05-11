@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
-import { parsePurchaseOrderCart, serializePurchaseOrderCart, type PoCartMeta } from '@/lib/purchase-order-cart'
+import {
+  computePurchaseOrderMoneyTotals,
+  parsePurchaseOrderCart,
+  serializePurchaseOrderCart,
+  type PoCartLine,
+  type PoCartMeta,
+} from '@/lib/purchase-order-cart'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
@@ -137,19 +143,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let subtotal = 0
-    let taxableSubtotal = 0
-    for (const c of cart) {
-      const price = Number(c.price || c.cost || 0)
-      const qty = Number(c.qty || 0)
-      const amt = price * qty
-      subtotal += amt
-      const taxType = (c as { taxType?: string }).taxType
-      const isExempt = taxType === 'exempt' || taxType === '면세' || taxType === '영세율' || taxType === 'zero'
-      if (!isExempt) taxableSubtotal += amt
-    }
-    const vat = Math.round(taxableSubtotal * 0.07 * 100) / 100
-    const total = Math.round((subtotal + vat) * 100) / 100
+    const { subtotal, vat, total } = computePurchaseOrderMoneyTotals(cart as PoCartLine[])
 
     let cartJson = serializePurchaseOrderCart(cart, meta)
 

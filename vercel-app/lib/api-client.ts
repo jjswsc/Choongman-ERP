@@ -5533,12 +5533,14 @@ export async function getPriceSchedules(params: {
   entityType?: "item" | "pos_menu"
   status?: "pending" | "applied" | "cancelled" | "failed"
   search?: string
+  category?: string
   limit?: number
 }) {
   const sp = new URLSearchParams()
   if (params.entityType) sp.set("entityType", params.entityType)
   if (params.status) sp.set("status", params.status)
   if (params.search) sp.set("search", params.search)
+  if (params.category) sp.set("category", params.category)
   if (params.limit != null) sp.set("limit", String(params.limit))
   const q = sp.toString()
   const res = await apiFetchWithOffline(`/api/getPriceSchedules${q ? `?${q}` : ""}`)
@@ -5652,6 +5654,8 @@ export interface PosOptionSelectionGroupConfig {
 export interface PosMenuOption {
   id: string
   menuId: string
+  /** 메뉴별 고유 옵션 코드 (예: C001-1) */
+  optionCode?: string
   name: string
   priceModifier: number
   priceModifierDelivery?: number | null
@@ -5679,6 +5683,8 @@ export interface PosMenuOption {
 export interface PosOptionGroupItem {
   id: string
   groupId: string
+  /** 그룹 항목 코드(선택) */
+  itemCode?: string
   itemName: string
   sortOrder: number
   basePriceHall: number
@@ -5709,6 +5715,8 @@ export interface PosOptionGroup {
   sortOrder: number
   items: PosOptionGroupItem[]
   link?: PosMenuOptionGroupLink | null
+  /** menuId 없이 전체 조회 시: 이 그룹을 링크한 서로 다른 메뉴 수 */
+  linkedMenuCount?: number
 }
 
 export type PosPackagingChecklistOrderType = 'takeout' | 'delivery' | 'both'
@@ -6036,6 +6044,7 @@ export async function savePosMenuOption(
   params: {
     id?: string
     menuId: number
+    optionCode?: string
     name: string
     priceModifier?: number
     priceModifierDelivery?: number | null
@@ -6054,7 +6063,7 @@ export async function savePosMenuOption(
     descriptionTable?: string | null
   },
   opts?: { requireOnline?: boolean }
-) {
+) : Promise<{ success: boolean; message?: string; optionCode?: string; remappedOptionCode?: boolean }> {
   const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -6064,9 +6073,10 @@ export async function savePosMenuOption(
     ? await apiFetch('/api/savePosMenuOption', init)
     : await apiFetchWithOffline('/api/savePosMenuOption', init)
   if (opts?.requireOnline) {
-    return parsePosMutationResponse(res)
+    const parsed = await parsePosMutationResponse(res)
+    return { ...parsed, optionCode: undefined, remappedOptionCode: false }
   }
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; optionCode?: string; remappedOptionCode?: boolean }>
 }
 
 export async function savePosMenuOptionsBulk(
@@ -6074,6 +6084,7 @@ export async function savePosMenuOptionsBulk(
     options: Array<{
       id?: string
       menuId: number
+      optionCode?: string
       name: string
       priceModifier?: number
       priceModifierDelivery?: number | null
@@ -6091,7 +6102,12 @@ export async function savePosMenuOptionsBulk(
     storeCode?: string
   },
   opts?: { requireOnline?: boolean }
-) {
+) : Promise<{
+  success: boolean
+  message?: string
+  remappedCount?: number
+  results?: { id?: string; success: boolean; message?: string; optionCode?: string; remapped?: boolean }[]
+}> {
   const init: RequestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -6101,12 +6117,14 @@ export async function savePosMenuOptionsBulk(
     ? await apiFetch("/api/savePosMenuOptionsBulk", init)
     : await apiFetchWithOffline("/api/savePosMenuOptionsBulk", init)
   if (opts?.requireOnline) {
-    return parsePosMutationResponse(res)
+    const parsed = await parsePosMutationResponse(res)
+    return { ...parsed, remappedCount: 0, results: [] }
   }
   return res.json() as Promise<{
     success: boolean
     message?: string
-    results?: { id?: string; success: boolean; message?: string }[]
+    remappedCount?: number
+    results?: { id?: string; success: boolean; message?: string; optionCode?: string; remapped?: boolean }[]
   }>
 }
 
@@ -6198,6 +6216,7 @@ export interface PosMenuCostAnalysisRow {
   /** 가격이 VAT 포함인지 (false면 이미 VAT 제외) */
   vatIncluded?: boolean
   optionId: string | null
+  optionCode?: string | null
   optionName: string | null
   optionType?: 'substitution' | 'additive' | null
   costHall: number
@@ -6705,6 +6724,7 @@ export interface PosPromoItem {
   promoId: string
   menuId: string
   optionId: string | null
+  optionCode?: string | null
   quantity: number
   sortOrder: number
   /** 같은 값끼리 한 선택 그룹(예: drink) */
@@ -6752,6 +6772,7 @@ export interface PosPromoWithItems extends PosPromo {
   items: {
     menuId: string
     optionId: string | null
+    optionCode?: string | null
     quantity: number
     choiceGroup?: string | null
     choicePickCount?: number | null
@@ -8575,7 +8596,7 @@ export interface PosOrderItem {
   deliveryAppCode?: string
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
   setChildrenState?: Record<
     string,
     {
@@ -8587,8 +8608,10 @@ export interface PosOrderItem {
   >
   menuId1?: string
   optionId1?: string
+  optionCode1?: string
   menuId2?: string
   optionId2?: string
+  optionCode2?: string
 }
 
 export interface PosOrder {

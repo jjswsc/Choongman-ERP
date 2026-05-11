@@ -276,9 +276,10 @@ export type CartPanelAddItemPayload = {
   /** 카탈로그 메뉴 id — items_json·주방 라우팅에 전달 */
   menuId?: string
   optionId?: string | null
+  optionCode?: string | null
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number; optionName?: string | null }[]
+  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number; optionName?: string | null }[]
 }
 
 export interface CartPanelHandle {
@@ -769,6 +770,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
     const menuIdLine = String(i.menuId ?? '').trim()
     const optionIdLine = String(i.optionId ?? '').trim()
+    const optionCodeLine = String(i.optionCode ?? '').trim()
     return {
       id: i.id,
       name: i.name,
@@ -778,6 +780,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...(lineNote ? { note: lineNote } : {}),
       ...(menuIdLine ? { menuId: menuIdLine } : {}),
       ...(optionIdLine ? { optionId: optionIdLine } : {}),
+      ...(optionCodeLine ? { optionCode: optionCodeLine } : {}),
       ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
       ...(i.promoId
         ? {
@@ -1102,6 +1105,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const optionById = useMemo(() => {
     if (!posMenuOptions.length) return new Map<string, PosMenuOption>()
     return new Map(posMenuOptions.map((o) => [String(o.id), o]))
+  }, [posMenuOptions])
+  const optionByCode = useMemo(() => {
+    if (!posMenuOptions.length) return new Map<string, PosMenuOption>()
+    const map = new Map<string, PosMenuOption>()
+    for (const opt of posMenuOptions) {
+      const code = String(opt.optionCode ?? '').trim()
+      if (!code) continue
+      map.set(code, opt)
+    }
+    return map
   }, [posMenuOptions])
   const optionsByMenuIdForOrder = useMemo(() => {
     const sellKey: keyof PosMenuOption =
@@ -3004,13 +3017,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                    * 1순위: 카트에 add될 때 미리 채워진 `p.optionName` (sell 채널/캐시 누락 영향 없음)
                    * 2순위: optionId/메뉴 옵션 lookup으로 추정
                    */
-                  const resolveSubOptionName = (p: { menuId: string; optionId: string | null; optionName?: string | null }) => {
+                  const resolveSubOptionName = (p: { menuId: string; optionId: string | null; optionCode?: string | null; optionName?: string | null }) => {
                     const cached = String(p.optionName ?? '').trim()
                     if (cached) return cached
                     const menu = menuByIdForCollab.get(String(p.menuId))
                     return resolvePromoSublineOptionDisplayName({
                       optionId: p.optionId,
+                      optionCode: p.optionCode,
                       optionById,
+                      optionByCode,
                       menuOptions: optionsByMenuIdForOrder.get(String(p.menuId)),
                       orderChannel: orderType,
                       menuCode: menu?.code,

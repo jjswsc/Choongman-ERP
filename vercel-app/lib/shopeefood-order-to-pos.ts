@@ -42,8 +42,36 @@ type PosItem = {
   name: string
   price: number
   qty: number
+  optionCode?: string | null
+  optionCodes?: string[]
   note?: string
   deliveryAppCode?: string
+}
+
+function isLikelyOptionCode(raw: string): boolean {
+  const s = String(raw || '').trim()
+  if (!s) return false
+  return /^[A-Za-z][A-Za-z0-9]*-\d+$/.test(s)
+}
+
+function extractOptionCodes(groups: unknown): string[] {
+  if (!Array.isArray(groups)) return []
+  const out = new Set<string>()
+  for (const g of groups) {
+    if (!g || typeof g !== 'object') continue
+    const go = g as Record<string, unknown>
+    const opts = Array.isArray(go.options) ? go.options : []
+    for (const opt of opts) {
+      if (!opt || typeof opt !== 'object') continue
+      const oo = opt as Record<string, unknown>
+      for (const raw of [oo.external_id, oo.externalId, oo.option_code, oo.optionCode, oo.code, oo.id]) {
+        const text = String(raw ?? '').trim()
+        if (!text) continue
+        if (isLikelyOptionCode(text)) out.add(text.toUpperCase())
+      }
+    }
+  }
+  return Array.from(out)
 }
 
 function optionParts(groups: unknown): { label: string; minorSum: number } {
@@ -81,6 +109,7 @@ function buildLineItems(order: Record<string, unknown>, currency: string): PosIt
     const dishName = String(dish.name ?? 'ShopeeFood')
     const extId = String(dish.external_id ?? dish.id ?? idx)
     const og = optionParts(detail.option_groups)
+    const optionCodes = extractOptionCodes(detail.option_groups)
     const lightFinal = dish.merchant_final_price != null ? num(dish.merchant_final_price) : null
     const unitList = num(dish.unit_list_price ?? dish.uint_list_price)
     const unitPriceField = num(dish.unit_price)
@@ -103,6 +132,8 @@ function buildLineItems(order: Record<string, unknown>, currency: string): PosIt
       name: dishName,
       price: unitMajor,
       qty,
+      ...(optionCodes.length === 1 ? { optionCode: optionCodes[0] } : {}),
+      ...(optionCodes.length > 1 ? { optionCodes } : {}),
       note,
       deliveryAppCode: 'shopee',
     })

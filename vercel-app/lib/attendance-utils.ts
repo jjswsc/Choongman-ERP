@@ -291,11 +291,26 @@ export function bangkokDateRangeToUtc(
   }
 }
 
-/** 날짜 문자열(YYYY-MM-DD)에 N일 더한 날짜. 자정 넘김 조회 연장용 */
+/** 날짜 문자열(YYYY-MM-DD)에 N일 더한 날짜. 방콕 달력 기준(브라우저 로컬·UTC 혼용 없음). */
 export function addDayBangkok(dateStr: string, delta: number): string {
-  const d = new Date(dateStr + 'T12:00:00')
-  d.setDate(d.getDate() + delta)
-  return d.toISOString().slice(0, 10)
+  const s = dateStr.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return todayStrBangkok()
+  const base = Date.parse(`${s}T12:00:00+07:00`)
+  if (!Number.isFinite(base)) return todayStrBangkok()
+  const ms = base + delta * 86400000
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })
+}
+
+/** 방콕 달력 기준 두 YYYY-MM-DD(포함) 사이 일수 */
+export function diffDaysInclusiveBangkok(startDate: string, endDate: string): number {
+  const s = startDate.trim().slice(0, 10)
+  const e = endDate.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e)) return 1
+  const startMs = Date.parse(`${s}T12:00:00+07:00`)
+  const endMs = Date.parse(`${e}T12:00:00+07:00`)
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 1
+  const raw = Math.floor((endMs - startMs) / 86400000) + 1
+  return Number.isFinite(raw) && raw > 0 ? raw : 1
 }
 
 /** 날짜 문자열(YYYY-MM-DD)의 방콕 기준 요일. 0=일요일, 1=월요일, ..., 6=토요일 */

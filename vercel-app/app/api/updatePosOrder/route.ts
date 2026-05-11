@@ -9,6 +9,7 @@ import {
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich'
 
 const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -43,7 +44,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
     const id = Number(body?.id)
-    const items = Array.isArray(body?.items) ? body.items : []
+    const itemsRaw = Array.isArray(body?.items) ? body.items : []
+    const items = await enrichOrderItemsWithOptionCode(itemsRaw)
     const memo = String(body?.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()

@@ -129,6 +129,13 @@ export default function PoPrintPage() {
         : undefined,
       poWht3LineLabel: t("poWht3LineLabel") || "Withholding tax (3%)",
       poNetAfterWht: t("poNetAfterWht") || "Net after withholding",
+      poPrintVatLineLeft: (() => {
+        const v = Number(data?.vat ?? 0)
+        const s = Number(data?.subtotal ?? 0)
+        if (v >= 0.005) return `${t("vat") || "VAT"} (7%)`
+        if (s >= 0.005) return t("poCartVatLabelNone")
+        return `${t("vat") || "VAT"} (7%)`
+      })(),
     }
   }, [t, data])
 

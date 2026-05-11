@@ -43,7 +43,8 @@ export function isBanbanMenu(menu: Pick<PosMenu, 'isBanban' | 'name' | 'code'>):
   if (name.includes('2 รส') || name.includes('สองรส') || name.includes('2 flavor') || name.includes('two flavor')) {
     return true
   }
-  if (code.includes('banban') || code.startsWith('bb-') || code === 'banban') return true
+  /** Bar.B.Q 등 브랜드 코드가 `BB-Q-…`(→ `bb-q-…`) 형태일 때 `bb-`만으로 반반으로 오인하지 않는다. */
+  if (code.includes('banban') || code === 'banban') return true
   return false
 }
 

@@ -27,12 +27,15 @@ describe('appendStoreCodeFilter', () => {
   it('returns base when no stores', () => {
     expect(appendStoreCodeFilter('created_at=gte.x', [])).toBe('created_at=gte.x')
   })
-  it('uses ilike for one store', () => {
-    expect(appendStoreCodeFilter('x=1', ['ABC'])).toBe('x=1&store_code=ilike.ABC')
+  it('expands CM variants and uses in clause for one logical store', () => {
+    const out = appendStoreCodeFilter('x=1', ['ABC'])
+    expect(out).toContain('store_code=')
+    expect(decodeURIComponent(out.split('store_code=')[1] ?? '')).toBe('in.(ABC,CM ABC)')
   })
   it('uses in clause for multiple stores', () => {
     const out = appendStoreCodeFilter('x=1', ['A', 'B'])
     expect(out).toContain('store_code=')
-    expect(decodeURIComponent(out.split('store_code=')[1] ?? '')).toBe('in.(A,B)')
+    const decoded = decodeURIComponent(out.split('store_code=')[1] ?? '')
+    expect(decoded).toBe('in.(A,CM A,B,CM B)')
   })
 })

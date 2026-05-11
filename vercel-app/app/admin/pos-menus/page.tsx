@@ -4,7 +4,7 @@ import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -22,6 +22,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -46,12 +54,10 @@ import {
   savePosMenuPackagingChecklist,
   savePosMenuOption,
   savePosMenuOptionsBulk,
-  savePosOptionGroup,
   savePosMenuOptionGroupLinks,
   savePosMenuIngredient,
   deletePosMenu,
   deletePosMenuOption,
-  deletePosOptionGroup,
   deletePosMenuIngredient,
   updatePosMenuSoldOut,
   getPosPromos,
@@ -66,7 +72,6 @@ import {
   type PosMenuPackagingCheckItem,
   type PosMenuOption,
   type PosOptionGroup,
-  type PosOptionGroupItem,
   type PosPackagingChecklistOrderType,
   type PosMenuIngredient,
   type PosPromo,
@@ -113,12 +118,43 @@ const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as co
 /** 옵션관리 탭: 고정 2단계 — 1. 사이즈, 2. 부위 */
 const OPTION_SIZE_VALUES = ["S", "M", "L"]
 const OPTION_PART_VALUES = ["Boneless", "Wing", "Drumette"] as const
-/** 치킨 메뉴: 코드가 c로 시작. 기본가=S 순살, 옵션은 M 순살/윙/봉 3개만 */
+/** 치킨 메뉴: 코드가 c로 시작. 기본가=S Boneless, 옵션은 M Boneless·Wing·Drumette 조합 */
 const CHICKEN_CODE_PREFIX = "c"
+/** 치킨 size/part 단계의 공통 표시 제목(영문 고정). 세부 구분은 · 뒤에 사이즈/부위 라벨로 표시 */
+const CHICKEN_OPTION_GROUP_TITLE = "chicken size"
+
+/** 옵션 일괄 추가「메뉴 검색·선택」: 좌측 메뉴 목록과 동일한 `코드 — 이름` 표기 */
+function formatPosMenuBulkPickLabel(m: PosMenu): string {
+  const c = String(m.code ?? "").trim()
+  const n = String(m.name ?? "").trim()
+  if (c && n) return `${c} — ${n}`
+  return n || c
+}
+
+function formatChickenOptionStepDisplayLabel(stepKey: "size" | "part", t: (key: string) => string): string {
+  const suffix = stepKey === "size" ? t("posOptionGroupSize") : t("posOptionGroupPart")
+  return `${CHICKEN_OPTION_GROUP_TITLE} · ${suffix}`
+}
+
+/** 치킨(c)·size+part 단계일 때 option_selection_config.label 을 통일 형식으로 덮어씀 */
+function applyChickenOptionGroupLabelsToConfig(
+  groups: string[],
+  normalizedConfig: PosOptionSelectionGroupConfig[],
+  menuCode: string | undefined,
+  t: (key: string) => string
+): PosOptionSelectionGroupConfig[] {
+  if (!isChickenMenu(menuCode) || !isSizePartGroups(groups)) return normalizedConfig
+  return normalizedConfig.map((row) => {
+    if (row.key === "size") return { ...row, label: formatChickenOptionStepDisplayLabel("size", t) }
+    if (row.key === "part") return { ...row, label: formatChickenOptionStepDisplayLabel("part", t) }
+    return row
+  })
+}
+
 function isChickenMenu(code: string | undefined): boolean {
   return !!code?.trim().toLowerCase().startsWith(CHICKEN_CODE_PREFIX)
 }
-/** 치킨 기본 옵션(S 순살): 메뉴 관리 옵션 목록에서 제외하고, 기본 행 하나로만 표시 */
+/** 치킨 기본 옵션(S Boneless): 메뉴 관리 옵션 목록에서 제외하고, 기본 행 하나로만 표시 */
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
@@ -147,6 +183,109 @@ function isSizePartGroups(groups: string[]): boolean {
   return groups.length === 2 && groups[0] === "size" && groups[1] === "part"
 }
 
+/** 치킨 옵션: DB option_step_values.size 가 비어 있을 때 이름 맨 앞 S/M/L 로 사이즈 추론 (레거시 행) */
+function inferChickenOptionSizeValue(o: PosMenuOption): string {
+  const fromStep = String(o.optionStepValues?.size ?? "").trim()
+  if (fromStep) return fromStep
+  const name = String(o.name ?? "").trim()
+  const m = name.match(/^\s*([SML])(?:\s*[-–—]\s*|\s+$|\b)/i)
+  if (m) return m[1].toUpperCase()
+  return ""
+}
+
+/** 치킨: DB part 비어 있을 때 `M - Boneless` 등에서 부위 토큰 추론 */
+function inferChickenOptionPartValue(o: PosMenuOption): string {
+  const fromStep = String(o.optionStepValues?.part ?? "").trim()
+  if (fromStep) return fromStep
+  const name = String(o.name ?? "").trim()
+  let rest = name.replace(/^\s*[SML]\s*[-–—]\s*/i, "").trim()
+  if (!rest) rest = name.replace(/^\s*[SML]\s+/i, "").trim()
+  if (rest) return rest
+  if (name && !/^\s*[SML]\b/i.test(name)) return name
+  return ""
+}
+
+/** 옵션 구성 탭: 단계별 목록 필터(치킨 size/part는 이름에서 step 값 추론) */
+function optionStepValueForGroupFilter(
+  opt: PosMenuOption,
+  groupKey: string,
+  menuCode: string | undefined,
+  stepGroups: string[]
+): string {
+  if (isChickenMenu(menuCode) && isSizePartGroups(stepGroups)) {
+    if (groupKey === "size") return inferChickenOptionSizeValue(opt)
+    if (groupKey === "part") return inferChickenOptionPartValue(opt)
+  }
+  return String(opt.optionStepValues?.[groupKey] ?? "").trim()
+}
+
+function optionMatchesGroupFilter(
+  opt: PosMenuOption,
+  groupKey: string,
+  menuCode: string | undefined,
+  stepGroups: string[]
+): boolean {
+  return optionStepValueForGroupFilter(opt, groupKey, menuCode, stepGroups) !== ""
+}
+
+/** 치킨 옵션 구성: part 단계에서 부위 값별로 묶어 보여 줌 */
+function groupChickenMenuOptionsByPartValue(options: PosMenuOption[]): { partValue: string; items: PosMenuOption[] }[] {
+  const map = new Map<string, PosMenuOption[]>()
+  for (const o of options) {
+    const p = inferChickenOptionPartValue(o)
+    if (!p) continue
+    if (!map.has(p)) map.set(p, [])
+    map.get(p)!.push(o)
+  }
+  const entries = [...map.entries()]
+  entries.sort((a, b) => {
+    const ia = OPTION_PART_VALUES.indexOf(a[0] as (typeof OPTION_PART_VALUES)[number])
+    const ib = OPTION_PART_VALUES.indexOf(b[0] as (typeof OPTION_PART_VALUES)[number])
+    if (ia !== -1 && ib !== -1) return ia - ib
+    if (ia !== -1) return -1
+    if (ib !== -1) return 1
+    return a[0].localeCompare(b[0], undefined, { numeric: true })
+  })
+  return entries.map(([partValue, items]) => ({
+    partValue,
+    items: [...items].sort((a, b) => {
+      const ao = Number(a.sortOrder ?? 0)
+      const bo = Number(b.sortOrder ?? 0)
+      if (ao !== bo) return ao - bo
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""))
+    }),
+  }))
+}
+
+/** 치킨 옵션 구성: 관리자 목록에서 사이즈 단계일 때 S/M/L 값별로 묶어 보여 줌 */
+function groupChickenMenuOptionsBySizeValue(options: PosMenuOption[]): { sizeValue: string; items: PosMenuOption[] }[] {
+  const map = new Map<string, PosMenuOption[]>()
+  for (const o of options) {
+    const sz = inferChickenOptionSizeValue(o)
+    if (!sz) continue
+    if (!map.has(sz)) map.set(sz, [])
+    map.get(sz)!.push(o)
+  }
+  const entries = [...map.entries()]
+  entries.sort((a, b) => {
+    const ia = OPTION_SIZE_VALUES.indexOf(a[0] as "S" | "M" | "L")
+    const ib = OPTION_SIZE_VALUES.indexOf(b[0] as "S" | "M" | "L")
+    if (ia !== -1 && ib !== -1) return ia - ib
+    if (ia !== -1) return -1
+    if (ib !== -1) return 1
+    return a[0].localeCompare(b[0], undefined, { numeric: true })
+  })
+  return entries.map(([sizeValue, items]) => ({
+    sizeValue,
+    items: [...items].sort((a, b) => {
+      const ao = Number(a.sortOrder ?? 0)
+      const bo = Number(b.sortOrder ?? 0)
+      if (ao !== bo) return ao - bo
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""))
+    }),
+  }))
+}
+
 function normalizeOptionSelectionConfig(
   groups: string[],
   existing?: PosOptionSelectionGroupConfig[]
@@ -162,13 +301,26 @@ function normalizeOptionSelectionConfig(
     const required = prev?.required !== false
     const audience =
       prev?.audience === "delivery" || prev?.audience === "hall" ? prev.audience : "all"
+    const minFromPrev = prev?.minSelect
+    const maxFromPrev = prev?.maxSelect
+    let minSelect =
+      minFromPrev != null && Number.isFinite(Number(minFromPrev))
+        ? Math.max(0, Math.floor(Number(minFromPrev)))
+        : required
+          ? 1
+          : 0
+    const maxSelect =
+      maxFromPrev != null && Number.isFinite(Number(maxFromPrev))
+        ? Math.max(1, Math.floor(Number(maxFromPrev)))
+        : 1
+    if (minSelect > maxSelect) minSelect = maxSelect
     return {
       key,
       label: String(prev?.label ?? key).trim() || key,
       audience,
       required,
-      minSelect: required ? 1 : 0,
-      maxSelect: 1,
+      minSelect,
+      maxSelect,
     }
   })
 }
@@ -184,6 +336,20 @@ function additiveOptionLinkSuffix(opt: PosMenuOption, menus: PosMenu[]): string 
   const ic = opt.itemCode?.trim()
   if (ic) return `${ic}×${opt.quantity ?? 1}`
   return ""
+}
+
+function buildOptionCode(menuCode: string | undefined, sortOrder: number | undefined): string {
+  const code = String(menuCode ?? "").trim()
+  if (!code) return ""
+  const order = Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : -1
+  if (order < 0) return ""
+  return `${code}-${Math.floor(order) + 1}`
+}
+
+function resolveOptionCode(option: PosMenuOption, menuCode: string | undefined): string {
+  const explicit = String(option.optionCode ?? "").trim()
+  if (explicit) return explicit
+  return buildOptionCode(menuCode, option.sortOrder)
 }
 
 const emptyForm = {
@@ -229,7 +395,7 @@ export default function PosMenusPage() {
   const { stores } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
-  /** 옵션 부위명(순살/윙/봉) — POS/영수증과 동일 규칙(미번역·폴백 t 시에도 언어 사전 적용) */
+  /** 옵션 부위명 — 영수증과 동일하게 한글 부위 표기를 Boneless/Wing/Drumette 로 통일 */
   const optionPartLabel = (name: string) => translatePosMenuLineForReceipt(name, t)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [allCategories, setAllCategories] = React.useState<string[]>([])
@@ -299,35 +465,30 @@ export default function PosMenusPage() {
   const [categoryOpen, setCategoryOpen] = React.useState(false)
   const [newOptionSize, setNewOptionSize] = React.useState("")
   const [newOptionPart, setNewOptionPart] = React.useState("")
-  const [chickenBatchApplying, setChickenBatchApplying] = React.useState(false)
   /** 옵션 구성 탭: 메뉴의 선택 단계(저장 전 편집) */
   const [optionsConfigGroupsDraft, setOptionsConfigGroupsDraft] = React.useState("")
   const [optionsConfigGroupRulesDraft, setOptionsConfigGroupRulesDraft] = React.useState<PosOptionSelectionGroupConfig[]>([])
   const [optionsConfigNewStepValues, setOptionsConfigNewStepValues] = React.useState<Record<string, string>>({})
   const [optionsConfigApplyingGroups, setOptionsConfigApplyingGroups] = React.useState(false)
-  const [optionsConfigLibraryOptions, setOptionsConfigLibraryOptions] = React.useState<PosMenuOption[]>([])
-  const [optionsConfigLibraryLoading, setOptionsConfigLibraryLoading] = React.useState(false)
-  const [optionsConfigLibrarySearchTerm, setOptionsConfigLibrarySearchTerm] = React.useState("")
-  const [optionsConfigLibraryFilter, setOptionsConfigLibraryFilter] = React.useState<"all" | "recent" | "frequent" | "deliveryOnly">("all")
-  const [optionsConfigLibraryUsage, setOptionsConfigLibraryUsage] = React.useState<Record<string, { count: number; lastUsedAt: number }>>({})
   /** 비치킨·선택 단계 없음: POS에서 한 줄로 고르는 치환 옵션 */
   const [optionsConfigCustomOptionName, setOptionsConfigCustomOptionName] = React.useState("")
   const [optionsConfigBulkValuesInput, setOptionsConfigBulkValuesInput] = React.useState("")
   const [optionsConfigBulkHallPrice, setOptionsConfigBulkHallPrice] = React.useState("")
   const [optionsConfigBulkDeliveryPrice, setOptionsConfigBulkDeliveryPrice] = React.useState("")
+  const [optionsConfigBulkMenuPickerOpen, setOptionsConfigBulkMenuPickerOpen] = React.useState(false)
+  const [optionsConfigBulkMenuPickerSearch, setOptionsConfigBulkMenuPickerSearch] = React.useState("")
+  const [optionsConfigBulkMenuPickerChecked, setOptionsConfigBulkMenuPickerChecked] = React.useState<Record<string, boolean>>({})
   const [optionsConfigDraggingOptionId, setOptionsConfigDraggingOptionId] = React.useState<string | null>(null)
-  /** set_main 단계 빠른 생성 입력 (예: 후라이드, 양념, 간장) */
-  const [optionsConfigSetMainQuickValues, setOptionsConfigSetMainQuickValues] = React.useState("")
+  const [optionsConfigShowAllOptions, setOptionsConfigShowAllOptions] = React.useState(false)
+  const [optionsConfigCopySourceMenuId, setOptionsConfigCopySourceMenuId] = React.useState<string>("")
+  const [optionsConfigCopying, setOptionsConfigCopying] = React.useState(false)
   const [optionsConfigNewOptionTitle, setOptionsConfigNewOptionTitle] = React.useState("")
-  const [optionGroupMasters, setOptionGroupMasters] = React.useState<PosOptionGroup[]>([])
-  const [optionGroupMasterLoading, setOptionGroupMasterLoading] = React.useState(false)
-  const [optionGroupMasterSaving, setOptionGroupMasterSaving] = React.useState(false)
-  const [optionGroupMasterSelectedId, setOptionGroupMasterSelectedId] = React.useState<string>("")
-  const [optionGroupMasterName, setOptionGroupMasterName] = React.useState("")
-  const [optionGroupMasterKey, setOptionGroupMasterKey] = React.useState("")
-  const [optionGroupMasterSearchTerm, setOptionGroupMasterSearchTerm] = React.useState("")
-  const [optionGroupMasterItems, setOptionGroupMasterItems] = React.useState<PosOptionGroupItem[]>([])
-  const [optionGroupMenuLinksSaving, setOptionGroupMenuLinksSaving] = React.useState(false)
+  const [optionsConfigLibraryGroups, setOptionsConfigLibraryGroups] = React.useState<PosOptionGroup[]>([])
+  const [optionsConfigLibraryLoading, setOptionsConfigLibraryLoading] = React.useState(false)
+  const [optionsConfigLibrarySearchTerm, setOptionsConfigLibrarySearchTerm] = React.useState("")
+  const [optionsConfigLibraryFilter, setOptionsConfigLibraryFilter] = React.useState<
+    "all" | "recent" | "frequent" | "deliveryOnly"
+  >("all")
   const [promoListForSetTab, setPromoListForSetTab] = React.useState<PosPromo[]>([])
   const [setTabPromosLoading, setSetTabPromosLoading] = React.useState(false)
   const [schemaStatus, setSchemaStatus] = React.useState<{
@@ -637,6 +798,8 @@ export default function PosMenusPage() {
       setOptionsConfigCustomOptionName("")
       setOptionsConfigNewOptionTitle("")
       setOptionsConfigSelectedGroupKey("")
+      setOptionsConfigShowAllOptions(false)
+      setOptionsConfigCopySourceMenuId("")
       return
     }
     getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(applyLoadedOptionsForConfig)
@@ -647,6 +810,8 @@ export default function PosMenusPage() {
     setNewOptionPart("")
     setNewOptionModifier("0")
     setNewOptionModifierDelivery("")
+    setOptionsConfigShowAllOptions(false)
+    setOptionsConfigCopySourceMenuId("")
   }, [optionsConfigSelectedMenuId, applyLoadedOptionsForConfig])
 
   React.useEffect(() => {
@@ -655,8 +820,9 @@ export default function PosMenusPage() {
     const g = sel?.optionSelectionGroups
     const parsedGroups = Array.isArray(g) && g.length > 0 ? g.map((x) => String(x).trim()).filter(Boolean) : []
     setOptionsConfigGroupsDraft(parsedGroups.join(", "))
-    setOptionsConfigGroupRulesDraft(normalizeOptionSelectionConfig(parsedGroups, sel?.optionSelectionConfig))
-  }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupsKey])
+    const normalizedRules = normalizeOptionSelectionConfig(parsedGroups, sel?.optionSelectionConfig)
+    setOptionsConfigGroupRulesDraft(applyChickenOptionGroupLabelsToConfig(parsedGroups, normalizedRules, sel?.code, t))
+  }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupsKey, t])
 
   const optionsConfigStepGroups = React.useMemo(() => {
     if (!optionsConfigSelectedMenuId) return [] as string[]
@@ -665,17 +831,27 @@ export default function PosMenusPage() {
   }, [menus, optionsConfigSelectedMenuId])
 
   React.useEffect(() => {
+    if (optionsConfigStepGroups.length === 0) {
+      setOptionsConfigSelectedGroupKey("")
+      return
+    }
+    setOptionsConfigSelectedGroupKey((prev) =>
+      optionsConfigStepGroups.includes(prev) ? prev : optionsConfigStepGroups[0]
+    )
+  }, [optionsConfigStepGroups])
+
+  React.useEffect(() => {
     if (mainTab !== "optionsConfig") return
     let cancelled = false
     setOptionsConfigLibraryLoading(true)
-    getPosMenuOptions()
+    void getPosOptionGroups()
       .then((list) => {
         if (cancelled) return
-        setOptionsConfigLibraryOptions(Array.isArray(list) ? list : [])
+        setOptionsConfigLibraryGroups(Array.isArray(list) ? list : [])
       })
       .catch(() => {
         if (cancelled) return
-        setOptionsConfigLibraryOptions([])
+        setOptionsConfigLibraryGroups([])
       })
       .finally(() => {
         if (cancelled) return
@@ -687,21 +863,17 @@ export default function PosMenusPage() {
   }, [mainTab])
 
   React.useEffect(() => {
-    if (!optionsConfigSelectedMenuId) {
-      setOptionsConfigLibrarySearchTerm("")
-      return
-    }
+    if (!optionsConfigSelectedMenuId) setOptionsConfigLibrarySearchTerm("")
   }, [optionsConfigSelectedMenuId])
 
-  React.useEffect(() => {
-    if (optionsConfigStepGroups.length === 0) {
-      setOptionsConfigSelectedGroupKey("")
-      return
+  const optionsConfigEffectiveGroupKey = React.useMemo(() => {
+    if (!optionsConfigSelectedMenuId) return ""
+    if (optionsConfigStepGroups.length === 0) return "__default__"
+    if (optionsConfigSelectedGroupKey && optionsConfigStepGroups.includes(optionsConfigSelectedGroupKey)) {
+      return optionsConfigSelectedGroupKey
     }
-    setOptionsConfigSelectedGroupKey((prev) =>
-      optionsConfigStepGroups.includes(prev) ? prev : optionsConfigStepGroups[0]
-    )
-  }, [optionsConfigStepGroups])
+    return optionsConfigStepGroups[0] || ""
+  }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupKey, optionsConfigStepGroups])
 
   React.useEffect(() => {
     if (mainTab === "optionsConfig" && optionsConfigSelectedMenuId) loadItems()
@@ -1003,6 +1175,7 @@ export default function PosMenusPage() {
     const channelPayload = resolveNewOptionChannelPayload()
     const res = await savePosMenuOption({
       menuId: Number(editingId),
+      optionCode: buildOptionCode(formData.code, menuOptions.length),
       name: newOptionName.trim(),
       priceModifier: channelPayload.priceModifier,
       priceModifierDelivery: channelPayload.priceModifierDelivery,
@@ -1087,6 +1260,7 @@ export default function PosMenusPage() {
     const res = await savePosMenuOption({
       id: opt.id,
       menuId: Number(editingId),
+      optionCode: resolveOptionCode(opt, formData.code),
       name: opt.name,
       priceModifier: opt.priceModifier ?? 0,
       priceModifierDelivery: opt.priceModifierDelivery ?? null,
@@ -1143,6 +1317,7 @@ export default function PosMenusPage() {
       const res = await savePosMenuOption({
         id: opt.id,
         menuId: Number(opt.menuId),
+        optionCode: resolveOptionCode(opt, menus.find((m) => m.id === String(opt.menuId))?.code),
         name: opt.name,
         priceModifier: opt.priceModifier ?? 0,
         priceModifierDelivery: opt.priceModifierDelivery ?? null,
@@ -1170,148 +1345,149 @@ export default function PosMenusPage() {
   }
 
   const optionsConfigSelectedMenu = optionsConfigSelectedMenuId ? menus.find((m) => m.id === optionsConfigSelectedMenuId) : null
-  const loadOptionGroupMasters = React.useCallback(
-    async (menuId?: string | null) => {
-      setOptionGroupMasterLoading(true)
+
+  const optionsConfigLibraryItems = React.useMemo(() => {
+    const q = optionsConfigLibrarySearchTerm.trim().toLowerCase()
+    type Row = { id: string; label: string; note: string; linkedMenuCount: number; sortOrder: number; numericId: number }
+    const rows: Row[] = []
+    for (const g of optionsConfigLibraryGroups) {
+      if (!g.isActive) continue
+      const items = g.items || []
+      if (items.length === 0) continue
+      const key = String(g.key ?? "").trim().toLowerCase()
+      const name = String(g.name ?? "").trim().toLowerCase()
+      if (q && !key.includes(q) && !name.includes(q)) continue
+      const deliveryOnlyGroup =
+        items.length > 0 &&
+        items.every((it) => it.sellDelivery !== false && it.sellHall === false)
+      if (optionsConfigLibraryFilter === "deliveryOnly" && !deliveryOnlyGroup) continue
+      const linkedMenuCount = Number(g.linkedMenuCount ?? 0)
+      if (optionsConfigLibraryFilter === "frequent" && linkedMenuCount < 2) continue
+      const label = `${String(g.key || "").trim()} · ${String(g.name || "").trim()}`
+      const note =
+        `${items.length}개 항목 · ` +
+        (t("posOptionTemplateUsedMenuCount") || "메뉴 {n}개").replace("{n}", String(linkedMenuCount))
+      rows.push({
+        id: String(g.id),
+        label,
+        note,
+        linkedMenuCount,
+        sortOrder: Number(g.sortOrder ?? 0),
+        numericId: Number(g.id) || 0,
+      })
+    }
+    if (optionsConfigLibraryFilter === "recent") {
+      rows.sort((a, b) => b.numericId - a.numericId)
+    } else if (optionsConfigLibraryFilter === "frequent") {
+      rows.sort((a, b) => b.linkedMenuCount - a.linkedMenuCount || b.numericId - a.numericId)
+    } else {
+      rows.sort((a, b) => {
+        const so = a.sortOrder - b.sortOrder
+        if (so !== 0) return so
+        return a.label.localeCompare(b.label, undefined, { numeric: true })
+      })
+    }
+    return rows.slice(0, 200)
+  }, [optionsConfigLibraryGroups, optionsConfigLibraryFilter, optionsConfigLibrarySearchTerm, t])
+
+  const handleUseOptionTemplateFromLibrary = React.useCallback(
+    async (groupId: string) => {
+      if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) {
+        await appAlert(t("posMenuOptionsConfigNoSelect") || "메뉴를 먼저 선택해 주세요.")
+        return
+      }
+      if (optionsConfigSelectedMenu.promoId?.trim()) {
+        await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
+        return
+      }
+      const gidNum = Number(groupId)
+      if (!Number.isFinite(gidNum) || gidNum <= 0) return
+
+      const template = optionsConfigLibraryGroups.find((x) => String(x.id) === String(groupId))
+      if (!template?.items?.length) {
+        await appAlert(t("posOptionTemplateListEmpty") || "불러올 공통 옵션그룹이 없습니다.")
+        return
+      }
+
+      const menuGroups = await getPosOptionGroups({ menuId: optionsConfigSelectedMenuId })
+      const already = (menuGroups || []).find((g) => String(g.id) === String(groupId) && g.link)
+      if (already) {
+        await appAlert(t("posOptionTemplateGroupAlreadyLinked"))
+        return
+      }
+
+      const linkedOnMenu = (menuGroups || []).filter((g): g is PosOptionGroup & { link: NonNullable<PosOptionGroup["link"]> } =>
+        Boolean(g.link)
+      )
+      const hasStandaloneDb =
+        optionsConfigMenuOptions.some((o) => /^\d+$/.test(String(o.id ?? ""))) && linkedOnMenu.length === 0
+      if (hasStandaloneDb) {
+        const ok = await appConfirm(t("posOptionGroupLinkFirstWarning"))
+        if (!ok) return
+      }
+
+      const sortedExisting = [...linkedOnMenu].sort(
+        (a, b) => Number(a.link?.sortOrder ?? 0) - Number(b.link?.sortOrder ?? 0)
+      )
+      const maxOrder = sortedExisting.reduce((m, g) => Math.max(m, Number(g.link?.sortOrder ?? 0)), -1)
+
+      const payloads = sortedExisting.map((g, idx) => ({
+        id: g.link?.id,
+        groupId: String(g.id),
+        sortOrder: Number(g.link?.sortOrder ?? idx),
+        sellHall: g.link?.sellHall !== false,
+        sellDelivery: g.link?.sellDelivery !== false,
+        priceHallOverride: g.link?.priceHallOverride ?? null,
+        priceDeliveryOverride: g.link?.priceDeliveryOverride ?? null,
+        required: g.link?.required !== false,
+        minSelect: Number(g.link?.minSelect ?? 0),
+        maxSelect: Number(g.link?.maxSelect ?? 1),
+      }))
+
+      payloads.push({
+        id: undefined,
+        groupId: String(groupId),
+        sortOrder: maxOrder + 1,
+        sellHall: true,
+        sellDelivery: true,
+        priceHallOverride: null,
+        priceDeliveryOverride: null,
+        required: true,
+        minSelect: 1,
+        maxSelect: 1,
+      })
+
       try {
-        const groups = await getPosOptionGroups({
-          menuId: menuId && menuId.trim() ? menuId : undefined,
+        const res = await savePosMenuOptionGroupLinks({
+          menuId: Number(optionsConfigSelectedMenuId),
+          links: payloads,
         })
-        setOptionGroupMasters(Array.isArray(groups) ? groups : [])
-      } finally {
-        setOptionGroupMasterLoading(false)
+        if (!res?.success) {
+          await appAlert(translateApiMessage(res?.message, t) || t("saveFailed") || "저장 실패")
+          return
+        }
+        await loadMenusAndCategories(setOptionsConfigListLoading)
+        const opts = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+        applyLoadedOptionsForConfig(Array.isArray(opts) ? opts : [])
+        const refreshedLib = await getPosOptionGroups()
+        setOptionsConfigLibraryGroups(Array.isArray(refreshedLib) ? refreshedLib : [])
+        await appAlert(t("posOptionTemplateGroupLinkedDone"))
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        await appAlert(translateApiMessage(msg, t) || t("saveFailed") || "저장 실패")
       }
     },
-    []
+    [
+      applyLoadedOptionsForConfig,
+      loadMenusAndCategories,
+      optionsConfigLibraryGroups,
+      optionsConfigMenuOptions,
+      optionsConfigSelectedMenu,
+      optionsConfigSelectedMenuId,
+      t,
+    ]
   )
-  React.useEffect(() => {
-    if (mainTab !== "optionsConfig") return
-    void loadOptionGroupMasters(optionsConfigSelectedMenuId)
-  }, [mainTab, optionsConfigSelectedMenuId, loadOptionGroupMasters])
-  React.useEffect(() => {
-    if (!optionGroupMasterSelectedId) {
-      setOptionGroupMasterItems([])
-      setOptionGroupMasterName("")
-      setOptionGroupMasterKey("")
-      return
-    }
-    const selected = optionGroupMasters.find((x) => x.id === optionGroupMasterSelectedId)
-    if (!selected) return
-    setOptionGroupMasterName(selected.name || "")
-    setOptionGroupMasterKey(selected.key || "")
-    setOptionGroupMasterItems(Array.isArray(selected.items) ? selected.items : [])
-  }, [optionGroupMasterSelectedId, optionGroupMasters])
-  const handleSaveOptionGroupMaster = React.useCallback(async () => {
-    const key = optionGroupMasterKey.trim()
-    const name = optionGroupMasterName.trim()
-    if (!key || !name) {
-      await appAlert(t("posOptionConfigNeedGroupsShort") || "그룹 키와 이름을 입력해 주세요.")
-      return
-    }
-    setOptionGroupMasterSaving(true)
-    try {
-      const res = await savePosOptionGroup({
-        id: optionGroupMasterSelectedId || undefined,
-        key,
-        name,
-        sortOrder:
-          optionGroupMasters.findIndex((x) => x.id === optionGroupMasterSelectedId) >= 0
-            ? optionGroupMasters.findIndex((x) => x.id === optionGroupMasterSelectedId)
-            : optionGroupMasters.length,
-        items: optionGroupMasterItems.map((item, idx) => ({
-          id: item.id || undefined,
-          itemName: item.itemName,
-          sortOrder: idx,
-          basePriceHall: Number(item.basePriceHall ?? 0) || 0,
-          basePriceDelivery:
-            item.basePriceDelivery != null ? Number(item.basePriceDelivery) : null,
-          sellHall: item.sellHall !== false,
-          sellDelivery: item.sellDelivery !== false,
-        })),
-      })
-      if (!res?.success) throw new Error(res?.message || "옵션그룹 저장 실패")
-      setOptionGroupMasterSelectedId(String(res.id || optionGroupMasterSelectedId || ""))
-      await loadOptionGroupMasters(optionsConfigSelectedMenuId)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      await appAlert(translateApiMessage(msg, t) || t("saveFailed") || "저장 실패")
-    } finally {
-      setOptionGroupMasterSaving(false)
-    }
-  }, [
-    lang,
-    loadOptionGroupMasters,
-    optionGroupMasterItems,
-    optionGroupMasterKey,
-    optionGroupMasterName,
-    optionGroupMasterSelectedId,
-    optionGroupMasters,
-    optionsConfigSelectedMenuId,
-    t,
-  ])
-  const handleSaveMenuGroupLinks = React.useCallback(async () => {
-    if (!optionsConfigSelectedMenuId) {
-      await appAlert(t("posMenuOptionsConfigNoSelect") || "메뉴를 먼저 선택해 주세요.")
-      return
-    }
-    setOptionGroupMenuLinksSaving(true)
-    try {
-      const links = optionGroupMasters
-        .filter((x) => x.link)
-        .sort(
-          (a, b) =>
-            Number(a.link?.sortOrder ?? 0) - Number(b.link?.sortOrder ?? 0)
-        )
-        .map((x, idx) => ({
-          id: x.link?.id,
-          groupId: x.id,
-          sortOrder: Number(x.link?.sortOrder ?? idx),
-          sellHall: x.link?.sellHall !== false,
-          sellDelivery: x.link?.sellDelivery !== false,
-          priceHallOverride:
-            x.link?.priceHallOverride != null
-              ? Number(x.link?.priceHallOverride)
-              : null,
-          priceDeliveryOverride:
-            x.link?.priceDeliveryOverride != null
-              ? Number(x.link?.priceDeliveryOverride)
-              : null,
-          required: x.link?.required !== false,
-          minSelect: Number(x.link?.minSelect ?? 0),
-          maxSelect: Number(x.link?.maxSelect ?? 1),
-        }))
-      const res = await savePosMenuOptionGroupLinks({
-        menuId: Number(optionsConfigSelectedMenuId),
-        links,
-      })
-      if (!res?.success) throw new Error(res?.message || "메뉴 링크 저장 실패")
-      await loadOptionGroupMasters(optionsConfigSelectedMenuId)
-      await loadMenusAndCategories(setOptionsConfigListLoading)
-      const opts = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
-      applyLoadedOptionsForConfig(Array.isArray(opts) ? opts : [])
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      await appAlert(translateApiMessage(msg, t) || t("saveFailed") || "저장 실패")
-    } finally {
-      setOptionGroupMenuLinksSaving(false)
-    }
-  }, [
-    applyLoadedOptionsForConfig,
-    lang,
-    loadOptionGroupMasters,
-    optionGroupMasters,
-    optionsConfigSelectedMenuId,
-    t,
-  ])
-  const optionGroupMastersFiltered = React.useMemo(() => {
-    const q = optionGroupMasterSearchTerm.trim().toLowerCase()
-    if (!q) return optionGroupMasters
-    return optionGroupMasters.filter((g) => {
-      const name = String(g.name || "").toLowerCase()
-      const key = String(g.key || "").toLowerCase()
-      return name.includes(q) || key.includes(q)
-    })
-  }, [optionGroupMasterSearchTerm, optionGroupMasters])
+
   const optionsConfigDraftGroupsParsed = React.useMemo(
     () => parseOptionGroupsFromText(optionsConfigGroupsDraft),
     [optionsConfigGroupsDraft]
@@ -1333,59 +1509,142 @@ export default function PosMenusPage() {
       return [
         {
           key: "__default__",
-          label: t("posOptionSelectionGroups") || "기본 옵션",
+          label: t("posOptionDefaultGroupRowLabel"),
           required: false,
           count: optionsConfigMenuOptions.length,
           audience: "all" as const,
+          minSelect: 0,
+          maxSelect: 1,
+          ruleSummary: t("posOptionStepListDefaultHint") || "선택 단계 없음",
         },
       ]
     }
     return optionsConfigStepGroups.map((groupKey) => {
       const row =
         optionsConfigGroupRulesDraft.find((x) => x.key === groupKey) ||
-        ({ key: groupKey, label: groupKey, required: true } as PosOptionSelectionGroupConfig)
+        ({ key: groupKey, label: groupKey, required: true, minSelect: 1, maxSelect: 1 } as PosOptionSelectionGroupConfig)
+      const required = row.required !== false
+      const minSel =
+        row.minSelect != null && Number.isFinite(Number(row.minSelect))
+          ? Math.max(0, Math.floor(Number(row.minSelect)))
+          : required
+            ? 1
+            : 0
+      const maxSel =
+        row.maxSelect != null && Number.isFinite(Number(row.maxSelect))
+          ? Math.max(1, Math.floor(Number(row.maxSelect)))
+          : 1
       const audience: "all" | "hall" | "delivery" =
         row.audience === "hall" || row.audience === "delivery" ? row.audience : "all"
+      const audienceWord =
+        audience === "all"
+          ? t("posOptionAudienceShortAll") || "홀+배달"
+          : audience === "hall"
+            ? t("posOptionSellHall") || "홀"
+            : t("posOptionSellDelivery") || "배달"
+      const ruleSummary = (t("posOptionSelectionRuleSummary") || "채널: {audience} / 최소 {min}개 / 최대 {max}개")
+        .replace("{audience}", audienceWord)
+        .replace("{min}", String(minSel))
+        .replace("{max}", String(maxSel))
+      let displayLabel = String(row.label ?? groupKey).trim()
+      if (isChickenMenu(optionsConfigSelectedMenu?.code) && isSizePartGroups(optionsConfigStepGroups)) {
+        if (groupKey === "size") displayLabel = formatChickenOptionStepDisplayLabel("size", t)
+        else if (groupKey === "part") displayLabel = formatChickenOptionStepDisplayLabel("part", t)
+      }
       return {
         key: groupKey,
-        label: String(row.label ?? groupKey),
-        required: row.required !== false,
-        count: optionsConfigMenuOptions.filter((opt) => (opt.optionStepValues?.[groupKey] ?? "").trim() !== "").length,
+        label: displayLabel,
+        required,
+        count: optionsConfigMenuOptions.filter((opt) =>
+          optionMatchesGroupFilter(opt, groupKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+        ).length,
         audience,
+        minSelect: minSel,
+        maxSelect: maxSel,
+        ruleSummary,
       }
     })
-  }, [optionsConfigStepGroups, optionsConfigMenuOptions, optionsConfigGroupRulesDraft, t])
+  }, [
+    optionsConfigStepGroups,
+    optionsConfigMenuOptions,
+    optionsConfigGroupRulesDraft,
+    optionsConfigSelectedMenu?.code,
+    t,
+  ])
 
-  const handleOptionGroupAudienceToggle = React.useCallback(
-    (groupKey: string, channel: "hall" | "delivery", checked: boolean) => {
+  const optionsConfigSelectedGroupLabel = React.useMemo(() => {
+    const key = optionsConfigEffectiveGroupKey
+    if (!key) return ""
+    const row = optionsConfigGroupPanelItems.find((g) => g.key === key)
+    return row?.label || key
+  }, [optionsConfigEffectiveGroupKey, optionsConfigGroupPanelItems])
+
+  /** 옵션 목록 괄호 제목: 치킨 size/part는 가운데 패널과 중복되지 않게 짧게(사이즈 / 부위만) */
+  const optionsConfigOptionListBracketLabel = React.useMemo(() => {
+    if (!optionsConfigEffectiveGroupKey || optionsConfigEffectiveGroupKey === "__default__") return ""
+    if (
+      optionsConfigSelectedMenu &&
+      isChickenMenu(optionsConfigSelectedMenu.code) &&
+      isSizePartGroups(optionsConfigStepGroups)
+    ) {
+      if (optionsConfigEffectiveGroupKey === "size") return t("posOptionGroupSize")
+      if (optionsConfigEffectiveGroupKey === "part") return t("posOptionGroupPart")
+    }
+    return optionsConfigSelectedGroupLabel || optionsConfigEffectiveGroupKey
+  }, [
+    optionsConfigEffectiveGroupKey,
+    optionsConfigSelectedGroupLabel,
+    optionsConfigSelectedMenu,
+    optionsConfigStepGroups,
+    t,
+  ])
+
+  const optionsConfigOptionsInSelectedGroup = React.useMemo(() => {
+    const key = optionsConfigEffectiveGroupKey
+    if (!key || key === "__default__") return optionsConfigMenuOptions
+    const inGroup = optionsConfigMenuOptions.filter((opt) =>
+      optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+    )
+    const isChickenSizePart =
+      isChickenMenu(optionsConfigSelectedMenu?.code) &&
+      isSizePartGroups(optionsConfigStepGroups) &&
+      (key === "size" || key === "part")
+    /** 레거시: DB step 만 있을 때 비치킨 등은 0건이면 전체 표시. 치킨 size/part는 추론 실패 시 빈 목록(전체 폴백으로 size/part 동일 표시 방지) */
+    if (inGroup.length === 0 && optionsConfigMenuOptions.length > 0 && !isChickenSizePart) {
+      return optionsConfigMenuOptions
+    }
+    return inGroup
+  }, [optionsConfigMenuOptions, optionsConfigEffectiveGroupKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups])
+
+  const optionsConfigOptionsOutsideSelectedGroupCount = React.useMemo(() => {
+    const key = optionsConfigEffectiveGroupKey
+    if (!key || key === "__default__") return 0
+    const inGroup = optionsConfigMenuOptions.filter((opt) =>
+      optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+    )
+    const isChickenSizePart =
+      isChickenMenu(optionsConfigSelectedMenu?.code) &&
+      isSizePartGroups(optionsConfigStepGroups) &&
+      (key === "size" || key === "part")
+    if (inGroup.length === 0 && optionsConfigMenuOptions.length > 0 && !isChickenSizePart) return 0
+    return optionsConfigMenuOptions.filter(
+      (opt) => !optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+    ).length
+  }, [optionsConfigMenuOptions, optionsConfigEffectiveGroupKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups])
+
+  const optionsConfigCopySourceMenus = React.useMemo(() => {
+    if (!optionsConfigSelectedMenuId) return [] as PosMenu[]
+    return menus.filter((m) => m.id !== optionsConfigSelectedMenuId)
+  }, [menus, optionsConfigSelectedMenuId])
+
+  const handleOptionGroupRuleFieldChange = React.useCallback(
+    (groupKey: string, patch: Partial<PosOptionSelectionGroupConfig>) => {
       setOptionsConfigGroupRulesDraft((prev) => {
         const normalized = normalizeOptionSelectionConfig(
           optionsConfigDraftGroupsParsed.length > 0 ? optionsConfigDraftGroupsParsed : optionsConfigStepGroups,
           prev
         )
-        return normalized.map((row) => {
-          if (row.key !== groupKey) return row
-          const hallEnabled = (row.audience ?? "all") !== "delivery"
-          const deliveryEnabled = (row.audience ?? "all") !== "hall"
-          const nextHall = channel === "hall" ? checked : hallEnabled
-          const nextDelivery = channel === "delivery" ? checked : deliveryEnabled
-          if (!nextHall && !nextDelivery) return row
-          const nextAudience = nextHall && nextDelivery ? "all" : nextHall ? "hall" : "delivery"
-          return { ...row, audience: nextAudience }
-        })
-      })
-    },
-    [optionsConfigDraftGroupsParsed, optionsConfigStepGroups]
-  )
-
-  const handleOptionGroupLabelChange = React.useCallback(
-    (groupKey: string, label: string) => {
-      setOptionsConfigGroupRulesDraft((prev) => {
-        const normalized = normalizeOptionSelectionConfig(
-          optionsConfigDraftGroupsParsed.length > 0 ? optionsConfigDraftGroupsParsed : optionsConfigStepGroups,
-          prev
-        )
-        return normalized.map((row) => (row.key === groupKey ? { ...row, label } : row))
+        return normalized.map((row) => (row.key === groupKey ? { ...row, ...patch } : row))
       })
     },
     [optionsConfigDraftGroupsParsed, optionsConfigStepGroups]
@@ -1403,148 +1662,13 @@ export default function PosMenusPage() {
       next[idx] = next[target]
       next[target] = temp
       setOptionsConfigGroupsDraft(next.join(", "))
-      setOptionsConfigGroupRulesDraft((prev) => normalizeOptionSelectionConfig(next, prev))
-    },
-    [optionsConfigDraftGroupsParsed, optionsConfigStepGroups]
-  )
-
-  const optionsConfigLibraryItems = React.useMemo(() => {
-    const templates = new Map<
-      string,
-      { key: string; label: string; audience: "all" | "hall" | "delivery"; menuCount: number; sampleValues: Set<string> }
-    >()
-    for (const menu of menus) {
-      const groups = (menu.optionSelectionGroups ?? []).map((g) => String(g).trim()).filter(Boolean)
-      const cfgMap = new Map((menu.optionSelectionConfig ?? []).map((c) => [String(c.key ?? "").trim(), c]))
-      for (const key of groups) {
-        if (!templates.has(key)) {
-          const cfg = cfgMap.get(key)
-          const audience: "all" | "hall" | "delivery" =
-            cfg?.audience === "hall" || cfg?.audience === "delivery" ? cfg.audience : "all"
-          templates.set(key, {
-            key,
-            label: String(cfg?.label ?? key),
-            audience,
-            menuCount: 0,
-            sampleValues: new Set<string>(),
-          })
-        }
-        templates.get(key)!.menuCount += 1
-      }
-    }
-    for (const opt of optionsConfigLibraryOptions) {
-      const stepValues = opt.optionStepValues ?? {}
-      for (const [k, v] of Object.entries(stepValues)) {
-        const key = String(k).trim()
-        const value = String(v ?? "").trim()
-        if (!key || !value) continue
-        if (!templates.has(key)) {
-          templates.set(key, {
-            key,
-            label: key,
-            audience: "all",
-            menuCount: 0,
-            sampleValues: new Set<string>(),
-          })
-        }
-        templates.get(key)!.sampleValues.add(value)
-      }
-    }
-    const q = optionsConfigLibrarySearchTerm.trim().toLowerCase()
-    return Array.from(templates.values())
-      .map((template) => {
-        const noteParts: string[] = []
-        noteParts.push((t("posOptionTemplateUsedMenuCount") || "메뉴 {n}개").replace("{n}", String(template.menuCount)))
-        const sample = Array.from(template.sampleValues).slice(0, 3)
-        if (sample.length > 0) noteParts.push(sample.join(", "))
-        const usage = optionsConfigLibraryUsage[template.key]
-        if (usage?.count) {
-          noteParts.push((t("posOptionTemplateUseCount") || "사용 {n}회").replace("{n}", String(usage.count)))
-        }
-        return {
-          id: template.key,
-          label: template.label,
-          note: noteParts.join(" | ") || undefined,
-          deliveryOnly: template.audience === "delivery",
-          audience: template.audience,
-          usageCount: usage?.count ?? 0,
-          lastUsedAt: usage?.lastUsedAt ?? 0,
-          source: template,
-        }
-      })
-      .filter((row) => !q || row.label.toLowerCase().includes(q) || row.id.toLowerCase().includes(q))
-      .filter((row) => (optionsConfigLibraryFilter === "deliveryOnly" ? row.deliveryOnly : true))
-      .sort((a, b) => {
-        if (optionsConfigLibraryFilter === "recent") {
-          if (b.lastUsedAt !== a.lastUsedAt) return b.lastUsedAt - a.lastUsedAt
-        } else if (optionsConfigLibraryFilter === "frequent") {
-          if (b.usageCount !== a.usageCount) return b.usageCount - a.usageCount
-        }
-        return a.label.localeCompare(b.label)
-      })
-  }, [menus, optionsConfigLibraryOptions, optionsConfigLibrarySearchTerm, optionsConfigLibraryFilter, optionsConfigLibraryUsage, t])
-
-  const handleUseTemplateGroupForConfig = React.useCallback(
-    async (templateGroupKey: string) => {
-      const source = optionsConfigLibraryItems.find((x) => x.id === templateGroupKey)?.source
-      if (!source) return
-      const current = optionsConfigDraftGroupsParsed.length > 0 ? optionsConfigDraftGroupsParsed : optionsConfigStepGroups
-      if (current.includes(source.key)) {
-        await appAlert(t("posOptionTemplateDuplicateSkip") || "같은 이름의 옵션이 이미 있어 추가하지 않았습니다.")
-        return
-      }
-      const merged = [...current, source.key]
-      setOptionsConfigGroupsDraft(merged.join(", "))
       setOptionsConfigGroupRulesDraft((prev) => {
-        const normalized = normalizeOptionSelectionConfig(merged, prev)
-        return normalized.map((row) =>
-          row.key === source.key ? { ...row, label: source.label, audience: source.audience } : row
-        )
-      })
-      setOptionsConfigLibraryUsage((prev) => {
-        const currentUsage = prev[templateGroupKey] ?? { count: 0, lastUsedAt: 0 }
-        return {
-          ...prev,
-          [templateGroupKey]: {
-            count: currentUsage.count + 1,
-            lastUsedAt: Date.now(),
-          },
-        }
+        const normalized = normalizeOptionSelectionConfig(next, prev)
+        return applyChickenOptionGroupLabelsToConfig(next, normalized, optionsConfigSelectedMenu?.code, t)
       })
     },
-    [optionsConfigLibraryItems, optionsConfigDraftGroupsParsed, optionsConfigStepGroups, t]
+    [optionsConfigDraftGroupsParsed, optionsConfigStepGroups, optionsConfigSelectedMenu?.code, t]
   )
-
-  /** 치킨 메뉴만: 옵션 추가 시 size, part 단계로 맞춤 */
-  const ensureChickenMenuOptionGroups = React.useCallback(async () => {
-    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
-    if (!isChickenMenu(optionsConfigSelectedMenu.code)) return
-    const groups = optionsConfigSelectedMenu.optionSelectionGroups || []
-    const hasCorrect = groups.length >= 2 && groups[0] === "size" && groups[1] === "part"
-    if (hasCorrect) return
-    const nextConfig = normalizeOptionSelectionConfig(["size", "part"], optionsConfigSelectedMenu.optionSelectionConfig)
-    const res = await savePosMenu({
-      id: optionsConfigSelectedMenuId,
-      code: optionsConfigSelectedMenu.code,
-      name: optionsConfigSelectedMenu.name,
-      category: optionsConfigSelectedMenu.category,
-      categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
-      price: optionsConfigSelectedMenu.price,
-      priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
-      imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
-      vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
-      isActive: optionsConfigSelectedMenu.isActive ?? true,
-      optionSelectionGroups: ["size", "part"],
-      optionSelectionConfig: nextConfig,
-      isBanban: optionsConfigSelectedMenu.isBanban ?? false,
-    })
-    if (res.success) {
-      setMenus((prev) =>
-        prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: ["size", "part"], optionSelectionConfig: nextConfig } : m))
-      )
-      setOptionsConfigGroupRulesDraft(nextConfig)
-    }
-  }, [optionsConfigSelectedMenuId, optionsConfigSelectedMenu])
 
   const handleApplyOptionGroupsForConfig = async () => {
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
@@ -1554,7 +1678,8 @@ export default function PosMenusPage() {
       return
     }
     const parsed = parseOptionGroupsFromText(optionsConfigGroupsDraft)
-    const nextConfig = normalizeOptionSelectionConfig(parsed, optionsConfigGroupRulesDraft)
+    const normalized = normalizeOptionSelectionConfig(parsed, optionsConfigGroupRulesDraft)
+    const nextConfig = applyChickenOptionGroupLabelsToConfig(parsed, normalized, optionsConfigSelectedMenu.code, t)
     setOptionsConfigApplyingGroups(true)
     try {
       const res = await savePosMenu({
@@ -1576,51 +1701,6 @@ export default function PosMenusPage() {
       if (res.success) {
         setMenus((prev) =>
           prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: parsed, optionSelectionConfig: nextConfig } : m))
-        )
-        setOptionsConfigGroupRulesDraft(nextConfig)
-        setOptionsConfigNewStepValues({})
-        await appAlert(t("msg_save_success") || "저장되었습니다.")
-      } else {
-        await appAlert(res.message || t("msg_save_fail_detail"))
-      }
-    } finally {
-      setOptionsConfigApplyingGroups(false)
-    }
-  }
-
-  /** 프리셋 단계를 입력란에 반영한 뒤 곧바로 DB에 저장 */
-  const handleApplyOptionPresetAndSave = async (preset: string[]) => {
-    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
-    const pid = optionsConfigSelectedMenu.promoId?.trim()
-    if (pid) {
-      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
-      return
-    }
-    const cleaned = preset.map((x) => String(x).trim()).filter(Boolean)
-    if (cleaned.length === 0) return
-    const nextConfig = normalizeOptionSelectionConfig(cleaned, optionsConfigGroupRulesDraft)
-    setOptionsConfigGroupsDraft(cleaned.join(", "))
-    setOptionsConfigApplyingGroups(true)
-    try {
-      const res = await savePosMenu({
-        id: optionsConfigSelectedMenuId,
-        code: optionsConfigSelectedMenu.code,
-        name: optionsConfigSelectedMenu.name,
-        category: optionsConfigSelectedMenu.category ?? "",
-        categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
-        sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
-        price: optionsConfigSelectedMenu.price,
-        priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
-        imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
-        vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
-        isActive: optionsConfigSelectedMenu.isActive ?? true,
-        optionSelectionGroups: cleaned,
-        optionSelectionConfig: nextConfig,
-        isBanban: optionsConfigSelectedMenu.isBanban ?? false,
-      })
-      if (res.success) {
-        setMenus((prev) =>
-          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: cleaned, optionSelectionConfig: nextConfig } : m))
         )
         setOptionsConfigGroupRulesDraft(nextConfig)
         setOptionsConfigNewStepValues({})
@@ -1656,6 +1736,7 @@ export default function PosMenusPage() {
     }
     const res = await savePosMenuOption({
       menuId: Number(optionsConfigSelectedMenuId),
+      optionCode: buildOptionCode(optionsConfigSelectedMenu.code, optionsConfigMenuOptions.length),
       name,
       priceModifier: channelPayload.priceModifier,
       priceModifierDelivery: channelPayload.priceModifierDelivery,
@@ -1683,10 +1764,6 @@ export default function PosMenusPage() {
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     try {
       const explicitTitle = optionsConfigNewOptionTitle.trim()
-      if (isChickenMenu(optionsConfigSelectedMenu.code)) {
-        await appAlert(t("posChickenTitleOnlyHint") || "치킨 메뉴는 기존 옵션을 유지하고, 아래 목록에서 옵션 제목만 수정해 주세요.")
-        return
-      }
 
       const groups = optionsConfigStepGroups
       if (groups.length === 0) {
@@ -1720,6 +1797,7 @@ export default function PosMenusPage() {
       }
       const res = await savePosMenuOption({
         menuId: Number(optionsConfigSelectedMenuId),
+        optionCode: buildOptionCode(optionsConfigSelectedMenu.code, optionsConfigMenuOptions.length),
         name,
         priceModifier: channelPayload.priceModifier,
         priceModifierDelivery: channelPayload.priceModifierDelivery,
@@ -1747,78 +1825,11 @@ export default function PosMenusPage() {
     }
   }
 
-  /**
-   * set_main 단일 선택(예: 3개 중 1개) 옵션을 빠르게 생성
-   * - 단계가 없으면 set_main으로 자동 저장
-   * - 입력값은 쉼표/줄바꿈으로 구분
-   */
-  const handleQuickCreateSetMainOptions = async () => {
-    const channelPayload = resolveNewOptionChannelPayload()
-    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
-    const pid = optionsConfigSelectedMenu.promoId?.trim()
-    if (pid) {
-      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
-      return
-    }
-    const labels = optionsConfigSetMainQuickValues
-      .split(/[,，\n\r]+/)
-      .map((v) => v.trim())
-      .filter(Boolean)
-    if (labels.length < 2) {
-      await appAlert("최소 2개 이상 입력해 주세요. (예: 후라이드, 양념, 간장)")
-      return
-    }
-
-    const currentGroups = optionsConfigStepGroups
-    if (!(currentGroups.length === 1 && currentGroups[0] === "set_main")) {
-      await handleApplyOptionPresetAndSave(["set_main"])
-    }
-
-    const latestOptions = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).catch(() => optionsConfigMenuOptions)
-    const existing = Array.isArray(latestOptions) ? latestOptions : []
-    const existingSet = new Set(
-      existing.map((o) => String(o.optionStepValues?.set_main ?? o.name ?? "").trim().toLowerCase()).filter(Boolean)
-    )
-
-    let added = 0
-    for (const label of labels) {
-      const key = label.toLowerCase()
-      if (existingSet.has(key)) continue
-      const res = await savePosMenuOption({
-        menuId: Number(optionsConfigSelectedMenuId),
-        name: label,
-        priceModifier: channelPayload.priceModifier,
-        priceModifierDelivery: channelPayload.priceModifierDelivery,
-        priceModifierPackaging: channelPayload.priceModifierPackaging,
-        sortOrder: existing.length + added,
-        optionType: "substitution",
-        optionStepValues: { set_main: label },
-        sellHall: channelPayload.sellHall,
-        sellDelivery: channelPayload.sellDelivery,
-        sellPackaging: channelPayload.sellPackaging,
-      })
-      if (!res.success) {
-        await appAlert(res.message || t("msg_save_fail_detail"))
-        return
-      }
-      existingSet.add(key)
-      added++
-    }
-
-    const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
-    applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
-    setOptionsConfigSetMainQuickValues("")
-    await appAlert(added > 0 ? `${added}개 옵션을 추가했습니다.` : "이미 같은 옵션이 있어 추가된 항목이 없습니다.")
-  }
-
   const handleAddAllOptionsForConfig = async () => {
     const channelPayload = resolveNewOptionChannelPayload()
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
-    const isChicken = isChickenMenu(optionsConfigSelectedMenu.code)
-    if (isChicken) {
-      await appAlert(t("posChickenTitleOnlyHint") || "치킨 메뉴는 기존 옵션을 유지하고, 아래 목록에서 옵션 제목만 수정해 주세요.")
-      return
-    } else if (!isSizePartGroups(optionsConfigStepGroups)) {
+    if (isChickenMenu(optionsConfigSelectedMenu.code)) return
+    if (!isSizePartGroups(optionsConfigStepGroups)) {
       await appAlert(
         t("posOptionConfigAddAllSizePartOnly") ||
           "[전체 조합 추가]는 선택 단계가 size, part 순서일 때만 사용할 수 있습니다."
@@ -1828,38 +1839,33 @@ export default function PosMenusPage() {
     const existingKeys = new Set(
       optionsConfigMenuOptions.map((o) => `${o.optionStepValues?.size ?? ""}_${o.optionStepValues?.part ?? ""}`)
     )
-    const price = 0
-    const combinations: { size: string; part: string; sellHall: boolean; sellDelivery: boolean; sellPackaging: boolean }[] = isChicken
-      ? [
-          { size: "M", part: "Boneless", sellHall: true, sellDelivery: true, sellPackaging: true },
-          { size: "M", part: "Wing", sellHall: true, sellDelivery: true, sellPackaging: true },
-          { size: "M", part: "Drumette", sellHall: true, sellDelivery: true, sellPackaging: true },
-        ]
-      : OPTION_SIZE_VALUES.flatMap((size) =>
-          OPTION_PART_VALUES.map((part) => ({
-            size,
-            part,
-            sellHall: true,
-            sellDelivery: true,
-            sellPackaging: true,
-          }))
-        )
+    const combinations: { size: string; part: string; sellHall: boolean; sellDelivery: boolean; sellPackaging: boolean }[] =
+      OPTION_SIZE_VALUES.flatMap((size) =>
+        OPTION_PART_VALUES.map((part) => ({
+          size,
+          part,
+          sellHall: true,
+          sellDelivery: true,
+          sellPackaging: true,
+        }))
+      )
     let added = 0
-    for (const { size, part, sellHall, sellDelivery, sellPackaging } of combinations) {
+    for (const { size, part } of combinations) {
       if (existingKeys.has(`${size}_${part}`)) continue
       const name = `${size} - ${part}`
       const res = await savePosMenuOption({
         menuId: Number(optionsConfigSelectedMenuId),
+        optionCode: buildOptionCode(optionsConfigSelectedMenu.code, optionsConfigMenuOptions.length + added),
         name,
-        priceModifier: isChicken ? price : channelPayload.priceModifier,
-        priceModifierDelivery: isChicken ? price : channelPayload.priceModifierDelivery,
-        priceModifierPackaging: isChicken ? price : channelPayload.priceModifierPackaging,
+        priceModifier: channelPayload.priceModifier,
+        priceModifierDelivery: channelPayload.priceModifierDelivery,
+        priceModifierPackaging: channelPayload.priceModifierPackaging,
         sortOrder: optionsConfigMenuOptions.length + added,
         optionType: "substitution",
         optionStepValues: { size, part },
-        sellHall: isChicken ? sellHall : channelPayload.sellHall,
-        sellDelivery: isChicken ? sellDelivery : channelPayload.sellDelivery,
-        sellPackaging: isChicken ? sellPackaging : channelPayload.sellPackaging,
+        sellHall: channelPayload.sellHall,
+        sellDelivery: channelPayload.sellDelivery,
+        sellPackaging: channelPayload.sellPackaging,
       })
       if (res.success) {
         existingKeys.add(`${size}_${part}`)
@@ -1868,126 +1874,6 @@ export default function PosMenusPage() {
     }
     if (added > 0) {
       getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(applyLoadedOptionsForConfig)
-    }
-  }
-
-  /** 기본가 = S 순살. 옵션으로 붙는 것은 M 순살/윙/봉 3개만 */
-  const CHICKEN_OPTION_COMBOS = [
-    { size: "M", part: "Boneless", sellHall: true, sellDelivery: true, sellPackaging: true },
-    { size: "M", part: "Wing", sellHall: true, sellDelivery: true, sellPackaging: true },
-    { size: "M", part: "Drumette", sellHall: true, sellDelivery: true, sellPackaging: true },
-  ] as const
-
-  const handleChickenBatchApply = async () => {
-    await appAlert(t("posChickenTitleOnlyHint") || "현재는 치킨 기존 옵션을 유지합니다. 옵션 목록에서 제목만 수정해 주세요.")
-    return
-    let list = menus
-    if (list.length === 0) {
-      try {
-        list = await getPosMenus()
-        setMenus(list || [])
-      } catch (_e) {
-        await appAlert(t("posChickenBatchNoMenus") || "메뉴 목록을 불러올 수 없습니다.")
-        return
-      }
-    }
-    const chickenMenus = (list || []).filter((m) => isChickenMenu(m.code))
-    if (chickenMenus.length === 0) {
-      await appAlert(t("posChickenBatchNoMenus") || "코드가 c로 시작하는 메뉴가 없습니다.")
-      return
-    }
-    if (!await appConfirm((t("posChickenBatchConfirm") || "코드가 c로 시작하는 {n}개 치킨 메뉴에 옵션(M 순살/윙/봉 3개)을 일괄 적용합니다. 기본가=S 순살. 기존 옵션은 삭제됩니다. 계속하시겠습니까?").replace("{n}", String(chickenMenus.length)))) return
-    setChickenBatchApplying(true)
-    try {
-      let done = 0
-      for (const menu of chickenMenus) {
-        const saveMenuRes = await savePosMenu({
-          id: menu.id,
-          code: menu.code,
-          name: menu.name,
-          category: menu.category ?? "",
-          categoryMain: menu.categoryMain ?? "",
-          sortOrder: menu.sortOrder ?? 0,
-          price: menu.price,
-          priceDelivery: menu.priceDelivery ?? null,
-          imageUrl: menu.imageUrl ?? "",
-          vatIncluded: menu.vatIncluded ?? true,
-          isActive: menu.isActive ?? true,
-          optionSelectionGroups: ["size", "part"],
-          optionSelectionConfig: normalizeOptionSelectionConfig(["size", "part"], menu.optionSelectionConfig),
-        })
-        if (!saveMenuRes.success) {
-          throw new Error(`메뉴 ${menu.code} 저장 실패: ${saveMenuRes.message}`)
-        }
-        const existing = await getPosMenuOptions({ menuId: menu.id, fresh: true })
-        const existingPriceByStep = new Map<
-          string,
-          { hall: number; delivery: number | null; packaging: number | null }
-        >(
-          (existing || [])
-            .map((opt) => {
-              const size = String(opt.optionStepValues?.size ?? '').trim()
-              const part = String(opt.optionStepValues?.part ?? '').trim()
-              if (!size || !part) return null
-              return [
-                `${size}__${part}`,
-                {
-                  hall: Number.isFinite(Number(opt.priceModifier)) ? Number(opt.priceModifier) : 0,
-                  delivery:
-                    opt.priceModifierDelivery != null && Number.isFinite(Number(opt.priceModifierDelivery))
-                      ? Number(opt.priceModifierDelivery)
-                      : null,
-                  packaging:
-                    opt.priceModifierPackaging != null && Number.isFinite(Number(opt.priceModifierPackaging))
-                      ? Number(opt.priceModifierPackaging)
-                      : null,
-                },
-              ] as const
-            })
-            .filter(Boolean) as [string, { hall: number; delivery: number | null; packaging: number | null }][]
-        )
-        for (const opt of existing || []) {
-          const delRes = await deletePosMenuOption({ id: String(opt.id) })
-          if (!delRes.success) {
-            throw new Error(`옵션 삭제 실패: ${delRes.message}`)
-          }
-        }
-        for (let i = 0; i < CHICKEN_OPTION_COMBOS.length; i++) {
-          const { size, part, sellHall, sellDelivery, sellPackaging } = CHICKEN_OPTION_COMBOS[i]
-          const preserved = existingPriceByStep.get(`${size}__${part}`)
-          const optRes = await savePosMenuOption({
-            menuId: Number(menu.id),
-            name: `${size} - ${part}`,
-            priceModifier: preserved?.hall ?? 0,
-            priceModifierDelivery: preserved?.delivery ?? null,
-            priceModifierPackaging: preserved?.packaging ?? null,
-            sortOrder: i,
-            optionType: "substitution",
-            optionStepValues: { size, part },
-            sellHall,
-            sellDelivery,
-            sellPackaging,
-          })
-          if (!optRes.success) {
-            throw new Error(`옵션 저장 실패 (${menu.code} ${size} ${part}): ${optRes.message}`)
-          }
-        }
-        done++
-      }
-      const updated = await getPosMenus()
-      setMenus(updated || [])
-      await appAlert((t("posChickenBatchDone") || "치킨 메뉴 {n}건에 옵션(M 순살/윙/봉)을 적용했습니다.").replace("{n}", String(done)))
-      const selectedMenuId: string = optionsConfigSelectedMenuId ?? ""
-      if (selectedMenuId && chickenMenus.some((m) => String(m.id) === selectedMenuId)) {
-        getPosMenuOptions({ menuId: selectedMenuId }).then(applyLoadedOptionsForConfig)
-      }
-    } catch (e) {
-      console.error("handleChickenBatchApply:", e)
-      const errorMessage = (e as { message?: string }).message
-      const message = errorMessage?.trim() || String(e)
-      await appAlert(message)
-    } finally {
-      setChickenBatchApplying(false)
     }
   }
 
@@ -2026,6 +1912,7 @@ export default function PosMenusPage() {
 
   const handleOptionReorderForConfig = React.useCallback((dragId: string, dropId: string) => {
     if (!dragId || !dropId || dragId === dropId) return
+    const selectedMenuCode = optionsConfigSelectedMenu?.code
     setOptionsConfigMenuOptions((prev) => {
       const from = prev.findIndex((x) => String(x.id) === String(dragId))
       const to = prev.findIndex((x) => String(x.id) === String(dropId))
@@ -2033,12 +1920,45 @@ export default function PosMenusPage() {
       const next = [...prev]
       const [moved] = next.splice(from, 1)
       next.splice(to, 0, moved)
-      return next.map((row, idx) => ({ ...row, sortOrder: idx }))
+      return next.map((row, idx) => ({
+        ...row,
+        sortOrder: idx,
+        optionCode: buildOptionCode(selectedMenuCode, idx),
+      }))
+    })
+  }, [optionsConfigSelectedMenu?.code])
+
+  const appendOptionsConfigBulkLabels = React.useCallback((labels: string[]) => {
+    const clean = [...new Set(labels.map((l) => l.trim()).filter(Boolean))]
+    if (clean.length === 0) return
+    setOptionsConfigBulkValuesInput((prev) => {
+      const base = prev.trim()
+      const chunk = clean.join(", ")
+      if (!base) return chunk
+      return `${base.replace(/,\s*$/, "")}, ${chunk}`
     })
   }, [])
 
+  const optionsConfigBulkMenuPickerList = React.useMemo(() => {
+    const cur = optionsConfigSelectedMenuId
+    const q = optionsConfigBulkMenuPickerSearch.trim().toLowerCase()
+    let rows = menus.filter((m) => String(m.id) !== String(cur ?? ""))
+    if (q) {
+      rows = rows.filter((m) => {
+        const hay = `${m.code ?? ""} ${m.name ?? ""} ${m.category ?? ""} ${m.categoryMain ?? ""}`.toLowerCase()
+        return hay.includes(q)
+      })
+    }
+    return sortByCode(rows, (m) => m.code)
+  }, [menus, optionsConfigSelectedMenuId, optionsConfigBulkMenuPickerSearch])
+
+  const optionsConfigBulkMenuPickerSelectedCount = React.useMemo(
+    () => Object.values(optionsConfigBulkMenuPickerChecked).filter(Boolean).length,
+    [optionsConfigBulkMenuPickerChecked]
+  )
+
   const handleBulkAddValuesForSelectedGroup = React.useCallback(async () => {
-    const selectedKey = optionsConfigSelectedGroupKey || optionsConfigStepGroups[0]
+    const selectedKey = optionsConfigEffectiveGroupKey !== "__default__" ? optionsConfigEffectiveGroupKey : ""
     if (!selectedKey) {
       await appAlert(t("posOptionConfigNeedGroupsShort") || "먼저 위에서 선택 단계를 저장하세요.")
       return
@@ -2052,7 +1972,11 @@ export default function PosMenusPage() {
       return
     }
     const duplicates = new Set(
-      optionsConfigMenuOptions.map((o) => String(o.optionStepValues?.[selectedKey] ?? "").trim().toLowerCase()).filter(Boolean)
+      optionsConfigMenuOptions
+        .map((o) =>
+          optionStepValueForGroupFilter(o, selectedKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups).toLowerCase()
+        )
+        .filter(Boolean)
     )
     const channelPayload = resolveNewOptionChannelPayload()
     const bulkHall = optionsConfigBulkHallPrice.trim() === "" ? channelPayload.priceModifier : Number(optionsConfigBulkHallPrice) || 0
@@ -2070,6 +1994,7 @@ export default function PosMenusPage() {
         next.push({
           id: draftId,
           menuId: optionsConfigSelectedMenuId ?? "",
+          optionCode: buildOptionCode(optionsConfigSelectedMenu?.code, next.length),
           name: label,
           priceModifier: bulkHall,
           priceModifierDelivery: bulkDelivery,
@@ -2093,15 +2018,137 @@ export default function PosMenusPage() {
         : (t("posOptionBulkNoNew") || "추가할 새 항목이 없습니다.")
     )
   }, [
-    optionsConfigSelectedGroupKey,
-    optionsConfigStepGroups,
+    optionsConfigEffectiveGroupKey,
     optionsConfigBulkValuesInput,
     optionsConfigBulkHallPrice,
     optionsConfigBulkDeliveryPrice,
     optionsConfigMenuOptions,
     resolveNewOptionChannelPayload,
     optionsConfigSelectedMenuId,
+    optionsConfigSelectedMenu?.code,
+    optionsConfigStepGroups,
     t,
+  ])
+
+  const handleImportOptionsFromExistingMenu = React.useCallback(async () => {
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
+    const sourceMenuId = optionsConfigCopySourceMenuId.trim()
+    if (!sourceMenuId) {
+      await appAlert(t("posOptionCopySourceRequired") || "가져올 원본 메뉴를 선택해 주세요.")
+      return
+    }
+    const sourceMenu = menus.find((m) => m.id === sourceMenuId)
+    if (!sourceMenu) {
+      await appAlert(t("posOptionCopySourceRequired") || "가져올 원본 메뉴를 선택해 주세요.")
+      return
+    }
+    const promoId = optionsConfigSelectedMenu.promoId?.trim()
+    if (promoId) {
+      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
+      return
+    }
+    const confirmed = await appConfirm(
+      (t("posOptionCopyConfirm") || "'{source}' 메뉴 옵션을 현재 메뉴에 가져올까요? 기존 옵션 뒤에 추가됩니다.")
+        .replace("{source}", `${sourceMenu.code} ${sourceMenu.name}`)
+    )
+    if (!confirmed) return
+    setOptionsConfigCopying(true)
+    try {
+      const sourceOptionsRaw = await getPosMenuOptions({ menuId: sourceMenuId, fresh: true })
+      const sourceOptions = Array.isArray(sourceOptionsRaw) ? sourceOptionsRaw : []
+      if (sourceOptions.length === 0) {
+        await appAlert(t("posOptionCopyNoOptions") || "선택한 메뉴에 가져올 옵션이 없습니다.")
+        return
+      }
+      const sourceGroups = (sourceMenu.optionSelectionGroups ?? []).map((x) => String(x).trim()).filter(Boolean)
+      const normalizedGroupCfg = normalizeOptionSelectionConfig(sourceGroups, sourceMenu.optionSelectionConfig)
+      const nextGroupConfig = applyChickenOptionGroupLabelsToConfig(
+        sourceGroups,
+        normalizedGroupCfg,
+        optionsConfigSelectedMenu.code,
+        t
+      )
+      const needGroupSync =
+        JSON.stringify(sourceGroups) !== JSON.stringify(optionsConfigStepGroups) ||
+        JSON.stringify(nextGroupConfig) !== JSON.stringify(optionsConfigGroupRulesDraft)
+      if (needGroupSync) {
+        const saveMenuRes = await savePosMenu({
+          id: optionsConfigSelectedMenuId,
+          code: optionsConfigSelectedMenu.code,
+          name: optionsConfigSelectedMenu.name,
+          category: optionsConfigSelectedMenu.category ?? "",
+          categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
+          sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
+          price: optionsConfigSelectedMenu.price,
+          priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
+          imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
+          vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
+          isActive: optionsConfigSelectedMenu.isActive ?? true,
+          optionSelectionGroups: sourceGroups,
+          optionSelectionConfig: nextGroupConfig,
+          isBanban: optionsConfigSelectedMenu.isBanban ?? false,
+        })
+        if (!saveMenuRes.success) {
+          await appAlert(saveMenuRes.message || t("msg_save_fail_detail"))
+          return
+        }
+        setMenus((prev) =>
+          prev.map((m) =>
+            m.id === optionsConfigSelectedMenuId
+              ? { ...m, optionSelectionGroups: sourceGroups, optionSelectionConfig: nextGroupConfig }
+              : m
+          )
+        )
+        setOptionsConfigGroupsDraft(sourceGroups.join(", "))
+        setOptionsConfigGroupRulesDraft(nextGroupConfig)
+      }
+      const startSortOrder = optionsConfigMenuOptions.length
+      const saveRes = await savePosMenuOptionsBulk({
+        options: sourceOptions.map((opt, idx) => ({
+          menuId: Number(optionsConfigSelectedMenuId),
+          optionCode: String(opt.optionCode ?? "").trim() || undefined,
+          name: String(opt.name ?? "").trim(),
+          priceModifier: Number(opt.priceModifier ?? 0) || 0,
+          priceModifierDelivery: opt.priceModifierDelivery ?? null,
+          priceModifierPackaging: opt.priceModifierPackaging ?? null,
+          sortOrder: startSortOrder + idx,
+          optionType: opt.optionType ?? "substitution",
+          itemCode: opt.itemCode ?? null,
+          additiveSourceMenuId: opt.additiveSourceMenuId ?? null,
+          quantity: opt.quantity ?? 1,
+          optionStepValues: opt.optionStepValues ?? null,
+          sellHall: opt.sellHall ?? true,
+          sellDelivery: opt.sellDelivery ?? true,
+          sellPackaging: opt.sellPackaging ?? true,
+        })),
+      })
+      if (!saveRes.success) {
+        const firstFailed = (saveRes.results || []).find((x) => !x.success)
+        await appAlert(firstFailed?.message || saveRes.message || t("msg_save_fail_detail"))
+        return
+      }
+      const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+      applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
+      const importedCount = sourceOptions.length
+      await appAlert(
+        (t("posOptionCopyDone") || "{n}개 옵션을 가져왔습니다. 코드 충돌 항목은 자동 재매핑되었습니다.").replace(
+          "{n}",
+          String(importedCount)
+        )
+      )
+    } finally {
+      setOptionsConfigCopying(false)
+    }
+  }, [
+    optionsConfigSelectedMenuId,
+    optionsConfigSelectedMenu,
+    optionsConfigCopySourceMenuId,
+    menus,
+    t,
+    optionsConfigStepGroups,
+    optionsConfigGroupRulesDraft,
+    optionsConfigMenuOptions.length,
+    applyLoadedOptionsForConfig,
   ])
 
   const areOptionsEqualForSave = React.useCallback((a: PosMenuOption, b: PosMenuOption) => {
@@ -2114,6 +2161,7 @@ export default function PosMenusPage() {
       return JSON.stringify(sorted)
     }
     return (
+      String(a.optionCode ?? "") === String(b.optionCode ?? "") &&
       String(a.name ?? "") === String(b.name ?? "") &&
       Number(a.priceModifier ?? 0) === Number(b.priceModifier ?? 0) &&
       (a.priceModifierDelivery ?? null) === (b.priceModifierDelivery ?? null) &&
@@ -2144,6 +2192,7 @@ export default function PosMenusPage() {
 
       const normalizedCurrentOptions = optionsConfigMenuOptions.map((o) => ({
         ...o,
+        optionCode: resolveOptionCode(o, optionsConfigSelectedMenu?.code),
         sellPackaging: o.sellHall ?? true,
         priceModifierPackaging: null,
       }))
@@ -2180,6 +2229,7 @@ export default function PosMenusPage() {
         options: changed.map((o) => ({
           id: /^\d+$/.test(String(o.id ?? "")) ? String(o.id) : undefined,
           menuId: Number(o.menuId),
+          optionCode: o.optionCode ?? undefined,
           name: o.name,
           priceModifier: o.priceModifier ?? 0,
           priceModifierDelivery: o.priceModifierDelivery ?? null,
@@ -2238,10 +2288,6 @@ export default function PosMenusPage() {
   const handleDeleteOptionForConfig = async (opt: PosMenuOption) => {
     if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
     if (!/^\d+$/.test(String(opt.id ?? ""))) {
-      await appAlert(
-        t("posOptionConfigDeleteFromGroupHint") ||
-          "이 옵션은 옵션그룹 링크에서 생성된 항목입니다. 왼쪽 '옵션그룹 마스터'에서 항목을 삭제한 뒤 저장해 주세요."
-      )
       setOptionsConfigMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
       return
     }
@@ -2324,7 +2370,13 @@ export default function PosMenusPage() {
     }
     try {
       const XLSX = await import("xlsx")
-      const rows = filteredMenus.map((m) => ({
+      const filteredMenuIdSet = new Set(filteredMenus.map((m) => m.id))
+      const rowKindCol = t("posMenuExportRowKind") || "행 구분"
+      const rowKindMenu = t("posMenuExportRowMenu") || "메뉴"
+      const rowKindOption = t("posMenuExportRowOption") || "옵션"
+      const sheetUnified = (t("posMenuExportSheetUnified") || "메뉴+옵션(통합)").slice(0, 31)
+
+      const menuCols = (m: (typeof filteredMenus)[0]) => ({
         [t("itemsColCode") || "코드"]: m.code ?? "",
         [t("posMenuName") || "메뉴명"]: m.name ?? "",
         [t("posMenuCategoryMain") || "대분류"]: m.categoryMain ?? "",
@@ -2333,10 +2385,90 @@ export default function PosMenusPage() {
         [t("posMenuPriceDelivery") || "배달 가격"]: Number(m.priceDelivery ?? 0),
         [t("posMenuVatIncluded") || "부가세 포함"]: m.vatIncluded ? (t("yes") || "Y") : (t("no") || "N"),
         [t("posMenuActive") || "활성"]: m.isActive ? (t("yes") || "Y") : (t("no") || "N"),
-      }))
-      const ws = XLSX.utils.json_to_sheet(rows)
+      })
+
+      const emptyOptionCols = () => ({
+        menuId: "",
+        menuCode: "",
+        menuName: "",
+        optionId: "",
+        optionCode: "",
+        optionName: "",
+        sortOrder: "",
+        priceModifierHall: "",
+        priceModifierDelivery: "",
+        priceModifierPackaging: "",
+        optionType: "",
+        itemCode: "",
+        additiveSourceMenuId: "",
+        quantity: "",
+        sellHall: "",
+        sellDelivery: "",
+        sellPackaging: "",
+        optionDescriptionDefault: "",
+        optionDescriptionDelivery: "",
+        optionDescriptionTable: "",
+        optionStepValues: "",
+      })
+
+      const optionExportCols = (opt: PosMenuOption, menu: (typeof filteredMenus)[0]) => {
+        const optionCode = resolveOptionCode(opt, menu?.code)
+        return {
+          menuId: opt.menuId ?? "",
+          menuCode: menu?.code ?? "",
+          menuName: menu?.name ?? "",
+          optionId: opt.id ?? "",
+          optionCode,
+          optionName: opt.name ?? "",
+          sortOrder: opt.sortOrder ?? 0,
+          priceModifierHall: Number(opt.priceModifier ?? 0),
+          priceModifierDelivery: Number(opt.priceModifierDelivery ?? 0),
+          priceModifierPackaging: Number(opt.priceModifierPackaging ?? 0),
+          optionType: opt.optionType ?? "",
+          itemCode: opt.itemCode ?? "",
+          additiveSourceMenuId: opt.additiveSourceMenuId ?? "",
+          quantity: opt.quantity ?? "",
+          sellHall: opt.sellHall === false ? (t("no") || "N") : (t("yes") || "Y"),
+          sellDelivery: opt.sellDelivery === false ? (t("no") || "N") : (t("yes") || "Y"),
+          sellPackaging: opt.sellPackaging === false ? (t("no") || "N") : (t("yes") || "Y"),
+          optionDescriptionDefault: opt.descriptionDefault ?? "",
+          optionDescriptionDelivery: opt.descriptionDelivery ?? "",
+          optionDescriptionTable: opt.descriptionTable ?? "",
+          optionStepValues: opt.optionStepValues ? JSON.stringify(opt.optionStepValues) : "",
+        }
+      }
+
+      const allOptions = await getPosMenuOptions({ fresh: true }).catch(() => [])
+      const optionsByMenu = new Map<string, PosMenuOption[]>()
+      for (const opt of allOptions) {
+        if (opt.menuId == null || opt.menuId === "" || !filteredMenuIdSet.has(opt.menuId)) continue
+        const arr = optionsByMenu.get(opt.menuId) ?? []
+        arr.push(opt)
+        optionsByMenu.set(opt.menuId, arr)
+      }
+      for (const [, list] of optionsByMenu) {
+        list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      }
+
+      const unifiedRows: Record<string, string | number>[] = []
+      for (const m of filteredMenus) {
+        const opts = optionsByMenu.get(m.id) ?? []
+        const base = menuCols(m)
+        if (opts.length === 0) {
+          unifiedRows.push({ [rowKindCol]: rowKindMenu, ...base, ...emptyOptionCols() })
+          continue
+        }
+        for (const opt of opts) {
+          unifiedRows.push({
+            [rowKindCol]: rowKindOption,
+            ...base,
+            ...optionExportCols(opt, m),
+          })
+        }
+      }
+
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, t("posMenuList") || "메뉴 목록")
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedRows), sheetUnified)
       const bangkokDate = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Bangkok",
         year: "numeric",
@@ -2359,7 +2491,12 @@ export default function PosMenusPage() {
     try {
       const XLSX = await import("xlsx")
       const sortedMenus = sortByCode([...menus], (m) => m.code)
-      const menuRows = sortedMenus.map((m) => ({
+      const rowKindCol = t("posMenuExportRowKind") || "행 구분"
+      const rowKindMenu = t("posMenuExportRowMenu") || "메뉴"
+      const rowKindOption = t("posMenuExportRowOption") || "옵션"
+      const sheetUnified = (t("posMenuExportSheetUnified") || "메뉴+옵션(통합)").slice(0, 31)
+
+      const detailedMenuCols = (m: (typeof menus)[0]) => ({
         id: m.id ?? "",
         [t("itemsColCode") || "코드"]: m.code ?? "",
         [t("posMenuName") || "메뉴명"]: m.name ?? "",
@@ -2379,48 +2516,91 @@ export default function PosMenusPage() {
         descriptionDelivery: m.descriptionDelivery ?? "",
         descriptionTable: m.descriptionTable ?? "",
         imageUrl: m.imageUrl ?? "",
-      }))
+      })
+
+      const emptyOptionColsDetailed = () => ({
+        menuId: "",
+        menuCode: "",
+        menuName: "",
+        optionId: "",
+        optionCode: "",
+        optionName: "",
+        sortOrder: "",
+        priceModifierHall: "",
+        priceModifierDelivery: "",
+        priceModifierPackaging: "",
+        optionType: "",
+        itemCode: "",
+        additiveSourceMenuId: "",
+        quantity: "",
+        sellHall: "",
+        sellDelivery: "",
+        sellPackaging: "",
+        optionDescriptionDefault: "",
+        optionDescriptionDelivery: "",
+        optionDescriptionTable: "",
+        optionStepValues: "",
+      })
+
+      const optionExportColsDetailed = (opt: PosMenuOption, menu: (typeof menus)[0]) => {
+        const optionCode = resolveOptionCode(opt, menu?.code)
+        return {
+          menuId: opt.menuId ?? "",
+          menuCode: menu?.code ?? "",
+          menuName: menu?.name ?? "",
+          optionId: opt.id ?? "",
+          optionCode,
+          optionName: opt.name ?? "",
+          sortOrder: opt.sortOrder ?? 0,
+          priceModifierHall: Number(opt.priceModifier ?? 0),
+          priceModifierDelivery: Number(opt.priceModifierDelivery ?? 0),
+          priceModifierPackaging: Number(opt.priceModifierPackaging ?? 0),
+          optionType: opt.optionType ?? "",
+          itemCode: opt.itemCode ?? "",
+          additiveSourceMenuId: opt.additiveSourceMenuId ?? "",
+          quantity: opt.quantity ?? "",
+          sellHall: opt.sellHall === false ? (t("no") || "N") : (t("yes") || "Y"),
+          sellDelivery: opt.sellDelivery === false ? (t("no") || "N") : (t("yes") || "Y"),
+          sellPackaging: opt.sellPackaging === false ? (t("no") || "N") : (t("yes") || "Y"),
+          optionDescriptionDefault: opt.descriptionDefault ?? "",
+          optionDescriptionDelivery: opt.descriptionDelivery ?? "",
+          optionDescriptionTable: opt.descriptionTable ?? "",
+          optionStepValues: opt.optionStepValues ? JSON.stringify(opt.optionStepValues) : "",
+        }
+      }
 
       const allOptions = await getPosMenuOptions({ fresh: true }).catch(() => [])
-      const menuById = new Map(sortedMenus.map((m) => [m.id, m]))
-      const optionRows = [...allOptions]
-        .sort((a, b) => {
-          const aMenu = menuById.get(a.menuId)?.code ?? ""
-          const bMenu = menuById.get(b.menuId)?.code ?? ""
-          if (aMenu !== bMenu) return aMenu.localeCompare(bMenu, "en")
-          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
-        })
-        .map((opt) => {
-          const menu = menuById.get(opt.menuId)
-          return {
-            menuId: opt.menuId ?? "",
-            menuCode: menu?.code ?? "",
-            menuName: menu?.name ?? "",
-            optionId: opt.id ?? "",
-            optionName: opt.name ?? "",
-            sortOrder: opt.sortOrder ?? 0,
-            priceModifierHall: Number(opt.priceModifier ?? 0),
-            priceModifierDelivery: Number(opt.priceModifierDelivery ?? 0),
-            priceModifierPackaging: Number(opt.priceModifierPackaging ?? 0),
-            optionType: opt.optionType ?? "",
-            itemCode: opt.itemCode ?? "",
-            additiveSourceMenuId: opt.additiveSourceMenuId ?? "",
-            quantity: opt.quantity ?? "",
-            sellHall: opt.sellHall === false ? (t("no") || "N") : (t("yes") || "Y"),
-            sellDelivery: opt.sellDelivery === false ? (t("no") || "N") : (t("yes") || "Y"),
-            sellPackaging: opt.sellPackaging === false ? (t("no") || "N") : (t("yes") || "Y"),
-            descriptionDefault: opt.descriptionDefault ?? "",
-            descriptionDelivery: opt.descriptionDelivery ?? "",
-            descriptionTable: opt.descriptionTable ?? "",
-            optionStepValues: opt.optionStepValues ? JSON.stringify(opt.optionStepValues) : "",
-          }
-        })
+      const sortedMenuIds = new Set(sortedMenus.map((m) => m.id))
+      const optionsByMenu = new Map<string, PosMenuOption[]>()
+      for (const opt of allOptions) {
+        if (opt.menuId == null || opt.menuId === "" || !sortedMenuIds.has(opt.menuId)) continue
+        const arr = optionsByMenu.get(opt.menuId) ?? []
+        arr.push(opt)
+        optionsByMenu.set(opt.menuId, arr)
+      }
+      for (const [, list] of optionsByMenu) {
+        list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      }
+
+      const unifiedRows: Record<string, string | number>[] = []
+      for (const m of sortedMenus) {
+        const opts = optionsByMenu.get(m.id) ?? []
+        const base = detailedMenuCols(m)
+        if (opts.length === 0) {
+          unifiedRows.push({ [rowKindCol]: rowKindMenu, ...base, ...emptyOptionColsDetailed() })
+          continue
+        }
+        for (const opt of opts) {
+          unifiedRows.push({
+            [rowKindCol]: rowKindOption,
+            ...base,
+            ...optionExportColsDetailed(opt, m),
+          })
+        }
+      }
 
       const wb = XLSX.utils.book_new()
-      const wsMenus = XLSX.utils.json_to_sheet(menuRows)
-      XLSX.utils.book_append_sheet(wb, wsMenus, t("posMenuList") || "메뉴 목록")
-      const wsOptions = XLSX.utils.json_to_sheet(optionRows)
-      XLSX.utils.book_append_sheet(wb, wsOptions, t("posFormTabOptions") || "옵션")
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedRows), sheetUnified)
       const bangkokDate = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Bangkok",
         year: "numeric",
@@ -2851,6 +3031,101 @@ export default function PosMenusPage() {
           }}
         />
 
+        <Dialog
+          open={optionsConfigBulkMenuPickerOpen}
+          onOpenChange={(open) => {
+            setOptionsConfigBulkMenuPickerOpen(open)
+            if (open) {
+              setOptionsConfigBulkMenuPickerSearch("")
+              setOptionsConfigBulkMenuPickerChecked({})
+            }
+          }}
+        >
+          <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden gap-3 p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-base">{t("posOptionBulkMenuPickerTitle") || "메뉴에서 값으로 넣기"}</DialogTitle>
+              <DialogDescription className="text-xs">{t("posOptionBulkMenuPickerHint")}</DialogDescription>
+            </DialogHeader>
+            <Input
+              className="h-9 text-sm"
+              placeholder={t("posOptionBulkMenuPickerSearchPh") || "코드·메뉴명 검색"}
+              value={optionsConfigBulkMenuPickerSearch}
+              onChange={(e) => setOptionsConfigBulkMenuPickerSearch(e.target.value)}
+              autoFocus
+            />
+            <div className="max-h-[min(52vh,28rem)] overflow-y-auto rounded-md border">
+              {optionsConfigBulkMenuPickerList.length === 0 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">{t("posOptionBulkMenuPickerEmpty")}</p>
+              ) : (
+                <ul className="divide-y">
+                  {optionsConfigBulkMenuPickerList.map((m) => {
+                    const line = formatPosMenuBulkPickLabel(m)
+                    const checked = !!optionsConfigBulkMenuPickerChecked[String(m.id)]
+                    return (
+                      <li key={m.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(c) =>
+                            setOptionsConfigBulkMenuPickerChecked((prev) => ({
+                              ...prev,
+                              [String(m.id)]: c === true,
+                            }))
+                          }
+                          aria-label={line}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-sm" title={line}>
+                          {m.code ? (
+                            <>
+                              <span className="font-mono text-xs text-muted-foreground">{m.code}</span>
+                              <span className="text-muted-foreground"> — </span>
+                            </>
+                          ) : null}
+                          <span>{m.name}</span>
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 shrink-0 text-[11px]"
+                          onClick={() => appendOptionsConfigBulkLabels([line])}
+                        >
+                          {t("posOptionBulkMenuPickerRowAdd")}
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button type="button" variant="outline" size="sm" onClick={() => setOptionsConfigBulkMenuPickerOpen(false)}>
+                {t("btn_close")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={optionsConfigBulkMenuPickerSelectedCount === 0}
+                onClick={() => {
+                  const ids = Object.entries(optionsConfigBulkMenuPickerChecked)
+                    .filter(([, v]) => v)
+                    .map(([k]) => k)
+                  const labels = ids
+                    .map((id) => menus.find((mm) => String(mm.id) === id))
+                    .filter((x): x is PosMenu => !!x)
+                    .map(formatPosMenuBulkPickLabel)
+                  appendOptionsConfigBulkLabels(labels)
+                  setOptionsConfigBulkMenuPickerChecked({})
+                }}
+              >
+                {(t("posOptionBulkMenuPickerAddSelected") || "선택한 메뉴를 입력란에 추가 ({n})").replace(
+                  "{n}",
+                  String(optionsConfigBulkMenuPickerSelectedCount)
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
@@ -3058,7 +3333,7 @@ export default function PosMenusPage() {
                         <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
                         {t("posMenuActive")}
                       </label>
-                      <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
+                      <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S Boneless) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
                         <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
                         {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
                       </label>
@@ -3165,7 +3440,7 @@ export default function PosMenusPage() {
                                 />
                               </div>
                             ))}
-                            <p className="text-[10px] text-muted-foreground w-full">예: size=M, bone=순살</p>
+                            <p className="text-[10px] text-muted-foreground w-full">예: size=M, part=Boneless</p>
                           </div>
                         )}
                         {newOptionType === "additive" && (
@@ -3223,7 +3498,7 @@ export default function PosMenusPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="base">{isChickenMenu(formData.code) ? (t("posIngredientScopeBaseChicken") || "기본 (S 순살)") : (t("posIngredientScopeBase") || "기본 (옵션 없음)")}</SelectItem>
+                            <SelectItem value="base">{isChickenMenu(formData.code) ? (t("posIngredientScopeBaseChicken") || "기본 (S Boneless)") : (t("posIngredientScopeBase") || "기본 (옵션 없음)")}</SelectItem>
                             {(isChickenMenu(formData.code) ? menuOptions.filter((o) => o.optionType === "substitution" && !isChickenDefaultOption(o.name)) : menuOptions.filter((o) => o.optionType === "substitution")).map((o) => (
                               <SelectItem key={o.id} value={o.id}>{t("posIngredientScopeOption") || "옵션"}: {optionPartLabel(o.name)}</SelectItem>
                             ))}
@@ -3820,15 +4095,15 @@ export default function PosMenusPage() {
                               <tr key={`${m.id}-base`} className="bg-amber-500/5 border-b">
                                 <td className="px-2 py-2 w-8" />
                                 <td className="px-5 py-2 text-center min-w-[88px] font-mono text-[10px] text-muted-foreground">{m.code}</td>
-                                <td className="px-5 py-2 min-w-[140px] pl-8 text-xs text-muted-foreground">{t("posIngredientScopeBaseChicken") || "기본 (S 순살)"}</td>
-                                <td colSpan={4} className="px-5 py-2 text-xs text-muted-foreground">{t("posChickenBaseOnlyHint") || "메뉴 기본가에 해당. M 순살/윙/봉은 옵션 구성에서 추가."}</td>
+                                <td className="px-5 py-2 min-w-[140px] pl-8 text-xs text-muted-foreground">{t("posIngredientScopeBaseChicken") || "기본 (S Boneless)"}</td>
+                                <td colSpan={4} className="px-5 py-2 text-xs text-muted-foreground">{t("posChickenBaseOnlyHint") || "메뉴 기본가에 해당. M Boneless / Wing / Drumette는 옵션 구성에서 추가."}</td>
                               </tr>
                             )
                           }
                           return null
                         }
-                        return toShow.map((opt, i) => {
-                          const optCode = `${m.code}-${i + 1}`
+                        return toShow.map((opt) => {
+                          const optCode = resolveOptionCode(opt, m.code)
                           const optPrice = (m.price ?? 0) + (opt.priceModifier ?? 0)
                           const isOptSoldOut = !(opt.sellHall ?? true) && !(opt.sellDelivery ?? true) && !(opt.sellPackaging ?? true)
                           return (
@@ -3975,507 +4250,6 @@ export default function PosMenusPage() {
         </div>
           </TabsContent>
           <TabsContent value="optionsConfig" className={adminTabsContentCn}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {t("posChickenBatchHint") || "코드가 c로 시작하는 메뉴(치킨)에 S/M·부위 옵션을 한 번에 적용할 수 있습니다."}
-              </p>
-              <Button variant="outline" size="sm" onClick={handleChickenBatchApply} disabled={chickenBatchApplying}>
-                {chickenBatchApplying ? (t("loading") || "적용 중...") : (t("posChickenBatchButton") || "치킨 메뉴 일괄 옵션 적용")}
-              </Button>
-            </div>
-            <div className="mb-4 grid gap-3 xl:grid-cols-2">
-              <div className="rounded-xl border bg-card p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold">
-                    {t("posOptionTemplateLibraryTitle") || "옵션그룹 마스터"}
-                  </h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px]"
-                    onClick={() => {
-                      setOptionGroupMasterSelectedId("")
-                      setOptionGroupMasterKey("")
-                      setOptionGroupMasterName("")
-                      setOptionGroupMasterItems([])
-                    }}
-                  >
-                    {t("new") || "신규"}
-                  </Button>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    className="h-8 text-xs"
-                    placeholder="group key (size, side...)"
-                    value={optionGroupMasterKey}
-                    onChange={(e) => setOptionGroupMasterKey(e.target.value)}
-                  />
-                  <Input
-                    className="h-8 text-xs"
-                    placeholder={t("posOptionGroupName") || "옵션그룹 이름"}
-                    value={optionGroupMasterName}
-                    onChange={(e) => setOptionGroupMasterName(e.target.value)}
-                  />
-                </div>
-                <div className="rounded border p-2 space-y-2">
-                  {(optionGroupMasterItems || []).map((item, idx) => (
-                    <div key={item.id || `new-${idx}`} className="grid grid-cols-[1fr_80px_80px_auto] gap-1">
-                      <Input
-                        className="h-7 text-xs"
-                        value={item.itemName}
-                        placeholder={t("posOptionTitle") || "항목명"}
-                        onChange={(e) =>
-                          setOptionGroupMasterItems((prev) =>
-                            prev.map((x, i) =>
-                              i === idx ? { ...x, itemName: e.target.value } : x
-                            )
-                          )
-                        }
-                      />
-                      <Input
-                        className="h-7 text-xs text-right"
-                        type="number"
-                        value={String(item.basePriceHall ?? 0)}
-                        onChange={(e) =>
-                          setOptionGroupMasterItems((prev) =>
-                            prev.map((x, i) =>
-                              i === idx
-                                ? { ...x, basePriceHall: Number(e.target.value || 0) }
-                                : x
-                            )
-                          )
-                        }
-                      />
-                      <Input
-                        className="h-7 text-xs text-right"
-                        type="number"
-                        value={item.basePriceDelivery == null ? "" : String(item.basePriceDelivery)}
-                        placeholder="-"
-                        onChange={(e) =>
-                          setOptionGroupMasterItems((prev) =>
-                            prev.map((x, i) =>
-                              i === idx
-                                ? {
-                                    ...x,
-                                    basePriceDelivery:
-                                      e.target.value.trim() === ""
-                                        ? null
-                                        : Number(e.target.value || 0),
-                                  }
-                                : x
-                            )
-                          )
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[10px]"
-                        onClick={() =>
-                          setOptionGroupMasterItems((prev) =>
-                            prev.filter((_, i) => i !== idx)
-                          )
-                        }
-                      >
-                        {t("delete") || "삭제"}
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px]"
-                    onClick={() =>
-                      setOptionGroupMasterItems((prev) => [
-                        ...prev,
-                        {
-                          id: "",
-                          groupId: optionGroupMasterSelectedId || "",
-                          itemName: "",
-                          sortOrder: prev.length,
-                          basePriceHall: 0,
-                          basePriceDelivery: null,
-                          sellHall: true,
-                          sellDelivery: true,
-                        },
-                      ])
-                    }
-                  >
-                    <Plus className="mr-1 h-3 w-3" />
-                    {t("posOptionAddSingle") || "항목 추가"}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 text-[11px]"
-                    disabled={optionGroupMasterSaving}
-                    onClick={() => void handleSaveOptionGroupMaster()}
-                  >
-                    {optionGroupMasterSaving ? (t("saving") || "저장 중...") : (t("save") || "저장")}
-                  </Button>
-                  {!!optionGroupMasterSelectedId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px]"
-                      onClick={async () => {
-                        const ok = await appConfirm(
-                          t("confirmDeleteMenu") || "삭제하시겠습니까?"
-                        )
-                        if (!ok) return
-                        await deletePosOptionGroup({ id: optionGroupMasterSelectedId })
-                        setOptionGroupMasterSelectedId("")
-                        await loadOptionGroupMasters(optionsConfigSelectedMenuId)
-                      }}
-                    >
-                      {t("delete") || "삭제"}
-                    </Button>
-                  )}
-                </div>
-                <Input
-                  className="h-8 text-xs"
-                  value={optionGroupMasterSearchTerm}
-                  onChange={(e) => setOptionGroupMasterSearchTerm(e.target.value)}
-                  placeholder={t("itemsSearchPh") || "검색"}
-                />
-                <div className="max-h-40 overflow-y-auto rounded border p-1">
-                  {(optionGroupMastersFiltered || []).map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      className={cn(
-                        "w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
-                        optionGroupMasterSelectedId === g.id && "bg-primary/10"
-                      )}
-                      onClick={() => setOptionGroupMasterSelectedId(g.id)}
-                    >
-                      {g.key} - {g.name}
-                    </button>
-                  ))}
-                  {optionGroupMasterLoading && (
-                    <p className="p-2 text-[11px] text-muted-foreground">
-                      {t("loading") || "로딩 중..."}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="rounded-xl border bg-card p-3 space-y-2">
-                <h3 className="text-sm font-bold">
-                  {t("posMenuOptionsConfigSelectHint") || "선택 메뉴 적용"}
-                </h3>
-                <p className="text-[11px] text-muted-foreground">
-                  {(optionsConfigSelectedMenu?.name || "-") +
-                    " / " +
-                    (optionsConfigSelectedMenu?.code || "-")}
-                </p>
-                <div className="max-h-[420px] overflow-y-auto rounded border p-2 space-y-1">
-                  {(optionGroupMastersFiltered || []).map((g, idx) => {
-                    const link = g.link
-                    const enabled = !!link
-                    return (
-                      <div key={`link-${g.id}`} className="rounded border p-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <label className="flex items-center gap-2 text-xs font-medium">
-                            <Checkbox
-                              checked={enabled}
-                              onCheckedChange={(v) =>
-                                setOptionGroupMasters((prev) =>
-                                  prev.map((x, idx) =>
-                                    x.id !== g.id
-                                      ? x
-                                      : {
-                                          ...x,
-                                          link:
-                                            v === true
-                                              ? {
-                                                  id: x.link?.id,
-                                                  menuId: optionsConfigSelectedMenuId || "",
-                                                  groupId: x.id,
-                                                  sortOrder: idx,
-                                                  sellHall: true,
-                                                  sellDelivery: true,
-                                                  required: true,
-                                                  minSelect: 1,
-                                                  maxSelect: 1,
-                                                }
-                                              : null,
-                                        }
-                                  )
-                                )
-                              }
-                            />
-                            {g.name}
-                          </label>
-                          <span className="text-[10px] text-muted-foreground">
-                            {g.key}
-                          </span>
-                        </div>
-                        {enabled ? (
-                          <div className="mt-2 space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <p className="mb-1 text-[10px] text-muted-foreground">
-                                  {t("sort_order") || "순서"}
-                                </p>
-                                <Input
-                                  className="h-7 text-right text-xs"
-                                  type="number"
-                                  value={String(link?.sortOrder ?? 0)}
-                                  onChange={(e) =>
-                                    setOptionGroupMasters((prev) =>
-                                      prev.map((x) =>
-                                        x.id === g.id
-                                          ? {
-                                              ...x,
-                                              link: {
-                                                ...(x.link || {
-                                                  menuId: optionsConfigSelectedMenuId || "",
-                                                  groupId: x.id,
-                                                  sellHall: true,
-                                                  sellDelivery: true,
-                                                }),
-                                                sortOrder: Number(e.target.value || 0),
-                                              },
-                                            }
-                                          : x
-                                      )
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid grid-cols-2 gap-1">
-                                <label className="rounded border px-1.5 py-1 text-[10px] flex items-center gap-1">
-                                  <Checkbox
-                                    checked={link?.sellHall !== false}
-                                    onCheckedChange={(v) =>
-                                      setOptionGroupMasters((prev) =>
-                                        prev.map((x) =>
-                                          x.id === g.id
-                                            ? {
-                                                ...x,
-                                                link: {
-                                                  ...(x.link || {
-                                                    menuId: optionsConfigSelectedMenuId || "",
-                                                    groupId: x.id,
-                                                    sortOrder: 0,
-                                                    sellHall: true,
-                                                    sellDelivery: true,
-                                                  }),
-                                                  sellHall: v === true,
-                                                },
-                                              }
-                                            : x
-                                        )
-                                      )
-                                    }
-                                  />
-                                  {t("posOptionSellHall") || "홀"}
-                                </label>
-                                <label className="rounded border px-1.5 py-1 text-[10px] flex items-center gap-1">
-                                  <Checkbox
-                                    checked={link?.sellDelivery !== false}
-                                    onCheckedChange={(v) =>
-                                      setOptionGroupMasters((prev) =>
-                                        prev.map((x) =>
-                                          x.id === g.id
-                                            ? {
-                                                ...x,
-                                                link: {
-                                                  ...(x.link || {
-                                                    menuId: optionsConfigSelectedMenuId || "",
-                                                    groupId: x.id,
-                                                    sortOrder: 0,
-                                                    sellHall: true,
-                                                    sellDelivery: true,
-                                                  }),
-                                                  sellDelivery: v === true,
-                                                },
-                                              }
-                                            : x
-                                        )
-                                      )
-                                    }
-                                  />
-                                  {t("posOptionSellDelivery") || "배달"}
-                                </label>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <p className="mb-1 text-[10px] text-muted-foreground">
-                                  {t("posOptionBasePriceLabel") || "홀 가격 오버라이드"}
-                                </p>
-                                <Input
-                                  className="h-7 text-right text-xs"
-                                  type="number"
-                                  placeholder="-"
-                                  value={link?.priceHallOverride == null ? "" : String(link.priceHallOverride)}
-                                  onChange={(e) =>
-                                    setOptionGroupMasters((prev) =>
-                                      prev.map((x) =>
-                                        x.id === g.id
-                                          ? {
-                                              ...x,
-                                              link: {
-                                                ...(x.link || {
-                                                  menuId: optionsConfigSelectedMenuId || "",
-                                                  groupId: x.id,
-                                                  sortOrder: 0,
-                                                  sellHall: true,
-                                                  sellDelivery: true,
-                                                }),
-                                                priceHallOverride:
-                                                  e.target.value.trim() === "" ? null : Number(e.target.value || 0),
-                                              },
-                                            }
-                                          : x
-                                      )
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div>
-                                <p className="mb-1 text-[10px] text-muted-foreground">
-                                  {t("posOptionDeliveryPriceLabel") || "배달 가격 오버라이드"}
-                                </p>
-                                <Input
-                                  className="h-7 text-right text-xs"
-                                  type="number"
-                                  placeholder="-"
-                                  value={link?.priceDeliveryOverride == null ? "" : String(link.priceDeliveryOverride)}
-                                  onChange={(e) =>
-                                    setOptionGroupMasters((prev) =>
-                                      prev.map((x) =>
-                                        x.id === g.id
-                                          ? {
-                                              ...x,
-                                              link: {
-                                                ...(x.link || {
-                                                  menuId: optionsConfigSelectedMenuId || "",
-                                                  groupId: x.id,
-                                                  sortOrder: 0,
-                                                  sellHall: true,
-                                                  sellDelivery: true,
-                                                }),
-                                                priceDeliveryOverride:
-                                                  e.target.value.trim() === "" ? null : Number(e.target.value || 0),
-                                              },
-                                            }
-                                          : x
-                                      )
-                                    )
-                                  }
-                                />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              <label className="rounded border px-1.5 py-1 text-[10px] flex items-center gap-1">
-                                <Checkbox
-                                  checked={link?.required !== false}
-                                  onCheckedChange={(v) =>
-                                    setOptionGroupMasters((prev) =>
-                                      prev.map((x) =>
-                                        x.id === g.id
-                                          ? {
-                                              ...x,
-                                              link: {
-                                                ...(x.link || {
-                                                  menuId: optionsConfigSelectedMenuId || "",
-                                                  groupId: x.id,
-                                                  sortOrder: 0,
-                                                  sellHall: true,
-                                                  sellDelivery: true,
-                                                }),
-                                                required: v === true,
-                                              },
-                                            }
-                                          : x
-                                      )
-                                    )
-                                  }
-                                />
-                                {t("required") || "필수"}
-                              </label>
-                              <Input
-                                className="h-7 text-right text-xs"
-                                type="number"
-                                min={0}
-                                value={String(link?.minSelect ?? 0)}
-                                onChange={(e) =>
-                                  setOptionGroupMasters((prev) =>
-                                    prev.map((x) =>
-                                      x.id === g.id
-                                        ? {
-                                            ...x,
-                                            link: {
-                                              ...(x.link || {
-                                                menuId: optionsConfigSelectedMenuId || "",
-                                                groupId: x.id,
-                                                sortOrder: 0,
-                                                sellHall: true,
-                                                sellDelivery: true,
-                                              }),
-                                              minSelect: Math.max(0, Number(e.target.value || 0)),
-                                            },
-                                          }
-                                        : x
-                                    )
-                                  )
-                                }
-                              />
-                              <Input
-                                className="h-7 text-right text-xs"
-                                type="number"
-                                min={1}
-                                value={String(link?.maxSelect ?? 1)}
-                                onChange={(e) =>
-                                  setOptionGroupMasters((prev) =>
-                                    prev.map((x) =>
-                                      x.id === g.id
-                                        ? {
-                                            ...x,
-                                            link: {
-                                              ...(x.link || {
-                                                menuId: optionsConfigSelectedMenuId || "",
-                                                groupId: x.id,
-                                                sortOrder: 0,
-                                                sellHall: true,
-                                                sellDelivery: true,
-                                              }),
-                                              maxSelect: Math.max(1, Number(e.target.value || 1)),
-                                            },
-                                          }
-                                        : x
-                                    )
-                                  )
-                                }
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8"
-                  onClick={() => void handleSaveMenuGroupLinks()}
-                  disabled={!optionsConfigSelectedMenuId || optionGroupMenuLinksSaving}
-                >
-                  {optionGroupMenuLinksSaving
-                    ? t("saving") || "저장 중..."
-                    : t("save") || "저장"}
-                </Button>
-              </div>
-            </div>
             <OptionsConfigShell
               menuListPanel={
                 <div className="rounded-xl border bg-card overflow-hidden">
@@ -4483,7 +4257,7 @@ export default function PosMenusPage() {
                     <div>
                       <h3 className="text-sm font-bold">{t("posMenuList")}</h3>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {t("posMenuOptionsConfigSelectHint") || "메뉴를 선택하면 옵션을 구성할 수 있습니다"}
+                        {t("posMenuOptionsConfigSelectMenuHint")}
                       </p>
                     </div>
                     <Button
@@ -4594,56 +4368,35 @@ export default function PosMenusPage() {
               }
               optionGroupPanel={
                 <OptionGroupListPanel
-                  title={t("posOptionSelectionGroups") || "옵션 그룹"}
-                  emptyLabel={t("posOptionConfigNeedGroupsShort") || "먼저 위에서 선택 단계를 저장하세요."}
+                  title={t("posOptionStepNavigatorTitle")}
+                  emptyLabel={t("posOptionStepListEmptyHint")}
                   requiredLabel={t("posOptionRequiredOne") || "필수 1개 선택"}
                   optionalLabel={t("posOptionOptionalZeroOne") || "선택 0~1개"}
                   groups={optionsConfigGroupPanelItems}
-                  selectedGroupKey={optionsConfigSelectedGroupKey || optionsConfigGroupPanelItems[0]?.key || ""}
+                  selectedGroupKey={optionsConfigEffectiveGroupKey || optionsConfigGroupPanelItems[0]?.key || ""}
                   onSelectGroup={setOptionsConfigSelectedGroupKey}
-                  onChangeGroupLabel={handleOptionGroupLabelChange}
-                  saveGroupsLabel={t("posOptionConfigApplySteps") || "단계 저장"}
-                  onSaveGroups={() => void handleApplyOptionGroupsForConfig()}
-                  saveGroupsDisabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                  chickenPresetLabel={t("posOptionConfigPresetChicken") || "치킨: size > part"}
-                  onApplyChickenPreset={() => void handleApplyOptionPresetAndSave(["size", "part"])}
-                  chickenPresetDisabled={
-                    optionsConfigApplyingGroups ||
-                    !!optionsConfigSelectedMenu?.promoId?.trim() ||
-                    !optionsConfigSelectedMenu ||
-                    !isChickenMenu(optionsConfigSelectedMenu.code)
-                  }
+                  stepListReadOnly
                   moveUpLabel={t("move_up") || "위로"}
                   moveDownLabel={t("move_down") || "아래로"}
                   onMoveGroup={handleMoveOptionGroup}
                   hallLabel={t("posOptionSellHall") || "홀"}
                   deliveryLabel={t("posOptionSellDelivery") || "배달"}
-                  onToggleGroupAudience={handleOptionGroupAudienceToggle}
-                  libraryTitle={t("posOptionTemplateLibraryTitle") || "공통 옵션그룹 리스트"}
-                  librarySearchLabel={t("search") || "검색"}
-                  librarySearchPlaceholder={t("posOptionTemplateSearchPlaceholder") || "옵션그룹 이름으로 검색"}
-                  librarySearchTerm={optionsConfigLibrarySearchTerm}
-                  onLibrarySearchTermChange={setOptionsConfigLibrarySearchTerm}
-                  filterAllLabel={t("all") || "전체"}
-                  filterRecentLabel={t("posOptionTemplateFilterRecent") || "최근 사용"}
-                  filterFrequentLabel={t("posOptionTemplateFilterFrequent") || "자주 사용"}
-                  filterDeliveryOnlyLabel={t("posOptionTemplateFilterDeliveryOnly") || "배달 전용"}
-                  libraryFilter={optionsConfigLibraryFilter}
-                  onLibraryFilterChange={setOptionsConfigLibraryFilter}
-                  libraryItems={optionsConfigLibraryItems.map((x) => ({ id: x.id, label: x.label, note: x.note }))}
-                  libraryLoading={optionsConfigLibraryLoading}
-                  libraryLoadingLabel={t("loading") || "로딩 중..."}
-                  libraryEmptyLabel={t("posOptionTemplateListEmpty") || "불러올 공통 옵션그룹이 없습니다."}
-                  useTemplateLabel={t("posOptionTemplateUseBtn") || "이 그룹 사용"}
-                  onUseTemplate={handleUseTemplateGroupForConfig}
                 />
               }
               editorPanel={
                 <OptionGroupEditorPanel
                   menuName={optionsConfigSelectedMenu?.name}
                   menuCode={optionsConfigSelectedMenu?.code}
+                  contextLabel={
+                    optionsConfigSelectedGroupLabel
+                      ? (t("posOptionGroupContextTitle") || "현재 선택 그룹: {group}").replace(
+                          "{group}",
+                          optionsConfigSelectedGroupLabel
+                        )
+                      : undefined
+                  }
                   titleFallback={t("posMenuOptions") || "옵션"}
-                  emptyMessage={t("posMenuOptionsConfigNoSelect") || "왼쪽에서 메뉴를 선택해 주세요"}
+                  emptyMessage={t("posMenuOptionsConfigNoSelect")}
                   resetLabel={t("posMenuOptionsConfigReset") || "초기화"}
                   saveLabel={t("save") || "저장"}
                   onReset={handleResetOptionsForConfig}
@@ -4655,19 +4408,138 @@ export default function PosMenusPage() {
                     <p className="text-[11px] text-muted-foreground">
                       {t("posOptionResetHint") || "기존 옵션을 지우고 새로 적용하려면 먼저 [초기화]를 누른 뒤 옵션을 추가하세요."}
                     </p>
+                    <div className="rounded border bg-muted/10 p-3 space-y-4">
+                      <div>
+                        <p className="text-xs font-semibold">
+                          {t("posOptionImportCardTitle") || "옵션 가져오기 · 공통 그룹 연결"}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {t("posOptionImportCardHint") ||
+                            "다른 메뉴에서 옵션 단계와 항목을 복사하거나, 저장된 공통 옵션그룹을 현재 메뉴에 연결합니다."}
+                        </p>
+                      </div>
 
-                    <div className="rounded border bg-muted/10 p-2">
-                      <p className="text-[11px] text-muted-foreground">
-                        {t("posOptionGroupEditHintRight") || "옵션그룹 선택 단계 수정은 가운데 패널에서 진행하세요. 이 영역은 그룹의 옵션 항목 편집 전용입니다."}
-                      </p>
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          {t("posOptionImportFromMenuLabel") || "다른 메뉴에서 복사"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("posOptionCopyFromMenuHint") ||
+                            "원본 메뉴의 옵션 단계/옵션 항목을 가져옵니다. option_code는 우선 유지하고 충돌 시 자동 재매핑됩니다."}
+                        </p>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <Select
+                            value={optionsConfigCopySourceMenuId || "__none__"}
+                            onValueChange={(v) => setOptionsConfigCopySourceMenuId(v === "__none__" ? "" : v)}
+                            disabled={!optionsConfigSelectedMenuId || optionsConfigCopying}
+                          >
+                            <SelectTrigger className="h-8 min-w-[240px] text-xs">
+                              <SelectValue placeholder={t("posOptionCopySourceSelect") || "원본 메뉴 선택"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">{t("posOptionCopySourceSelect") || "원본 메뉴 선택"}</SelectItem>
+                              {optionsConfigCopySourceMenus.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.code} - {m.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => void handleImportOptionsFromExistingMenu()}
+                            disabled={!optionsConfigCopySourceMenuId || optionsConfigCopying || !optionsConfigSelectedMenuId}
+                          >
+                            {optionsConfigCopying
+                              ? t("loading") || "로딩 중..."
+                              : t("posOptionCopyImportButton") || "옵션 가져오기"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-border/60 pt-3 space-y-2">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          {t("posOptionTemplateLibraryTitle") || "공통 옵션 목록"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("posOptionImportLibraryHint") ||
+                            "목록에서 공통 옵션그룹을 고른 뒤 [이 그룹 사용]으로 연결합니다. 이미 연결된 그룹은 다시 넣을 수 없습니다."}
+                        </p>
+                        <div className="flex flex-wrap gap-2 items-end">
+                          <div className="min-w-[160px] flex-1">
+                            <label className="text-[11px] text-muted-foreground block mb-0.5">
+                              {t("itemsSearchPh") || "검색"}
+                            </label>
+                            <Input
+                              className="h-8 text-xs"
+                              placeholder={t("posOptionTemplateSearchPlaceholder") || ""}
+                              value={optionsConfigLibrarySearchTerm}
+                              onChange={(e) => setOptionsConfigLibrarySearchTerm(e.target.value)}
+                              disabled={!optionsConfigSelectedMenuId}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {(
+                            [
+                              ["all", t("noticeFilterAll") || "전체"],
+                              ["recent", t("posOptionTemplateFilterRecent") || "최근"],
+                              ["frequent", t("posOptionTemplateFilterFrequent") || "자주"],
+                              ["deliveryOnly", t("posOptionTemplateFilterDeliveryOnly") || "배달 전용"],
+                            ] as const
+                          ).map(([key, lab]) => (
+                            <Button
+                              key={key}
+                              type="button"
+                              variant={optionsConfigLibraryFilter === key ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 text-[11px]"
+                              disabled={!optionsConfigSelectedMenuId}
+                              onClick={() => setOptionsConfigLibraryFilter(key)}
+                            >
+                              {lab}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="max-h-[280px] overflow-y-auto rounded border bg-background p-2 space-y-1">
+                          {optionsConfigLibraryLoading ? (
+                            <p className="py-6 text-center text-xs text-muted-foreground">
+                              {t("loading") || "로딩 중..."}
+                            </p>
+                          ) : optionsConfigLibraryItems.length === 0 ? (
+                            <p className="py-6 text-center text-xs text-muted-foreground">
+                              {t("posOptionTemplateListEmpty") || "목록이 비어 있습니다."}
+                            </p>
+                          ) : (
+                            optionsConfigLibraryItems.map((row) => (
+                              <div
+                                key={row.id}
+                                className="flex items-start justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 hover:bg-muted/40"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium leading-snug break-words">{row.label}</p>
+                                  <p className="text-[10px] text-muted-foreground">{row.note}</p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  className="h-7 shrink-0 text-[11px]"
+                                  disabled={!optionsConfigSelectedMenuId}
+                                  onClick={() => void handleUseOptionTemplateFromLibrary(row.id)}
+                                >
+                                  {t("posOptionTemplateUseBtn") || "이 그룹 사용"}
+                                </Button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <div className="rounded border p-3 bg-muted/20">
-                      {optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code) && (
-                        <p className="mb-2 text-xs text-amber-700">
-                          {t("posChickenTitleOnlyHint") || "치킨 메뉴는 기존 옵션 구조를 유지합니다. 아래 옵션 목록에서 제목만 수정해 주세요."}
-                        </p>
-                      )}
                       <div className="space-y-2">
                         <div className="w-full">
                           <label className="text-xs font-medium block mb-0.5">
@@ -4687,7 +4559,7 @@ export default function PosMenusPage() {
                               <label className="text-xs font-medium block mb-0.5">1. {t("posOptionGroupSize")}</label>
                               <Select value={newOptionSize || "_"} onValueChange={(v) => setNewOptionSize(v === "_" ? "" : v)}>
                                 <SelectTrigger className="h-8 w-20 text-xs">
-                                  <SelectValue placeholder="S/M/L" />
+                                  <SelectValue placeholder={t("posOptionSizeAbbrevPlaceholder")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="_">{t("posMenuCategoryAll") || "선택"}</SelectItem>
@@ -4726,9 +4598,22 @@ export default function PosMenusPage() {
                           </div>
                         ) : optionsConfigStepGroups.length > 0 ? (
                           <div className="flex flex-wrap gap-2 items-end w-full">
-                            {optionsConfigStepGroups.map((g) => (
+                            {[...(optionsConfigStepGroups || [])]
+                              .sort((a, b) => {
+                                if (a === optionsConfigEffectiveGroupKey) return -1
+                                if (b === optionsConfigEffectiveGroupKey) return 1
+                                return 0
+                              })
+                              .map((g) => (
                               <div key={g}>
-                                <label className="text-xs font-medium block mb-0.5">{g}</label>
+                                <label className="text-xs font-medium block mb-0.5">
+                                  {g}
+                                  {g === optionsConfigEffectiveGroupKey ? (
+                                    <span className="ml-1 text-[10px] text-primary">
+                                      {t("posOptionSelectedGroupBadge") || "선택 그룹"}
+                                    </span>
+                                  ) : null}
+                                </label>
                                 <Input
                                   className="h-8 w-28 text-xs"
                                   placeholder={g}
@@ -4745,37 +4630,101 @@ export default function PosMenusPage() {
                         )}
 
                         <div className="rounded border bg-background p-2">
-                        <p className="mb-1 text-[11px] font-semibold text-muted-foreground">
-                          {t("posOptionChannelScopeTitle") || "채널 설정 (기본채널=홀+포장, 배달)"}
-                        </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            <Button
-                              type="button"
-                              variant={newOptionChannelScope === "all" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-[11px]"
-                              onClick={() => setNewOptionChannelScope("all")}
-                            >
-                              {t("posOptionScopeAll") || "기본+배달"}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant={newOptionChannelScope === "hall" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-[11px]"
-                              onClick={() => setNewOptionChannelScope("hall")}
-                            >
-                              {t("posOptionScopeBaseOnly") || "기본채널만"}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant={newOptionChannelScope === "delivery" ? "default" : "outline"}
-                              size="sm"
-                              className="h-7 text-[11px]"
-                              onClick={() => setNewOptionChannelScope("delivery")}
-                            >
-                              {t("posOptionScopeDeliveryOnly") || "배달만"}
-                            </Button>
+                          <p className="mb-1 text-[11px] font-semibold text-muted-foreground">
+                            {t("posOptionChannelScopeTitle") || "채널 설정 (기본채널=홀+포장, 배달)"}
+                          </p>
+                          <div className="flex flex-wrap items-end justify-between gap-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              <Button
+                                type="button"
+                                variant={newOptionChannelScope === "all" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-[11px]"
+                                onClick={() => setNewOptionChannelScope("all")}
+                              >
+                                {t("posOptionScopeAll") || "기본+배달"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={newOptionChannelScope === "hall" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-[11px]"
+                                onClick={() => setNewOptionChannelScope("hall")}
+                              >
+                                {t("posOptionScopeBaseOnly") || "기본채널만"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={newOptionChannelScope === "delivery" ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 text-[11px]"
+                                onClick={() => setNewOptionChannelScope("delivery")}
+                              >
+                                {t("posOptionScopeDeliveryOnly") || "배달만"}
+                              </Button>
+                            </div>
+                            {optionsConfigSelectedMenuId &&
+                              optionsConfigStepGroups.length > 0 &&
+                              optionsConfigEffectiveGroupKey &&
+                              optionsConfigEffectiveGroupKey !== "__default__" &&
+                              (() => {
+                                const groupKey = optionsConfigEffectiveGroupKey
+                                const row =
+                                  optionsConfigGroupRulesDraft.find((x) => x.key === groupKey) ||
+                                  ({
+                                    key: groupKey,
+                                    label: groupKey,
+                                    audience: "all",
+                                    required: true,
+                                    minSelect: 1,
+                                    maxSelect: 1,
+                                  } as PosOptionSelectionGroupConfig)
+                                const minSel =
+                                  row.minSelect != null && Number.isFinite(Number(row.minSelect))
+                                    ? Math.max(0, Math.floor(Number(row.minSelect)))
+                                    : row.required !== false
+                                      ? 1
+                                      : 0
+                                const maxSel =
+                                  row.maxSelect != null && Number.isFinite(Number(row.maxSelect))
+                                    ? Math.max(1, Math.floor(Number(row.maxSelect)))
+                                    : 1
+                                const promoLocked = !!optionsConfigSelectedMenu?.promoId?.trim()
+                                return (
+                                  <div className="flex flex-wrap items-end gap-2">
+                                    <div>
+                                      <label className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
+                                        {t("posOptionRuleMinSelect")}
+                                      </label>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        className="h-7 w-14 text-right text-xs"
+                                        disabled={promoLocked}
+                                        value={minSel}
+                                        onChange={(e) => {
+                                          const n = Math.max(0, Math.floor(Number(e.target.value)))
+                                          handleOptionGroupRuleFieldChange(groupKey, {
+                                            minSelect: n,
+                                            maxSelect: Math.max(maxSel, n),
+                                          })
+                                        }}
+                                      />
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-7 text-[11px]"
+                                      onClick={() => void handleApplyOptionGroupsForConfig()}
+                                      disabled={optionsConfigApplyingGroups || promoLocked}
+                                    >
+                                      {optionsConfigApplyingGroups
+                                        ? (t("saving") || "저장 중...")
+                                        : (t("posOptionConfigApplySteps") || "단계 저장")}
+                                    </Button>
+                                  </div>
+                                )
+                              })()}
                           </div>
                         </div>
 
@@ -4816,40 +4765,32 @@ export default function PosMenusPage() {
                             className="h-8 px-3"
                             onClick={handleAddOptionForConfig}
                             disabled={
-                              (optionsConfigSelectedMenu ? isChickenMenu(optionsConfigSelectedMenu.code) : false) ||
-                              (optionsConfigUseSizePartUi
+                              optionsConfigUseSizePartUi
                                 ? !newOptionSize || !newOptionPart
                                 : optionsConfigStepGroups.length === 0 ||
-                                  optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim()))
+                                  optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim())
                             }
                             type="button"
                           >
                             <Plus className="h-3.5 w-3.5 mr-1" />
                             {t("posOptionAddSingle") || "옵션 추가"}
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8"
-                            onClick={handleAddAllOptionsForConfig}
-                            disabled={
-                              !optionsConfigSelectedMenu ||
-                              isChickenMenu(optionsConfigSelectedMenu.code) ||
-                              (!isChickenMenu(optionsConfigSelectedMenu.code) && !isSizePartGroups(optionsConfigStepGroups))
-                            }
-                            title={
-                              !optionsConfigSelectedMenu ||
-                              (!isChickenMenu(optionsConfigSelectedMenu.code) && !isSizePartGroups(optionsConfigStepGroups))
-                                ? (t("posOptionConfigAddAllSizePartOnly") || "size, part 단계일 때만 사용")
-                                : isChickenMenu(optionsConfigSelectedMenu.code)
-                                  ? (t("posChickenTitleOnlyHint") || "치킨은 기존 옵션 제목만 수정")
+                          {!optionsConfigSelectedMenu || !isChickenMenu(optionsConfigSelectedMenu.code) ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8"
+                              onClick={handleAddAllOptionsForConfig}
+                              disabled={!optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigStepGroups)}
+                              title={
+                                !optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigStepGroups)
+                                  ? (t("posOptionConfigAddAllSizePartOnly") || "size, part 단계일 때만 사용")
                                   : undefined
-                            }
-                          >
-                            {optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
-                              ? (t("posOptionAddAllChicken") || "치킨 옵션 추가 (M 순살/윙/봉 3개)")
-                              : t("posOptionAddAll")}
-                          </Button>
+                              }
+                            >
+                              {t("posOptionAddAll")}
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -4884,10 +4825,37 @@ export default function PosMenusPage() {
                     ) : null}
 
                     <div className="rounded border p-3">
-                      <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 목록"}</h4>
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-xs font-semibold">
+                          {t("posMenuOptions") || "옵션 목록"}{" "}
+                          {optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__"
+                            ? `(${optionsConfigOptionListBracketLabel})`
+                            : ""}
+                        </h4>
+                        <Button
+                          type="button"
+                          variant={optionsConfigShowAllOptions ? "default" : "outline"}
+                          size="sm"
+                          className="h-7 text-[11px]"
+                          onClick={() => setOptionsConfigShowAllOptions((prev) => !prev)}
+                        >
+                          {optionsConfigShowAllOptions
+                            ? t("posOptionShowSelectedGroupOnly") || "선택 그룹만 보기"
+                            : t("posOptionShowAll") || "전체 보기"}
+                        </Button>
+                      </div>
+                      {!optionsConfigShowAllOptions &&
+                      optionsConfigEffectiveGroupKey &&
+                      optionsConfigEffectiveGroupKey !== "__default__" &&
+                      optionsConfigOptionsOutsideSelectedGroupCount > 0 ? (
+                        <p className="mb-2 text-[11px] text-muted-foreground">
+                          {(t("posOptionGroupHiddenCountHint") || "선택 그룹과 무관한 {n}개 옵션은 숨김 상태입니다.")
+                            .replace("{n}", String(optionsConfigOptionsOutsideSelectedGroupCount))}
+                        </p>
+                      ) : null}
                       <div className="mb-2 rounded border bg-muted/10 p-2">
                         <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-                          {(t("posOptionBulkAddTitle") || "선택 그룹에 값 일괄 추가")} ({optionsConfigSelectedGroupKey || "-"})
+                          {(t("posOptionBulkAddTitle") || "선택 그룹에 값 일괄 추가")} ({optionsConfigEffectiveGroupKey || "-"})
                         </p>
                         <div className="flex flex-wrap items-end gap-2">
                           <Input
@@ -4910,6 +4878,21 @@ export default function PosMenusPage() {
                             value={optionsConfigBulkDeliveryPrice}
                             onChange={(e) => setOptionsConfigBulkDeliveryPrice(e.target.value)}
                           />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0 gap-1 text-xs"
+                            disabled={!optionsConfigSelectedMenuId}
+                            onClick={() => {
+                              setOptionsConfigBulkMenuPickerSearch("")
+                              setOptionsConfigBulkMenuPickerChecked({})
+                              setOptionsConfigBulkMenuPickerOpen(true)
+                            }}
+                          >
+                            <Search className="h-3.5 w-3.5" aria-hidden />
+                            {t("posOptionBulkMenuSearchBtn") || "메뉴 검색·선택"}
+                          </Button>
                           <Button type="button" size="sm" className="h-8 text-xs" onClick={() => void handleBulkAddValuesForSelectedGroup()}>
                             {t("posOptionBulkAddBtn") || "값 일괄 추가"}
                           </Button>
@@ -4919,9 +4902,14 @@ export default function PosMenusPage() {
                         {(() => {
                           const optionsToShowRaw =
                             optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
+                              ? optionsConfigOptionsInSelectedGroup.filter((o) => !isChickenDefaultOption(o.name))
+                              : optionsConfigOptionsInSelectedGroup
+                          const optionsToShowSource = optionsConfigShowAllOptions
+                            ? optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
                               ? optionsConfigMenuOptions.filter((o) => !isChickenDefaultOption(o.name))
                               : optionsConfigMenuOptions
-                          const optionsToShow = [...optionsToShowRaw].sort((a, b) => {
+                            : optionsToShowRaw
+                          const optionsToShow = [...optionsToShowSource].sort((a, b) => {
                             const ao = Number(a.sortOrder ?? 0)
                             const bo = Number(b.sortOrder ?? 0)
                             if (ao !== bo) return ao - bo
@@ -4932,16 +4920,31 @@ export default function PosMenusPage() {
                               <p className="py-6 text-center text-xs text-muted-foreground">
                                 {optionsConfigMenuOptions.length === 0
                                   ? (t("posOptionsConfigEmptyOptions") || "위에서 옵션을 추가해 주세요.")
-                                  : (t("posChickenBaseOnlyHint") || "치킨은 기본(S 순살)만 있습니다. M 순살/윙/봉은 \"치킨 옵션 추가\"로 넣으세요.")}
+                                  : t("posOptionListFilteredEmpty")}
                               </p>
                             )
                           }
-                          return optionsToShow.map((o) => (
+                          const chickenSizeStepGrouped =
+                            optionsConfigSelectedMenu &&
+                            isChickenMenu(optionsConfigSelectedMenu.code) &&
+                            isSizePartGroups(optionsConfigStepGroups) &&
+                            optionsConfigEffectiveGroupKey === "size" &&
+                            !optionsConfigShowAllOptions
+
+                          const chickenPartStepGrouped =
+                            optionsConfigSelectedMenu &&
+                            isChickenMenu(optionsConfigSelectedMenu.code) &&
+                            isSizePartGroups(optionsConfigStepGroups) &&
+                            optionsConfigEffectiveGroupKey === "part" &&
+                            !optionsConfigShowAllOptions
+
+                          const renderOptionCard = (o: PosMenuOption) => (
                             <OptionItemRowCard
                               key={o.id}
                               option={o}
+                              displayCode={resolveOptionCode(o, optionsConfigSelectedMenu?.code)}
                               displayName={optionPartLabel(o.name)}
-                              editableName={!!(optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code))}
+                              editableName={!!optionsConfigSelectedMenu}
                               optionNamePlaceholder={t("posOptionNamePlaceholder") || "옵션명"}
                               channelTitle={t("posOptionChannelTitle") || "판매 채널"}
                               baseChannelLabel={t("posOptionBaseChannelLabel") || "기본채널(홀+포장)"}
@@ -4972,7 +4975,109 @@ export default function PosMenusPage() {
                                 setOptionsConfigDraggingOptionId(null)
                               }}
                             />
-                          ))
+                          )
+
+                          if (chickenSizeStepGrouped) {
+                            const sections = groupChickenMenuOptionsBySizeValue(optionsToShow)
+                            if (sections.length === 0) {
+                              return <div className="space-y-2">{optionsToShow.map((o) => renderOptionCard(o))}</div>
+                            }
+                            return (
+                              <div className="space-y-4">
+                                <p className="text-[11px] leading-snug text-muted-foreground">
+                                  {t("posOptionChickenSizeStepAdminHint")}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border/60 bg-muted/25 px-2 py-1.5">
+                                  <span className="text-[10px] font-medium text-muted-foreground">
+                                    {t("posOptionChickenRegisteredSizes")}
+                                  </span>
+                                  {sections.map(({ sizeValue }) => (
+                                    <span
+                                      key={sizeValue}
+                                      className="rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary"
+                                    >
+                                      {sizeValue}
+                                    </span>
+                                  ))}
+                                </div>
+                                {sections.map(({ sizeValue, items }) => (
+                                  <div key={sizeValue} className="space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-1.5">
+                                      <span className="text-[11px] font-semibold text-primary">
+                                        {t("posOptionGroupSize")}
+                                      </span>
+                                      <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums">
+                                        {sizeValue}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {(t("posOptionChickenSizeStepComboCount") || "{n}개 조합").replace(
+                                          "{n}",
+                                          String(items.length)
+                                        )}
+                                      </span>
+                                    </div>
+                                    <p className="px-0.5 text-[10px] leading-snug text-muted-foreground">
+                                      {(t("posOptionChickenSizeSectionSub") || "").replace("{size}", sizeValue)}
+                                    </p>
+                                    <div className="space-y-2">
+                                      {items.map((o) => {
+                                        const partRaw = inferChickenOptionPartValue(o)
+                                        const partShown = partRaw ? optionPartLabel(partRaw) : ""
+                                        return (
+                                          <div key={o.id} className="space-y-1">
+                                            {partShown ? (
+                                              <div className="flex items-baseline gap-1.5 border-l-2 border-primary/40 pl-2">
+                                                <span className="text-[10px] font-semibold text-primary">
+                                                  {t("posOptionGroupPart")}
+                                                </span>
+                                                <span className="text-[11px] font-medium">{partShown}</span>
+                                              </div>
+                                            ) : null}
+                                            {renderOptionCard(o)}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          }
+
+                          if (chickenPartStepGrouped) {
+                            const sections = groupChickenMenuOptionsByPartValue(optionsToShow)
+                            if (sections.length === 0) {
+                              return <div className="space-y-2">{optionsToShow.map((o) => renderOptionCard(o))}</div>
+                            }
+                            return (
+                              <div className="space-y-4">
+                                <p className="text-[11px] leading-snug text-muted-foreground">
+                                  {t("posOptionChickenPartStepAdminHint")}
+                                </p>
+                                {sections.map(({ partValue, items }) => (
+                                  <div key={partValue} className="space-y-2">
+                                    <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-1.5">
+                                      <span className="text-[11px] font-semibold text-primary">
+                                        {t("posOptionGroupPart")}
+                                      </span>
+                                      <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold">
+                                        {optionPartLabel(partValue)}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {(t("posOptionChickenSizeStepComboCount") || "{n}개 조합").replace(
+                                          "{n}",
+                                          String(items.length)
+                                        )}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-2">{items.map((o) => renderOptionCard(o))}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          }
+
+                          return optionsToShow.map((o) => renderOptionCard(o))
                         })()}
                       </div>
                     </div>

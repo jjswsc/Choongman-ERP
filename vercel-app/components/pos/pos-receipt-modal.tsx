@@ -53,7 +53,7 @@ export type ReceiptModalData = {
     lineDiscountAmt?: number
     note?: string
     promoId?: string
-    promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+    promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
     /** 줄 단위 배달 플랫폼(있으면 영수증 채널 유추에 사용) */
     deliveryAppCode?: string
   }[]

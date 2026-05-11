@@ -41,6 +41,7 @@ import {
 import { useStoreList } from "@/lib/use-store-list"
 import { useOrderCreate } from "@/lib/order-create-context"
 import { todayStrBangkok } from "@/lib/attendance-utils"
+import { computePurchaseOrderMoneyTotals, poLineIsVatExempt } from "@/lib/purchase-order-cart"
 import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip } from "lucide-react"
 
 function bangkokYearMonth(): string {
@@ -171,20 +172,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     return Array.from(cats.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   }, [items, t])
 
-  const { subtotal, vat, total } = React.useMemo(() => {
-    let sub = 0
-    let taxableSub = 0
-    for (const c of cart) {
-      const amt = c.price * c.qty
-      sub += amt
-      const isExempt = c.taxType === 'exempt' || c.taxType === 'zero' || c.taxType === '면세' || c.taxType === '영세율'
-      if (!isExempt) taxableSub += amt
-    }
-    const vatRaw = taxableSub * 0.07
-    const v = Math.round(vatRaw * 100) / 100
-    const total = Math.round((sub + v) * 100) / 100
-    return { subtotal: sub, vat: v, total }
-  }, [cart])
+  const { subtotal, vat, total } = React.useMemo(
+    () => computePurchaseOrderMoneyTotals(cart),
+    [cart]
+  )
   /** 로열티·회계 PO: 공급가액(과세 전) 기준 3% 원천징수(태국 관행에 맞춤 조정 가능) */
   const [applyWithholding3Pct, setApplyWithholding3Pct] = React.useState(false)
   const withholdingTaxAmount = React.useMemo(() => {
@@ -200,6 +191,8 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [manualLineName, setManualLineName] = React.useState("")
   const [manualLinePrice, setManualLinePrice] = React.useState("")
   const [manualLineQty, setManualLineQty] = React.useState("1")
+  /** 회계 PO 수동 줄 기본 VAT — Pepsi 프로모션 지원 등은 면세로 추가 */
+  const [manualLineTaxType, setManualLineTaxType] = React.useState<"taxable" | "exempt">("taxable")
   /** 회계 PO: 선택 매장 (미선택 가능) */
   const [relatedStore, setRelatedStore] = React.useState<string>("_none")
   const [billingStart, setBillingStart] = React.useState("")
@@ -279,11 +272,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     const qty = Math.max(0.0001, Number(String(manualLineQty).replace(/,/g, "")) || 1)
     const code = `SVC-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     setBillingIntentMode(null)
-    setCart((prev) => [...prev, { code, name, price, qty, taxType: "taxable" }])
+    setCart((prev) => [...prev, { code, name, price, qty, taxType: manualLineTaxType }])
     setManualLineName("")
     setManualLinePrice("")
     setManualLineQty("1")
-  }, [manualLineName, manualLinePrice, manualLineQty])
+  }, [manualLineName, manualLinePrice, manualLineQty, manualLineTaxType])
 
   React.useEffect(() => {
     let cancelled = false
@@ -470,6 +463,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     setSelectedItem(null)
     setQuantityInput("1")
   }
+
+  const setCartLineTaxType = React.useCallback((idx: number, taxType: "taxable" | "exempt") => {
+    setCart((prev) => prev.map((c, i) => (i === idx ? { ...c, taxType } : c)))
+  }, [])
 
   const removeFromCart = (codeOrIdx: string | number) => {
     setBillingIntentMode(null)
@@ -1035,6 +1032,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 <CardTitle className="text-sm font-semibold">{t("poManualLineSection")}</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">{t("poManualLineLead")}</p>
                 <p className="text-xs text-muted-foreground">{t("poManualLineHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("poManualLineTaxHint")}</p>
               </div>
               <Button
                 type="button"
@@ -1081,6 +1079,29 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 onChange={(e) => setManualLineQty(e.target.value)}
                 className="h-9"
               />
+            </div>
+            <div className="w-full space-y-1 sm:w-32">
+              <label className="text-xs text-muted-foreground">{t("poManualLineTaxType")}</label>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant={manualLineTaxType === "taxable" ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-9 flex-1 px-2 text-xs"
+                  onClick={() => setManualLineTaxType("taxable")}
+                >
+                  {t("poTaxableShort")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={manualLineTaxType === "exempt" ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-9 flex-1 px-2 text-xs"
+                  onClick={() => setManualLineTaxType("exempt")}
+                >
+                  {t("poExemptShort")}
+                </Button>
+              </div>
             </div>
             <Button type="button" variant="secondary" className="h-9 w-full sm:w-auto" onClick={addManualLineToCart}>
               {t("poManualLineAdd")}
@@ -1397,6 +1418,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                       {cartGroupByStore && (
                         <th className="px-3 py-2 text-left font-medium">{t("orderColStore")}</th>
                       )}
+                      {allowManualLines ? (
+                        <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("poLineTaxCol")}</th>
+                      ) : null}
                       <th className="px-3 py-2 text-left font-medium">{t("item")}</th>
                       <th className="px-3 py-2 text-right font-medium">{t("price")}</th>
                       <th className="px-3 py-2 text-right font-medium">{t("qty")}</th>
@@ -1410,6 +1434,30 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                         {cartGroupByStore && (
                           <td className="px-3 py-2 font-medium">{c.store || "-"}</td>
                         )}
+                        {allowManualLines ? (
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:justify-end">
+                              <Button
+                                type="button"
+                                variant={!poLineIsVatExempt(c.taxType) ? "secondary" : "outline"}
+                                size="sm"
+                                className="h-7 px-2 text-[11px] shrink-0"
+                                onClick={() => setCartLineTaxType(idx, "taxable")}
+                              >
+                                {t("poTaxableShort")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={poLineIsVatExempt(c.taxType) ? "secondary" : "outline"}
+                                size="sm"
+                                className="h-7 px-2 text-[11px] shrink-0"
+                                onClick={() => setCartLineTaxType(idx, "exempt")}
+                              >
+                                {t("poExemptShort")}
+                              </Button>
+                            </div>
+                          </td>
+                        ) : null}
                         <td className="px-3 py-2 font-medium">{c.name}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatMoneyComma(c.price)}</td>
                         <td className="px-3 py-2 text-right">{c.qty}</td>
@@ -1437,7 +1485,13 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                   <span className="tabular-nums">{formatMoneyComma(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>{t("vat")}</span>
+                  <span>
+                    {vat >= 0.005
+                      ? t("poCartVatLabel7")
+                      : subtotal >= 0.005
+                        ? t("poCartVatLabelNone")
+                        : t("poCartVatLabel7")}
+                  </span>
                   <span className="tabular-nums">{formatMoneyComma(vat)}</span>
                 </div>
                 <div className="flex justify-between border-t border-border/50 pt-1.5 font-semibold text-foreground">

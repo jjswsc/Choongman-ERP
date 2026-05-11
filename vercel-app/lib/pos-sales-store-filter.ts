@@ -1,8 +1,7 @@
 /**
  * 매출 API 공통: URL stores / 단일 pos 파싱, Supabase(PostgREST) store_code 필터 조각 생성.
  * - 0개: 필터 없음
- * - 1개: ilike (기존 동작 유지, 부분 일치)
- * - 2개 이상: in.(...) 정확 일치
+ * - 1개 이상: `storeCodeSearchVariants`로 CM 접두 등을 펼친 뒤 `in.(...)` 정확 일치(동일 주문 이중집계 없음)
  */
 export function parseStoreList(raw: string | null): string[] {
   return String(raw ?? '')
@@ -20,17 +19,32 @@ export function resolveStoresFromParams(pos: string | null | undefined, storesRa
   return []
 }
 
+/** 조회·RPC에 넘길 store_code 목록 (CM 접두 등 표기 차이 펼침, 대소문자 중복 제거) */
+export function expandSalesStoreCodesForFilter(stores: string[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const s of stores) {
+    for (const v of storeCodeSearchVariants(s)) {
+      const t = String(v ?? '').trim()
+      if (!t) continue
+      const k = t.toLowerCase()
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(t)
+    }
+  }
+  return out
+}
+
 /**
  * 기존 filter 문자열(created_at=...) 뒤에 붙일 store 조건.
  * PostgREST: store_code=in.(a,b,c)
  */
 export function appendStoreCodeFilter(baseFilter: string, stores: string[]): string {
-  if (stores.length === 0) return baseFilter
-  if (stores.length === 1) {
-    return `${baseFilter}&store_code=ilike.${encodeURIComponent(stores[0])}`
-  }
-  const inner = stores.map((s) => String(s).trim()).filter(Boolean)
-  const inClause = `in.(${inner.join(',')})`
+  const expanded = expandSalesStoreCodesForFilter(stores)
+  if (expanded.length === 0) return baseFilter
+  const inner = expanded.join(',')
+  const inClause = `in.(${inner})`
   return `${baseFilter}&store_code=${encodeURIComponent(inClause)}`
 }
 
@@ -54,4 +68,31 @@ export function storeCodeSearchVariants(primary: string): string[] {
   add(withCm)
   add(s.replace(/^CM\s+/i, "").trim())
   return out
+}
+
+/** DB `store_code`가 매출 화면에서 선택한 코드와 동일 매장 계열이면 true (CM 접두·표기 차이) */
+export function rowMatchesSalesStoreSelection(dbStoreCode: unknown, selectedCode: string): boolean {
+  const a = String(dbStoreCode ?? '').trim()
+  const b = String(selectedCode ?? '').trim()
+  if (!a || !b) return false
+  if (a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0) return true
+  const setA = new Set(storeCodeSearchVariants(a).map((x) => x.toLowerCase()))
+  const setB = new Set(storeCodeSearchVariants(b).map((x) => x.toLowerCase()))
+  for (const x of setA) {
+    if (setB.has(x)) return true
+  }
+  return false
+}
+
+/**
+ * 매장별 집계 행 키 통합: `Ekkamai` / `CM Ekkamai` 등을 한 줄로 합칠 때 사용.
+ * CM 접두가 있으면 그 표기를 우선, 없으면 사전순 첫 변형.
+ */
+export function canonicalSalesStoreRowKey(storeCode: string): string {
+  const raw = String(storeCode ?? '').trim()
+  if (!raw || raw === '(미지정)') return raw || '(미지정)'
+  const variants = storeCodeSearchVariants(raw)
+  const withCm = variants.filter((v) => /^CM\s+/i.test(v))
+  const pool = withCm.length > 0 ? withCm : variants
+  return pool.slice().sort((a, b) => a.localeCompare(b))[0] ?? raw
 }

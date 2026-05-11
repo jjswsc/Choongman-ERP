@@ -51,6 +51,7 @@ import {
   type PromoLineLike,
 } from "@/lib/promo-economics"
 import { getPromoChoiceSlotLabel } from "@/lib/pos-promo-choice"
+import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 
 const CHICKEN_CODE_PREFIX = "c"
 function isChickenMenu(code: string | undefined): boolean {
@@ -59,11 +60,20 @@ function isChickenMenu(code: string | undefined): boolean {
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
-  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+  return (
+    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
+    /^S\s*[-]?\s*Boneless\s*$/i.test(n) ||
+    n === "S 순살" ||
+    n === "S - 순살" ||
+    n === "S-순살" ||
+    n === "S Boneless" ||
+    n === "S - Boneless" ||
+    n === "S-Boneless"
+  )
 }
 
-/** 치킨 + optionId 없음 = 메뉴 기본가(S 순살). 세트·미리보기에도 M과 같이 사이즈가 보이게 함 */
-const CHICKEN_IMPLICIT_BASE_OPTION_NAME = "S 순살"
+/** 치킨 + optionId 없음 = 메뉴 기본가(S Boneless). 세트·미리보기에도 M과 같이 사이즈가 보이게 함 */
+const CHICKEN_IMPLICIT_BASE_OPTION_NAME = POS_CHICKEN_DEFAULT_OPTION_DISPLAY
 
 function chickenLineOptionDisplayName(
   menuCode: string | undefined,

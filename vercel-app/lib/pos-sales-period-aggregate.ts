@@ -152,6 +152,7 @@ export function aggregatePosSalesByPeriod(
 
     const bkkDate = toDateStrBangkok(dt)
     if (!bkkDate) continue
+    /** 월·연만 POS 영업일 라벨(자정 넘김 매장). 일·요일은 조회 기간과 맞추기 위해 방콕 달력일 사용 */
     const bizYmd = getPosBusinessDateStrFromConfig(new Date(dt), getHours(String(r.store_code ?? '').trim()))
 
     if (groupBy === 'month') {
@@ -165,14 +166,14 @@ export function aggregatePosSalesByPeriod(
       const k = `${start.toISOString().slice(0, 10)}~${end.toISOString().slice(0, 10)}`
       add(k, r)
     } else if (groupBy === 'dow') {
-      const dow = getDayOfWeekBangkok(bizYmd)
+      const dow = getDayOfWeekBangkok(bkkDate)
       add(String(dow), r)
     } else if (groupBy === 'hour') {
       const h = getBangkokHour(dt)
       const hk = String(Math.min(23, Math.max(0, h))).padStart(2, '0')
       add(hk, r)
     } else {
-      add(bizYmd, r)
+      add(bkkDate, r)
     }
   }
 

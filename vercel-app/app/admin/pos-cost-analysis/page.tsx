@@ -256,7 +256,11 @@ export default function PosCostAnalysisPage() {
       )
       if (base) out.push({ ...base, displayCode: base.menuCode ?? "" })
       opts.forEach((o, i) => {
-        out.push({ ...o, displayCode: `${base?.menuCode ?? menuId}-${i + 1}` })
+        out.push({
+          ...o,
+          displayCode:
+            String(o.optionCode ?? "").trim() || `${base?.menuCode ?? menuId}-${i + 1}`,
+        })
       })
     }
     return out
@@ -275,7 +279,11 @@ export default function PosCostAnalysisPage() {
       )
       if (base) out.push({ ...base, displayCode: base.menuCode ?? "" })
       opts.forEach((o, i) => {
-        out.push({ ...o, displayCode: `${base?.menuCode ?? menuId}-${i + 1}` })
+        out.push({
+          ...o,
+          displayCode:
+            String(o.optionCode ?? "").trim() || `${base?.menuCode ?? menuId}-${i + 1}`,
+        })
       })
     }
     return out

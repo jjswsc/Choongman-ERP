@@ -531,7 +531,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                     const menuName =
                       menus.find((m) => String(m.id) === String(pi.menuId))?.name?.trim() ||
                       `#${String(pi.menuId)}`
-                    return `${menuName} x${Math.max(1, Number(pi.quantity) || 1)}`
+                    const optCode = String((pi as { optionCode?: unknown }).optionCode ?? '').trim()
+                    const optCodeLabel = optCode ? ` [${optCode}]` : ''
+                    return `${menuName}${optCodeLabel} x${Math.max(1, Number(pi.quantity) || 1)}`
                   })
                 : []
             const banbanFlavorLines = banban

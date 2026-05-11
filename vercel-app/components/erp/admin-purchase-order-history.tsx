@@ -44,6 +44,7 @@ import {
   isPoAccountingTaxInvoiceMode,
 } from "@/components/invoice/purchase-order-print"
 import {
+  computePurchaseOrderMoneyTotals,
   formatPoDisplayDate,
   isAccountingPurchaseOrderByCartJson,
   parsePurchaseOrderCart,
@@ -246,6 +247,7 @@ export function AdminPurchaseOrderHistory() {
 
   const exportPoExcel = (po: PurchaseOrderRow) => {
     const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
+    const totals = computePurchaseOrderMoneyTotals(cart)
     const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
     const dateStr = formatPoDisplayDate(po, poDateLocale)
@@ -332,9 +334,9 @@ export function AdminPurchaseOrderHistory() {
       pad(headers, colCount),
       ...dataRows.map((r) => pad(r.map((v) => String(v)), colCount)),
       pad([], colCount),
-      pad([t("subtotal"), ...Array(colCount - 2).fill(""), String(po.subtotal ?? 0)], colCount),
-      pad([t("vat"), ...Array(colCount - 2).fill(""), String(po.vat ?? 0)], colCount),
-      pad([t("total"), ...Array(colCount - 2).fill(""), String(po.total ?? 0)], colCount),
+      pad([t("subtotal"), ...Array(colCount - 2).fill(""), String(totals.subtotal)], colCount),
+      pad([t("vat"), ...Array(colCount - 2).fill(""), String(totals.vat)], colCount),
+      pad([t("total"), ...Array(colCount - 2).fill(""), String(totals.total)], colCount),
       ...(Number(po.withholding_tax_amount) > 0
         ? [
             pad(
@@ -352,7 +354,7 @@ export function AdminPurchaseOrderHistory() {
                 String(
                   Math.max(
                     0,
-                    Math.round(((Number(po.total) || 0) - Math.abs(Number(po.withholding_tax_amount) || 0)) * 100) /
+                    Math.round(((Number(totals.total) || 0) - Math.abs(Number(po.withholding_tax_amount) || 0)) * 100) /
                       100
                   )
                 ),
@@ -402,6 +404,7 @@ ${allRows.map((row, ri) => {
 
   const printPo = async (po: PurchaseOrderRow) => {
     const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
+    const totals = computePurchaseOrderMoneyTotals(cart)
     const poNo = po.po_no || `PO-${po.id}`
     const dateStr = formatPoDisplayDate(po, poDateLocale)
 
@@ -440,10 +443,11 @@ ${allRows.map((row, ri) => {
         price: c.price ?? 0,
         qty: c.qty ?? 0,
         store: c.store,
+        taxType: c.taxType,
       })),
-      subtotal: po.subtotal ?? 0,
-      vat: po.vat ?? 0,
-      total: po.total ?? 0,
+      subtotal: totals.subtotal,
+      vat: totals.vat,
+      total: totals.total,
       withholdingTaxAmount:
         po.withholding_tax_amount != null && Number(po.withholding_tax_amount) > 0
           ? Number(po.withholding_tax_amount)

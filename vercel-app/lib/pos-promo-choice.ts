@@ -1,6 +1,7 @@
 export type PromoChoiceLine = {
   menuId: string
   optionId: string | null
+  optionCode?: string | null
   quantity: number
   choiceGroup?: string | null
   choicePickCount?: number | null
@@ -48,7 +49,7 @@ function normalizePickCount(raw: unknown): number {
 }
 
 function buildRowKey(line: PromoChoiceLine, idx: number): string {
-  return `${idx}:${String(line.menuId)}:${String(line.optionId ?? '')}`
+  return `${idx}:${String(line.menuId)}:${String(line.optionCode ?? '')}:${String(line.optionId ?? '')}`
 }
 
 export function splitPromoChoiceGroups(items: PromoChoiceLine[]): {

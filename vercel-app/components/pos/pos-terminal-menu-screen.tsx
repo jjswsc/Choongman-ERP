@@ -59,7 +59,8 @@ import {
   resolvePosMenuDescriptionForChannel,
   resolvePosMenuOptionDescriptionForChannel,
 } from '@/lib/pos-menu-display-description'
-import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
+import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
+import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
@@ -470,8 +471,9 @@ export function PosTerminalMenuScreen({
       }
     }
     const id = opt ? `${menu.id}-${opt.id}` : menu.id
+    const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt) : ''
     const name = opt
-      ? `${menu.name} (${opt.name})`
+      ? `${menu.name} (${optBracket})`
       : defaultOptionName
         ? `${menu.name} (${defaultOptionName})`
         : menu.name
@@ -481,7 +483,7 @@ export function PosTerminalMenuScreen({
       name,
       price,
       menuId: menu.id,
-      ...(opt ? { optionId: opt.id } : {}),
+      ...(opt ? { optionId: opt.id, optionCode: opt.optionCode ?? null } : {}),
     })
     setOptionPickerMenu(null)
     setOptionPickerStep(0)
@@ -502,15 +504,19 @@ export function PosTerminalMenuScreen({
     /** 카트 라인에 옵션 이름을 미리 캐시 — 카트 패널은 sell 채널 필터·옵션 캐시 누락 시 lookup이 실패할 수 있다. */
     const normalizedItems = (resolvedPromo.items || []).map((x) => {
       const optId = x.optionId ? String(x.optionId) : null
+      const option = optId ? allOptions.find((o) => String(o.id) === optId) : null
       const menu = menus.find((m) => String(m.id) === String(x.menuId))
       const optName = optId
-        ? (allOptions.find((o) => String(o.id) === optId)?.name?.trim() || '')
+        ? option && menu
+          ? resolvePosCartOptionDisplayName(menu, option) || String(option.name ?? '').trim()
+          : (option?.name?.trim() || '')
         : isChickenMenu(menu?.code)
-          ? 'S 순살'
+          ? POS_CHICKEN_DEFAULT_OPTION_DISPLAY
           : ''
       return {
         menuId: String(x.menuId),
         optionId: optId,
+        ...(option?.optionCode ? { optionCode: option.optionCode } : {}),
         quantity: Math.max(1, Number(x.quantity) || 1),
         ...(optName ? { optionName: optName } : {}),
       }
@@ -1492,10 +1498,10 @@ export function PosTerminalMenuScreen({
             const defaultBtn = isChickenBase && (
               <button
                 type="button"
-                onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null, 'S 순살') })}
+                onClick={() => fireMenuAction(() => { void addWithOption(optionPickerMenu, null, POS_CHICKEN_DEFAULT_OPTION_DISPLAY) })}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
-                <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S 순살)'}</span>
+                <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S Boneless)'}</span>
                 <span className="font-bold text-amber-600">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
               </button>
             )
@@ -1524,7 +1530,7 @@ export function PosTerminalMenuScreen({
                 size: t('posOptionGroupSize') || '사이즈',
                 part: t('posOptionGroupPart') || '부위',
                 topping: t('posOptionGroupTopping') || '토핑',
-                bone: t('posOptionGroupBone') || '뼈/순살',
+                bone: t('posOptionGroupBone') || 'Bone / Boneless',
                 type: t('posOptionGroupType') || '타입',
                 set_main: t('posOptionGroupSetMain') || '세트 메인',
                 side: t('posOptionGroupSide') || '사이드',

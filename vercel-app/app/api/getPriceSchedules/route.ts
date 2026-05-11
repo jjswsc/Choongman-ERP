@@ -12,11 +12,13 @@ export async function GET(req: NextRequest) {
     const entityType = String(searchParams.get("entityType") || "").trim()
     const status = String(searchParams.get("status") || "").trim()
     const search = String(searchParams.get("search") || "").trim()
+    const category = String(searchParams.get("category") || "").trim()
     const limit = Math.min(500, Math.max(1, Number(searchParams.get("limit")) || 200))
 
     const conditions: string[] = []
     if (entityType) conditions.push(`entity_type=eq.${encodeURIComponent(entityType)}`)
     if (status) conditions.push(`status=eq.${encodeURIComponent(status)}`)
+    if (category) conditions.push(`category=eq.${encodeURIComponent(category)}`)
     if (search) conditions.push(`entity_display_name=ilike.${encodeURIComponent(`*${search}*`)}`)
     const filter = conditions.length ? conditions.join("&") : "id=gte.0"
 

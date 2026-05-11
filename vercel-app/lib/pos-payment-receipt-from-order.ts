@@ -16,7 +16,7 @@ export type PosOrderReceiptLineOptions = {
   menus?: PosMenu[]
 }
 
-type ReceiptPromoLine = { menuId: string; optionId: string | null; quantity: number }
+type ReceiptPromoLine = { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }
 type CatalogPromoLine = ReceiptPromoLine & { choiceGroup: string | null }
 
 export function posOrderRowPaymentSum(row: Record<string, unknown>): number {
@@ -156,9 +156,12 @@ function normalizeReceiptPromoLines(raw: unknown[]): ReceiptPromoLine[] {
     const o = x as Record<string, unknown>
     const opt = o.optionId ?? o.option_id
     const optStr = opt != null && String(opt).trim() ? String(opt).trim() : null
+    const optionCode = o.optionCode ?? o.option_code
+    const optionCodeStr = optionCode != null && String(optionCode).trim() ? String(optionCode).trim() : null
     return {
       menuId: String(o.menuId ?? o.menu_id ?? ''),
       optionId: optStr,
+      ...(optionCodeStr ? { optionCode: optionCodeStr } : {}),
       quantity: Math.max(1, Number(o.quantity ?? o.qty ?? 1) || 1),
     }
   })
@@ -172,6 +175,7 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
   const rows: CatalogPromoLine[] = items.map((x) => ({
     menuId: String(x.menuId ?? ''),
     optionId: x.optionId != null && String(x.optionId).trim() ? String(x.optionId) : null,
+    ...(x.optionCode != null && String(x.optionCode).trim() ? { optionCode: String(x.optionCode).trim() } : {}),
     quantity: Math.max(1, Number(x.quantity) || 1),
     choiceGroup: String(x.choiceGroup ?? '').trim() || null,
   }))
@@ -180,11 +184,14 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
   // 스냅샷(promoItems)이 있는 최신 주문은 이 분기까지 오지 않아 기존 선택값을 그대로 사용한다.
   const implicitChoiceKeys = new Set<string>()
   const optionIdsByMenuQty = new Map<string, Set<string>>()
+  const optionKey = (r: CatalogPromoLine): string =>
+    (r.optionId && String(r.optionId).trim()) || (r.optionCode && String(r.optionCode).trim()) || ''
   for (const row of rows) {
     if (row.choiceGroup) continue
     const key = `${row.menuId}::${row.quantity}`
     const bucket = optionIdsByMenuQty.get(key) ?? new Set<string>()
-    if (row.optionId) bucket.add(row.optionId)
+    const ok = optionKey(row)
+    if (ok) bucket.add(ok)
     optionIdsByMenuQty.set(key, bucket)
   }
   for (const [key, optionIds] of optionIdsByMenuQty.entries()) {
@@ -201,6 +208,7 @@ function promoLinesFromCatalog(promoId: string, catalog: Map<string, PosPromoWit
     .map((row) => ({
       menuId: row.menuId,
       optionId: row.optionId,
+      ...(row.optionCode ? { optionCode: row.optionCode } : {}),
       quantity: row.quantity,
     }))
 }

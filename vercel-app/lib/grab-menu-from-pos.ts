@@ -42,6 +42,7 @@ type MenuRow = {
 type OptionRow = {
   id?: number
   menu_id?: number
+  option_code?: string | null
   name?: string
   price_modifier?: number
   price_modifier_delivery?: number | null
@@ -537,11 +538,13 @@ async function resolvePolicyBundleForGrabMenu(storeCodeGuess: string): Promise<{
 }
 
 async function loadOptions(): Promise<OptionRow[]> {
-  const cols =
-    'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,sell_delivery,option_step_values,description_default,description_delivery,description_table'
-  const colsLegacy =
-    'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,description_default,description_delivery,description_table'
-  for (const c of [cols, colsLegacy]) {
+  const projections = [
+    'id,menu_id,option_code,name,price_modifier,price_modifier_delivery,sort_order,sell_delivery,option_step_values,description_default,description_delivery,description_table',
+    'id,menu_id,option_code,name,price_modifier,price_modifier_delivery,sort_order,description_default,description_delivery,description_table',
+    'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,sell_delivery,option_step_values,description_default,description_delivery,description_table',
+    'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,description_default,description_delivery,description_table',
+  ]
+  for (const c of projections) {
     try {
       const rows = (await supabaseSelect('pos_menu_options', {
         order: 'menu_id.asc,sort_order.asc,name.asc',
@@ -769,10 +772,12 @@ export async function buildGrabMenuFromPos(params: {
             selectionRangeMin: range.min,
             selectionRangeMax: range.max,
             modifiers: rows.map((opt, idx) => {
-                  const modId = normalizeId(
-                    `mod-${String(opt.id ?? '')}-${itemId}-${idx + 1}`,
-                    `${itemId}-mod-${idx + 1}`
-                  )
+              const optionCode = String(opt.option_code ?? '').trim()
+              const optId = String(opt.id ?? '').trim()
+              const modId = normalizeId(
+                `mod-${optionCode || optId}-${itemId}-${idx + 1}`,
+                `${itemId}-mod-${idx + 1}`
+              )
               const modPrice =
                 opt.price_modifier_delivery != null ? opt.price_modifier_delivery : opt.price_modifier
               const modDescDelivery = String(opt.description_delivery ?? '').trim()

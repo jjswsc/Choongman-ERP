@@ -5,10 +5,19 @@ import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
 export const maxDuration = 120
 
-/** 치킨 기본 옵션(S 순살): 원가 분석에서는 메뉴 기본 행으로 이미 포함되므로 옵션 목록에서 제외 */
+/** 치킨 기본 옵션(S Boneless): 원가 분석에서는 메뉴 기본 행으로 이미 포함되므로 옵션 목록에서 제외 */
 function isChickenDefaultOption(name: string | undefined): boolean {
   const n = String(name ?? '').trim()
-  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === 'S 순살' || n === 'S - 순살' || n === 'S-순살'
+  return (
+    /^S\s*[-]?\s*순살\s*$/i.test(n) ||
+    /^S\s*[-]?\s*Boneless\s*$/i.test(n) ||
+    n === 'S 순살' ||
+    n === 'S - 순살' ||
+    n === 'S-순살' ||
+    n === 'S Boneless' ||
+    n === 'S - Boneless' ||
+    n === 'S-Boneless'
+  )
 }
 
 type MenuRow = {
@@ -36,6 +45,7 @@ type OptRow = {
   id?: number
   menu_id?: number
   name?: string
+  option_code?: string | null
   option_type?: string
   item_code?: string | null
   additive_source_menu_id?: number | null
@@ -135,8 +145,8 @@ async function loadPosMenusPaged(): Promise<MenuRow[]> {
 async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
   const order = 'menu_id.asc,sort_order.asc,name.asc'
   const selects = [
-    'id,menu_id,name,option_type,item_code,additive_source_menu_id,quantity,sort_order,price_modifier,price_modifier_delivery',
-    'id,menu_id,name,option_type,item_code,quantity,sort_order,price_modifier,price_modifier_delivery',
+    'id,menu_id,name,option_code,option_type,item_code,additive_source_menu_id,quantity,sort_order,price_modifier,price_modifier_delivery',
+    'id,menu_id,name,option_code,option_type,item_code,quantity,sort_order,price_modifier,price_modifier_delivery',
     'id,menu_id,name,option_type,item_code,quantity,sort_order',
   ]
   for (const select of selects) {
@@ -367,6 +377,7 @@ export async function GET(request: NextRequest) {
       priceDelivery: number | null
       vatIncluded: boolean
       optionId: string | null
+      optionCode?: string | null
       optionName: string | null
       optionType?: 'substitution' | 'additive' | null
       costHall: number
@@ -679,6 +690,7 @@ export async function GET(request: NextRequest) {
         priceDelivery,
         vatIncluded,
         optionId: null,
+        optionCode: null,
         optionName: null,
         optionType: null,
         costHall: Math.round((baseDisplay.costHall + rollupAddFood) * 10) / 10,
@@ -712,6 +724,7 @@ export async function GET(request: NextRequest) {
             priceDelivery: optPriceDelivery,
             vatIncluded,
             optionId: String(opt.id ?? ''),
+            optionCode: String(opt.option_code ?? '').trim() || `${String(menu.code ?? '')}-${Math.max(0, Number(opt.sort_order ?? 0)) + 1}`,
             optionName: String(opt.name ?? ''),
             optionType: 'additive',
             costHall: Math.round((baseCost + addFood) * 10) / 10,
@@ -738,6 +751,7 @@ export async function GET(request: NextRequest) {
             priceDelivery: optPriceDelivery,
             vatIncluded,
             optionId: String(opt.id ?? ''),
+            optionCode: String(opt.option_code ?? '').trim() || `${String(menu.code ?? '')}-${Math.max(0, Number(opt.sort_order ?? 0)) + 1}`,
             optionName: String(opt.name ?? ''),
             optionType: 'substitution',
             costHall: computed.costHall,

@@ -14,13 +14,16 @@ export type CartLineForPosOrder = {
   /** 카트·OrderItem 과 items_json 의 option_id1 교차 */
   optionId?: string
   optionId1?: string
+  optionCode?: string
+  optionCode1?: string
   menuId2?: string
   optionId2?: string
+  optionCode2?: string
   orderType?: string
   deliveryAppCode?: string
   promoId?: string
   promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
 }
 
 /** items_json / API 줄 단위 — qty·quantity 외 레거시/연동 키 보강 */
@@ -57,8 +60,10 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
     const q = resolveCartLineQuantityForSave(i)
     const menuIdPrimary = String(i.menuId1 ?? i.menuId ?? '').trim()
     const optionIdPrimary = String(i.optionId1 ?? i.optionId ?? '').trim()
+    const optionCodePrimary = String(i.optionCode1 ?? i.optionCode ?? '').trim()
     const menuId2 = String(i.menuId2 ?? '').trim()
     const optionId2 = String(i.optionId2 ?? '').trim()
+    const optionCode2 = String(i.optionCode2 ?? '').trim()
     return {
       id: i.id,
       name: i.name,
@@ -68,8 +73,10 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
       ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
       ...(menuIdPrimary ? { menuId1: menuIdPrimary } : {}),
       ...(optionIdPrimary ? { optionId1: optionIdPrimary } : {}),
+      ...(optionCodePrimary ? { optionCode1: optionCodePrimary } : {}),
       ...(menuId2 ? { menuId2 } : {}),
       ...(optionId2 ? { optionId2 } : {}),
+      ...(optionCode2 ? { optionCode2 } : {}),
       ...(i.orderType ? { orderType: i.orderType } : {}),
       ...(i.deliveryAppCode ? { deliveryAppCode: i.deliveryAppCode } : {}),
       ...(i.promoId

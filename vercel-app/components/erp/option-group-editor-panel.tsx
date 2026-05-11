@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 type OptionGroupEditorPanelProps = {
   menuName?: string
   menuCode?: string
+  contextLabel?: string
   titleFallback: string
   emptyMessage: string
   resetLabel: string
@@ -21,6 +22,7 @@ type OptionGroupEditorPanelProps = {
 export function OptionGroupEditorPanel({
   menuName,
   menuCode,
+  contextLabel,
   titleFallback,
   emptyMessage,
   resetLabel,
@@ -44,6 +46,7 @@ export function OptionGroupEditorPanel({
               <h3 className="text-sm font-bold">
                 {menuName || titleFallback} ({menuCode})
               </h3>
+              {contextLabel ? <p className="mt-1 text-xs text-muted-foreground">{contextLabel}</p> : null}
             </div>
             <div className="flex shrink-0 gap-2">
               <Button

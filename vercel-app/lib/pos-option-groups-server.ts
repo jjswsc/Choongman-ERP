@@ -129,11 +129,13 @@ export function buildMenuOptionsFromLinks(
   menuId: number,
   links: PosMenuOptionGroupLinkRow[],
   groupsById: Map<number, PosOptionGroupRow>,
-  itemsByGroupId: Map<number, PosOptionGroupItemRow[]>
+  itemsByGroupId: Map<number, PosOptionGroupItemRow[]>,
+  menuCode?: string
 ) {
   const out: Array<{
     id: string
     menuId: string
+    optionCode?: string
     name: string
     priceModifier: number
     priceModifierDelivery: number | null
@@ -166,6 +168,7 @@ export function buildMenuOptionsFromLinks(
       return Number(a.id || 0) - Number(b.id || 0)
     })
     for (const item of sortedItems) {
+      const nextSortOrder = sortCursor
       const hallBase = Number(item.base_price_hall ?? 0) || 0
       const deliveryBase =
         item.base_price_delivery != null
@@ -182,6 +185,7 @@ export function buildMenuOptionsFromLinks(
       out.push({
         id: `g${gid}-i${item.id}`,
         menuId: String(menuId),
+        optionCode: menuCode ? `${menuCode}-${nextSortOrder + 1}` : undefined,
         name: String(item.item_name || ""),
         priceModifier: hallPrice,
         priceModifierDelivery: deliveryPrice,

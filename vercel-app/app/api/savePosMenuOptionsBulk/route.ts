@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from "@/lib/supabase-server"
 import { recordPriceChanges } from "@/lib/price-history"
 import { triggerGrabMenuNotification } from "@/lib/grab-menu-sync-trigger"
+import { createMenuOptionCodeAllocator } from "@/lib/pos-option-code-server"
 
 type SavePosMenuOptionInput = {
   id?: string
   menuId: number
+  optionCode?: string
   name: string
   priceModifier?: number
   priceModifierDelivery?: number | null
@@ -39,7 +41,10 @@ async function getMenuCategories(menuId: number): Promise<{ categoryMain: string
   return { categoryMain: "", category: "" }
 }
 
-async function saveSingleOption(input: SavePosMenuOptionInput): Promise<void> {
+async function saveSingleOption(
+  input: SavePosMenuOptionInput,
+  allocatorByMenuId: Map<number, Awaited<ReturnType<typeof createMenuOptionCodeAllocator>>>
+): Promise<{ optionCode?: string; remapped?: boolean }> {
   const id = input.id
   const menuId = Number(input.menuId)
   const name = String(input.name ?? "").trim()
@@ -50,6 +55,7 @@ async function saveSingleOption(input: SavePosMenuOptionInput): Promise<void> {
     input.priceModifierPackaging != null ? Number(input.priceModifierPackaging) : null
   const sortOrder = Number(input.sortOrder ?? 0) || 0
   const optionType = input.optionType || "substitution"
+  const optionCode = String(input.optionCode ?? "").trim()
   const isAdditive = optionType === "additive"
   const itemCode = input.itemCode ? String(input.itemCode).trim() : null
   const additiveSourceMenuId =
@@ -127,7 +133,17 @@ async function saveSingleOption(input: SavePosMenuOptionInput): Promise<void> {
       }
     }
     await supabaseUpdateByFilter("pos_menu_options", `id=eq.${id}`, row)
-    return
+    let allocator = allocatorByMenuId.get(menuId)
+    if (!allocator) {
+      allocator = await createMenuOptionCodeAllocator(menuId)
+      allocatorByMenuId.set(menuId, allocator)
+    }
+    const codeRes = await allocator.assign({
+      optionId: String(id),
+      preferredCode: optionCode || undefined,
+      fallbackSortOrder: sortOrder,
+    })
+    return { optionCode: codeRes.optionCode || undefined, remapped: codeRes.remapped }
   }
 
   const inserted = (await supabaseInsert("pos_menu_options", {
@@ -136,7 +152,17 @@ async function saveSingleOption(input: SavePosMenuOptionInput): Promise<void> {
   })) as { id?: number }[] | { id?: number }
   const newRow = Array.isArray(inserted) ? inserted[0] : inserted
   const newId = newRow?.id != null ? String(newRow.id) : null
-  if (!newId) return
+  if (!newId) return {}
+  let allocator = allocatorByMenuId.get(menuId)
+  if (!allocator) {
+    allocator = await createMenuOptionCodeAllocator(menuId)
+    allocatorByMenuId.set(menuId, allocator)
+  }
+  const codeRes = await allocator.assign({
+    optionId: newId,
+    preferredCode: optionCode || undefined,
+    fallbackSortOrder: sortOrder,
+  })
   const { categoryMain, category } = await getMenuCategories(menuId)
   const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
   initChanges.push({ fieldName: "price_modifier", oldValue: null, newValue: priceModifier })
@@ -146,7 +172,7 @@ async function saveSingleOption(input: SavePosMenuOptionInput): Promise<void> {
   if (priceModifierPackaging != null) {
     initChanges.push({ fieldName: "price_modifier_packaging", oldValue: null, newValue: priceModifierPackaging })
   }
-  if (initChanges.length === 0) return
+  if (initChanges.length === 0) return { optionCode: codeRes.optionCode || undefined, remapped: codeRes.remapped }
   recordPriceChanges({
     entityType: "pos_menu_option",
     entityId: newId,
@@ -156,6 +182,7 @@ async function saveSingleOption(input: SavePosMenuOptionInput): Promise<void> {
     categoryMain: categoryMain || undefined,
     parentEntityId: String(menuId),
   }).catch(() => {})
+  return { optionCode: codeRes.optionCode || undefined, remapped: codeRes.remapped }
 }
 
 export async function POST(req: NextRequest) {
@@ -168,11 +195,14 @@ export async function POST(req: NextRequest) {
     if (optionsRaw.length === 0) {
       return NextResponse.json({ success: false, message: "options required" }, { headers })
     }
-    const results: { id?: string; success: boolean; message?: string }[] = []
+    const allocatorByMenuId = new Map<number, Awaited<ReturnType<typeof createMenuOptionCodeAllocator>>>()
+    const results: { id?: string; success: boolean; message?: string; optionCode?: string; remapped?: boolean }[] = []
+    let remappedCount = 0
     for (const row of optionsRaw as SavePosMenuOptionInput[]) {
       try {
-        await saveSingleOption(row)
-        results.push({ id: row.id, success: true })
+        const saveResult = await saveSingleOption(row, allocatorByMenuId)
+        if (saveResult.remapped) remappedCount += 1
+        results.push({ id: row.id, success: true, optionCode: saveResult.optionCode, remapped: saveResult.remapped })
       } catch (err) {
         results.push({
           id: row.id,
@@ -194,7 +224,12 @@ export async function POST(req: NextRequest) {
       {
         success: allSuccess,
         results,
-        message: allSuccess ? undefined : "일부 옵션 저장에 실패했습니다.",
+        remappedCount,
+        message: allSuccess
+          ? remappedCount > 0
+            ? `저장 완료 (option_code ${remappedCount}건 자동 재매핑)`
+            : undefined
+          : "일부 옵션 저장에 실패했습니다.",
       },
       { headers }
     )
