@@ -20,6 +20,7 @@ export type PosMenuUpsertApiBody = {
   optionSelectionConfig?: {
     key: string
     label?: string
+    audience?: 'all' | 'hall' | 'delivery'
     required?: boolean
     minSelect?: number
     maxSelect?: number
@@ -81,6 +82,7 @@ export async function upsertPosMenuFromBody(
   const code = String(body.code ?? '').trim()
   const name = String(body.name ?? '').trim()
   let editingId = body.id ? String(body.id).trim() : null
+  const isChickenMenu = code.toLowerCase().startsWith('c')
 
   // imageOnly 요청은 image 컬럼만 갱신하므로 code/name 입력을 강제하지 않는다.
   const isImageOnlyEdit = body.imageOnly === true && !!editingId
@@ -118,6 +120,9 @@ export async function upsertPosMenuFromBody(
           const key = String(cfg?.key ?? '').trim()
           if (!key) return null
           const label = String(cfg?.label ?? '').trim()
+          const audienceRaw = String(cfg?.audience ?? 'all').trim().toLowerCase()
+          const audience: 'all' | 'hall' | 'delivery' =
+            audienceRaw === 'hall' || audienceRaw === 'delivery' ? audienceRaw : 'all'
           const minRaw = Number(cfg?.minSelect)
           const maxRaw = Number(cfg?.maxSelect)
           const required = cfg?.required === true
@@ -128,13 +133,51 @@ export async function upsertPosMenuFromBody(
           return {
             key,
             label: label || key,
+            audience,
             required,
             minSelect: normalizedMin,
             maxSelect: normalizedMax,
           }
         })
-        .filter((x): x is { key: string; label: string; required: boolean; minSelect: number; maxSelect: number } => !!x)
+        .filter(
+          (x): x is {
+            key: string
+            label: string
+            audience: 'all' | 'hall' | 'delivery'
+            required: boolean
+            minSelect: number
+            maxSelect: number
+          } => !!x
+        )
     : null
+  const optionSelectionGroupsFinal =
+    isChickenMenu && (optionSelectionGroupsExplicit || optionSelectionGroupsLegacy)
+      ? ['part']
+      : optionSelectionGroupsCleaned
+  const optionSelectionGroupsLegacyFinal =
+    isChickenMenu && optionSelectionGroupsLegacy ? ['part'] : optionSelectionGroupsLegacy
+  const optionSelectionConfigFinal =
+    isChickenMenu && optionSelectionConfigExplicit
+      ? (() => {
+          const foundPart = (optionSelectionConfigCleaned || []).find((x) => x.key === 'part')
+          return [
+            {
+              key: 'part',
+              label: String(foundPart?.label ?? 'part').trim() || 'part',
+              audience: foundPart?.audience === 'hall' || foundPart?.audience === 'delivery' ? foundPart.audience : 'all',
+              required: foundPart?.required !== false,
+              minSelect:
+                foundPart?.minSelect != null && Number.isFinite(Number(foundPart.minSelect))
+                  ? Math.max(0, Math.floor(Number(foundPart.minSelect)))
+                  : 1,
+              maxSelect:
+                foundPart?.maxSelect != null && Number.isFinite(Number(foundPart.maxSelect))
+                  ? Math.max(1, Math.floor(Number(foundPart.maxSelect)))
+                  : 1,
+            },
+          ]
+        })()
+      : optionSelectionConfigCleaned
   const kitchenPrinter =
     body.kitchenPrinter === 0 ||
     body.kitchenPrinter === 1 ||
@@ -165,16 +208,16 @@ export async function upsertPosMenuFromBody(
   if (hasSortOrder) baseRow.sort_order = Number(body.sortOrder)
   if (optionSelectionGroupsExplicit) {
     baseRow.option_selection_groups =
-      optionSelectionGroupsCleaned && optionSelectionGroupsCleaned.length > 0
-        ? optionSelectionGroupsCleaned
+      optionSelectionGroupsFinal && optionSelectionGroupsFinal.length > 0
+        ? optionSelectionGroupsFinal
         : []
-  } else if (optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0) {
-    baseRow.option_selection_groups = optionSelectionGroupsLegacy
+  } else if (optionSelectionGroupsLegacyFinal && optionSelectionGroupsLegacyFinal.length > 0) {
+    baseRow.option_selection_groups = optionSelectionGroupsLegacyFinal
   }
   if (optionSelectionConfigExplicit) {
     baseRow.option_selection_config =
-      optionSelectionConfigCleaned && optionSelectionConfigCleaned.length > 0
-        ? optionSelectionConfigCleaned
+      optionSelectionConfigFinal && optionSelectionConfigFinal.length > 0
+        ? optionSelectionConfigFinal
         : []
   }
   if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter

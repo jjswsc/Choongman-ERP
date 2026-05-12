@@ -55,6 +55,7 @@ import {
   savePosMenuOption,
   savePosMenuOptionsBulk,
   savePosMenuOptionGroupLinks,
+  savePosOptionGroup,
   savePosMenuIngredient,
   deletePosMenu,
   deletePosMenuOption,
@@ -136,6 +137,18 @@ function formatChickenOptionStepDisplayLabel(stepKey: "size" | "part", t: (key: 
   return `${CHICKEN_OPTION_GROUP_TITLE} · ${suffix}`
 }
 
+function normalizeOptionGroupsForMenu(groups: string[], menuCode: string | undefined): string[] {
+  const normalized = Array.from(
+    new Set(
+      (groups || [])
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean)
+    )
+  )
+  if (!isChickenMenu(menuCode)) return normalized
+  return ["part"]
+}
+
 /** 치킨(c)·size+part 단계일 때 option_selection_config.label 을 통일 형식으로 덮어씀 */
 function applyChickenOptionGroupLabelsToConfig(
   groups: string[],
@@ -148,6 +161,31 @@ function applyChickenOptionGroupLabelsToConfig(
     if (row.key === "size") return { ...row, label: formatChickenOptionStepDisplayLabel("size", t) }
     if (row.key === "part") return { ...row, label: formatChickenOptionStepDisplayLabel("part", t) }
     return row
+  })
+}
+
+/** 치킨(c) size/part는 공통 규칙으로 통일: size 단계는 배달 전용 + 단일 선택 */
+function applyChickenDeliveryRulesToConfig(
+  groups: string[],
+  normalizedConfig: PosOptionSelectionGroupConfig[],
+  menuCode: string | undefined,
+  t: (key: string) => string
+): PosOptionSelectionGroupConfig[] {
+  const withLabels = applyChickenOptionGroupLabelsToConfig(groups, normalizedConfig, menuCode, t)
+  if (!isChickenMenu(menuCode)) return withLabels
+  if (groups.length === 1 && groups[0] === "part") {
+    return withLabels.map((row) => (row.key === "part" ? { ...row, label: t("posOptionGroupPart") || "부위" } : row))
+  }
+  if (!isSizePartGroups(groups)) return withLabels
+  return withLabels.map((row) => {
+    if (row.key !== "size") return row
+    return {
+      ...row,
+      audience: "delivery",
+      required: true,
+      minSelect: 1,
+      maxSelect: 1,
+    }
   })
 }
 
@@ -215,6 +253,9 @@ function optionStepValueForGroupFilter(
   if (isChickenMenu(menuCode) && isSizePartGroups(stepGroups)) {
     if (groupKey === "size") return inferChickenOptionSizeValue(opt)
     if (groupKey === "part") return inferChickenOptionPartValue(opt)
+  }
+  if (isChickenMenu(menuCode) && stepGroups.length === 1 && stepGroups[0] === "part" && groupKey === "part") {
+    return inferChickenOptionPartValue(opt)
   }
   return String(opt.optionStepValues?.[groupKey] ?? "").trim()
 }
@@ -484,6 +525,8 @@ export default function PosMenusPage() {
   const [optionsConfigCopying, setOptionsConfigCopying] = React.useState(false)
   const [optionsConfigNewOptionTitle, setOptionsConfigNewOptionTitle] = React.useState("")
   const [optionsConfigLibraryGroups, setOptionsConfigLibraryGroups] = React.useState<PosOptionGroup[]>([])
+  /** 옵션 구성 탭: 공통 그룹 제안용 전체 메뉴 옵션(치킨 part 등 가상 그룹 생성) */
+  const [optionsConfigAllMenuOptionsCatalog, setOptionsConfigAllMenuOptionsCatalog] = React.useState<PosMenuOption[]>([])
   const [optionsConfigLibraryLoading, setOptionsConfigLibraryLoading] = React.useState(false)
   const [optionsConfigLibrarySearchTerm, setOptionsConfigLibrarySearchTerm] = React.useState("")
   const [optionsConfigLibraryFilter, setOptionsConfigLibraryFilter] = React.useState<
@@ -818,27 +861,50 @@ export default function PosMenusPage() {
     if (!optionsConfigSelectedMenuId) return
     const sel = menus.find((m) => m.id === optionsConfigSelectedMenuId)
     const g = sel?.optionSelectionGroups
-    const parsedGroups = Array.isArray(g) && g.length > 0 ? g.map((x) => String(x).trim()).filter(Boolean) : []
+    const parsedGroupsRaw = Array.isArray(g) && g.length > 0 ? g.map((x) => String(x).trim()).filter(Boolean) : []
+    const parsedGroups = normalizeOptionGroupsForMenu(parsedGroupsRaw, sel?.code)
     setOptionsConfigGroupsDraft(parsedGroups.join(", "))
     const normalizedRules = normalizeOptionSelectionConfig(parsedGroups, sel?.optionSelectionConfig)
-    setOptionsConfigGroupRulesDraft(applyChickenOptionGroupLabelsToConfig(parsedGroups, normalizedRules, sel?.code, t))
+    setOptionsConfigGroupRulesDraft(applyChickenDeliveryRulesToConfig(parsedGroups, normalizedRules, sel?.code, t))
   }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupsKey, t])
 
   const optionsConfigStepGroups = React.useMemo(() => {
     if (!optionsConfigSelectedMenuId) return [] as string[]
     const m = menus.find((x) => x.id === optionsConfigSelectedMenuId)
-    return (m?.optionSelectionGroups ?? []).map((g) => String(g).trim()).filter(Boolean)
+    return normalizeOptionGroupsForMenu(
+      (m?.optionSelectionGroups ?? []).map((g) => String(g).trim()).filter(Boolean),
+      m?.code
+    )
   }, [menus, optionsConfigSelectedMenuId])
 
+  /** 옵션 구성 UI: [단계 저장] 전에도 드래프트 문자열 기준으로 단계 목록·선택을 맞춤 (빈 문자열 = 단계 없음 편집) */
+  const optionsConfigPanelStepGroups = React.useMemo(() => {
+    if (!optionsConfigSelectedMenuId) return [] as string[]
+    const m = menus.find((x) => x.id === optionsConfigSelectedMenuId)
+    const code = m?.code
+    const trimmed = optionsConfigGroupsDraft.trim()
+    if (trimmed === "") return [] as string[]
+    return normalizeOptionGroupsForMenu(parseOptionGroupsFromText(optionsConfigGroupsDraft), code)
+  }, [optionsConfigSelectedMenuId, menus, optionsConfigGroupsDraft])
+
   React.useEffect(() => {
-    if (optionsConfigStepGroups.length === 0) {
+    if (optionsConfigPanelStepGroups.length === 0) {
       setOptionsConfigSelectedGroupKey("")
       return
     }
     setOptionsConfigSelectedGroupKey((prev) =>
-      optionsConfigStepGroups.includes(prev) ? prev : optionsConfigStepGroups[0]
+      optionsConfigPanelStepGroups.includes(prev) ? prev : optionsConfigPanelStepGroups[0]
     )
-  }, [optionsConfigStepGroups])
+  }, [optionsConfigPanelStepGroups])
+
+  const optionsConfigEffectiveGroupKey = React.useMemo(() => {
+    if (!optionsConfigSelectedMenuId) return ""
+    if (optionsConfigPanelStepGroups.length === 0) return "__default__"
+    if (optionsConfigSelectedGroupKey && optionsConfigPanelStepGroups.includes(optionsConfigSelectedGroupKey)) {
+      return optionsConfigSelectedGroupKey
+    }
+    return optionsConfigPanelStepGroups[0] || ""
+  }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupKey, optionsConfigPanelStepGroups])
 
   React.useEffect(() => {
     if (mainTab !== "optionsConfig") return
@@ -863,17 +929,24 @@ export default function PosMenusPage() {
   }, [mainTab])
 
   React.useEffect(() => {
+    if (mainTab !== "optionsConfig") return
+    let cancelled = false
+    void getPosMenuOptions({ fresh: true })
+      .then((list) => {
+        if (cancelled) return
+        setOptionsConfigAllMenuOptionsCatalog(Array.isArray(list) ? list : [])
+      })
+      .catch(() => {
+        if (!cancelled) setOptionsConfigAllMenuOptionsCatalog([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mainTab])
+
+  React.useEffect(() => {
     if (!optionsConfigSelectedMenuId) setOptionsConfigLibrarySearchTerm("")
   }, [optionsConfigSelectedMenuId])
-
-  const optionsConfigEffectiveGroupKey = React.useMemo(() => {
-    if (!optionsConfigSelectedMenuId) return ""
-    if (optionsConfigStepGroups.length === 0) return "__default__"
-    if (optionsConfigSelectedGroupKey && optionsConfigStepGroups.includes(optionsConfigSelectedGroupKey)) {
-      return optionsConfigSelectedGroupKey
-    }
-    return optionsConfigStepGroups[0] || ""
-  }, [optionsConfigSelectedMenuId, optionsConfigSelectedGroupKey, optionsConfigStepGroups])
 
   React.useEffect(() => {
     if (mainTab === "optionsConfig" && optionsConfigSelectedMenuId) loadItems()
@@ -1346,34 +1419,98 @@ export default function PosMenusPage() {
 
   const optionsConfigSelectedMenu = optionsConfigSelectedMenuId ? menus.find((m) => m.id === optionsConfigSelectedMenuId) : null
 
+  const VIRTUAL_CHICKEN_PART_GROUP_ID = "virtual:chicken-part"
+
+  const optionsConfigVirtualChickenPartLibraryGroup = React.useMemo((): PosOptionGroup | null => {
+    const realPartWithItems = optionsConfigLibraryGroups.some(
+      (g) => String(g.key ?? "").trim().toLowerCase() === "part" && (g.items?.length ?? 0) > 0
+    )
+    if (realPartWithItems) return null
+    const chickenMenuIds = new Set(
+      menus.filter((m) => isChickenMenu(m.code)).map((m) => String(m.id).trim()).filter(Boolean)
+    )
+    if (chickenMenuIds.size === 0 || optionsConfigAllMenuOptionsCatalog.length === 0) return null
+    const byLower = new Map<string, PosOptionGroup["items"][0]>()
+    let sort = 0
+    const menusWithPart = new Set<string>()
+    for (const o of optionsConfigAllMenuOptionsCatalog) {
+      const mid = String(o.menuId ?? "").trim()
+      if (!mid || !chickenMenuIds.has(mid)) continue
+      const fromStep = String(o.optionStepValues?.part ?? "").trim()
+      const part = fromStep || inferChickenOptionPartValue(o)
+      const p = String(part ?? "").trim()
+      if (!p) continue
+      menusWithPart.add(mid)
+      const low = p.toLowerCase()
+      if (byLower.has(low)) continue
+      byLower.set(low, {
+        id: "",
+        groupId: "",
+        itemName: p,
+        sortOrder: sort++,
+        basePriceHall: 0,
+        basePriceDelivery: null,
+        sellHall: true,
+        sellDelivery: true,
+      })
+    }
+    if (byLower.size === 0) return null
+    return {
+      id: VIRTUAL_CHICKEN_PART_GROUP_ID,
+      key: "part",
+      name: t("posOptionVirtualLibraryChickenPartName") || "part (치킨 메뉴 옵션 기준)",
+      isActive: true,
+      sortOrder: -100,
+      items: [...byLower.values()],
+      linkedMenuCount: menusWithPart.size,
+    }
+  }, [menus, optionsConfigLibraryGroups, optionsConfigAllMenuOptionsCatalog, t])
+
+  const optionsConfigLibraryGroupsForUi = React.useMemo(() => {
+    const out = [...optionsConfigLibraryGroups]
+    if (optionsConfigVirtualChickenPartLibraryGroup) out.push(optionsConfigVirtualChickenPartLibraryGroup)
+    return out
+  }, [optionsConfigLibraryGroups, optionsConfigVirtualChickenPartLibraryGroup])
+
   const optionsConfigLibraryItems = React.useMemo(() => {
     const q = optionsConfigLibrarySearchTerm.trim().toLowerCase()
-    type Row = { id: string; label: string; note: string; linkedMenuCount: number; sortOrder: number; numericId: number }
+    type Row = {
+      id: string
+      label: string
+      note: string
+      linkedMenuCount: number
+      sortOrder: number
+      numericId: number
+      canUse: boolean
+    }
     const rows: Row[] = []
-    for (const g of optionsConfigLibraryGroups) {
+    for (const g of optionsConfigLibraryGroupsForUi) {
       if (!g.isActive) continue
       const items = g.items || []
-      if (items.length === 0) continue
+      const hasItems = items.length > 0
       const key = String(g.key ?? "").trim().toLowerCase()
       const name = String(g.name ?? "").trim().toLowerCase()
       if (q && !key.includes(q) && !name.includes(q)) continue
       const deliveryOnlyGroup =
-        items.length > 0 &&
-        items.every((it) => it.sellDelivery !== false && it.sellHall === false)
+        hasItems && items.every((it) => it.sellDelivery !== false && it.sellHall === false)
       if (optionsConfigLibraryFilter === "deliveryOnly" && !deliveryOnlyGroup) continue
       const linkedMenuCount = Number(g.linkedMenuCount ?? 0)
       if (optionsConfigLibraryFilter === "frequent" && linkedMenuCount < 2) continue
       const label = `${String(g.key || "").trim()} · ${String(g.name || "").trim()}`
-      const note =
-        `${items.length}개 항목 · ` +
-        (t("posOptionTemplateUsedMenuCount") || "메뉴 {n}개").replace("{n}", String(linkedMenuCount))
+      const itemLine = hasItems
+        ? (t("posOptionTemplateItemCount") || "{n}개 항목").replace("{n}", String(items.length))
+        : (t("posOptionTemplateGroupNoItems") || "저장된 항목 0개")
+      const menuLine = (t("posOptionTemplateUsedMenuCount") || "메뉴 {n}개").replace("{n}", String(linkedMenuCount))
+      const note = `${itemLine} · ${menuLine}`
+      const numericId = String(g.id).startsWith("virtual:") ? 0 : Number(g.id) || 0
       rows.push({
         id: String(g.id),
         label,
         note,
         linkedMenuCount,
         sortOrder: Number(g.sortOrder ?? 0),
-        numericId: Number(g.id) || 0,
+        numericId,
+        canUse: hasItems,
       })
     }
     if (optionsConfigLibraryFilter === "recent") {
@@ -1388,7 +1525,7 @@ export default function PosMenusPage() {
       })
     }
     return rows.slice(0, 200)
-  }, [optionsConfigLibraryGroups, optionsConfigLibraryFilter, optionsConfigLibrarySearchTerm, t])
+  }, [optionsConfigLibraryGroupsForUi, optionsConfigLibraryFilter, optionsConfigLibrarySearchTerm, t])
 
   const handleUseOptionTemplateFromLibrary = React.useCallback(
     async (groupId: string) => {
@@ -1400,17 +1537,64 @@ export default function PosMenusPage() {
         await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
         return
       }
-      const gidNum = Number(groupId)
-      if (!Number.isFinite(gidNum) || gidNum <= 0) return
 
-      const template = optionsConfigLibraryGroups.find((x) => String(x.id) === String(groupId))
+      let resolvedGroupId = String(groupId).trim()
+      let postMaterializeGroups: PosOptionGroup[] | null = null
+
+      if (resolvedGroupId.startsWith("virtual:")) {
+        const v = optionsConfigLibraryGroupsForUi.find((x) => String(x.id) === resolvedGroupId)
+        if (!v?.items?.length) {
+          await appAlert(t("posOptionTemplateListEmpty") || "불러올 공통 옵션그룹이 없습니다.")
+          return
+        }
+        const globalList = (await getPosOptionGroups()) as PosOptionGroup[]
+        const gk = String(v.key ?? "").trim().toLowerCase()
+        const existingSameKey = globalList.find((g) => String(g.key ?? "").trim().toLowerCase() === gk)
+        const useExistingId =
+          existingSameKey?.id &&
+          String(existingSameKey.id).length > 0 &&
+          (existingSameKey.items?.length ?? 0) === 0
+            ? String(existingSameKey.id)
+            : undefined
+        const saveRes = await savePosOptionGroup({
+          id: useExistingId,
+          key: String(v.key ?? "").trim(),
+          name: String(v.name ?? "").trim(),
+          sortOrder: Number(v.sortOrder ?? 0) || 0,
+          items: v.items.map((it, i) => ({
+            itemName: String(it.itemName ?? "").trim(),
+            sortOrder: i,
+            basePriceHall: Number(it.basePriceHall ?? 0) || 0,
+            basePriceDelivery: it.basePriceDelivery != null ? Number(it.basePriceDelivery) : null,
+            sellHall: it.sellHall !== false,
+            sellDelivery: it.sellDelivery !== false,
+          })),
+        })
+        if (!saveRes.success) {
+          await appAlert(translateApiMessage(saveRes.message, t) || saveRes.message || t("msg_save_fail_detail"))
+          return
+        }
+        resolvedGroupId = String(saveRes.id ?? "").trim()
+        postMaterializeGroups = (await getPosOptionGroups()) as PosOptionGroup[]
+        setOptionsConfigLibraryGroups(Array.isArray(postMaterializeGroups) ? postMaterializeGroups : [])
+      }
+
+      const gidNum = Number(resolvedGroupId)
+      if (!Number.isFinite(gidNum) || gidNum <= 0) {
+        await appAlert(t("posOptionTemplateInvalidGroup") || "유효하지 않은 옵션그룹입니다.")
+        return
+      }
+
+      const template =
+        postMaterializeGroups?.find((x) => String(x.id) === resolvedGroupId) ??
+        optionsConfigLibraryGroupsForUi.find((x) => String(x.id) === resolvedGroupId)
       if (!template?.items?.length) {
         await appAlert(t("posOptionTemplateListEmpty") || "불러올 공통 옵션그룹이 없습니다.")
         return
       }
 
       const menuGroups = await getPosOptionGroups({ menuId: optionsConfigSelectedMenuId })
-      const already = (menuGroups || []).find((g) => String(g.id) === String(groupId) && g.link)
+      const already = (menuGroups || []).find((g) => String(g.id) === String(resolvedGroupId) && g.link)
       if (already) {
         await appAlert(t("posOptionTemplateGroupAlreadyLinked"))
         return
@@ -1446,7 +1630,7 @@ export default function PosMenusPage() {
 
       payloads.push({
         id: undefined,
-        groupId: String(groupId),
+        groupId: resolvedGroupId,
         sortOrder: maxOrder + 1,
         sellHall: true,
         sellDelivery: true,
@@ -1480,7 +1664,7 @@ export default function PosMenusPage() {
     [
       applyLoadedOptionsForConfig,
       loadMenusAndCategories,
-      optionsConfigLibraryGroups,
+      optionsConfigLibraryGroupsForUi,
       optionsConfigMenuOptions,
       optionsConfigSelectedMenu,
       optionsConfigSelectedMenuId,
@@ -1501,11 +1685,11 @@ export default function PosMenusPage() {
   /** 사이즈/부위 드롭다운은 치킨(c 접두) 전용. 비치킨은 단계 키마다 직접 입력 */
   const optionsConfigUseSizePartUi = React.useMemo(() => {
     if (!optionsConfigSelectedMenu) return false
-    return isChickenMenu(optionsConfigSelectedMenu.code)
-  }, [optionsConfigSelectedMenu])
+    return isChickenMenu(optionsConfigSelectedMenu.code) && isSizePartGroups(optionsConfigStepGroups)
+  }, [optionsConfigSelectedMenu, optionsConfigStepGroups])
 
   const optionsConfigGroupPanelItems = React.useMemo(() => {
-    if (optionsConfigStepGroups.length === 0) {
+    if (optionsConfigPanelStepGroups.length === 0) {
       return [
         {
           key: "__default__",
@@ -1519,7 +1703,7 @@ export default function PosMenusPage() {
         },
       ]
     }
-    return optionsConfigStepGroups.map((groupKey) => {
+    return optionsConfigPanelStepGroups.map((groupKey) => {
       const row =
         optionsConfigGroupRulesDraft.find((x) => x.key === groupKey) ||
         ({ key: groupKey, label: groupKey, required: true, minSelect: 1, maxSelect: 1 } as PosOptionSelectionGroupConfig)
@@ -1556,7 +1740,7 @@ export default function PosMenusPage() {
         label: displayLabel,
         required,
         count: optionsConfigMenuOptions.filter((opt) =>
-          optionMatchesGroupFilter(opt, groupKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+          optionMatchesGroupFilter(opt, groupKey, optionsConfigSelectedMenu?.code, optionsConfigPanelStepGroups)
         ).length,
         audience,
         minSelect: minSel,
@@ -1565,10 +1749,11 @@ export default function PosMenusPage() {
       }
     })
   }, [
-    optionsConfigStepGroups,
+    optionsConfigPanelStepGroups,
     optionsConfigMenuOptions,
     optionsConfigGroupRulesDraft,
     optionsConfigSelectedMenu?.code,
+    optionsConfigStepGroups,
     t,
   ])
 
@@ -1603,7 +1788,7 @@ export default function PosMenusPage() {
     const key = optionsConfigEffectiveGroupKey
     if (!key || key === "__default__") return optionsConfigMenuOptions
     const inGroup = optionsConfigMenuOptions.filter((opt) =>
-      optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+      optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigPanelStepGroups)
     )
     const isChickenSizePart =
       isChickenMenu(optionsConfigSelectedMenu?.code) &&
@@ -1614,13 +1799,19 @@ export default function PosMenusPage() {
       return optionsConfigMenuOptions
     }
     return inGroup
-  }, [optionsConfigMenuOptions, optionsConfigEffectiveGroupKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups])
+  }, [
+    optionsConfigMenuOptions,
+    optionsConfigEffectiveGroupKey,
+    optionsConfigSelectedMenu?.code,
+    optionsConfigStepGroups,
+    optionsConfigPanelStepGroups,
+  ])
 
   const optionsConfigOptionsOutsideSelectedGroupCount = React.useMemo(() => {
     const key = optionsConfigEffectiveGroupKey
     if (!key || key === "__default__") return 0
     const inGroup = optionsConfigMenuOptions.filter((opt) =>
-      optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+      optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigPanelStepGroups)
     )
     const isChickenSizePart =
       isChickenMenu(optionsConfigSelectedMenu?.code) &&
@@ -1628,9 +1819,15 @@ export default function PosMenusPage() {
       (key === "size" || key === "part")
     if (inGroup.length === 0 && optionsConfigMenuOptions.length > 0 && !isChickenSizePart) return 0
     return optionsConfigMenuOptions.filter(
-      (opt) => !optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigStepGroups)
+      (opt) => !optionMatchesGroupFilter(opt, key, optionsConfigSelectedMenu?.code, optionsConfigPanelStepGroups)
     ).length
-  }, [optionsConfigMenuOptions, optionsConfigEffectiveGroupKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups])
+  }, [
+    optionsConfigMenuOptions,
+    optionsConfigEffectiveGroupKey,
+    optionsConfigSelectedMenu?.code,
+    optionsConfigStepGroups,
+    optionsConfigPanelStepGroups,
+  ])
 
   const optionsConfigCopySourceMenus = React.useMemo(() => {
     if (!optionsConfigSelectedMenuId) return [] as PosMenu[]
@@ -1640,19 +1837,19 @@ export default function PosMenusPage() {
   const handleOptionGroupRuleFieldChange = React.useCallback(
     (groupKey: string, patch: Partial<PosOptionSelectionGroupConfig>) => {
       setOptionsConfigGroupRulesDraft((prev) => {
-        const normalized = normalizeOptionSelectionConfig(
-          optionsConfigDraftGroupsParsed.length > 0 ? optionsConfigDraftGroupsParsed : optionsConfigStepGroups,
-          prev
-        )
-        return normalized.map((row) => (row.key === groupKey ? { ...row, ...patch } : row))
+        const targetGroups = optionsConfigPanelStepGroups
+        const normalized = normalizeOptionSelectionConfig(targetGroups, prev)
+        const patched = normalized.map((row) => (row.key === groupKey ? { ...row, ...patch } : row))
+        return applyChickenDeliveryRulesToConfig(targetGroups, patched, optionsConfigSelectedMenu?.code, t)
       })
     },
-    [optionsConfigDraftGroupsParsed, optionsConfigStepGroups]
+    [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code, t]
   )
 
   const handleMoveOptionGroup = React.useCallback(
     (groupKey: string, direction: "up" | "down") => {
-      const current = optionsConfigDraftGroupsParsed.length > 0 ? optionsConfigDraftGroupsParsed : optionsConfigStepGroups
+      const current = [...optionsConfigPanelStepGroups]
+      if (isChickenMenu(optionsConfigSelectedMenu?.code) && isSizePartGroups(current)) return
       const idx = current.indexOf(groupKey)
       if (idx < 0) return
       const target = direction === "up" ? idx - 1 : idx + 1
@@ -1664,10 +1861,48 @@ export default function PosMenusPage() {
       setOptionsConfigGroupsDraft(next.join(", "))
       setOptionsConfigGroupRulesDraft((prev) => {
         const normalized = normalizeOptionSelectionConfig(next, prev)
-        return applyChickenOptionGroupLabelsToConfig(next, normalized, optionsConfigSelectedMenu?.code, t)
+        return applyChickenDeliveryRulesToConfig(next, normalized, optionsConfigSelectedMenu?.code, t)
       })
     },
-    [optionsConfigDraftGroupsParsed, optionsConfigStepGroups, optionsConfigSelectedMenu?.code, t]
+    [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code, t]
+  )
+
+  const handleRemoveOptionGroup = React.useCallback(
+    async (groupKey: string) => {
+      if (!optionsConfigSelectedMenu) return
+      const promoId = optionsConfigSelectedMenu.promoId?.trim()
+      if (promoId) {
+        await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
+        return
+      }
+      const current = [...optionsConfigPanelStepGroups]
+      if (!current.includes(groupKey)) return
+      if (isChickenMenu(optionsConfigSelectedMenu.code) && current.length <= 1) {
+        await appAlert(
+          t("posOptionGroupDeleteChickenMin") ||
+            "치킨 메뉴는 옵션 선택 단계를 최소 1개(part) 유지해야 합니다."
+        )
+        return
+      }
+      const ok = await appConfirm(
+        (t("posOptionStepRemoveGroupConfirm") || '단계 "{step}"을(를) 목록에서 제거할까요? [단계 저장] 후 서버에 반영됩니다.').replace(
+          "{step}",
+          groupKey
+        )
+      )
+      if (!ok) return
+      const next = current.filter((k) => k !== groupKey)
+      setOptionsConfigGroupsDraft(next.length > 0 ? next.join(", ") : "")
+      setOptionsConfigGroupRulesDraft((prev) => {
+        const normalized = normalizeOptionSelectionConfig(next, prev)
+        return applyChickenDeliveryRulesToConfig(next, normalized, optionsConfigSelectedMenu.code, t)
+      })
+      setOptionsConfigSelectedGroupKey((prev) => {
+        if (prev !== groupKey) return prev
+        return next[0] ?? ""
+      })
+    },
+    [optionsConfigSelectedMenu, optionsConfigPanelStepGroups, t]
   )
 
   const handleApplyOptionGroupsForConfig = async () => {
@@ -1677,9 +1912,12 @@ export default function PosMenusPage() {
       await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
       return
     }
-    const parsed = parseOptionGroupsFromText(optionsConfigGroupsDraft)
+    const parsed = normalizeOptionGroupsForMenu(
+      parseOptionGroupsFromText(optionsConfigGroupsDraft),
+      optionsConfigSelectedMenu.code
+    )
     const normalized = normalizeOptionSelectionConfig(parsed, optionsConfigGroupRulesDraft)
-    const nextConfig = applyChickenOptionGroupLabelsToConfig(parsed, normalized, optionsConfigSelectedMenu.code, t)
+    const nextConfig = applyChickenDeliveryRulesToConfig(parsed, normalized, optionsConfigSelectedMenu.code, t)
     setOptionsConfigApplyingGroups(true)
     try {
       const res = await savePosMenu({
@@ -1717,7 +1955,7 @@ export default function PosMenusPage() {
     const channelPayload = resolveNewOptionChannelPayload()
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     if (isChickenMenu(optionsConfigSelectedMenu.code)) return
-    if (optionsConfigStepGroups.length > 0) {
+    if (optionsConfigPanelStepGroups.length > 0) {
       await appAlert(
         t("posOptionDirectAddNeedNoSteps") ||
           "선택 단계가 설정된 메뉴에서는 아래 단계별 입력으로 조합을 추가하세요. 한 줄 옵션만 쓰려면 선택 단계를 비운 뒤 [단계 저장]하세요."
@@ -1765,7 +2003,7 @@ export default function PosMenusPage() {
     try {
       const explicitTitle = optionsConfigNewOptionTitle.trim()
 
-      const groups = optionsConfigStepGroups
+      const groups = optionsConfigPanelStepGroups
       if (groups.length === 0) {
         await appAlert(
           t("posOptionConfigNeedGroups") ||
@@ -1829,7 +2067,7 @@ export default function PosMenusPage() {
     const channelPayload = resolveNewOptionChannelPayload()
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     if (isChickenMenu(optionsConfigSelectedMenu.code)) return
-    if (!isSizePartGroups(optionsConfigStepGroups)) {
+    if (!isSizePartGroups(optionsConfigPanelStepGroups)) {
       await appAlert(
         t("posOptionConfigAddAllSizePartOnly") ||
           "[전체 조합 추가]는 선택 단계가 size, part 순서일 때만 사용할 수 있습니다."
@@ -1974,7 +2212,7 @@ export default function PosMenusPage() {
     const duplicates = new Set(
       optionsConfigMenuOptions
         .map((o) =>
-          optionStepValueForGroupFilter(o, selectedKey, optionsConfigSelectedMenu?.code, optionsConfigStepGroups).toLowerCase()
+          optionStepValueForGroupFilter(o, selectedKey, optionsConfigSelectedMenu?.code, optionsConfigPanelStepGroups).toLowerCase()
         )
         .filter(Boolean)
     )
@@ -2026,7 +2264,7 @@ export default function PosMenusPage() {
     resolveNewOptionChannelPayload,
     optionsConfigSelectedMenuId,
     optionsConfigSelectedMenu?.code,
-    optionsConfigStepGroups,
+    optionsConfigPanelStepGroups,
     t,
   ])
 
@@ -2060,9 +2298,12 @@ export default function PosMenusPage() {
         await appAlert(t("posOptionCopyNoOptions") || "선택한 메뉴에 가져올 옵션이 없습니다.")
         return
       }
-      const sourceGroups = (sourceMenu.optionSelectionGroups ?? []).map((x) => String(x).trim()).filter(Boolean)
+      const sourceGroups = normalizeOptionGroupsForMenu(
+        (sourceMenu.optionSelectionGroups ?? []).map((x) => String(x).trim()).filter(Boolean),
+        optionsConfigSelectedMenu.code
+      )
       const normalizedGroupCfg = normalizeOptionSelectionConfig(sourceGroups, sourceMenu.optionSelectionConfig)
-      const nextGroupConfig = applyChickenOptionGroupLabelsToConfig(
+      const nextGroupConfig = applyChickenDeliveryRulesToConfig(
         sourceGroups,
         normalizedGroupCfg,
         optionsConfigSelectedMenu.code,
@@ -4379,6 +4620,14 @@ export default function PosMenusPage() {
                   moveUpLabel={t("move_up") || "위로"}
                   moveDownLabel={t("move_down") || "아래로"}
                   onMoveGroup={handleMoveOptionGroup}
+                  onRemoveGroup={handleRemoveOptionGroup}
+                  removeGroupLabel={t("posOptionStepRemoveGroup")}
+                  removeGroupDisabled={
+                    !!optionsConfigSelectedMenu?.promoId?.trim() ||
+                    (optionsConfigSelectedMenu
+                      ? isChickenMenu(optionsConfigSelectedMenu.code) && optionsConfigPanelStepGroups.length <= 1
+                      : false)
+                  }
                   hallLabel={t("posOptionSellHall") || "홀"}
                   deliveryLabel={t("posOptionSellDelivery") || "배달"}
                 />
@@ -4527,7 +4776,13 @@ export default function PosMenusPage() {
                                   size="sm"
                                   variant="secondary"
                                   className="h-7 shrink-0 text-[11px]"
-                                  disabled={!optionsConfigSelectedMenuId}
+                                  disabled={!optionsConfigSelectedMenuId || !row.canUse}
+                                  title={
+                                    !row.canUse
+                                      ? (t("posOptionTemplateUseDisabledHint") ||
+                                          "공통 그룹에 저장된 항목이 있을 때만 연결할 수 있습니다.")
+                                      : undefined
+                                  }
                                   onClick={() => void handleUseOptionTemplateFromLibrary(row.id)}
                                 >
                                   {t("posOptionTemplateUseBtn") || "이 그룹 사용"}
@@ -4596,9 +4851,9 @@ export default function PosMenusPage() {
                               </div>
                             </div>
                           </div>
-                        ) : optionsConfigStepGroups.length > 0 ? (
+                        ) : optionsConfigPanelStepGroups.length > 0 ? (
                           <div className="flex flex-wrap gap-2 items-end w-full">
-                            {[...(optionsConfigStepGroups || [])]
+                            {[...(optionsConfigPanelStepGroups || [])]
                               .sort((a, b) => {
                                 if (a === optionsConfigEffectiveGroupKey) return -1
                                 if (b === optionsConfigEffectiveGroupKey) return 1
@@ -4664,7 +4919,7 @@ export default function PosMenusPage() {
                               </Button>
                             </div>
                             {optionsConfigSelectedMenuId &&
-                              optionsConfigStepGroups.length > 0 &&
+                              optionsConfigPanelStepGroups.length > 0 &&
                               optionsConfigEffectiveGroupKey &&
                               optionsConfigEffectiveGroupKey !== "__default__" &&
                               (() => {
@@ -4691,37 +4946,85 @@ export default function PosMenusPage() {
                                     : 1
                                 const promoLocked = !!optionsConfigSelectedMenu?.promoId?.trim()
                                 return (
-                                  <div className="flex flex-wrap items-end gap-2">
-                                    <div>
-                                      <label className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
-                                        {t("posOptionRuleMinSelect")}
-                                      </label>
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        className="h-7 w-14 text-right text-xs"
+                                  <div className="flex w-full min-w-0 flex-col gap-2">
+                                    <div className="flex max-w-md items-start gap-2 rounded-md border border-border/50 bg-muted/15 px-2 py-1.5">
+                                      <Checkbox
+                                        id={`opt-req-${groupKey}`}
+                                        checked={row.required !== false}
                                         disabled={promoLocked}
-                                        value={minSel}
-                                        onChange={(e) => {
-                                          const n = Math.max(0, Math.floor(Number(e.target.value)))
+                                        onCheckedChange={(ck) => {
+                                          const on = ck === true
                                           handleOptionGroupRuleFieldChange(groupKey, {
-                                            minSelect: n,
-                                            maxSelect: Math.max(maxSel, n),
+                                            required: on,
+                                            minSelect: on ? Math.max(1, minSel || 1) : 0,
+                                            maxSelect: on
+                                              ? Math.max(maxSel, Math.max(1, minSel || 1))
+                                              : Math.max(1, maxSel),
                                           })
                                         }}
                                       />
+                                      <label
+                                        htmlFor={`opt-req-${groupKey}`}
+                                        className="cursor-pointer text-[11px] leading-snug"
+                                      >
+                                        <span className="font-medium">{t("posOptionRuleRequireForOrder")}</span>
+                                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                          {t("posOptionRuleRequireForOrderHint")}
+                                        </span>
+                                      </label>
                                     </div>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-7 text-[11px]"
-                                      onClick={() => void handleApplyOptionGroupsForConfig()}
-                                      disabled={optionsConfigApplyingGroups || promoLocked}
-                                    >
-                                      {optionsConfigApplyingGroups
-                                        ? (t("saving") || "저장 중...")
-                                        : (t("posOptionConfigApplySteps") || "단계 저장")}
-                                    </Button>
+                                    <div className="flex flex-wrap items-end gap-2">
+                                      <div>
+                                        <label className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
+                                          {t("posOptionRuleMinSelect")}
+                                        </label>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          className="h-7 w-14 text-right text-xs"
+                                          disabled={promoLocked}
+                                          value={minSel}
+                                          onChange={(e) => {
+                                            const n = Math.max(0, Math.floor(Number(e.target.value)))
+                                            handleOptionGroupRuleFieldChange(groupKey, {
+                                              required: n > 0,
+                                              minSelect: n,
+                                              maxSelect: Math.max(maxSel, n > 0 ? n : 1),
+                                            })
+                                          }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
+                                          {t("posOptionRuleMaxSelect")}
+                                        </label>
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          className="h-7 w-14 text-right text-xs"
+                                          disabled={promoLocked}
+                                          value={maxSel}
+                                          onChange={(e) => {
+                                            const n = Math.max(1, Math.floor(Number(e.target.value)))
+                                            handleOptionGroupRuleFieldChange(groupKey, {
+                                              maxSelect: n,
+                                              minSelect: Math.min(minSel, n),
+                                            })
+                                          }}
+                                        />
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-7 text-[11px]"
+                                        onClick={() => void handleApplyOptionGroupsForConfig()}
+                                        disabled={optionsConfigApplyingGroups || promoLocked}
+                                      >
+                                        {optionsConfigApplyingGroups
+                                          ? (t("saving") || "저장 중...")
+                                          : (t("posOptionConfigApplySteps") || "단계 저장")}
+                                      </Button>
+                                    </div>
                                   </div>
                                 )
                               })()}
@@ -4767,8 +5070,8 @@ export default function PosMenusPage() {
                             disabled={
                               optionsConfigUseSizePartUi
                                 ? !newOptionSize || !newOptionPart
-                                : optionsConfigStepGroups.length === 0 ||
-                                  optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim())
+                                : optionsConfigPanelStepGroups.length === 0 ||
+                                  optionsConfigPanelStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim())
                             }
                             type="button"
                           >
@@ -4781,9 +5084,9 @@ export default function PosMenusPage() {
                               size="sm"
                               className="h-8"
                               onClick={handleAddAllOptionsForConfig}
-                              disabled={!optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigStepGroups)}
+                              disabled={!optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigPanelStepGroups)}
                               title={
-                                !optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigStepGroups)
+                                !optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigPanelStepGroups)
                                   ? (t("posOptionConfigAddAllSizePartOnly") || "size, part 단계일 때만 사용")
                                   : undefined
                               }
@@ -4797,7 +5100,7 @@ export default function PosMenusPage() {
 
                     {optionsConfigSelectedMenu &&
                     !isChickenMenu(optionsConfigSelectedMenu.code) &&
-                    optionsConfigStepGroups.length === 0 ? (
+                    optionsConfigPanelStepGroups.length === 0 ? (
                       <div className="rounded border p-3 bg-muted/15 space-y-2">
                         <p className="text-xs font-medium">{t("posOptionDirectAddSection") || "옵션명 직접 추가 (단계 없음)"}</p>
                         <div className="flex flex-wrap items-end gap-2">
@@ -4927,14 +5230,14 @@ export default function PosMenusPage() {
                           const chickenSizeStepGrouped =
                             optionsConfigSelectedMenu &&
                             isChickenMenu(optionsConfigSelectedMenu.code) &&
-                            isSizePartGroups(optionsConfigStepGroups) &&
+                            isSizePartGroups(optionsConfigPanelStepGroups) &&
                             optionsConfigEffectiveGroupKey === "size" &&
                             !optionsConfigShowAllOptions
 
                           const chickenPartStepGrouped =
                             optionsConfigSelectedMenu &&
                             isChickenMenu(optionsConfigSelectedMenu.code) &&
-                            isSizePartGroups(optionsConfigStepGroups) &&
+                            isSizePartGroups(optionsConfigPanelStepGroups) &&
                             optionsConfigEffectiveGroupKey === "part" &&
                             !optionsConfigShowAllOptions
 
@@ -5000,6 +5303,9 @@ export default function PosMenusPage() {
                                     </span>
                                   ))}
                                 </div>
+                                <p className="text-[10px] leading-snug text-muted-foreground">
+                                  사이즈 단계는 S/M/L만 선택합니다. 가격·채널 조합 편집은 [부위] 단계에서 진행해 주세요.
+                                </p>
                                 {sections.map(({ sizeValue, items }) => (
                                   <div key={sizeValue} className="space-y-2">
                                     <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-1.5">
@@ -5019,24 +5325,22 @@ export default function PosMenusPage() {
                                     <p className="px-0.5 text-[10px] leading-snug text-muted-foreground">
                                       {(t("posOptionChickenSizeSectionSub") || "").replace("{size}", sizeValue)}
                                     </p>
-                                    <div className="space-y-2">
-                                      {items.map((o) => {
-                                        const partRaw = inferChickenOptionPartValue(o)
-                                        const partShown = partRaw ? optionPartLabel(partRaw) : ""
-                                        return (
-                                          <div key={o.id} className="space-y-1">
-                                            {partShown ? (
-                                              <div className="flex items-baseline gap-1.5 border-l-2 border-primary/40 pl-2">
-                                                <span className="text-[10px] font-semibold text-primary">
-                                                  {t("posOptionGroupPart")}
-                                                </span>
-                                                <span className="text-[11px] font-medium">{partShown}</span>
-                                              </div>
-                                            ) : null}
-                                            {renderOptionCard(o)}
-                                          </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {Array.from(
+                                        new Set(
+                                          items
+                                            .map((o) => inferChickenOptionPartValue(o))
+                                            .filter((x) => String(x).trim())
+                                            .map((x) => optionPartLabel(String(x)))
                                         )
-                                      })}
+                                      ).map((part) => (
+                                        <span
+                                          key={`${sizeValue}-${part}`}
+                                          className="rounded-md border border-border/80 bg-background px-2 py-0.5 text-[11px] text-foreground/90"
+                                        >
+                                          {part}
+                                        </span>
+                                      ))}
                                     </div>
                                   </div>
                                 ))}

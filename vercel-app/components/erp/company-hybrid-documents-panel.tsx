@@ -418,8 +418,49 @@ export function CompanyHybridDocumentsPanel() {
   const buildCategoryIdPayload = () =>
     formCategoryId !== FORM_CAT_NONE ? Number(formCategoryId) : undefined
 
+  /** 신규는 상단 선택 매장, 수정 시에는 행의 store(API가 기존 행과 일치 요구) */
+  const storeForDocumentMutation = (): string | null => {
+    if (editing?.id) {
+      const fromRow = String(editing.store || "").trim()
+      if (fromRow) return fromRow
+    }
+    return writeStoreForMutations
+  }
+
+  const onSaveUploadedDocMeta = async () => {
+    if (!editing?.id || editing.source === "drive") return
+    const ws = storeForDocumentMutation()
+    if (!ws) {
+      void appAlert(t("companyHybridDocPickStoreForRegister"))
+      return
+    }
+    if (!driveTitle.trim()) {
+      void appAlert(t("companyHybridDocTitle"))
+      return
+    }
+    const body: Record<string, unknown> = {
+      id: editing.id,
+      store: ws,
+      title: driveTitle.trim(),
+      visibility: formVisibility,
+      validFrom: validFrom || undefined,
+      validTo: validTo || undefined,
+      note: note.trim() || undefined,
+      categoryId: buildCategoryIdPayload(),
+    }
+    const res = await saveCompanyHybridDocument(body)
+    if (!res.success) {
+      if (redirectToAdminLoginIfUnauthorized(res.httpStatus, setAuth)) return
+      void appAlert(translateApiMessage(String(res.message || "Error"), (k) => t(k)))
+      return
+    }
+    resetForm()
+    if (mainTab === "list") void load()
+    else setMainTab("list")
+  }
+
   const onSaveDrive = async () => {
-    const ws = writeStoreForMutations
+    const ws = storeForDocumentMutation()
     if (!ws) {
       void appAlert(t("companyHybridDocPickStoreForRegister"))
       return
@@ -704,9 +745,11 @@ export function CompanyHybridDocumentsPanel() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="whitespace-nowrap">{t("companyHybridDocColStore")}</TableHead>
+                        <TableHead className="whitespace-nowrap text-center">
+                          {t("companyHybridDocColStore")}
+                        </TableHead>
                         <TableHead
-                          className="min-w-[8rem]"
+                          className="min-w-[8rem] text-center"
                           aria-sort={
                             titleSort === "asc" ? "ascending" : titleSort === "desc" ? "descending" : undefined
                           }
@@ -714,7 +757,7 @@ export function CompanyHybridDocumentsPanel() {
                           <button
                             type="button"
                             className={cn(
-                              "-mx-1 -my-0.5 inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-1 text-left font-medium",
+                              "-mx-1 -my-0.5 inline-flex w-full max-w-full items-center justify-center gap-1 rounded-md px-1.5 py-1 text-center font-medium",
                               "hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             )}
                             onClick={() => {
@@ -732,12 +775,12 @@ export function CompanyHybridDocumentsPanel() {
                             )}
                           </button>
                         </TableHead>
-                        <TableHead>{t("companyHybridDocColCategory")}</TableHead>
-                        <TableHead>{t("companyHybridDocColPermission")}</TableHead>
-                        <TableHead>{t("companyHybridDocSource")}</TableHead>
-                        <TableHead className="whitespace-nowrap">{t("companyHybridDocColIssued")}</TableHead>
-                        <TableHead>{t("companyHybridDocColCreated")}</TableHead>
-                        <TableHead className="text-right">{t("stockColAction")}</TableHead>
+                        <TableHead className="text-center">{t("companyHybridDocColCategory")}</TableHead>
+                        <TableHead className="text-center">{t("companyHybridDocColPermission")}</TableHead>
+                        <TableHead className="text-center">{t("companyHybridDocSource")}</TableHead>
+                        <TableHead className="whitespace-nowrap text-center">{t("companyHybridDocColIssued")}</TableHead>
+                        <TableHead className="text-center">{t("companyHybridDocColCreated")}</TableHead>
+                        <TableHead className="text-center">{t("stockColAction")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -785,7 +828,7 @@ export function CompanyHybridDocumentsPanel() {
                               >
                                 <ExternalLink className="h-4 w-4" />
                               </Button>
-                              {row.source === "drive" && canM && (
+                              {canM && (
                                 <Button
                                   type="button"
                                   size="icon"
@@ -793,6 +836,8 @@ export function CompanyHybridDocumentsPanel() {
                                   className="h-8 w-8"
                                   onClick={() => {
                                     fillFrom(row)
+                                    const rs = String(row.store || "").trim()
+                                    if (rs) setSelectedStore(rs)
                                     setMainTab("register")
                                   }}
                                   title={t("companyHybridDocEdit")}
@@ -932,6 +977,16 @@ export function CompanyHybridDocumentsPanel() {
                 <Label>{t("companyHybridDocNote")}</Label>
                 <Input value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
+              {editing && editing.source !== "drive" && (
+                <div className="flex flex-wrap gap-2 border-t pt-3">
+                  <Button type="button" onClick={() => void onSaveUploadedDocMeta()} disabled={!storeForDocumentMutation()}>
+                    {t("companyHybridDocSave")}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={resetForm}>
+                    {t("companyHybridDocCancel")}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -950,7 +1005,13 @@ export function CompanyHybridDocumentsPanel() {
                   <Input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={() => void onSaveDrive()} disabled={!writeStoreForMutations}>
+                  <Button
+                    type="button"
+                    onClick={() => void onSaveDrive()}
+                    disabled={
+                      !storeForDocumentMutation() || (editing != null && editing.source !== "drive")
+                    }
+                  >
                     {editing && editing.source === "drive" ? t("companyHybridDocSave") : t("companyHybridDocAddDrive")}
                   </Button>
                   {editing && (

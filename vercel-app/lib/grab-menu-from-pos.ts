@@ -719,7 +719,23 @@ export async function buildGrabMenuFromPos(params: {
             ([k, v]) => String(k).trim() && String(v).trim()
           )
           if (entries.length > 0) {
-            const [groupKey, optionValue] = entries[0]
+            const preferredKeys = selectionConfigEntries
+              .map((cfg) => String(cfg.key || '').trim().toLowerCase())
+              .filter(Boolean)
+            let chosen = entries[0]
+            for (const preferredKey of preferredKeys) {
+              const matched = entries.find(([k]) => String(k || '').trim().toLowerCase() === preferredKey)
+              if (matched) {
+                chosen = matched
+                break
+              }
+            }
+            // 치킨(part 단일화) 레거시 행은 stepValues에 size+part가 함께 남아도 part를 우선 그룹으로 사용
+            if (String(menu.code ?? '').trim().toLowerCase().startsWith('c')) {
+              const chickenPart = entries.find(([k]) => String(k || '').trim().toLowerCase() === 'part')
+              if (chickenPart) chosen = chickenPart
+            }
+            const [groupKey, optionValue] = chosen
             split = {
               groupName: String(groupKey).trim(),
               optionName: String(optionValue).trim(),

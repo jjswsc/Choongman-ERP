@@ -81,6 +81,7 @@ import { formatPosOrderNoForPrint } from "@/lib/pos-order-no"
 import { formatPosReceiptOrderNoDisplay, resolvePosReceiptOrderNoRaw } from "@/lib/pos-delivery-platform"
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
 import { resolvePosCartOptionDisplayName } from "@/lib/pos-cart-option-display-name"
+import { posOptionRowMatchesPickerSelections } from "@/lib/pos-option-step-selection-match"
 import {
   printPosHtmlDocument,
   POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS,
@@ -2265,7 +2266,7 @@ export default function PosOrderPage() {
                 setOptionPickerSelections(nextSelections)
                 if (optionPickerStep >= groups.length - 1) {
                   const match = optsWithStepsToShow.find((o) =>
-                    groups.every((g) => o.optionStepValues?.[g] === nextSelections[g])
+                    posOptionRowMatchesPickerSelections(o.optionStepValues, groups, nextSelections, groupConfigMap)
                   )
                   if (match) {
                     addToCartWithOption(optionPickerMenu, match)
@@ -2310,8 +2311,18 @@ export default function PosOrderPage() {
                       size="sm"
                       className="text-xs"
                       onClick={() => {
+                        const nextSelections = { ...optionPickerSelections }
+                        delete nextSelections[groupKey]
+                        setOptionPickerSelections(nextSelections)
                         if (optionPickerStep >= groups.length - 1) {
-                          addToCartWithOption(optionPickerMenu, null)
+                          const match = optsWithStepsToShow.find((o) =>
+                            posOptionRowMatchesPickerSelections(o.optionStepValues, groups, nextSelections, groupConfigMap)
+                          )
+                          if (match) {
+                            addToCartWithOption(optionPickerMenu, match)
+                          } else {
+                            addToCartWithOption(optionPickerMenu, null)
+                          }
                         } else {
                           setOptionPickerStep((s) => s + 1)
                         }

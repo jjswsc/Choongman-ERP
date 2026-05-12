@@ -61,6 +61,7 @@ import {
 } from '@/lib/pos-menu-display-description'
 import { translatePosMenuLineForReceipt, POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-name'
+import { posOptionRowMatchesPickerSelections } from '@/lib/pos-option-step-selection-match'
 import { isChickenMenu } from '@/lib/pos-menu-categories'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
@@ -1519,7 +1520,7 @@ export function PosTerminalMenuScreen({
                 setOptionPickerSelections(next)
                 if (optionPickerStep >= groups.length - 1) {
                   const match = optsWithStepsToShow.find((o) =>
-                    groups.every((g) => o.optionStepValues?.[g] === next[g])
+                    posOptionRowMatchesPickerSelections(o.optionStepValues, groups, next, groupConfigMap)
                   )
                   if (match) addWithOption(optionPickerMenu, match)
                 } else {
@@ -1563,8 +1564,15 @@ export function PosTerminalMenuScreen({
                       size="sm"
                       className="text-xs"
                       onClick={() => fireMenuAction(() => {
+                        const next = { ...optionPickerSelections }
+                        delete next[groupKey]
+                        setOptionPickerSelections(next)
                         if (optionPickerStep >= groups.length - 1) {
-                          void addWithOption(optionPickerMenu, null)
+                          const match = optsWithStepsToShow.find((o) =>
+                            posOptionRowMatchesPickerSelections(o.optionStepValues, groups, next, groupConfigMap)
+                          )
+                          if (match) void addWithOption(optionPickerMenu, match)
+                          else void addWithOption(optionPickerMenu, null)
                         } else {
                           setOptionPickerStep((s) => s + 1)
                         }

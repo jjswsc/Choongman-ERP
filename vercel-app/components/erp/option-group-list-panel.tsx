@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ArrowDown, ArrowUp } from "lucide-react"
+import { ArrowDown, ArrowUp, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -39,6 +39,10 @@ type OptionGroupListPanelProps = {
   moveUpLabel: string
   moveDownLabel: string
   onMoveGroup: (groupKey: string, direction: "up" | "down") => void
+  /** 생략하면 단계 삭제 버튼 미표시 */
+  removeGroupLabel?: string
+  onRemoveGroup?: (groupKey: string) => void | Promise<void>
+  removeGroupDisabled?: boolean
   hallLabel: string
   deliveryLabel: string
   onToggleGroupAudience?: (groupKey: string, channel: "hall" | "delivery", checked: boolean) => void
@@ -63,6 +67,9 @@ export function OptionGroupListPanel({
   moveUpLabel,
   moveDownLabel,
   onMoveGroup,
+  removeGroupLabel,
+  onRemoveGroup,
+  removeGroupDisabled,
   hallLabel,
   deliveryLabel,
   onToggleGroupAudience,
@@ -155,27 +162,41 @@ export function OptionGroupListPanel({
                         </div>
                       </>
                     ) : null}
-                    <div className="mt-2 flex items-center gap-1">
+                    <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-x-auto">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-6 text-[10px]"
+                        className="h-6 shrink-0 whitespace-nowrap px-2 text-[10px]"
                         onClick={() => onMoveGroup(group.key, "up")}
                       >
-                        <ArrowUp className="mr-1 h-3 w-3" />
+                        <ArrowUp className="mr-1 h-3 w-3 shrink-0" />
                         {moveUpLabel}
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-6 text-[10px]"
+                        className="h-6 shrink-0 whitespace-nowrap px-2 text-[10px]"
                         onClick={() => onMoveGroup(group.key, "down")}
                       >
-                        <ArrowDown className="mr-1 h-3 w-3" />
+                        <ArrowDown className="mr-1 h-3 w-3 shrink-0" />
                         {moveDownLabel}
                       </Button>
+                      {onRemoveGroup && group.key !== "__default__" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 shrink-0 whitespace-nowrap px-2 text-[10px] text-destructive hover:text-destructive"
+                          disabled={removeGroupDisabled}
+                          title={removeGroupLabel}
+                          onClick={() => void onRemoveGroup(group.key)}
+                        >
+                          <Trash2 className="mr-1 h-3 w-3 shrink-0" />
+                          {removeGroupLabel ?? ""}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </li>
