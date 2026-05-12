@@ -1685,8 +1685,8 @@ export default function PosMenusPage() {
   /** 사이즈/부위 드롭다운은 치킨(c 접두) 전용. 비치킨은 단계 키마다 직접 입력 */
   const optionsConfigUseSizePartUi = React.useMemo(() => {
     if (!optionsConfigSelectedMenu) return false
-    return isChickenMenu(optionsConfigSelectedMenu.code) && isSizePartGroups(optionsConfigStepGroups)
-  }, [optionsConfigSelectedMenu, optionsConfigStepGroups])
+    return isChickenMenu(optionsConfigSelectedMenu.code) && isSizePartGroups(optionsConfigPanelStepGroups)
+  }, [optionsConfigSelectedMenu, optionsConfigPanelStepGroups])
 
   const optionsConfigGroupPanelItems = React.useMemo(() => {
     if (optionsConfigPanelStepGroups.length === 0) {
@@ -1731,7 +1731,7 @@ export default function PosMenusPage() {
         .replace("{min}", String(minSel))
         .replace("{max}", String(maxSel))
       let displayLabel = String(row.label ?? groupKey).trim()
-      if (isChickenMenu(optionsConfigSelectedMenu?.code) && isSizePartGroups(optionsConfigStepGroups)) {
+      if (isChickenMenu(optionsConfigSelectedMenu?.code) && isSizePartGroups(optionsConfigPanelStepGroups)) {
         if (groupKey === "size") displayLabel = formatChickenOptionStepDisplayLabel("size", t)
         else if (groupKey === "part") displayLabel = formatChickenOptionStepDisplayLabel("part", t)
       }
@@ -1753,7 +1753,6 @@ export default function PosMenusPage() {
     optionsConfigMenuOptions,
     optionsConfigGroupRulesDraft,
     optionsConfigSelectedMenu?.code,
-    optionsConfigStepGroups,
     t,
   ])
 
@@ -1770,7 +1769,7 @@ export default function PosMenusPage() {
     if (
       optionsConfigSelectedMenu &&
       isChickenMenu(optionsConfigSelectedMenu.code) &&
-      isSizePartGroups(optionsConfigStepGroups)
+      isSizePartGroups(optionsConfigPanelStepGroups)
     ) {
       if (optionsConfigEffectiveGroupKey === "size") return t("posOptionGroupSize")
       if (optionsConfigEffectiveGroupKey === "part") return t("posOptionGroupPart")
@@ -1780,7 +1779,7 @@ export default function PosMenusPage() {
     optionsConfigEffectiveGroupKey,
     optionsConfigSelectedGroupLabel,
     optionsConfigSelectedMenu,
-    optionsConfigStepGroups,
+    optionsConfigPanelStepGroups,
     t,
   ])
 
@@ -1792,7 +1791,7 @@ export default function PosMenusPage() {
     )
     const isChickenSizePart =
       isChickenMenu(optionsConfigSelectedMenu?.code) &&
-      isSizePartGroups(optionsConfigStepGroups) &&
+      isSizePartGroups(optionsConfigPanelStepGroups) &&
       (key === "size" || key === "part")
     /** 레거시: DB step 만 있을 때 비치킨 등은 0건이면 전체 표시. 치킨 size/part는 추론 실패 시 빈 목록(전체 폴백으로 size/part 동일 표시 방지) */
     if (inGroup.length === 0 && optionsConfigMenuOptions.length > 0 && !isChickenSizePart) {
@@ -1803,7 +1802,6 @@ export default function PosMenusPage() {
     optionsConfigMenuOptions,
     optionsConfigEffectiveGroupKey,
     optionsConfigSelectedMenu?.code,
-    optionsConfigStepGroups,
     optionsConfigPanelStepGroups,
   ])
 
@@ -1815,7 +1813,7 @@ export default function PosMenusPage() {
     )
     const isChickenSizePart =
       isChickenMenu(optionsConfigSelectedMenu?.code) &&
-      isSizePartGroups(optionsConfigStepGroups) &&
+      isSizePartGroups(optionsConfigPanelStepGroups) &&
       (key === "size" || key === "part")
     if (inGroup.length === 0 && optionsConfigMenuOptions.length > 0 && !isChickenSizePart) return 0
     return optionsConfigMenuOptions.filter(
@@ -1825,7 +1823,6 @@ export default function PosMenusPage() {
     optionsConfigMenuOptions,
     optionsConfigEffectiveGroupKey,
     optionsConfigSelectedMenu?.code,
-    optionsConfigStepGroups,
     optionsConfigPanelStepGroups,
   ])
 
