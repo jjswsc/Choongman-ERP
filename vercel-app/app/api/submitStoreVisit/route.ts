@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
     ) {
       const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
         id?: number
+        code?: string
         gps_name?: string
         name?: string
         type?: string
@@ -80,23 +81,39 @@ export async function POST(request: NextRequest) {
         }
       }
       const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
-      const isOffice = OFFICE_STORES.some((s) => s.toLowerCase() === storeNameTrim.toLowerCase())
+      const storeNormOffice = storeNameTrim.toLowerCase()
+      const isOffice =
+        OFFICE_STORES.some((s) => s.toLowerCase() === storeNormOffice) ||
+        storeNormOffice.includes('office') ||
+        storeNormOffice.includes('오피스') ||
+        storeNormOffice.includes('본사') ||
+        storeNormOffice.includes('본점')
       if ((targetLat === 0 && targetLng === 0) && isOffice) {
-        const officeNorm = OFFICE_STORES.map((s) => s.trim().toLowerCase())
-        for (const v of vendors || []) {
-          const gpsName = String(v.gps_name || '').trim().toLowerCase()
-          const name = String(v.name || '').trim().toLowerCase()
-          const vType = String(v.type || '').trim().toLowerCase()
-          const vNameInOffice = officeNorm.includes(gpsName) || officeNorm.includes(name)
-          const vType본사 = vType === '본사'
-          const vId548 = v.id === 548
-          if (vNameInOffice || vType본사 || vId548) {
-            const lat = Number(v.lat) || 0
-            const lng = Number(v.lng) || 0
-            if (lat !== 0 || lng !== 0) {
-              targetLat = lat
-              targetLng = lng
-              break
+        const vendorCoords = (v: { lat?: string | number; lng?: string | number }) => {
+          const lat = Number(v.lat) || 0
+          const lng = Number(v.lng) || 0
+          return lat !== 0 || lng !== 0 ? { lat, lng } : null
+        }
+        const hqRow = (vendors || []).find((v) => String(v.code || '').trim().toUpperCase() === 'HQ')
+        const hqCoords = hqRow ? vendorCoords(hqRow) : null
+        if (hqCoords) {
+          targetLat = hqCoords.lat
+          targetLng = hqCoords.lng
+        } else {
+          const officeNorm = OFFICE_STORES.map((s) => s.trim().toLowerCase())
+          for (const v of vendors || []) {
+            const gpsName = String(v.gps_name || '').trim().toLowerCase()
+            const name = String(v.name || '').trim().toLowerCase()
+            const vType = String(v.type || '').trim().toLowerCase()
+            const vNameInOffice = officeNorm.includes(gpsName) || officeNorm.includes(name)
+            const vTypeHq = vType === '본사' || vType.includes('head office')
+            if (vNameInOffice || vTypeHq) {
+              const c = vendorCoords(v)
+              if (c) {
+                targetLat = c.lat
+                targetLng = c.lng
+                break
+              }
             }
           }
         }

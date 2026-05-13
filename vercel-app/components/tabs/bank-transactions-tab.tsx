@@ -1310,6 +1310,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         </Link>
         <span className="font-normal">{` · ${tt("bankCoaUsedForBankHint", "통장·적요 규칙·분개는 동일 DB(account_subjects)를 사용합니다")}`}</span>
       </p>
+      <div className="rounded-md border border-sky-200/80 dark:border-sky-800/50 bg-sky-50/60 dark:bg-sky-950/25 px-3 py-2.5 space-y-1.5">
+        <p className="text-xs font-medium text-foreground">{tt("bankExpenseMgmtCoexistTitle", "지출 관리와 같은 출금 줄을 쓸 때 (출금 용도)")}</p>
+        <p className="text-[11px] text-muted-foreground whitespace-pre-line leading-snug">
+          {tt(
+            "bankExpenseMgmtCoexistBody",
+            "When you will link this bank withdrawal from Expense Management for payment, pick the withdraw category to match your SOP.\n• Transfer, loan, advance, correction, unclassified: no bank auto-journal on save → later bank-link payment mainly adds payable settlement.\n• Expense / Fixed (saved as expense): bank already posts expense/cash → do not also link the same row from Expense Management (pick one workflow).\n• Purchase payment: posts payable/cash → do not also run the same vendor payment twice from Expense Management; use one path."
+          )}
+        </p>
+      </div>
       <input
         ref={invoicePhotoInputRef}
         type="file"

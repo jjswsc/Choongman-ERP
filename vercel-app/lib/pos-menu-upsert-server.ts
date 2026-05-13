@@ -3,6 +3,10 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import {
+  normalizeChickenOptionSelectionGroups,
+  syncOptionSelectionConfigToGroupKeys,
+} from '@/lib/pos-option-selection-groups'
 import { recordPriceChanges } from '@/lib/price-history'
 
 export type PosMenuUpsertApiBody = {
@@ -150,33 +154,35 @@ export async function upsertPosMenuFromBody(
           } => !!x
         )
     : null
+  const chickenSyncGroupOrder =
+    isChickenMenu && optionSelectionGroupsCleaned && optionSelectionGroupsCleaned.length > 0
+      ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsCleaned)
+      : isChickenMenu && optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0
+        ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsLegacy)
+        : isChickenMenu && optionSelectionConfigCleaned && optionSelectionConfigCleaned.length > 0
+          ? normalizeChickenOptionSelectionGroups(
+              optionSelectionConfigCleaned.map((x) => String(x?.key ?? '').trim()).filter(Boolean)
+            )
+          : null
+
   const optionSelectionGroupsFinal =
-    isChickenMenu && (optionSelectionGroupsExplicit || optionSelectionGroupsLegacy)
-      ? ['part']
-      : optionSelectionGroupsCleaned
+    optionSelectionGroupsExplicit && optionSelectionGroupsCleaned != null
+      ? isChickenMenu
+        ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsCleaned)
+        : optionSelectionGroupsCleaned
+      : null
   const optionSelectionGroupsLegacyFinal =
-    isChickenMenu && optionSelectionGroupsLegacy ? ['part'] : optionSelectionGroupsLegacy
+    optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0
+      ? isChickenMenu
+        ? normalizeChickenOptionSelectionGroups(optionSelectionGroupsLegacy)
+        : optionSelectionGroupsLegacy
+      : null
   const optionSelectionConfigFinal =
-    isChickenMenu && optionSelectionConfigExplicit
-      ? (() => {
-          const foundPart = (optionSelectionConfigCleaned || []).find((x) => x.key === 'part')
-          return [
-            {
-              key: 'part',
-              label: String(foundPart?.label ?? 'part').trim() || 'part',
-              audience: foundPart?.audience === 'hall' || foundPart?.audience === 'delivery' ? foundPart.audience : 'all',
-              required: foundPart?.required !== false,
-              minSelect:
-                foundPart?.minSelect != null && Number.isFinite(Number(foundPart.minSelect))
-                  ? Math.max(0, Math.floor(Number(foundPart.minSelect)))
-                  : 1,
-              maxSelect:
-                foundPart?.maxSelect != null && Number.isFinite(Number(foundPart.maxSelect))
-                  ? Math.max(1, Math.floor(Number(foundPart.maxSelect)))
-                  : 1,
-            },
-          ]
-        })()
+    isChickenMenu && optionSelectionConfigExplicit && optionSelectionConfigCleaned != null
+      ? syncOptionSelectionConfigToGroupKeys(
+          chickenSyncGroupOrder && chickenSyncGroupOrder.length > 0 ? chickenSyncGroupOrder : ['part'],
+          optionSelectionConfigCleaned
+        )
       : optionSelectionConfigCleaned
   const kitchenPrinter =
     body.kitchenPrinter === 0 ||

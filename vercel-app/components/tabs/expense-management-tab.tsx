@@ -401,14 +401,13 @@ export function ExpenseManagementTab() {
     [auth?.role]
   )
 
-  const approvablePlansForDay = React.useMemo(
-    () =>
-      (filteredExpensePlans || []).filter((r) => {
-        const rowDate = String(r.dueDate || r.expenseDate || "").slice(0, 10)
-        return r.status === "planned" && canApproveByPolicy(r) && rowDate === startStr
-      }),
-    [filteredExpensePlans, canApproveByPolicy, startStr]
-  )
+  const approvablePlansForDay = React.useMemo(() => {
+    const combined = [...(filteredExpensePlans || []), ...(filteredPurchasePlans || [])]
+    return combined.filter((r) => {
+      const rowDate = String(r.dueDate || r.expenseDate || "").slice(0, 10)
+      return r.status === "planned" && canApproveByPolicy(r) && rowDate === startStr
+    })
+  }, [filteredExpensePlans, filteredPurchasePlans, canApproveByPolicy, startStr])
 
   const handleApprove = React.useCallback(async (row: ExpenseAccrualPlanItem, action: "approve" | "reject") => {
     const note = action === "reject"

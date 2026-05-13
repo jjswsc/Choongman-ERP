@@ -8,6 +8,11 @@ import {
   loadMenuGroupLinks,
   loadPosOptionGroupsWithItems,
 } from '@/lib/pos-option-groups-server'
+import {
+  isChickenMenuCode,
+  normalizeChickenOptionSelectionGroups,
+  syncOptionSelectionConfigToGroupKeys,
+} from '@/lib/pos-option-selection-groups'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
@@ -146,8 +151,20 @@ export async function GET() {
       if (menuLinks.length > 0 && groupsById.size > 0) {
         const resolved = buildSelectionConfigFromLinks(menuLinks, groupsById)
         if (resolved.optionSelectionGroups.length > 0) {
-          optionSelectionGroups = resolved.optionSelectionGroups
-          optionSelectionConfig = resolved.optionSelectionConfig
+          let mergedGroups = resolved.optionSelectionGroups
+          let mergedConfig = resolved.optionSelectionConfig
+          /** 치킨: DB 컬럼에 size가 없는데 링크된 공통 그룹에 size 키가 있으면 컬럼 의도를 존중해 size 제거 (size 단계 폐기 후 링크만으로 부활하는 현상 방지) */
+          if (
+            isChickenMenuCode(row.code) &&
+            optionSelectionGroups.length > 0 &&
+            !optionSelectionGroups.includes('size') &&
+            mergedGroups.includes('size')
+          ) {
+            mergedGroups = normalizeChickenOptionSelectionGroups(mergedGroups.filter((k) => k !== 'size'))
+            mergedConfig = syncOptionSelectionConfigToGroupKeys(mergedGroups, mergedConfig)
+          }
+          optionSelectionGroups = mergedGroups
+          optionSelectionConfig = mergedConfig
         }
       }
       const kp = row.kitchen_printer

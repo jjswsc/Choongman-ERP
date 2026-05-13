@@ -292,6 +292,7 @@ export async function POST(request: NextRequest) {
       targetLng = 0
     const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
       id?: number
+      code?: string
       gps_name?: string
       name?: string
       type?: string
@@ -326,17 +327,31 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    // 오피스 매장인데 위에서 매칭 안 됐으면, 본사(type=본사/Head Office) 좌표 사용
+    // 오피스 매장인데 위에서 매칭 안 됐으면, 본사 좌표 사용
+    // - `saveHeadOfficeInfo`는 code=HQ, type=본사 로 저장. 거래처(saveVendor)만 저장하면 type이 purchase로 바뀔 수 있어 code=HQ도 인정.
     if (targetLat === 0 && targetLng === 0 && isOfficeStore) {
-      const headOffice = (vendors || []).find(
-        (v) => String(v.type || '').toLowerCase().includes('본사') || String(v.type || '').toLowerCase().includes('head office')
-      )
-      if (headOffice) {
-        const lat = Number(headOffice.lat) || 0
-        const lng = Number(headOffice.lng) || 0
-        if (lat !== 0 || lng !== 0) {
-          targetLat = lat
-          targetLng = lng
+      const vendorCoords = (v: { lat?: string | number; lng?: string | number }) => {
+        const lat = Number(v.lat) || 0
+        const lng = Number(v.lng) || 0
+        return lat !== 0 || lng !== 0 ? { lat, lng } : null
+      }
+      const hqRow = (vendors || []).find((v) => String(v.code || '').trim().toUpperCase() === 'HQ')
+      const hqCoords = hqRow ? vendorCoords(hqRow) : null
+      if (hqCoords) {
+        targetLat = hqCoords.lat
+        targetLng = hqCoords.lng
+      } else {
+        const headOffice = (vendors || []).find(
+          (v) =>
+            String(v.type || '').toLowerCase().includes('본사') ||
+            String(v.type || '').toLowerCase().includes('head office')
+        )
+        if (headOffice) {
+          const c = vendorCoords(headOffice)
+          if (c) {
+            targetLat = c.lat
+            targetLng = c.lng
+          }
         }
       }
     }

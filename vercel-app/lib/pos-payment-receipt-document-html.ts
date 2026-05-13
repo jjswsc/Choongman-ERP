@@ -19,6 +19,7 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
+import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 
 function receiptSubtotalAndVatForPrint(receiptData: ReceiptModalData): { subtotalPrint: number; vatPrint: number } {
   const subtotalPrint = resolveReceiptSubtotalPrintAmount({
@@ -342,7 +343,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const forceSimple =
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
-      : /ekkamai/i.test(String(receiptData.storeCode || ''))
+      : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
   if (forceSimple) {
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
       receiptData.items || [],
