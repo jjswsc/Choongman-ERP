@@ -49,11 +49,21 @@ export function normalizeOptionGroupsForMenu(groups: string[], menuCode: string 
   return normalizeChickenOptionSelectionGroups(orderedDedup)
 }
 
+/** `buildSelectionConfigFromLinks` 결과와 동일한 정규화된 단계 설정(항상 label·audience·min/max 확정). */
+export type ResolvedPosOptionSelectionGroupConfig = {
+  key: string
+  label: string
+  audience: 'all' | 'hall' | 'delivery'
+  required: boolean
+  minSelect: number
+  maxSelect: number
+}
+
 /** 단계 키 순서에 맞춰 option_selection_config 행을 맞춘다(누락 키는 기본값). */
 export function syncOptionSelectionConfigToGroupKeys(
   groups: string[],
   existing?: PosOptionSelectionGroupConfig[] | null
-): PosOptionSelectionGroupConfig[] {
+): ResolvedPosOptionSelectionGroupConfig[] {
   const byKey = new Map<string, PosOptionSelectionGroupConfig>()
   for (const row of existing || []) {
     const key = String(row?.key ?? "").trim()
