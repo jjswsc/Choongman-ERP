@@ -92,24 +92,13 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [entityId, setEntityId] = React.useState("")
-  const [fieldName, setFieldName] = React.useState(mode === "item" ? "price" : "price")
-  const [scheduledValue, setScheduledValue] = React.useState("")
+  const [itemSell, setItemSell] = React.useState("")
+  const [itemCost, setItemCost] = React.useState("")
+  const [menuHall, setMenuHall] = React.useState("")
+  const [menuDelivery, setMenuDelivery] = React.useState("")
   const [effectiveAtLocal, setEffectiveAtLocal] = React.useState(nextHourBangkokLocalInput())
   const [itemOptions, setItemOptions] = React.useState<{ id: string; label: string; category: string }[]>([])
   const [categoryOptions, setCategoryOptions] = React.useState<string[]>([])
-
-  const fieldOptions = React.useMemo(() => {
-    if (mode === "item") {
-      return [
-        { value: "price", label: t("priceScheduleFieldItemSell") },
-        { value: "cost", label: t("priceScheduleFieldItemCost") },
-      ]
-    }
-    return [
-      { value: "price", label: t("priceScheduleFieldMenuHall") },
-      { value: "price_delivery", label: t("priceScheduleFieldMenuDelivery") },
-    ]
-  }, [mode, t])
 
   const scheduledFieldLabel = React.useCallback(
     (field: string) => {
@@ -201,9 +190,29 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
       await appAlert(t("priceScheduleAlertSelectTarget"))
       return
     }
-    const n = Number(scheduledValue)
-    if (!Number.isFinite(n) || n < 0) {
-      await appAlert(t("priceScheduleAlertInvalidPrice"))
+    const pairs: { fieldName: string; raw: string }[] =
+      mode === "item"
+        ? [
+            { fieldName: "price", raw: itemSell },
+            { fieldName: "cost", raw: itemCost },
+          ]
+        : [
+            { fieldName: "price", raw: menuHall },
+            { fieldName: "price_delivery", raw: menuDelivery },
+          ]
+    const toSave: { fieldName: string; scheduledValue: number }[] = []
+    for (const { fieldName, raw } of pairs) {
+      const trimmed = String(raw ?? "").trim()
+      if (!trimmed) continue
+      const n = Number(trimmed)
+      if (!Number.isFinite(n) || n < 0) {
+        await appAlert(t("priceScheduleAlertInvalidPrice"))
+        return
+      }
+      toSave.push({ fieldName, scheduledValue: n })
+    }
+    if (toSave.length === 0) {
+      await appAlert(t("priceScheduleAlertEnterAtLeastOne"))
       return
     }
     const effectiveAt = bangkokLocalToUtcIso(effectiveAtLocal)
@@ -213,24 +222,32 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
     }
     setSaving(true)
     try {
-      const r = await savePriceSchedule({
-        entityType: mode,
-        entityId,
-        fieldName,
-        scheduledValue: n,
-        effectiveAt,
-      })
-      if (!r.success) {
-        await appAlert(r.message || t("priceScheduleAlertSaveFailed"))
-        return
+      for (const row of toSave) {
+        const r = await savePriceSchedule({
+          entityType: mode,
+          entityId,
+          fieldName: row.fieldName,
+          scheduledValue: row.scheduledValue,
+          effectiveAt,
+        })
+        if (!r.success) {
+          await appAlert(r.message || t("priceScheduleAlertSaveFailed"))
+          return
+        }
       }
-      setScheduledValue("")
+      if (mode === "item") {
+        setItemSell("")
+        setItemCost("")
+      } else {
+        setMenuHall("")
+        setMenuDelivery("")
+      }
       await loadSchedules()
       await appAlert(t("priceScheduleAlertRegistered"))
     } finally {
       setSaving(false)
     }
-  }, [canManage, entityId, scheduledValue, effectiveAtLocal, mode, fieldName, loadSchedules, t])
+  }, [canManage, entityId, itemSell, itemCost, menuHall, menuDelivery, effectiveAtLocal, mode, loadSchedules, t])
 
   const handleCancel = React.useCallback(async (id: number) => {
     if (!canManage) return
@@ -320,37 +337,66 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
           <CalendarClock className="h-4 w-4 text-primary" />
           {t("priceScheduleSectionTitle")}
         </div>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-          <Select value={entityId} onValueChange={setEntityId} disabled={!canManage}>
-            <SelectTrigger className="h-9 text-xs">
-              <SelectValue placeholder={mode === "item" ? t("priceScheduleSelectItem") : t("priceScheduleSelectMenu")} />
-            </SelectTrigger>
-            <SelectContent>
-              {filteredEntityOptions.map((o) => (
-                <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={fieldName} onValueChange={setFieldName} disabled={!canManage}>
-            <SelectTrigger className="h-9 text-xs">
-              <SelectValue placeholder={t("priceScheduleFieldKindPlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {fieldOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            value={scheduledValue}
-            onChange={(e) => setScheduledValue(e.target.value)}
-            type="number"
-            min={0}
-            step="0.01"
-            className="h-9 text-sm"
-            placeholder={t("priceScheduleNewPricePh")}
-            disabled={!canManage}
-          />
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+          <div className="min-w-0 xl:col-span-2">
+            <Select value={entityId} onValueChange={setEntityId} disabled={!canManage}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder={mode === "item" ? t("priceScheduleSelectItem") : t("priceScheduleSelectMenu")} />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredEntityOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {mode === "item" ? (
+            <>
+              <Input
+                value={itemSell}
+                onChange={(e) => setItemSell(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                className="h-9 text-sm"
+                placeholder={t("priceScheduleFieldItemSell")}
+                disabled={!canManage}
+              />
+              <Input
+                value={itemCost}
+                onChange={(e) => setItemCost(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                className="h-9 text-sm"
+                placeholder={t("priceScheduleFieldItemCost")}
+                disabled={!canManage}
+              />
+            </>
+          ) : (
+            <>
+              <Input
+                value={menuHall}
+                onChange={(e) => setMenuHall(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                className="h-9 text-sm"
+                placeholder={t("priceScheduleFieldMenuHall")}
+                disabled={!canManage}
+              />
+              <Input
+                value={menuDelivery}
+                onChange={(e) => setMenuDelivery(e.target.value)}
+                type="number"
+                min={0}
+                step="0.01"
+                className="h-9 text-sm"
+                placeholder={t("priceScheduleFieldMenuDelivery")}
+                disabled={!canManage}
+              />
+            </>
+          )}
           <Input
             value={effectiveAtLocal}
             onChange={(e) => setEffectiveAtLocal(e.target.value)}

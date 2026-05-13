@@ -23,7 +23,7 @@ alwaysApply: true
 
 | 항목 | 확정 값 |
 |------|---------|
-| 안쪽 여백 | 왼 **5mm**, 오른 **15mm** (`RECEIPT_INNER_INSET_*`) |
+| 안쪽 여백 | 왼 **5mm**, 오른 **17mm** (`RECEIPT_INNER_INSET_*`) — 오른쪽 17mm는 **소수점 2자리(`199.00`/`+27.72` 등) 마지막 글자가 우측 비인쇄영역에 닿지 않도록** 확보한 값. 15mm로 줄이면 일부 80mm 열전사(Zywell 등)에서 오른쪽 끝 1글자(주로 마지막 `0`)가 미인쇄되어 `199.0`처럼 1자리만 보임. |
 | 본문 하단 여백(롤 피드) | **6mm** (`RECEIPT_TRAILING_BOTTOM_MM`) — 절단·드라이버에 따라 마지막 줄과 칼날 겹침 완화 |
 | `.receipt-content` 좌 당김 | **-2mm** (`RECEIPT_CONTENT_NUDGE_LEFT_MM`) |
 | 금액 그리드 | `minmax(0,1fr) **16mm**`, `column-gap **3px**` (`RECEIPT_AMOUNT_COL_MM`, `RECEIPT_GRID_COL_GAP_PX`) |

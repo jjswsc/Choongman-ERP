@@ -210,6 +210,25 @@ function isSizePartGroups(groups: string[]): boolean {
   return groups.length === 2 && groups[0] === "size" && groups[1] === "part"
 }
 
+/** 위/아래 스왑 후 `normalizeOptionGroupsForMenu` 적용 결과. 경계 밖이면 null */
+function optionStepOrderAfterSwap(
+  orderedKeys: string[],
+  groupKey: string,
+  direction: "up" | "down",
+  menuCode: string | undefined
+): string[] | null {
+  const idx = orderedKeys.indexOf(groupKey)
+  if (idx < 0) return null
+  const target = direction === "up" ? idx - 1 : idx + 1
+  if (target < 0 || target >= orderedKeys.length) return null
+  const swapped = [...orderedKeys]
+  const a = swapped[idx]!
+  const b = swapped[target]!
+  swapped[idx] = b
+  swapped[target] = a
+  return normalizeOptionGroupsForMenu(swapped, menuCode)
+}
+
 /** 치킨 옵션: DB option_step_values.size 가 비어 있을 때 이름 맨 앞 S/M/L 로 사이즈 추론 (레거시 행) */
 function inferChickenOptionSizeValue(o: PosMenuOption): string {
   const fromStep = String(o.optionStepValues?.size ?? "").trim()
@@ -232,6 +251,19 @@ function inferChickenOptionPartValue(o: PosMenuOption): string {
   return ""
 }
 
+/**
+ * size/part 외 단계(sidedish 등)가 있으면, 이름만으로 part를 채우면 김치 같은 행이 part·다른 단계에 동시에 걸린다.
+ * 레거시 콤보(M - 윙)·size 스텝이 있을 때만 이름에서 part 추론을 허용한다.
+ */
+function shouldInferChickenPartFromName(o: PosMenuOption, stepGroups: string[]): boolean {
+  if (isSizePartGroups(stepGroups)) return true
+  if (stepGroups.length === 1 && stepGroups[0] === "part") return true
+  if (stepGroups.length > 0 && stepGroups.every((k) => k === "size" || k === "part")) return true
+  if (inferChickenOptionSizeValue(o)) return true
+  if (/^\s*[SML](?:\s*[-–—]|\s+|\b)/i.test(String(o.name ?? "").trim())) return true
+  return false
+}
+
 /** 옵션 구성 탭: 단계별 목록 필터(치킨 size/part는 이름에서 step 값 추론) */
 function optionStepValueForGroupFilter(
   opt: PosMenuOption,
@@ -246,6 +278,7 @@ function optionStepValueForGroupFilter(
   if (isChickenMenu(menuCode) && groupKey === "part" && stepGroups.includes("part")) {
     const direct = String(opt.optionStepValues?.part ?? "").trim()
     if (direct) return direct
+    if (!shouldInferChickenPartFromName(opt, stepGroups)) return ""
     return inferChickenOptionPartValue(opt)
   }
   if (isChickenMenu(menuCode) && groupKey === "size" && stepGroups.includes("size")) {
@@ -1435,8 +1468,16 @@ export default function PosMenusPage() {
     for (const o of optionsConfigAllMenuOptionsCatalog) {
       const mid = String(o.menuId ?? "").trim()
       if (!mid || !chickenMenuIds.has(mid)) continue
+      const menu = menus.find((m) => String(m.id) === mid)
+      const stepGroups = normalizeOptionGroupsForMenu(
+        Array.isArray(menu?.optionSelectionGroups)
+          ? menu.optionSelectionGroups.map((x) => String(x).trim()).filter(Boolean)
+          : [],
+        menu?.code
+      )
       const fromStep = String(o.optionStepValues?.part ?? "").trim()
-      const part = fromStep || inferChickenOptionPartValue(o)
+      const inferred = shouldInferChickenPartFromName(o, stepGroups) ? inferChickenOptionPartValue(o) : ""
+      const part = fromStep || inferred
       const p = String(part ?? "").trim()
       if (!p) continue
       menusWithPart.add(mid)
@@ -1881,22 +1922,43 @@ export default function PosMenusPage() {
   const handleMoveOptionGroup = React.useCallback(
     (groupKey: string, direction: "up" | "down") => {
       const current = [...optionsConfigPanelStepGroups]
-      if (isChickenMenu(optionsConfigSelectedMenu?.code) && isSizePartGroups(current)) return
-      const idx = current.indexOf(groupKey)
-      if (idx < 0) return
-      const target = direction === "up" ? idx - 1 : idx + 1
-      if (target < 0 || target >= current.length) return
-      const next = [...current]
-      const temp = next[idx]
-      next[idx] = next[target]
-      next[target] = temp
-      setOptionsConfigGroupsDraft(next.join(", "))
+      const code = optionsConfigSelectedMenu?.code
+      const nextNorm = optionStepOrderAfterSwap(current, groupKey, direction, code)
+      if (!nextNorm) return
+      if (nextNorm.length === current.length && nextNorm.every((k, i) => k === current[i])) return
+      setOptionsConfigGroupsDraft(nextNorm.join(", "))
       setOptionsConfigGroupRulesDraft((prev) => {
-        const normalized = normalizeOptionSelectionConfig(next, prev)
-        return applyChickenDeliveryRulesToConfig(next, normalized, optionsConfigSelectedMenu?.code, t)
+        const normalized = normalizeOptionSelectionConfig(nextNorm, prev)
+        return applyChickenDeliveryRulesToConfig(nextNorm, normalized, code, t)
       })
     },
     [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code, t]
+  )
+
+  const isOptionStepMoveUpDisabled = React.useCallback(
+    (groupKey: string) => {
+      const current = optionsConfigPanelStepGroups
+      const idx = current.indexOf(groupKey)
+      if (idx <= 0) return true
+      const code = optionsConfigSelectedMenu?.code
+      const nextNorm = optionStepOrderAfterSwap(current, groupKey, "up", code)
+      if (!nextNorm) return true
+      return nextNorm.length === current.length && nextNorm.every((k, i) => k === current[i])
+    },
+    [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code]
+  )
+
+  const isOptionStepMoveDownDisabled = React.useCallback(
+    (groupKey: string) => {
+      const current = optionsConfigPanelStepGroups
+      const idx = current.indexOf(groupKey)
+      if (idx < 0 || idx >= current.length - 1) return true
+      const code = optionsConfigSelectedMenu?.code
+      const nextNorm = optionStepOrderAfterSwap(current, groupKey, "down", code)
+      if (!nextNorm) return true
+      return nextNorm.length === current.length && nextNorm.every((k, i) => k === current[i])
+    },
+    [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code]
   )
 
   const handleRemoveOptionGroup = React.useCallback(
@@ -4702,6 +4764,8 @@ export default function PosMenusPage() {
                   stepListReadOnly
                   moveUpLabel={t("move_up") || "위로"}
                   moveDownLabel={t("move_down") || "아래로"}
+                  isMoveUpDisabled={isOptionStepMoveUpDisabled}
+                  isMoveDownDisabled={isOptionStepMoveDownDisabled}
                   onMoveGroup={handleMoveOptionGroup}
                   onRemoveGroup={handleRemoveOptionGroup}
                   removeGroupLabel={t("posOptionStepRemoveGroup")}

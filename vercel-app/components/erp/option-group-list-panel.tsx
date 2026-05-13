@@ -38,6 +38,9 @@ type OptionGroupListPanelProps = {
   chickenPresetDisabled?: boolean
   moveUpLabel: string
   moveDownLabel: string
+  /** 생략 시 첫 행만 위로 비활성(기본). 지정 시 단계 순서가 실제로 바뀌지 않는 경우까지 포함해 비활성 처리 */
+  isMoveUpDisabled?: (groupKey: string) => boolean
+  isMoveDownDisabled?: (groupKey: string) => boolean
   onMoveGroup: (groupKey: string, direction: "up" | "down") => void
   /** 생략하면 단계 삭제 버튼 미표시 */
   removeGroupLabel?: string
@@ -66,6 +69,8 @@ export function OptionGroupListPanel({
   chickenPresetDisabled,
   moveUpLabel,
   moveDownLabel,
+  isMoveUpDisabled,
+  isMoveDownDisabled,
   onMoveGroup,
   removeGroupLabel,
   onRemoveGroup,
@@ -105,8 +110,12 @@ export function OptionGroupListPanel({
           <p className="py-6 text-center text-xs text-muted-foreground">{emptyLabel}</p>
         ) : (
           <ul className="space-y-1">
-            {groups.map((group) => {
+            {groups.map((group, listIdx) => {
               const selected = group.key === selectedGroupKey
+              const upDisabled = isMoveUpDisabled ? isMoveUpDisabled(group.key) : listIdx === 0
+              const downDisabled = isMoveDownDisabled
+                ? isMoveDownDisabled(group.key)
+                : listIdx >= groups.length - 1
               return (
                 <li key={group.key}>
                   <div
@@ -168,6 +177,7 @@ export function OptionGroupListPanel({
                         variant="outline"
                         size="sm"
                         className="h-6 shrink-0 whitespace-nowrap px-2 text-[10px]"
+                        disabled={upDisabled}
                         onClick={() => onMoveGroup(group.key, "up")}
                       >
                         <ArrowUp className="mr-1 h-3 w-3 shrink-0" />
@@ -178,6 +188,7 @@ export function OptionGroupListPanel({
                         variant="outline"
                         size="sm"
                         className="h-6 shrink-0 whitespace-nowrap px-2 text-[10px]"
+                        disabled={downDisabled}
                         onClick={() => onMoveGroup(group.key, "down")}
                       >
                         <ArrowDown className="mr-1 h-3 w-3 shrink-0" />

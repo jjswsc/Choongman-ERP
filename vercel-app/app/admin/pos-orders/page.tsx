@@ -59,7 +59,7 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
-import { cn, escapeHtml } from "@/lib/utils"
+import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
 import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"

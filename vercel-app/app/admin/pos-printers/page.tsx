@@ -46,7 +46,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
 import { escapeHtmlReceiptEmphasizeChannelTokenAfterHash } from "@/lib/pos-delivery-platform"
 import { kitchenSlipPrintI18n } from "@/lib/pos-kitchen-slip-print-i18n"
-import { cn, escapeHtml } from "@/lib/utils"
+import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import {
@@ -1167,9 +1167,9 @@ export default function PosPrintersPage() {
           Array.isArray(it.promoLines) && it.promoLines.length > 0
             ? `<div class="receipt-line-note">${it.promoLines.map((l) => `- ${escapeHtml(l)}`).join("<br/>")}</div>`
             : ""
-        return `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${(
+        return `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${formatBahtNum(
           it.qty * it.price
-        ).toLocaleString()}</span></div>${promoHtml}${
+        )}</span></div>${promoHtml}${
           itemBarcodeUrl
             ? `<div class="text-center" style="margin: 3px 0 5px 0;"><img src="${escapeHtml(itemBarcodeUrl)}" alt="Item barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>`
             : ""
@@ -1248,13 +1248,13 @@ export default function PosPrintersPage() {
           <div class="receipt-item-head"><span>${escapeHtml(tr("posMenuName", "품목"))}</span><span>${escapeHtml(tr("amount", "금액"))}</span></div>
           ${lines}
           <div class="receipt-divider"></div>
-          <div class="receipt-row"><span>${escapeHtml(t("posSubtotal") || "소계")}</span><span>${previewData.subtotal.toLocaleString()}</span></div>
-          <div class="receipt-row"><span>${escapeHtml(t("posDiscount") || "할인")}</span><span>-${previewData.discount.toLocaleString()}</span></div>
-          <div class="receipt-row"><span>${escapeHtml(t("posDeliveryFee") || "배달 수수료")}</span><span>+${previewData.delivery.toLocaleString()}</span></div>
-          <div class="receipt-row"><span>${escapeHtml(t("posPackagingFee") || "포장 수수료")}</span><span>+${previewData.packaging.toLocaleString()}</span></div>
+          <div class="receipt-row"><span>${escapeHtml(t("posSubtotal") || "소계")}</span><span>${formatBahtNum(previewData.subtotal)}</span></div>
+          <div class="receipt-row"><span>${escapeHtml(t("posDiscount") || "할인")}</span><span>-${formatBahtNum(previewData.discount)}</span></div>
+          <div class="receipt-row"><span>${escapeHtml(t("posDeliveryFee") || "배달 수수료")}</span><span>+${formatBahtNum(previewData.delivery)}</span></div>
+          <div class="receipt-row"><span>${escapeHtml(t("posPackagingFee") || "포장 수수료")}</span><span>+${formatBahtNum(previewData.packaging)}</span></div>
           <div class="receipt-divider-strong"></div>
           <div class="receipt-total">
-            <div class="receipt-row"><span>${escapeHtml(t("posTotal") || "합계")}</span><span>${previewData.total.toLocaleString()}</span></div>
+            <div class="receipt-row"><span>${escapeHtml(t("posTotal") || "합계")}</span><span>${formatBahtNum(previewData.total)}</span></div>
           </div>
           <div class="receipt-divider"></div>
           ${receiptBarcodeUrl ? `<div class="text-center" style="margin: 8px 0;"><img src="${escapeHtml(receiptBarcodeUrl)}" alt="Receipt barcode" style="width:100%;max-width:100%;height:auto;object-fit:contain;" /></div>` : ""}
@@ -2327,7 +2327,7 @@ export default function PosPrintersPage() {
                     <div key={`pv-receipt-${idx}`} className="my-1">
                       <div className="flex items-center justify-between">
                         <span>{it.qty}x {it.name}</span>
-                        <span>{(it.qty * it.price).toLocaleString()}</span>
+                        <span>{formatBahtNum(it.qty * it.price)}</span>
                       </div>
                       {Array.isArray(it.promoLines) && it.promoLines.length > 0
                         ? it.promoLines.map((line, li) => (
@@ -2352,13 +2352,13 @@ export default function PosPrintersPage() {
                     </div>
                   ))}
                   <div className="my-2 border-t border-dashed border-black" />
-                  <div className="my-1 flex items-center justify-between"><span>{t("posSubtotal") || "소계"}</span><span>{previewData.subtotal.toLocaleString()}</span></div>
-                  <div className="my-1 flex items-center justify-between"><span>{t("posDiscount") || "할인"}</span><span>-{previewData.discount.toLocaleString()}</span></div>
-                  <div className="my-1 flex items-center justify-between"><span>{t("posDeliveryFee") || "배달 수수료"}</span><span>+{previewData.delivery.toLocaleString()}</span></div>
-                  <div className="my-1 flex items-center justify-between"><span>{t("posPackagingFee") || "포장 수수료"}</span><span>+{previewData.packaging.toLocaleString()}</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posSubtotal") || "소계"}</span><span>{formatBahtNum(previewData.subtotal)}</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posDiscount") || "할인"}</span><span>-{formatBahtNum(previewData.discount)}</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posDeliveryFee") || "배달 수수료"}</span><span>+{formatBahtNum(previewData.delivery)}</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posPackagingFee") || "포장 수수료"}</span><span>+{formatBahtNum(previewData.packaging)}</span></div>
                   <div className="my-2 border-t-2 border-black" />
                   <div className="font-bold">
-                    <div className="flex items-center justify-between"><span>{t("posTotal") || "합계"}</span><span>{previewData.total.toLocaleString()}</span></div>
+                    <div className="flex items-center justify-between"><span>{t("posTotal") || "합계"}</span><span>{formatBahtNum(previewData.total)}</span></div>
                   </div>
                   <div className="my-2 border-t border-dashed border-black" />
                   {receiptBarcode ? (
