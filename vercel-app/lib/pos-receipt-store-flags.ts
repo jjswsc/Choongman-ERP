@@ -26,9 +26,6 @@ export function shouldForceSimplePaymentReceiptForStore(storeCode: string | null
   if (s.includes('ekamai') || s.includes('eakkamai')) return true
   // 태국어 지역명(에까마이)
   if (s.includes('เอกมัย')) return true
-  // 후아막(Huamak / Huamark) — CP-80260H 등에서 결제 영수증 grid 2열이 좌우로 찢김
-  if (s.includes('huamak') || s.includes('huamark')) return true
-  if (s.includes('หัวหมาก')) return true
   return false
 }
 

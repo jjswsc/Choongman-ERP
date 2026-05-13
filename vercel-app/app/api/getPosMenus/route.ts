@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { runDuePriceSchedules } from '@/lib/price-schedule'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import {
   type PosOptionGroupRow,
@@ -29,6 +30,12 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    try {
+      await runDuePriceSchedules(new Date())
+    } catch (scheduleErr) {
+      console.error('getPosMenus runDuePriceSchedules:', scheduleErr)
+    }
+
     let groupsById = new Map<number, PosOptionGroupRow>()
     let linksByMenuId = new Map<number, PosMenuOptionGroupLinkRow[]>()
     try {

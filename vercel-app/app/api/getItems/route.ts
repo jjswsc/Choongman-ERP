@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
+import { runDuePriceSchedules } from '@/lib/price-schedule'
 
 const ITEMS_SELECT_FULL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order,stock_base_unit,stock_unit_options,standard_units,account_subject_id'
 const ITEMS_SELECT_MINIMAL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order'
@@ -63,6 +64,12 @@ export async function GET(request: NextRequest) {
   const isHqOnly = scope === 'outbound' || scope === 'order'
 
   try {
+    try {
+      await runDuePriceSchedules(new Date())
+    } catch (scheduleErr) {
+      console.error('getItems runDuePriceSchedules:', scheduleErr)
+    }
+
     const resolveVendorName = await createVendorNameResolver()
     let rows: ItemRow[] | null = null
     let hasStockCols = true

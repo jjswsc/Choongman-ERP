@@ -92,15 +92,7 @@ import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
   type PosOrderReceiptLineOptions,
 } from "@/lib/pos-payment-receipt-from-order"
-import {
-  RECEIPT_AMOUNT_COL_MM,
-  RECEIPT_CONTENT_NUDGE_LEFT_MM,
-  RECEIPT_GRID_COL_GAP_PX,
-  RECEIPT_INNER_INSET_LEFT_MM,
-  RECEIPT_INNER_INSET_RIGHT_MM,
-  RECEIPT_TRAILING_BOTTOM_MM,
-} from "@/lib/pos-receipt-layout"
-import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
+import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-receipt-document-html"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
@@ -1287,27 +1279,6 @@ export default function PosOrderPage() {
     }
   }
 
-  const POS_PAPER_SIDE_PADDING_MM = 0
-  const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
-    ${posThermalReceiptPageSizeRule()}
-    html, body { margin: 0; padding: 0; }
-    html { height: auto; }
-    body {
-      width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
-      max-width: ${POS_THERMAL_RECEIPT_WIDTH_MM}mm;
-      min-height: auto;
-      height: auto;
-      box-sizing: border-box;
-      font-family: ${fontFamily};
-      font-size: ${fontSizePx}px;
-      padding: ${POS_PAPER_SIDE_PADDING_MM}mm ${RECEIPT_INNER_INSET_RIGHT_MM}mm ${POS_PAPER_SIDE_PADDING_MM}mm ${RECEIPT_INNER_INSET_LEFT_MM}mm;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    @media print {
-      body { zoom: 1; }
-    }
-  `
   const printInIframe = React.useCallback(
     (
       fullHtml: string,
@@ -1331,36 +1302,46 @@ export default function PosOrderPage() {
   )
 
   const handlePrintReceipt = async () => {
-    if (!receiptRef.current) return
-    const printContent = receiptRef.current.innerHTML
-    const fullHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${t("posReceipt") || "영수증"}</title>
-          <style>
-            ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${RECEIPT_INNER_INSET_LEFT_MM}mm; padding-right: ${RECEIPT_INNER_INSET_RIGHT_MM}mm; }
-            .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${RECEIPT_CONTENT_NUDGE_LEFT_MM}mm; break-inside: avoid; page-break-inside: avoid; }
-            .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) ${RECEIPT_AMOUNT_COL_MM}mm; column-gap: ${RECEIPT_GRID_COL_GAP_PX}px; align-items: start; margin: 4px 0; padding-right: 0; box-sizing: border-box; }
-            .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; font-size: 10px; line-height: 1.2; }
-            .receipt-row.receipt-total > span:last-child, .receipt-total .receipt-row > span:last-child { font-size: 11px; }
-            .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
-            .receipt-biz { margin: 2px 0; font-size: 11px; }
-            .receipt-brand-logo { display: inline-block; height: auto; object-fit: contain; }
-            .receipt-brand-logo.sm { width: 84px; }
-            .receipt-brand-logo.md { width: 108px; }
-            .receipt-brand-logo.lg { width: 132px; }
-            .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; }
-            .space-y-2 > * + * { margin-top: 8px; }
-            .space-y-1 > * + * { margin-top: 4px; }
-          </style>
-        </head>
-        <body>${printContent}</body>
-      </html>
-    `
+    if (!receiptData) return
+    const fullHtml = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: String(receiptData.orderNo ?? ""),
+        storeCode: String(receiptData.storeCode ?? ""),
+        orderType: String(receiptData.orderType ?? ""),
+        tableName: receiptData.tableName ? String(receiptData.tableName) : undefined,
+        memo: receiptData.memo ? String(receiptData.memo) : "",
+        items: (receiptData.items || []).map((it) => ({
+          id: String(it.id ?? ""),
+          name: String(it.name ?? ""),
+          price: Number(it.price ?? 0) || 0,
+          qty: Number(it.qty ?? 0) || 0,
+          note: String(it.note ?? ""),
+          promoItems: Array.isArray((it as { promoItems?: unknown }).promoItems)
+            ? ((it as { promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[] }).promoItems ?? [])
+            : [],
+        })),
+        subtotal: Number(receiptData.subtotal ?? 0) || 0,
+        discountAmt: Number(receiptData.discountAmt ?? 0) || 0,
+        total: Number(receiptData.total ?? 0) || 0,
+        deliveryFee: Number(receiptData.deliveryFee ?? 0) || 0,
+        packagingFee: Number(receiptData.packagingFee ?? 0) || 0,
+        vatFeeAmt: Number(receiptData.vatFeeAmt ?? 0) || 0,
+        vatFeeMode: receiptData.vatFeeMode,
+        receiptExclusiveSubtotalDisplay: Number(receiptData.receiptExclusiveSubtotalDisplay ?? 0) || 0,
+        receiptVatDisplayAmt: Number(receiptData.receiptVatDisplayAmt ?? 0) || 0,
+        receiptTaxableGrossForDisplay: Number(receiptData.receiptTaxableGrossForDisplay ?? 0) || 0,
+        serviceFeeAmt: Number(receiptData.serviceFeeAmt ?? 0) || 0,
+        serviceFeeMode: receiptData.serviceFeeMode,
+        cardFeeAmt: Number(receiptData.cardFeeAmt ?? 0) || 0,
+        cardFeeMode: receiptData.cardFeeMode,
+        otherFeeAmt: Number(receiptData.otherFeeAmt ?? 0) || 0,
+        otherFeeMode: receiptData.otherFeeMode,
+      },
+      t,
+      lang,
+      menuNameById: (menuId: string) =>
+        menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || "",
+    })
     try {
       await printInIframe(fullHtml, t("posReceipt") || "영수증", {
         printRole: "receipt",

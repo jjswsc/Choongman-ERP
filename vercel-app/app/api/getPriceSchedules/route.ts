@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelectFilter } from "@/lib/supabase-server"
 import { requireAuth } from "@/lib/verify-auth"
+import { runDuePriceSchedules } from "@/lib/price-schedule"
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -8,6 +9,12 @@ export async function GET(req: NextRequest) {
   const authRes = await requireAuth(req, "manager")
   if (authRes.errorResponse) return authRes.errorResponse
   try {
+    try {
+      await runDuePriceSchedules(new Date())
+    } catch (scheduleErr) {
+      console.error("getPriceSchedules runDuePriceSchedules:", scheduleErr)
+    }
+
     const { searchParams } = new URL(req.url)
     const entityType = String(searchParams.get("entityType") || "").trim()
     const status = String(searchParams.get("status") || "").trim()

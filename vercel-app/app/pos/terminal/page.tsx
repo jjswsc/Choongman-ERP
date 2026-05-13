@@ -82,7 +82,6 @@ import {
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import {
-  buildPosTaxInvoiceThermalHtml,
   parsePosOrderMemo,
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
@@ -94,8 +93,6 @@ import { kitchenSlipPrintI18n } from '@/lib/pos-kitchen-slip-print-i18n'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import {
-  escapeHtmlReceiptEmphasizeChannelTokenAfterHash,
-  formatPosReceiptOrderNoDisplay,
   getPosDeliveryPlatformName,
   isApiInboundDeliveryOrderMemo,
   pickPosChannelOrderNo,
@@ -115,13 +112,12 @@ import {
 } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
-import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
-import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
 import {
   normalizePosTableNameForMatch,
   translatePosMenuLineForReceipt,
   translateReceiptTableDisplayName,
 } from '@/lib/pos-print-translate'
+import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-receipt-document-html'
 import {
   enrichPosOrderLikeItemsWithPromoSnapshot,
   isPosOrderPaidLikeStatus,
@@ -2244,169 +2240,32 @@ export default function PosTerminalPage() {
     onAfterDirectPrint?: () => void
   ) {
     if (posDemoRef.current) return
-    const esc = (value: string) =>
-      value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-    const timestamp = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Bangkok',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(new Date())
-    const parsedMemo = parsePosOrderMemo(payload.memo)
-    const tr = (key: string, fallback: string) => {
-      const value = tPrint(key)
-      return value && value !== key ? value : fallback
-    }
-    /* 주문용 영수증: 로고 없이 심플 (내부/주방 참조용) */
-    const ct = (tag: string) => '\u003c/' + tag + '>'
-    const tableDisplay = payload.tableName
-      ? translateReceiptTableDisplayName(payload.tableName, (k) => tPrint(k))
-      : ''
-    const tableRow = tableDisplay
-      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
-          esc(tr('posTable', '테이블')) +
-          ct('span') +
-          '<span class="receipt-meta-value">' +
-          escapeHtmlReceiptEmphasizeChannelTokenAfterHash(tableDisplay) +
-          ct('span') +
-          ct('div')
-      : ''
-    const channelOrderPick = pickPosChannelOrderNo({
-      tableName: payload.tableName,
-      orderNo: payload.orderNo,
-      memo: payload.memo,
-    })
-    const channelOrderNoRow =
-      channelOrderPick.kind !== 'pos_order' && channelOrderPick.text.trim()
-        ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
-            esc(tr('posChannelOrderNo', '채널 주문번호')) +
-            ct('span') +
-            '<span class="receipt-meta-value">#' +
-            esc(channelOrderPick.text.trim()) +
-            ct('span') +
-            ct('div')
-        : ''
-    const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
-    const orderTypeLabelText =
-      payload.orderType === 'delivery'
-        ? tr('posOrderTypeDelivery', 'Delivery')
-        : payload.orderType === 'takeout'
-          ? tr('posOrderTypeTakeout', 'Takeaway')
-          : tr('posOrderTypeDineIn', 'Dine In')
-    const orderTypeRow =
-      '<div class="receipt-order-type-chip">' +
-      esc(orderTypeLabelText) +
-      ct('div')
-    const itemsRows = payload.items
-      .map((it, idx) => {
-        const addon = Boolean((it as { isAddon?: boolean }).isAddon)
-        const prevAddon = idx > 0 && Boolean((payload.items[idx - 1] as { isAddon?: boolean }).isAddon)
-        const addonHead =
-          addon && !prevAddon
-            ? '<div class="receipt-addon-section" style="margin:10px 0 6px;padding-top:8px;border-top:1px dashed #666;font-size:11px;font-weight:700;text-align:center">' +
-              esc(tr('posReceiptAddonSection', '추가 주문')) +
-              ct('div')
-            : ''
-        const lineName = resolveOrderItemDisplayName({
+    const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
+    let receiptHtml = buildPosHallOrderReceiptDocumentHtml({
+      payload,
+      t: tPrint,
+      lang: printLang,
+      resolveOrderItemDisplayName: (it) =>
+        resolveOrderItemDisplayName({
           id: String(it.id ?? ''),
           name: String(it.name ?? ''),
           menuId: String((it as { menuId?: string }).menuId ?? ''),
-        })
-        const lineSplit = splitPosPrintItemLine(lineName)
-        const lineMain = translatePosMenuLineForReceipt(lineSplit.mainName || lineName, (k) => tPrint(k))
-        const lineOption = lineSplit.optionLine
-          ? translatePosMenuLineForReceipt(lineSplit.optionLine, (k) => tPrint(k))
-          : ''
-        const lineNote = normalizePosLineNote(String((it as { note?: string }).note ?? ''), {
-          keepOptionSummary: false,
-        })
-        const promoComposeLines =
-          Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems) &&
-          (it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems!.length > 0
-            ? (it as { promoItems: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems
-                .slice(0, 4)
-                .map((p) => {
-                  const menuName = menus.find((m) => String(m.id) === String(p.menuId))?.name?.trim() || `#${String(p.menuId)}`
-                  return `${menuName} x${Math.max(1, Number(p.quantity) || 1)}`
-                })
-            : []
-        const promoComposeMoreCount =
-          promoComposeLines.length > 0 &&
-          Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
-            ? Math.max(
-                0,
-                ((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems?.length || 0) -
-                  promoComposeLines.length
-              )
-            : 0
-        const promoComposeHtml =
-          promoComposeLines.length > 0
-            ? '<div class="receipt-line-note">' +
-              promoComposeLines.map((line) => '- ' + esc(line)).join('<br/>') +
-              (promoComposeMoreCount > 0 ? '<br/>+' + String(promoComposeMoreCount) : '') +
-              ct('div')
-            : ''
-        const noteHtml = lineNote
-          ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
-          : ''
-        const optionHtml = lineOption
-          ? '<div class="receipt-line-note">- ' + esc(lineOption) + ct('div')
-          : ''
-        return (
-          addonHead +
-          '<div class="receipt-row"><span>' +
-          it.qty +
-          'x ' +
-          esc(lineMain) +
-          ct('span') +
-          '<span>' +
-          formatBahtNum(it.price * it.qty) +
-          ct('span') +
-          ct('div') +
-          optionHtml +
-          promoComposeHtml +
-          noteHtml
-        )
-      })
-      .join('')
-    const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
-    const taxInvoiceRow = parsedMemo.taxInvoice
-      ? buildPosTaxInvoiceThermalHtml({ taxInvoice: parsedMemo.taxInvoice, esc, tr })
-      : ''
-    const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ct('span') + ct('div') : ''
-    const orderNoForPrint = formatPosReceiptOrderNoDisplay({
-      posOrderNo: payload.orderNo,
-      tableName: payload.tableName,
-      memo: payload.memo,
+        }),
+      menuNameById: (menuId: string) =>
+        menus.find((m) => String(m.id) === String(menuId))?.name?.trim() || '',
     })
-    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(orderNoForPrint) + ct('div') + orderTypeRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + channelOrderNoRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + taxInvoiceRow + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ct('span') + ct('div') + ct('div')
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-    const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
-    const receiptHtml = buildReceiptDocumentHtml({
-      title: tPrint('posReceipt') || '영수증',
-      htmlLang: printLang,
-      bodyContent: printContent,
-      extraStyles:
-        '.receipt-order-simple .receipt-order-type-chip{display:inline-block;margin-top:7px;padding:3px 11px;border:1.6px solid #000;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;color:#000;line-height:1.2}.receipt-order-simple .receipt-row{margin:6px 0}.receipt-order-simple .receipt-item-head{padding-bottom:5px}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#111}.receipt-order-simple .receipt-order-label{font-weight:800}',
-      footerContent: showPrintButtonInReceipt
-        ? '<button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +
-            printButtonLabel +
-            '</button>'
-        : undefined,
-    })
+    if (showPrintButtonInReceipt) {
+      const footerButton =
+        '<div class="receipt-print-actions"><button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +
+        printButtonLabel +
+        '</button></div>'
+      receiptHtml = receiptHtml.replace('</body>', footerButton + '</body>')
+    }
 
     if (fromUserGesture && onShowInModal) {
       onShowInModal(receiptHtml)
