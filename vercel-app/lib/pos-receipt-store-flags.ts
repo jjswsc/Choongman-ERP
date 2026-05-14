@@ -69,3 +69,17 @@ export function shouldForcePaymentReceiptLogoForStore(storeCode: string | null |
   if (s.includes('หัวหมาก')) return true
   return false
 }
+
+/**
+ * 후아막/더스트리트처럼 OEM 편차가 큰 매장은
+ * 결제 영수증 2열 유지 시에도 폭·폰트를 한 단계 줄여 분열을 완화한다.
+ */
+export function shouldUseNarrowLegacyPaymentReceiptForStore(storeCode: string | null | undefined): boolean {
+  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
+  if (!s0) return false
+  const s = s0.toLowerCase()
+  if (s.includes('huamak') || s.includes('huamark') || s.includes('huama')) return true
+  if (s.includes('หัวหมาก')) return true
+  if (s.includes('the street') || s.includes('thestreet')) return true
+  return false
+}

@@ -24,6 +24,7 @@ import {
   shouldForceSimplePaymentReceiptForStore,
   shouldForcePaymentReceiptLogoForStore,
   shouldUseLegacyAlignedPaymentReceiptForStore,
+  shouldUseNarrowLegacyPaymentReceiptForStore,
 } from '@/lib/pos-receipt-store-flags'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
@@ -305,7 +306,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       ? forceSimpleTextMode
       : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
   const useLegacyAligned = !forceSimple && shouldUseLegacyAlignedPaymentReceiptForStore(receiptData.storeCode)
+  const useNarrowLegacy = useLegacyAligned && shouldUseNarrowLegacyPaymentReceiptForStore(receiptData.storeCode)
   const forceReceiptLogo = shouldForcePaymentReceiptLogoForStore(receiptData.storeCode)
+  const legacyAmountColMm = useNarrowLegacy ? 14.6 : RECEIPT_AMOUNT_COL_MM
+  const legacyGapPx = useNarrowLegacy ? 2 : RECEIPT_GRID_COL_GAP_PX
   const paymentRowHtml = (nameInnerHtml: string, amtInnerHtml: string, extraClass = '') =>
     useLegacyAligned
       ? `<div class="receipt-row${extraClass ? ` ${extraClass}` : ''}"><span>${nameInnerHtml}</span><span>${amtInnerHtml}</span></div>`
@@ -515,7 +519,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         </div>`
     : ''
   const printContent = `
-      <div class="receipt-content receipt-payment${useLegacyAligned ? ' receipt-payment--legacy-safe' : ''} ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
+      <div class="receipt-content receipt-payment${useLegacyAligned ? ' receipt-payment--legacy-safe' : ''}${useNarrowLegacy ? ' receipt-payment--legacy-narrow' : ''} ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
         <div class="receipt-brand-wrap text-center">
           ${showLogo ? `<img src="${esc(logoUrl)}" alt="Company logo" class="receipt-brand-logo ${esc(d.receiptLogoSize)}" />` : ''}
           <div class="receipt-store-name">${esc(receiptData.storeCode)}</div>
@@ -695,9 +699,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment--legacy-safe .receipt-row,
         .receipt-payment--legacy-safe .receipt-item-head { display: table !important; width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; break-inside: avoid; page-break-inside: avoid; }
         .receipt-payment--legacy-safe .receipt-row > span:first-child,
-        .receipt-payment--legacy-safe .receipt-item-head > span:first-child { display: table-cell !important; width: auto !important; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px !important; vertical-align: top !important; word-break: break-word; }
+        .receipt-payment--legacy-safe .receipt-item-head > span:first-child { display: table-cell !important; width: auto !important; padding-right: ${legacyGapPx}px !important; vertical-align: top !important; word-break: break-word; }
         .receipt-payment--legacy-safe .receipt-row > span:last-child,
-        .receipt-payment--legacy-safe .receipt-item-head > span:last-child { display: table-cell !important; width: ${RECEIPT_AMOUNT_COL_MM}mm !important; min-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; max-width: ${RECEIPT_AMOUNT_COL_MM}mm !important; text-align: right !important; vertical-align: top !important; white-space: nowrap !important; }
+        .receipt-payment--legacy-safe .receipt-item-head > span:last-child { display: table-cell !important; width: ${legacyAmountColMm}mm !important; min-width: ${legacyAmountColMm}mm !important; max-width: ${legacyAmountColMm}mm !important; text-align: right !important; vertical-align: top !important; white-space: nowrap !important; }
         .receipt-payment--legacy-safe .receipt-item-head { margin-top: 2px; }
         .receipt-payment--legacy-safe .receipt-row { margin: 5px 0; }
         .receipt-payment--legacy-safe .receipt-total { margin-top: 10px; padding-top: 6px; border-top: 1px solid #000; font-weight: 800; }
@@ -708,6 +712,13 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment--legacy-safe .tax-invoice-row > .tax-invoice-label { display: table-cell !important; width: 22mm !important; vertical-align: top !important; padding-right: 4px !important; font-weight: 600; }
         .receipt-payment--legacy-safe .tax-invoice-row > span:last-child { display: table-cell !important; width: auto !important; vertical-align: top !important; word-break: break-word; }
         .receipt-payment--legacy-safe .tax-invoice-row.tax-invoice-addr > span:last-child { word-break: break-word; }
+        .receipt-payment--legacy-narrow { padding-right: 0.8mm; }
+        .receipt-payment--legacy-narrow .receipt-meta-label { width: 20mm !important; font-size: 9.8px; }
+        .receipt-payment--legacy-narrow .receipt-meta-value { font-size: 10.6px; line-height: 1.34; }
+        .receipt-payment--legacy-narrow .receipt-row > span:first-child { font-size: 10.6px; line-height: 1.3; }
+        .receipt-payment--legacy-narrow .receipt-row > span:last-child { font-size: 10.2px; }
+        .receipt-payment--legacy-narrow .receipt-item-head > span:first-child,
+        .receipt-payment--legacy-narrow .receipt-item-head > span:last-child { font-size: 10px; }
         `
             : `
         .tax-invoice-stack { margin: 6px 0; break-inside: avoid; page-break-inside: avoid; }
