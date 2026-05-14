@@ -28,7 +28,12 @@ function formatBahtInt(n: number | null | undefined): string {
   })
 }
 
-export type StoreSalesRefetchOptions = { scope?: "all" | "current"; storeCode?: string }
+export type StoreSalesRefetchOptions = {
+  scope?: "all" | "current"
+  storeCode?: string
+  /** 사용자 수동 새로고침 — 테이블 스냅샷 즉시 재조회 */
+  immediate?: boolean
+}
 
 export type StoreSalesRealtimeViewProps = {
   effectiveStoreCode: string
@@ -67,6 +72,12 @@ export function StoreSalesRealtimeView({
   const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
 
+  /** 테이블/주문만 바뀌고 매장 ID 집합이 같으면 동일 — `stores` 참조 변경으로 당일 매출 API가 반복 호출되는 것을 막음 */
+  const allStoresCodesKey = useMemo(() => {
+    if (!isAllStoresSelected) return ""
+    return [...new Set(stores.map((s) => String(s.id || "").trim()).filter(Boolean))].sort().join(",")
+  }, [isAllStoresSelected, stores])
+
   const loadTodaySales = useCallback(() => {
     if (!effectiveStoreCode) return
     if (!isAllStoresSelected) {
@@ -78,9 +89,9 @@ export function StoreSalesRealtimeView({
         .catch(() => setTodaySales(null))
       return
     }
-    const storeCodes = stores
-      .map((store) => String(store.id || "").trim())
-      .filter(Boolean)
+    const storeCodes = allStoresCodesKey
+      ? allStoresCodesKey.split(",").map((c) => c.trim()).filter(Boolean)
+      : []
     if (!storeCodes.length) {
       setTodaySales({ completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 })
       setStoreSalesMap({})
@@ -115,21 +126,22 @@ export function StoreSalesRealtimeView({
         setStoreSalesMap({})
         setTodaySales(null)
       })
-  }, [effectiveStoreCode, isAllStoresSelected, stores])
+  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
 
   const refreshRealtimeSection = useCallback(() => {
     loadTodaySales()
     if (effectiveStoreCode && !isAllStoresSelected) {
-      void refetchStores({ storeCode: effectiveStoreCode })
+      void refetchStores({ storeCode: effectiveStoreCode, immediate: true })
       return
     }
-    void refetchStores({ scope: "all" })
+    void refetchStores({ scope: "all", immediate: true })
   }, [loadTodaySales, refetchStores, effectiveStoreCode, isAllStoresSelected])
 
+  /** 당일 매출 숫자만 자동 갱신. 테이블/주문(getPosOrders)은 부모 usePosStore 초기 로드·수동 새로고침에만 맡김 — 중복 호출·전송량 절감 */
   useEffect(() => {
     if (!effectiveStoreCode) return
-    refreshRealtimeSection()
-  }, [effectiveStoreCode, refreshRealtimeSection])
+    loadTodaySales()
+  }, [effectiveStoreCode, loadTodaySales])
 
   const sortedTables = useMemo(() => {
     const tables = currentStore?.tables || []

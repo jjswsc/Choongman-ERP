@@ -511,7 +511,7 @@ export default function PosTerminalPage() {
   )
 
   const refetchCurrentStore = useCallback(() => {
-    return refetchStores({ scope: 'current' })
+    return refetchStores({ scope: 'current', immediate: true })
   }, [refetchStores])
 
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)

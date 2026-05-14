@@ -5724,7 +5724,8 @@ export const i18n = {
     posStatusAll: '전체',
     posOrdersStoreScope: '조회 매장',
     mobileStoreSalesTitle: '매장 실시간 매출',
-    mobileStoreSalesSub: 'POS 기준 당일 합계와 테이블 사용 현황입니다. 주문·결제 시 자동으로 갱신됩니다.',
+    mobileStoreSalesSub:
+      'POS 기준 당일 합계는 매장·전체 선택 시 자동으로 조회됩니다. 테이블·진행 주문 반영은 상단 새로고침을 눌러 주세요.',
     mobileStoreSalesTodayTotal: '당일 매출 합계',
     mobileStoreSalesCompletedOrders: '완료 건수',
     mobileStoreSalesPendingOrders: '진행 중',
@@ -6573,7 +6574,7 @@ export const i18n = {
     helpSum_admin_live_store_sales:
       'POS 영업일 기준 당일 완료·진행 주문 합계와 테이블별 진행 금액을 본사·매장에서 같은 기준으로 확인하는 화면입니다.',
     helpHow_admin_live_store_sales:
-      '① 본사(오피스) 계정은 상단 매장 선택으로 조회 매장을 바꿉니다. 매장 계정은 로그인 매장만 표시됩니다.\n② 새로고침으로 즉시 갱신하고, 약 15초마다 자동으로 다시 불러옵니다. Supabase Realtime이 연결된 경우 주문·결제 반영 시 더 빨리 갱신될 수 있습니다.\n③ 테이블 목록은 배치에 등록된 테이블 중 당일 홀 진행 주문이 있는 좌석만 금액·손님 수와 함께 나열합니다. 기간별 분석은「매출 관리」메뉴를 이용하세요.\n④ 모바일에서 동일 화면이 필요하면「모바일 매출 화면」링크로 `/store-sales`를 열 수 있습니다.',
+      '① 본사(오피스) 계정은 상단 매장 선택으로 조회 매장을 바꿉니다. 매장 계정은 로그인 매장만 표시됩니다.\n② 당일 완료·진행 합계는 매장(또는 전체)을 고를 때마다 자동으로 다시 불러옵니다. 테이블·진행 주문 목록은 서버 부하를 줄이기 위해 자동으로 반복 조회하지 않으니, 최신 좌석 현황이 필요하면「새로고침」을 누르세요.\n③ 테이블 목록은 배치에 등록된 테이블 중 당일 홀 진행 주문이 있는 좌석만 금액·손님 수와 함께 나열합니다. 기간별 분석은「매출 관리」메뉴를 이용하세요.\n④ 모바일에서 동일 화면이 필요하면「모바일 매출 화면」링크로 `/store-sales`를 열 수 있습니다.',
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다.',
     helpHow_admin_pos_menus:
@@ -13557,7 +13558,8 @@ orderItemQty: 'Qty',
     posStatusAll: 'All',
     posOrdersStoreScope: 'Store scope',
     mobileStoreSalesTitle: 'Store live sales',
-    mobileStoreSalesSub: "Today's POS totals and table occupancy. Updates when orders or payments change.",
+    mobileStoreSalesSub:
+      "Today's POS totals refresh when you pick a store or All. Use Refresh to reload table occupancy and open orders.",
     mobileStoreSalesTodayTotal: 'Today total',
     mobileStoreSalesCompletedOrders: 'Completed orders',
     mobileStoreSalesPendingOrders: 'In progress',
@@ -14407,7 +14409,7 @@ orderItemQty: 'Qty',
     helpSum_admin_live_store_sales:
       'See the POS business-day totals for completed and in-progress orders, plus per-table open dine-in amounts, with the same rules on web admin and mobile.',
     helpHow_admin_live_store_sales:
-      '① Head-office users: pick the store at the top. Store logins see their own store only.\n② Use Refresh for an immediate pull; the screen also auto-refreshes about every 15 seconds. If Supabase Realtime is configured, updates may appear sooner after orders or payments.\n③ The table list shows layout tables that have an open dine-in order today with guest count and amount. Use Sales management for period analytics.\n④ Open the Mobile sales screen link to use `/store-sales` on a phone.',
+      '① Head-office users: pick the store at the top. Store logins see their own store only.\n② Today’s completed/in-progress totals reload automatically when you change the store (or pick All). Table and open-order data is not polled on a timer to reduce server traffic—press Refresh when you need the latest seat view.\n③ The table list shows layout tables that have an open dine-in order today with guest count and amount. Use Sales management for period analytics.\n④ Open the Mobile sales screen link to use `/store-sales` on a phone.',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery).',
     helpHow_admin_pos_menus:

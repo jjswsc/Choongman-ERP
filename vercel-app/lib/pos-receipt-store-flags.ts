@@ -41,3 +41,18 @@ export function shouldUseTightSimpleReceiptInsetForStore(storeCode: string | nul
   if (s.includes('เอกมัย')) return true
   return false
 }
+
+/**
+ * True 계열 매장은 기존 2열(항목/금액) 정렬이 더 안정적으로 맞는 장비가 있어
+ * 결제 영수증을 레거시 2열 마크업/스타일로 유지한다.
+ */
+export function shouldUseLegacyAlignedPaymentReceiptForStore(storeCode: string | null | undefined): boolean {
+  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
+  if (!s0) return false
+  const ascii = s0.toLowerCase()
+  if (ascii.includes('true digital')) return true
+  if (ascii.includes('truedigital')) return true
+  const tokenized = ascii.replace(/[^a-z0-9]+/g, ' ').trim()
+  if (!tokenized) return false
+  return tokenized.split(/\s+/).includes('true')
+}

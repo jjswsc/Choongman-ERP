@@ -279,6 +279,8 @@ type StoreSnapshot = {
 type RefetchStoresOptions = {
   scope?: 'all' | 'current'
   storeCode?: string
+  /** true: 헤더 새로고침 등 사용자가 즉시 반영을 기대할 때(디바운스 생략) */
+  immediate?: boolean
 }
 
 export function usePosStore() {
@@ -582,12 +584,20 @@ export function usePosStore() {
       .finally(() => setLoading(false))
   }, [effectiveStoreCodes.join(','), currentStoreId, fetchStoreSnapshot])
 
-  /** refetchStores 디바운스 (600ms) - 연속 호출 시 API 부하 감소 */
+  /** refetchStores 디바운스 (600ms) - 연속 호출 시 API 부하 감소. `immediate`면 즉시 실행하고 Promise 반환 */
   const refetchStores = useCallback((options?: RefetchStoresOptions) => {
+    const immediate = Boolean(options?.immediate)
+    const pass: RefetchStoresOptions = {
+      scope: options?.scope,
+      storeCode: options?.storeCode,
+    }
+    if (immediate) {
+      return refetchStoresImmediate(pass)
+    }
     if (refetchTimeoutRef.current) clearTimeout(refetchTimeoutRef.current)
     refetchTimeoutRef.current = setTimeout(() => {
       refetchTimeoutRef.current = null
-      refetchStoresImmediate(options)
+      void refetchStoresImmediate(pass)
     }, 600)
   }, [refetchStoresImmediate])
 
