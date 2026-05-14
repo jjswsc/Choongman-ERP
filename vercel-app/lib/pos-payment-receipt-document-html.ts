@@ -19,7 +19,11 @@ import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { splitPosPrintItemLine } from '@/lib/pos-print-item-line'
-import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
+import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
+import {
+  shouldForceSimplePaymentReceiptForStore,
+  shouldUseStackedPaymentReceiptForStore,
+} from '@/lib/pos-receipt-store-flags'
 
 function receiptSubtotalAndVatForPrint(receiptData: ReceiptModalData): { subtotalPrint: number; vatPrint: number } {
   const subtotalPrint = resolveReceiptSubtotalPrintAmount({
@@ -344,13 +348,15 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     typeof forceSimpleTextMode === 'boolean'
       ? forceSimpleTextMode
       : shouldForceSimplePaymentReceiptForStore(receiptData.storeCode)
+  const useStackedPaymentReceipt =
+    !forceSimple && shouldUseStackedPaymentReceiptForStore(receiptData.storeCode)
   if (forceSimple) {
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
       receiptData.items || [],
       receiptData.discountAmt,
       isPaymentReceipt
     )
-    const orderTypeLabel = orderTypeLabels[receiptData.orderType] || receiptData.orderType
+    const orderTypeLabel = orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType
     const itemRows = (receiptData.items || [])
       .map((it, idx) => {
         const banban = parseBanbanFlavorsFromName(it.name)
@@ -480,7 +486,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         </div>`
     : ''
   const printContent = `
-      <div class="receipt-content receipt-payment ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
+      <div class="receipt-content receipt-payment${useStackedPaymentReceipt ? ' receipt-payment--stacked' : ''} ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
         <div class="receipt-brand-wrap text-center">
           ${showLogo ? `<img src="${esc(logoUrl)}" alt="Company logo" class="receipt-brand-logo ${esc(d.receiptLogoSize)}" />` : ''}
           <div class="receipt-store-name">${esc(receiptData.storeCode)}</div>
@@ -504,7 +510,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
               : ''
           }
           <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('date', 'Date'))}</span><span class="receipt-meta-value">${esc(printedAtStr)}</span></div>
-          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderType', 'Order Type'))}</span><span class="receipt-meta-value">${esc(orderTypeLabels[receiptData.orderType] || receiptData.orderType)}</span></div>
+          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderType', 'Order Type'))}</span><span class="receipt-meta-value">${esc(orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType)}</span></div>
         </div>
         <div class="receipt-divider"></div>
         ${(d.receiptBizName || d.receiptBizTaxId || d.receiptBizAbn || d.receiptBizOwner || d.receiptBizAddress || d.receiptBizPhone) ? '<div class="text-xs receipt-muted receipt-biz-wrap">' : ''}
@@ -643,9 +649,9 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         /* full 레이아웃은 유지하되, 결제 영수증의 행 배치를 table 기반으로 고정해 분리 인쇄를 완화 */
         .receipt-payment { position: static !important; left: 0 !important; width: 100% !important; max-width: 100% !important; }
         .receipt-payment .receipt-row,
-        .receipt-payment .receipt-item-head { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
+        .receipt-payment .receipt-item-head { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; break-inside: avoid; page-break-inside: avoid; }
         .receipt-payment .receipt-row > span:first-child,
-        .receipt-payment .receipt-item-head > span:first-child { display: table-cell; width: calc(100% - ${RECEIPT_AMOUNT_COL_MM}mm); padding-right: ${RECEIPT_GRID_COL_GAP_PX}px; vertical-align: top; }
+        .receipt-payment .receipt-item-head > span:first-child { display: table-cell; width: auto; padding-right: ${RECEIPT_GRID_COL_GAP_PX}px; vertical-align: top; }
         .receipt-payment .receipt-row > span:last-child,
         .receipt-payment .receipt-item-head > span:last-child { display: table-cell; width: ${RECEIPT_AMOUNT_COL_MM}mm; text-align: right; vertical-align: top; white-space: normal; }
         .receipt-payment .receipt-meta-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
@@ -654,6 +660,26 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         .receipt-payment .tax-invoice-row { display: table; width: 100%; table-layout: fixed; border-collapse: collapse; }
         .receipt-payment .tax-invoice-row > .tax-invoice-label { display: table-cell; width: 22mm; vertical-align: top; padding-right: 4px; }
         .receipt-payment .tax-invoice-row > span:last-child { display: table-cell; width: auto; vertical-align: top; }
+        ${
+          useStackedPaymentReceipt
+            ? `
+        /* OEM 80mm: 2열 table/grid 대신 품목→금액 세로 스택 (문자폭·렌더 차이에 강함) */
+        .receipt-payment--stacked .receipt-item-head { display: none !important; }
+        .receipt-payment--stacked .receipt-row,
+        .receipt-payment--stacked .receipt-item-head { display: block !important; width: 100% !important; table-layout: auto !important; border-collapse: separate !important; }
+        .receipt-payment--stacked .receipt-row > span,
+        .receipt-payment--stacked .receipt-item-head > span { display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+        .receipt-payment--stacked .receipt-row > span:last-child,
+        .receipt-payment--stacked .receipt-item-head > span:last-child { text-align: right !important; margin-top: 1px; font-weight: 700; }
+        .receipt-payment--stacked .receipt-meta-row { display: block !important; margin: 5px 0 !important; }
+        .receipt-payment--stacked .receipt-meta-label { display: block !important; width: 100% !important; white-space: normal !important; padding-right: 0 !important; font-size: 10px; }
+        .receipt-payment--stacked .receipt-meta-value { display: block !important; width: 100% !important; margin-top: 1px; }
+        .receipt-payment--stacked .tax-invoice-row { display: block !important; margin: 6px 0 !important; }
+        .receipt-payment--stacked .tax-invoice-row > .tax-invoice-label { display: block !important; width: 100% !important; padding-right: 0 !important; }
+        .receipt-payment--stacked .tax-invoice-row > span:last-child { display: block !important; width: 100% !important; margin-top: 2px; }
+        `
+            : ''
+        }
       `,
   })
 }

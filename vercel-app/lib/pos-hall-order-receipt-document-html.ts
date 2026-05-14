@@ -11,6 +11,7 @@ import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
+import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 
 type HallOrderItem = {
   id: string
@@ -112,13 +113,17 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     esc(timestamp) +
     c('span') +
     c('div')
+  const otKey = normalizePosOrderTypeKey(payload.orderType)
   const orderTypeLabelText =
-    payload.orderType === 'delivery'
+    otKey === 'delivery'
       ? tr('posOrderTypeDelivery', 'Delivery')
-      : payload.orderType === 'takeout'
+      : otKey === 'takeout'
         ? tr('posOrderTypeTakeout', 'Takeaway')
         : tr('posOrderTypeDineIn', 'Dine In')
-  const orderTypeRow = '<div class="receipt-order-type-chip">' + esc(orderTypeLabelText) + c('div')
+  const orderTypeChipInline =
+    '<span class="receipt-order-type-chip receipt-order-type-chip--inline"> ' +
+    esc(orderTypeLabelText) +
+    '</span>'
   const itemsRows = payload.items
     .map((it) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
@@ -226,8 +231,8 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     esc(tr('posOrderNo', '주문')) +
     ' #' +
     esc(orderNoForPrint) +
+    orderTypeChipInline +
     c('div') +
-    orderTypeRow +
     c('div') +
     '<div class="receipt-divider">' +
     c('div') +
@@ -280,7 +285,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     htmlLang: lang,
     bodyContent: printContent,
     extraStyles:
-      '.receipt-order-simple .receipt-order-type-chip{display:inline-block;margin-top:7px;padding:3px 11px;border:1.6px solid #000;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;color:#000;line-height:1.2}.receipt-order-simple .receipt-order-label{font-weight:800}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#111}.receipt-order-simple .receipt-row,.receipt-order-simple .receipt-item-head{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-row>span:first-child,.receipt-order-simple .receipt-item-head>span:first-child{display:table-cell;width:calc(100% - ' +
+      '.receipt-order-simple .receipt-order-label{font-weight:800;line-height:1.35}.receipt-order-simple .receipt-order-type-chip{display:inline-block;vertical-align:middle;border:1.4px solid #000;border-radius:999px;font-weight:800;color:#000;background:#fff}.receipt-order-simple .receipt-order-type-chip--inline{margin-left:5px;padding:1px 8px;font-size:10px;letter-spacing:.02em;line-height:1.2}.receipt-order-simple .receipt-line-note{margin-left:2.3mm;color:#111}.receipt-order-simple .receipt-row,.receipt-order-simple .receipt-item-head{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-row>span:first-child,.receipt-order-simple .receipt-item-head>span:first-child{display:table-cell;width:calc(100% - ' +
       String(RECEIPT_AMOUNT_COL_MM) +
       'mm);padding-right:' +
       String(RECEIPT_GRID_COL_GAP_PX) +

@@ -1,9 +1,11 @@
 /**
- * 매출 필터 옵션 (매장 목록). pos_orders 기준. startStr~endStr 기간 내 store_code 목록.
+ * 매출 필터 옵션 (매장 목록). pos_orders 기준.
+ * startStr~endStr: POS 영업일 라벨(매장별 영업시간) 구간 — getPosTodaySales / 매출 리포트와 동일.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
+import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -18,26 +20,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ posOptions: [] }, { headers })
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
-
-    const rpcRows = (await supabaseRpc<{ store_code?: string }[]>('get_pos_sales_filter_store_codes', {
-      p_start_utc: startISO,
-      p_end_utc_exclusive: endISOExclusive,
-    }).catch(() => null)) as { store_code?: string }[] | null
-
-    if (Array.isArray(rpcRows) && rpcRows.length > 0) {
-      const posOptions = rpcRows
-        .map((r) => String(r.store_code ?? '').trim())
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b))
-      return NextResponse.json({ posOptions, source: 'rpc' as const }, { headers })
-    }
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
 
     const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'store_code',
-    })) as { store_code?: string }[]
+      select: 'store_code,created_at',
+    })) as { store_code?: string; created_at?: string }[]
+
+    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
 
     const posSet = new Set<string>()
     for (const r of rows) {
@@ -45,7 +37,7 @@ export async function GET(request: NextRequest) {
       if (p) posSet.add(p)
     }
     const posOptions = Array.from(posSet).sort()
-    if (rows.length >= 50000) headers.set('X-Sales-Truncated', '1')
+    if (rowsRaw.length >= 50000) headers.set('X-Sales-Truncated', '1')
 
     return NextResponse.json({ posOptions, source: 'select' as const }, { headers })
   } catch (e) {

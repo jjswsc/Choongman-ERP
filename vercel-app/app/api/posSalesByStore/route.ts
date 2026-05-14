@@ -4,7 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import {
   normalizePosOrderTypeKey,
   parseOrderTypesParam,
@@ -15,6 +15,7 @@ import {
   appendStoreCodeFilter,
   canonicalSalesStoreRowKey,
 } from '@/lib/pos-sales-store-filter'
+import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 const FETCH_LIMIT = 50000
@@ -35,15 +36,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
 
-    const rows = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
+    const rowsRaw = (await supabaseSelectFilterStrippingUnknownColumns('pos_orders', filter, {
       limit: FETCH_LIMIT,
       select:
-        'store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type',
+        'created_at,store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type',
     }, 'posSalesByStore')) as {
+      created_at?: string
       store_code?: string
       subtotal?: number
       vat?: number
@@ -56,7 +59,9 @@ export async function GET(request: NextRequest) {
       order_type?: string
     }[]
 
-    if (rows.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+
+    if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const byStore: Record<
       string,

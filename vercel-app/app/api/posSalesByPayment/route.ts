@@ -1,12 +1,14 @@
 /**
  * 결제수단별 매출. pos_orders 기반. 현금/카드/QR/기타.
+ * 조회 구간: POS 영업일 라벨(getPosTodaySales 와 동일).
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
+import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 const FETCH_LIMIT = 50000
@@ -27,15 +29,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
 
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
       limit: FETCH_LIMIT,
       select:
-        'payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,total,status,order_type,store_code',
+        'created_at,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,total,status,order_type,store_code',
     })) as {
+      created_at?: string
       payment_cash?: number
       payment_card?: number
       payment_qr?: number
@@ -49,7 +53,9 @@ export async function GET(request: NextRequest) {
       store_code?: string
     }[]
 
-    if (rows.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+
+    if (rowsRaw.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const byMethod: Record<string, number> = {}
     for (const r of rows) {

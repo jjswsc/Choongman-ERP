@@ -3,9 +3,10 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
+import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
@@ -53,16 +54,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
 
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+    const rowsRaw = (await supabaseSelectFilter('pos_orders', filter, {
       limit: MENU_FETCH_LIMIT,
-      select: 'items_json,status,order_type,store_code',
-    })) as { items_json?: string; status?: string; order_type?: string; store_code?: string }[]
+      select: 'created_at,items_json,status,order_type,store_code',
+    })) as { created_at?: string; items_json?: string; status?: string; order_type?: string; store_code?: string }[]
 
-    if (rows.length >= MENU_FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
+    const rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, startStr, endStr)
+
+    if (rowsRaw.length >= MENU_FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const menus = (await supabaseSelect('pos_menus', {
       limit: 5000,

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
 import { normalizePosCancelReasonKey } from '@/lib/pos-cancel-reason-key'
+import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 
 const FETCH_LIMIT = 50000
 
@@ -40,25 +41,30 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
 
-    const orders = (await supabaseSelectFilterStrippingUnknownColumns(
+    const ordersRaw = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_orders',
       filter,
       {
         limit: FETCH_LIMIT,
-        select: 'order_type,status,total,memo,items_json',
+        select: 'created_at,store_code,order_type,status,total,memo,items_json',
       },
       'posCancelReasonSummary'
     )) as {
+      created_at?: string
+      store_code?: string
       order_type?: string
       status?: string
       total?: number
       memo?: string
       items_json?: string
     }[]
+
+    const orders = filterRowsByPosSalesBusinessDateRange(ordersRaw, bizCtx, startStr, endStr)
 
     const lineBucket = new Map<string, { count: number; amount: number }>()
     const orderBucket = new Map<string, { count: number; amount: number }>()
@@ -125,7 +131,7 @@ export async function GET(request: NextRequest) {
     const lineRows = toRows(lineBucket)
     const orderRows = toRows(orderBucket)
 
-    const truncated = orders.length >= FETCH_LIMIT
+    const truncated = ordersRaw.length >= FETCH_LIMIT
     if (truncated) headers.set('X-Sales-Truncated', '1')
 
     return NextResponse.json(

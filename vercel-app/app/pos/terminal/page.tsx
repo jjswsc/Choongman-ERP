@@ -127,6 +127,7 @@ import {
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
 import { orderPaymentsSum } from '@/lib/pos-order-line-update'
+import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { subscribePosOrdersInsert, subscribePosOrdersUpdate } from '@/lib/supabase-client'
 import { openPosCashDrawer } from '@/lib/pos-cash-drawer'
 import {
@@ -1572,7 +1573,8 @@ export default function PosTerminalPage() {
               const tablePart = order.tableName
                 ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                 : ''
-              const orderTypeLabel = ki.orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+              const orderTypeLabel =
+                ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
               const html = buildKitchenSlipDocumentHtml({
                 label: slip.label,
                 orderNo: order.orderNo ?? '',
@@ -1775,7 +1777,8 @@ export default function PosTerminalPage() {
                       const tablePart = order.tableName
                         ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                         : ''
-                      const orderTypeLabel = ki.orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                      const orderTypeLabel =
+                ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
                       const html = buildKitchenSlipDocumentHtml({
                         label: slip.label,
                         orderNo: order.orderNo ?? '',
@@ -2334,7 +2337,8 @@ export default function PosTerminalPage() {
           const memoLine = kitchenMemo.trim()
             ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
             : ''
-          const orderTypeLabelSlip = ki.orderTypeLabels[channel] || channel
+          const orderTypeLabelSlip =
+            ki.orderTypeLabels[normalizePosOrderTypeKey(channel)] || channel
           const tablePartR = tableName
             ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
             : ''
@@ -2517,7 +2521,7 @@ export default function PosTerminalPage() {
           const memoLine = kitchenMemo.trim()
             ? (ki.t('posCustomerMemo') || '메모') + ': ' + kitchenMemo.trim()
             : ''
-          const otKey = String(po.orderType ?? channel).trim().toLowerCase()
+          const otKey = normalizePosOrderTypeKey(po.orderType ?? channel)
           const orderTypeLabelSlip = ki.orderTypeLabels[otKey] || orderTypeLabel
           const tablePartR = tableName
             ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(tableName, ki.t)
@@ -2696,7 +2700,7 @@ export default function PosTerminalPage() {
                 label: slip.label,
                 orderNo,
                 storeCode,
-                orderTypeLabel: ki.orderTypeLabels[orderType] || orderType,
+                orderTypeLabel: ki.orderTypeLabels[normalizePosOrderTypeKey(orderType)] || orderType,
                 tablePart: tablePartR,
                 dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
                 items: slip.items.map((it) => ({
@@ -3348,7 +3352,8 @@ export default function PosTerminalPage() {
                   const tablePart = order.tableName
                     ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(order.tableName, ki.t)
                     : ''
-                  const orderTypeLabel = ki.orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                  const orderTypeLabel =
+                ki.orderTypeLabels[normalizePosOrderTypeKey(order.orderType)] || (order.orderType ?? '')
                   const html = buildKitchenSlipDocumentHtml({
                     label: slip.label,
                     orderNo: order.orderNo ?? '',
@@ -5544,7 +5549,9 @@ export default function PosTerminalPage() {
                       const tablePartR = payload.orderLabel
                         ? ' · ' + (ki.t('posTable') || '테이블') + ': ' + translateReceiptTableDisplayName(payload.orderLabel, ki.t)
                         : ''
-                      const orderTypeLabel = ki.orderTypeLabels[payload.orderType] || payload.orderType
+                      const orderTypeLabel =
+                        ki.orderTypeLabels[normalizePosOrderTypeKey(payload.orderType)] ||
+                        payload.orderType
                       const printOne = (idx: number) => {
                         if (idx >= slips.length) return
                         const slip = slips[idx]

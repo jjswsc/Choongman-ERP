@@ -93,6 +93,7 @@ import {
   type PosOrderReceiptLineOptions,
 } from "@/lib/pos-payment-receipt-from-order"
 import { buildPosHallOrderReceiptDocumentHtml } from "@/lib/pos-hall-order-receipt-document-html"
+import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { usePosMainDevice } from "@/hooks/use-pos-main-device"
 import { PosMenuFillImage } from "@/components/pos/pos-menu-image"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
@@ -1410,7 +1411,8 @@ export default function PosOrderPage() {
           label: slip.label,
           orderNo: kitchenOrderNoRaw,
           storeCode: receiptData.storeCode,
-          orderTypeLabel: ki.orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType,
+          orderTypeLabel:
+            ki.orderTypeLabels[normalizePosOrderTypeKey(receiptData.orderType)] || receiptData.orderType,
           tablePart,
           dateStr: formatPosDateTimeMedium(new Date(), ki.lang),
           items: slip.items.map((it) => ({

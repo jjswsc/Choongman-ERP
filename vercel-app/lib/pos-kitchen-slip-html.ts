@@ -85,7 +85,9 @@ function kitchenSlipClassCss(design: KitchenSlipDesignResolved): string {
   const tp = typographyForScale(design.fontScale)
   return `
 .k-header { text-align: center; font-size: ${tp.header}px; font-weight: 800; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; word-break: normal; overflow-wrap: break-word; line-height: 1.35; letter-spacing: 0.02em; }
-.k-order-type { text-align: center; margin: 2px 0 10px 0; padding: 6px 8px; border: 1.7px solid #000; border-radius: 7px; font-size: ${Math.max(12, tp.row - 1)}px; font-weight: 800; letter-spacing: 0.05em; line-height: 1.2; }
+.k-order-head-row { text-align: center; margin: 4px 0 8px 0; font-size: ${tp.row}px; line-height: 1.35; }
+.k-order-head-row strong { font-weight: 800; }
+.k-order-chip-inline { display: inline-block; margin-left: 6px; padding: 2px 8px; border: 1.3px solid #000; border-radius: 999px; font-size: ${Math.max(11, tp.row - 3)}px; font-weight: 800; letter-spacing: 0.03em; line-height: 1.15; vertical-align: middle; }
 .k-row { margin: 7px 0; font-size: ${tp.row}px; max-width: 100%; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.45; letter-spacing: -0.01em; }
 .k-line-note { font-size: ${tp.lineNote}px; color: #111; margin-top: 4px; padding-left: 3px; white-space: normal; word-break: normal; overflow-wrap: break-word; line-height: 1.36; letter-spacing: -0.01em; }
 .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: ${tp.memo}px; }
@@ -268,12 +270,11 @@ export function buildKitchenSlipHtml(params: {
     '<body><div class="k-header">' +
     escapeHtml(label) +
     c('div') +
-    '<div class="k-order-type">' +
-    escapeHtml(orderTypeLabel) +
-    c('div') +
-    '<div class="k-row"><strong>' +
+    '<div class="k-row k-order-head-row"><strong>' +
     escapeHtml(orderNoPrint) +
-    c('strong') +
+    '</strong><span class="k-order-chip-inline">' +
+    escapeHtml(orderTypeLabel) +
+    '</span>' +
     c('div') +
     '<div class="k-row">' +
     escapeHtml(storeCode + tablePart) +

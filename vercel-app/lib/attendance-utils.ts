@@ -301,6 +301,26 @@ export function addDayBangkok(dateStr: string, delta: number): string {
   return new Date(ms).toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })
 }
 
+/** 방콕 달력 YYYY-MM-DD [startYmd,endYmd] 구간의 모든 일자(포함). start>end 이면 교환. */
+export function iterBangkokYmdInclusive(startYmd: string, endYmd: string): string[] {
+  let lo = startYmd.trim().slice(0, 10)
+  let hi = endYmd.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lo) || !/^\d{4}-\d{2}-\d{2}$/.test(hi)) return []
+  if (lo > hi) {
+    const t = lo
+    lo = hi
+    hi = t
+  }
+  const out: string[] = []
+  let d = lo
+  for (let guard = 0; guard < 800 && d <= hi; guard++) {
+    out.push(d)
+    if (d === hi) break
+    d = addDayBangkok(d, 1)
+  }
+  return out
+}
+
 /** 방콕 달력 기준 두 YYYY-MM-DD(포함) 사이 일수 */
 export function diffDaysInclusiveBangkok(startDate: string, endDate: string): number {
   const s = startDate.trim().slice(0, 10)

@@ -1,5 +1,6 @@
 /**
- * 기간별 집계 (연/월/주/일/요일/시간대별). pos_orders 기반. 버킷은 방콕 달력 기준.
+ * 기간별 집계 (연/월/주/일/요일/시간대별). pos_orders 기반.
+ * 조회 구간·버킷: POS 영업일 라벨(getPosTodaySales / posBizDayScope 와 동일).
  * splitByStore=1 이면 매장별 시리즈: { split, series } (매장 0·1·N 모두).
  * - 매장 2개 이상: 요청 매장 코드별 부분집합 집계
  * - 매장 1개: 해당 필터 행 전체를 한 키로 집계
@@ -10,7 +11,7 @@ import { supabaseRpc } from '@/lib/supabase-server'
 import {
   supabaseSelectFilterAllPagesStrippingUnknownColumns,
 } from '@/lib/supabase-pgrst204-retry'
-import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
 import {
   resolveStoresFromParams,
@@ -67,7 +68,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = appendStoreCodeFilter(filter, stores)
     let rows: PeriodOrderRow[] = []
@@ -94,11 +96,13 @@ export async function GET(request: NextRequest) {
     if (!usedRpc) {
       rows = await loadPeriodOrderRows(filter)
     }
-    const truncated = rows.length >= PERIOD_FETCH_MAX_ROWS
+    const preFilterRowCount = rows.length
+    rows = filterRowsByPosSalesBusinessDateRange(rows, bizCtx, startStr, endStr)
+    const truncated =
+      preFilterRowCount >= PERIOD_FETCH_MAX_ROWS || (usedRpc && preFilterRowCount >= FETCH_LIMIT)
     if (truncated) headers.set('X-Sales-Truncated', '1')
     headers.set('X-Pos-Sales-Source', usedRpc ? 'rpc' : 'select-all-pages')
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
     const resolveSc = (sc: string) => resolvePosBusinessHoursFromContext(bizCtx, sc)
 
     if (splitByStore) {

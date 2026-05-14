@@ -1,10 +1,12 @@
 /**
  * pos_orders 행 → 기간(월/주/일/요일/시간) 버킷 집계. posSalesByPeriod와 splitByStore에서 공용.
+ * 일·주·요일·월·연은 매장별 POS 영업일 라벨(`getPosBusinessDateStrFromConfig`) 기준. 시간대만 방콕 벽시계 시각.
  */
 import {
-  toDateStrBangkok,
   getDayOfWeekBangkok,
   getBangkokHour,
+  getMondayOfWeekBangkok,
+  addDayBangkok,
 } from '@/lib/attendance-utils'
 import {
   getPosBusinessDateStrFromConfig,
@@ -63,14 +65,6 @@ export type PeriodAggRow = {
   salesPerDineInOrder: number
   salesPerGuest: number
   salesPerOrder: number
-}
-
-function getStartOfWeek(d: Date): Date {
-  const x = new Date(d)
-  const day = x.getUTCDay()
-  x.setUTCDate(x.getUTCDate() - day)
-  x.setUTCHours(0, 0, 0, 0)
-  return x
 }
 
 function toRow(k: string, v: Bucket): PeriodAggRow {
@@ -150,9 +144,7 @@ export function aggregatePosSalesByPeriod(
     const dt = r.created_at
     if (!dt) continue
 
-    const bkkDate = toDateStrBangkok(dt)
-    if (!bkkDate) continue
-    /** 월·연만 POS 영업일 라벨(자정 넘김 매장). 일·요일은 조회 기간과 맞추기 위해 방콕 달력일 사용 */
+    /** 일·주·요일·월·연: 모두 POS 영업일 라벨(매장별 영업시간) 기준 */
     const bizYmd = getPosBusinessDateStrFromConfig(new Date(dt), getHours(String(r.store_code ?? '').trim()))
 
     if (groupBy === 'month') {
@@ -160,20 +152,19 @@ export function aggregatePosSalesByPeriod(
     } else if (groupBy === 'year') {
       add(bizYmd.slice(0, 4), r)
     } else if (groupBy === 'week') {
-      const start = getStartOfWeek(new Date(dt))
-      const end = new Date(start)
-      end.setUTCDate(end.getUTCDate() + 6)
-      const k = `${start.toISOString().slice(0, 10)}~${end.toISOString().slice(0, 10)}`
+      const mon = getMondayOfWeekBangkok(bizYmd)
+      const sun = addDayBangkok(mon, 6)
+      const k = `${mon}~${sun}`
       add(k, r)
     } else if (groupBy === 'dow') {
-      const dow = getDayOfWeekBangkok(bkkDate)
+      const dow = getDayOfWeekBangkok(bizYmd)
       add(String(dow), r)
     } else if (groupBy === 'hour') {
       const h = getBangkokHour(dt)
       const hk = String(Math.min(23, Math.max(0, h))).padStart(2, '0')
       add(hk, r)
     } else {
-      add(bkkDate, r)
+      add(bizYmd, r)
     }
   }
 
