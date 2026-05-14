@@ -1967,7 +1967,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   )}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">{t("bankImportDupHint") || "이미 등록된 거래(날짜·금액·적요 동일)는 자동으로 제외됩니다."}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("bankImportDupHint") ||
+                  "같은 계좌·날짜·입출금·금액이면 DB에 이미 있는 줄과만 비교해 중복을 제외합니다. 메모(사용자)가 다르면 별개 건으로 저장됩니다."}
+              </p>
               <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                 {t("bankImportWithdrawCoaHint") || "※ 출금: 아래 표에서 용도·계정과목(매입 대금이면 거래처)을 선택하면 저장 시 통장에 반영됩니다. 적요 규칙으로 자동 채워집니다."}
               </p>

@@ -41,17 +41,3 @@ export function shouldUseTightSimpleReceiptInsetForStore(storeCode: string | nul
   if (s.includes('เอกมัย')) return true
   return false
 }
-
-/**
- * 중국 OEM·CP-802 계열 등에서 결제 영수증만 2열(CSS table/grid)이 좌우로 찢기는 경우가 있어,
- * 품목·금액을 세로 스택(블록)으로만 배치한다. (홀 주문서·주방전과 달리 손님 영수증만 열이 많음)
- */
-export function shouldUseStackedPaymentReceiptForStore(storeCode: string | null | undefined): boolean {
-  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
-  if (!s0) return false
-  const s = s0.toLowerCase()
-  if (s.includes('huamak') || s.includes('huamark')) return true
-  if (s.includes('หัวหมาก')) return true
-  if (s.includes('the street') || s.includes('thestreet')) return true
-  return false
-}

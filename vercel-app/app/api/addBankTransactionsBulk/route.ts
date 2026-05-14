@@ -31,6 +31,13 @@ function normMemoForDedup(memo: string): string {
     .slice(0, 500)
 }
 
+function normNoteForDedup(note: string | null | undefined): string {
+  return String(note ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 500)
+}
+
 /** 동일 날짜·유형·금액에서 CSV 재업로드 시 적요만 오거나 "적요 | 상세"만 오는 경우까지 잡기 */
 function isSameBankMemoLoose(existingMemo: string, incomingMemo: string): boolean {
   const a = normMemoForDedup(existingMemo)
@@ -42,6 +49,19 @@ function isSameBankMemoLoose(existingMemo: string, incomingMemo: string): boolea
   if (!bHasDetail && aHasDetail && a.startsWith(`${b} |`)) return true
   if (bHasDetail && !aHasDetail && b.startsWith(`${a} |`)) return true
   return false
+}
+
+type DbDedupEntry = { memo: string; note: string }
+
+function findDuplicateDbEntryIndex(
+  pool: DbDedupEntry[],
+  incomingMemo: string,
+  incomingNote: string
+): number {
+  const inNote = normNoteForDedup(incomingNote)
+  return pool.findIndex(
+    (e) => normNoteForDedup(e.note) === inNote && isSameBankMemoLoose(e.memo, incomingMemo)
+  )
 }
 
 function bucketKey(transDate: string, transType: string, amount: number): string {
@@ -106,21 +126,29 @@ export async function POST(request: NextRequest) {
     const minDate = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : ''
     const maxDate = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : ''
 
-    const memoBuckets = new Map<string, string[]>()
+    /** 이미 DB에 있는 줄만 소비형으로 매칭: 같은 요청 안에서 동일 적요·메모인 여러 줄은 각각 등록, CSV 재업로드는 DB 건수만큼만 제외 */
+    const dbDedupPoolByBucket = new Map<string, DbDedupEntry[]>()
     if (minDate && maxDate) {
       const filter = `account_id=eq.${accountId}&trans_date=gte.${minDate}&trans_date=lte.${maxDate}`
       const existing = (await supabaseSelectFilter('bank_transactions', filter, {
-        select: 'trans_date,trans_type,amount,memo',
+        select: 'trans_date,trans_type,amount,memo,note',
         limit: EXISTING_FETCH_LIMIT,
-      })) as { trans_date?: string; trans_type?: string; amount?: number; memo?: string }[]
+      })) as {
+        trans_date?: string
+        trans_type?: string
+        amount?: number
+        memo?: string
+        note?: string
+      }[]
       for (const r of existing || []) {
         const d = String(r.trans_date || '').slice(0, 10)
         const t = String(r.trans_type || 'withdraw').toLowerCase()
         const a = Math.abs(Number(r.amount) || 0)
         const m = String(r.memo || '')
+        const n = String(r.note || '')
         const bk = bucketKey(d, t, a)
-        if (!memoBuckets.has(bk)) memoBuckets.set(bk, [])
-        memoBuckets.get(bk)!.push(m)
+        if (!dbDedupPoolByBucket.has(bk)) dbDedupPoolByBucket.set(bk, [])
+        dbDedupPoolByBucket.get(bk)!.push({ memo: m, note: n })
       }
     }
 
@@ -155,8 +183,10 @@ export async function POST(request: NextRequest) {
       if (!['deposit', 'withdraw'].includes(transType)) continue
 
       const bk = bucketKey(transDate, transType, amount)
-      const priorMemos = memoBuckets.get(bk) || []
-      if (priorMemos.some((em) => isSameBankMemoLoose(em, memo))) {
+      const pool = dbDedupPoolByBucket.get(bk) || []
+      const dupIdx = findDuplicateDbEntryIndex(pool, memo, note)
+      if (dupIdx >= 0) {
+        pool.splice(dupIdx, 1)
         skipped++
         continue
       }
@@ -271,8 +301,6 @@ export async function POST(request: NextRequest) {
         console.error('addBankTransactionsBulk posting:', postingErr)
       }
       inserted++
-      if (!memoBuckets.has(bk)) memoBuckets.set(bk, [])
-      memoBuckets.get(bk)!.push(memo)
     }
 
     const msg = skipped > 0
