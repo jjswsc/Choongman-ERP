@@ -50,9 +50,22 @@ export function shouldUseLegacyAlignedPaymentReceiptForStore(storeCode: string |
   const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
   if (!s0) return false
   const ascii = s0.toLowerCase()
+  if (ascii.includes('huamak') || ascii.includes('huamark') || ascii.includes('huama')) return true
+  if (ascii.includes('the street') || ascii.includes('thestreet')) return true
+  if (ascii.includes('หัวหมาก')) return true
   if (ascii.includes('true digital')) return true
   if (ascii.includes('truedigital')) return true
   const tokenized = ascii.replace(/[^a-z0-9]+/g, ' ').trim()
   if (!tokenized) return false
   return tokenized.split(/\s+/).includes('true')
+}
+
+/** 후아막 계열은 설정값과 무관하게 결제 영수증 상단 로고를 강제 노출 */
+export function shouldForcePaymentReceiptLogoForStore(storeCode: string | null | undefined): boolean {
+  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
+  if (!s0) return false
+  const s = s0.toLowerCase()
+  if (s.includes('huamak') || s.includes('huamark') || s.includes('huama')) return true
+  if (s.includes('หัวหมาก')) return true
+  return false
 }
