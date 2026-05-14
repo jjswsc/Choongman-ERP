@@ -17,15 +17,8 @@ export function normalizePosStoreCodeForFlags(raw: string): string {
  * 결제 영수증은 "초단순" 레이아웃(테이블/블록 위주)로 강제한다.
  */
 export function shouldForceSimplePaymentReceiptForStore(storeCode: string | null | undefined): boolean {
-  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
-  if (!s0) return false
-  const s = s0.toLowerCase()
-  // ASCII
-  if (s.includes('ekkamai')) return true
-  // 흔한 변형(철자·공백)
-  if (s.includes('ekamai') || s.includes('eakkamai')) return true
-  // 태국어 지역명(에까마이)
-  if (s.includes('เอกมัย')) return true
+  void storeCode
+  // 전 매장 결제 영수증을 legacy 2열 경로로 통일(2026-05 운영 정책)
   return false
 }
 
@@ -43,21 +36,11 @@ export function shouldUseTightSimpleReceiptInsetForStore(storeCode: string | nul
 }
 
 /**
- * True 계열 매장은 기존 2열(항목/금액) 정렬이 더 안정적으로 맞는 장비가 있어
- * 결제 영수증을 레거시 2열 마크업/스타일로 유지한다.
+ * 결제 영수증은 전 매장에서 동일한 legacy 2열 정렬을 사용한다.
  */
 export function shouldUseLegacyAlignedPaymentReceiptForStore(storeCode: string | null | undefined): boolean {
-  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
-  if (!s0) return false
-  const ascii = s0.toLowerCase()
-  if (ascii.includes('huamak') || ascii.includes('huamark') || ascii.includes('huama')) return true
-  if (ascii.includes('the street') || ascii.includes('thestreet')) return true
-  if (ascii.includes('หัวหมาก')) return true
-  if (ascii.includes('true digital')) return true
-  if (ascii.includes('truedigital')) return true
-  const tokenized = ascii.replace(/[^a-z0-9]+/g, ' ').trim()
-  if (!tokenized) return false
-  return tokenized.split(/\s+/).includes('true')
+  void storeCode
+  return true
 }
 
 /** 후아막 계열은 설정값과 무관하게 결제 영수증 상단 로고를 강제 노출 */
@@ -67,19 +50,5 @@ export function shouldForcePaymentReceiptLogoForStore(storeCode: string | null |
   const s = s0.toLowerCase()
   if (s.includes('huamak') || s.includes('huamark') || s.includes('huama')) return true
   if (s.includes('หัวหมาก')) return true
-  return false
-}
-
-/**
- * 후아막/더스트리트처럼 OEM 편차가 큰 매장은
- * 결제 영수증 2열 유지 시에도 폭·폰트를 한 단계 줄여 분열을 완화한다.
- */
-export function shouldUseNarrowLegacyPaymentReceiptForStore(storeCode: string | null | undefined): boolean {
-  const s0 = normalizePosStoreCodeForFlags(String(storeCode || ''))
-  if (!s0) return false
-  const s = s0.toLowerCase()
-  if (s.includes('huamak') || s.includes('huamark') || s.includes('huama')) return true
-  if (s.includes('หัวหมาก')) return true
-  if (s.includes('the street') || s.includes('thestreet')) return true
   return false
 }
