@@ -9,6 +9,7 @@ import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from
 import { normalizePosLineNote } from '@/lib/pos-line-note'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
+import { buildPosReceiptVatPrintLabelEscaped } from '@/lib/pos-receipt-vat-print-label'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
@@ -51,6 +52,8 @@ type HallOrderPayload = {
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number
   otherFeeMode?: 'included' | 'separate'
+  /** 홀(dine-in) 인원. 0·미입력이면 영수증에 표시하지 않음 */
+  guestCount?: number
 }
 
 export function buildPosHallOrderReceiptDocumentHtml(params: {
@@ -96,6 +99,17 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       c('span') +
       c('div')
     : ''
+  const guestN = Math.max(0, Math.min(99, Math.trunc(Number(payload.guestCount ?? 0) || 0)))
+  const guestRow =
+    guestN > 0
+      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
+        esc(tr('posOrderGuestCount', 'Guests')) +
+        c('span') +
+        '<span class="receipt-meta-value">' +
+        esc(String(guestN)) +
+        c('span') +
+        c('div')
+      : ''
   const channelOrderPick = pickPosChannelOrderNo({
     tableName: payload.tableName,
     orderNo: payload.orderNo,
@@ -193,6 +207,12 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     receiptVatDisplayAmt: payload.receiptVatDisplayAmt,
   })
   const showVatRow = vatPrint > 0.0001
+  const vatPrintLabelEscaped = buildPosReceiptVatPrintLabelEscaped({
+    vatFeeMode: payload.vatFeeMode,
+    t,
+    tr,
+    esc,
+  })
   const discountRow =
     payload.discountAmt > 0
       ? '<div class="receipt-row discount"><span>' +
@@ -212,7 +232,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${formatBahtNum(payload.packagingFee ?? 0)}</span></div>`
       : ''
   const vatRow = showVatRow
-    ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${payload.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatPrint)}</span></div>`
+    ? `<div class="receipt-row"><span>${vatPrintLabelEscaped}</span><span>${formatBahtNum(vatPrint)}</span></div>`
     : ''
   const serviceFeeRow =
     (payload.serviceFeeAmt ?? 0) > 0
@@ -246,6 +266,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     c('div') +
     '<div class="text-xs">' +
     tableRow +
+    guestRow +
     channelOrderNoRow +
     dateRow +
     c('div') +

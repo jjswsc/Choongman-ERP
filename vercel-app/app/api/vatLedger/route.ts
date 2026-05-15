@@ -183,12 +183,26 @@ export async function GET(request: NextRequest) {
         (row) => String(row.direction || '').trim().toLowerCase() === 'input'
       )
       if (!hasInputEntries) {
+        // 매출 등만 있고 매입 행이 없을 때: 지출 기반 매입만 채우면 입고(stock_logs Inbound) 매입이
+        // 영구히 빠진 채로 조기 반환되는 문제가 있어, 입고·지출 통합 동기화도 같이 돌린다.
         try {
           await syncInputVatFromExpensesForPeriod({
             startMonth: period.startMonth,
             endMonth: period.endMonth,
             storeFilter,
           })
+        } catch (e) {
+          console.warn('vatLedger GET expense-input quick sync skipped:', e)
+        }
+        try {
+          await syncTaxVatLedgersFromStockAndExpenses({
+            months: period.months,
+            storeFilter,
+          })
+        } catch (e) {
+          console.warn('vatLedger GET stock+expense auto-sync skipped:', e)
+        }
+        try {
           const refreshedRows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {
             select: '*',
             order: 'doc_date.asc,id.asc',
@@ -201,7 +215,7 @@ export async function GET(request: NextRequest) {
           })
           return NextResponse.json({ entries: refreshedEntries, period }, { headers })
         } catch (e) {
-          console.warn('vatLedger GET expense-input quick sync skipped:', e)
+          console.warn('vatLedger GET refresh after input backfill failed:', e)
         }
       }
       return NextResponse.json({ entries: initialEntries, period }, { headers })

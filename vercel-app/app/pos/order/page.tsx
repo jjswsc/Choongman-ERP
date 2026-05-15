@@ -227,7 +227,6 @@ export default function PosOrderPage() {
   const [storeFees, setStoreFees] = React.useState({ deliveryFee: 0, packagingFee: 0 })
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
-  const [autoPrintFinalOrderBeforePayment, setAutoPrintFinalOrderBeforePayment] = React.useState(false)
   const posPrinterSettingsRef = React.useRef<PosPrinterSettings | null>(null)
   const posPrinterSettingsStoreCodeRef = React.useRef("")
   const posPrinterSettingsInFlightStoreCodeRef = React.useRef("")
@@ -352,7 +351,6 @@ export default function PosOrderPage() {
         setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 })
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
-        setAutoPrintFinalOrderBeforePayment(Boolean(s.autoPrintFinalOrderBeforePayment))
         setReceiptBizName(String(s.receiptBizName || ""))
         setReceiptBizTaxId(String(s.receiptBizTaxId || ""))
         setReceiptBizAbn(String(s.receiptBizAbn || ""))
@@ -388,7 +386,6 @@ export default function PosOrderPage() {
         setStoreFees({ deliveryFee: 0, packagingFee: 0 })
         setAutoPrintReceiptOnPayment(false)
         setAutoPrintKitchenSlipOnOrder(false)
-        setAutoPrintFinalOrderBeforePayment(false)
         setReceiptBizName("")
         setReceiptBizTaxId("")
         setReceiptBizAbn("")
@@ -1396,10 +1393,6 @@ export default function PosOrderPage() {
     if (cart.length === 0) {
       await appAlert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
       return
-    }
-    /** 매장 테이블 전용. 배달/포장은 결제 완료 영수증만으로 충분해 사전 주문 slips를 찍지 않음(이중 출력 방지). */
-    if (orderType === "dine_in" && autoPrintFinalOrderBeforePayment && receiptRef.current) {
-      await handlePrintReceipt()
     }
     setPayCash(String(total))
     setPayCard("0")

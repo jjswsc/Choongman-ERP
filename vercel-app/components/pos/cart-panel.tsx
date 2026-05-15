@@ -200,6 +200,8 @@ export type CartPanelBeforePaymentReceiptPayload = {
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number
   otherFeeMode?: 'included' | 'separate'
+  /** 홀 결제 직전 영수증 스냅샷용 */
+  guestCount?: number
 }
 
 export type CartPanelPaymentPayload = {
@@ -2296,6 +2298,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           cardFeeMode: pricingSnapshot.cardFeeMode,
           otherFeeAmt: pricingSnapshot.otherFeeAmt,
           otherFeeMode: pricingSnapshot.otherFeeMode,
+          ...(orderType === 'dine-in'
+            ? { guestCount: Math.max(0, Math.min(99, Math.trunc(Number(guestCount) || 0))) }
+            : {}),
         })
       )
     }
@@ -3829,6 +3834,46 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               t={t}
             />
 
+            {orderType === 'dine-in' && (
+              <div className="rounded-2xl border border-sky-500/30 bg-sky-500/[0.07] p-3 shadow-sm dark:bg-sky-950/25">
+                <div className="mb-2 flex items-start gap-2">
+                  <Users className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-semibold leading-tight">{t('posOrderGuestCount') || '손님 수'}</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      {tr('posPaymentGuestCountHint', '결제 완료 전까지 여기서 손님 수를 바꿀 수 있어요.')}
+                    </p>
+                  </div>
+                  <Select
+                    value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
+                    onValueChange={(v) => {
+                      if (v === '__zero__') setGuestCount(0)
+                      else if (v === '__direct__') {
+                        setGuestDirectValue(String(guestCount > 9 ? guestCount : 10))
+                        setGuestDirectOpen(true)
+                      } else setGuestCount(Number(v))
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-10 w-[3.5rem] shrink-0 border-sky-600/40 bg-background/95 [&>span]:flex [&>span]:items-center [&>span]:justify-center dark:border-sky-500/45"
+                      aria-label={t('posOrderGuestCount') || undefined}
+                    >
+                      <span className="tabular-nums font-semibold">{guestCount}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__zero__">0</SelectItem>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__direct__">{t('posGuestDirectInput') || '직접 입력'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
               {/* 협업 할인 — 항상 표시, 없음 선택 가능 */}
               <div className="rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-50/80 via-card to-card p-4 shadow-sm dark:from-violet-950/25 dark:via-card dark:to-card">
@@ -4852,11 +4897,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <Button
                 className={cn(
                   'h-12 w-full rounded-xl px-8 font-bold sm:w-auto sm:min-w-[10rem]',
-                  !paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))
+                  !paymentSumMatch ||
+                    taxInvoiceInvalid ||
+                    (showSplit && splitPaidSteps < Math.max(1, splitCount)) ||
+                    (orderType === 'dine-in' && guestCount <= 0)
                     ? 'bg-muted text-muted-foreground hover:bg-muted'
                     : 'shadow-md'
                 )}
-                disabled={!paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))}
+                disabled={
+                  !paymentSumMatch ||
+                  taxInvoiceInvalid ||
+                  (showSplit && splitPaidSteps < Math.max(1, splitCount)) ||
+                  (orderType === 'dine-in' && guestCount <= 0)
+                }
                 onClick={handlePaymentComplete}
                 data-tour="pos-tour-payment-confirm"
               >

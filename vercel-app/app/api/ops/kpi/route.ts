@@ -1,32 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getVerifiedAuth } from '@/lib/verify-auth'
+import { requireAuth } from '@/lib/verify-auth'
 import { isOfficeRole } from '@/lib/permissions'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-
-function bangkokTodayYmd(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
+import { getBangkokDateRangeUtc, getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
-    const auth = await getVerifiedAuth(req)
-    const qs = new URL(req.url).searchParams
-    const ymd = String(qs.get('date') || bangkokTodayYmd()).slice(0, 10)
-    const requestedStore = String(qs.get('storeCode') || '').trim()
-    const storeCode = isOfficeRole(auth?.role || '')
-      ? requestedStore
-      : String(auth?.store || '').trim()
+    const { auth, errorResponse } = await requireAuth(req, 'any')
+    if (errorResponse) return errorResponse
 
-    const orderFilter =
-      `created_at=gte.${encodeURIComponent(`${ymd}T00:00:00+07:00`)}&created_at=lt.${encodeURIComponent(`${ymd}T23:59:59+07:00`)}` +
-      (storeCode ? `&store_code=eq.${encodeURIComponent(storeCode)}` : '')
+    const qs = new URL(req.url).searchParams
+    const ymd = String(qs.get('date') || getBangkokTodayDateString()).slice(0, 10)
+    const requestedStore = String(qs.get('storeCode') || '').trim()
+    const storeCode = isOfficeRole(auth.role || '')
+      ? requestedStore
+      : String(auth.store || '').trim()
+
+    if (!isOfficeRole(auth.role || '') && !storeCode) {
+      return NextResponse.json(
+        { success: false, message: '로그인 매장 정보가 없어 집계할 수 없습니다.' },
+        { status: 400, headers }
+      )
+    }
+
+    const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(ymd, ymd)
+    const dayRangeFilter = `created_at=gte.${encodeURIComponent(dayStartUtcIso)}&created_at=lt.${encodeURIComponent(nextDayStartUtcIso)}`
+    const orderFilter = dayRangeFilter + (storeCode ? `&store_code=eq.${encodeURIComponent(storeCode)}` : '')
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 20000,
       select: 'id,status,total',
@@ -41,7 +42,10 @@ export async function GET(req: NextRequest) {
       if (['cancelled', 'canceled', 'refunded'].includes(status)) orderFailed += 1
     }
 
-    const attempts = (await supabaseSelectFilter('pos_payment_attempts', orderFilter, {
+    const attemptsFilter =
+      dayRangeFilter +
+      (storeCode ? `&pos_orders.store_code=eq.${encodeURIComponent(storeCode)}` : '')
+    const attempts = (await supabaseSelectFilter('pos_payment_attempts', attemptsFilter, {
       limit: 20000,
       select: 'response_code',
     }).catch(() => [])) as { response_code?: string }[] | null
@@ -51,8 +55,7 @@ export async function GET(req: NextRequest) {
 
     const printJobs = (await supabaseSelectFilter(
       'pos_print_jobs',
-      `created_at=gte.${encodeURIComponent(`${ymd}T00:00:00+07:00`)}` +
-        (storeCode ? `&store_code=eq.${encodeURIComponent(storeCode)}` : ''),
+      dayRangeFilter + (storeCode ? `&store_code=eq.${encodeURIComponent(storeCode)}` : ''),
       {
         limit: 20000,
         select: 'status',

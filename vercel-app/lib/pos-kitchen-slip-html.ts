@@ -240,6 +240,10 @@ export function buildKitchenSlipHtml(params: {
   design: KitchenSlipDesignResolved
   printTrackingId?: string
   printColorAdjust?: 'exact' | 'economy'
+  /** 홀 인원 등. 1 이상일 때만 표시 */
+  guestCount?: number
+  /** `guestCount` 표시용 라벨(번역). 없으면 `Guests` */
+  guestCountLabel?: string
 }): string {
   const {
     label,
@@ -254,6 +258,8 @@ export function buildKitchenSlipHtml(params: {
     design,
     printTrackingId,
     printColorAdjust = 'exact',
+    guestCount,
+    guestCountLabel,
   } = params
   const paperCss = getKitchenSlipPaperCss(design, printColorAdjust)
   const classCss = kitchenSlipClassCss(design)
@@ -265,6 +271,17 @@ export function buildKitchenSlipHtml(params: {
       label,
     })
   const c = (tag: string) => '\u003c/' + tag + '>'
+  const guestN = Math.max(0, Math.min(99, Math.trunc(Number(guestCount ?? 0) || 0)))
+  const guestLabel = String(guestCountLabel || 'Guests').trim() || 'Guests'
+  const guestRowHtml =
+    guestN > 0
+      ? '<div class="k-row">' +
+        escapeHtml(guestLabel) +
+        ': <strong>' +
+        escapeHtml(String(guestN)) +
+        '</strong>' +
+        c('div')
+      : ''
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
     POS_PRINT_NOTO_SANS_THAI_FONT_LINKS +
@@ -291,6 +308,7 @@ export function buildKitchenSlipHtml(params: {
     '<div class="k-row">' +
     dateStr +
     c('div') +
+    guestRowHtml +
     '<div class="k-row" style="font-size:11px;color:#555;">' +
     'Trace ID: ' +
     escapeHtml(traceId) +
@@ -318,6 +336,8 @@ export function buildKitchenSlipDocumentHtml(params: {
   printTrackingId?: string
   printColorAdjust?: 'exact' | 'economy'
   prependItemsHtml?: string
+  guestCount?: number
+  guestCountLabel?: string
 }): string {
   const {
     label,
@@ -333,6 +353,8 @@ export function buildKitchenSlipDocumentHtml(params: {
     printTrackingId,
     printColorAdjust,
     prependItemsHtml,
+    guestCount,
+    guestCountLabel,
   } = params
   const itemsHtml = buildKitchenSlipItemsHtml(items, escapeHtml, design, prependItemsHtml ?? '')
   const memoHtml = buildKitchenSlipMemoBlockHtml(String(memoLine ?? ''), escapeHtml, design)
@@ -349,5 +371,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     design,
     printTrackingId,
     printColorAdjust,
+    guestCount,
+    guestCountLabel,
   })
 }

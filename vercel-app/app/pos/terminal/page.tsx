@@ -15,7 +15,6 @@ import {
   type CartPanelHandle,
   type CartPanelAddItemPayload,
   type CartPanelPaymentPayload,
-  type CartPanelBeforePaymentReceiptPayload,
   type CartPanelSplitReceiptPayload,
 } from '@/components/pos/cart-panel'
 import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
@@ -172,6 +171,25 @@ function buildCustomerDisplayPaymentLines(
     })
   }
   return lines
+}
+
+/** 1–99만 영수증·주방전표에 노출 */
+function posGuestCountForThermalPrint(n: unknown): number | undefined {
+  const g = Math.max(0, Math.min(99, Math.trunc(Number(n) || 0)))
+  return g > 0 ? g : undefined
+}
+
+function posGuestCountSpread(n: unknown): { guestCount: number } | Record<PropertyKey, never> {
+  const g = posGuestCountForThermalPrint(n)
+  return g != null ? { guestCount: g } : {}
+}
+
+function posKitchenGuestSpread(
+  n: unknown,
+  label: string
+): { guestCount: number; guestCountLabel: string } | Record<PropertyKey, never> {
+  const g = posGuestCountForThermalPrint(n)
+  return g != null ? { guestCount: g, guestCountLabel: label } : {}
 }
 
 /** Supabase Realtime INSERT 페이로드의 id는 number가 아닐 수 있음(bigint 등 → 문자열) */
@@ -1597,6 +1615,7 @@ export default function PosTerminalPage() {
                 escapeHtml,
                 design: slipDesign,
                 printColorAdjust: 'exact',
+                ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
               })
               printPosHtmlDocument(html, {
                 title: slip.label,
@@ -1633,6 +1652,7 @@ export default function PosTerminalPage() {
             subtotal: order.subtotal ?? 0,
             discountAmt: order.discountAmt ?? 0,
             total: order.total ?? 0,
+            ...posGuestCountSpread(order.guestCount),
           },
           undefined,
           false,
@@ -1801,6 +1821,7 @@ export default function PosTerminalPage() {
                         escapeHtml,
                         design: slipDesign,
                         printColorAdjust: 'exact',
+                        ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
                       })
                       printPosHtmlDocument(html, {
                         title: slip.label,
@@ -1837,6 +1858,7 @@ export default function PosTerminalPage() {
                     subtotal: order.subtotal ?? 0,
                     discountAmt: order.discountAmt ?? 0,
                     total: order.total ?? 0,
+                    ...posGuestCountSpread(order.guestCount),
                   },
                   undefined,
                   false,
@@ -2236,6 +2258,7 @@ export default function PosTerminalPage() {
       cardFeeMode?: 'included' | 'separate'
       otherFeeAmt?: number
       otherFeeMode?: 'included' | 'separate'
+      guestCount?: number
     },
     /** 사용자 클릭 직후 열어둔 창을 넘기면 팝업 차단/자동 인쇄 제한을 피할 수 있음 */
     existingWindow?: Window | null,
@@ -2481,6 +2504,7 @@ export default function PosTerminalPage() {
       cardFeeMode: pricing.cardFeeMode,
       otherFeeAmt: pricing.otherFeeAmt,
       otherFeeMode: pricing.otherFeeMode,
+      ...posGuestCountSpread(po.guestCount),
     }
 
     const printHallOrderSheet =
@@ -2564,6 +2588,7 @@ export default function PosTerminalPage() {
               design: slipDesign,
               printColorAdjust: 'exact',
               prependItemsHtml: idx === 0 ? partialHead : '',
+              ...posKitchenGuestSpread(po.guestCount, ki.t('posOrderGuestCount')),
             })
             printPosHtmlDocument(html, {
               title: slip.label,
@@ -2679,6 +2704,7 @@ export default function PosTerminalPage() {
         subtotal,
         discountAmt,
         total,
+        ...posGuestCountSpread(row.guest_count),
       }
       const runKitchenFromRealtimeOrderInsert = () => {
         if (!reserveKitchenAutoPrintKey(`order:${orderId}:kitchen`)) return
@@ -2718,6 +2744,7 @@ export default function PosTerminalPage() {
                 escapeHtml,
                 design: slipDesign,
                 printColorAdjust: 'exact',
+                ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
               })
               printPosHtmlDocument(html, {
                 title: slip.label,
@@ -2998,6 +3025,7 @@ export default function PosTerminalPage() {
         cardFeeMode: pricing.cardFeeMode,
         otherFeeAmt: pricing.otherFeeAmt,
         otherFeeMode: pricing.otherFeeMode,
+        ...posGuestCountSpread(row.guest_count),
       }
 
       const kitchenDedupeKey = `order:${orderId}:kitchen:add-remote:${Array.from(addedSet).sort().join('|')}`
@@ -3075,6 +3103,7 @@ export default function PosTerminalPage() {
                 design: slipDesign,
                 printColorAdjust: 'exact',
                 prependItemsHtml: idx === 0 ? addonKitchenHead : '',
+                ...posKitchenGuestSpread(row.guest_count, ki.t('posOrderGuestCount')),
               })
               printPosHtmlDocument(html, {
                 title: slip.label,
@@ -3333,6 +3362,7 @@ export default function PosTerminalPage() {
             subtotal: order.subtotal ?? 0,
             discountAmt: order.discountAmt ?? 0,
             total: order.total ?? 0,
+            ...posGuestCountSpread(order.guestCount),
           }
           const runKitchenForPolledOrder = () => {
             if (!reserveKitchenAutoPrintKey(`order:${oid}:kitchen`)) return
@@ -3376,6 +3406,7 @@ export default function PosTerminalPage() {
                     escapeHtml,
                     design: slipDesign,
                     printColorAdjust: 'exact',
+                    ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
                   })
                   printPosHtmlDocument(html, {
                     title: slip.label,
@@ -3777,6 +3808,7 @@ export default function PosTerminalPage() {
           cardFeeMode: pricing.cardFeeMode,
           otherFeeAmt: pricing.otherFeeAmt,
           otherFeeMode: pricing.otherFeeMode,
+          ...posGuestCountSpread(o.guestCount),
         }
         void printReceiptNow(receiptPayloadAfterTax, null, false, undefined, true)
       }
@@ -4368,12 +4400,6 @@ export default function PosTerminalPage() {
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
             posBackendActionInFlight={posCartBackendBusy}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
-            onBeforeOpenPayment={async (payload: CartPanelBeforePaymentReceiptPayload) => {
-              /** 홀 테이블에서만 사용. 배달/포장은 결제 확인 시 세금 계산 영수증이 나가므로 사전 출력은 이중 출력이 됨. */
-              if (cartOrderType !== 'dine-in') return
-              if (!autoPrintFinalOrderBeforePayment || !isMainPosDevice) return
-              await printReceiptNow(payload, undefined, false, undefined, true)
-            }}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               try {
                 if (isPosDemo) {
@@ -4930,6 +4956,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  ...posGuestCountSpread(payload.guestCount),
                 }
                 const runKitchenAfterDineInSubmit = () => {
                   if (kitchenCartLines.length === 0) return
@@ -5019,6 +5046,7 @@ export default function PosTerminalPage() {
                           design: slipDesign,
                           printColorAdjust: 'exact',
                           prependItemsHtml: isAddOrder && idx === 0 ? addonKitchenHead : '',
+                          ...posKitchenGuestSpread(payload.guestCount, ki.t('posOrderGuestCount')),
                         })
                         printPosHtmlDocument(html, {
                           title: slip.label,

@@ -6,6 +6,7 @@ import type { PosMenu, PosPrinterSettings } from '@/lib/api-client'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolveReceiptSubtotalPrintAmount, resolveReceiptVatPrintAmount } from '@/lib/pos-pricing'
+import { buildPosReceiptVatPrintLabelEscaped } from '@/lib/pos-receipt-vat-print-label'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -378,6 +379,12 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const isTaxInvoice = !!taxInvoice
   const { subtotalPrint, vatPrint } = receiptSubtotalAndVatForPrint(receiptData)
   const showVatRow = vatPrint > 0.0001
+  const vatPrintLabelEscaped = buildPosReceiptVatPrintLabelEscaped({
+    vatFeeMode: receiptData.vatFeeMode,
+    t,
+    tr,
+    esc,
+  })
   if (forceSimple) {
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
       receiptData.items || [],
@@ -422,7 +429,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ? `<tr><td class="simple-k">${esc(t('posPackagingFee') || '포장 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.packagingFee)}</td></tr>`
         : '',
       showVatRow
-        ? `<tr><td class="simple-k">${esc(t('posVatLabel') || '부가세')}</td><td class="simple-v">${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatPrint)}</td></tr>`
+        ? `<tr><td class="simple-k">${vatPrintLabelEscaped}</td><td class="simple-v">${formatBahtNum(vatPrint)}</td></tr>`
         : '',
     ]
       .filter(Boolean)
@@ -650,7 +657,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         ${receiptData.discountAmt > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(receiptData.discountAmt)}`) : ''}
         ${(receiptData.deliveryFee ?? 0) > 0 ? paymentRowHtml(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`) : ''}
         ${(receiptData.packagingFee ?? 0) > 0 ? paymentRowHtml(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`) : ''}
-        ${showVatRow ? paymentRowHtml(esc(t('posVatLabel') || '부가세'), `${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(vatPrint)}`) : ''}
+        ${showVatRow ? paymentRowHtml(vatPrintLabelEscaped, formatBahtNum(vatPrint)) : ''}
         ${(receiptData.serviceFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posServiceFee') || '서비스비'), `${receiptData.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.serviceFeeAmt)}`) : ''}
         ${(receiptData.cardFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posCardFee') || '카드비'), `${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)}`) : ''}
         ${(receiptData.otherFeeAmt ?? 0) > 0 ? paymentRowHtml(esc(t('posOtherFee') || '기타'), `${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)}`) : ''}
