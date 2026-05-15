@@ -1009,6 +1009,22 @@ export default function PosOrdersPage() {
       .finally(() => setAuditLoading(false))
   }, [auditStartStr, auditEndStr, auditEmployeeFilter, auditOrderNoFilter, orderListStoreCode])
 
+  const handleAuditFilterKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>, clearField: () => void) => {
+      if (e.key === "Enter") {
+        e.preventDefault()
+        loadAuditTrail()
+        return
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        clearField()
+        setAuditQuickSearchTick((v) => v + 1)
+      }
+    },
+    [loadAuditTrail]
+  )
+
   const applyAuditQuickFilter = React.useCallback(
     (params: { employee?: string; orderNo?: string }) => {
       if (params.employee != null) setAuditEmployeeFilter(params.employee)
@@ -1633,24 +1649,28 @@ export default function PosOrdersPage() {
                 type="date"
                 value={auditStartStr}
                 onChange={(e) => setAuditStartStr(e.target.value)}
+                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditStartStr(""))}
                 className="h-9 w-[150px] text-sm"
               />
               <Input
                 type="date"
                 value={auditEndStr}
                 onChange={(e) => setAuditEndStr(e.target.value)}
+                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEndStr(""))}
                 className="h-9 w-[150px] text-sm"
               />
               <Input
                 placeholder="직원명/사번"
                 value={auditEmployeeFilter}
                 onChange={(e) => setAuditEmployeeFilter(e.target.value)}
+                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditEmployeeFilter(""))}
                 className="h-9 w-[160px] text-sm"
               />
               <Input
                 placeholder={t("posOrderNo") || "주문번호"}
                 value={auditOrderNoFilter}
                 onChange={(e) => setAuditOrderNoFilter(e.target.value)}
+                onKeyDown={(e) => handleAuditFilterKeyDown(e, () => setAuditOrderNoFilter(""))}
                 className="h-9 w-[160px] text-sm"
               />
             </div>
